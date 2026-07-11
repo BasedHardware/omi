@@ -283,8 +283,7 @@ extension SettingsContentView {
                 }
               }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
 
             if !aiChatWorkingDirectory.isEmpty {
               Button("Clear") {
@@ -294,8 +293,7 @@ extension SettingsContentView {
                 Task { await chatProvider?.discoverClaudeConfig() }
                 chatProvider?.workingDirectory = nil
               }
-              .buttonStyle(.bordered)
-              .controlSize(.small)
+              .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
             }
           }
 
@@ -355,8 +353,7 @@ extension SettingsContentView {
                   fileViewerContent = aiChatClaudeMdContent ?? ""
                   showFileViewer = true
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
 
                 Toggle("", isOn: $claudeMdEnabled)
                   .toggleStyle(OmiToggleStyle())
@@ -387,12 +384,12 @@ extension SettingsContentView {
               HStack {
                 Text("Project")
                   .scaledFont(size: OmiType.caption, weight: .medium)
-                  .foregroundColor(OmiColors.accent)
+                  .foregroundColor(OmiColors.textSecondary)
                   .padding(.horizontal, OmiSpacing.xs)
                   .padding(.vertical, OmiSpacing.hairline)
                   .background(
                     RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
-                      .fill(OmiColors.accent.opacity(0.1))
+                      .fill(OmiColors.backgroundTertiary)
                   )
 
                 Spacer()
@@ -403,8 +400,7 @@ extension SettingsContentView {
                     fileViewerContent = aiChatProjectClaudeMdContent ?? ""
                     showFileViewer = true
                   }
-                  .buttonStyle(.bordered)
-                  .controlSize(.small)
+                  .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
 
                   Toggle("", isOn: $projectClaudeMdEnabled)
                     .toggleStyle(OmiToggleStyle())
@@ -456,8 +452,7 @@ extension SettingsContentView {
               Image(systemName: "arrow.clockwise")
                 .scaledFont(size: OmiType.body)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
           }
 
           let allSkills:
@@ -538,7 +533,7 @@ extension SettingsContentView {
                         Text(origin)
                           .scaledFont(size: OmiType.micro, weight: .medium)
                           .foregroundColor(
-                            origin == "Project" ? OmiColors.accent : OmiColors.textTertiary
+                            origin == "Project" ? OmiColors.textSecondary : OmiColors.textTertiary
                           )
                           .padding(.horizontal, OmiSpacing.xxs)
                           .padding(.vertical, OmiSpacing.hairline)
@@ -546,7 +541,7 @@ extension SettingsContentView {
                             RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
                               .fill(
                                 origin == "Project"
-                                  ? OmiColors.accent.opacity(0.1)
+                                  ? OmiColors.backgroundTertiary
                                   : OmiColors.backgroundPrimary.opacity(0.5))
                           )
                       }
@@ -569,8 +564,7 @@ extension SettingsContentView {
                         ?? "Unable to read file"
                       showFileViewer = true
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.mini)
+                    .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
                   }
                   .padding(.vertical, OmiSpacing.xs)
                   .padding(.horizontal, OmiSpacing.xxs)
@@ -637,8 +631,7 @@ extension SettingsContentView {
                     .scaledFont(size: OmiType.body, weight: .medium)
                 }
               }
-              .buttonStyle(.borderedProminent)
-              .controlSize(.small)
+              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
             } else {
               // Token is set — show compact view
               HStack(spacing: OmiSpacing.sm) {
@@ -663,8 +656,7 @@ extension SettingsContentView {
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
 
                 Button(action: {
                   playwrightExtensionToken = ""
@@ -677,8 +669,7 @@ extension SettingsContentView {
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
               }
             }
           }

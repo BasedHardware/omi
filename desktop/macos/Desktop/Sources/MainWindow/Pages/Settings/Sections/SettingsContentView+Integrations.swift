@@ -43,16 +43,9 @@ extension SettingsContentView {
             } else {
               Text("Read Gmail")
                 .scaledFont(size: OmiType.body, weight: .medium)
-                .foregroundColor(OmiColors.backgroundPrimary)
-                .padding(.horizontal, OmiSpacing.md)
-                .padding(.vertical, OmiSpacing.xs)
-                .background(
-                  RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
-                    .fill(OmiColors.accent)
-                )
             }
           }
-          .buttonStyle(.plain)
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
           .disabled(isReadingGmail)
         }
       }
@@ -171,13 +164,9 @@ extension SettingsContentView {
             } else {
               Text("Sync Calendar")
                 .scaledFont(size: OmiType.body, weight: .medium)
-                .foregroundColor(OmiColors.backgroundPrimary)
-                .padding(.horizontal, OmiSpacing.md)
-                .padding(.vertical, OmiSpacing.xs)
-                .background(RoundedRectangle(cornerRadius: OmiChrome.badgeRadius).fill(OmiColors.accent))
             }
           }
-          .buttonStyle(.plain)
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
           .disabled(isReadingCalendar)
           .accessibilityIdentifier("syncCalendarButton")
         }

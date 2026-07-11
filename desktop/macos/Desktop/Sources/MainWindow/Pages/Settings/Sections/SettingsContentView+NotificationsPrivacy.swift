@@ -13,7 +13,7 @@ extension SettingsContentView {
           HStack {
             Image(systemName: "bell.badge.fill")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(OmiColors.textSecondary)
 
             Text("Notifications")
               .scaledFont(size: OmiType.subheading, weight: .medium)
@@ -111,7 +111,7 @@ extension SettingsContentView {
           HStack {
             Image(systemName: "text.badge.checkmark")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(OmiColors.textSecondary)
 
             Text("Daily Summary")
               .scaledFont(size: OmiType.subheading, weight: .medium)
@@ -165,7 +165,7 @@ extension SettingsContentView {
       settingsCard(settingId: "privacy.storerecordings") {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           Text("Data Controls")
-            .scaledFont(size: OmiType.subheading, weight: .semibold)
+            .scaledFont(size: OmiType.heading, weight: .semibold)
             .foregroundColor(OmiColors.textPrimary)
 
           privacyToggleRow(
@@ -196,7 +196,7 @@ extension SettingsContentView {
           HStack(spacing: OmiSpacing.sm) {
             Image(systemName: "shield.lefthalf.filled")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(OmiColors.textSecondary)
               .frame(width: 20)
 
             Text("Encryption")
@@ -240,7 +240,7 @@ extension SettingsContentView {
             HStack(spacing: OmiSpacing.sm) {
               Image(systemName: "list.bullet")
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.accent)
+                .foregroundColor(OmiColors.textSecondary)
                 .frame(width: 20)
 
               Text("What We Track")
@@ -281,7 +281,7 @@ extension SettingsContentView {
           HStack(spacing: OmiSpacing.sm) {
             Image(systemName: "hand.raised.fill")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(OmiColors.textSecondary)
               .frame(width: 20)
 
             Text("Privacy Guarantees")

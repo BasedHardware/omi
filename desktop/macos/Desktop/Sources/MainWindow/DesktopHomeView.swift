@@ -130,6 +130,9 @@ struct DesktopHomeView: View {
                   onUpgrade: {
                     appState.showUsageLimitPopup = false
                     selectedSettingsSection = .planUsage
+                    // Plan and Usage now lives below Account on the merged
+                    // "Account & Plan" page — scroll straight to the plan card.
+                    highlightedSettingId = "planusage.current"
                     OmiMotion.withGated(Self.pageNavigationAnimation) {
                       selectedIndex = SidebarNavItem.settings.rawValue
                     }

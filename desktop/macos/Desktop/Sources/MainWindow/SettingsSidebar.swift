@@ -331,15 +331,17 @@ struct SettingsSidebar: View {
 
   private let expandedWidth: CGFloat = 260
   private let iconWidth: CGFloat = 20
+  // Merged nav: `.account` hosts Account & Plan (renders `.planUsage` content
+  // too) and `.notifications` hosts Notifications & Privacy (renders `.privacy`
+  // content too). The absorbed cases stay routable for deep links/automation
+  // and highlight their merged item via `sidebarItem`.
   private let visibleSections: [SettingsContentView.SettingsSection] = [
     .general,
-    .rewind,
-    .transcription,
-    .notifications,
-    .privacy,
     .account,
-    .planUsage,
+    .transcription,
     .floatingBar,
+    .notifications,
+    .rewind,
     .shortcuts,
     .advanced,
     .about,
@@ -388,7 +390,7 @@ struct SettingsSidebar: View {
             ForEach(visibleSections, id: \.self) { section in
               SettingsSidebarItem(
                 section: section,
-                isSelected: selectedSection == section,
+                isSelected: selectedSection.sidebarItem == section,
                 iconWidth: iconWidth,
                 onTap: {
                   OmiMotion.withGated(.easeInOut(duration: 0.15)) {
@@ -543,7 +545,7 @@ struct SettingsSidebarItem: View {
               .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
               .frame(width: iconWidth)
 
-            Text(section.rawValue)
+            Text(section.displayTitle)
               .scaledFont(size: OmiType.body, weight: isSelected ? .medium : .regular)
               .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
 

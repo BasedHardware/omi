@@ -33,7 +33,7 @@ extension SettingsContentView {
               ProactiveAssistantsPlugin.shared.stopMonitoring()
               try? AuthService.shared.signOut()
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
             .disabled(isDeletingAccount)
           }
 
@@ -201,12 +201,8 @@ extension SettingsContentView {
           }) {
             Text("View Plans")
               .scaledFont(size: OmiType.body, weight: .semibold)
-              .foregroundColor(OmiColors.backgroundPrimary)
-              .padding(.horizontal, OmiSpacing.lg)
-              .padding(.vertical, OmiSpacing.sm)
           }
-          .buttonStyle(.borderedProminent)
-          .tint(OmiColors.accent)
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
         }
       }
     }
@@ -216,11 +212,11 @@ extension SettingsContentView {
     HStack(spacing: OmiSpacing.sm) {
       ZStack {
         Circle()
-          .fill(OmiColors.accent.opacity(0.16))
+          .fill(OmiColors.backgroundTertiary)
           .frame(width: 18, height: 18)
         Image(systemName: "checkmark")
           .scaledFont(size: OmiType.micro, weight: .bold)
-          .foregroundColor(OmiColors.accent)
+          .foregroundColor(OmiColors.textSecondary)
       }
       Text(text)
         .scaledFont(size: OmiType.body, weight: .medium)
@@ -265,7 +261,7 @@ extension SettingsContentView {
           HStack(spacing: OmiSpacing.lg) {
             Image(systemName: "creditcard.fill")
               .scaledFont(size: OmiType.title)
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(OmiColors.textSecondary)
 
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text(currentPlanTitle)
@@ -292,13 +288,13 @@ extension SettingsContentView {
                     .scaledFont(size: OmiType.body, weight: .semibold)
                 }
               }
-              .buttonStyle(.bordered)
+              .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
               .disabled(isOpeningCustomerPortal)
             } else {
               Button("Refresh") {
                 loadSubscriptionInfo()
               }
-              .buttonStyle(.bordered)
+              .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
               .disabled(isLoadingSubscription)
             }
           }
@@ -330,7 +326,7 @@ extension SettingsContentView {
                 .foregroundColor(OmiColors.warning)
                 .scaledFont(size: OmiType.subheading)
               Text("Plan Retiring")
-                .scaledFont(size: OmiType.body, weight: .semibold)
+                .scaledFont(size: OmiType.subheading, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
             }
 
@@ -369,12 +365,11 @@ extension SettingsContentView {
                 .foregroundColor(OmiColors.textTertiary)
             }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-              HStack(alignment: .top, spacing: OmiSpacing.md) {
-                ForEach(subscriptionPlansForDisplay) { plan in
-                  subscriptionPlanCard(plan)
-                    .frame(minWidth: 220)
-                }
+            // All plan cards share the row width — no horizontal scrolling.
+            HStack(alignment: .top, spacing: OmiSpacing.lg) {
+              ForEach(subscriptionPlansForDisplay) { plan in
+                subscriptionPlanCard(plan)
+                  .frame(maxWidth: .infinity, alignment: .topLeading)
               }
             }
           }
@@ -478,7 +473,7 @@ extension SettingsContentView {
           Divider().overlay(OmiColors.backgroundQuaternary)
           VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             Text("Your current cycle")
-              .scaledFont(size: OmiType.body, weight: .semibold)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
             overageExplainerRow("Questions used", value: "\(info.usedQuestions)")
             overageExplainerRow("Included in plan", value: "\(info.includedQuestions ?? 0)")
@@ -524,7 +519,7 @@ extension SettingsContentView {
         HStack(spacing: OmiSpacing.md) {
           Image(systemName: "key.fill")
             .scaledFont(size: OmiType.heading)
-            .foregroundColor(OmiColors.accent)
+            .foregroundColor(OmiColors.textSecondary)
           VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             Text(APIKeyService.isByokActive ? "Free plan active" : "Use Omi free forever")
               .scaledFont(size: OmiType.subheading, weight: .semibold)
@@ -544,7 +539,7 @@ extension SettingsContentView {
           Text(APIKeyService.isByokActive ? "Manage your keys" : "Switch to your own keys")
             .scaledFont(size: OmiType.body, weight: .semibold)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
       }
     }
   }
@@ -565,7 +560,7 @@ extension SettingsContentView {
         VStack(alignment: .leading, spacing: OmiSpacing.md) {
           HStack {
             Text("Usage this month")
-              .scaledFont(size: OmiType.body, weight: .semibold)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
             Spacer()
             Text(chatUsageQuotaValueText(quota))

@@ -443,7 +443,7 @@ extension SettingsContentView {
           HStack {
             Image(systemName: "arrow.triangle.2.circlepath")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(OmiColors.textSecondary)
 
             Text("Software Updates")
               .scaledFont(size: OmiType.subheading, weight: .medium)
@@ -454,7 +454,7 @@ extension SettingsContentView {
             Button("Check Now") {
               updaterViewModel.checkForUpdates()
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
             .disabled(!updaterViewModel.canCheckForUpdates)
             .help(
               updaterViewModel.canCheckForUpdates
@@ -491,13 +491,13 @@ extension SettingsContentView {
                     NSWorkspace.shared.open(
                       URL(fileURLWithPath: "/Applications", isDirectory: true))
                   }
-                  .buttonStyle(.bordered)
+                  .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
                 }
 
                 Button("Download Latest") {
                   openURLInDefaultBrowser(AppBuild.manualDownloadURL)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
 
                 Button("Dismiss") {
                   updaterViewModel.lastUpdateFailure = nil
@@ -601,7 +601,7 @@ extension SettingsContentView {
         HStack(spacing: OmiSpacing.lg) {
           Image(systemName: "exclamationmark.bubble.fill")
             .scaledFont(size: OmiType.subheading)
-            .foregroundColor(OmiColors.accent)
+            .foregroundColor(OmiColors.textSecondary)
 
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Report an Issue")
@@ -618,7 +618,7 @@ extension SettingsContentView {
           Button("Report") {
             FeedbackWindow.show(userEmail: AuthState.shared.userEmail)
           }
-          .buttonStyle(.bordered)
+          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
         }
       }
     }
@@ -751,7 +751,7 @@ extension SettingsContentView {
       HStack(alignment: .top, spacing: OmiSpacing.md) {
         Image(systemName: icon)
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.accent)
+          .foregroundColor(OmiColors.textSecondary)
           .frame(width: 20, alignment: .leading)
 
         VStack(alignment: .leading, spacing: OmiSpacing.xxs) {

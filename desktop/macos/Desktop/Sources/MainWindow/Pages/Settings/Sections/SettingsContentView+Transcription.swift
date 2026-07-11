@@ -13,7 +13,7 @@ extension SettingsContentView {
           HStack {
             Image(systemName: "globe")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(OmiColors.textSecondary)
 
             Text("Language Mode")
               .scaledFont(size: OmiType.subheading, weight: .medium)
@@ -164,7 +164,7 @@ extension SettingsContentView {
           HStack {
             Image(systemName: "text.book.closed")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(OmiColors.textSecondary)
 
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Custom Vocabulary")
@@ -249,7 +249,7 @@ extension SettingsContentView {
           HStack {
             Image(systemName: "waveform.badge.minus")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(OmiColors.textSecondary)
 
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Local VAD Gate")

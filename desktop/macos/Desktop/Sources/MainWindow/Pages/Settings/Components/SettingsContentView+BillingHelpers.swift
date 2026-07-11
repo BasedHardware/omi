@@ -474,7 +474,7 @@ extension SettingsContentView {
         .tint(accent)
       }
     }
-    .padding(OmiSpacing.xl)
+    .padding(OmiSpacing.xxl)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.controlRadius)

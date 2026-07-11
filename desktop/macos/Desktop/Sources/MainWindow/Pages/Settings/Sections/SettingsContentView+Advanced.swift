@@ -9,7 +9,7 @@ extension SettingsContentView {
     HStack(spacing: OmiSpacing.sm) {
       Image(systemName: icon)
         .scaledFont(size: OmiType.subheading)
-        .foregroundColor(OmiColors.accent)
+        .foregroundColor(OmiColors.textSecondary)
       Text(title)
         .scaledFont(size: OmiType.heading, weight: .semibold)
         .foregroundColor(OmiColors.textPrimary)
@@ -48,7 +48,7 @@ extension SettingsContentView {
         HStack(spacing: OmiSpacing.md) {
           Image(systemName: "flask.fill")
             .scaledFont(size: OmiType.subheading)
-            .foregroundColor(OmiColors.accent)
+            .foregroundColor(OmiColors.textSecondary)
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Chat Prompt Lab")
               .scaledFont(size: OmiType.subheading, weight: .semibold)
@@ -61,12 +61,7 @@ extension SettingsContentView {
           Button("Open") {
             ChatLabWindowManager.shared.openWindow(chatProvider: chatProvider)
           }
-          .buttonStyle(.plain)
-          .padding(.horizontal, OmiSpacing.md)
-          .padding(.vertical, OmiSpacing.xs)
-          .background(OmiColors.accent)
-          .foregroundColor(OmiColors.backgroundPrimary)
-          .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius))
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
         }
       }
     }
@@ -216,8 +211,7 @@ extension SettingsContentView {
                 }
               }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
 
             if !aiChatWorkingDirectory.isEmpty {
               Button("Clear") {
@@ -226,8 +220,7 @@ extension SettingsContentView {
                 Task { await chatProvider?.discoverClaudeConfig() }
                 chatProvider?.workingDirectory = nil
               }
-              .buttonStyle(.bordered)
-              .controlSize(.small)
+              .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
             }
           }
 
@@ -291,8 +284,7 @@ extension SettingsContentView {
                     .scaledFont(size: OmiType.body, weight: .medium)
                 }
               }
-              .buttonStyle(.borderedProminent)
-              .controlSize(.small)
+              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
             } else {
               HStack(spacing: OmiSpacing.sm) {
                 Text("Token")
@@ -316,8 +308,7 @@ extension SettingsContentView {
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
 
                 Button(action: {
                   playwrightExtensionToken = ""
@@ -330,8 +321,7 @@ extension SettingsContentView {
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
               }
             }
           }
@@ -375,7 +365,7 @@ extension SettingsContentView {
           HStack(spacing: OmiSpacing.md) {
             Image(systemName: showProfileAndStats ? "eye.slash" : "eye")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(OmiColors.textSecondary)
 
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Profile and Stats")
@@ -393,8 +383,7 @@ extension SettingsContentView {
                 showProfileAndStats.toggle()
               }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
           }
         }
       }
@@ -413,7 +402,7 @@ extension SettingsContentView {
           HStack(spacing: OmiSpacing.sm) {
             Image(systemName: "brain")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(OmiColors.textSecondary)
 
             Text("AI User Profile")
               .scaledFont(size: OmiType.subheading, weight: .medium)
@@ -431,8 +420,7 @@ extension SettingsContentView {
                 Text(aiProfileText == nil ? "Generate Now" : "Regenerate")
                   .scaledFont(size: OmiType.caption)
               }
-              .buttonStyle(.bordered)
-              .controlSize(.small)
+              .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
             }
           }
 
@@ -451,8 +439,7 @@ extension SettingsContentView {
                 Button("Cancel") {
                   isEditingAIProfile = false
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
 
                 Button("Save") {
                   if let id = aiProfileId {
@@ -467,8 +454,7 @@ extension SettingsContentView {
                     }
                   }
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
 
                 Spacer()
               }
@@ -571,7 +557,7 @@ extension SettingsContentView {
           HStack(spacing: OmiSpacing.sm) {
             Image(systemName: "chart.bar")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(OmiColors.textSecondary)
 
             Text("Your Stats")
               .scaledFont(size: OmiType.subheading, weight: .medium)
@@ -639,7 +625,7 @@ extension SettingsContentView {
           HStack(spacing: OmiSpacing.sm) {
             Image(systemName: "lock.shield")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(OmiColors.textSecondary)
 
             Text("Feature Tiers")
               .scaledFont(size: OmiType.subheading, weight: .medium)
@@ -668,7 +654,7 @@ extension SettingsContentView {
               .background(OmiColors.backgroundQuaternary)
 
             Text("Progress")
-              .scaledFont(size: OmiType.body, weight: .semibold)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
               .foregroundColor(OmiColors.textSecondary)
 
             // Tier 1 — always unlocked

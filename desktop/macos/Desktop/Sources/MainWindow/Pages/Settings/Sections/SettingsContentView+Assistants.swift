@@ -12,7 +12,7 @@ extension SettingsContentView {
           HStack {
             Image(systemName: "eye.fill")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(OmiColors.textSecondary)
 
             Text("Focus Assistant")
               .scaledFont(size: OmiType.subheading, weight: .medium)
@@ -92,8 +92,7 @@ extension SettingsContentView {
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
 
                 Button(action: {
                   PromptEditorWindow.show()
@@ -105,8 +104,7 @@ extension SettingsContentView {
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
               }
             }
 
@@ -190,7 +188,7 @@ extension SettingsContentView {
           HStack {
             Image(systemName: "checklist")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(OmiColors.textSecondary)
 
             Text("Task Assistant")
               .scaledFont(size: OmiType.subheading, weight: .medium)
@@ -364,8 +362,7 @@ extension SettingsContentView {
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
 
                 Button(action: {
                   TaskPromptEditorWindow.show()
@@ -377,8 +374,7 @@ extension SettingsContentView {
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
               }
             }
 
@@ -411,10 +407,10 @@ extension SettingsContentView {
                     if TaskAssistantSettings.isBrowser(appName) {
                       Text("browser")
                         .scaledFont(size: OmiType.micro)
-                        .foregroundColor(OmiColors.accent)
+                        .foregroundColor(OmiColors.textSecondary)
                         .padding(.horizontal, OmiSpacing.xs)
                         .padding(.vertical, OmiSpacing.hairline)
-                        .background(OmiColors.accent.opacity(0.15))
+                        .background(OmiColors.backgroundTertiary)
                         .cornerRadius(OmiChrome.stripRadius)
                     }
 
@@ -505,8 +501,7 @@ extension SettingsContentView {
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
               }
             }
           }  // end if taskEnabled
@@ -527,7 +522,7 @@ extension SettingsContentView {
           HStack {
             Image(systemName: "lightbulb.fill")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(OmiColors.textSecondary)
 
             Text("Insight Assistant")
               .scaledFont(size: OmiType.subheading, weight: .medium)
@@ -633,8 +628,7 @@ extension SettingsContentView {
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
 
                 Button(action: {
                   InsightPromptEditorWindow.show()
@@ -646,8 +640,7 @@ extension SettingsContentView {
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
               }
             }
 
@@ -731,7 +724,7 @@ extension SettingsContentView {
           HStack {
             Image(systemName: "brain.head.profile")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(OmiColors.textSecondary)
 
             Text("Memory Assistant")
               .scaledFont(size: OmiType.subheading, weight: .medium)
@@ -837,8 +830,7 @@ extension SettingsContentView {
                     .scaledFont(size: OmiType.caption)
                 }
               }
-              .buttonStyle(.bordered)
-              .controlSize(.small)
+              .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
             }
 
             Divider()
@@ -961,7 +953,7 @@ extension SettingsContentView {
           HStack {
             Image(systemName: "target")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(OmiColors.textSecondary)
 
             Text("Goals")
               .scaledFont(size: OmiType.subheading, weight: .medium)
@@ -1115,16 +1107,8 @@ extension SettingsContentView {
             FeedbackWindow.show(userEmail: AuthState.shared.userEmail)
           }) {
             Text("Report")
-              .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(OmiColors.backgroundPrimary)
-              .padding(.horizontal, OmiSpacing.md)
-              .padding(.vertical, OmiSpacing.xs)
-              .background(
-                RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
-                  .fill(OmiColors.accent)
-              )
           }
-          .buttonStyle(.plain)
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
         }
       }
 
@@ -1150,16 +1134,8 @@ extension SettingsContentView {
 
           Button(action: { showRescanFilesAlert = true }) {
             Text("Rescan")
-              .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(OmiColors.backgroundPrimary)
-              .padding(.horizontal, OmiSpacing.md)
-              .padding(.vertical, OmiSpacing.xs)
-              .background(
-                RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
-                  .fill(OmiColors.accent)
-              )
           }
-          .buttonStyle(.plain)
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
         }
       }
       .alert("Rescan Files?", isPresented: $showRescanFilesAlert) {

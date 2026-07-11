@@ -13,7 +13,7 @@ extension SettingsContentView {
           HStack {
             Image(systemName: "internaldrive.fill")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(OmiColors.textSecondary)
 
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Storage")
@@ -45,7 +45,7 @@ extension SettingsContentView {
           HStack {
             Image(systemName: "eye.slash.fill")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(OmiColors.textSecondary)
 
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Excluded Apps")
@@ -62,8 +62,7 @@ extension SettingsContentView {
             Button("Reset to Defaults") {
               rewindSettings.resetToDefaults()
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
           }
 
           Divider()
@@ -120,7 +119,7 @@ extension SettingsContentView {
           HStack {
             Image(systemName: "battery.75percent")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(OmiColors.textSecondary)
 
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Battery Optimization")
@@ -149,7 +148,7 @@ extension SettingsContentView {
           HStack {
             Image(systemName: "clock.fill")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(OmiColors.textSecondary)
 
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Data Retention")
