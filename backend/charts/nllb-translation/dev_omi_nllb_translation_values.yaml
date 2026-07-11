@@ -31,6 +31,10 @@ env:
     value: "4"
   - name: NLLB_MAX_BATCH_SIZE
     value: "64"
+  - name: NLLB_BEAM_SIZE
+    value: "1"
+  - name: NLLB_INFERENCE_WORKERS
+    value: "2"
 
 resources:
   requests:
