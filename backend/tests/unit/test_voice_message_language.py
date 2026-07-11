@@ -154,3 +154,28 @@ def test_no_preference_detect_language(chat, monkeypatch):
 
     language = chat.resolve_voice_message_language("uid", None)
     assert language == "multi"
+
+
+@pytest.mark.asyncio
+async def test_stream_routes_storage_and_transcription_to_owned_executors(chat, monkeypatch):
+    calls = []
+
+    async def fake_run_blocking(executor, func, *args, **kwargs):
+        calls.append((executor, func, args, kwargs))
+        if func is chat._prepare_voice_message_url:
+            return "https://signed.test/audio"
+        if func is chat._transcribe_voice_message_url:
+            return None, "en"
+        raise AssertionError(f"unexpected blocking call: {func.__name__}")
+
+    monkeypatch.setattr(chat, "run_blocking", fake_run_blocking)
+
+    chunks = [chunk async for chunk in chat.process_voice_message_segment_stream("audio.wav", "uid", "en")]
+
+    assert chunks == []
+    assert [(executor, func) for executor, func, _, _ in calls] == [
+        (chat.storage_executor, chat._prepare_voice_message_url),
+        (chat.sync_executor, chat._transcribe_voice_message_url),
+    ]
+    assert calls[0][2] == ("audio.wav",)
+    assert calls[1][2] == ("https://signed.test/audio", "audio.wav", "en", False)
