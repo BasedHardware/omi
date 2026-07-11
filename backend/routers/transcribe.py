@@ -1325,6 +1325,7 @@ async def _stream_handler(
             translation_service=translation_service,
             on_translation_ready=_on_translation_ready,
             language_state=conversation_language_state,
+            source_language=language if language != 'multi' else '',
         )
         if translation_enabled
         else None

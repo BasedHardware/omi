@@ -130,7 +130,7 @@ class TranslationCoordinator:
         translation_service: TranslationService,
         on_translation_ready: Callable[[str, str, str, str], Awaitable[None]],
         language_state: Optional[ConversationLanguageState] = None,
-        source_language: str = "en",
+        source_language: str = "",
     ):
         self.target_language = target_language
         self.target_base = _normalize_base_language(target_language) or ''
