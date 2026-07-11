@@ -117,6 +117,11 @@ class PushToTalkManager: ObservableObject {
   private var silentMicRecoveryPolicy = PTTSilentMicRecoveryPolicy()
   private var micCaptureGeneration: UInt64 = 0
   private var transcriptSegments: [String] = []
+  // Stable provider item ids of finals already appended this turn. Dedup relay
+  // re-deliveries by id, never by text (INV-6: never dedupe by user text), so a
+  // legitimately repeated phrase within a turn is not silently dropped. Reset
+  // wherever transcriptSegments is reset.
+  private var seenFinalSegmentIDs: Set<String> = []
   private var lastInterimText: String = ""
   private var hasMicPermission: Bool = false
   private var isCurrentSessionFollowUp = false
@@ -433,6 +438,7 @@ class PushToTalkManager: ObservableObject {
     startActiveTracer()
     isCurrentSessionFollowUp = barState?.showingAIResponse == true
     transcriptSegments = []
+    seenFinalSegmentIDs.removeAll()
     lastInterimText = ""
     currentContextSnapshot = nil
 
@@ -495,6 +501,7 @@ class PushToTalkManager: ObservableObject {
     if transcriptionService == nil {
       if activeTracer == nil { startActiveTracer() }
       transcriptSegments = []
+      seenFinalSegmentIDs.removeAll()
       lastInterimText = ""
       currentContextSnapshot = nil
       let preOverlayImage = ScreenCaptureManager.captureScreenImage()
@@ -537,6 +544,7 @@ class PushToTalkManager: ObservableObject {
     }
     stopAudioTranscription()
     transcriptSegments = []
+    seenFinalSegmentIDs.removeAll()
     lastInterimText = ""
     currentContextSnapshot = nil
     batchAudioLock.lock()
@@ -1174,6 +1182,7 @@ class PushToTalkManager: ObservableObject {
     isCurrentSessionFollowUp = false
 
     transcriptSegments = []
+    seenFinalSegmentIDs.removeAll()
     lastInterimText = ""
     currentContextSnapshot = nil
 
@@ -1869,7 +1878,7 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
     log("PushToTalkManager: omni STT connected")
   }
 
-  func omniDidReceiveInputTranscript(_ text: String, isFinal: Bool) {
+  func omniDidReceiveInputTranscript(_ text: String, isFinal: Bool, itemID: String?) {
     guard let turnID = omniTurnID,
       voiceTurnCoordinator.activeTurnID == turnID
     else { return }
@@ -1879,7 +1888,12 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
     if isFinal {
       let finalText = text.isEmpty ? lastInterimText : text
       let trimmed = finalText.trimmingCharacters(in: .whitespacesAndNewlines)
-      if !trimmed.isEmpty && !transcriptSegments.contains(trimmed) {
+      // Dedup by the provider's stable item id (a relay re-delivering the SAME
+      // final), NOT by text — keying on text silently dropped legitimately
+      // repeated phrases within a turn ("yes. yes." → "yes"). No id ⇒ treat as
+      // distinct (unique key) so a genuine repeat is never lost.
+      let dedupKey = itemID ?? UUID().uuidString
+      if !trimmed.isEmpty && seenFinalSegmentIDs.insert(dedupKey).inserted {
         transcriptSegments.append(trimmed)
       }
       lastInterimText = ""
