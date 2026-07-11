@@ -30,6 +30,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "DESKTOP_UPDATE_POINTERS_MODE", "value": "primary"},
         {"name": "DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE", "value": "0.01"},
         {"name": "OMI_ENV_STAGE", "value": "dev"},
+        {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omiapi.com"},
         {"name": "OMI_LLM_GATEWAY_FEATURE_MODE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION", "value": "true"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED", "value": "false"},
@@ -53,7 +54,8 @@ def with_memory_env(payload: str) -> str:
 
 GOOGLE_OAUTH_SECRETS = '''\
         {"name": "GOOGLE_CLIENT_ID", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_ID"}}},
-        {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET"}}},'''
+        {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET"}}},
+        {"name": "STT_PRERECORDED_MODEL", "valueFrom": {"secretKeyRef": {"name": "STT_PRERECORDED_MODEL", "key": "latest"}}},'''
 
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
@@ -111,6 +113,63 @@ def test_repo_cloud_run_workflows_match_manifest():
     errors = validator.validate_runtime_env(env='dev', check_workflows=True)
 
     assert errors == []
+
+
+def test_parakeet_cloud_run_surface_requires_hosted_endpoint():
+    validator = load_validator()
+    env_config = {
+        'gke': {},
+        'cloud_run': {
+            'services': {
+                service: {
+                    'env': {'HOSTED_PARAKEET_API_URL': {'value': 'http://parakeet.omiapi.com'}},
+                    'secrets': {
+                        'STT_PRERECORDED_MODEL': {
+                            'secret': 'STT_PRERECORDED_MODEL',
+                            'version': 'latest',
+                        }
+                    },
+                }
+                for service in ('backend', 'backend-sync', 'backend-integration')
+            }
+        },
+    }
+    del env_config['cloud_run']['services']['backend']['env']['HOSTED_PARAKEET_API_URL']
+
+    errors = validator._validate_prerecorded_stt_contract('dev', env_config)
+
+    assert errors == [
+        validator.ValidationError(
+            'dev/cloud_run/backend',
+            'required Cloud Run service is missing non-empty HOSTED_PARAKEET_API_URL',
+        )
+    ]
+
+
+def test_dev_cloud_run_prerecorded_stt_services_require_both_bindings():
+    validator = load_validator()
+    env_config = {
+        'cloud_run': {
+            'services': {
+                'backend': {'env': {}, 'secrets': {}},
+                'backend-sync': {'env': {}, 'secrets': {}},
+                'backend-integration': {'env': {}, 'secrets': {}},
+            }
+        }
+    }
+
+    errors = validator._validate_prerecorded_stt_contract('dev', env_config)
+
+    assert len(errors) == 6
+    assert {error.scope for error in errors} == {
+        'dev/cloud_run/backend',
+        'dev/cloud_run/backend-sync',
+        'dev/cloud_run/backend-integration',
+    }
+    assert {error.message for error in errors} == {
+        'required Cloud Run service is missing STT_PRERECORDED_MODEL',
+        'required Cloud Run service is missing non-empty HOSTED_PARAKEET_API_URL',
+    }
 
 
 def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
@@ -355,9 +414,16 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
                                     'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION': {'value': 'true'},
                                     'OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED': {'value': 'false'},
                                     'OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE': {'value': '1.0'},
+                                    'HOSTED_PARAKEET_API_URL': {'value': 'http://parakeet.omiapi.com'},
                                     'CUSTOM_MANIFEST_ONLY_MARKER': {'value': 'present'},
                                 },
-                                'secrets': STANDARD_CLOUD_RUN_SECRETS,
+                                'secrets': {
+                                    **STANDARD_CLOUD_RUN_SECRETS,
+                                    'STT_PRERECORDED_MODEL': {
+                                        'secret': 'STT_PRERECORDED_MODEL',
+                                        'version': 'latest',
+                                    },
+                                },
                             }
                         },
                         'jobs': {
