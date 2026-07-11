@@ -126,7 +126,7 @@ struct SignInView: View {
                     }
 
                     if let error = authState.error {
-                        Text(error)
+                        Text(UserFacingErrorPresentation.message(from: error, while: .signIn))
                             .font(.caption)
                             .foregroundColor(OmiColors.error)
                             .multilineTextAlignment(.center)

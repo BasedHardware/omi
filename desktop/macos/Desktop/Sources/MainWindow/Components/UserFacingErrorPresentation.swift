@@ -108,6 +108,30 @@ enum UserFacingErrorPresentation {
     return fallback(for: context)
   }
 
+  /// Sanitizes already-materialized error copy at display time when the original
+  /// `Error` is not available (for example, values stored on invariant-owned types).
+  static func message(from raw: String, while context: Context) -> String {
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return fallback(for: context) }
+    if shouldPreserveCuratedCopy(trimmed) {
+      return trimmed
+    }
+    return fallback(for: context)
+  }
+
+  private static func shouldPreserveCuratedCopy(_ text: String) -> Bool {
+    let lowered = text.lowercased()
+    if text.count > 160 { return false }
+    if text.contains("://") || text.contains("Error Domain=") { return false }
+    if lowered.contains("nsurlerror") || lowered.contains("cfstream") { return false }
+    if lowered.range(of: #"\b[45]\d{2}\b"#, options: .regularExpression) != nil { return false }
+    if text.filter({ $0 == ":" }).count > 1 { return false }
+    if lowered.hasPrefix("omi ") || lowered.hasPrefix("couldn't ") || lowered.hasPrefix("didn't ") {
+      return true
+    }
+    return text.hasSuffix(".") && text.count < 120
+  }
+
   private static func fallback(for context: Context) -> String {
     "Couldn't \(context.action). Try again."
   }

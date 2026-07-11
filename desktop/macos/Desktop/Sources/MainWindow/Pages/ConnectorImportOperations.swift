@@ -67,7 +67,7 @@ enum ConnectorImportOperations {
                 message: "Imported \(emails.count.formatted()) emails and saved \(memoryCount.formatted()) memories."
             )
         } catch {
-            return .failure(message: UserFacingErrorPresentation.message(for: error, while: .integration("Gmail")))
+            return .failure(message: error.localizedDescription)
         }
     }
 
@@ -145,7 +145,7 @@ enum ConnectorImportOperations {
                 message: message
             )
         } catch {
-            return .failure(message: UserFacingErrorPresentation.message(for: error, while: .integration("X")))
+            return .failure(message: error.localizedDescription)
         }
     }
 
@@ -193,7 +193,7 @@ enum ConnectorImportOperations {
                 message: "Read \(events.count.formatted()) calendar events and saved \(memoryCount.formatted()) memories."
             )
         } catch {
-            return .failure(message: UserFacingErrorPresentation.message(for: error, while: .integration("Google Calendar")))
+            return .failure(message: error.localizedDescription)
         }
     }
 
@@ -203,24 +203,20 @@ enum ConnectorImportOperations {
             return try await runAppleNotesImport(progress: progress)
         } catch let error as AppleNotesReaderError {
             guard error.shouldPromptForFolderSelection else {
-                return .failure(
-                    message: UserFacingErrorPresentation.message(for: error, while: .integration("Apple Notes"))
-                )
+                return .failure(message: error.localizedDescription)
             }
             switch await selectAppleNotesFolder() {
-            case .denied(_):
-                return .failure(message: "Omi couldn't access that Apple Notes folder. Choose another folder and try again.")
+            case .denied(let message):
+                return .failure(message: message ?? error.localizedDescription)
             case .granted:
                 do {
                     return try await runAppleNotesImport(progress: progress)
                 } catch {
-                    return .failure(
-                        message: UserFacingErrorPresentation.message(for: error, while: .integration("Apple Notes"))
-                    )
+                    return .failure(message: error.localizedDescription)
                 }
             }
         } catch {
-            return .failure(message: UserFacingErrorPresentation.message(for: error, while: .integration("Apple Notes")))
+            return .failure(message: error.localizedDescription)
         }
     }
 
@@ -330,7 +326,7 @@ enum ConnectorImportOperations {
             _ = try await AppleNotesReaderService.shared.validateSelectedFolder(path: selectedURL.path)
             return .granted
         } catch {
-            return .denied(message: "Omi couldn't access that folder.")
+            return .denied(message: error.localizedDescription)
         }
     }
 

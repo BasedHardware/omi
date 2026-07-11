@@ -31,6 +31,23 @@ final class UserFacingErrorPresentationTests: XCTestCase {
     )
   }
 
+  func testSanitizesStoredErrorCopyAtDisplayTime() {
+    XCTAssertEqual(
+      UserFacingErrorPresentation.message(
+        from: "route v1/internal-control was not found (404)",
+        while: .chatSessions
+      ),
+      "Couldn't load chats. Try again."
+    )
+    XCTAssertEqual(
+      UserFacingErrorPresentation.message(
+        from: "Didn't hear back from X. If you approved access, try again.",
+        while: .integration("X")
+      ),
+      "Didn't hear back from X. If you approved access, try again."
+    )
+  }
+
   func testProvidesNetworkRecovery() {
     XCTAssertEqual(
       UserFacingErrorPresentation.message(
