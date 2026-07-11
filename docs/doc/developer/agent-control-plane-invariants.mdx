@@ -176,13 +176,21 @@ Every production adapter declares `managed_cloud` or `local_user` in
 kernel creates them. Managed sessions may select only managed-cloud adapters;
 local-user sessions are pinned to the exact selected local adapter. Missing
 adapter arguments inherit that boundary, while unknown adapters fail closed.
+Signed desktop control, and the canonical top-level `spawn_agent` tool's
+explicit `provider` selector for Hermes or OpenClaw, may establish a fresh
+local-provider session or resume an existing session against its persisted
+boundary, even when the control bridge itself uses managed-cloud routing. An
+adapter ID alone may not use that exception, and neither may cross a parent
+run's boundary or override an existing session's adapter.
 
 Guard surface:
 
 - `execution-policy.ts` is the shared resolver used by control tools and the
   kernel run-acceptance path.
 - `runtime-adapter.test.ts`, `execution-policy.test.ts`, and
-  `control-tools.test.ts` exhaust production declarations and managed routing.
+  `control-tools.test.ts` exhaust production declarations, managed routing,
+  directed and signed top-level local-provider starts, and signed local-session
+  resumption.
 
 ### Execution role owns agent-management authority
 

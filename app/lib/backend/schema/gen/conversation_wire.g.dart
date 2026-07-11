@@ -792,6 +792,7 @@ class GeneratedSyncLocalFilesResultResponse {
 
 class GeneratedSyncJobStartResponse {
   final String jobId;
+  final String lane;
   final int pollAfterMs;
   final String status;
   final int totalFiles;
@@ -799,6 +800,7 @@ class GeneratedSyncJobStartResponse {
 
   const GeneratedSyncJobStartResponse({
     required this.jobId,
+    this.lane = "fresh",
     required this.pollAfterMs,
     required this.status,
     required this.totalFiles,
@@ -808,6 +810,7 @@ class GeneratedSyncJobStartResponse {
   factory GeneratedSyncJobStartResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedSyncJobStartResponse(
       jobId: _required(_readFieldValue<String>(_readField(json, const ["job_id"]), "job_id", _readString, requiredField: true, nullable: false), "job_id"),
+      lane: _required(_readFieldValue<String>(_readField(json, const ["lane"]), "lane", _readString, requiredField: false, nullable: false, defaultValue: "fresh"), "lane"),
       pollAfterMs: _required(_readFieldValue<int>(_readField(json, const ["poll_after_ms"]), "poll_after_ms", _readInt, requiredField: true, nullable: false), "poll_after_ms"),
       status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
       totalFiles: _required(_readFieldValue<int>(_readField(json, const ["total_files"]), "total_files", _readInt, requiredField: true, nullable: false), "total_files"),
@@ -818,6 +821,7 @@ class GeneratedSyncJobStartResponse {
   Map<String, dynamic> toJson() {
     return {
       'job_id': jobId,
+      'lane': lane,
       'poll_after_ms': pollAfterMs,
       'status': status,
       'total_files': totalFiles,
@@ -830,8 +834,12 @@ class GeneratedSyncJobStatusResponse {
   final String? error;
   final int failedSegments;
   final String jobId;
+  final String lane;
   final int processedSegments;
+  final String? reasonCode;
+  final int? recordingAgeSeconds;
   final GeneratedSyncLocalFilesResultResponse? result;
+  final int? retryAfter;
   final String status;
   final int successfulSegments;
   final int totalSegments;
@@ -840,8 +848,12 @@ class GeneratedSyncJobStatusResponse {
     this.error,
     this.failedSegments = 0,
     required this.jobId,
+    this.lane = "fresh",
     this.processedSegments = 0,
+    this.reasonCode,
+    this.recordingAgeSeconds,
     this.result,
+    this.retryAfter,
     required this.status,
     this.successfulSegments = 0,
     this.totalSegments = 0,
@@ -852,8 +864,12 @@ class GeneratedSyncJobStatusResponse {
       error: _readFieldValue<String>(_readField(json, const ["error"]), "error", _readString, requiredField: false, nullable: true),
       failedSegments: _required(_readFieldValue<int>(_readField(json, const ["failed_segments"]), "failed_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "failed_segments"),
       jobId: _required(_readFieldValue<String>(_readField(json, const ["job_id"]), "job_id", _readString, requiredField: true, nullable: false), "job_id"),
+      lane: _required(_readFieldValue<String>(_readField(json, const ["lane"]), "lane", _readString, requiredField: false, nullable: false, defaultValue: "fresh"), "lane"),
       processedSegments: _required(_readFieldValue<int>(_readField(json, const ["processed_segments"]), "processed_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "processed_segments"),
+      reasonCode: _readFieldValue<String>(_readField(json, const ["reason_code"]), "reason_code", _readString, requiredField: false, nullable: true),
+      recordingAgeSeconds: _readFieldValue<int>(_readField(json, const ["recording_age_seconds"]), "recording_age_seconds", _readInt, requiredField: false, nullable: true),
       result: _readFieldValue<GeneratedSyncLocalFilesResultResponse>(_readField(json, const ["result"]), "result", (value) => _readObject(value, GeneratedSyncLocalFilesResultResponse.fromJson), requiredField: false, nullable: true),
+      retryAfter: _readFieldValue<int>(_readField(json, const ["retry_after"]), "retry_after", _readInt, requiredField: false, nullable: true),
       status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
       successfulSegments: _required(_readFieldValue<int>(_readField(json, const ["successful_segments"]), "successful_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "successful_segments"),
       totalSegments: _required(_readFieldValue<int>(_readField(json, const ["total_segments"]), "total_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "total_segments"),
@@ -865,11 +881,83 @@ class GeneratedSyncJobStatusResponse {
       'error': error,
       'failed_segments': failedSegments,
       'job_id': jobId,
+      'lane': lane,
       'processed_segments': processedSegments,
+      'reason_code': reasonCode,
+      'recording_age_seconds': recordingAgeSeconds,
       'result': result?.toJson(),
+      'retry_after': retryAfter,
       'status': status,
       'successful_segments': successfulSegments,
       'total_segments': totalSegments,
+    };
+  }
+}
+
+class GeneratedSyncCaptureManifestFile {
+  final String name;
+  final String sha256;
+
+  const GeneratedSyncCaptureManifestFile({
+    required this.name,
+    required this.sha256,
+  });
+
+  factory GeneratedSyncCaptureManifestFile.fromJson(Map<String, dynamic> json) {
+    return GeneratedSyncCaptureManifestFile(
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+      sha256: _required(_readFieldValue<String>(_readField(json, const ["sha256"]), "sha256", _readString, requiredField: true, nullable: false), "sha256"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'name': name,
+      'sha256': sha256,
+    };
+  }
+}
+
+class GeneratedSyncCaptureManifestRequest {
+  final String conversationId;
+  final List<GeneratedSyncCaptureManifestFile> files;
+
+  const GeneratedSyncCaptureManifestRequest({
+    required this.conversationId,
+    required this.files,
+  });
+
+  factory GeneratedSyncCaptureManifestRequest.fromJson(Map<String, dynamic> json) {
+    return GeneratedSyncCaptureManifestRequest(
+      conversationId: _required(_readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: true, nullable: false), "conversation_id"),
+      files: _required(_readFieldValue<List<GeneratedSyncCaptureManifestFile>>(_readField(json, const ["files"]), "files", (value) => _readObjectList(value, GeneratedSyncCaptureManifestFile.fromJson), requiredField: true, nullable: false), "files"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'conversation_id': conversationId,
+      'files': files.map((value) => value.toJson()).toList(),
+    };
+  }
+}
+
+class GeneratedSyncCaptureManifestResponse {
+  final String manifest;
+
+  const GeneratedSyncCaptureManifestResponse({
+    required this.manifest,
+  });
+
+  factory GeneratedSyncCaptureManifestResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedSyncCaptureManifestResponse(
+      manifest: _required(_readFieldValue<String>(_readField(json, const ["manifest"]), "manifest", _readString, requiredField: true, nullable: false), "manifest"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'manifest': manifest,
     };
   }
 }

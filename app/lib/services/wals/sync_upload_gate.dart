@@ -12,6 +12,7 @@ typedef SyncFilesUploader = Future<UploadFilesResult> Function(
   List<File> files, {
   UploadProgressCallback? onUploadProgress,
   String? conversationId,
+  SyncUploadLane syncLane,
 });
 typedef FairUseStatusLoader = Future<Map<String, dynamic>?> Function();
 
@@ -46,17 +47,17 @@ class SyncUploadGate {
 
   /// Reconciles a previously confirmed fair-use restriction with the server.
   /// Returns whether uploads are currently allowed after all cooldowns.
-  Future<bool> prepareToUpload() async {
-    if (_limiter.hasPersistedFairUseState) {
+  Future<bool> prepareToUpload({SyncUploadLane lane = SyncUploadLane.fresh}) async {
+    if (lane == SyncUploadLane.fresh && _limiter.hasPersistedFairUseState) {
       await reconcileFairUseStatus();
     }
-    return !_limiter.isLimited;
+    return !_limiter.isLimitedForLane(lane.name);
   }
 
   /// Single-flight authoritative fair-use reconciliation.
   Future<bool> reconcileFairUseStatus() {
     if (!_limiter.hasPersistedFairUseState) {
-      return Future.value(!_limiter.isLimited);
+      return Future.value(!_limiter.isLimitedForLane(SyncUploadLane.fresh.name));
     }
     final active = _reconciliation;
     if (active != null) return active;
@@ -83,40 +84,52 @@ class SyncUploadGate {
       // reconciliation soon without hitting upload after the local deadline.
       _limiter.markLimited(retryAfterSeconds: _statusRetryCooldownSeconds, reason: RateLimitReason.fairUse);
     }
-    return !_limiter.isLimited;
+    return !_limiter.isLimitedForLane(SyncUploadLane.fresh.name);
   }
 
   Future<UploadFilesResult> upload(
     List<File> files, {
     UploadProgressCallback? onUploadProgress,
     String? conversationId,
+    SyncUploadLane lane = SyncUploadLane.fresh,
   }) async {
     await _uploadMutex.acquire();
     try {
       // Honor an active Retry-After without immediately probing fair-use
       // status. Lifecycle/manual entry points may reconcile active state, but
       // queued parallel uploads must stop at the established cooldown.
-      var allowed = !_limiter.isLimited;
-      if (allowed && _limiter.hasPersistedFairUseState) {
+      var allowed = !_limiter.isLimitedForLane(lane.name);
+      if (allowed && lane == SyncUploadLane.fresh && _limiter.hasPersistedFairUseState) {
         allowed = await reconcileFairUseStatus();
       }
       if (!allowed) {
         throw SyncRateLimitedException(
           kind: _limiter.reason == RateLimitReason.backendBusy
               ? SyncRateLimitKind.backendCapacity
-              : SyncRateLimitKind.fairUse,
+              : lane == SyncUploadLane.backfill
+                  ? SyncRateLimitKind.backfillPaced
+                  : SyncRateLimitKind.fairUse,
           retryAfterSeconds: _limiter.activeRetryAfterSeconds,
         );
       }
 
       try {
-        final result = await _uploader(files, onUploadProgress: onUploadProgress, conversationId: conversationId);
-        _limiter.clear();
+        final result = await _uploader(
+          files,
+          onUploadProgress: onUploadProgress,
+          conversationId: conversationId,
+          syncLane: lane,
+        );
+        _limiter.clearForLane(lane.name);
         return result;
       } on SyncRateLimitedException catch (error) {
         _limiter.markLimited(
           retryAfterSeconds: error.retryAfterSeconds,
-          reason: error.kind == SyncRateLimitKind.fairUse ? RateLimitReason.fairUse : RateLimitReason.backendBusy,
+          reason: switch (error.kind) {
+            SyncRateLimitKind.fairUse => RateLimitReason.fairUse,
+            SyncRateLimitKind.backfillPaced => RateLimitReason.backfillPaced,
+            SyncRateLimitKind.backendCapacity => RateLimitReason.backendBusy,
+          },
         );
         rethrow;
       }

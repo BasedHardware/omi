@@ -628,6 +628,9 @@ class SyncJobStatusResponse {
   final int failedSegments;
   final SyncLocalFilesResponse? result;
   final String? error;
+  final String? lane;
+  final String? reasonCode;
+  final int? retryAfter;
 
   SyncJobStatusResponse({
     required this.jobId,
@@ -638,6 +641,9 @@ class SyncJobStatusResponse {
     this.failedSegments = 0,
     this.result,
     this.error,
+    this.lane,
+    this.reasonCode,
+    this.retryAfter,
   });
 
   bool get isTerminal => status == 'completed' || status == 'partial_failure' || status == 'failed';
@@ -645,7 +651,20 @@ class SyncJobStatusResponse {
   bool get isPartialFailure => status == 'partial_failure';
 
   factory SyncJobStatusResponse.fromJson(Map<String, dynamic> json) {
-    return SyncJobStatusResponse.fromGenerated(wire.GeneratedSyncJobStatusResponse.fromJson(json));
+    final generated = wire.GeneratedSyncJobStatusResponse.fromJson(json);
+    return SyncJobStatusResponse(
+      jobId: generated.jobId,
+      status: generated.status,
+      totalSegments: generated.totalSegments,
+      processedSegments: generated.processedSegments,
+      successfulSegments: generated.successfulSegments,
+      failedSegments: generated.failedSegments,
+      result: generated.result == null ? null : SyncLocalFilesResponse.fromGenerated(generated.result!),
+      error: generated.error,
+      lane: json['lane'] as String?,
+      reasonCode: json['reason_code'] as String?,
+      retryAfter: (json['retry_after'] as num?)?.toInt(),
+    );
   }
 
   factory SyncJobStatusResponse.fromGenerated(wire.GeneratedSyncJobStatusResponse generated) {

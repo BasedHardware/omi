@@ -38,6 +38,9 @@ SCHEMA_GROUPS = {
             'SyncLocalFilesResultResponse',
             'SyncJobStartResponse',
             'SyncJobStatusResponse',
+            'SyncCaptureManifestFile',
+            'SyncCaptureManifestRequest',
+            'SyncCaptureManifestResponse',
         ),
     },
     'messages': {
