@@ -72,11 +72,29 @@ for arg in "$@"; do
 done
 suite="${filter%/}"
 
-case "$suite" in
-  AlphaTests|BetaTests)
-    sleep 3
-    ;;
-esac
+if [ "$suite" = "AlphaTests" ] || [ "$suite" = "BetaTests" ]; then
+  peer="AlphaTests"
+  if [ "$suite" = "AlphaTests" ]; then
+    peer="BetaTests"
+  fi
+
+  entered_path="$FAKE_XCRUN_SYNC_DIR/$suite.entered"
+  peer_entered_path="$FAKE_XCRUN_SYNC_DIR/$peer.entered"
+  trap 'rm -f "$entered_path"' EXIT
+  touch "$entered_path"
+
+  # This is a deadlock guard, not the concurrency oracle. Reaching the peer's
+  # marker proves it entered while this process was still active and waiting.
+  deadline=$((SECONDS + 10))
+  while [ ! -f "$peer_entered_path" ]; do
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      echo "rendezvous timed out waiting for $peer" >&2
+      exit 1
+    fi
+    sleep 0.05
+  done
+  touch "$FAKE_XCRUN_SYNC_DIR/overlap-proven"
+fi
 
 if [ "$suite" = "AlphaTests" ]; then
   echo "alpha failed"
@@ -89,18 +107,18 @@ chmod +x "$TMPDIR/bin/xcrun"
 
 export PATH="$TMPDIR/bin:$PATH"
 export FAKE_XCRUN_LOG="$TMPDIR/xcrun.log"
+export FAKE_XCRUN_SYNC_DIR="$TMPDIR/xcrun-sync"
 export OMI_SWIFT_TEST_DISCOVERY_ROOT="$TMPDIR/tests"
 export OMI_SWIFT_TEST_PACKAGE_PATH="$TMPDIR/package"
 export OMI_SWIFT_TEST_SUITE_WORKERS=2
+mkdir -p "$FAKE_XCRUN_SYNC_DIR"
 
-start=$(date +%s)
 if "$RUNNER" >"$TMPDIR/runner.out" 2>"$TMPDIR/runner.err"; then
   fail "runner unexpectedly succeeded despite AlphaTests failure"
 fi
-elapsed=$(( $(date +%s) - start ))
 
-if [ "$elapsed" -ge 6 ]; then
-  fail "runner did not execute AlphaTests and BetaTests in parallel; elapsed=${elapsed}s"
+if [ ! -f "$FAKE_XCRUN_SYNC_DIR/overlap-proven" ]; then
+  fail "runner did not execute AlphaTests and BetaTests concurrently"
 fi
 if ! grep -q -- "--- FAILED: AlphaTests ---" "$TMPDIR/runner.out"; then
   fail "runner did not print the failed suite heading"
