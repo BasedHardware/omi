@@ -56,6 +56,8 @@ for bcp, nllb in BCP47_TO_NLLB.items():
     if nllb not in NLLB_TO_BCP47:
         NLLB_TO_BCP47[nllb] = bcp.split("-")[0]
 
+_BCP47_TO_NLLB_LOWER: Dict[str, str] = {k.lower(): v for k, v in BCP47_TO_NLLB.items()}
+
 REQUESTS_TOTAL = Counter("nllb_requests_total", "Total translation requests", ["target_lang", "status"])
 TRANSLATION_LATENCY = Histogram(
     "nllb_translation_latency_seconds",
@@ -124,11 +126,11 @@ def _resolve_nllb_code(bcp47_code: str) -> Optional[str]:
     if not bcp47_code:
         return None
     code = bcp47_code.strip().lower()
-    if code in BCP47_TO_NLLB:
-        return BCP47_TO_NLLB[code]
+    if code in _BCP47_TO_NLLB_LOWER:
+        return _BCP47_TO_NLLB_LOWER[code]
     base = code.split("-")[0]
-    if base in BCP47_TO_NLLB:
-        return BCP47_TO_NLLB[base]
+    if base in _BCP47_TO_NLLB_LOWER:
+        return _BCP47_TO_NLLB_LOWER[base]
     if code in NLLB_TO_BCP47:
         return code
     return None
