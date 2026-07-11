@@ -239,26 +239,6 @@ class _PlansSheetState extends State<PlansSheet> {
     }
   }
 
-  Map<String, dynamic>? _getScheduledPlanDetails() {
-    final provider = context.read<UsageProvider>();
-    final availablePlans = provider.availablePlans;
-    if (availablePlans == null) return null;
-
-    try {
-      final plans = availablePlans['plans'] as List;
-      // Find the annual plan if it's scheduled (both plans are active)
-      final annualPlan = plans.firstWhere(
-        (plan) => plan['is_active'] == true && plan['interval'] == 'year',
-        orElse: () => null,
-      );
-
-      return annualPlan;
-    } catch (e) {
-      Logger.debug('Error getting scheduled plan details: $e');
-      return null;
-    }
-  }
-
   Future<void> _handleSwitchToFreePlan() async {
     setState(() => _isSwitchingToFree = true);
 
@@ -1064,7 +1044,6 @@ class _PlansSheetState extends State<PlansSheet> {
                               final currentPlan = _getCurrentPlanDetails();
                               final isOnAnnualPlan = currentPlan?['interval'] == 'year';
                               final hasScheduledUpgrade = _hasScheduledUpgrade();
-                              final scheduledPlan = _getScheduledPlanDetails();
 
                               if (hasScheduledUpgrade) {
                                 // User has a scheduled upgrade - show upgrade info

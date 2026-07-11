@@ -4029,16 +4029,6 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
     // Phrases
     final phrases = widget.result['top_phrases'] as List<dynamic>? ?? [];
 
-    // Actions
-    final totalActions = widget.result['total_action_items'] ?? 0;
-    final completedActions = widget.result['completed_action_items'] ?? 0;
-    final completionRate = (((widget.result['action_items_completion_rate'] ?? 0.0) as num) * 100).toInt();
-
-    // Signature + archetype
-    final archetype = (widget.result['decision_style'] as Map<String, dynamic>?)?['name'] ?? 'Thinker';
-    final signaturePhrase = (widget.result['signature_phrase'] as Map<String, dynamic>?)?['phrase'] ?? 'okay';
-    final signatureCount = (widget.result['signature_phrase'] as Map<String, dynamic>?)?['count'] ?? 0;
-
     // Struggle + Win
     final struggle = (widget.result['struggle'] as Map<String, dynamic>?)?['title'] ?? context.l10n.wrappedTheHardPart;
     final biggestWin =
