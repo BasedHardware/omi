@@ -359,6 +359,9 @@ export type BarChatState = {
   messages: BarChatMessage[]
   sending: boolean
   status: BarChatStatus
+  /** A delegated coding-agent (ACP) task is running in the shared engine — the
+   *  bar orb shows its distinctive 'agents' pose. Absent = false. */
+  agentsActive?: boolean
 }
 /** `token` is a per-reveal monotonic id: the renderer echoes it back via
  *  `showAck` once it has painted the revealed frame, so main can reject a stale

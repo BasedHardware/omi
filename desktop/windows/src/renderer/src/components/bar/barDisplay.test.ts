@@ -14,7 +14,8 @@ describe('deriveOrbState', () => {
     recording: false,
     transcribing: false,
     status: 'idle',
-    continuousListening: false
+    continuousListening: false,
+    agentsActive: false
   } as const
 
   it('recording → speaking WITH the user amplitude (the blob reacts to the mic)', () => {
@@ -46,6 +47,29 @@ describe('deriveOrbState', () => {
   it('continuous listening → listening; otherwise idle', () => {
     expect(deriveOrbState({ ...base, continuousListening: true }).state).toBe('listening')
     expect(deriveOrbState(base).state).toBe('idle')
+  })
+
+  it('running coding-agent → agents pose (over generic thinking; both are status=sending)', () => {
+    expect(deriveOrbState({ ...base, agentsActive: true, status: 'sending' })).toEqual({
+      state: 'agents',
+      withAmplitude: false
+    })
+    // agents also wins over passive continuous listening
+    expect(deriveOrbState({ ...base, agentsActive: true, continuousListening: true }).state).toBe(
+      'agents'
+    )
+  })
+
+  it('live voice still wins over an active agent (user turn is most salient)', () => {
+    // user holding PTT during an agent task → the user's reactive mic turn
+    expect(deriveOrbState({ ...base, agentsActive: true, recording: true })).toEqual({
+      state: 'speaking',
+      withAmplitude: true
+    })
+    // Omi speaking a reply also outranks the agents pose
+    expect(deriveOrbState({ ...base, agentsActive: true, status: 'speaking' }).state).toBe(
+      'speaking'
+    )
   })
 })
 

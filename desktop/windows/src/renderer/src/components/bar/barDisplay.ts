@@ -14,6 +14,9 @@ export type BarActivity = {
   status: BarChatStatus
   /** Continuous listening is on AND the user is signed in. */
   continuousListening: boolean
+  /** A delegated coding-agent (ACP) task is running (projected from the shared
+   *  chat engine). Shows the orb's distinctive 'agents' pose. */
+  agentsActive: boolean
 }
 
 /**
@@ -28,6 +31,9 @@ export type BarActivity = {
 export function deriveOrbState(a: BarActivity): { state: OrbState; withAmplitude: boolean } {
   if (a.recording) return { state: 'speaking', withAmplitude: true }
   if (a.status === 'speaking') return { state: 'speaking', withAmplitude: false }
+  // A running coding-agent shows the distinctive 'agents' pose over generic
+  // 'thinking' (both carry status==='sending'), but live voice above still wins.
+  if (a.agentsActive) return { state: 'agents', withAmplitude: false }
   if (a.transcribing || a.status === 'sending') return { state: 'thinking', withAmplitude: false }
   if (a.continuousListening) return { state: 'listening', withAmplitude: false }
   return { state: 'idle', withAmplitude: false }

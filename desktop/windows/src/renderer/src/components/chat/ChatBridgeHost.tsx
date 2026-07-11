@@ -16,14 +16,19 @@ const PUBLISH_THROTTLE_MS = 50
 
 export function ChatBridgeHost(): null {
   const { chat } = useAppState()
-  const { history, sending, speaking } = chat
+  const { history, sending, speaking, agentActive } = chat
 
   const status: BarChatStatus = speaking ? 'speaking' : sending ? 'sending' : 'idle'
   // The projected snapshot the bar renders. Held in a ref so the pull path
   // (bar:requestChatState) and the throttled publisher always read fresh values.
-  const stateRef = useRef<BarChatState>({ messages: history, sending, status })
+  const stateRef = useRef<BarChatState>({
+    messages: history,
+    sending,
+    status,
+    agentsActive: agentActive
+  })
   // eslint-disable-next-line react-hooks/refs -- latest-ref: the pull path + throttled publisher read the freshest snapshot
-  stateRef.current = { messages: history, sending, status }
+  stateRef.current = { messages: history, sending, status, agentsActive: agentActive }
 
   const publish = useCallback((): void => {
     window.omi?.publishChatState?.(stateRef.current)
@@ -88,7 +93,7 @@ export function ChatBridgeHost(): null {
     if (since >= PUBLISH_THROTTLE_MS) fire()
     else if (timerRef.current === null)
       timerRef.current = setTimeout(fire, PUBLISH_THROTTLE_MS - since)
-  }, [history, sending, status, publish])
+  }, [history, sending, status, agentActive, publish])
 
   useEffect(() => {
     return () => {

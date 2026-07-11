@@ -254,7 +254,8 @@ export function BarApp(): React.JSX.Element {
     recording: ptt.recording,
     transcribing: ptt.transcribing,
     status: chat.status,
-    continuousListening: continuous && signedIn
+    continuousListening: continuous && signedIn,
+    agentsActive: chat.agentsActive ?? false
   })
   const orbState = orb.state
   const amplitudeSource: (() => WaveformSource | null) | null = orb.withAmplitude

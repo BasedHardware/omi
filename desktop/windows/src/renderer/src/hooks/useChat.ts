@@ -22,6 +22,9 @@ export type UseChat = {
    *  distinct from `sending` (which is the streaming phase). The bar orb uses it
    *  to show the "speaking" state after a voice exchange. */
   speaking: boolean
+  /** True while a delegated coding-agent (ACP) task is running — the bar orb
+   *  shows its distinctive 'agents' pose. */
+  agentActive: boolean
   // `send` takes the message text. The draft input is intentionally NOT stored
   // here: this hook lives in the app-wide AppStateProvider, so keeping the
   // per-keystroke input in it would re-render the entire app shell (and every
@@ -53,6 +56,9 @@ export function useChat(): UseChat {
   // a later reply's TTS starts before an earlier one drains.
   const [speaking, setSpeaking] = useState(false)
   const ttsActiveRef = useRef(0)
+  // True while a delegated coding-agent (ACP) task is running — drives the bar
+  // orb's distinctive 'agents' pose (projected to the bar via ChatBridgeHost).
+  const [agentActive, setAgentActive] = useState(false)
   // Speak an assembled reply through the gated voice path — fire-and-forget so
   // the send promise resolves as soon as the text is rendered (audio plays on
   // its own). Only for voice-originated turns; falls back to the system voice
@@ -257,6 +263,7 @@ export function useChat(): UseChat {
     }
 
     setSending(true)
+    setAgentActive(true)
     const taskId = crypto.randomUUID()
     activeAgentTaskRef.current = taskId
     const assistantId = crypto.randomUUID()
@@ -333,6 +340,7 @@ export function useChat(): UseChat {
       statusNotes += `_Error: ${(e as Error).message}_\n`
     } finally {
       if (activeAgentTaskRef.current === taskId) activeAgentTaskRef.current = null
+      setAgentActive(false)
       unsubscribe()
       activity = null
       render(true)
@@ -540,5 +548,5 @@ export function useChat(): UseChat {
     }
   }
 
-  return { history, sending, speaking, send, reset }
+  return { history, sending, speaking, agentActive, send, reset }
 }
