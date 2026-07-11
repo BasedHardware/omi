@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 import pytest
 
-from llm_gateway.gateway.config_loader import feature_lane_id, load_gateway_config
+from llm_gateway.gateway.config_loader import feature_lane_id, load_gateway_config, load_generated_route_overrides
 from utils.llm.model_config import get_all_configured_features, get_route_options, get_model, get_provider
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -88,15 +88,25 @@ def test_every_model_config_feature_has_inventory_and_gateway_lane():
     assert missing_lanes == []
 
 
-def test_generated_gateway_lanes_preserve_model_config_route_options():
+def test_generated_gateway_lanes_apply_only_declared_gateway_route_overrides():
     config = load_gateway_config(prod_mode=True)
+    overrides = load_generated_route_overrides()
 
     for feature in get_all_configured_features():
-        model = get_model(feature)
-        provider = get_provider(feature)
+        override = overrides.get(feature)
+        model = override.primary.model if override is not None else get_model(feature)
+        provider = override.primary.provider if override is not None else get_provider(feature)
         route = config.route_artifacts[f'route.{feature}.model_config.001']
 
-        assert route.provider_options == get_route_options(feature, model, provider)
+        expected_options = get_route_options(feature, model, provider)
+        if override is not None:
+            expected_options.update(override.provider_options)
+        expected_provider_model = (
+            f'google/{model}' if provider == 'openrouter' and model.startswith('gemini') else model
+        )
+        assert route.primary.model == expected_provider_model
+        assert route.primary.provider == provider
+        assert route.provider_options == expected_options
 
 
 def test_anthropic_generated_lanes_do_not_advertise_streaming_without_adapter_support():
