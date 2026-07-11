@@ -53,6 +53,31 @@ describe('computeStripBounds', () => {
     expect(s.y).toBe(-200)
     expect(s.x).toBe(Math.round(2560 + (1920 - STRIP_WIDTH) / 2))
   })
+
+  // Reveal regression (BUG 4 follow-up): making the strip click-through broke a
+  // STRAIGHT-UP approach — only an edge-slide along y=top revealed the bar. The
+  // strip is now hit-testable again; these guard the geometry the reveal depends
+  // on regardless of approach direction. (The hit-testability itself is an
+  // Electron runtime property, verified manually with a real cursor.)
+  it('catches a cursor arriving straight up at top-center (reveal-from-below)', () => {
+    const inStrip = (cursor: { x: number; y: number }, d: DisplayLike): boolean => {
+      const s = computeStripBounds(d)
+      return (
+        cursor.x >= s.x && cursor.x < s.x + s.width && cursor.y >= s.y && cursor.y < s.y + s.height
+      )
+    }
+    // The exact pixel a from-below cursor crosses: dead top-center, y = bounds.top.
+    const cx = primary.bounds.x + primary.bounds.width / 2
+    expect(inStrip({ x: cx, y: primary.bounds.y }, primary)).toBe(true)
+    // Off-center but within the 280px band (a diagonal-ish straight-up) still fires.
+    expect(inStrip({ x: cx - 120, y: primary.bounds.y }, primary)).toBe(true)
+    expect(inStrip({ x: cx + 120, y: primary.bounds.y }, primary)).toBe(true)
+    // Same on the negative-origin, high-DPI secondary display.
+    const cx2 = secondary.bounds.x + secondary.bounds.width / 2
+    expect(inStrip({ x: cx2, y: secondary.bounds.y }, secondary)).toBe(true)
+    // …but a cursor still below the top edge has not reached the trigger yet.
+    expect(inStrip({ x: cx, y: primary.bounds.y + 1 }, primary)).toBe(false)
+  })
 })
 
 describe('isCursorInPeekFootprint (retract watchdog — merge-blocker regression)', () => {

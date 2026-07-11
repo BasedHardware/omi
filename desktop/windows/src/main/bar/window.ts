@@ -440,11 +440,15 @@ function createStrip(display: Electron.Display): BrowserWindow {
     }
   })
   win.setAlwaysOnTop(true, 'screen-saver')
-  // Click-through: the strip must NEVER eat a click meant for the app underneath
-  // (a control at the very top-center — e.g. a browser's new-tab "+" — sits right
-  // under it). `forward: true` still delivers mousemove to the renderer, so the
-  // hover-reveal trigger keeps working; only clicks pass straight through.
-  win.setIgnoreMouseEvents(true, { forward: true })
+  // The strip stays HIT-TESTABLE (NOT click-through) — it is the dedicated,
+  // ultra-thin (1px) reveal detector, decoupled from the click-blocking surface
+  // (the bar window). It must reliably catch the cursor reaching the top edge
+  // from ANY approach; forwarded mousemove on a click-through window only fired
+  // on an edge-slide, not a straight-up approach (reveal regression). Being 1px
+  // at y=0 it cannot swallow a real click meant for the app (a browser's new-tab
+  // "+" sits well below the top pixel). The click-through that BUG 4 needs lives
+  // on the bar WINDOW instead: only the visible pill captures clicks, and the
+  // peek watchdog forces the rest click-through (see isCursorOverPill).
   try {
     win.setContentProtection(true) // invisible helper — never in captures
   } catch {
