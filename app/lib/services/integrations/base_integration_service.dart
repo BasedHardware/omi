@@ -11,7 +11,7 @@ abstract class BaseIntegrationService {
   BaseIntegrationService({required this.appKey, required this.prefKey});
 
   bool get isAuthenticated {
-    return SharedPreferencesUtil().getBool(prefKey) ?? false;
+    return SharedPreferencesUtil().getBool(prefKey);
   }
 
   Future<void> refreshConnectionStatus() async {

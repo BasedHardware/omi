@@ -33,7 +33,7 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
       builder: (context, provider, child) {
         // Conversation source
         var convoSource = widget.conversation.source;
-        bool hasPhotos = (widget.conversation.photos ?? []).isNotEmpty;
+        bool hasPhotos = widget.conversation.photos.isNotEmpty;
         String contentTabLabel;
         if (convoSource == ConversationSource.openglass) {
           contentTabLabel = context.l10n.photos;
