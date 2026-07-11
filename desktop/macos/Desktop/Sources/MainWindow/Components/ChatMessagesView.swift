@@ -429,7 +429,8 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         // i.e. scrollMode == .freeScrolling, so guarding on that mode made this
         // restore (and the scrollTo below) dead code — the viewport jumped on every
         // page-up. userIsScrolling is the real "don't fight the user's drag" signal
-        // (set by UserScrollDetector, auto-cleared 0.3s after the last wheel event).
+        // (set by UserScrollDetector on any scroll interaction — wheel, drag, or
+        // keyboard scroll — and auto-cleared 0.3s after the last one).
         guard !userIsScrolling else { return }
 
         // Verify the anchor message is still in the list

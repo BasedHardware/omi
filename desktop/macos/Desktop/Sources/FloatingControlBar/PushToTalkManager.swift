@@ -1890,11 +1890,17 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
       let trimmed = finalText.trimmingCharacters(in: .whitespacesAndNewlines)
       // Dedup by the provider's stable item id (a relay re-delivering the SAME
       // final), NOT by text — keying on text silently dropped legitimately
-      // repeated phrases within a turn ("yes. yes." → "yes"). No id ⇒ treat as
-      // distinct (unique key) so a genuine repeat is never lost.
-      let dedupKey = itemID ?? UUID().uuidString
-      if !trimmed.isEmpty && seenFinalSegmentIDs.insert(dedupKey).inserted {
-        transcriptSegments.append(trimmed)
+      // repeated phrases within a turn ("yes. yes." → "yes"). With no id a final
+      // can't be a relay re-delivery, so always keep it (a genuine repeat is
+      // never lost) rather than minting a throwaway key.
+      if !trimmed.isEmpty {
+        if let itemID {
+          if seenFinalSegmentIDs.insert(itemID).inserted {
+            transcriptSegments.append(trimmed)
+          }
+        } else {
+          transcriptSegments.append(trimmed)
+        }
       }
       lastInterimText = ""
       if state == .finalizing {
