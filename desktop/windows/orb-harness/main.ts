@@ -154,11 +154,15 @@ const api = {
     if (!this.renderer) this.renderer = new OrbRenderer(canvas)
     const params = resolveParams({ t: 0, preset: opts.preset })
     const dt = opts.dt ?? 1 / 60
+    // The `from` state begins fully SETTLED (entered WARMUP seconds ago), so the
+    // window shows the real transition — not a spurious gather from entering the
+    // from-state at t=0 (e.g. thinking freshly ramping 0→1 before it dissolves).
+    const WARMUP = 2
     let state = opts.from
-    let stateChangedAt = 0
+    let stateChangedAt = -WARMUP
     let speechActive = opts.fromSpeechActive ?? opts.from === 'speaking'
     let speechMerge = speechActive ? 1 : 0 // start settled for the `from` state
-    let enterMerge = mergeAmount(state, 0, speechMerge)
+    let enterMerge = mergeAmount(state, WARMUP, speechMerge)
     let spinMult = spinTargetFor(state, params)
     let orbitTime = 0
     const merges: number[] = []
@@ -213,11 +217,13 @@ const api = {
     const sampleAt = new Set(
       Array.from({ length: opts.count }, (_, k) => Math.round((k / (opts.count - 1)) * (total - 1)))
     )
+    // See transitionAreas: the `from` state starts settled (entered WARMUP ago).
+    const WARMUP = 2
     let state = opts.from
-    let stateChangedAt = 0
+    let stateChangedAt = -WARMUP
     let speechActive = opts.from === 'speaking'
     let speechMerge = speechActive ? 1 : 0
-    let enterMerge = mergeAmount(state, 0, speechMerge)
+    let enterMerge = mergeAmount(state, WARMUP, speechMerge)
     let spinMult = spinTargetFor(state, params)
     let orbitTime = 0
     const frames: string[] = []
