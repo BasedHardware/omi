@@ -275,7 +275,9 @@ def test_inventory_strict_raw_decode_site_gate_fails_with_actionable_sites():
 
     assert result.returncode == 1
     assert 'Raw Dart decode sites:' in result.stdout
-    assert 'app/lib/backend/schema/app.dart:31' in result.stdout
+    # AppReview.fromGenerated's updatedAt raw decode: #9470 added an empty-string date guard above
+    # it, shifting this known site from :31 to :32. Keep this pinned to the actual generated line.
+    assert 'app/lib/backend/schema/app.dart:32' in result.stdout
 
 
 def test_inventory_openapi_route_response_decode_migration_complete():
