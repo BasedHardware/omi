@@ -13,7 +13,7 @@ actor TaskDeduplicationService {
     /// told us to keep among the delete_ids — same group (`keep_id: t1,
     /// delete_ids: [t1, t2]`) or cross-group — and the old filter (existence only)
     /// would then hard-delete the canonical task, destroying the whole cluster.
-    nonisolated static func safeDeleteIDs(
+    static func safeDeleteIDs(
         deleteIDs: [String],
         validTaskIDs: Set<String>,
         protectedKeepIDs: Set<String>
