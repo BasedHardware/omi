@@ -595,16 +595,16 @@ def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional
     return 'ok'
 
 
-def update_conversation_segment_text(uid: str, conversation_id: str, segment_id: str, text: str) -> str:
-    """
-    Update a single segment's text in a conversation.
+@firestore.transactional
+def _update_segment_text_transaction(transaction, doc_ref, uid: str, segment_id: str, text: str) -> str:
+    """Atomic read-modify-write of a single transcript segment's text.
 
-    Returns:
-        'ok' on success, 'not_found' if conversation missing, 'locked' if conversation is locked,
-        'segment_not_found' if segment_id not found.
+    The whole ``transcript_segments`` array is rewritten, so the read must happen
+    inside the transaction — otherwise two concurrent edits to *different* segments
+    both read the pre-edit array and the later write silently clobbers the earlier
+    one (lost update). The transaction retries on contention.
     """
-    doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
-    doc_snapshot = doc_ref.get()
+    doc_snapshot = doc_ref.get(transaction=transaction)
     if not doc_snapshot.exists:
         return 'not_found'
 
@@ -629,8 +629,24 @@ def update_conversation_segment_text(uid: str, conversation_id: str, segment_id:
 
     doc_level = conversation_data.get('data_protection_level', 'standard')
     prepared_payload = _prepare_conversation_for_write({'transcript_segments': segments}, uid, doc_level)
-    doc_ref.update(prepared_payload)
+    transaction.update(doc_ref, prepared_payload)
     return 'ok'
+
+
+def update_conversation_segment_text(uid: str, conversation_id: str, segment_id: str, text: str) -> str:
+    """
+    Update a single segment's text in a conversation.
+
+    Runs as a Firestore transaction so concurrent edits to different segments of
+    the same conversation cannot lose-update each other.
+
+    Returns:
+        'ok' on success, 'not_found' if conversation missing, 'locked' if conversation is locked,
+        'segment_not_found' if segment_id not found.
+    """
+    doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    transaction = db.transaction()
+    return _update_segment_text_transaction(transaction, doc_ref, uid, segment_id, text)
 
 
 def delete_conversation_photos(uid: str, conversation_id: str) -> int:
