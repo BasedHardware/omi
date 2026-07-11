@@ -18,9 +18,11 @@ import {
   genesisSettled,
   mergeAmount,
   spinTargetFor,
+  orbitFlowFor,
   stepMergeEnvelope,
   stepAmplitudeEnvelope,
   SPIN_EASE_TAU,
+  FLOW_EASE_TAU,
   DEFAULT_ORB_PARAMS,
   type OrbParams,
   type OrbState
@@ -47,6 +49,9 @@ export class OrbAnimator {
    *  the warped orbit clock it integrates (C9 — faster spin while busy). */
   private spinMult = 1
   private orbitTime = 0
+  /** Live orbit cadence 0..1 (step-rest ↔ continuous glide), eased toward the
+   *  current state's target so the crossover is smooth (busy states glide). */
+  private flow = 0
   private summonedAt: number | null = null
   private morphTarget = 0
   private morph = 0
@@ -173,7 +178,10 @@ export class OrbAnimator {
     const steadyMerge = mergeAmount(this.state, Number.MAX_SAFE_INTEGER, this.speechMerge)
     const curMerge = mergeAmount(this.state, stateTime, this.speechMerge, this.enterMerge)
     if (Math.abs(curMerge - steadyMerge) > 0.005) return true
-    if (Math.abs(this.spinMult - spinTargetFor(this.state, this.params)) > 0.01) return true
+    if (Math.abs(this.spinMult - spinTargetFor(this.state, stateTime, this.params)) > 0.01) {
+      return true
+    }
+    if (Math.abs(this.flow - orbitFlowFor(this.state)) > 0.01) return true
     return false
   }
 
@@ -210,11 +218,17 @@ export class OrbAnimator {
     // Deterministic envelope steps (same functions the harness scrubs with).
     this.speechMerge = stepMergeEnvelope(this.speechMerge, this.speechActive ? 1 : 0, dt)
     this.ampEnvelope = stepAmplitudeEnvelope(this.ampEnvelope, this.rawAmplitude, dt)
-    // Ease the orbit-speed multiplier toward the state's target and integrate
-    // the warped orbit clock (incremental → no angle jump when speed changes).
-    const spinTarget = spinTargetFor(this.state, this.params)
+    // Ease the orbit-speed multiplier toward the state's (whirl-shaped) target
+    // and integrate the warped orbit clock (incremental → no angle jump when the
+    // speed changes). The target itself carries the entry whirl (a decaying
+    // overshoot), so the ring whirls fast on entry and eases to cruise.
+    const stateTime = t - this.stateChangedAt
+    const spinTarget = spinTargetFor(this.state, stateTime, this.params)
     this.spinMult += (spinTarget - this.spinMult) * (1 - Math.exp(-dt / SPIN_EASE_TAU))
     this.orbitTime += dt * this.spinMult
+    // Ease the orbit cadence toward the state's target (step-rest ↔ glide) so the
+    // busy-state continuous spin fades in/out instead of snapping the motion.
+    this.flow += (orbitFlowFor(this.state) - this.flow) * (1 - Math.exp(-dt / FLOW_EASE_TAU))
     // Ease the morph toward its target at a fixed rate (deterministic per dt).
     const step = dt / MORPH_SECONDS
     if (this.morph < this.morphTarget) this.morph = Math.min(this.morphTarget, this.morph + step)
@@ -224,11 +238,12 @@ export class OrbAnimator {
     const frame = computeOrbFrame({
       t,
       state: this.state,
-      stateTime: t - this.stateChangedAt,
+      stateTime,
       amplitude: this.ampEnvelope,
       speechMerge: this.speechMerge,
       enterMerge: this.enterMerge,
       orbitTime: this.orbitTime,
+      flow: this.flow,
       genesisTime: this.summonedAt === null ? Infinity : t - this.summonedAt,
       // Linear progress internally; eased at the point of use so the shape
       // change reads as one smooth motion in both directions.

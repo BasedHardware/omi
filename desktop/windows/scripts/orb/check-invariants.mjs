@@ -3,8 +3,8 @@
 //   2. transparent background (1px border + corners fully alpha-0)
 //   3. orb stays in bounds (never touches the canvas edge)
 //   4. blob count via connected components matches the choreography
-//      (8 separated dots / 1 speech-or-thinking blob / 4 agent pills / 0 at
-//      genesis-zero), with no punched holes and no stray specks
+//      (8 separated dots for idle/listening/THINKING / 1 speech blob / 4 agent
+//      pills / 0 at genesis-zero), with no punched holes and no stray specks
 //   5. BOUNDED speech wave: for extreme amplitude inputs (silence, clipping,
 //      square wave, seeded noise) the blob's iso-contour stays inside designed
 //      min/max radii every frame and never flatlines to a hard circle
@@ -60,20 +60,22 @@ const CASES = [
     noHoles: true,
     noSpecks: true
   },
-  // Thinking: the autonomous blob — solid at every ramp stage.
+  // Thinking: the dots STAY a separated orbiting ring — merge-into-a-blob is
+  // reserved for speech. Never a transient blob at any stage after entry (this
+  // is the reported-bug guard: thinking used to collapse into the center pool).
   {
     name: 'thinking-early',
     spec: { t: 30.35, state: 'thinking', stateTime: 0.35 },
-    noHoles: true,
+    blobs: 8,
     noSpecks: true
   },
   {
     name: 'thinking-mid',
     spec: { t: 30.6, state: 'thinking', stateTime: 0.6 },
-    noHoles: true,
+    blobs: 8,
     noSpecks: true
   },
-  { name: 'thinking', spec: { t: 40, state: 'thinking', stateTime: 3 }, blobs: 1, noHoles: true },
+  { name: 'thinking', spec: { t: 40, state: 'thinking', stateTime: 3 }, blobs: 8 },
   // Agents: four status pills.
   { name: 'agents', spec: { t: 40, state: 'agents', stateTime: 3 }, blobs: 4 },
   // Genesis: scale zero renders NOTHING; early spring frames stay in bounds.
@@ -212,32 +214,39 @@ async function main() {
       }
     }
 
-    // --- 5b. Thinking pulse is VISIBLE (and bounded) ---------------------------
-    // Review round 3: per-dot phase smearing made the "faster autonomous pulse"
-    // nearly static (±0.7%). Sample one pulse period finely and require a real
-    // but tasteful radius oscillation.
+    // --- 5b. Thinking ORBITS: 8 separated dots that rotate (never a blob) ------
+    // The reported bug: thinking collapsed the dots into a central blob, hiding
+    // the orbit. Thinking now keeps the 8 dots separated and glides them
+    // continuously around the ring. Sample across a slice of the rotation and
+    // require: always 8 separated dots, and the ring visibly advances (the dot
+    // positions rotate frame-to-frame — not static, not a blob).
     {
-      const PERIOD = (2 * Math.PI) / 4.6
-      const means = []
-      for (let i = 0; i < 16; i++) {
-        const img = await renderPixels(page, {
-          t: 40 + (i / 16) * PERIOD,
-          state: 'thinking',
-          stateTime: 3 + (i / 16) * PERIOD
-        })
+      let prevSig = null
+      let advanced = 0
+      const STEPS = 8
+      for (let i = 0; i < STEPS; i++) {
+        const dt = i * 0.3
+        const img = await renderPixels(page, { t: 40 + dt, state: 'thinking', stateTime: 3 + dt })
         checked++
-        means.push(contourWaviness(img).mean)
+        const comps = components(whiteMask(img))
+        if (comps.length !== 8) {
+          failures.push(
+            `thinking-orbit/frame${i}: expected 8 separated dots, found ${comps.length}`
+          )
+          continue
+        }
+        // Order-independent signature of the dot centroids; a rotating ring
+        // shifts them frame-to-frame, a static (or blobbed) ring does not.
+        const sig = comps
+          .map((k) => `${Math.round(k.cx)},${Math.round(k.cy)}`)
+          .sort()
+          .join(' ')
+        if (prevSig !== null && sig !== prevSig) advanced++
+        prevSig = sig
       }
-      const lo = Math.min(...means)
-      const hi = Math.max(...means)
-      const swing = (hi - lo) / ((hi + lo) / 2)
-      if (swing < 0.025)
+      if (advanced < STEPS - 2)
         failures.push(
-          `thinking-pulse: radius swing ${(swing * 100).toFixed(1)}% — invisible (<2.5%)`
-        )
-      if (swing > 0.12)
-        failures.push(
-          `thinking-pulse: radius swing ${(swing * 100).toFixed(1)}% — past tasteful (>12%)`
+          `thinking-orbit: ring advanced in only ${advanced}/${STEPS - 1} steps — dots not orbiting`
         )
     }
 

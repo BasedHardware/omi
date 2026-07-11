@@ -18,9 +18,13 @@
 //                is DRIVEN by the live voice amplitude (bounded — see
 //                shapeAmplitude). Dissolves back out when speech ends (the
 //                caller eases `speechMerge` down via stepMergeEnvelope).
-//   thinking   — deliberately DISTINCT from the speech blob: a tighter,
-//                faster, autonomous pulse with zero audio coupling.
-//   agents     — dots pair up into four status pills (clean, understated).
+//   thinking   — deliberately DISTINCT from the speech blob: the dots STAY
+//                SEPARATE on the ring and orbit CONTINUOUSLY at an elevated
+//                speed (merge-into-a-puddle is reserved for speech). Entry kicks
+//                off a fast whirl that eases down to a steady cruise. Also covers
+//                transcribing and a streaming reply (status 'sending').
+//   agents     — entry whirls the ring fast for ~1s, THEN the dots pair up into
+//                four status pills (clean, understated) while the agent runs.
 //
 // Genesis (summon): scale 0 → full disc with an ease-out spring (slight
 // overshoot, fast settle) — never a fade/slide of a full-size element.
@@ -181,28 +185,57 @@ export function easeInOutVelocity(t: number): number {
 // --- Orbit -------------------------------------------------------------------
 
 /**
- * Ring rotation angle (radians) at time t: per cycle the ring eases through
- * `stepDegrees` (velocity S-curve), then rests. Continuous across cycles.
+ * Ring rotation angle (radians) at time t.
+ *
+ * `flow` (0..1) blends the cadence: 0 = eased STEP-then-REST (per cycle the ring
+ * eases through `stepDegrees` then rests — the calm idle look); 1 = a CONTINUOUS
+ * linear glide at the same average rate (the "dots moving around a circle fast"
+ * look busy states need — a discrete stepping ring never reads as spinning). The
+ * two agree exactly at every cycle boundary, so the blend is continuous across
+ * cycles for any flow, and the average rate (one `stepDegrees` per period) is
+ * identical either way — flow changes the texture of the motion, not its speed.
  */
-export function orbitAngle(t: number, p: OrbParams): number {
+export function orbitAngle(t: number, p: OrbParams, flow = 0): number {
   const period = Math.max(1e-6, p.orbitPeriod)
   const cycle = Math.floor(t / period)
   const u = (t - cycle * period) / period
   const rotateFrac = 1 - Math.min(0.95, Math.max(0, p.restFraction))
-  const progress = u < rotateFrac ? easeInOut(u / rotateFrac) : 1
+  const stepped = u < rotateFrac ? easeInOut(u / rotateFrac) : 1
+  const f = Math.min(1, Math.max(0, flow))
+  const progress = stepped * (1 - f) + u * f
   const step = (p.stepDegrees * Math.PI) / 180
   return (cycle + progress) * step
 }
 
-/** Instantaneous angular velocity (rad/s) — for the motion-profile check. */
-export function orbitVelocity(t: number, p: OrbParams): number {
+/** Instantaneous angular velocity (rad/s) — for the motion-profile check. At
+ *  `flow` 1 it never rests (constant glide `step/period`); at 0 it is the eased
+ *  step profile (0 → peak → 0, then a rest). */
+export function orbitVelocity(t: number, p: OrbParams, flow = 0): number {
   const period = Math.max(1e-6, p.orbitPeriod)
   const u = (t - Math.floor(t / period) * period) / period
   const rotateFrac = 1 - Math.min(0.95, Math.max(0, p.restFraction))
-  if (u >= rotateFrac) return 0
   const step = (p.stepDegrees * Math.PI) / 180
-  return (easeInOutVelocity(u / rotateFrac) * step) / (rotateFrac * period)
+  const f = Math.min(1, Math.max(0, flow))
+  const steppedV =
+    u >= rotateFrac ? 0 : (easeInOutVelocity(u / rotateFrac) * step) / (rotateFrac * period)
+  const continuousV = step / period
+  return steppedV * (1 - f) + continuousV * f
 }
+
+/**
+ * Per-state orbit cadence: busy orbiting states (thinking, and the agents entry
+ * whirl) glide the ring CONTINUOUSLY (1) so it reads as spinning fast; idle and
+ * quiet listening keep the calm STEP-then-REST cadence (0). The animator eases
+ * the live value across a state change so the cadence shift is never a jerk;
+ * deterministic renders (harness/tests) fall back to this per-state default.
+ */
+export function orbitFlowFor(state: OrbState): number {
+  return state === 'thinking' || state === 'agents' ? 1 : 0
+}
+
+/** Exponential time-constant (s) for easing the live orbit-cadence `flow` toward
+ *  its state target — a smooth glide↔step crossover, no snap when it flips. */
+export const FLOW_EASE_TAU = 0.3
 
 // --- Bounded amplitude (voice → wave, never spiky, never flatlined) -----------
 
@@ -261,22 +294,22 @@ export function stepMergeEnvelope(current: number, target: 0 | 1, dt: number): n
  *  the new state's own merge — short enough to feel immediate, long enough that
  *  a branch switch never snaps the blob apart and reforms it. */
 export const MERGE_XFADE = 0.4
-/** Thinking gathers into its blob over this long (its autonomous ramp). */
-const THINK_GATHER = 0.8
 
 /**
  * How merged the dots are (0 = ring, 1 = blob).
  *
- * Each state has a steady merge target — thinking: 1 (autonomous), agents: 0,
- * speaking/listening/idle: the caller's speechMerge envelope. When `enterMerge`
- * is supplied (the merge shown at the instant this state was entered), the
- * result CROSS-FADES from it to the target over the state's ramp, so a state
- * change can never discontinuously snap the merge. Without `enterMerge` the
- * exact original per-state formulas are returned (deterministic harness/tests).
+ * Merge-into-a-puddle is RESERVED FOR SPEECH: only speaking/listening/idle track
+ * the caller's speechMerge envelope. thinking and agents keep their steady merge
+ * at 0 — the dots stay separate on the ring (thinking orbits them; agents pairs
+ * them into pills) and never collapse into the speech blob. When `enterMerge` is
+ * supplied (the merge shown at the instant this state was entered), the result
+ * CROSS-FADES from it to the target over MERGE_XFADE, so a state change can never
+ * discontinuously snap the merge — entering thinking from a held speech blob
+ * dissolves the blob smoothly back to the orbiting ring. Without `enterMerge` the
+ * steady per-state target is returned (deterministic harness/tests).
  *
  * This is the C6 fix: previously `mergeAmount` branch-switched formulas on a
- * state change, so e.g. speaking→thinking snapped merge 1→0 in one frame (the
- * blob exploded to dots) before thinking's own ramp reformed it.
+ * state change, so e.g. speaking→thinking snapped merge in one frame.
  */
 export function mergeAmount(
   state: OrbState,
@@ -284,37 +317,57 @@ export function mergeAmount(
   speechMerge: number,
   enterMerge?: number
 ): number {
-  if (enterMerge === undefined) {
-    if (state === 'thinking') return easeInOut(Math.min(1, stateTime / THINK_GATHER))
-    if (state === 'agents') return 0
-    return easeInOut(Math.min(1, Math.max(0, speechMerge)))
-  }
   const steady =
-    state === 'thinking'
-      ? 1
-      : state === 'agents'
-        ? 0
-        : easeInOut(Math.min(1, Math.max(0, speechMerge)))
-  // Thinking eases in over its designed gather time; every other transition
-  // uses the short cross-fade. (Entering thinking from the ring — enterMerge 0
-  // — reduces exactly to the original easeInOut(stateTime/0.8) ramp.)
-  const ramp = state === 'thinking' ? THINK_GATHER : MERGE_XFADE
-  const w = easeInOut(Math.min(1, stateTime / ramp))
+    state === 'thinking' || state === 'agents'
+      ? 0
+      : easeInOut(Math.min(1, Math.max(0, speechMerge)))
+  if (enterMerge === undefined) return steady
+  const w = easeInOut(Math.min(1, stateTime / MERGE_XFADE))
   return enterMerge * (1 - w) + steady * w
 }
 
+/** Entry-whirl shape. On entry to a whirling state the spin target OVERSHOOTS its
+ *  cruise by `WHIRL_ADD` (scaled per preset), decaying with `WHIRL_TAU` so the
+ *  ring visibly speeds up then eases to cruise over ~1s — the "fast then slow
+ *  between states" effect. Deterministic (a function of stateTime, no random). */
+export const WHIRL_ADD = 2.5
+export const WHIRL_TAU = 0.35
+
+/** Seconds the agents entry keeps the dots whirling on the ring BEFORE the pose
+ *  (glide → pills) begins. Long enough to read as a fast orbit; the whirl spin
+ *  overshoot has mostly decayed by the time the dots start settling. */
+export const AGENTS_WHIRL = 1.0
+
 /**
- * Target orbit-speed multiplier for a state (1 = calm idle cadence). Busy
- * states spin the ring faster; the animator eases the LIVE multiplier toward
- * this so the change is never a jump (C9). Thinking is the busiest; speaking
- * and listening get progressively smaller bumps; idle and agents rest at 1×.
+ * Target orbit-speed multiplier for a state at `stateTime` seconds in (1 = calm
+ * idle cadence). Busy states spin the ring faster; the animator eases the LIVE
+ * multiplier toward this so the change is never a jump (C9). Two shapes combine:
+ *  - a steady CRUISE — thinking is busiest, speaking/listening get smaller
+ *    bumps, idle/agents cruise at 1×;
+ *  - an entry WHIRL — thinking and agents kick off with a decaying overshoot so
+ *    the ring whirls fast on entry and eases down to cruise (speaking/listening
+ *    don't whirl — they merge/rest).
+ * Agents cruises at 1× (the pose is still), so its whole visible spin-up IS the
+ * entry whirl, which plays before the dots settle into pills.
  */
-export function spinTargetFor(state: OrbState, params: OrbParams = DEFAULT_ORB_PARAMS): number {
+export function spinTargetFor(
+  state: OrbState,
+  stateTime: number,
+  params: OrbParams = DEFAULT_ORB_PARAMS
+): number {
   const busy = params.spinBusyMult
-  if (state === 'thinking') return busy
-  if (state === 'speaking') return 1 + (busy - 1) * 0.45
-  if (state === 'listening') return 1 + (busy - 1) * 0.15
-  return 1 // idle, agents
+  const cruise =
+    state === 'thinking'
+      ? busy
+      : state === 'speaking'
+        ? 1 + (busy - 1) * 0.45
+        : state === 'listening'
+          ? 1 + (busy - 1) * 0.15
+          : 1 // idle, agents
+  if (state !== 'thinking' && state !== 'agents') return cruise
+  // Scale the whirl with the preset's spin budget (compact mounts stay calmer).
+  const add = WHIRL_ADD * (busy / DEFAULT_ORB_PARAMS.spinBusyMult)
+  return cruise + add * Math.exp(-Math.max(0, stateTime) / WHIRL_TAU)
 }
 
 /** Exponential time-constant (s) for easing the live spin multiplier toward its
@@ -369,6 +422,10 @@ export type OrbInputs = {
    *  multiplier so busy states rotate faster without an angle jump (C9); the
    *  noise/pulse still use the real `t`. Falls back to `t` when omitted. */
   orbitTime?: number
+  /** Orbit cadence 0..1 (0 = step-then-rest, 1 = continuous glide). The app
+   *  eases this across a state change for a smooth crossover; deterministic
+   *  renders fall back to `orbitFlowFor(state)`. */
+  flow?: number
   /** Seconds since summon, or Infinity when long-since materialized. */
   genesisTime?: number
   /** Disc → rounded-rect morph 0..1 (expanded surface drives this). */
@@ -386,9 +443,12 @@ export function computeOrbFrame(input: OrbInputs): OrbFrame {
   const thinking = state === 'thinking'
 
   // Orbit runs on the (optionally speed-warped) orbit clock; everything else
-  // (noise, pulse, agents timing) stays on real time.
+  // (noise, pulse, agents timing) stays on real time. `flow` blends the ring
+  // cadence from stepped (idle) to a continuous glide (busy) — thinking and the
+  // agents entry whirl spin smoothly instead of stepping.
   const orbitT = input.orbitTime ?? t
-  const angle = orbitAngle(orbitT, p)
+  const flow = input.flow ?? orbitFlowFor(state)
+  const angle = orbitAngle(orbitT, p, flow)
 
   // Merge travel is STAGGERED per dot (a rotational sweep: dots pool into the
   // puddle one after another and split back out the same way). A simultaneous
@@ -413,20 +473,23 @@ export function computeOrbFrame(input: OrbInputs): OrbFrame {
   // Agents pose: dot PAIRS converge onto the same center and stretch into one
   // capsule per row — identical superimposed primitives, so each pill is a
   // single clean bar (offset endpoints made lumpy dumbbells; review finding).
-  // STAGED: the glide finishes BEFORE the stretch begins — stretching while
-  // vertical neighbors were still in smooth-min range bridged pills across
-  // rows into a two-row clump (review round 2). Dots glide as dots, settle on
-  // their row centers, then lengthen into bars.
-  const ap = state === 'agents' ? Math.min(1, Math.max(0, stateTime / 0.7)) : 0
+  // WHIRL-THEN-STAGE: for the first AGENTS_WHIRL seconds the dots stay on the
+  // ring and orbit fast (the entry whirl — spin overshoots, flow glides), THEN
+  // the pose plays. STAGED: the glide finishes BEFORE the stretch begins —
+  // stretching while vertical neighbors were still in smooth-min range bridged
+  // pills across rows into a two-row clump (review round 2). Dots glide as dots,
+  // settle on their row centers, then lengthen into bars.
+  const ap =
+    state === 'agents' ? Math.min(1, Math.max(0, (stateTime - AGENTS_WHIRL) / 0.7)) : 0
   const agents = easeInOut(Math.min(1, ap / 0.6))
   const stretch = easeInOut(Math.max(0, (ap - 0.65) / 0.35))
   // Row assignment: each dot glides to the row matching its VERTICAL ORDER on
-  // the ring at transition start (t - stateTime — deterministic). Index-fixed
-  // pairing sent top-row dots straight through the second row's dots,
-  // bridging pills mid-glide (review round 2).
+  // the ring when the pose begins (t - stateTime + AGENTS_WHIRL — deterministic).
+  // Index-fixed pairing sent top-row dots straight through the second row's
+  // dots, bridging pills mid-glide (review round 2).
   let rowOf: number[] | null = null
   if (ap > 0) {
-    const a0 = orbitAngle(orbitT - stateTime, p)
+    const a0 = orbitAngle(orbitT - stateTime + AGENTS_WHIRL, p, flow)
     const order = Array.from({ length: DOT_COUNT }, (_, i) => i).sort(
       (A, B) =>
         Math.sin(a0 + (A * 2 * Math.PI) / DOT_COUNT) - Math.sin(a0 + (B * 2 * Math.PI) / DOT_COUNT)

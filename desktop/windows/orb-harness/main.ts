@@ -163,7 +163,7 @@ const api = {
     let speechActive = opts.fromSpeechActive ?? opts.from === 'speaking'
     let speechMerge = speechActive ? 1 : 0 // start settled for the `from` state
     let enterMerge = mergeAmount(state, WARMUP, speechMerge)
-    let spinMult = spinTargetFor(state, params)
+    let spinMult = spinTargetFor(state, WARMUP, params)
     let orbitTime = 0
     const merges: number[] = []
     const areas: number[] = []
@@ -177,10 +177,10 @@ const api = {
         speechActive = opts.toSpeechActive ?? opts.to === 'speaking'
       }
       speechMerge = stepMergeEnvelope(speechMerge, speechActive ? 1 : 0, dt)
-      const spinTarget = spinTargetFor(state, params)
+      const stateTime = t - stateChangedAt
+      const spinTarget = spinTargetFor(state, stateTime, params)
       spinMult += (spinTarget - spinMult) * (1 - Math.exp(-dt / SPIN_EASE_TAU))
       orbitTime += dt * spinMult
-      const stateTime = t - stateChangedAt
       const frame = computeOrbFrame({
         t,
         state,
@@ -224,7 +224,7 @@ const api = {
     let speechActive = opts.from === 'speaking'
     let speechMerge = speechActive ? 1 : 0
     let enterMerge = mergeAmount(state, WARMUP, speechMerge)
-    let spinMult = spinTargetFor(state, params)
+    let spinMult = spinTargetFor(state, WARMUP, params)
     let orbitTime = 0
     const frames: string[] = []
     for (let i = 0; i < total; i++) {
@@ -236,7 +236,9 @@ const api = {
         speechActive = opts.to === 'speaking'
       }
       speechMerge = stepMergeEnvelope(speechMerge, speechActive ? 1 : 0, dt)
-      spinMult += (spinTargetFor(state, params) - spinMult) * (1 - Math.exp(-dt / SPIN_EASE_TAU))
+      spinMult +=
+        (spinTargetFor(state, t - stateChangedAt, params) - spinMult) *
+        (1 - Math.exp(-dt / SPIN_EASE_TAU))
       orbitTime += dt * spinMult
       const frame = computeOrbFrame({
         t,

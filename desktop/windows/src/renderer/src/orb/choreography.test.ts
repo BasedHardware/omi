@@ -11,11 +11,14 @@ import {
   easeInOutVelocity,
   orbitAngle,
   orbitVelocity,
+  orbitFlowFor,
   shapeAmplitude,
   stepAmplitudeEnvelope,
   stepMergeEnvelope,
   mergeAmount,
+  MERGE_XFADE,
   spinTargetFor,
+  AGENTS_WHIRL,
   genesisScale,
   genesisSettled,
   computeOrbFrame
@@ -177,9 +180,11 @@ describe('mergeAmount', () => {
     expect(mergeAmount('idle', 5, 0)).toBe(0)
   })
 
-  it('thinking is autonomous (ignores speech), agents never merges', () => {
+  it('thinking and agents never merge — the blob is reserved for speech', () => {
+    // The dots stay separate on the ring regardless of stateTime or any speech
+    // signal (thinking orbits them; agents pairs them into pills).
     expect(mergeAmount('thinking', 0, 1)).toBe(0)
-    expect(mergeAmount('thinking', 2, 0)).toBe(1)
+    expect(mergeAmount('thinking', 2, 1)).toBe(0)
     expect(mergeAmount('agents', 5, 1)).toBe(0)
   })
 
@@ -195,12 +200,20 @@ describe('mergeAmount', () => {
       }
     })
 
-    it('speaking→thinking never snaps: entering thinking merged stays merged', () => {
-      // enterMerge≈1 (a held speech blob) → thinking holds ~1 the whole ramp,
-      // never dips toward 0 the way the branch-switch bug did.
-      for (let s = 0; s <= 0.8; s += 0.05) {
-        expect(mergeAmount('thinking', s, 0, 1)).toBeGreaterThan(0.98)
+    it('speaking→thinking dissolves the held blob smoothly back to the ring', () => {
+      // enterMerge≈1 (a held speech blob) → thinking eases merge 1→0 over
+      // MERGE_XFADE (the blob melts back to the orbiting ring), monotone, never
+      // snapping. (The old behaviour HELD the blob merged — thinking no longer
+      // has a blob at all.)
+      expect(mergeAmount('thinking', 0, 0, 1)).toBeCloseTo(1, 9)
+      let prev = 1
+      for (let s = 1 / 60; s <= MERGE_XFADE + 0.05; s += 1 / 60) {
+        const m = mergeAmount('thinking', s, 0, 1)
+        expect(m).toBeLessThanOrEqual(prev + 1e-9)
+        expect(prev - m).toBeLessThan(0.12)
+        prev = m
       }
+      expect(mergeAmount('thinking', MERGE_XFADE, 0, 1)).toBeLessThan(0.02)
     })
 
     it('thinking→idle dissolves smoothly from 1 down to 0', () => {
@@ -218,11 +231,12 @@ describe('mergeAmount', () => {
       }
     })
 
-    it('thinking from the ring (enterMerge 0) reduces exactly to the original ramp', () => {
-      // thinking's steady target is 1, so cross-fading 0→1 over its 0.8s gather
-      // IS the original easeInOut(stateTime/0.8).
-      for (let s = 0; s <= 1; s += 0.1) {
-        expect(mergeAmount('thinking', s, 0, 0)).toBeCloseTo(mergeAmount('thinking', s, 0), 9)
+    it('thinking holds the ring: steady merge stays 0 for any stateTime/signal', () => {
+      // thinking's steady target is 0 (no blob), so it stays 0 whether it was
+      // entered from the ring (enterMerge 0) or with a stray speech signal.
+      for (let s = 0; s <= 2; s += 0.1) {
+        expect(mergeAmount('thinking', s, 1)).toBe(0)
+        expect(mergeAmount('thinking', s, 0, 0)).toBe(0)
       }
     })
 
@@ -237,20 +251,50 @@ describe('mergeAmount', () => {
 })
 
 describe('spinTargetFor (state-speed choreography)', () => {
-  it('idle and agents rest at 1×; busy states spin faster, thinking the most', () => {
+  const SETTLED = 8 // stateTime past which the entry whirl has fully decayed
+
+  it('settled: idle/agents cruise at 1×; busy states spin faster, thinking the most', () => {
     const busy = DEFAULT_ORB_PARAMS.spinBusyMult
-    expect(spinTargetFor('idle', P)).toBe(1)
-    expect(spinTargetFor('agents', P)).toBe(1)
-    expect(spinTargetFor('thinking', P)).toBe(busy)
-    // speaking > listening > idle, all below thinking.
-    expect(spinTargetFor('speaking', P)).toBeGreaterThan(spinTargetFor('listening', P))
-    expect(spinTargetFor('listening', P)).toBeGreaterThan(1)
-    expect(spinTargetFor('speaking', P)).toBeLessThan(spinTargetFor('thinking', P))
+    expect(spinTargetFor('idle', SETTLED, P)).toBe(1)
+    expect(spinTargetFor('agents', SETTLED, P)).toBeCloseTo(1, 6)
+    expect(spinTargetFor('thinking', SETTLED, P)).toBeCloseTo(busy, 6)
+    // speaking > listening > idle, all below thinking's cruise.
+    expect(spinTargetFor('speaking', SETTLED, P)).toBeGreaterThan(
+      spinTargetFor('listening', SETTLED, P)
+    )
+    expect(spinTargetFor('listening', SETTLED, P)).toBeGreaterThan(1)
+    expect(spinTargetFor('speaking', SETTLED, P)).toBeLessThan(
+      spinTargetFor('thinking', SETTLED, P)
+    )
   })
 
-  it('compact mounts spin up more gently than the default', () => {
-    expect(spinTargetFor('thinking', ORB_PRESETS.compact)).toBeLessThan(
-      spinTargetFor('thinking', P)
+  it('entry whirl: thinking and agents overshoot at t=0, then decay to cruise', () => {
+    const thinkEntry = spinTargetFor('thinking', 0, P)
+    const thinkCruise = spinTargetFor('thinking', SETTLED, P)
+    expect(thinkEntry).toBeGreaterThan(thinkCruise + 1) // a real overshoot
+    // agents cruises at 1× — the whirl IS its whole visible spin-up.
+    expect(spinTargetFor('agents', 0, P)).toBeGreaterThan(2)
+    // Monotone decay from the entry peak toward cruise.
+    let prev = thinkEntry
+    for (let s = 0.05; s <= 2; s += 0.05) {
+      const v = spinTargetFor('thinking', s, P)
+      expect(v).toBeLessThanOrEqual(prev + 1e-9)
+      prev = v
+    }
+    expect(spinTargetFor('thinking', 2, P)).toBeCloseTo(thinkCruise, 1)
+  })
+
+  it('speaking/listening do not whirl (steady from entry)', () => {
+    expect(spinTargetFor('speaking', 0, P)).toBeCloseTo(spinTargetFor('speaking', SETTLED, P), 9)
+    expect(spinTargetFor('listening', 0, P)).toBeCloseTo(spinTargetFor('listening', SETTLED, P), 9)
+  })
+
+  it('compact mounts whirl and cruise more gently than the default', () => {
+    expect(spinTargetFor('thinking', SETTLED, ORB_PRESETS.compact)).toBeLessThan(
+      spinTargetFor('thinking', SETTLED, P)
+    )
+    expect(spinTargetFor('thinking', 0, ORB_PRESETS.compact)).toBeLessThan(
+      spinTargetFor('thinking', 0, P)
     )
   })
 })
@@ -376,9 +420,10 @@ describe('computeOrbFrame', () => {
   it('agents transition is staged: the glide settles before any stretch begins', () => {
     // While any dot is still gliding (off its row-center x=0... y=row), no
     // capsule stretch may be engaged — stretching mid-glide bridged pills
-    // across rows (review round 2).
+    // across rows (review round 2). The pose begins only AFTER the entry whirl,
+    // so offset the scan window by AGENTS_WHIRL.
     const rowYs = [0, 1, 2, 3].map((row) => (row - 1.5) * P.pillRowPitch)
-    for (let s = 0.05; s < 0.7; s += 0.05) {
+    for (let s = AGENTS_WHIRL + 0.05; s < AGENTS_WHIRL + 0.7; s += 0.05) {
       const f = computeOrbFrame({ t: 100, state: 'agents', stateTime: s })
       const stretched = f.dots.some((d) => d.halfLen > 1e-3)
       if (!stretched) continue
@@ -428,6 +473,94 @@ describe('computeOrbFrame', () => {
           expect(Math.hypot(d.x, d.y) + d.r + d.halfLen).toBeLessThanOrEqual(1.001)
         }
       }
+    }
+  })
+})
+
+// Regression for the reported bug: "when thinking/transcribing/spawning agents,
+// the dots should orbit fast then settle between states — why isn't that
+// happening at all." The dots used to collapse into a blob (thinking merge → 1),
+// hiding the orbit entirely.
+describe('thinking orbits — dots stay separate and keep moving', () => {
+  it('keeps the 8 dots separated on the ring — never a blob', () => {
+    const f = computeOrbFrame({
+      t: 5,
+      state: 'thinking',
+      stateTime: 3,
+      speechMerge: 1,
+      amplitude: 1
+    })
+    // No merge, no center pool — the ring is intact.
+    expect(f.merge).toBe(0)
+    expect(f.centerR).toBe(0)
+    for (const d of f.dots) {
+      expect(Math.hypot(d.x, d.y)).toBeCloseTo(P.orbitRadius, 6)
+      expect(d.halfLen).toBe(0)
+    }
+    // Minimum pairwise distance stays large (a collapsed blob would drop it ~0).
+    let minDist = Infinity
+    for (let i = 0; i < f.dots.length; i++) {
+      for (let j = i + 1; j < f.dots.length; j++) {
+        const dx = f.dots[i].x - f.dots[j].x
+        const dy = f.dots[i].y - f.dots[j].y
+        minDist = Math.min(minDist, Math.hypot(dx, dy))
+      }
+    }
+    expect(minDist).toBeGreaterThan(0.3)
+  })
+
+  it('advances the orbit continuously — no long rests (flow=1)', () => {
+    const flow = orbitFlowFor('thinking')
+    expect(flow).toBe(1)
+    // Across a full period every sampled frame advances (a stepped ring would
+    // sit still through the rest fraction).
+    let prev = orbitAngle(0, P, flow)
+    let advanced = 0
+    const frames = 120
+    for (let i = 1; i <= frames; i++) {
+      const a = orbitAngle((i / frames) * P.orbitPeriod, P, flow)
+      if (a > prev + 1e-6) advanced++
+      prev = a
+    }
+    expect(advanced).toBe(frames)
+    // Velocity never rests anywhere in the cycle when flowing.
+    for (let i = 0; i <= 100; i++) {
+      expect(orbitVelocity((i / 100) * P.orbitPeriod, P, 1)).toBeGreaterThan(0)
+    }
+  })
+
+  it('contrast: the idle step-rest cadence (flow=0) DOES rest', () => {
+    // Proves the glide (flow) is what removes the rest — idle still pauses.
+    const restT = P.orbitPeriod * (1 - P.restFraction / 2)
+    expect(orbitVelocity(restT, P, 0)).toBe(0)
+  })
+})
+
+describe('agents whirls on the ring, then settles into pills', () => {
+  it('during the entry whirl the dots stay a spread orbiting ring (no pills yet)', () => {
+    for (const s of [0.1, 0.5, 0.9]) {
+      const f = computeOrbFrame({ t: 3, state: 'agents', stateTime: s })
+      for (const d of f.dots) {
+        expect(d.halfLen).toBe(0)
+        expect(Math.hypot(d.x, d.y)).toBeCloseTo(P.orbitRadius, 6)
+      }
+    }
+    // The ring visibly rotates across the whirl (same dot index moves).
+    const early = computeOrbFrame({ t: 3, state: 'agents', stateTime: 0.1, orbitTime: 0.1 })
+    const later = computeOrbFrame({ t: 3, state: 'agents', stateTime: 0.6, orbitTime: 0.6 })
+    const moved = early.dots.some(
+      (d, i) => Math.hypot(d.x - later.dots[i].x, d.y - later.dots[i].y) > 0.05
+    )
+    expect(moved).toBe(true)
+  })
+
+  it('well after the whirl, the pose has settled into four clean pills', () => {
+    const f = computeOrbFrame({ t: 100, state: 'agents', stateTime: AGENTS_WHIRL + 1.5 })
+    const ys = new Set(f.dots.map((d) => d.y.toFixed(4)))
+    expect(ys.size).toBe(4)
+    for (const d of f.dots) {
+      expect(d.halfLen).toBeCloseTo(P.pillHalfLen, 6)
+      expect(d.x).toBeCloseTo(0, 6)
     }
   })
 })

@@ -15,9 +15,10 @@
 import { openHarness, renderPixels } from './lib/harness.mjs'
 import { contourWaviness } from './lib/pixels.mjs'
 
-// A real state change eases over ~0.4s (MERGE_XFADE) / 0.8s (thinking gather),
-// so at 60fps no single frame may move merge more than a small step. A snap is
-// ~1.0. Thresholds sit well below a snap and above the smooth cross-fade.
+// A real state change eases the merge over ~0.4s (MERGE_XFADE) — e.g. a held
+// speech blob dissolving back to the orbiting ring on speaking→thinking — so at
+// 60fps no single frame may move merge more than a small step. A snap is ~1.0.
+// Thresholds sit well below a snap and above the smooth cross-fade.
 const MAX_MERGE_STEP = 0.2
 const MAX_AREA_STEP_FRAC = 0.28
 
