@@ -1056,7 +1056,7 @@ actor TaskAssistant: ProactiveAssistant {
         var lastContextSummary = ""
         var lastCurrentActivity = ""
 
-        for iteration in 0..<8 {
+        toolLoop: for iteration in 0..<8 {
             let result = try await geminiClient.sendImageToolLoop(
                 contents: contents,
                 systemPrompt: currentSystemPrompt,
@@ -1300,8 +1300,11 @@ actor TaskAssistant: ProactiveAssistant {
                 continue
 
             default:
+                // `break` alone only exits the switch, so the loop re-sent the
+                // identical request up to 7 more times (cost + latency) on an
+                // unknown tool call. Break the labeled loop to actually abort.
                 log("Task: Unknown tool call: \(toolCall.name), breaking")
-                break
+                break toolLoop
             }
         }
 
