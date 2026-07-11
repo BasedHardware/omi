@@ -1344,11 +1344,10 @@ class ChatToolExecutor {
         return "Error: embedding index failed to load. Task vector search is unavailable."
       }
 
-      // Embed the query text
-      // EmbeddingService uses a shared Int64-keyed index for both action_items and staged_tasks.
-      // loadIndex() loads action_items first, then staged_tasks — so for colliding IDs, the
-      // staged_task embedding overwrites the action_item one. We check staged_tasks first to
-      // match the actual embedding owner, then fall back to action_items for non-colliding IDs.
+      // Embed the query text. The in-memory index is keyed by (source, id), so
+      // each search result resolves deterministically against its own table
+      // instead of the old staged-first/action-fallback guessing that returned an
+      // unrelated task when action_item and staged_task rowids collided.
       let queryEmbedding = try await EmbeddingService.shared.embed(
         text: query, taskType: "RETRIEVAL_QUERY")
 
@@ -1360,9 +1359,11 @@ class ChatToolExecutor {
       var count = 0
 
       for result in vectorResults where result.similarity > 0.3 {
-        // Try staged_tasks first (their embeddings overwrite action_items on ID collision),
-        // then fall back to action_items
-        if let staged = try? await StagedTaskStorage.shared.getStagedTask(id: result.id) {
+        switch result.source {
+        case .staged:
+          guard let staged = try? await StagedTaskStorage.shared.getStagedTask(id: result.id) else {
+            continue
+          }
           if staged.deleted { continue }
           if !includeCompleted && staged.completed { continue }
           count += 1
@@ -1371,7 +1372,10 @@ class ChatToolExecutor {
           lines.append(
             "\(count). \(check) \(staged.description) (similarity: \(sim), id: \(result.id), source: staged_tasks)"
           )
-        } else if let record = try? await ActionItemStorage.shared.getActionItem(id: result.id) {
+        case .actionItem:
+          guard let record = try? await ActionItemStorage.shared.getActionItem(id: result.id) else {
+            continue
+          }
           if record.deleted { continue }
           if !includeCompleted && record.completed { continue }
           count += 1
