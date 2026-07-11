@@ -225,6 +225,7 @@ def clear_user_data(uid: str):
         "task_integrations",
         "chat_sessions",
         "folders",
+        "hourly_usage",
     ]:
         docs = list(user_ref.collection(coll_name).stream())
         for d in docs:

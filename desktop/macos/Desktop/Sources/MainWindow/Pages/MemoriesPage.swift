@@ -908,7 +908,7 @@ class MemoriesViewModel: ObservableObject {
     } catch {
       // Only show error if we don't have cached data
       if memories.isEmpty {
-        errorMessage = error.localizedDescription
+        errorMessage = UserFacingErrorPresentation.message(for: error, while: .memories)
       }
       logError("Failed to load memories from API", error: error)
     }
@@ -1305,7 +1305,7 @@ class MemoriesViewModel: ObservableObject {
       try await MemoryStorage.shared.updateVisibility(scope: scope, visibility: "private")
       await reloadForCurrentLayerFilter()
     } catch {
-      errorMessage = error.localizedDescription
+      errorMessage = UserFacingErrorPresentation.message(for: error, while: .memoryVisibility)
       logError("Bulk make private disabled or failed", error: error)
     }
   }
@@ -1319,7 +1319,7 @@ class MemoriesViewModel: ObservableObject {
       try await MemoryStorage.shared.updateVisibility(scope: scope, visibility: "public")
       await reloadForCurrentLayerFilter()
     } catch {
-      errorMessage = error.localizedDescription
+      errorMessage = UserFacingErrorPresentation.message(for: error, while: .memoryVisibility)
       logError("Bulk make public disabled or failed", error: error)
     }
   }
@@ -1343,7 +1343,7 @@ class MemoriesViewModel: ObservableObject {
       try await MemoryStorage.shared.deleteAllMemories(scope: scope)
       await reloadForCurrentLayerFilter()
     } catch {
-      errorMessage = error.localizedDescription
+      errorMessage = UserFacingErrorPresentation.message(for: error, while: .memoryDeletion)
       logError("Bulk delete disabled or failed", error: error)
     }
   }
@@ -2272,7 +2272,7 @@ struct MemoriesPage: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
-  private func errorView(_ message: String) -> some View {
+  private func errorView(_: String) -> some View {
     VStack(spacing: 16) {
       Image(systemName: "exclamationmark.triangle")
         .scaledFont(size: 36)
@@ -2282,7 +2282,7 @@ struct MemoriesPage: View {
         .scaledFont(size: 18, weight: .semibold)
         .foregroundColor(OmiColors.textPrimary)
 
-      Text(message)
+      Text("Check your connection and try again.")
         .scaledFont(size: 14)
         .foregroundColor(OmiColors.textTertiary)
 

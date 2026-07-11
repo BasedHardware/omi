@@ -14,6 +14,7 @@ from database.announcements import compare_versions
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits, TrialMetadata
 from utils.byok import get_byok_key, get_byok_keys
 from utils.log_sanitizer import sanitize
+from utils.observability.fallback import record_fallback
 import logging
 
 logger = logging.getLogger(__name__)
@@ -25,12 +26,18 @@ def _get_user(uid: str) -> Any:
 
 PAID_PLAN_TYPES = {PlanType.unlimited, PlanType.architect, PlanType.operator}
 
-# Plans that unlock the desktop (macOS) app. Neo (unlimited) is a mobile/web
-# plan — it does NOT include desktop access, so on desktop a Neo subscriber is
-# treated like basic for the trial paywall. Operator and Architect include the
-# desktop app. Keep this in sync with the per-plan feature copy + the mobile
-# plans sheet (Operator shows "Desktop app", Neo shows "No desktop access").
+# Plans that unlock the full desktop (macOS) experience. This is deliberately
+# narrower than basic desktop usability: every plan, including Neo, has at
+# least the Free desktop tier. Operator and Architect add full desktop access.
+# Keep this in sync with the per-plan feature copy and the mobile plans sheet.
 DESKTOP_ENTITLED_PLAN_TYPES = {PlanType.operator, PlanType.architect}
+
+# Effective desktop tiers are used for Desktop-specific admission decisions.
+# Never use DESKTOP_ENTITLED_PLAN_TYPES as a zero-access check: it represents
+# full Desktop entitlement, while ``desktop_free`` is a valid usable floor.
+DESKTOP_ACCESS_TIER_FREE = "desktop_free"
+DESKTOP_ACCESS_TIER_FULL = "desktop_full"
+DESKTOP_ACCESS_TIER_ARCHITECT = "desktop_architect"
 
 # Grandfather: Neo subscriptions whose current billing period started before
 # this cutoff retain desktop access until that period ends. At their next
@@ -60,6 +67,32 @@ def plan_grants_desktop(plan: PlanType, subscription: Optional[Subscription] = N
     return False
 
 
+def effective_desktop_access_tier(plan: PlanType, subscription: Optional[Subscription] = None) -> str:
+    """Return the usable Desktop tier for a subscription.
+
+    Free is the minimum Desktop tier. A Neo (``unlimited``) subscriber who is
+    not in the full-Desktop grandfather period therefore receives
+    ``desktop_free`` rather than no Desktop access. Operator and grandfathered
+    Neo receive ``desktop_full``; Architect receives its separate premium tier.
+    """
+    if plan == PlanType.architect:
+        return DESKTOP_ACCESS_TIER_ARCHITECT
+    if plan_grants_desktop(plan, subscription):
+        return DESKTOP_ACCESS_TIER_FULL
+    return DESKTOP_ACCESS_TIER_FREE
+
+
+def desktop_trial_paywall_eligible(plan: PlanType, subscription: Optional[Subscription] = None) -> bool:
+    """Whether a plan can be blocked by the Desktop account-age trial paywall.
+
+    The account-age paywall is only for users on the Free tier. Neo is mapped
+    to the usable Free Desktop tier when it lacks full Desktop entitlement, but
+    it is still an active paid plan and must never be converted into zero audio,
+    chat, or realtime access.
+    """
+    return effective_desktop_access_tier(plan, subscription) == DESKTOP_ACCESS_TIER_FREE and plan not in PAID_PLAN_TYPES
+
+
 def neo_grandfather_until(subscription: Optional[Subscription]) -> Optional[int]:
     """If the subscriber is currently grandfathered onto Neo desktop, return
     the unix-seconds timestamp when that access ends (their current period end).
@@ -74,9 +107,11 @@ def neo_grandfather_until(subscription: Optional[Subscription]) -> Optional[int]
 
 
 def should_defer_desktop_processing(uid: str) -> bool:
-    """True for desktop users on a non-desktop-entitled plan (basic / Neo) without active
-    BYOK — their conversations are stored as raw transcript on capture and the expensive LLM
-    enrichment is deferred until they first open the conversation (freemium cost cut).
+    """True for Desktop users on the Free effective tier without active BYOK.
+
+    Free and non-grandfathered Neo users store a raw transcript on capture and
+    defer expensive LLM enrichment until the first open. This cost policy must
+    not be interpreted as a no-Desktop-access policy.
 
     Operator / Architect (desktop-entitled) and BYOK users (who pay their own LLM bill) are
     processed normally. The caller restricts this to `source == desktop`. Fails safe to False
@@ -88,7 +123,7 @@ def should_defer_desktop_processing(uid: str) -> bool:
             return False
         subscription = users_db.get_user_valid_subscription(uid)
         plan = subscription.plan if subscription else PlanType.basic
-        return plan not in DESKTOP_ENTITLED_PLAN_TYPES
+        return effective_desktop_access_tier(plan, subscription) == DESKTOP_ACCESS_TIER_FREE
     except Exception as e:
         logger.warning("should_defer_desktop_processing lookup failed for uid=%s: %s", uid, e)
         return False
@@ -146,14 +181,15 @@ def _request_has_all_byok_keys() -> bool:
 def _is_trial_expired_uncached(uid: str) -> bool:
     """Is this user past their 3-day desktop trial?
 
-    The trial applies to anyone without a desktop-entitled plan (basic OR Neo);
-    BYOK users are bypassed (they're paying their own LLM/STT bill). Returns
-    False on any lookup error so a Firebase blip never paywalls a paying user.
+    The trial applies only to the Free Desktop tier. Neo may use that tier for
+    non-premium capabilities, but is paid and must never be reduced to zero
+    access. BYOK users are also bypassed. Returns False on any lookup error so
+    a Firebase blip never paywalls a paying user.
     """
     try:
         subscription = users_db.get_user_valid_subscription(uid)
         plan = subscription.plan if subscription else PlanType.basic
-        if plan_grants_desktop(plan, subscription):
+        if not desktop_trial_paywall_eligible(plan, subscription):
             return False
         if users_db.is_byok_active(uid):
             return False
@@ -180,6 +216,38 @@ def _is_trial_expired_cached(uid: str) -> bool:
     cache_key = f"trial_paywall:expired:{uid}"
     cached = redis_db.get_generic_cache(cache_key)
     if cached is not None:
+        # A cache entry may have been written before an entitlement correction
+        # or a plan migration. Revalidate a positive value so a paid Neo user
+        # is not left with a zero-access decision until this key's TTL expires.
+        if cached:
+            try:
+                subscription = users_db.get_user_valid_subscription(uid)
+                plan = subscription.plan if subscription else PlanType.basic
+                if not desktop_trial_paywall_eligible(plan, subscription):
+                    clear_trial_paywall_cache(uid)
+                    record_fallback(
+                        component='other',
+                        from_mode='trial_paywall',
+                        to_mode=effective_desktop_access_tier(plan, subscription),
+                        reason='local_heal',
+                        outcome='recovered',
+                        log=logger,
+                    )
+                    return False
+            except Exception as e:
+                # Match the uncached lookup's fail-open behavior. An
+                # entitlement lookup outage must not preserve a zero-access
+                # decision for a paid subscriber from stale cache state.
+                logger.warning("trial paywall cache revalidation failed for uid=%s: %s", uid, e)
+                record_fallback(
+                    component='other',
+                    from_mode='trial_paywall',
+                    to_mode='fail_open',
+                    reason='policy',
+                    outcome='degraded',
+                    log=logger,
+                )
+                return False
         return bool(cached)
     expired = _is_trial_expired_uncached(uid)
     try:
@@ -233,13 +301,17 @@ def get_trial_metadata(uid: str) -> TrialMetadata:
         subscription = users_db.get_user_valid_subscription(uid)
         plan = subscription.plan if subscription else PlanType.basic
 
-        # Desktop-entitled (Operator / Architect) or BYOK users: trial is moot —
-        # they have full desktop access. Neo (unlimited) is mobile/web only, so
-        # it falls through to the trial computation just like basic.
+        # Any plan that is not eligible for the Free account-age trial, plus
+        # BYOK users, has usable Desktop access. In particular, Neo's Free
+        # Desktop tier is a floor, not a trial-only or zero-access state.
         # Same request-level escape hatch as `_is_trial_expired_cached`: a request
         # carrying all 4 BYOK provider headers is treated as BYOK-active even if
         # Firestore hasn't caught up yet.
-        if plan_grants_desktop(plan, subscription) or users_db.is_byok_active(uid) or _request_has_all_byok_keys():
+        if (
+            not desktop_trial_paywall_eligible(plan, subscription)
+            or users_db.is_byok_active(uid)
+            or _request_has_all_byok_keys()
+        ):
             return TrialMetadata(
                 trial_expired=False,
                 trial_duration_seconds=TRIAL_LENGTH_SECONDS,
@@ -785,8 +857,7 @@ def get_plan_features(plan: PlanType, simplified: bool = False) -> List[str]:
             f"{NEO_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
             "Unlimited listening and transcription",
             "Unlimited memories and insights",
-            # Neo is mobile/web only — no desktop app (see DESKTOP_ENTITLED_PLAN_TYPES).
-            "Available on mobile and web",
+            "Desktop capture with Free-tier allowance",
         ]
 
     # Basic plan

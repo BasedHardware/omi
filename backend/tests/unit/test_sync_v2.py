@@ -978,7 +978,7 @@ class TestAsyncCoordinatorSemaphore:
     def test_semaphore_delegates_to_http_client(self):
         """Semaphore must use http_client._get_semaphore (CLAUDE.md rule 4)."""
         source = _read_pipeline_source()
-        assert '_get_sync_pipeline_semaphore()' in source, "Must use loop-scoped semaphore getter"
+        assert '_get_sync_pipeline_semaphore(sync_lane)' in source, "Must use the lane-specific loop-scoped semaphore"
         assert '_get_semaphore' in source, "Must delegate to http_client._get_semaphore"
 
     def test_semaphore_limit_is_16(self):
@@ -989,7 +989,8 @@ class TestAsyncCoordinatorSemaphore:
         if end == -1:
             end = source.find('\nasync def ', start + 1)
         func_body = source[start:end]
-        assert "'sync_pipeline', 16" in func_body
+        assert "'sync_pipeline_fresh', 16" in func_body
+        assert "'sync_pipeline_backfill'" in func_body
 
     def test_semaphore_no_duplicate_cache(self):
         """sync.py must NOT have its own _sync_semaphores cache (use http_client's)."""
@@ -1333,6 +1334,7 @@ class TestAsyncCoordinatorBehavioral:
             'database.conversations',
             'database.users',
             'database.user_usage',
+            'database.sync_ledger',
             'firebase_admin',
             'google',
             'google.cloud',
@@ -1369,6 +1371,8 @@ class TestAsyncCoordinatorBehavioral:
             'utils.request_validation',
             'utils.sync.files',
             'utils.sync.playback',
+            'utils.sync.backfill',
+            'utils.sync.content_id',
             'utils.speaker_assignment',
             'utils.speaker_identification',
             'utils.stt.speaker_embedding',
@@ -1389,6 +1393,16 @@ class TestAsyncCoordinatorBehavioral:
         sys.modules['utils.client_device'].resolve_client_device_from_request = MagicMock(
             return_value=MagicMock(client_device_id=None, platform=None)
         )
+        sys.modules['database.sync_ledger'].claim_sync_content = MagicMock(return_value={'outcome': 'owned'})
+        sys.modules['database.sync_ledger'].release_sync_content_claim = MagicMock()
+        sys.modules['database.sync_ledger'].mark_sync_content_completed = MagicMock()
+        sys.modules['database.sync_ledger'].try_mark_sync_content_side_effect = MagicMock(return_value=True)
+        sys.modules['utils.sync.backfill'].try_acquire_backfill_slot = MagicMock(return_value=True)
+        sys.modules['utils.sync.backfill'].release_backfill_slot = MagicMock()
+        sys.modules['utils.sync.backfill'].reserve_backfill_speech = MagicMock(
+            return_value=MagicMock(allowed=True, reason=None, retry_after=None)
+        )
+        sys.modules['utils.sync.content_id'].compute_sync_content_id = MagicMock(return_value='content-1')
 
         _install_sync_observability_stubs()
 
@@ -1433,7 +1447,7 @@ class TestAsyncCoordinatorBehavioral:
         sys.modules['utils.byok'].set_byok_uid = MagicMock()
         sys.modules['utils.byok'].get_byok_keys = MagicMock(return_value={})
         sys.modules['utils.analytics'].record_usage = MagicMock()
-        sys.modules['utils.request_validation'].parse_sync_filename_timestamp = MagicMock(return_value=1700000000)
+        sys.modules['utils.request_validation'].parse_sync_filename_timestamp = MagicMock(return_value=time.time())
         import types
 
         sync_pkg = types.ModuleType('utils.sync')
@@ -1534,12 +1548,15 @@ class TestAsyncCoordinatorBehavioral:
             stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=[])
             stubs['pipeline']._cleanup_files = MagicMock()
 
-            await module._run_full_pipeline_background_async('j3', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job3')
+            await module._run_full_pipeline_background_async(
+                'j3', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job3', content_id='content-3'
+            )
 
             stubs['sync_jobs'].mark_job_completed.assert_called_once()
             result = stubs['sync_jobs'].mark_job_completed.call_args[0][1]
             assert result['total_segments'] == 0
             assert result['failed_segments'] == 0
+            stubs['pipeline'].mark_sync_content_completed.assert_called_once()
         finally:
             self._cleanup(stubs['saved_modules'])
 
@@ -1575,11 +1592,14 @@ class TestAsyncCoordinatorBehavioral:
             stubs['pipeline'].retrieve_vad_segments = MagicMock()
             stubs['pipeline'].get_wav_duration = MagicMock(return_value=0.0)
 
-            await module._run_full_pipeline_background_async('j5', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job5')
+            await module._run_full_pipeline_background_async(
+                'j5', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job5', content_id='content-5'
+            )
 
             stubs['sync_jobs'].mark_job_completed.assert_called_once()
             result = stubs['sync_jobs'].mark_job_completed.call_args[0][1]
             assert result['total_segments'] == 0
+            stubs['pipeline'].mark_sync_content_completed.assert_called_once()
         finally:
             self._cleanup(stubs['saved_modules'])
 
@@ -1901,6 +1921,7 @@ class TestV2EndpointExecution:
             'database.conversations',
             'database.users',
             'database.user_usage',
+            'database.sync_ledger',
             'firebase_admin',
             'google',
             'google.cloud',
@@ -1937,6 +1958,8 @@ class TestV2EndpointExecution:
             'utils.request_validation',
             'utils.sync.files',
             'utils.sync.playback',
+            'utils.sync.backfill',
+            'utils.sync.content_id',
             'utils.speaker_assignment',
             'utils.speaker_identification',
             'utils.stt.speaker_embedding',
@@ -1957,6 +1980,16 @@ class TestV2EndpointExecution:
         sys.modules['utils.client_device'].resolve_client_device_from_request = MagicMock(
             return_value=MagicMock(client_device_id=None, platform=None)
         )
+        sys.modules['database.sync_ledger'].claim_sync_content = MagicMock(return_value={'outcome': 'owned'})
+        sys.modules['database.sync_ledger'].release_sync_content_claim = MagicMock()
+        sys.modules['database.sync_ledger'].mark_sync_content_completed = MagicMock()
+        sys.modules['database.sync_ledger'].try_mark_sync_content_side_effect = MagicMock(return_value=True)
+        sys.modules['utils.sync.backfill'].try_acquire_backfill_slot = MagicMock(return_value=True)
+        sys.modules['utils.sync.backfill'].release_backfill_slot = MagicMock()
+        sys.modules['utils.sync.backfill'].reserve_backfill_speech = MagicMock(
+            return_value=MagicMock(allowed=True, reason=None, retry_after=None)
+        )
+        sys.modules['utils.sync.content_id'].compute_sync_content_id = MagicMock(return_value='content-1')
 
         _install_sync_observability_stubs()
 
@@ -1988,7 +2021,7 @@ class TestV2EndpointExecution:
         sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False
         sys.modules['utils.fair_use'].FAIR_USE_RESTRICT_DAILY_DG_MS = 0
         sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
-        sys.modules['utils.request_validation'].parse_sync_filename_timestamp = MagicMock(return_value=1700000000)
+        sys.modules['utils.request_validation'].parse_sync_filename_timestamp = MagicMock(return_value=time.time())
         import types
 
         sync_pkg = types.ModuleType('utils.sync')
@@ -2272,6 +2305,15 @@ class TestV2EndpointExecution:
                 return fn(*args, **kwargs)
 
             module.run_blocking = _passthrough_run_blocking
+            module.classify_sync_lane = MagicMock(
+                return_value=types.SimpleNamespace(
+                    lane=module.SyncLane.FRESH,
+                    trust=types.SimpleNamespace(value='legacy'),
+                    reason='recent_capture',
+                    maximum_age_seconds=60,
+                    automatic_recovery_allowed=True,
+                )
+            )
 
             import asyncio
             from starlette.datastructures import UploadFile

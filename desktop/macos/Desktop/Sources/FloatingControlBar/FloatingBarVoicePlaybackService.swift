@@ -1,6 +1,7 @@
 import AVFoundation
 import CryptoKit
 import Foundation
+import OmiSupport
 
 @MainActor
 final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerDelegate {
@@ -303,7 +304,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
             "FloatingBarVoicePlaybackService: cloud TTS chunk synthesis failed, falling back to system voice: \(error.localizedDescription)"
           )
           self.recordSelectedVoiceFallback(
-            to: "system_voice_fallback", reason: "provider_5xx", outcome: .degraded)
+            to: "system_voice_fallback", reason: Self.ttsFallbackReason(for: error), outcome: .degraded)
           self.enqueueSystemSpeech(text)
           self.startSynthesisIfNeeded(mode: mode)
           self.clearFloatingPillResponseGlowIfIdle()
@@ -404,7 +405,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
             guard let self, self.playbackGeneration == generation else { return }
             self.isOneShotSynthesizing = false
             self.recordSelectedVoiceFallback(
-              to: "system_voice_fallback", reason: "provider_5xx", outcome: .degraded)
+              to: "system_voice_fallback", reason: Self.ttsFallbackReason(for: error), outcome: .degraded)
             self.enqueueSystemSpeech(trimmed)
           }
         }
@@ -446,11 +447,11 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
             self.isOneShotSynthesizing = false
             if let cachedFallback {
               self.recordSelectedVoiceFallback(
-                to: "cached_openai_tts", reason: "provider_5xx", outcome: .recovered)
+                to: "cached_openai_tts", reason: Self.ttsFallbackReason(for: error), outcome: .recovered)
               self.startPlayback(cachedFallback, fallbackText: phrase)
             } else {
               self.recordSelectedVoiceFallback(
-                to: "system_voice_fallback", reason: "provider_5xx", outcome: .degraded)
+                to: "system_voice_fallback", reason: Self.ttsFallbackReason(for: error), outcome: .degraded)
               self.enqueueSystemSpeech(phrase)
             }
           }
@@ -757,13 +758,63 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     voiceID: String,
     instructions: String
   ) async throws -> Data {
-    try await APIClient.shared.synthesizeSpeech(
-      request: APIClient.TtsSynthesizeRequest(
-        text: text,
-        voiceId: voiceID,
-        instructions: instructions.isEmpty ? nil : instructions
+    let byokKey = APIKeyService.isByokActive ? APIKeyService.byokKey(.openai) : nil
+    let fingerprint = byokKey.map(APIKeyService.byokFingerprint)
+    if let fingerprint {
+      let canUseKey = await MainActor.run {
+        CredentialHealthManager.shared.canUseBYOK(provider: .openai, fingerprint: fingerprint)
+      }
+      guard canUseKey else {
+        throw CredentialHealthError.providerAuth(
+          provider: .openai,
+          mode: .byok,
+          message: "Your OpenAI key was rejected. Update it in Settings."
+        )
+      }
+    }
+
+    do {
+      return try await APIClient.shared.synthesizeSpeech(
+        request: APIClient.TtsSynthesizeRequest(
+          text: text,
+          voiceId: voiceID,
+          instructions: instructions.isEmpty ? nil : instructions
+        )
       )
-    )
+    } catch let error as CredentialHealthError {
+      await MainActor.run {
+        if case .providerAuth(let provider, let mode, _) = error {
+          CredentialHealthManager.shared.recordProviderFailure(
+            error.failureClass,
+            provider: provider,
+            authMode: mode,
+            fingerprint: fingerprint,
+            context: "openai_tts"
+          )
+        } else {
+          CredentialHealthManager.shared.record(error, context: "openai_tts")
+        }
+      }
+      throw error
+    }
+  }
+
+  private nonisolated static func ttsFallbackReason(for error: Error) -> String {
+    if let apiError = error as? APIError,
+      case .httpError(let statusCode, _) = apiError,
+      statusCode == 429
+    {
+      return "quota"
+    }
+    guard let credentialError = error as? CredentialHealthError else { return "provider_5xx" }
+    switch credentialError.failureClass {
+    case .providerAuthFailed:
+      return "auth"
+    case .providerQuotaExceeded:
+      return "provider_429"
+    default:
+      return "provider_5xx"
+    }
   }
 
   private nonisolated static func cleanedPlaybackText(from message: ChatMessage?) -> String {
@@ -845,13 +896,10 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     voiceID: String,
     instructions: String
   ) -> URL {
-    let baseURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-      .first ?? FileManager.default.temporaryDirectory
     let fingerprint = SHA256.hash(data: Data("\(voiceID)\n\(instructions)\n\(text)".utf8))
       .map { String(format: "%02x", $0) }
       .joined()
-    return baseURL
-      .appendingPathComponent("Omi", isDirectory: true)
+    return DesktopLocalProfile.applicationSupportURL()
       .appendingPathComponent("VoicePhraseCache", isDirectory: true)
       .appendingPathComponent("background-agent-kickoff-v1", isDirectory: true)
       .appendingPathComponent("\(fingerprint).mp3")
