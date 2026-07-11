@@ -11,10 +11,39 @@ import ctranslate2
 import sentencepiece as spm
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
-from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import Counter as PromCounter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST, REGISTRY
 from starlette.responses import Response
 
 logger = logging.getLogger("nllb_translation")
+
+
+def _counter(name: str, doc: str, labels: List[str]) -> PromCounter:
+    try:
+        return PromCounter(name, doc, labels)
+    except ValueError:
+        return REGISTRY._names_to_collectors[name]  # type: ignore[return-value]
+
+
+def _histogram(name: str, doc: str, labels: List[str], buckets: List[float]) -> Histogram:
+    try:
+        return Histogram(name, doc, labels, buckets=buckets)
+    except ValueError:
+        return REGISTRY._names_to_collectors[name]  # type: ignore[return-value]
+
+
+def _gauge(name: str, doc: str) -> Gauge:
+    try:
+        return Gauge(name, doc)
+    except ValueError:
+        return REGISTRY._names_to_collectors[name]  # type: ignore[return-value]
+
+
+def _histogram_no_labels(name: str, doc: str, buckets: List[float]) -> Histogram:
+    try:
+        return Histogram(name, doc, buckets=buckets)
+    except ValueError:
+        return REGISTRY._names_to_collectors[name]  # type: ignore[return-value]
+
 
 MODEL_DIR = os.environ.get("NLLB_MODEL_DIR", "/models/nllb-200-distilled-600M-ct2-int8")
 CT2_DEVICE = os.environ.get("CT2_DEVICE", "cuda")
@@ -60,29 +89,29 @@ for bcp, nllb in BCP47_TO_NLLB.items():
 
 _BCP47_TO_NLLB_LOWER: Dict[str, str] = {k.lower(): v for k, v in BCP47_TO_NLLB.items()}
 
-REQUESTS_TOTAL = Counter("nllb_requests_total", "Total translation requests", ["target_lang", "status"])
-TRANSLATION_LATENCY = Histogram(
+REQUESTS_TOTAL = _counter("nllb_requests_total", "Total translation requests", ["target_lang", "status"])
+TRANSLATION_LATENCY = _histogram(
     "nllb_translation_latency_seconds",
     "Translation latency",
     ["target_lang"],
     buckets=[0.01, 0.025, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0],
 )
-CHARS_TRANSLATED = Counter("nllb_chars_translated_total", "Total characters translated", ["target_lang"])
-SENTENCES_TRANSLATED = Counter("nllb_sentences_translated_total", "Total sentences translated", ["target_lang"])
-ACTIVE_REQUESTS = Gauge("nllb_active_requests", "Active translation requests")
-MODEL_LOADED = Gauge("nllb_model_loaded", "Whether model is loaded (1=yes, 0=no)")
-BATCH_SIZE = Histogram(
+CHARS_TRANSLATED = _counter("nllb_chars_translated_total", "Total characters translated", ["target_lang"])
+SENTENCES_TRANSLATED = _counter("nllb_sentences_translated_total", "Total sentences translated", ["target_lang"])
+ACTIVE_REQUESTS = _gauge("nllb_active_requests", "Active translation requests")
+MODEL_LOADED = _gauge("nllb_model_loaded", "Whether model is loaded (1=yes, 0=no)")
+BATCH_SIZE = _histogram_no_labels(
     "nllb_batch_size",
     "Number of sentences per translate request",
     buckets=[1, 2, 5, 10, 20, 32, 50, 64, 100],
 )
-INFERENCE_LATENCY = Histogram(
+INFERENCE_LATENCY = _histogram(
     "nllb_inference_latency_seconds",
     "Pure CTranslate2 inference latency (excludes tokenization)",
     ["target_lang"],
     buckets=[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0],
 )
-TOKENIZATION_LATENCY = Histogram(
+TOKENIZATION_LATENCY = _histogram_no_labels(
     "nllb_tokenization_latency_seconds",
     "SentencePiece tokenization latency",
     buckets=[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25],
