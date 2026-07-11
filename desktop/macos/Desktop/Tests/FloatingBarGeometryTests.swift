@@ -56,6 +56,25 @@ final class FloatingBarGeometryTests: XCTestCase {
         XCTAssertEqual(expandedFrame.size, NSSize(width: 430, height: 110))
     }
 
+    func testNotchTransitionIgnoresTransientPTTOffset() {
+        let displayFrame = NSRect(x: 0, y: 0, width: 1710, height: 1107)
+        let transientPTTFrame = NSRect(x: 716, y: 1049, width: 351, height: 58)
+
+        let agentListFrame = FloatingControlBarGeometry.topCenteredFrame(
+            size: NSSize(width: 430, height: 338),
+            anchorFrame: displayFrame
+        )
+        let collapsedFrame = FloatingControlBarGeometry.topCenteredFrame(
+            size: transientPTTFrame.size,
+            anchorFrame: displayFrame
+        )
+
+        XCTAssertNotEqual(transientPTTFrame.midX, displayFrame.midX)
+        XCTAssertEqual(agentListFrame.midX, displayFrame.midX)
+        XCTAssertEqual(collapsedFrame.origin.x, 680)
+        XCTAssertLessThanOrEqual(abs(collapsedFrame.midX - displayFrame.midX), 0.5)
+    }
+
     func testPTTExpansionKeepsCompactPillCenter() {
         let compactFrame = FloatingControlBarGeometry.defaultPillFrame(
             size: compactSize,

@@ -28,6 +28,18 @@ enum FloatingControlBarGeometry {
         )
     }
 
+    /// Canonical top-center placement. Non-draggable notch surfaces must use
+    /// the display midpoint rather than an in-flight window frame: PTT, chat,
+    /// and the agent list can otherwise preserve a transient animation offset.
+    static func topCenteredFrame(size: NSSize, anchorFrame: NSRect) -> NSRect {
+        NSRect(
+            x: (anchorFrame.midX - size.width / 2).rounded(.toNearestOrAwayFromZero),
+            y: anchorFrame.maxY - size.height,
+            width: size.width,
+            height: size.height
+        )
+    }
+
     /// The notch window often includes transparent glow/layout outsets below and
     /// beside the visible black island. Hover activation must be limited to the
     /// actual top chrome so transparent pixels do not steal hover from windows
