@@ -22,6 +22,13 @@ from utils.llm.gateway_client import _chat_structured_payload
 LANE_ID = 'omi:auto:chat-structured'
 
 
+@pytest.fixture
+def gateway_client():
+    # TestClient startup belongs to fixture setup, not the fast-unit call budget.
+    with TestClient(app) as client:
+        yield client
+
+
 def test_chat_completions_requires_service_auth(monkeypatch):
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
 
@@ -31,7 +38,7 @@ def test_chat_completions_requires_service_auth(monkeypatch):
     assert response.json()['detail'] == 'invalid service authentication'
 
 
-def test_chat_completions_invalid_json_records_pre_route_rejection(monkeypatch):
+def test_chat_completions_invalid_json_records_pre_route_rejection(monkeypatch, gateway_client):
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
     recorded: list[dict] = []
     monkeypatch.setattr(
@@ -40,7 +47,7 @@ def test_chat_completions_invalid_json_records_pre_route_rejection(monkeypatch):
         lambda **kwargs: recorded.append(kwargs),
     )
 
-    response = TestClient(app).post(
+    response = gateway_client.post(
         '/v1/chat/completions',
         content='{',
         headers={**auth_headers(), 'content-type': 'application/json'},
