@@ -115,6 +115,7 @@ def validate_runtime_env(
     if errors:
         return errors
 
+    errors.extend(_validate_prerecorded_stt_contract(env, env_config))
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
     errors.extend(_validate_prerecorded_stt_contract(env, env_config))
     errors.extend(_validate_memory_maintenance_job_contract(env, env_config))

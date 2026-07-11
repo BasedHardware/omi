@@ -114,11 +114,11 @@ class TestTranscribeBytes:
         wav = _make_wav()
         monkeypatch.delenv('HOSTED_PARAKEET_API_URL', raising=False)
 
-        with pytest.raises(
-            pr.PrerecordedSTTConfigurationError,
-            match='HOSTED_PARAKEET_API_URL is required when prerecorded STT selects parakeet',
-        ):
+        with pytest.raises(pr.PrerecordedSTTConfigurationError) as exc_info:
             pr.parakeet_prerecorded_from_bytes(wav, diarize=False)
+
+        assert exc_info.value.provider == pr.PrerecordedSTTService.PARAKEET
+        assert exc_info.value.missing_env == 'HOSTED_PARAKEET_API_URL'
 
     def test_basic_transcription(self):
         wav = _make_wav()

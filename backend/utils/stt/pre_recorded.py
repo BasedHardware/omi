@@ -58,10 +58,6 @@ _parakeet_languages = {
 # ---------------------------------------------------------------------------
 
 
-class PrerecordedSTTConfigurationError(RuntimeError):
-    """Raised when the selected prerecorded STT provider lacks required runtime configuration."""
-
-
 class PrerecordedSTTProvider(ABC):
 
     @abstractmethod
@@ -95,6 +91,15 @@ class PrerecordedSTTService:
     DEEPGRAM = 'deepgram'
     MODULATE = 'modulate'
     PARAKEET = 'parakeet'
+
+
+class PrerecordedSTTConfigurationError(RuntimeError):
+    """A selected pre-recorded STT provider is not configured on this runtime."""
+
+    def __init__(self, provider: str, missing_env: str):
+        self.provider = provider
+        self.missing_env = missing_env
+        super().__init__(f'{provider} pre-recorded STT requires {missing_env}')
 
 
 def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Optional[str], str]:
@@ -759,9 +764,7 @@ def parakeet_prerecorded_from_bytes(
 
     api_url = os.getenv('HOSTED_PARAKEET_API_URL')
     if not api_url:
-        raise PrerecordedSTTConfigurationError(
-            'HOSTED_PARAKEET_API_URL is required when prerecorded STT selects parakeet'
-        )
+        raise PrerecordedSTTConfigurationError(PrerecordedSTTService.PARAKEET, 'HOSTED_PARAKEET_API_URL')
 
     try:
         if encoding:

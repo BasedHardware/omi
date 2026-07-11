@@ -3516,6 +3516,8 @@ export interface VerifyPhoneNumberResponse {
 
 export interface VoiceMessageTranscriptionResponse {
   language?: string | null;
+  stt_model?: string | null;
+  stt_provider?: string | null;
   transcript: string;
 }
 

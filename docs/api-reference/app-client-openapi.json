@@ -21445,6 +21445,28 @@
             ],
             "title": "Language"
           },
+          "stt_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stt Model"
+          },
+          "stt_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stt Provider"
+          },
           "transcript": {
             "title": "Transcript",
             "type": "string"

@@ -100,6 +100,8 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            # Dev Cloud Run must stay within the dev Parakeet topology; never point this at
+            # the production-only parakeet.omi.me endpoint.
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omiapi.com
               category: service_discovery
