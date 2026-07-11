@@ -9,6 +9,12 @@ NODE_RESOURCE="$DESKTOP_DIR/Desktop/Sources/Resources/node"
 PACKAGED_RUNTIME_DIR="$DESKTOP_DIR/.harness/agent-runtime"
 AGENT_PACKAGED_NODE_MODULES="$PACKAGED_RUNTIME_DIR/agent-node_modules"
 PI_MONO_PACKAGED_NODE_MODULES="$PACKAGED_RUNTIME_DIR/pi-mono-extension-node_modules"
+CACHE_STAMP="$PACKAGED_RUNTIME_DIR/cache.stamp"
+CACHE_LOCK="$DESKTOP_DIR/.harness/agent-runtime-prepare.lock.d"
+
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=agent-runtime-cache.sh
+source "$SCRIPT_DIR/agent-runtime-cache.sh"
 
 NODE_VERSION="${OMI_AGENT_NODE_VERSION:-v22.14.0}"
 NODE_DARWIN_ARM64_SHA256="e9404633bc02a5162c5c573b1e2490f5fb44648345d64a958b17e325729a5e42"
@@ -16,6 +22,7 @@ NODE_DARWIN_X64_SHA256="6698587713ab565a94a360e091df9f6d91c8fadda6d00f0cf6526e9b
 
 MODE="universal"
 SKIP_NPM=0
+PREP_TEMP_DIR=""
 
 usage() {
   cat <<'USAGE'
@@ -34,6 +41,10 @@ Modes:
                     Copy the developer's current `node` binary into resources.
                     This is for debugging only; normal app bundles should use
                     the pinned universal runtime.
+
+Local runs reuse a content-addressed, worktree-local preparation when all
+inputs and validated outputs are unchanged. Set OMI_AGENT_RUNTIME_FORCE_REBUILD=1
+to bypass it. CI and --skip-npm always prepare without reading or writing a stamp.
 USAGE
 }
 
@@ -80,7 +91,7 @@ require_executable() {
 }
 
 sha256_file() {
-  shasum -a 256 "$1" | awk '{print $1}'
+  arc_sha256_file "$1"
 }
 
 verify_sha256() {
@@ -233,7 +244,9 @@ let removedCount = 0;
 let removedBytes = 0;
 
 function removePath(targetPath) {
-  if (!fs.existsSync(targetPath)) {
+  try {
+    fs.lstatSync(targetPath);
+  } catch {
     return;
   }
   removedBytes += pathSizeBytes(targetPath);
@@ -319,6 +332,10 @@ if (removedCount > 0) {
   console.log(`[agent-runtime] Pruned ${removedCount} packaged-only file(s)/folder(s) from ${path.basename(packageDir)} (${removedMiB} MiB)`);
 }
 NODE
+  # Package pruning can remove an optional CLI while leaving npm's `.bin`
+  # symlink behind. Broken launchers are not useful in the shipped runtime and
+  # make output validation ambiguous, so remove them before cache validation.
+  arc_remove_broken_symlinks "$package_dir/node_modules/.bin"
 }
 
 dedupe_pi_mono_packaged_node_modules() {
@@ -425,6 +442,10 @@ if (linkedCount > 0) {
   console.log(`[agent-runtime] Deduped ${linkedCount} pi-mono package(s) via symlink (${linkedMiB} MiB)`);
 }
 NODE
+  # Dedupe replaces shared packages with final-bundle-relative symlinks. npm's
+  # launchers for those packages cannot resolve in the staging layout and are
+  # unnecessary in the shipped extension, so remove them before validation.
+  arc_remove_broken_symlinks "$PI_MONO_PACKAGED_NODE_MODULES/.bin"
 }
 
 stage_unsafe_local_node() {
@@ -474,7 +495,7 @@ download_node_archive() {
 stage_universal_node() {
   local temp_dir
   temp_dir="$(mktemp -d /tmp/omi-node-universal-XXXXXX)"
-  trap "rm -rf '$temp_dir'" EXIT
+  PREP_TEMP_DIR="$temp_dir"
 
   download_node_archive "arm64" "$NODE_DARWIN_ARM64_SHA256" "$temp_dir/arm64.tar.gz"
   tar -xzf "$temp_dir/arm64.tar.gz" -C "$temp_dir"
@@ -494,27 +515,150 @@ stage_universal_node() {
     echo "ERROR: staged Node is not universal: $(file "$NODE_RESOURCE")" >&2
     exit 1
   }
+  rm -rf "$temp_dir"
+  PREP_TEMP_DIR=""
   log "Staged universal Node $NODE_VERSION at $NODE_RESOURCE"
 }
 
 validate_runtime_tree() {
-  require_executable "$NODE_RESOURCE"
-  require_file "$AGENT_DIR/dist/index.js"
-  require_file "$AGENT_DIR/dist/patched-acp-entry.mjs"
-  require_file "$AGENT_DIR/src/runtime/control-tool-manifest.ts"
-  require_file "$AGENT_DIR/src/runtime/node-tools.ts"
-  require_file "$AGENT_DIR/src/runtime/omi-tool-manifest.ts"
-  require_file "$AGENT_DIR/node_modules/@mariozechner/pi-coding-agent/dist/cli.js"
-  require_file "$AGENT_PACKAGED_NODE_MODULES/@mariozechner/pi-coding-agent/dist/cli.js"
-  require_file "$AGENT_DIR/node_modules/@zed-industries/claude-agent-acp/dist/acp-agent.js"
-  require_file "$AGENT_PACKAGED_NODE_MODULES/@zed-industries/claude-agent-acp/dist/acp-agent.js"
-  require_file "$PI_MONO_DIR/index.ts"
-  require_file "$PI_MONO_DIR/package.json"
-  require_file "$PI_MONO_PACKAGED_NODE_MODULES/@mariozechner/pi-coding-agent/dist/cli.js"
+  local required
+  [ -x "$NODE_RESOURCE" ] || return 1
+  for required in \
+    "$AGENT_DIR/dist/index.js" \
+    "$AGENT_DIR/dist/patched-acp-entry.mjs" \
+    "$AGENT_DIR/src/runtime/control-tool-manifest.ts" \
+    "$AGENT_DIR/src/runtime/node-tools.ts" \
+    "$AGENT_DIR/src/runtime/omi-tool-manifest.ts" \
+    "$AGENT_DIR/node_modules/@mariozechner/pi-coding-agent/dist/cli.js" \
+    "$AGENT_PACKAGED_NODE_MODULES/@mariozechner/pi-coding-agent/dist/cli.js" \
+    "$AGENT_DIR/node_modules/@zed-industries/claude-agent-acp/dist/acp-agent.js" \
+    "$AGENT_PACKAGED_NODE_MODULES/@zed-industries/claude-agent-acp/dist/acp-agent.js" \
+    "$PI_MONO_DIR/index.ts" \
+    "$PI_MONO_DIR/package.json"; do
+    [ -f "$required" ] || return 1
+  done
 
-  "$NODE_RESOURCE" --version >/dev/null
-  log "Runtime validated: node=$("$NODE_RESOURCE" --version), agent dist and piMono files present"
+  [ -d "$PI_MONO_PACKAGED_NODE_MODULES" ] || return 1
+  validate_packaged_symlinks || return 1
+
+  local staged_version
+  staged_version="$("$NODE_RESOURCE" --version 2>/dev/null)" || return 1
+  if [ "$MODE" = "universal" ]; then
+    [ "$staged_version" = "$NODE_VERSION" ] || return 1
+    command -v lipo >/dev/null 2>&1 || return 1
+    local arches
+    arches="$(lipo -archs "$NODE_RESOURCE" 2>/dev/null)" || return 1
+    case " $arches " in *" arm64 "*) ;; *) return 1 ;; esac
+    case " $arches " in *" x86_64 "*) ;; *) return 1 ;; esac
+  else
+    local major="${staged_version#v}"
+    major="${major%%.*}"
+    [ "$major" -ge 22 ] 2>/dev/null || return 1
+  fi
 }
+
+validate_packaged_symlinks() {
+  python3 - "$AGENT_PACKAGED_NODE_MODULES" "$PI_MONO_PACKAGED_NODE_MODULES" <<'PY'
+import os
+import sys
+
+agent_modules, pi_modules = map(os.path.abspath, sys.argv[1:])
+for root in (agent_modules, pi_modules):
+    if not os.path.isdir(root):
+        raise SystemExit(1)
+    for current, dirs, files in os.walk(root, followlinks=False):
+        for name in dirs + files:
+            link = os.path.join(current, name)
+            if not os.path.islink(link):
+                continue
+            target = os.readlink(link)
+            resolved = os.path.realpath(os.path.join(current, target))
+            if os.path.exists(resolved):
+                try:
+                    if os.path.commonpath((resolved, root)) == root:
+                        continue
+                except ValueError:
+                    pass
+                raise SystemExit(1)
+            marker = "agent/node_modules/"
+            normalized = target.replace("\\", "/")
+            if marker not in normalized:
+                raise SystemExit(1)
+            package_path = normalized.split(marker, 1)[1]
+            if not os.path.exists(os.path.join(agent_modules, package_path)):
+                raise SystemExit(1)
+PY
+}
+
+compute_cache_key() {
+  local node_version npm_version
+  node_version="$(node --version 2>/dev/null || printf missing)"
+  npm_version="$(npm --version 2>/dev/null || printf missing)"
+  {
+    printf 'cache-schema=1\nmode=%s\nskip_npm=%s\nnode_runtime=%s\n' "$MODE" "$SKIP_NPM" "$NODE_VERSION"
+    printf 'build-node=%s\nbuild-npm=%s\nos=%s\narch=%s\n' "$node_version" "$npm_version" "$(uname -s)" "$(uname -m)"
+    arc_hash_paths \
+      "$SCRIPT_DIR/prepare-agent-runtime.sh" \
+      "$SCRIPT_DIR/agent-runtime-cache.sh" \
+      "$AGENT_DIR/package.json" \
+      "$AGENT_DIR/package-lock.json" \
+      "$AGENT_DIR/tsconfig.json" \
+      "$AGENT_DIR/src" \
+      "$AGENT_DIR/scripts" \
+      "$PI_MONO_DIR/package.json" \
+      "$PI_MONO_DIR/package-lock.json" \
+      "$PI_MONO_DIR/index.ts"
+  } | arc_sha256_stream
+}
+
+compute_output_digest() {
+  # run.sh copies these four prepared outputs wholesale. Hash their complete
+  # contents and filesystem metadata so no unvalidated file can ride a HIT.
+  # Deliberately exclude AGENT_DIR/node_modules: it is a working build input,
+  # not an app-bundle output.
+  arc_hash_paths \
+    "$NODE_RESOURCE" \
+    "$AGENT_DIR/dist" \
+    "$AGENT_PACKAGED_NODE_MODULES" \
+    "$PI_MONO_PACKAGED_NODE_MODULES"
+}
+
+cleanup() {
+  if [ -n "$PREP_TEMP_DIR" ]; then
+    rm -rf "$PREP_TEMP_DIR"
+  fi
+  arc_release_lock "$CACHE_LOCK"
+}
+
+mkdir -p "$DESKTOP_DIR/.harness"
+arc_acquire_lock "$CACHE_LOCK" "${OMI_AGENT_RUNTIME_LOCK_TIMEOUT:-600}"
+trap cleanup EXIT INT TERM
+
+CACHE_ELIGIBLE=1
+BYPASS_REASON=""
+POLICY="$(arc_cache_policy "${CI:-}" "$SKIP_NPM" "${OMI_AGENT_RUNTIME_FORCE_REBUILD:-0}")"
+if [ "$POLICY" != "eligible" ]; then
+  CACHE_ELIGIBLE=0
+  BYPASS_REASON="${POLICY#bypass:}"
+fi
+
+CACHE_KEY="$(compute_cache_key)"
+if [ "$CACHE_ELIGIBLE" = "1" ] && validate_runtime_tree; then
+  CURRENT_OUTPUT_DIGEST="$(compute_output_digest)"
+  if arc_cache_status "$CACHE_STAMP" "$CACHE_KEY" "$CURRENT_OUTPUT_DIGEST"; then
+    log "Cache HIT ($CACHE_KEY); validated prepared runtime reused"
+    exit 0
+  fi
+fi
+
+if [ "$CACHE_ELIGIBLE" = "1" ]; then
+  log "Cache MISS ($CACHE_KEY); preparing runtime"
+else
+  log "Cache BYPASS ($BYPASS_REASON); preparing runtime"
+fi
+# Removing the prior stamp before mutation guarantees a failed preparation can
+# never leave a successful-looking stamp behind.
+rm -f "$CACHE_STAMP"
 
 install_agent_deps_and_build
 install_pi_mono_deps
@@ -526,4 +670,14 @@ case "$MODE" in
     stage_universal_node
     ;;
 esac
-validate_runtime_tree
+validate_runtime_tree || {
+  echo "ERROR: prepared agent runtime failed validation" >&2
+  exit 1
+}
+
+log "Runtime validated: node=$("$NODE_RESOURCE" --version), agent dist and piMono files present"
+if [ "$CACHE_ELIGIBLE" = "1" ]; then
+  OUTPUT_DIGEST="$(compute_output_digest)"
+  arc_write_stamp "$CACHE_STAMP" "$CACHE_KEY" "$OUTPUT_DIGEST"
+  log "Cache stored ($CACHE_KEY)"
+fi

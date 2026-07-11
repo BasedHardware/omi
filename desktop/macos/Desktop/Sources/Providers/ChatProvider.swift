@@ -2592,7 +2592,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     let result = await ChatToolExecutor.execute(
                         toolCall,
                         originatingChatMode: currentChatMode,
-                        originatingSurfaceRef: .chatLab(labSessionId: labSessionId)
+                        originatingSurfaceRef: .chatLab(labSessionId: labSessionId),
+                        originatingUserText: question.trimmingCharacters(in: .whitespacesAndNewlines)
                     )
                     log("ChatLab: tool \(name) executed")
                     return result
@@ -4102,7 +4103,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     toolCall,
                     originatingChatMode: currentChatMode,
                     originatingClientScope: currentToolClientScope,
-                    originatingSurfaceRef: resolvedSurface)
+                    originatingSurfaceRef: resolvedSurface,
+                    originatingUserText: trimmedText)
                 log("OMI tool \(name) executed for callId=\(callId)")
                 responseMetrics.recordToolResult(name: name, result: result)
                 return result
