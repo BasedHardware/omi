@@ -249,7 +249,7 @@ runs:
               CREATE_STATUS=$?
               set -e
               if [[ "$CREATE_STATUS" -eq 0 ]]; then
-                POLICY="$CREATE_OUTPUT"
+                POLICY="$(printf '%s\n' "$CREATE_OUTPUT" | tail -n 1)"
                 break
               fi
               if [[ "$CREATE_OUTPUT" != *"Cannot find metric(s)"* || "$ATTEMPT" -eq 60 ]]; then
