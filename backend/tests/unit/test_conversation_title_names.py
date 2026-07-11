@@ -100,6 +100,7 @@ if not hasattr(sys.modules.get("utils.llm", None), "__path__"):
     _stub_package("utils.llm")
 llm_clients_stub = sys.modules.get("utils.llm.clients") or _stub_module("utils.llm.clients")
 llm_clients_stub.get_llm = MagicMock(return_value=MagicMock())
+llm_clients_stub.get_llm_gateway_chat_structured = MagicMock(return_value=MagicMock())
 llm_clients_stub.parser = MagicMock()
 
 conversation_folder_stub = sys.modules.get("utils.llm.conversation_folder") or _stub_module(
