@@ -155,7 +155,19 @@ const RENDERER_RELOAD_WINDOW_MS = 60_000
 const RENDERER_RELOAD_MAX = 3
 const rendererReloadTimes = new WeakMap<Electron.WebContents, number[]>()
 app.on('render-process-gone', (_e, wc, details) => {
-  logFatal('render-process-gone', `reason=${details.reason} exitCode=${details.exitCode}`)
+  // Include the URL so a crash is attributable to a specific window (main /bar /
+  // capture /insight-toast) instead of an anonymous "renderer crashed".
+  const url = ((): string => {
+    try {
+      return wc.getURL()
+    } catch {
+      return '?'
+    }
+  })()
+  logFatal(
+    'render-process-gone',
+    `url=${url} reason=${details.reason} exitCode=${details.exitCode}`
+  )
   // Skip clean exits (intentional teardown) and destroyed windows.
   if (details.reason === 'clean-exit' || wc.isDestroyed()) return
   const now = Date.now()
@@ -179,7 +191,15 @@ app.on('render-process-gone', (_e, wc, details) => {
   }
 })
 app.on('child-process-gone', (_e, details) =>
-  logFatal('child-process-gone', `type=${details.type} reason=${details.reason}`)
+  // Include the utility's name/service (e.g. "Audio Service", "Video Capture")
+  // so a Utility crash points at the actual subsystem rather than just "Utility".
+  logFatal(
+    'child-process-gone',
+    `type=${details.type}` +
+      (details.name ? ` name=${details.name}` : '') +
+      (details.serviceName ? ` service=${details.serviceName}` : '') +
+      ` reason=${details.reason} exitCode=${details.exitCode}`
+  )
 )
 
 // Desktop-automation bridge (real Windows UI actions). ON by default; set
