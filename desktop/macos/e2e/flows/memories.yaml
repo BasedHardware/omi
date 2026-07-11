@@ -48,6 +48,13 @@ steps:
       result.detail.result_count: { min: 1 }
 
   - id: S5
+    name: Capture atlas overview when graph data exists
+    bridge.action:
+      name: capture_memory_atlas_png
+      params:
+        level: overview
+
+  - id: S6
     name: Logs clean
     log.expect:
       absent:

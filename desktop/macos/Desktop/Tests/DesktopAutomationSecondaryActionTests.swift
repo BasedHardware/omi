@@ -30,6 +30,7 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
       "memory_graph_snapshot",
       "open_memory_atlas",
       "memory_atlas_set_viewport",
+      "capture_memory_atlas_png",
       "open_quick_note",
       "about_snapshot",
       "settings_notifications_snapshot",
@@ -249,6 +250,20 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     for parameter in ["target", "zoom", "pan_x", "pan_y", "reset"] {
       XCTAssertTrue(viewportBody.contains("\"\(parameter)\""))
     }
+  }
+
+  func testMemoryAtlasCaptureUsesSemanticLevelsAndSheetSurface() throws {
+    let body = try actionBody(named: "capture_memory_atlas_png", in: try bridgeSource())
+    XCTAssertTrue(body.contains("AppBuild.isNonProduction"))
+    for level in ["overview", "neighborhood", "detail", "focus", "inspect"] {
+      XCTAssertTrue(body.contains("case \"\(level)\""), "capture should support \(level)")
+    }
+    XCTAssertTrue(body.contains("getKnowledgeGraph"))
+    XCTAssertTrue(body.contains("atlas_data_unavailable"))
+    XCTAssertTrue(body.contains("atlas_empty"))
+    XCTAssertTrue(body.contains("attachedSheet"))
+    XCTAssertTrue(body.contains("\"captured_surface\": \"sheet\""))
+    XCTAssertTrue(body.contains("DesktopAutomationLaunchOptions.captureRoot"))
   }
 
   func testNavigateViaShortcutPostsSidebarNotification() throws {

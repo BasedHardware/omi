@@ -57,7 +57,7 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
     let snapshot = makeProductionScaleSnapshot()
     let plan = makePlan(snapshot: snapshot, zoom: 15.5)
 
-    XCTAssertEqual(MemoryAtlasZoomPolicy.maximumZoom(compact: false), 16)
+    XCTAssertEqual(MemoryAtlasZoomPolicy.maximumZoom(compact: false), 5)
     XCTAssertEqual(MemoryAtlasZoomPolicy.maximumZoom(compact: true), 1.35)
     XCTAssertEqual(plan.detailLevel, .inspect)
     assertWorkBudgets(plan, nodes: 64, edges: 64, labels: 64)

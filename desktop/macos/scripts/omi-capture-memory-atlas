@@ -1,0 +1,20 @@
+#!/bin/bash
+# Capture the real, expanded memory atlas at a named semantic zoom level.
+set -euo pipefail
+
+LEVEL="${1:-overview}"
+OUTPUT="${2:-}"
+case "$LEVEL" in
+  overview|neighborhood|detail|focus|inspect) ;;
+  *)
+    echo "usage: omi-capture-memory-atlas [overview|neighborhood|detail|focus|inspect] [output.png]" >&2
+    exit 2
+    ;;
+esac
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+args=(action capture_memory_atlas_png "level=$LEVEL")
+if [ -n "$OUTPUT" ]; then
+  args+=("path=$OUTPUT")
+fi
+"$SCRIPT_DIR/omi-ctl" "${args[@]}"

@@ -2843,7 +2843,7 @@ final class DesktopAutomationActionRegistry {
     register(
       name: "memory_atlas_set_viewport",
       summary: "Set memory atlas zoom and pan for deterministic non-production performance sweeps",
-      params: ["target", "zoom", "pan_x", "pan_y", "reset"]
+      params: ["target", "zoom", "pan_x", "pan_y", "reset", "node_id"]
     ) { params in
       let target = params["target"] == "inline" ? "inline" : "expanded"
       var userInfo: [String: Any] = ["target": target]
@@ -2857,6 +2857,13 @@ final class DesktopAutomationActionRegistry {
           object: nil,
           userInfo: userInfo
         )
+        if let nodeID = params["node_id"], !nodeID.isEmpty {
+          NotificationCenter.default.post(
+            name: .desktopAutomationMemoryAtlasSelectionRequested,
+            object: nil,
+            userInfo: ["target": target, "node_id": nodeID]
+          )
+        }
       }
       return [
         "posted": "true",
@@ -2864,6 +2871,151 @@ final class DesktopAutomationActionRegistry {
         "zoom": params["zoom"] ?? "unchanged",
         "pan_x": params["pan_x"] ?? "unchanged",
         "pan_y": params["pan_y"] ?? "unchanged",
+        "node_id": params["node_id"] ?? "unchanged",
+      ]
+    }
+
+    register(
+      name: "capture_memory_atlas_png",
+      summary: "Open and capture the memory atlas sheet at a named semantic zoom level",
+      params: ["level", "path"],
+      category: "capture",
+      surfaces: ["memory_atlas"],
+      safety: "local_artifact",
+      sideEffects: ["navigates to Memories", "opens the atlas sheet", "writes a PNG"],
+      examples: ["omi-ctl action capture_memory_atlas_png level=neighborhood"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "non_production_only"]
+      }
+
+      let level = (params["level"] ?? "overview").lowercased()
+      let zoom: Double
+      switch level {
+      case "overview": zoom = 1.0
+      case "neighborhood": zoom = 1.6
+      case "detail": zoom = 2.5
+      case "focus": zoom = 4.0
+      case "inspect": zoom = 5.0
+      default:
+        return [
+          "error": "unsupported_level",
+          "supported_levels": "overview,neighborhood,detail,focus,inspect",
+        ]
+      }
+
+      let graph: KnowledgeGraphResponse
+      do {
+        graph = try await APIClient.shared.getKnowledgeGraph()
+      } catch {
+        return [
+          "error": "atlas_data_unavailable",
+          "error_message": automationSafeErrorDetail(error.localizedDescription),
+        ]
+      }
+      guard !graph.nodes.isEmpty else {
+        return [
+          "error": "atlas_empty",
+          "node_count": "0",
+          "edge_count": "\(graph.edges.count)",
+        ]
+      }
+
+      NotificationCenter.default.post(
+        name: .navigateToSidebarItem,
+        object: nil,
+        userInfo: ["rawValue": SidebarNavItem.memories.rawValue]
+      )
+      try await Task.sleep(nanoseconds: 150_000_000)
+
+      let deadline = Date().addingTimeInterval(3)
+      var atlasSheet: NSWindow?
+      repeat {
+        // Navigation and view mounting are asynchronous. Re-posting this idempotent
+        // request avoids losing the notification before the atlas card subscribes.
+        NotificationCenter.default.post(name: .desktopAutomationOpenMemoryAtlasRequested, object: nil)
+        atlasSheet = NSApp.windows.first(where: {
+          $0.isVisible
+            && $0.title.range(of: "omi", options: .caseInsensitive) != nil
+            && $0.attachedSheet != nil
+        })?.attachedSheet
+        if atlasSheet == nil {
+          try await Task.sleep(nanoseconds: 50_000_000)
+        }
+      } while atlasSheet == nil && Date() < deadline
+
+      guard let atlasSheet else {
+        return [
+          "error": "atlas_sheet_unavailable",
+          "hint": "Memories must be loaded and the atlas card mounted before capture",
+          "node_count": "\(graph.nodes.count)",
+          "edge_count": "\(graph.edges.count)",
+        ]
+      }
+
+      NotificationCenter.default.post(
+        name: .desktopAutomationMemoryAtlasViewportRequested,
+        object: nil,
+        userInfo: ["target": "expanded", "zoom": zoom, "pan_x": 0.0, "pan_y": 0.0]
+      )
+      if level == "focus" || level == "inspect",
+        let focusNode = graph.nodes
+          .filter({ !$0.memoryIds.isEmpty })
+          .sorted(by: {
+            if $0.memoryIds.count == $1.memoryIds.count { return $0.id < $1.id }
+            return $0.memoryIds.count > $1.memoryIds.count
+          })
+          .first
+      {
+        NotificationCenter.default.post(
+          name: .desktopAutomationMemoryAtlasSelectionRequested,
+          object: nil,
+          userInfo: ["target": "expanded", "node_id": focusNode.id]
+        )
+      }
+      // Give SwiftUI one render turn after applying the semantic viewport.
+      try await Task.sleep(nanoseconds: 150_000_000)
+
+      let defaultURL = DesktopAutomationLaunchOptions.captureRoot
+        .appendingPathComponent("memory-atlas", isDirectory: true)
+        .appendingPathComponent("\(level).png")
+      let outputURL = params["path"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) } ?? defaultURL
+      do {
+        try FileManager.default.createDirectory(
+          at: outputURL.deletingLastPathComponent(),
+          withIntermediateDirectories: true
+        )
+      } catch {
+        return ["error": "capture_directory_failed", "error_message": error.localizedDescription]
+      }
+
+      guard let contentView = atlasSheet.contentView else {
+        return ["error": "atlas_sheet_has_no_content"]
+      }
+      let bounds = contentView.bounds
+      guard let rep = contentView.bitmapImageRepForCachingDisplay(in: bounds) else {
+        return ["error": "bitmap_rep_failed"]
+      }
+      contentView.cacheDisplay(in: bounds, to: rep)
+      guard let data = rep.representation(using: .png, properties: [:]) else {
+        return ["error": "png_encode_failed"]
+      }
+      do {
+        try data.write(to: outputURL, options: .atomic)
+      } catch {
+        return ["error": "png_write_failed", "error_message": error.localizedDescription]
+      }
+
+      return [
+        "path": outputURL.path,
+        "level": level,
+        "zoom": String(format: "%.1f", zoom),
+        "captured_surface": "sheet",
+        "bytes": "\(data.count)",
+        "width": "\(rep.pixelsWide)",
+        "height": "\(rep.pixelsHigh)",
+        "node_count": "\(graph.nodes.count)",
+        "edge_count": "\(graph.edges.count)",
       ]
     }
 
