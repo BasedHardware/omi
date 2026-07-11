@@ -71,9 +71,15 @@ OnboardingImportEvidenceService.save()
 ## Phases
 
 ### Phase 0 — Calendar over OAuth (do first, small)
-The backend Google Calendar integration already exists and is verified. Only wiring:
-- `desktop/.../CalendarReaderService.readEvents()` → call the backend Calendar
-  events endpoint (backend uses the stored OAuth token) instead of scraping cookies.
+The backend Google Calendar integration already exists AND already reads events from
+the Google API: `backend/utils/retrieval/tools/calendar_tools.py:290` calls
+`googleapis.com/calendar/v3/.../events` with the stored OAuth token (refreshed via
+`google_utils`). So Phase 0 is thin wiring, not new OAuth:
+- Backend: expose a read endpoint (e.g. `GET /v1/calendar/events?days_back&days_forward`)
+  as a thin wrapper over the existing `calendar_tools` list-events call. Hermetic test
+  mocks the Google layer and asserts the response maps to the desktop `CalendarEvent`.
+- Desktop: `CalendarReaderService.readEvents()` → call that endpoint (with the user's
+  Firebase session) instead of scraping cookies.
 - Trigger the existing `/v1/integrations/google-calendar` OAuth-url flow from the
   onboarding step when not yet connected; reuse `AuthService` loopback callback.
 - Reuse `calendar_onboarding.py` status/skip/reset as-is.
@@ -114,4 +120,19 @@ The backend Google Calendar integration already exists and is verified. Only wir
 
 - Confirm the exact current Google restricted-scope verification requirements before
   committing Gmail work (policy shifts; verify against live Google docs).
-- Confirm the backend Calendar events endpoint shape maps cleanly to `CalendarEvent`.
+- Map `calendar_tools` list-events output → desktop `CalendarEvent` (fields align;
+  confirm all-day + attendee shapes).
+
+## External blockers (cannot be done from the repo)
+
+These gate a *working, verified* migration and are outside code:
+- **Google OAuth client credentials** (`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`) in a
+  runnable/deployed backend — needed to exercise any live OAuth flow.
+- **A Google-connected test account** to verify the Calendar/Gmail read path end to end.
+- **Google Cloud consent-screen scope config**: adding `gmail.readonly` (restricted) and
+  the Calendar scope to the app's OAuth consent screen.
+- **Gmail restricted-scope verification / CASA** — a Google-side review measured in weeks.
+
+Implication: backend/desktop code can be written with hermetic (mocked-Google) tests,
+but the live OAuth path cannot be exercised until the above are in place. Do not mark
+the feature "done" on hermetic tests alone.
