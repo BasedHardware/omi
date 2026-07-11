@@ -144,24 +144,28 @@ def _translate_batch(texts: List[str], source_nllb: str, target_nllb: str) -> Li
         raise RuntimeError("Model not loaded")
 
     tokenized = [_tokenizer.Encode(text, out_type=str) for text in texts]
-    target_prefix = [[target_nllb]] * len(texts)
 
-    translate_kwargs = {
-        "target_prefix": target_prefix,
-        "max_input_length": MAX_INPUT_LENGTH,
-        "beam_size": 4,
-    }
+    # NLLB requires: source = [src_lang] + tokens + [</s>]
+    #                target_prefix = [</s>, tgt_lang]
     if source_nllb:
-        tokenized = [[source_nllb] + tokens for tokens in tokenized]
+        tokenized = [[source_nllb] + tokens + ["</s>"] for tokens in tokenized]
+    else:
+        tokenized = [tokens + ["</s>"] for tokens in tokenized]
 
-    results = _translator.translate_batch(tokenized, **translate_kwargs)
+    target_prefix = [["</s>", target_nllb]] * len(texts)
 
+    results = _translator.translate_batch(
+        tokenized,
+        target_prefix=target_prefix,
+        max_input_length=MAX_INPUT_LENGTH,
+        beam_size=4,
+    )
+
+    special_tokens = {"</s>", target_nllb}
     translations = []
     source_bcp47 = NLLB_TO_BCP47.get(source_nllb, source_nllb.split("_")[0] if source_nllb else "")
     for result in results:
-        tokens = result.hypotheses[0]
-        if tokens and tokens[0] == target_nllb:
-            tokens = tokens[1:]
+        tokens = [t for t in result.hypotheses[0] if t not in special_tokens]
         decoded = _tokenizer.Decode(tokens)
         translations.append(
             TranslationResult(
