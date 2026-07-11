@@ -1693,18 +1693,24 @@ class ChatToolExecutor {
 
   private static func triggerAutomationPermissionDirectly() {
     Task.detached {
-      let launchScript = NSAppleScript(source: "launch application \"System Events\"")
-      var launchError: NSDictionary?
-      launchScript?.executeAndReturnError(&launchError)
+      // NSAppleScript is main-thread-only — build+execute each script on the main
+      // actor; the delay between them stays off-main.
+      await MainActor.run {
+        let launchScript = NSAppleScript(source: "launch application \"System Events\"")
+        var launchError: NSDictionary?
+        launchScript?.executeAndReturnError(&launchError)
+      }
       try? await Task.sleep(nanoseconds: 500_000_000)
-      let script = NSAppleScript(
-        source: """
-          tell application "System Events"
-            return name of first process whose frontmost is true
-          end tell
-          """)
-      var error: NSDictionary?
-      script?.executeAndReturnError(&error)
+      await MainActor.run {
+        let script = NSAppleScript(
+          source: """
+            tell application "System Events"
+              return name of first process whose frontmost is true
+            end tell
+            """)
+        var error: NSDictionary?
+        script?.executeAndReturnError(&error)
+      }
       if let url = URL(
         string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")
       {

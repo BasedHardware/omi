@@ -1179,6 +1179,16 @@ class MemoriesViewModel: ObservableObject {
       undoTimeRemaining = 4
     }
 
+    // The soft-delete above immediately drops this row from getLocalMemories(), so
+    // the SQLite paging cursor is now one position too high — the next loadMore()
+    // would skip the item that shifted into the old cursor slot. Back the
+    // visible/cache cursor off by one. (rawBackendOffset is adjusted separately in
+    // performActualDelete, only after the backend row is actually removed, because
+    // the backend still holds the row during the undo window.) Undo and
+    // delete-failure both call reloadForCurrentLayerFilter(), which recomputes
+    // currentOffset from offset 0, so this decrement safely unwinds.
+    currentOffset = max(0, currentOffset - 1)
+
     // Start countdown timer
     deleteTask = Task {
       // Update countdown every 100ms
@@ -1242,6 +1252,12 @@ class MemoriesViewModel: ObservableObject {
     do {
       try await APIClient.shared.deleteMemory(id: memory.id)
       AnalyticsManager.shared.memoryDeleted(conversationId: memory.id)
+      // The backend row is now gone, so the raw backend paging cursor is one
+      // position too high — decrement it so the next API-backed loadMore() doesn't
+      // skip the item that shifted into the old cursor slot. Done here rather than
+      // in the optimistic block because the backend still holds the row during the
+      // undo window; decrementing earlier would re-fetch and duplicate it.
+      rawBackendOffset = max(0, rawBackendOffset - 1)
     } catch {
       logError("Failed to delete memory", error: error)
       do {
