@@ -90,10 +90,6 @@ body.bar-body {
   letter-spacing: 0.02em;
   color: rgb(212 212 212);
 }
-.bar-pill-state {
-  font-size: 10.5px;
-  color: rgb(115 115 115);
-}
 
 /* The expanded ask panel lays out at the overlay's original 480px and paints
    at 0.7 — identical look to the old overlay surface. */
