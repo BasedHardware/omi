@@ -5,7 +5,6 @@ description: Screen Recording permission flow — verify Rewind permission state
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/Chat/PermissionRequestAuthorization.swift
-  - desktop/macos/Desktop/Sources/PermissionRequestAuthorization.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift
   - desktop/macos/Desktop/Sources/ScreenCaptureService.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/PermissionsPage.swift
