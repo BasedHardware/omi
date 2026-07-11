@@ -382,9 +382,14 @@ final class WALService: ObservableObject {
             totalFrames: currentFrames.count
         )
 
-        // Check for duplicate
-        if let existingIndex = wals.firstIndex(where: { $0.id == wal.id }) {
-            // Append to existing
+        // Check for duplicate. Two chunks can share a WAL id ("device_second", 1s
+        // resolution) when a second chunk is created within the same wall-clock
+        // second as a prior successful write. They share generateFileName(), so the
+        // duplicate write MUST extend the existing file (append: true below), not
+        // atomically overwrite it — overwriting truncated the earlier ~60s of audio
+        // to just the new buffer while totalFrames claimed the sum.
+        let existingIndex = wals.firstIndex(where: { $0.id == wal.id })
+        if let existingIndex {
             wals[existingIndex].totalFrames += currentFrames.count
             logger.debug("Appended \(self.currentFrames.count) frames to existing WAL")
         } else {
@@ -395,7 +400,8 @@ final class WALService: ObservableObject {
         let framesToWrite = currentFrames
         let syncedToWrite = currentFramesSynced
         frameWriteInProgress = true
-        writeFramesToDiskAsync(frames: framesToWrite, wal: wal) { [weak self] wrote in
+        writeFramesToDiskAsync(frames: framesToWrite, wal: wal, append: existingIndex != nil) {
+            [weak self] wrote in
             guard let self else { return }
             self.frameWriteInProgress = false
             guard wrote else {
@@ -430,9 +436,34 @@ final class WALService: ObservableObject {
         return true
     }
 
+    /// Length-prefix encode frames into the on-disk WAL chunk byte layout
+    /// (`UInt32 little-endian length + frame bytes`, repeated).
+    static func encodeFrames(_ frames: [Data]) -> Data {
+        var fileData = Data()
+        for frame in frames {
+            var length = UInt32(frame.count).littleEndian
+            fileData.append(Data(bytes: &length, count: 4))
+            fileData.append(frame)
+        }
+        return fileData
+    }
+
+    /// Bytes to write for a WAL chunk. When `append` is set and the file already
+    /// has content, the new frames EXTEND it — a duplicate WAL id (same
+    /// device+second) must never atomically overwrite the earlier frames, which
+    /// destroyed the previously-recorded audio.
+    static func frameFileBytes(existing: Data?, frames: [Data], append: Bool) -> Data {
+        let encoded = encodeFrames(frames)
+        if append, let existing, !existing.isEmpty {
+            return existing + encoded
+        }
+        return encoded
+    }
+
     private func writeFramesToDiskAsync(
         frames: [Data],
         wal: WALEntry,
+        append: Bool = false,
         completion: @escaping @MainActor (Bool) -> Void
     ) {
         guard let walDir = walDirectory else {
@@ -445,15 +476,13 @@ final class WALService: ObservableObject {
         let fileUrl = walDir.appendingPathComponent(fileName)
         let walId = wal.id
 
-        var fileData = Data()
-        for frame in frames {
-            var length = UInt32(frame.count).littleEndian
-            fileData.append(Data(bytes: &length, count: 4))
-            fileData.append(frame)
-        }
-
         let frameCount = frames.count
-        DispatchQueue.global(qos: .utility).async { [weak self, fileData] in
+        DispatchQueue.global(qos: .utility).async { [weak self, frames] in
+            // On a duplicate-id append, read the already-persisted frames off the
+            // main thread and extend them; a failed atomic write leaves the prior
+            // file untouched.
+            let existing = append ? try? Data(contentsOf: fileUrl) : nil
+            let fileData = Self.frameFileBytes(existing: existing, frames: frames, append: append)
             let succeeded: Bool
             let failureReason: String?
             do {
