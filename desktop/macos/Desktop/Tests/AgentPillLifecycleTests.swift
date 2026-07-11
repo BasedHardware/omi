@@ -483,9 +483,8 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertFalse(source.contains(".strokeBorder(Color.white.opacity(0.10 * Double(progress)), lineWidth: 0.6)"))
     XCTAssertTrue(windowSource.contains("private static let askOmiAnimationDuration: TimeInterval = 0.14"))
     XCTAssertTrue(windowSource.contains("private static let askOmiSettleDelay: TimeInterval = 0.16"))
-    XCTAssertTrue(windowSource.contains("FloatingControlBarGeometry.topAnchoredFrame("))
-    XCTAssertTrue(windowSource.contains("screenFrame: screenForPlacement?.frame"))
-    XCTAssertTrue(windowSource.contains("pinsToScreenCenter: notchModeEnabled"))
+    XCTAssertTrue(windowSource.contains("FloatingControlBarGeometry.surfaceTransitionFrame("))
+    XCTAssertTrue(windowSource.contains("? .notch(screenFrame: screenForPlacement?.frame)"))
     XCTAssertFalse(windowSource.contains("let currentTopCenteredFrame = NSRect("))
     XCTAssertTrue(windowSource.contains("let keepVoiceResponseAlive = state.isVoiceResponseGlowActive"))
     XCTAssertTrue(windowSource.contains("FloatingControlBarManager.shared.cancelChat(keepVoiceAlive: keepVoiceResponseAlive)"))
@@ -533,9 +532,32 @@ final class AgentPillLifecycleTests: XCTestCase {
 
     XCTAssertTrue(body.contains("animationDuration: Self.notchHoverMenuExpandDuration"))
     XCTAssertTrue(body.contains("animationDuration: Self.notchHoverMenuCollapseDuration"))
+    XCTAssertTrue(body.contains("resizeSurfaceTransition("))
+    XCTAssertTrue(body.contains(".agentSwitcher(visible: true)"))
+    XCTAssertTrue(body.contains(".agentSwitcher(visible: false)"))
+    XCTAssertFalse(body.contains("resizeAnchored("))
     // No bare animated resize (which defaults to the slow 0.3s) may remain in
     // the hover-menu expand/collapse path.
     XCTAssertFalse(body.contains("animated: true, anchorTop: true)"))
+  }
+
+  func testPTTResizeUsesSemanticSurfaceTransitionPlacement() throws {
+    let windowSource = try floatingControlBarWindowSource()
+
+    guard let start = windowSource.range(of: "func resizeForPTTState(expanded: Bool)"),
+      let end = windowSource.range(
+        of: "/// Size the notch to fit the \"thinking\" indicator",
+        range: start.upperBound..<windowSource.endIndex
+      )
+    else {
+      return XCTFail("Expected resizeForPTTState section")
+    }
+    let body = String(windowSource[start.lowerBound..<end.lowerBound])
+
+    XCTAssertTrue(body.contains("resizeSurfaceTransition("))
+    XCTAssertTrue(body.contains(".pushToTalk(expanded: expanded)"))
+    XCTAssertFalse(body.contains("resizeAnchored("))
+    XCTAssertFalse(body.contains("FloatingControlBarGeometry.targetFrame("))
   }
 
   func testFloatingBarExplicitSpawnCompletesParentTurn() throws {
@@ -1054,11 +1076,11 @@ final class AgentPillLifecycleTests: XCTestCase {
   func testPTTCollapsePreservesGlowPaddingOnLegacyDisplays() throws {
     let source = try floatingControlBarWindowSource()
 
-    // Legacy PTT collapse must use the glow-adjusted compact size when
-    // either response playback or post-PTT waiting glow is still true.
-    XCTAssertTrue(source.contains("let compactSize: NSSize = state.isVoiceResponseGlowActive"))
-    XCTAssertTrue(source.contains("responseGlowWindowSizeForCurrentScreen(forSurfaceSize: Self.minBarSize)"))
-    XCTAssertTrue(source.contains("compactSize: compactSize"))
+    // Legacy PTT collapse supplies the bare compact surface to the shared
+    // transition path, which applies the active response/agent glow exactly once.
+    XCTAssertTrue(source.contains("toSurfaceSize: expanded ? Self.voiceBarSize : Self.minBarSize"))
+    XCTAssertTrue(source.contains("let windowSize = responseGlowWindowSizeForCurrentScreen(forSurfaceSize: size)"))
+    XCTAssertTrue(source.contains("guard state.isVoiceResponseGlowActive || collapsedPillAgentGlowActive else"))
   }
 
   func testTerminalProjectionPreservesStatusText() throws {
