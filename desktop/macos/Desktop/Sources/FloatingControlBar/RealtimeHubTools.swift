@@ -92,6 +92,48 @@ enum RealtimeHubTools {
       + "was misheard; interpret it as \(primary). "
   }
 
+  struct DirectPermissionRedirect: Equatable {
+    let tool: HubTool
+    let type: String
+    let recoveredFromDelegation: Bool
+  }
+
+  struct PermissionExecutorRoute: Equatable {
+    let toolName: String
+    let type: String?
+  }
+
+  /// Realtime permission tools deliberately forward to ChatToolExecutor so
+  /// both chat surfaces share the same native permission implementation.
+  static func permissionExecutorRoute(
+    for tool: HubTool,
+    arguments: [String: Any]
+  ) -> PermissionExecutorRoute? {
+    guard tool == .checkPermissionStatus || tool == .requestPermission else { return nil }
+    let type = ((arguments["type"] ?? arguments["permission"]) as? String)?
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    return .init(toolName: tool.rawValue, type: type)
+  }
+
+  /// A model should call the permission tools directly. This narrow fallback
+  /// prevents a malformed `spawn_agent` request from creating a child worker
+  /// for an immediate, app-local permission action.
+  static func directPermissionRedirect(
+    forDelegationBrief brief: String,
+    originatingUserText: String? = nil
+  ) -> DirectPermissionRedirect? {
+    guard
+      case .directNative(let toolName, let type, let recovered) = ChatToolExecutor.permissionExecutionRoute(
+        toolName: HubTool.spawnAgent.rawValue,
+        arguments: ["brief": brief],
+        originatingUserText: originatingUserText
+      ),
+      let type,
+      let tool = HubTool(rawValue: toolName)
+    else { return nil }
+    return .init(tool: tool, type: type, recoveredFromDelegation: recovered)
+  }
+
   static func systemInstruction(
     aboutUser: String, topLevelConversationContext: String = "", userLanguages: [String] = []
   ) -> String {
@@ -141,6 +183,10 @@ enum RealtimeHubTools {
     multi-step "do X for me" work, use spawn_agent — it requests delegation through Omi's \
     resolver, which may start a background agent, continue an existing one, or ask the user \
     for missing details before any child agent sees the task.
+
+    Permissions are never background work. When the user asks to check or grant a macOS \
+    permission, or screen access is missing, call check_permission_status or request_permission \
+    yourself. NEVER use spawn_agent for a permission request.
 
     Using tools: when a request needs a tool, ALWAYS give a short spoken heads-up first so the \
     user knows you're on it and that it won't be instant — then call the tool and speak the \

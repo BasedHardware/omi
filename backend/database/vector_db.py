@@ -265,6 +265,90 @@ def delete_vector(uid: str, conversation_id: str) -> None:
 # ==========================================
 
 MEMORIES_NAMESPACE = "ns2"
+WORKSTREAM_ASSOCIATION_NAMESPACE = "workstream-association-v1"
+WORKSTREAM_ASSOCIATION_SCHEMA_VERSION = 1
+
+
+def upsert_workstream_association_vector(
+    uid: str,
+    workstream_id: str,
+    *,
+    objective: str,
+    current_state_summary: str,
+    account_generation: int = 0,
+) -> bool:
+    """Write a rebuildable retrieval projection for one open workstream."""
+    if index is None:
+        return False
+    content = f"Objective: {objective.strip()}\nCurrent state: {current_state_summary.strip()}".strip()
+    if not content:
+        return False
+    data: VectorRecordDoc = {
+        'id': f'{uid}:workstream:{account_generation}:{workstream_id}',
+        'values': embeddings.embed_query(content),
+        'metadata': {
+            'uid': uid,
+            'workstream_id': workstream_id,
+            'status': 'open',
+            'account_generation': account_generation,
+            'schema_version': WORKSTREAM_ASSOCIATION_SCHEMA_VERSION,
+        },
+    }
+    index.upsert(vectors=[data], namespace=WORKSTREAM_ASSOCIATION_NAMESPACE)
+    return True
+
+
+def query_workstream_association_candidates(
+    uid: str, summary: str, *, account_generation: int = 0, limit: int = 5
+) -> List[str]:
+    """Return derived candidate IDs only; callers must hydrate authority."""
+    if index is None or not summary.strip():
+        return []
+    response = index.query(
+        vector=embeddings.embed_query(summary),
+        top_k=max(1, min(limit, 20)),
+        include_metadata=True,
+        include_values=False,
+        filter={
+            'uid': {'$eq': uid},
+            'status': {'$eq': 'open'},
+            'account_generation': {'$eq': account_generation},
+            'schema_version': {'$eq': WORKSTREAM_ASSOCIATION_SCHEMA_VERSION},
+        },
+        namespace=WORKSTREAM_ASSOCIATION_NAMESPACE,
+    )
+    result: List[str] = []
+    for match in response.get('matches', []):
+        metadata = match.get('metadata') if isinstance(match, dict) else None
+        workstream_id = metadata.get('workstream_id') if isinstance(metadata, dict) else None
+        if isinstance(workstream_id, str) and workstream_id not in result:
+            result.append(workstream_id)
+    return result
+
+
+def delete_workstream_association_vector(uid: str, workstream_id: str, *, account_generation: int = 0) -> bool:
+    if index is None:
+        return False
+    index.delete(
+        ids=[f'{uid}:workstream:{account_generation}:{workstream_id}'],
+        namespace=WORKSTREAM_ASSOCIATION_NAMESPACE,
+    )
+    return True
+
+
+def reset_workstream_association_vectors(uid: str, *, account_generation: int = 0) -> bool:
+    if index is None:
+        return False
+    index.delete(
+        filter={
+            '$and': [
+                {'uid': {'$eq': uid}},
+                {'account_generation': {'$eq': account_generation}},
+            ]
+        },
+        namespace=WORKSTREAM_ASSOCIATION_NAMESPACE,
+    )
+    return True
 
 
 def build_legacy_memory_vector_filter(uid: str, subject_entity_id: str | None = None) -> Dict[str, Any]:

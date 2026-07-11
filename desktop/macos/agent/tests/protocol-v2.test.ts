@@ -99,6 +99,20 @@ describe("protocol v2", () => {
     expect(directBlock).toContain("handleAgentControlToolCall");
   });
 
+  it("keeps a direct spawned agent's relay context active until its terminal run event", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(join(here, "../src/index.ts"), "utf8");
+    const directStart = source.indexOf('case "direct_control_tool"');
+    const directBlock = source.slice(directStart, source.indexOf('case "interrupt"'));
+
+    expect(directStart).toBeGreaterThanOrEqual(0);
+    expect(directBlock).toContain("const directRunClientId");
+    expect(directBlock).toContain("withControlRunCorrelation(control.name, controlInput, directRunClientId)");
+    expect(directBlock).toContain("transport.registerExternalRequestContext");
+    expect(directBlock).toContain("preserveDirectControlRunOwner");
+    expect(directBlock).toContain("transport.releaseExternalRequestContext");
+  });
+
   it("treats top-level background-agent spawn as a long-lived correlated control run", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const source = readFileSync(join(here, "../src/index.ts"), "utf8");

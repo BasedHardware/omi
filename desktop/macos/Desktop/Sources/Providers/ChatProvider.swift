@@ -1,7 +1,8 @@
-import SwiftUI
 import Combine
 import CoreGraphics
 import GRDB
+import OmiSupport
+import SwiftUI
 import UniformTypeIdentifiers
 
 // MARK: - UserDefaults Extension for KVO
@@ -914,6 +915,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// watchdog in sendMessage() and the `.stopped` catch branch.
     private var sendWatchdogFiredGeneration: Int?
 
+    /// A per-tool guard fires before the whole-turn watchdog when an adapter
+    /// leaves a tool request active without making forward progress.
+    private var sendToolStallAbortGeneration: Int?
+
+    private static let perToolStallAbortMs = 90_000
+
     /// Set to true during onboarding so the ACP session ID is persisted for restart recovery.
     var isOnboarding = false
     @Published var sessionsLoadError: String?
@@ -1038,6 +1045,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     @Published var claudeAuthMethods: [[String: Any]] = []
     /// OAuth URL to open in browser (sent by bridge when auth is needed)
     @Published var claudeAuthUrl: String?
+    /// Prevent duplicate browser launches for the same explicit User Claude flow.
+    private var claudeAuthLaunchRequested = false
     /// Whether the user has a cached Claude OAuth token
     @Published var isClaudeConnected = false
     /// Cumulative tokens used in the current session via Omi account
@@ -1400,15 +1409,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             await resolvedAgentClient().setGlobalAuthHandlers(
                 onAuthRequired: { [weak self] methods, authUrl in
                     Task { @MainActor [weak self] in
-                        self?.claudeAuthMethods = methods
-                        self?.claudeAuthUrl = authUrl
-                        self?.isClaudeAuthRequired = true
+                        self?.handleClaudeAuthRequired(methods: methods, authUrl: authUrl)
                     }
                 },
                 onAuthSuccess: { [weak self] in
                     Task { @MainActor [weak self] in
-                        self?.isClaudeAuthRequired = false
-                        self?.checkClaudeConnectionStatus()
+                        self?.handleClaudeAuthSuccess()
                     }
                 }
             )
@@ -1668,14 +1674,83 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// credential storage, and ACP subprocess restart.
     func startClaudeAuth() {
         guard isUserClaudeMode else { return }
+        guard !claudeAuthLaunchRequested else { return }
 
-        if let urlString = claudeAuthUrl, let url = URL(string: urlString) {
-            log("ChatProvider: Opening Claude OAuth URL in browser")
-            NSWorkspace.shared.open(url)
-        } else {
-            logError("ChatProvider: No auth URL available from bridge")
+        guard let url = Self.validatedClaudeOAuthURL(claudeAuthUrl) else {
+            logError("ChatProvider: Bridge supplied an invalid Claude OAuth URL")
             isClaudeAuthRequired = false
+            claudeAuthLaunchRequested = false
+            errorMessage = "Unable to start Claude sign-in. Try again."
+            return
         }
+
+        claudeAuthLaunchRequested = true
+        log("ChatProvider: Opening validated Claude OAuth URL in browser")
+        NSWorkspace.shared.open(url)
+    }
+
+    private func handleClaudeAuthRequired(methods: [[String: Any]], authUrl: String?) {
+        // A fresh bridge-issued authorization URL represents a new OAuth
+        // attempt (for example after the bounded callback timeout). Reset the
+        // launch latch so a retry can open the new URL, while duplicate events
+        // for the same in-flight flow still open at most one browser tab.
+        if Self.isNewClaudeOAuthAttempt(previousAuthURL: claudeAuthUrl, nextAuthURL: authUrl) {
+            claudeAuthLaunchRequested = false
+        }
+        claudeAuthMethods = methods
+        claudeAuthUrl = authUrl
+        isClaudeAuthRequired = true
+        startClaudeAuth()
+    }
+
+    private func handleClaudeAuthSuccess() {
+        isClaudeAuthRequired = false
+        claudeAuthLaunchRequested = false
+        claudeAuthUrl = nil
+        checkClaudeConnectionStatus()
+    }
+
+    nonisolated static func validatedClaudeOAuthURL(_ urlString: String?) -> URL? {
+        guard
+            let urlString,
+            let components = URLComponents(string: urlString),
+            components.scheme?.lowercased() == "https",
+            components.host?.lowercased() == "claude.ai",
+            components.port == nil,
+            components.path == "/oauth/authorize",
+            components.user == nil,
+            components.password == nil,
+            components.fragment == nil
+        else {
+            return nil
+        }
+
+        let queryItems = components.queryItems ?? []
+        func queryValue(_ name: String) -> String? {
+            let values = queryItems.compactMap { $0.name == name ? $0.value : nil }
+            guard values.count == 1, let value = values.first, !value.isEmpty else { return nil }
+            return value
+        }
+        guard
+            queryValue("response_type") == "code",
+            queryValue("client_id") != nil,
+            queryValue("state") != nil,
+            queryValue("code_challenge") != nil,
+            queryValue("code_challenge_method") == "S256",
+            let redirectURLString = queryValue("redirect_uri"),
+            let redirectURL = URLComponents(string: redirectURLString),
+            redirectURL.scheme?.lowercased() == "http",
+            redirectURL.host?.lowercased() == "localhost",
+            redirectURL.port != nil,
+            redirectURL.path == "/callback"
+        else {
+            return nil
+        }
+        return components.url
+    }
+
+    nonisolated static func isNewClaudeOAuthAttempt(previousAuthURL: String?, nextAuthURL: String?) -> Bool {
+        previousAuthURL != nextAuthURL
     }
 
     /// Check whether a cached Claude OAuth token exists (config file or Keychain)
@@ -3786,6 +3861,19 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         let isFirstMessage = messages.isEmpty
         let capturedSessionId = sessionId
         let capturedAppId = overrideAppId ?? selectedAppId
+        // Only the primary chat can turn the user's current message into a
+        // permission authorization. Child, floating, and lab surfaces never
+        // inherit this capability.
+        let isPrimaryChatPermissionSurface = systemPromptStyle == .main && !isOnboarding && surfaceRef == nil
+        let precedingAssistantMessage = messages.last.flatMap { message in
+            message.sender == .ai && !message.isStreaming ? message.copyableText : nil
+        }
+        let permissionAuthorization = isPrimaryChatPermissionSurface
+            ? PermissionRequestAuthorization.authorize(
+                userMessage: trimmedText,
+                precedingAssistantMessage: precedingAssistantMessage
+            )
+            : nil
         // saveMessage site 3 of 5: user message at turn start.
         // Fire-and-forget Task launched before the bridge query so
         // it doesn't block streaming. `isSending` already gates the
@@ -3967,7 +4055,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         "guidance": screenContextReason.isExplicitScreenRequest
                             ? (screenRecordingGranted
                                 ? "Use this hidden screen context to answer the user's screen-related request. Request raw screenshot pixels only if this summary is insufficient."
-                                : "The user asked about their screen, but Omi does not currently have Screen Recording permission for live screen access. Tell the user plainly and call request_permission with type=screen_recording if current screen access is needed.")
+                                : "The user asked about their screen, but Omi does not currently have Screen Recording permission for live screen access. Tell the user plainly and ask whether they want to grant it. Call request_permission with type=screen_recording only after they explicitly request or affirm it.")
                             : "Use this minimized ambient context only if it helps resolve a deictic or app-local reference. Do not mention screen access or request Screen Recording permission unless the user explicitly asks about the current screen.",
                     ]
                     if let data = try? JSONSerialization.data(
@@ -3998,6 +4086,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // any kind (text delta OR tool_use start). It also brackets the
             // text-streaming window so the `generation` span excludes tool time.
             let currentChatMode = chatMode
+            let currentIsOnboardingSurface = isOnboarding
             let currentToolClientScope: String? = isFloatingPillSurface(resolvedSurface)
                 ? AgentClientScope.floatingPill
                 : nil
@@ -4028,7 +4117,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     toolCall,
                     originatingChatMode: currentChatMode,
                     originatingClientScope: currentToolClientScope,
-                    originatingSurfaceRef: resolvedSurface)
+                    originatingSurfaceRef: resolvedSurface,
+                    permissionAuthorization: permissionAuthorization,
+                    isOnboardingSurface: currentIsOnboardingSurface)
                 log("OMI tool \(name) executed for callId=\(callId)")
                 responseMetrics.recordToolResult(name: name, result: result)
                 return result
@@ -4144,14 +4235,37 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // gaps when no bridge events arrive. Cancelled via defer on
             // scope exit (success or throw).
             let stallTickTask = Task { [weak self] in
+                var issuedToolStallAbort = false
                 while !Task.isCancelled {
                     try? await Task.sleep(nanoseconds: 500_000_000)  // 500ms
                     if Task.isCancelled { break }
                     let nowMs = ChatProvider.monotonicNowMs()
                     let transitions = await stallDetector.tick(atMs: nowMs)
-                    if transitions.isEmpty { continue }
-                    await MainActor.run { [weak self] in
-                        self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
+                    if !transitions.isEmpty {
+                        await MainActor.run { [weak self] in
+                            self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
+                        }
+                    }
+                    if !issuedToolStallAbort {
+                        let overdueToolIds = await stallDetector.toolIdsExceeding(
+                            durationMs: Self.perToolStallAbortMs,
+                            atMs: nowMs
+                        )
+                        if !overdueToolIds.isEmpty {
+                            issuedToolStallAbort = true
+                            let shouldInterrupt = await MainActor.run { () -> Bool in
+                                guard let self, self.isSending, self.sendGeneration == sendGen else { return false }
+                                self.sendToolStallAbortGeneration = sendGen
+                                log(
+                                    "ChatProvider: tool stall guard fired at \\(Self.perToolStallAbortMs / 1_000)s "
+                                        + "(active_tools=\\(overdueToolIds.count)); interrupting bridge"
+                                )
+                                return true
+                            }
+                            if shouldInterrupt {
+                                await self?.resolvedAgentClient().interrupt()
+                            }
+                        }
                     }
                 }
             }
@@ -4190,15 +4304,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 onToolResultDisplay: toolResultDisplayHandler,
                 onAuthRequired: { [weak self] methods, authUrl in
                     Task { @MainActor [weak self] in
-                        self?.claudeAuthMethods = methods
-                        self?.claudeAuthUrl = authUrl
-                        self?.isClaudeAuthRequired = true
+                        self?.handleClaudeAuthRequired(methods: methods, authUrl: authUrl)
                     }
                 },
                 onAuthSuccess: { [weak self] in
                     Task { @MainActor [weak self] in
-                        self?.isClaudeAuthRequired = false
-                        self?.checkClaudeConnectionStatus()
+                        self?.handleClaudeAuthSuccess()
                     }
                 }
             )
@@ -4501,9 +4612,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 // instead of letting the turn vanish (the watchdog's own error-set
                 // races this catch and bails once `isSending` is released here).
                 let watchdogFired = (sendWatchdogFiredGeneration == sendGen)
+                let toolStallAbortFired = (sendToolStallAbortGeneration == sendGen)
                 sendWatchdogFiredGeneration = nil
+                sendToolStallAbortGeneration = nil
                 currentError = nil
-                if let timeoutMessage = ChatProvider.stoppedTurnErrorMessage(watchdogFired: watchdogFired) {
+                if let timeoutMessage = ChatProvider.stoppedTurnErrorMessage(
+                    watchdogFired: watchdogFired,
+                    toolStallAbortFired: toolStallAbortFired
+                ) {
                     errorMessage = timeoutMessage
                 } else {
                     stoppedByUser = true
@@ -4970,8 +5086,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// fired for the turn, the `.stopped` came from the watchdog's own interrupt —
     /// the turn timed out, so surface "Response took too long" rather than letting
     /// it vanish. Extracted so the watchdog-vs-user-stop distinction is unit-tested.
-    nonisolated static func stoppedTurnErrorMessage(watchdogFired: Bool) -> String? {
-        watchdogFired ? "Response took too long. Try again." : nil
+    nonisolated static func stoppedTurnErrorMessage(
+        watchdogFired: Bool,
+        toolStallAbortFired: Bool = false
+    ) -> String? {
+        if toolStallAbortFired {
+            return "A tool took too long. Try again."
+        }
+        return watchdogFired ? "Response took too long. Try again." : nil
     }
 
     /// Map a `StallDetector.State` to the matching `ToolCallStatus`.
@@ -5084,10 +5206,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         for runId in runIds {
             guard let artifacts = try? await DesktopCoordinatorService.shared.inspectArtifactsForRun(runId: runId)
             else { continue }
-            // Guard against duplicate artifact ids (last-write-wins); Dictionary(uniqueKeysWithValues:)
-            // traps on a duplicate key and would crash the chat view.
-            artifactsByRunId[runId] = Dictionary(
-                artifacts.map { ($0.artifactId, $0) }, uniquingKeysWith: { _, latest in latest })
+            // Guard against duplicate artifact ids from the runtime (last-write-wins).
+            artifactsByRunId[runId] = Dictionary(lastWriteWins: artifacts.map { ($0.artifactId, $0) })
         }
         guard !artifactsByRunId.isEmpty else { return }
 

@@ -5,6 +5,11 @@ on:
     branches: main
   pull_request:
     branches: main
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
 
 concurrency:
   group: repo-checks-${{ github.event.pull_request.number || github.ref }}
@@ -47,10 +52,11 @@ jobs:
 
       - name: Save changed files
         run: |
-          git diff --name-only --diff-filter=ACM "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
+          scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
           cat /tmp/changed-files.txt
 
       - name: Check merge conflict markers
+        if: github.event_name != 'pull_request'
         run: |
           failed=0
           while IFS= read -r file; do
@@ -65,23 +71,27 @@ jobs:
           fi
 
       - name: Architecture guardrail warnings
+        if: github.event_name != 'pull_request'
         run: python3 .github/scripts/check_arch_guardrails.py --changed-files /tmp/changed-files.txt
 
       - name: Test product invariant PR-body checker
         run: python3 .github/scripts/test_check_product_invariants.py
 
-      - name: Test brand UI ratchet helper
-        run: python3 .github/scripts/test_check_brand_ui.py
+      - name: Test PR preflight contracts
+        run: python3 .github/scripts/test_pr_preflight.py
 
-      - name: Check product invariant citations
+      - name: Run shared PR contract preflight
         if: github.event_name == 'pull_request'
         env:
-          PR_BODY: ${{ github.event.pull_request.body }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          printf '%s' "$PR_BODY" > /tmp/pr-body.txt
-          python3 .github/scripts/check_product_invariants.py \
-            --changed-files /tmp/changed-files.txt \
-            --pr-body-file /tmp/pr-body.txt
+          scripts/pr-preflight \
+            --base "${{ needs.changes.outputs.diff_base }}" \
+            --repository "${{ github.repository }}" \
+            --pr-number "${{ github.event.pull_request.number }}"
+
+      - name: Test brand UI ratchet helper
+        run: python3 .github/scripts/test_check_brand_ui.py
 
       - name: Check brand UI purple ratchet (INV-UI-1)
         if: github.event_name == 'pull_request'
@@ -91,20 +101,8 @@ jobs:
             --base "${{ needs.changes.outputs.diff_base }}"
 
       - name: Check desktop changelog data
+        if: github.event_name != 'pull_request'
         run: python3 .github/scripts/desktop-changelog.py validate
-
-      - name: Check desktop changelog entry
-        if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changelog/v')
-        run: |
-          SKIP_FLAG=""
-          if [ "${{ contains(github.event.pull_request.labels.*.name, 'no-changelog-needed') }}" = "true" ]; then
-            SKIP_FLAG="--skip"
-          fi
-
-          python3 .github/scripts/check-desktop-changelog.py \
-            --base "origin/${{ github.base_ref }}" \
-            --head HEAD \
-            $SKIP_FLAG
 
       - name: Check desktop prod promotion policy
         run: python3 .github/scripts/check-desktop-prod-promotion-policy.py
@@ -117,6 +115,9 @@ jobs:
 
       - name: Test desktop release promotion gate
         run: python3 .github/scripts/test_check_desktop_release_promotion.py
+
+      - name: Test automatic desktop beta candidate gate
+        run: python3 .github/scripts/test_check_desktop_auto_beta_candidate.py
 
       - name: Check release process guards
         run: python3 .github/scripts/check-release-process-guards.py
@@ -141,9 +142,9 @@ jobs:
         if: needs.changes.outputs.has_workflows == 'true'
         run: |
           GOBIN=/tmp/actionlint-bin go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-          FILES=$(grep -E '^\.github/workflows/.*\.ya?ml$' /tmp/changed-files.txt || true)
-          if [ -n "$FILES" ]; then
-            /tmp/actionlint-bin/actionlint -shellcheck "" $FILES
+          mapfile -t files < <(grep -E '^\.github/workflows/.*\.ya?ml$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
+          if [ "${#files[@]}" -gt 0 ]; then
+            /tmp/actionlint-bin/actionlint -shellcheck "" "${files[@]}"
           fi
 
   formatting:
@@ -159,7 +160,7 @@ jobs:
 
       - name: Save changed files
         run: |
-          git diff --name-only --diff-filter=ACM "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
+          scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
           cat /tmp/changed-files.txt
 
       - name: Setup Flutter
@@ -177,7 +178,7 @@ jobs:
       - name: Check Dart formatting
         if: needs.changes.outputs.has_dart == 'true'
         run: |
-          FILES=$(grep '\.dart$' /tmp/changed-files.txt | grep -v -e '\.gen\.dart$' -e '\.g\.dart$' || true)
+          FILES=$(grep '\.dart$' /tmp/changed-files.txt | grep -v -e '\.gen\.dart$' -e '\.g\.dart$' | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           if [ -n "$FILES" ]; then
             echo "$FILES" | xargs dart format --line-length 120 --set-exit-if-changed --output=none
           fi
@@ -186,7 +187,7 @@ jobs:
         if: needs.changes.outputs.has_python == 'true'
         run: |
           pip install -q black
-          FILES=$(grep 'backend/.*\.py$' /tmp/changed-files.txt || true)
+          FILES=$(grep 'backend/.*\.py$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           if [ -n "$FILES" ]; then
             echo "$FILES" | xargs black --check --line-length 120 --skip-string-normalization
           fi
@@ -194,7 +195,7 @@ jobs:
       - name: Check ARB formatting
         if: needs.changes.outputs.has_arb == 'true'
         run: |
-          FILES=$(grep '\.arb$' /tmp/changed-files.txt || true)
+          FILES=$(grep '\.arb$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           failed=0
           for f in $FILES; do
             if ! python3 -m json.tool "$f" > /dev/null 2>&1; then
@@ -223,7 +224,7 @@ jobs:
       - name: Check C/C++ formatting
         if: needs.changes.outputs.has_firmware == 'true'
         run: |
-          FILES=$(grep -E '^(omi|omiGlass)/.*\.(c|cpp|cc|cxx|h|hpp)$' /tmp/changed-files.txt || true)
+          FILES=$(grep -E '^(omi|omiGlass)/.*\.(c|cpp|cc|cxx|h|hpp)$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           if [ -n "$FILES" ]; then
             echo "$FILES" | xargs clang-format --dry-run --Werror
           fi

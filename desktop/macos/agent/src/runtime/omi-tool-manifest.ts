@@ -9,6 +9,7 @@ export type OmiToolCondition =
   | "always"
   | "onboardingOnly"
   | "nonOnboarding"
+  | "coordinatorOnly"
   | "screenContext"
   | "screenContextOrOnboarding";
 export type OmiToolExecutorKind = "swiftTool" | "runtimeControl" | "nodeTool" | "localApiOnly";
@@ -97,6 +98,7 @@ interface OmiToolSurfacePatch {
 export interface OmiToolProjectionContext {
   onboarding?: boolean;
   screenContext?: boolean;
+  executionRole?: "coordinator" | "leaf";
 }
 
 export interface OmiToolAvailabilitySnapshot {
@@ -166,13 +168,6 @@ function piLocalApiAndScreenContextStdio(): Partial<Record<OmiToolAdapterId, Omi
     "pi-mono": { advertised: true },
     "omi-tools-stdio": { advertised: true, condition: "screenContext" },
     "local-agent-api": { advertised: true },
-  };
-}
-
-function piAndScreenContextOrOnboardingStdio(): Partial<Record<OmiToolAdapterId, OmiToolAdapterAvailability>> {
-  return {
-    "pi-mono": { advertised: true },
-    "omi-tools-stdio": { advertised: true, condition: "screenContextOrOnboarding" },
   };
 }
 
@@ -493,18 +488,27 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     ),
   },
   check_permission_status: {
-    surfaces: ["desktop_chat", "onboarding"],
+    surfaces: ["desktop_chat", "realtime_voice", "onboarding"],
     capabilityDoc: doc("Check Permission Status", "Check whether a required macOS permission has been granted.", [
       "Use before requesting a permission or after request_permission returns pending.",
       "Omit type to check all supported permissions.",
     ]),
+    voice: {
+      realtimeDescription:
+        "Check whether Omi has the requested macOS permission. This is a fast local action; use it directly when the user asks to check permissions, never by spawning an agent.",
+    },
   },
   request_permission: {
-    surfaces: ["desktop_chat", "onboarding"],
+    surfaces: ["desktop_chat", "realtime_voice", "onboarding"],
     capabilityDoc: doc("Request Permission", "Open or guide the user through granting a required macOS permission.", [
-      "Use when a tool reports permission_required or the user asks Omi to grant/check a permission.",
-      "Use strict permission types only.",
+      "Call only when the current user message names one permission or clearly affirms your immediately preceding permission request.",
+      "Ask the user to choose when their request is generic or names multiple permissions.",
+      "The user must still complete the native macOS prompt or Settings toggle.",
     ]),
+    voice: {
+      realtimeDescription:
+        "Request Omi's macOS permission directly by opening the native prompt or the relevant System Settings pane. Use for Screen Recording, microphone, notifications, Accessibility, Automation, or Full Disk Access. Never use spawn_agent for a permission request.",
+    },
   },
   scan_files: {
     surfaces: ["onboarding"],
@@ -1041,16 +1045,17 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     executor: { kind: "swiftTool" },
     intendedForAgents: true,
     runtimePreconditions: ["Requires local desktop app."],
-    adapters: piAndScreenContextOrOnboardingStdio(),
+    adapters: piAndStdio(),
   },
   {
     name: "request_permission",
     label: "Request Permission",
     description:
-      "Request a specific macOS permission from the user by opening the appropriate system prompt or Settings pane. Use when a tool reports permission_required or when the user asks Omi to get a permission.",
+      "Open the native macOS permission prompt or Settings pane for one required permission after the user explicitly asks for it.",
     promptSnippet: "request_permission - Request a macOS permission",
     promptGuidelines: [
-      "For screen-related requests, if Screen Recording is missing, tell the user Omi cannot see the current screen yet and call request_permission with type=screen_recording.",
+      "Call only when the current user message explicitly requests one named permission, or clearly affirms your immediately preceding missing-permission request.",
+      "For generic or multi-permission requests, ask the user which permission they want to grant.",
       "Use strict permission types only. Do not invent permission names.",
       "After requesting, explain any returned requires_restart or pending status.",
     ],
@@ -1070,8 +1075,8 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     timeoutClass: "normal",
     executor: { kind: "swiftTool" },
     intendedForAgents: true,
-    runtimePreconditions: ["Requires local desktop app; some macOS permissions require the user to toggle Settings manually."],
-    adapters: piAndScreenContextOrOnboardingStdio(),
+    runtimePreconditions: ["Requires explicit current-turn user consent; some macOS permissions require the user to toggle Settings manually."],
+    adapters: piAndStdio(),
   },
   {
     name: "scan_files",
@@ -1404,10 +1409,16 @@ const controlVoicePatches: Partial<Record<AgentControlManifestTool["name"], OmiT
 };
 
 function controlEntry(tool: AgentControlManifestTool): OmiToolManifestEntry {
+  const coordinatorOnly = new Set([
+    "send_agent_message",
+    "spawn_background_agent",
+    "spawn_agent",
+    "run_agent_and_wait",
+  ]);
   const adapters =
     tool.name === "resolve_desktop_dispatch" || tool.name === "spawn_background_agent"
       ? trustedDirectControlOnly()
-      : piAndStdio();
+      : piAndStdio(coordinatorOnly.has(tool.name) ? "coordinatorOnly" : "always");
   return {
     name: tool.name,
     label: tool.label,
@@ -1448,6 +1459,7 @@ export function isToolAvailableForContext(
   if (!availability?.advertised) return false;
   if (availability.condition === "onboardingOnly") return context.onboarding === true;
   if (availability.condition === "nonOnboarding") return context.onboarding !== true;
+  if (availability.condition === "coordinatorOnly") return context.executionRole !== "leaf";
   if (availability.condition === "screenContext") return context.screenContext === true;
   if (availability.condition === "screenContextOrOnboarding") return context.screenContext === true || context.onboarding === true;
   return true;

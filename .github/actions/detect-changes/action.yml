@@ -26,6 +26,8 @@ outputs:
     value: ${{ steps.changed.outputs.has_backend_runtime_env }}
   has_backend_async_gate:
     value: ${{ steps.changed.outputs.has_backend_async_gate }}
+  has_backend_isolation_gate:
+    value: ${{ steps.changed.outputs.has_backend_isolation_gate }}
   has_desktop_agent_runtime:
     value: ${{ steps.changed.outputs.has_desktop_agent_runtime }}
   has_app_codegen:
@@ -68,8 +70,8 @@ runs:
           DIFF_BASE="HEAD~1"
         fi
 
-        FILES=$(git diff --name-only --diff-filter=ACM "$DIFF_BASE"...HEAD)
-        APP_COMPILE_FILES=$(git diff --name-only --diff-filter=ACMD "$DIFF_BASE"...HEAD)
+        FILES=$(scripts/changed-files "$DIFF_BASE"...HEAD)
+        APP_COMPILE_FILES="$FILES"
         echo "$FILES"
         echo "diff_base=$DIFF_BASE" >> "$GITHUB_OUTPUT"
 
@@ -81,10 +83,11 @@ runs:
         has_web_app=$(echo "$FILES" | grep -qE '^web/app/|^\.github/workflows/web-checks\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
         has_admin=$(echo "$FILES" | grep -qE '^web/admin/|^\.github/workflows/web-checks\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
         has_personas=$(echo "$FILES" | grep -qE '^web/personas-open-source/|^\.github/workflows/web-checks\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
-        has_workflows=$(echo "$FILES" | grep -qE '^\.github/workflows/.*\.ya?ml$|^\.github/actionlint\.ya?ml$|^\.github/actions/detect-changes/' && echo true || echo false)
-        has_backend_runtime_env=$(echo "$FILES" | grep -qE '^backend/deploy/runtime_env\.yaml$|^backend/charts/backend-listen/.*_values\.yaml$|^backend/scripts/(render_backend_runtime_env|validate-backend-runtime-env|preflight-cloud-run-deploy|repair_cloud_run_traffic|deploy_status_report|pre-deploy-check)\.(py|sh)$|^backend/tests/unit/test_(backend_runtime_env_validator|preflight_cloud_run_deploy|repair_cloud_run_traffic|deploy_status_report)\.py$|^backend/tests/fixtures/deploy_status/|^docs/doc/developer/backend/prod_hotfix_runbook\.mdx$|^docs/docs\.json$|^\.github/workflows/gcp_backend.*\.ya?ml$|^\.github/workflows/(repo-checks|backend-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
+        has_workflows=$(echo "$FILES" | grep -qE '^\.github/workflows/.*\.ya?ml$|^\.github/actionlint\.ya?ml$|^\.github/actions/.*/action\.ya?ml$|^\.github/actions/detect-changes/' && echo true || echo false)
+        has_backend_runtime_env=$(echo "$FILES" | grep -qE '^backend/deploy/runtime_env\.yaml$|^backend/charts/backend-listen/.*_values\.yaml$|^backend/scripts/(render_backend_runtime_env|validate-backend-runtime-env|preflight-cloud-run-deploy|repair_cloud_run_traffic|deploy_status_report|pre-deploy-check)\.(py|sh)$|^backend/tests/unit/test_(backend_runtime_env_validator|preflight_cloud_run_deploy|repair_cloud_run_traffic|deploy_status_report)\.py$|^backend/tests/fixtures/deploy_status/|^docs/doc/developer/backend/prod_hotfix_runbook\.mdx$|^docs/docs\.json$|^\.github/workflows/gcp_backend.*\.ya?ml$|^\.github/actions/sync-backfill-lifecycle/|^\.github/workflows/(repo-checks|backend-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
         has_backend_async_gate=$(echo "$FILES" | grep -qE '^backend/.*\.py$|^\.github/workflows/(repo-checks|backend-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
-        has_backend_workflow_contracts=$(echo "$FILES" | grep -qE '^backend/testing/workflow_contracts\.json$|^backend/scripts/check_workflow_contracts\.py$|^scripts/pre-push$|^\.github/workflows/backend-checks\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
+        has_backend_isolation_gate=$(echo "$FILES" | grep -qE '^backend/.*\.py$|^backend/tests/\.(import_time_side_effects_legacy|module_stub_legacy_allowlist)$|^\.github/workflows/(repo-checks|backend-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
+        has_backend_workflow_contracts=$(echo "$FILES" | grep -qE '^\.gitignore$|^backend/testing/workflow_contracts\.json$|^backend/scripts/(check_workflow_contracts|select_backend_unit_tests)\.py$|^scripts/(changed-files|install-git-hooks\.sh|pre-push|pre-push-singleflight)$|^\.github/workflows/(backend-checks|backend-unit-tests|desktop-checks|desktop-swift-ci|repo-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
         has_desktop_agent_runtime=$(echo "$FILES" | grep -qE '^desktop/macos/agent/|^desktop/macos/pi-mono-extension/|^desktop/macos/run\.sh$|^desktop/macos/scripts/(audit-desktop-bundle-deps|prepare-agent-runtime|prepare-desktop-bundle-native-deps|test-tool-surfaces|agent-logic-harness)\.sh$|^codemagic\.yaml$|^scripts/pre-push$|^\.github/workflows/(repo-checks|desktop-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
         has_app_codegen=$(echo "$FILES" | grep -qE '^app/lib/|^app/pubspec\.yaml$|^app/pubspec\.lock$|^app/build\.yaml$|^app/assets/|^\.github/workflows/(repo-checks|mobile-app-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
         has_app_l10n=$(echo "$FILES" | grep -qE '^app/lib/l10n/.*\.arb$|^app/l10n\.yaml$|^\.github/workflows/(repo-checks|mobile-app-checks)\.yml$|^\.github/actions/detect-changes/' && echo true || echo false)
@@ -106,6 +109,7 @@ runs:
           echo "has_workflows=$has_workflows"
           echo "has_backend_runtime_env=$has_backend_runtime_env"
           echo "has_backend_async_gate=$has_backend_async_gate"
+          echo "has_backend_isolation_gate=$has_backend_isolation_gate"
           echo "has_backend_workflow_contracts=$has_backend_workflow_contracts"
           echo "has_desktop_agent_runtime=$has_desktop_agent_runtime"
           echo "has_app_codegen=$has_app_codegen"
@@ -129,7 +133,7 @@ runs:
           echo "has_flutter_generated=false" >> "$GITHUB_OUTPUT"
         fi
 
-        if [ "$has_backend_runtime_env" = "true" ] || [ "$has_backend_async_gate" = "true" ] || [ "$has_backend_workflow_contracts" = "true" ]; then
+        if [ "$has_backend_runtime_env" = "true" ] || [ "$has_backend_async_gate" = "true" ] || [ "$has_backend_isolation_gate" = "true" ] || [ "$has_backend_workflow_contracts" = "true" ]; then
           echo "has_backend_static_contracts=true" >> "$GITHUB_OUTPUT"
         else
           echo "has_backend_static_contracts=false" >> "$GITHUB_OUTPUT"

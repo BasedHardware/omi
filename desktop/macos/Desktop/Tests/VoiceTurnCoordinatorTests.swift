@@ -138,6 +138,113 @@ final class VoiceTurnCoordinatorTests: XCTestCase {
     XCTAssertEqual(snapshots.count, 3)
   }
 
+  func testHubReadyTransitionIsConsumedBeforeReentrantSnapshot() {
+    let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
+    let sessionID = VoiceSessionID()
+    var gate = RealtimeHubWarmWaitResolutionGate()
+    var resolutions = 0
+    coordinator.setSnapshotHandler { model in
+      guard gate.observe(model.turn?.route) else { return }
+      resolutions += 1
+      guard let turnID = coordinator.activeTurnID else {
+        XCTFail("hub-ready transition must retain its active turn")
+        return
+      }
+      // RealtimeHubController.beginTurn clears its response glow synchronously,
+      // which publishes another snapshot. The consumed transition must not run
+      // the warm-wait resolver again.
+      coordinator.send(.responseActiveChanged(turnID: turnID, active: false))
+    }
+
+    let turnID = coordinator.begin(intent: .hold)
+    coordinator.send(.selectRoute(turnID: turnID, route: .hubWarmWait))
+    coordinator.send(.hubReady(turnID: turnID, sessionID: sessionID))
+
+    XCTAssertEqual(resolutions, 1)
+    XCTAssertEqual(gate.route, .hub(sessionID: sessionID))
+  }
+
+  func testSnapshotReentrantEventsDrainFIFOWithoutRecursiveCallbacks() {
+    let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
+    var callbackDepth = 0
+    var maximumCallbackDepth = 0
+    var queuedRouteSelection = false
+
+    coordinator.setSnapshotHandler { model in
+      callbackDepth += 1
+      maximumCallbackDepth = max(maximumCallbackDepth, callbackDepth)
+      defer { callbackDepth -= 1 }
+
+      guard !queuedRouteSelection, let turn = model.turn, turn.phase == .recording else {
+        return
+      }
+      queuedRouteSelection = true
+      coordinator.send(.selectRoute(turnID: turn.id, route: .deepgramBatch))
+
+      XCTAssertEqual(
+        coordinator.model.turn?.route,
+        .undecided,
+        "a nested event must not mutate the model until the current snapshot returns"
+      )
+    }
+
+    let turnID = coordinator.begin(intent: .hold)
+
+    XCTAssertEqual(maximumCallbackDepth, 1)
+    XCTAssertEqual(coordinator.model.turn?.route, .deepgramBatch)
+    XCTAssertEqual(
+      coordinator.timelineSnapshot().suffix(2).map(\.event),
+      ["start", "select_route"]
+    )
+    XCTAssertEqual(coordinator.activeTurnID, turnID)
+  }
+
+  func testEffectReentrantTerminalEventRunsAfterCurrentEffectReturns() {
+    let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
+    let turnID = coordinator.begin(intent: .hold)
+    let captureID = VoiceCaptureID(91)
+    coordinator.send(.captureStarted(turnID: turnID, captureID: captureID))
+
+    var callbackDepth = 0
+    var maximumCallbackDepth = 0
+    var queuedCancellation = false
+    var effects: [VoiceTurnEffect] = []
+    coordinator.setEffectHandler { effect in
+      callbackDepth += 1
+      maximumCallbackDepth = max(maximumCallbackDepth, callbackDepth)
+      effects.append(effect)
+      defer { callbackDepth -= 1 }
+
+      guard !queuedCancellation, effect == .stopCapture(turnID: turnID, captureID: captureID) else {
+        return
+      }
+      queuedCancellation = true
+      coordinator.send(.cancel(turnID: turnID, reason: .cancelled))
+
+      XCTAssertEqual(
+        coordinator.model.turn?.phase,
+        .finalizing,
+        "a nested terminal event must wait until the current effect returns"
+      )
+    }
+
+    coordinator.send(.finalize(turnID: turnID))
+
+    XCTAssertEqual(maximumCallbackDepth, 1)
+    XCTAssertEqual(coordinator.model.turn?.phase, .terminal(.cancelled))
+    XCTAssertEqual(
+      effects.compactMap { effect -> VoiceTurnTerminalRecord? in
+        if case .terminal(let terminal) = effect { return terminal }
+        return nil
+      },
+      [.init(turnID: turnID, reason: .cancelled)]
+    )
+    XCTAssertEqual(
+      coordinator.timelineSnapshot().suffix(2).map(\.event),
+      ["finalize", "cancel"]
+    )
+  }
+
   func testResetCancelsOutstandingDeadlinesAndReturnsPresentationToIdle() {
     let scheduler = ManualVoiceTurnScheduler()
     let coordinator = VoiceTurnCoordinator(scheduler: scheduler)

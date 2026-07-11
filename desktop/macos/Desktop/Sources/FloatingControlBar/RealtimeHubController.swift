@@ -67,6 +67,7 @@ enum RealtimeHubCloseClassifier {
 enum RealtimeHubCommitResult: Equatable {
   case accepted
   case deferredForReplacement
+  case deferredForReconnect
   case rejectedNoSession
 }
 
@@ -204,6 +205,31 @@ struct PendingBargeInReplacementTurn {
   let turnID: VoiceTurnID
   let responseID: VoiceResponseID
   var pendingBegin = true
+  var pendingCommit = false
+  private(set) var audioBuffer: [Data] = []
+  private(set) var bufferedAudioBytes = 0
+
+  @discardableResult
+  mutating func appendAudio(_ pcm16k: Data) -> Bool {
+    let remaining = Self.maxBufferedAudioBytes - bufferedAudioBytes
+    guard remaining > 0 else { return false }
+    let accepted = pcm16k.count <= remaining ? pcm16k : Data(pcm16k.prefix(remaining))
+    guard !accepted.isEmpty else { return false }
+    audioBuffer.append(accepted)
+    bufferedAudioBytes += accepted.count
+    return accepted.count == pcm16k.count
+  }
+}
+
+/// Captures one PTT turn while a non-barge-in realtime session is reconnecting.
+/// Keeping it separate from the barge-in buffer prevents a fresh turn from being
+/// accidentally coalesced with a replaced response's input.
+struct PendingRealtimeSessionReconnectTurn {
+  static let maxBufferedAudioBytes = 3_840_000  // 120 s @ 16 kHz s16le
+
+  let turnID: VoiceTurnID
+  let responseID: VoiceResponseID
+  let interrupting: Bool
   var pendingCommit = false
   private(set) var audioBuffer: [Data] = []
   private(set) var bufferedAudioBytes = 0
@@ -572,6 +598,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// need a fresh one-use token first, so hold early mic chunks/commit until the
   /// replacement session exists and can use its normal socket-open buffering.
   private var pendingBargeInReplacement: PendingBargeInReplacementTurn?
+  /// A session can be replaced between PTT-down and its first microphone chunk.
+  /// Preserve that one turn until the replacement session is authenticated, then
+  /// replay it in order before committing.
+  private var pendingSessionReconnect: PendingRealtimeSessionReconnectTurn?
 
   /// Failover chain: when the Auto-selected (primary) provider can't connect, the hub
   /// tries the OTHER realtime provider before dropping to the legacy Claude cascade.
@@ -1538,6 +1568,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     hubConnected = false  // no live session → PTT falls back to the cascade until re-warm
     sessionVoiceSeedContextSnapshot = ""
     geminiSessionNeedsTurnBoundary = false
+    pendingSessionReconnect = nil
     clearBargeInReplacementState()
     pendingCompletedAgentDeltaAckIds.removeAll()
     pendingCompletedAgentDeltaHighWaterMs = nil
@@ -1767,6 +1798,44 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
   }
 
+  /// Replays a turn captured while a regular warm session was being replaced.
+  /// The provider input window opens before replay so Gemini's activity boundaries
+  /// and OpenAI's event ownership remain tied to the original PTT turn.
+  private func finishSessionReconnectAfterReady() {
+    guard let pending = pendingSessionReconnect, let live = session else { return }
+    pendingSessionReconnect = nil
+    guard voiceOutputCoordinator.snapshot().turnID == pending.turnID,
+      VoiceTurnCoordinator.shared.activeTurnID == pending.turnID
+    else {
+      live.abandonInputTurn()
+      log("RealtimeHub: discarded reconnect audio for a superseded PTT turn")
+      return
+    }
+    let candidates = AssistantSettings.shared.voiceBaseLanguages
+    if live.supportsInputTranscriptionLanguage, !candidates.isEmpty {
+      live.setInputTranscriptionLanguage(candidates.count == 1 ? candidates[0] : turnEarlyVerdictCode)
+    }
+    live.beginInputTurn(
+      turnID: pending.turnID,
+      responseID: pending.responseID,
+      interrupting: pending.interrupting)
+    attachGeminiScreenFrameAfterActivityStartIfNeeded(session: live)
+    for pcm16k in pending.audioBuffer {
+      sendAudio(pcm16k, to: live)
+    }
+    if pending.pendingCommit {
+      responding = true
+      live.commitInputTurn()
+      if let voiceSessionID {
+        VoiceTurnCoordinator.shared.send(
+          .hubCommitAccepted(
+            turnID: pending.turnID,
+            sessionID: voiceSessionID,
+            responseID: pending.responseID))
+      }
+    }
+  }
+
   private func failBargeInReplacement(provider: RealtimeHubProvider, reason: String) {
     let hadCommittedTurn = pendingBargeInReplacement?.pendingCommit == true
     clearBargeInReplacementState()
@@ -1879,6 +1948,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       requestedTurnID
       ?? VoiceTurnCoordinator.shared.activeTurnID
       ?? VoiceTurnCoordinator.shared.begin(intent: .hold)
+    if let pending = pendingSessionReconnect, pending.turnID != turnID {
+      pendingSessionReconnect = nil
+      log("RealtimeHub: discarded reconnect audio for a superseded rapid PTT turn")
+    }
     let responseID = VoiceResponseID(UUID().uuidString)
     voiceResponseID = responseID
     if sessionProvider == .openai {
@@ -2103,10 +2176,35 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       }
       return
     }
+    let activeTurnID = voiceOutputCoordinator.snapshot().turnID
+    if var pending = pendingSessionReconnect {
+      if pending.turnID != activeTurnID {
+        pendingSessionReconnect = nil
+        log("RealtimeHub: discarded reconnect audio for a superseded PTT turn")
+      } else {
+        if pending.appendAudio(pcm16k) == false {
+          log(
+            "RealtimeHub: reconnect audio buffer reached "
+              + "\(PendingRealtimeSessionReconnectTurn.maxBufferedAudioBytes) bytes; truncating turn audio"
+          )
+        }
+        pendingSessionReconnect = pending
+        return
+      }
+    }
     guard let s = session else {
-      log(
-        "RealtimeHub[\(providerTag)]: dropping mic audio because no realtime session owns this turn"
-      )
+      guard let activeTurnID, let responseID = voiceResponseID else {
+        log("RealtimeHub[\(providerTag)]: dropping mic audio without a PTT turn identity")
+        return
+      }
+      var pending = PendingRealtimeSessionReconnectTurn(
+        turnID: activeTurnID,
+        responseID: responseID,
+        interrupting: pendingInputTurnInterrupting)
+      _ = pending.appendAudio(pcm16k)
+      pendingSessionReconnect = pending
+      log("RealtimeHub[\(providerTag)]: buffering mic audio until the reconnecting session is ready")
+      ensureWarm()
       return
     }
     sendAudio(pcm16k, to: s)
@@ -2174,6 +2272,19 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         VoiceTurnCoordinator.shared.send(.hubCommitDeferredForReplacement(turnID: turnID))
       }
       return .deferredForReplacement
+    }
+    if var pending = pendingSessionReconnect {
+      pending.pendingCommit = true
+      pendingSessionReconnect = pending
+      log(
+        "RealtimeHub[\(providerTag)]: session reconnect not ready at commit — "
+          + "deferring commit (bufferedChunks=\(pending.audioBuffer.count))"
+      )
+      if let turnID = VoiceTurnCoordinator.shared.activeTurnID {
+        VoiceTurnCoordinator.shared.send(.hubCommitDeferred(turnID: turnID))
+      }
+      ensureWarm()
+      return .deferredForReconnect
     }
     guard let s = session else {
       responding = false
@@ -2302,6 +2413,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     turnPreparationTask?.cancel()
     turnPreparationTask = nil
     inputTurnActivityStartPending = false
+    pendingSessionReconnect = nil
     responding = false
     realtimePlaybackActive = false
     realtimePlaybackEpoch += 1
@@ -2420,8 +2532,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     guard isCurrentSession(source) else { return }
     lastWarmAt = Date()
     hubConnected = true  // authenticated + ready — PTT may now route turns to the hub
+    let replayedReconnectTurn = pendingSessionReconnect != nil
     if pendingBargeInReplacement != nil {
       finishBargeInReplacementAfterSessionReady()
+    }
+    if replayedReconnectTurn {
+      finishSessionReconnectAfterReady()
     }
     if let turnID = VoiceTurnCoordinator.shared.activeTurnID, let voiceSessionID,
       VoiceTurnCoordinator.shared.activeTurn?.route == .hubWarmWait
@@ -2443,6 +2559,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       pendingFailoverReason = nil
     }
     if inputTurnInProgress,
+      !replayedReconnectTurn,
       inputTurnActivityStartPending || sessionProvider == .gemini
     {
       if let live = session {
@@ -2762,6 +2879,33 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           ToolCall(name: "get_daily_recap", arguments: ["days_ago": daysAgo], thoughtSignature: nil)
         )
       }
+    case .checkPermissionStatus, .requestPermission:
+      // Permission prompts belong to this desktop process. Reuse the canonical
+      // chat executor so PTT and main chat trigger exactly the same native flow.
+      let originatingUserText = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard let executorRoute = RealtimeHubTools.permissionExecutorRoute(
+        for: tool, arguments: arguments)
+      else {
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name,
+          output: "Permission tool routing is unavailable.", expectedTurnEpoch: toolTurnEpoch)
+        return
+      }
+      runToolAndSpeak(
+        source: source,
+        callId: callId, name: name,
+        emptyText: "The permission status did not return a result.",
+        errorText: "Could not open the permission request right now.",
+        expectedTurnEpoch: toolTurnEpoch
+      ) {
+        await ChatToolExecutor.execute(
+          ToolCall(
+            name: executorRoute.toolName,
+            arguments: executorRoute.type.map { ["type": $0] } ?? [:],
+            thoughtSignature: nil),
+          originatingUserText: originatingUserText
+        )
+      }
     case .getActionItems:
       // Backend READ of the full task list with filters (completed / due-date range) — the
       // capable sibling of the local get_tasks. Same APIClient path the chat agent uses.
@@ -2976,7 +3120,43 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     name: String,
     expectedTurnEpoch: Int
   ) async {
-    let userText = turnTranscript
+    let userText = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let permissionRedirect = RealtimeHubTools.directPermissionRedirect(
+      forDelegationBrief: brief,
+      originatingUserText: userText)
+    {
+      guard
+        isCurrentToolTurn(
+          source: source, callId: callId, name: name, expectedTurnEpoch: expectedTurnEpoch)
+      else {
+        log("RealtimeHub[\(providerTag)]: dropping stale spawn_agent permission redirect before side effects")
+        return
+      }
+      log(
+        "RealtimeHub[\(providerTag)]: redirecting spawn_agent permission request to \(permissionRedirect.tool.rawValue) type=\(permissionRedirect.type)"
+      )
+      if permissionRedirect.recoveredFromDelegation {
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "other",
+          from: "agent",
+          to: "native",
+          reason: "other",
+          outcome: .recovered,
+          extra: ["surface": "realtime", "permission": permissionRedirect.type])
+      }
+      let output = await ChatToolExecutor.execute(
+        ToolCall(
+          name: permissionRedirect.tool.rawValue,
+          arguments: ["type": permissionRedirect.type],
+          thoughtSignature: nil
+        ),
+        originatingUserText: userText
+      )
+      sendToolResultIfCurrent(
+        source: source, callId: callId, name: name, output: output,
+        expectedTurnEpoch: expectedTurnEpoch)
+      return
+    }
     var directedProvider: AgentPillsManager.DirectedProvider?
     switch providerName {
     case "openclaw": directedProvider = .openclaw

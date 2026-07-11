@@ -482,7 +482,10 @@ def test_extract_memories_inner_canonical_uses_memory_service(monkeypatch):
     legacy_delete = sys.modules["database.memories"].delete_memories_for_conversation
     legacy_delete.reset_mock()
 
-    memory = Memory(content="User likes coffee", category=MemoryCategory.interesting)
+    memories = [
+        Memory(content="User likes coffee", category=MemoryCategory.interesting),
+        Memory(content="User changed the launch date", category=MemoryCategory.interesting),
+    ]
     write_mock = MagicMock()
     retract_mock = MagicMock()
     service = MagicMock()
@@ -491,10 +494,12 @@ def test_extract_memories_inner_canonical_uses_memory_service(monkeypatch):
 
     _patch_cohort_resolver(monkeypatch, MemorySystem.CANONICAL)
     monkeypatch.setattr(pc, "canonical_write_enabled", lambda *args, **kwargs: True)
-    monkeypatch.setattr(pc, "new_memories_extractor", lambda *args, **kwargs: [memory])
+    monkeypatch.setattr(pc, "new_memories_extractor", lambda *args, **kwargs: memories)
     monkeypatch.setattr(pc, "record_usage", lambda *args, **kwargs: None)
     monkeypatch.setattr(pc.users_db, "get_user_language_preference", lambda uid: "en")
     monkeypatch.setattr(pc, "MemoryService", lambda **_: service)
+    association_mock = MagicMock()
+    monkeypatch.setattr(pc, "associate_canonical_evidence", association_mock)
 
     conversation = SimpleNamespace(
         id="conv-canonical",
@@ -508,7 +513,17 @@ def test_extract_memories_inner_canonical_uses_memory_service(monkeypatch):
     retract_mock.assert_called_once_with("uid-canonical", "conv-canonical")
     legacy_delete.assert_not_called()
     legacy_save.assert_not_called()
-    assert write_mock.call_count == 1
+    assert write_mock.call_count == 2
+    association_mock.assert_called_once()
+    evidence = association_mock.call_args.args[1]
+    assert evidence.evidence_id == "conv-canonical"
+    assert len(evidence.evidence_refs) == 3
+
+    association_mock.reset_mock()
+    conversation.is_locked = True
+    pc._extract_memories_inner("uid-canonical", conversation)
+    assert write_mock.call_count == 4
+    association_mock.assert_not_called()
 
 
 def test_v3_get_routes_canonical_user_to_memory_service(monkeypatch):

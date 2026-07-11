@@ -187,6 +187,7 @@ actor AgentRuntimeProcess {
     let clientId: String
     let requestId: String
     let surfaceRef: AgentSurfaceReference?
+    let originatingUserText: String?
     let onTextDelta: AgentBridge.TextDeltaHandler
     let onToolCall: AgentBridge.ToolCallHandler
     let onToolActivity: AgentBridge.ToolActivityHandler
@@ -681,6 +682,43 @@ actor AgentRuntimeProcess {
     guard let ownerId = currentOwnerId() else {
       throw BridgeError.agentError("Agent control requires a signed-in owner")
     }
+    return try await sendDirectControlTool(
+      clientId: clientId,
+      harnessMode: harnessMode,
+      name: name,
+      input: input,
+      ownerId: ownerId
+    )
+  }
+
+#if DEBUG
+  func debugAutomationControlTool(
+    clientId: String,
+    harnessMode: String,
+    name: String,
+    input: [String: Any],
+    ownerId: String
+  ) async throws -> String {
+    guard AppBuild.isNonProduction else {
+      throw BridgeError.agentError("Automation control is disabled on production bundles")
+    }
+    return try await sendDirectControlTool(
+      clientId: clientId,
+      harnessMode: harnessMode,
+      name: name,
+      input: input,
+      ownerId: ownerId
+    )
+  }
+#endif
+
+  private func sendDirectControlTool(
+    clientId: String,
+    harnessMode: String,
+    name: String,
+    input: [String: Any],
+    ownerId: String
+  ) async throws -> String {
     try await registerClient(clientId: clientId, harnessMode: harnessMode)
     guard advertisedAgentControlTools.contains(name) else {
       throw BridgeError.agentError("Agent runtime does not advertise direct control tool \(name)")
@@ -818,6 +856,7 @@ actor AgentRuntimeProcess {
         clientId: clientId,
         requestId: requestId,
         surfaceRef: surfaceRef,
+        originatingUserText: prompt.trimmingCharacters(in: .whitespacesAndNewlines),
         onTextDelta: onTextDelta,
         onToolCall: onToolCall,
         onToolActivity: onToolActivity,
@@ -904,6 +943,11 @@ actor AgentRuntimeProcess {
     env["HARNESS_MODE"] = preferredHarnessMode
     env["OMI_AGENT_STATE_DIR"] = Self.defaultStateDirectory()
     env["OMI_AGENT_ARTIFACTS_DIR"] = Self.defaultArtifactsDirectory()
+#if DEBUG
+    if AppBuild.isNonProduction {
+      env["OMI_AGENT_ALLOW_CONTROL_ONLY"] = "1"
+    }
+#endif
     env.removeValue(forKey: "ANTHROPIC_API_KEY")
     env.removeValue(forKey: "CLAUDE_CODE_USE_VERTEX")
     applyLocalAgentEnvironment(to: &env)
@@ -936,9 +980,11 @@ actor AgentRuntimeProcess {
     let forceRefreshToken = preferredAdapterId == .piMono && !DesktopLocalProfile.isEnabled
     if let token = try? await authService.getIdToken(forceRefresh: forceRefreshToken), !token.isEmpty {
       env["OMI_AUTH_TOKEN"] = token
-    } else if preferredAdapterId == .piMono {
+    } else if preferredAdapterId == .piMono && env["OMI_AGENT_ALLOW_CONTROL_ONLY"] != "1" {
       log("AgentRuntimeProcess: pi-mono start refused, Firebase ID token is missing")
       throw BridgeError.authMissing
+    } else if preferredAdapterId == .piMono {
+      log("AgentRuntimeProcess: starting non-production control-only runtime without Firebase auth")
     }
 
     let nodeDir = (nodePath as NSString).deletingLastPathComponent
@@ -1382,7 +1428,9 @@ actor AgentRuntimeProcess {
     }
     let input = message.payload["input"] as? [String: Any] ?? [:]
     Task {
-      let result = await request.onToolCall(callId, name, input)
+      let result = await ChatToolExecutor.withOriginatingUserText(request.originatingUserText) {
+        await request.onToolCall(callId, name, input)
+      }
       completeToolCall(callId: callId, result: result, requestId: request.requestId, clientId: request.clientId)
     }
   }

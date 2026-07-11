@@ -86,6 +86,49 @@ OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL = Counter(
     ['mode'],
 )
 
+OMI_SYNC_LANE_JOBS_TOTAL = Counter(
+    'omi_sync_lane_jobs_total',
+    'Sync jobs admitted by lane, capture-time trust, and outcome',
+    ['lane', 'trust', 'outcome'],
+)
+
+OMI_SYNC_LANE_SPEECH_MS_TOTAL = Counter(
+    'omi_sync_lane_speech_ms_total',
+    'Successfully reserved sync speech milliseconds by lane',
+    ['lane'],
+)
+
+OMI_SYNC_RECORDING_AGE_SECONDS = Histogram(
+    'omi_sync_recording_age_seconds',
+    'Oldest recording age at sync admission by lane',
+    ['lane'],
+    buckets=(300, 1800, 3600, 21600, 86400, 259200, 604800, 1209600, 2592000),
+)
+
+OMI_SYNC_QUEUE_WAIT_SECONDS = Histogram(
+    'omi_sync_queue_wait_seconds',
+    'Cloud Tasks queue wait before sync processing by lane',
+    ['lane'],
+    buckets=(1, 5, 15, 30, 60, 300, 900, 3600, 21600, 86400),
+)
+
+OMI_SYNC_BACKFILL_DAILY_USED_MS = Gauge(
+    'omi_sync_backfill_daily_used_ms',
+    'Current UTC-day processed speech milliseconds reserved by historical sync',
+)
+
+TASK_WORKSTREAM_ASSOCIATION_TOTAL = Counter(
+    'task_workstream_association_total',
+    'Canonical evidence association outcomes with bounded adjudication reasons',
+    ['outcome', 'reason'],
+)
+
+TASK_INTELLIGENCE_ATTRIBUTION_TOTAL = Counter(
+    'task_intelligence_attribution_total',
+    'Privacy-safe task intervention, feedback, and outcome events',
+    ['event', 'subject_kind', 'code'],
+)
+
 AUTH_FLOW_EVENTS = Counter(
     'auth_flow_events_total',
     'Auth flow events by provider, stage, outcome, and sanitized failure class',

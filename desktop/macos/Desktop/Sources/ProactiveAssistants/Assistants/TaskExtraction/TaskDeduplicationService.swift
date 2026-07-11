@@ -1,4 +1,5 @@
 import Foundation
+import OmiSupport
 
 /// Service that periodically scans staged tasks and uses Gemini AI to detect
 /// and remove semantic duplicates BEFORE they are promoted to action items.
@@ -80,6 +81,10 @@ actor TaskDeduplicationService {
     // MARK: - Deduplication Logic
 
     private func runDeduplication() async {
+        guard await TaskLegacyEffectGate.live.isAllowed(.destructiveDeduplication) else {
+            log("TaskDedup: Canonical or unresolved mode; destructive staged dedupe skipped")
+            return
+        }
         guard let client = getGeminiClient() else {
             log("TaskDedup: Skipping - Gemini client not initialized")
             return
@@ -211,7 +216,7 @@ actor TaskDeduplicationService {
 
         // Validate and delete
         let validTaskIDs = Set(tasks.map { $0.id })
-        let taskLookup = Dictionary(tasks.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
+        let taskLookup = Dictionary(lastWriteWins: tasks.map { ($0.id, $0) })
         var deletedCount = 0
 
         for group in result.duplicateGroups {
@@ -251,7 +256,16 @@ actor TaskDeduplicationService {
 
                 // Hard-delete staged task from backend
                 do {
-                    try await APIClient.shared.deleteStagedTask(id: deleteId)
+                    let deleted: Bool = try await TaskLegacyEffectGate.live.perform(
+                        .destructiveDeduplication
+                    ) {
+                        try await APIClient.shared.deleteStagedTask(id: deleteId)
+                        return true
+                    } ?? false
+                    guard deleted else {
+                        log("TaskDedup: Mode changed; stopping before destructive write")
+                        return deletedCount
+                    }
                     deletedCount += 1
                     log("TaskDedup: Hard-deleted staged task '\(deletedTask?.description ?? deleteId)' (kept: '\(keptTask?.description ?? group.keepId)') - \(group.reason)")
                 } catch {

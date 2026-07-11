@@ -4,6 +4,8 @@ tier: 2
 description: Hermetic main chat navigation and typed turn using Rust OMI_LLM_STUB=1 (no live LLM)
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/Chat/WritingToolsFix.swift
+  - desktop/macos/Desktop/Sources/BrowserExtensionSetup.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ChatPage.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
   - desktop/macos/Desktop/Sources/AnalyticsManager.swift
@@ -18,6 +20,7 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/RuntimeOwnerIdentity.swift
   - desktop/macos/Desktop/Sources/Chat/ScreenContextTelemetry.swift
   - desktop/macos/Desktop/Sources/Chat/ChatStreamingBuffer.swift
+  - desktop/macos/Desktop/Sources/Chat/StallDetector.swift
   - desktop/macos/Desktop/Sources/Chat/ChatErrorState.swift
   - desktop/macos/Desktop/Sources/Chat/ChatPrompts.swift
   - desktop/macos/Desktop/Sources/Chat/TypingIndicator.swift

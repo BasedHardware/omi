@@ -4,6 +4,10 @@ import Foundation
 import GRDB
 import UserNotifications
 
+enum ChatToolExecutionContext {
+  @TaskLocal static var originatingUserText: String?
+}
+
 /// Executes tool calls from Gemini and returns results
 /// Tools: execute_sql (read/write SQL on omi.db), semantic_search (vector similarity)
 @MainActor
@@ -46,6 +50,167 @@ class ChatToolExecutor {
     onboardingPermissionTypes.joined(separator: ", ")
   }
 
+  nonisolated enum PermissionExecutionRoute: Equatable {
+    case unrelated
+    case directNative(toolName: String, type: String?, recoveredFromDelegation: Bool)
+    case delegate
+    case rejectExternalTarget
+
+    var recoversMalformedDelegation: Bool {
+      guard case .directNative(_, _, let recovered) = self else { return false }
+      return recovered
+    }
+  }
+
+  /// Permission tools operate on this Omi process only. Keep the routing rule
+  /// independent of model prompting so every chat surface gets the same guard:
+  /// local permission work is native, while an explicitly named other app can
+  /// never be mistaken for Omi and open this process's System Settings pane.
+  nonisolated static func permissionExecutionRoute(
+    toolName: String,
+    arguments: [String: Any],
+    originatingUserText: String? = nil
+  ) -> PermissionExecutionRoute {
+    let directPermissionTools = ["check_permission_status", "request_permission"]
+    if directPermissionTools.contains(toolName) {
+      if permissionTarget(in: arguments, narrative: originatingUserText ?? "") == .external {
+        return .rejectExternalTarget
+      }
+      return .directNative(
+        toolName: toolName,
+        type: normalizedPermissionType(from: arguments),
+        recoveredFromDelegation: false)
+    }
+
+    guard toolName == "spawn_agent" else { return .unrelated }
+    let brief = ((arguments["brief"] ?? arguments["objective"]) as? String) ?? ""
+    guard let request = permissionRequest(in: brief) else { return .delegate }
+    let originatingTarget = permissionTarget(in: [:], narrative: originatingUserText ?? "")
+    let effectiveTarget = originatingTarget == .unspecified
+      ? permissionTarget(in: arguments, narrative: brief)
+      : originatingTarget
+    guard effectiveTarget == .local else { return .delegate }
+    return .directNative(toolName: request.toolName, type: request.type, recoveredFromDelegation: true)
+  }
+
+  private nonisolated enum PermissionTarget {
+    case local
+    case external
+    case unspecified
+  }
+
+  private nonisolated static func permissionTarget(
+    in arguments: [String: Any],
+    narrative: String = ""
+  ) -> PermissionTarget {
+    for key in ["target", "target_app", "app", "application", "bundle_id", "bundleId"] {
+      guard let value = arguments[key] as? String, !value.trimmingCharacters(in: .whitespaces).isEmpty else {
+        continue
+      }
+      return isLocalPermissionTarget(value) ? .local : .external
+    }
+
+    let text = narrative.isEmpty
+      ? ["brief", "objective", "query", "request"].compactMap { arguments[$0] as? String }
+        .joined(separator: " ")
+      : narrative
+    let normalized = text.lowercased()
+    guard !normalized.isEmpty else { return .unspecified }
+
+    // Capture the common explicit-target forms without maintaining an app-name
+    // allow/deny list. Any named target other than Omi/this app is external.
+    let permissionPhrase = "screen recording|microphone|mic|notifications?|accessibility|automation|full disk access"
+    let targetPatterns = [
+      #"\b(?:permission|access|status|enabled|granted|allowed)[^?.!]{0,48}\bfor\s+(.+?)(?:[?.!,]|$)"#,
+      #"\b(?:whether|if)\s+(.+?)\s+(?:has|have|is|can|should|was|were)\b"#,
+      #"\b(?:permission|access)\s+for\s+(.+?)(?:[?.!,]|$)"#,
+      #"\b(?:whether|if)\s+(.+?)\s+has\b"#,
+      #"\bdoes\s+(.+?)\s+have\b"#,
+      #"\b([a-z0-9._-]+(?:\s+[a-z0-9._-]+)?)['’]s\s+(?:"# + permissionPhrase + #")\b"#,
+      #"\b(?:"# + permissionPhrase + #")(?:\s+permission|\s+access)?\s+for\s+(.+?)(?:[?.!,]|$)"#,
+      #"\b(?:grant|allow|enable|give)\s+(.+?)\s+to\s+(?:use|access)\s+(?:the\s+)?(?:"# + permissionPhrase + #")\b"#,
+      #"\b(?:grant|allow|enable|give)\s+(.+?)\s+(?:"# + permissionPhrase + #")\b"#,
+      #"\bcheck\s+(.+?)\s+(?:"# + permissionPhrase + #")(?:\s+permission|\s+access)?\b"#,
+      #"\b(?:request|check)\s+(?:the\s+)?(omi|this app|this application)(?:['’]s)?\s+(?:"#
+        + permissionPhrase + #")(?:\s+permission|\s+access)?\b"#,
+    ]
+    let fullRange = NSRange(normalized.startIndex..., in: normalized)
+    for pattern in targetPatterns {
+      guard
+        let regex = try? NSRegularExpression(pattern: pattern),
+        let match = regex.firstMatch(in: normalized, range: fullRange),
+        let range = Range(match.range(at: 1), in: normalized)
+      else { continue }
+      let candidate = String(normalized[range])
+      if isPermissionCapabilitySubject(candidate) {
+        continue
+      }
+      return isLocalPermissionTarget(candidate) ? .local : .external
+    }
+
+    // A bare local label is target evidence. Merely addressing "Omi" in a
+    // longer sentence is not: explicit external evidence wins above, and an
+    // unmatched narrative remains unspecified instead of being forced local.
+    if ["omi", "omi app", "the omi app", "this app", "this application"].contains(normalized) {
+      return .local
+    }
+    return .unspecified
+  }
+
+  private nonisolated static func isLocalPermissionTarget(_ value: String) -> Bool {
+    let normalized = value.lowercased().trimmingCharacters(
+      in: .whitespacesAndNewlines.union(.punctuationCharacters))
+    let words = Set(
+      normalized.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init))
+    return words.contains("omi") || normalized.hasPrefix("com.omi.")
+      || normalized == "this app" || normalized == "this application"
+  }
+
+  private nonisolated static func isPermissionCapabilitySubject(_ value: String) -> Bool {
+    let normalized = value.lowercased().trimmingCharacters(
+      in: .whitespacesAndNewlines.union(.punctuationCharacters))
+    return Set([
+      "screen recording", "screen recording permission", "screen recording access",
+      "microphone", "microphone permission", "microphone access", "mic", "mic permission",
+      "notifications", "notification permission", "notifications permission",
+      "accessibility", "accessibility permission", "accessibility access",
+      "automation", "automation permission", "automation access",
+      "full disk access", "full disk access permission",
+    ]).contains(normalized)
+  }
+
+  private nonisolated static func permissionRequest(in text: String) -> (toolName: String, type: String)? {
+    let normalized = text.lowercased()
+    let words = Set(normalized.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init))
+    let permissionTypes: [(String, [String])] = [
+      ("screen_recording", ["screen recording", "screen-recording"]),
+      ("microphone", ["microphone", "mic permission", "microphone access"]),
+      ("notifications", ["notification permission", "notifications permission", "omi notifications"]),
+      ("accessibility", ["accessibility permission", "accessibility access"]),
+      ("automation", ["automation permission", "automation access"]),
+      ("full_disk_access", ["full disk access"]),
+    ]
+    guard let type = permissionTypes.first(where: { _, phrases in
+      phrases.contains { normalized.contains($0) }
+    })?.0 else { return nil }
+
+    if ["check", "status", "granted"].contains(where: words.contains) {
+      return ("check_permission_status", type)
+    }
+    if ["request", "grant", "allow", "enable", "give"].contains(where: words.contains) {
+      return ("request_permission", type)
+    }
+    return nil
+  }
+
+  private nonisolated static func normalizedPermissionType(from arguments: [String: Any]) -> String? {
+    ((arguments["type"] ?? arguments["permission"]) as? String)?
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .lowercased()
+      .replacingOccurrences(of: "-", with: "_")
+      .replacingOccurrences(of: " ", with: "_")
+  }
+
   nonisolated static func onboardingPermissionStatusPayload(
     screenRecording: Bool,
     microphone: Bool,
@@ -81,27 +246,79 @@ class ChatToolExecutor {
     followupContinuation = nil
   }
 
+  nonisolated static func effectiveOriginatingUserText(_ explicit: String?) -> String? {
+    explicit ?? ChatToolExecutionContext.originatingUserText
+  }
+
+  nonisolated static func withOriginatingUserText<T>(
+    _ text: String?,
+    operation: () async -> T
+  ) async -> T {
+    await ChatToolExecutionContext.$originatingUserText.withValue(text) {
+      await operation()
+    }
+  }
+
   /// Execute a tool call and return the result as a string
   static func execute(
     _ toolCall: ToolCall,
     originatingChatMode: ChatMode? = nil,
     originatingClientScope: String? = nil,
     originatingSurfaceRef: AgentSurfaceReference? = nil,
-    originatingRunId: String? = nil
+    originatingRunId: String? = nil,
+    originatingUserText: String? = nil,
+    permissionAuthorization: PermissionRequestAuthorization? = nil,
+    isOnboardingSurface: Bool = false
   ) async -> String {
-    log("Executing tool: \(toolCall.name) with args: \(toolCall.arguments)")
+    let routedToolCall: ToolCall
+    let permissionRoute = permissionExecutionRoute(
+      toolName: toolCall.name,
+      arguments: toolCall.arguments,
+      originatingUserText: Self.effectiveOriginatingUserText(originatingUserText))
+    switch permissionRoute {
+    case .directNative(let toolName, let type, _) where toolName != toolCall.name:
+      routedToolCall = ToolCall(
+        name: toolName,
+        arguments: type.map { ["type": $0] } ?? [:],
+        thoughtSignature: toolCall.thoughtSignature
+      )
+    case .rejectExternalTarget:
+      return permissionJSON([
+        "ok": false,
+        "status": "refused",
+        "error": "permission_target_not_omi",
+        "message": "Omi can only check or request permissions for Omi itself, not another app.",
+      ])
+    default:
+      routedToolCall = toolCall
+    }
+
+    if permissionRoute.recoversMalformedDelegation {
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "other",
+        from: "agent",
+        to: "native",
+        reason: "other",
+        outcome: .recovered,
+        extra: [
+          "surface": "desktop_chat",
+          "permission": routedToolCall.arguments["type"] as? String ?? "unknown",
+        ])
+    }
+
+    log("Executing tool: \(routedToolCall.name) with args: \(routedToolCall.arguments)")
     let telemetryContext = ScreenContextTelemetryContext.from(
       surfaceRef: originatingSurfaceRef,
       runId: originatingRunId
     )
 
-    if case .deny(let message) = localPolicyDecision(toolName: toolCall.name, arguments: toolCall.arguments) {
-      log("Tool \(toolCall.name) denied by local policy")
-      if ScreenContextToolTelemetry.isScreenContextTool(toolCall.name) {
+    if case .deny(let message) = localPolicyDecision(toolName: routedToolCall.name, arguments: routedToolCall.arguments) {
+      log("Tool \(routedToolCall.name) denied by local policy")
+      if ScreenContextToolTelemetry.isScreenContextTool(routedToolCall.name) {
         let failureCode: ScreenContextFailureCode =
           message.hasPrefix("PERMISSION_REQUIRED:") ? .permissionDenied : .policyApprovalRequired
         ScreenContextToolTelemetry.trackToolResult(
-          toolName: toolCall.name,
+          toolName: routedToolCall.name,
           context: telemetryContext,
           ok: false,
           failureCode: failureCode,
@@ -111,15 +328,15 @@ class ChatToolExecutor {
       return message
     }
 
-    if toolCall.name == "spawn_agent" {
+    if routedToolCall.name == "spawn_agent" {
       return await executeSpawnAgent(
-        toolCall.arguments,
+        routedToolCall.arguments,
         originatingChatMode: originatingChatMode,
         originatingClientScope: originatingClientScope
       )
     }
 
-    switch GeneratedToolExecutors.chatDispatch(for: toolCall.name) {
+    switch GeneratedToolExecutors.chatDispatch(for: routedToolCall.name) {
     case .executeSql:
       return await executeSQL(toolCall.arguments)
 
@@ -140,19 +357,33 @@ class ChatToolExecutor {
 
     // Onboarding tools
     case .requestPermission:
-      let result = await executeRequestPermission(toolCall.arguments)
-      let permType = toolCall.arguments["type"] as? String ?? "unknown"
+      let permissionType = permissionType(from: routedToolCall.arguments)
+      // Onboarding globals hold UI callbacks and must not grant permission
+      // authority to calls that did not originate from the onboarding surface.
+      let isOnboardingRequest = isOnboardingSurface
+      guard isOnboardingRequest || (permissionType.flatMap { permissionAuthorization?.consume(permissionType: $0) } == true) else {
+        return policyDeniedMessage(
+          toolName: routedToolCall.name,
+          code: "explicit_user_permission_required",
+          capability: "desktop.permissions.request",
+          message: "The user must explicitly request this named macOS permission, or affirm your immediately preceding request, before Omi can open System Settings."
+        )
+      }
+      let result = await executeRequestPermission(routedToolCall.arguments)
+      let permType = routedToolCall.arguments["type"] as? String ?? "unknown"
       let granted = permissionToolResultGranted(result)
-      AnalyticsManager.shared.onboardingChatToolUsed(
-        tool: "request_permission",
-        properties: ["permission": permType, "result": granted ? "granted" : "pending"])
-      if !granted {
-        DispatchQueue.main.async { onPermissionPending?(permType) }
+      if isOnboardingRequest {
+        AnalyticsManager.shared.onboardingChatToolUsed(
+          tool: "request_permission",
+          properties: ["permission": permType, "result": granted ? "granted" : "pending"])
+        if !granted {
+          DispatchQueue.main.async { onPermissionPending?(permType) }
+        }
       }
       return result
 
     case .checkPermissionStatus:
-      let result = await executeCheckPermissionStatus(toolCall.arguments)
+      let result = await executeCheckPermissionStatus(routedToolCall.arguments)
       AnalyticsManager.shared.onboardingChatToolUsed(tool: "check_permission_status")
       return result
 
@@ -357,7 +588,7 @@ class ChatToolExecutor {
         toolName: "capture_screen",
         permission: "screen_recording",
         message:
-          "Screen Recording permission is not granted. Tell the user Omi cannot see their current screen yet, then call request_permission with type=screen_recording if they want to grant access."
+          "Screen Recording permission is not granted. Tell the user Omi cannot see their current screen yet and ask whether they want to grant access. Call request_permission with type=screen_recording only after they explicitly request or affirm it."
       )
     }
     guard let fileURL = ScreenCaptureManager.captureScreen() else {
