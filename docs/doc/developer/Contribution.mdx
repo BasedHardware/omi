@@ -41,10 +41,17 @@ Maintainers declining a PR for direction or taste will cite an invariant ID or o
 Good PRs are easy to review and come with evidence that the change works.
 
 - **Bug fixes** include the regression test that would have caught the bug.
+- **Close the failure class.** For a bug fix, describe the violated contract and
+  the durable guard. If recent history contains the same cause, fix the shared
+  boundary, state model, harness, compatibility check, or static contract rather
+  than adding another call-site exception.
 - **Small features** can go straight to PR when they are well scoped: test the core path and the main error path, and describe any manual verification you did.
 - **Large or ambiguous features** should start as a GitHub issue so maintainers can align on scope and direction before major implementation work begins.
 - **Show your verification.** List the commands you ran and what they showed in the PR description. "It compiles" is not evidence — exercising the real user-facing path is.
 - **Tests that run in CI must be hermetic** — no live services, no network. Validation against a live service is welcome as extra evidence, but it can never be the only proof a PR works.
+- **Behavioral tests execute production behavior.** Source-string assertions are
+  static tripwires only; they do not prove lifecycle, concurrency, or integration
+  behavior.
 - **Product invariants** — if you touch paths listed on a locked invariant, name the ID (for example `INV-CHAT-1`) in the PR body.
 - **Fast local PR contract check** — run `scripts/pr-preflight --pr-body-file /path/to/draft-pr-body.md`. Once the
   branch has a PR, `scripts/pr-preflight` reads its current body automatically with `gh`.
