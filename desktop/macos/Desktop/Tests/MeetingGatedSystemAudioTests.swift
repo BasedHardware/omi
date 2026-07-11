@@ -151,6 +151,46 @@ final class MeetingDetectorTests: XCTestCase {
         XCTAssertFalse(detector.isMeetingActive)
         XCTAssertEqual(changes, [], "no edges while never in a meeting")
     }
+
+    func testStopDiscardsInFlightProbeResult() async {
+        let probeStarted = DispatchSemaphore(value: 0)
+        let releaseProbe = DispatchSemaphore(value: 0)
+        let unexpectedInitialObservation = DispatchSemaphore(value: 0)
+        let unexpectedChange = DispatchSemaphore(value: 0)
+        var changes = [Bool]()
+        var initialObservedCount = 0
+        let detector = MeetingDetector(
+            pollInterval: 60.0,
+            offGracePeriod: 8.0,
+            isMeetingNow: {
+                probeStarted.signal()
+                _ = releaseProbe.wait(timeout: .now() + 2)
+                return true
+            },
+            now: { [weak self] in self?.now ?? Date(timeIntervalSince1970: 0) },
+            onInitialStateObserved: {
+                initialObservedCount += 1
+                unexpectedInitialObservation.signal()
+            },
+            onChange: {
+                changes.append($0)
+                unexpectedChange.signal()
+            }
+        )
+
+        detector.start()
+        XCTAssertEqual(probeStarted.wait(timeout: .now() + 2), .success)
+        detector.stop()
+        releaseProbe.signal()
+        await Task.yield()
+
+        XCTAssertFalse(detector.hasObservedState)
+        XCTAssertFalse(detector.isMeetingActive)
+        XCTAssertEqual(initialObservedCount, 0)
+        XCTAssertEqual(changes, [])
+        XCTAssertEqual(unexpectedInitialObservation.wait(timeout: .now()), .timedOut)
+        XCTAssertEqual(unexpectedChange.wait(timeout: .now()), .timedOut)
+    }
 }
 
 // MARK: - AssistantSettings.systemAudioCaptureMode

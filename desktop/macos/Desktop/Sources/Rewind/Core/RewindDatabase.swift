@@ -215,25 +215,15 @@ actor RewindDatabase {
         do {
             try db.execute(sql: "DROP TABLE IF EXISTS action_items_fts")
         } catch {
-            try forceRemoveBrokenActionItemsFTSMetadata(in: db)
+            try dropActionItemsFTSShadowsIfPresent(in: db)
+            try db.execute(sql: "DROP TABLE IF EXISTS action_items_fts")
         }
     }
 
-    private static func forceRemoveBrokenActionItemsFTSMetadata(in db: Database) throws {
-        try db.execute(sql: "PRAGMA writable_schema = ON")
-        defer { try? db.execute(sql: "PRAGMA writable_schema = OFF") }
-
-        try db.execute(sql: "DELETE FROM sqlite_master WHERE type = 'table' AND name = 'action_items_fts'")
+    private static func dropActionItemsFTSShadowsIfPresent(in db: Database) throws {
         for table in actionItemsFTSShadowTables {
-            do {
-                try db.execute(sql: "DROP TABLE IF EXISTS \(table)")
-            } catch {
-                try db.execute(sql: "DELETE FROM sqlite_master WHERE type = 'table' AND name = '\(table)'")
-            }
+            try db.execute(sql: "DROP TABLE IF EXISTS \(table)")
         }
-
-        let schemaVersion = (try Int.fetchOne(db, sql: "PRAGMA schema_version")) ?? 0
-        try db.execute(sql: "PRAGMA schema_version = \(schemaVersion + 1)")
     }
 
     /// Configure the database for a specific user.
@@ -249,16 +239,21 @@ actor RewindDatabase {
 
     /// Close the database only if no new session has started (configure() not called since).
     /// Prevents a stale sign-out Task from closing a freshly opened database.
-    func closeIfStale(generation: Int) {
+    @discardableResult
+    func closeIfStale(generation: Int) -> Bool {
         guard generation == RewindDatabase.configureGeneration else {
             log("RewindDatabase: Skipping stale close (requested gen \(generation), current gen \(RewindDatabase.configureGeneration))")
-            return
+            return false
         }
         close()
+        return true
     }
 
     /// Close the database, allowing re-initialization for a different user.
     func close() {
+        if let runningFlagPath {
+            try? FileManager.default.removeItem(atPath: runningFlagPath)
+        }
         dbQueue = nil
         initializationTask = nil
         runningFlagPath = nil
@@ -277,8 +272,16 @@ actor RewindDatabase {
     /// Returns the per-user base directory: ~/Library/Application Support/Omi/users/{userId}/
     /// Falls back to the static currentUserId (set synchronously at app start) when
     /// configure() hasn't been called yet (e.g., TierManager triggers init early).
+    private func targetUserId() -> String {
+        if RewindDatabase.currentUserId == nil,
+           UserDefaults.standard.string(forKey: .authUserId) == nil {
+            return "anonymous"
+        }
+        return configuredUserId ?? RewindDatabase.currentUserId ?? "anonymous"
+    }
+
     private func userBaseDirectory() -> URL {
-        let userId = configuredUserId ?? RewindDatabase.currentUserId ?? "anonymous"
+        let userId = targetUserId()
         return DesktopLocalProfile.applicationSupportURL()
             .appendingPathComponent("users", isDirectory: true)
             .appendingPathComponent(userId, isDirectory: true)
@@ -313,7 +316,7 @@ actor RewindDatabase {
     /// If the DB is open for a different user (e.g., "anonymous" before configure was called),
     /// closes it and reopens for the configured user.
     func initialize() async throws {
-        let targetUser = configuredUserId ?? RewindDatabase.currentUserId ?? "anonymous"
+        let targetUser = targetUserId()
 
         // Already initialized for the correct user
         if dbQueue != nil && openedForUserId == targetUser {
@@ -471,7 +474,7 @@ actor RewindDatabase {
         }
 
         dbQueue = activeQueue
-        openedForUserId = configuredUserId ?? RewindDatabase.currentUserId ?? "anonymous"
+        openedForUserId = targetUserId()
         consecutiveQueryIOErrors = 0
 
         try migrate(activeQueue)
@@ -543,7 +546,7 @@ actor RewindDatabase {
             .appendingPathComponent("users", isDirectory: true)
             .appendingPathComponent("anonymous", isDirectory: true)
 
-        let effectiveUserId = configuredUserId ?? RewindDatabase.currentUserId ?? "anonymous"
+        let effectiveUserId = targetUserId()
         let sourceDir: URL
         if fileManager.fileExists(atPath: legacyDB.path) {
             sourceDir = omiDir
