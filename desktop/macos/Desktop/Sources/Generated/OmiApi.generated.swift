@@ -9714,7 +9714,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode([[String: OmiAnyCodable]].self, from: data)
   }
 
-  public static func mcpGetFoldersV1McpFoldersGet(client: OmiApiClient) async throws -> OmiAnyCodable {
+  public static func mcpGetFoldersV1McpFoldersGet(client: OmiApiClient) async throws -> [OmiAnyCodable] {
     let _path = "/v1/mcp/folders"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -9731,7 +9731,7 @@ public enum OmiAPI {
     guard (200..<300).contains(http.statusCode) else {
       throw OmiApiError.httpError(status: http.statusCode, data: data)
     }
-    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+    return try JSONDecoder().decode([OmiAnyCodable].self, from: data)
   }
 
   public static func mcpCreateFolderV1McpFoldersPost(client: OmiApiClient, body: OmiAnyCodable) async throws -> OmiAnyCodable {

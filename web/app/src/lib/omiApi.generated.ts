@@ -2051,6 +2051,19 @@ export interface McpCreateFolder {
   name: string;
 }
 
+export interface McpFolder {
+  color?: string | null;
+  conversation_count?: number;
+  created_at?: string | null;
+  description?: string | null;
+  icon?: string | null;
+  id?: string;
+  is_default?: boolean;
+  is_system?: boolean;
+  name?: string;
+  updated_at?: string | null;
+}
+
 export interface McpMoveConversation {
   folder_id?: string | null;
 }
@@ -3948,6 +3961,7 @@ export interface OmiApiSchemas {
   "McpApiKeyCreated": McpApiKeyCreated;
   "McpCreateActionItem": McpCreateActionItem;
   "McpCreateFolder": McpCreateFolder;
+  "McpFolder": McpFolder;
   "McpMoveConversation": McpMoveConversation;
   "McpOauthGrantsResponse": McpOauthGrantsResponse;
   "McpRefreshToolsResponse": McpRefreshToolsResponse;
@@ -6206,7 +6220,7 @@ export interface OmiApiPaths {
     patch: {
       operationId: "mcp_move_conversation_to_folder_v1_mcp_conversations__conversation_id__folder_patch";
       responses: {
-        "200": unknown;
+        "200": McpStatusResponse;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -6227,14 +6241,14 @@ export interface OmiApiPaths {
     get: {
       operationId: "mcp_get_folders_v1_mcp_folders_get";
       responses: {
-        "200": unknown;
+        "200": Array<McpFolder>;
         "401": void;
       };
     };
     post: {
       operationId: "mcp_create_folder_v1_mcp_folders_post";
       responses: {
-        "200": unknown;
+        "200": McpFolder;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -6244,7 +6258,7 @@ export interface OmiApiPaths {
     patch: {
       operationId: "mcp_update_folder_v1_mcp_folders__folder_id__patch";
       responses: {
-        "200": unknown;
+        "200": McpFolder;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -6253,7 +6267,7 @@ export interface OmiApiPaths {
     delete: {
       operationId: "mcp_delete_folder_v1_mcp_folders__folder_id__delete";
       responses: {
-        "200": unknown;
+        "200": McpStatusResponse;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -11993,7 +12007,7 @@ export async function get_conversation_by_id_v1_mcp_conversations__conversation_
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function mcp_move_conversation_to_folder_v1_mcp_conversations__conversation_id__folder_patch(path: { conversation_id: string }, body: McpMoveConversation, init?: OmiApiClientInit): Promise<unknown> {
+export async function mcp_move_conversation_to_folder_v1_mcp_conversations__conversation_id__folder_patch(path: { conversation_id: string }, body: McpMoveConversation, init?: OmiApiClientInit): Promise<McpStatusResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/conversations/${path.conversation_id}/folder`;
   const _search = "";
@@ -12028,7 +12042,7 @@ export async function get_daily_summaries_v1_mcp_daily_summaries_get(query: { li
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function mcp_get_folders_v1_mcp_folders_get(init?: OmiApiClientInit): Promise<unknown> {
+export async function mcp_get_folders_v1_mcp_folders_get(init?: OmiApiClientInit): Promise<Array<McpFolder>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/folders`;
   const _search = "";
@@ -12043,7 +12057,7 @@ export async function mcp_get_folders_v1_mcp_folders_get(init?: OmiApiClientInit
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function mcp_create_folder_v1_mcp_folders_post(body: McpCreateFolder, init?: OmiApiClientInit): Promise<unknown> {
+export async function mcp_create_folder_v1_mcp_folders_post(body: McpCreateFolder, init?: OmiApiClientInit): Promise<McpFolder> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/folders`;
   const _search = "";
@@ -12060,7 +12074,7 @@ export async function mcp_create_folder_v1_mcp_folders_post(body: McpCreateFolde
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function mcp_update_folder_v1_mcp_folders__folder_id__patch(path: { folder_id: string }, body: McpUpdateFolder, init?: OmiApiClientInit): Promise<unknown> {
+export async function mcp_update_folder_v1_mcp_folders__folder_id__patch(path: { folder_id: string }, body: McpUpdateFolder, init?: OmiApiClientInit): Promise<McpFolder> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/folders/${path.folder_id}`;
   const _search = "";
@@ -12077,7 +12091,7 @@ export async function mcp_update_folder_v1_mcp_folders__folder_id__patch(path: {
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function mcp_delete_folder_v1_mcp_folders__folder_id__delete(path: { folder_id: string }, query: { move_to_folder_id?: string | null }, init?: OmiApiClientInit): Promise<unknown> {
+export async function mcp_delete_folder_v1_mcp_folders__folder_id__delete(path: { folder_id: string }, query: { move_to_folder_id?: string | null }, init?: OmiApiClientInit): Promise<McpStatusResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/folders/${path.folder_id}`;
   const _params = query ? Object.entries(query)

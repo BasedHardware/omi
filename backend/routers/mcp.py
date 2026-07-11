@@ -260,12 +260,25 @@ def _folder_http_error(error: mcp_folders.FolderError) -> HTTPException:
     return HTTPException(status_code=400, detail=str(error))
 
 
-@router.get("/v1/mcp/folders", tags=["mcp"])
+class McpFolder(BaseModel):
+    id: str = ""
+    name: str = ""
+    description: Optional[str] = None
+    color: Optional[str] = None
+    icon: Optional[str] = None
+    is_system: bool = False
+    is_default: bool = False
+    conversation_count: int = 0
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+@router.get("/v1/mcp/folders", response_model=List[McpFolder], tags=["mcp"])
 def mcp_get_folders(uid: str = Depends(get_uid_from_mcp_api_key)):
     return [clean_folder(f) for f in mcp_folders.list_folders(uid)]
 
 
-@router.post("/v1/mcp/folders", tags=["mcp"])
+@router.post("/v1/mcp/folders", response_model=McpFolder, tags=["mcp"])
 def mcp_create_folder(
     request: McpCreateFolder,
     uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "folders:write")),
@@ -279,7 +292,7 @@ def mcp_create_folder(
     return clean_folder(folder)
 
 
-@router.patch("/v1/mcp/folders/{folder_id}", tags=["mcp"])
+@router.patch("/v1/mcp/folders/{folder_id}", response_model=McpFolder, tags=["mcp"])
 def mcp_update_folder(folder_id: str, request: McpUpdateFolder, uid: str = Depends(get_uid_from_mcp_api_key)):
     try:
         folder = mcp_folders.update_folder(
@@ -295,7 +308,7 @@ def mcp_update_folder(folder_id: str, request: McpUpdateFolder, uid: str = Depen
     return clean_folder(folder)
 
 
-@router.delete("/v1/mcp/folders/{folder_id}", tags=["mcp"])
+@router.delete("/v1/mcp/folders/{folder_id}", response_model=McpStatusResponse, tags=["mcp"])
 def mcp_delete_folder(
     folder_id: str, move_to_folder_id: Optional[str] = None, uid: str = Depends(get_uid_from_mcp_api_key)
 ):
@@ -306,7 +319,7 @@ def mcp_delete_folder(
     return {"status": "ok"}
 
 
-@router.patch("/v1/mcp/conversations/{conversation_id}/folder", tags=["mcp"])
+@router.patch("/v1/mcp/conversations/{conversation_id}/folder", response_model=McpStatusResponse, tags=["mcp"])
 def mcp_move_conversation_to_folder(
     conversation_id: str, request: McpMoveConversation, uid: str = Depends(get_uid_from_mcp_api_key)
 ):

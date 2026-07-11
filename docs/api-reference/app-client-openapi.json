@@ -12634,6 +12634,94 @@
         "title": "McpCreateFolder",
         "type": "object"
       },
+      "McpFolder": {
+        "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "conversation_count": {
+            "default": 0,
+            "title": "Conversation Count",
+            "type": "integer"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_default": {
+            "default": false,
+            "title": "Is Default",
+            "type": "boolean"
+          },
+          "is_system": {
+            "default": false,
+            "title": "Is System",
+            "type": "boolean"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "title": "McpFolder",
+        "type": "object"
+      },
       "McpMoveConversation": {
         "properties": {
           "folder_id": {
@@ -39868,7 +39956,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/McpStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -40006,7 +40096,13 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/McpFolder"
+                  },
+                  "title": "Response Mcp Get Folders V1 Mcp Folders Get",
+                  "type": "array"
+                }
               }
             },
             "description": "Successful Response"
@@ -40041,7 +40137,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/McpFolder"
+                }
               }
             },
             "description": "Successful Response"
@@ -40105,7 +40203,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/McpStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -40164,7 +40264,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/McpFolder"
+                }
               }
             },
             "description": "Successful Response"
