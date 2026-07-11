@@ -85,9 +85,9 @@
     /* Glass — reserved for floating surfaces (bar, toasts); content panels
        are solid. */
     --glass-bg: rgba(0, 0, 0, 0.42);
-    --glass-bg-subtle: rgba(0, 0, 0, 0.30);
+    --glass-bg-subtle: rgba(0, 0, 0, 0.3);
     --glass-bg-strong: rgba(0, 0, 0, 0.52);
-    --glass-border: rgba(255, 255, 255, 0.10);
+    --glass-border: rgba(255, 255, 255, 0.1);
     --glass-border-strong: rgba(255, 255, 255, 0.18);
     --glass-highlight: rgba(255, 255, 255, 0.07);
     --glass-blur: 24px;
@@ -103,11 +103,7 @@
        the SF Pro analog — deterministic rendering on every machine, closest
        to the Mac app's feel. Segoe UI Variable stays as the fallback stack. */
     --font-app:
-      'Inter Variable',
-      'Segoe UI Variable Text',
-      'Segoe UI Variable',
-      'Segoe UI',
-      system-ui,
+      'Inter Variable', 'Segoe UI Variable Text', 'Segoe UI Variable', 'Segoe UI', system-ui,
       sans-serif;
   }
 
@@ -115,12 +111,7 @@
      escape hatch): data-font="segoe" renders the whole app in Segoe UI
      Variable instead of Inter. */
   html[data-font='segoe'] {
-    --font-app:
-      'Segoe UI Variable Text',
-      'Segoe UI Variable',
-      'Segoe UI',
-      system-ui,
-      sans-serif;
+    --font-app: 'Segoe UI Variable Text', 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
   }
 
   html,
@@ -181,9 +172,18 @@
   }
 
   @keyframes auraDrift {
-    0% { opacity: 0.6; transform: translate(0, 0) scale(1); }
-    50% { opacity: 1; transform: translate(10px, -10px) scale(1.05); }
-    100% { opacity: 0.6; transform: translate(-10px, 10px) scale(1); }
+    0% {
+      opacity: 0.6;
+      transform: translate(0, 0) scale(1);
+    }
+    50% {
+      opacity: 1;
+      transform: translate(10px, -10px) scale(1.05);
+    }
+    100% {
+      opacity: 0.6;
+      transform: translate(-10px, 10px) scale(1);
+    }
   }
 
   .panel-header {
@@ -262,7 +262,9 @@
      don't jitter as values tick. */
   .tnum {
     font-variant-numeric: tabular-nums lining-nums;
-    font-feature-settings: 'tnum' 1, 'lnum' 1;
+    font-feature-settings:
+      'tnum' 1,
+      'lnum' 1;
   }
 
   .btn-primary {
@@ -338,15 +340,25 @@
   /* Dashboard widget surface (Home): solid raised panel on the flat canvas.
      Fixed height so cards never grow with their content — sized to fit the
      header + 2 preview rows + a "+N more" line; shorter content just leaves
-     empty space at the bottom. */
+     empty space at the bottom.
+
+     Elevation: --surface (#1a1a1a) sits only ~11 levels above the --bg-primary
+     (#0f0f0f) canvas, so with a 9%-white hairline and no shadow the card frame
+     nearly vanished into the dark ("sucked into the black"). Raise it to
+     --bg-tertiary (#252525, a real elevation step), strengthen the border, and
+     add a soft drop shadow so the panel reads as a distinct raised surface. */
   .widget-card {
     @apply flex h-40 flex-col rounded-section border p-4 transition-colors duration-200;
-    background: var(--surface);
-    border-color: var(--border);
+    background: var(--bg-tertiary);
+    border-color: var(--border-strong);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
   }
 
+  /* Hover lifts one step LIGHTER (--bg-quaternary #343438) — the old value
+     (--bg-raised #1f1f22) was darker than the new resting tone and read as a
+     dip, not a lift. */
   .widget-card:hover {
-    background: var(--bg-raised);
+    background: var(--bg-quaternary);
     border-color: var(--border-strong);
   }
 
