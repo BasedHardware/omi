@@ -29,8 +29,13 @@ const PRE_ROLL_MS = 2000
 const SAMPLE_RATE = 16000
 
 export type PttCapture = {
-  /** Live analyser for the waveform visualizer. */
+  /** Live analyser for the waveform visualizer (heavily smoothed → springy bars). */
   analyser: AnalyserNode
+  /** Second analyser with (near-)zero smoothing, for the orb's per-syllable
+   *  reactivity. The bars' smoothing lags ~600ms — too slow for the blob — so
+   *  the orb reads its own fast tap and does its own (fast attack / slow
+   *  release) shaping downstream. */
+  orbAnalyser: AnalyserNode
   /** Stop appending new audio and, after DRAIN_MS (so the in-flight
    *  ScriptProcessor window lands), resolve the full captured buffer. Idempotent —
    *  repeat calls share one promise. Detaches from a warm graph (which keeps
@@ -62,6 +67,7 @@ type MicGraph = {
   source: MediaStreamAudioSourceNode
   processor: ScriptProcessorNode
   analyser: AnalyserNode
+  orbAnalyser: AnalyserNode
   subscribers: Set<(pcm: Int16Array) => void>
   ring: Int16Array[]
   ringSamples: number
@@ -79,6 +85,14 @@ async function createGraph(trackRing: boolean): Promise<MicGraph> {
   analyser.smoothingTimeConstant = 0.85 // smooth, springy bars
   source.connect(analyser)
 
+  // A second, (near-)zero-smoothing analyser dedicated to the orb: the bars'
+  // 0.85 smoothing lags ~600ms and mutes syllable transients. This one passes
+  // the raw per-poll level through; the orb's own envelope does the shaping.
+  const orbAnalyser = ctx.createAnalyser()
+  orbAnalyser.fftSize = 64
+  orbAnalyser.smoothingTimeConstant = 0.2
+  source.connect(orbAnalyser)
+
   const processor = ctx.createScriptProcessor(4096, 1, 1)
   source.connect(processor)
 
@@ -88,6 +102,7 @@ async function createGraph(trackRing: boolean): Promise<MicGraph> {
     source,
     processor,
     analyser,
+    orbAnalyser,
     subscribers: new Set(),
     ring: [],
     ringSamples: 0
@@ -247,6 +262,7 @@ export async function startPttCapture(opts: PttCaptureOptions = {}): Promise<Ptt
   let drainPromise: Promise<Int16Array> | null = null
   return {
     analyser: graph.analyser,
+    orbAnalyser: graph.orbAnalyser,
     drain: (): Promise<Int16Array> => {
       drainPromise ??= new Promise<Int16Array>((resolve) => {
         setTimeout(() => {

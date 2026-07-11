@@ -259,7 +259,11 @@ export type CaptureEvent =
   | { type: 'ptt-capped'; captureId: string }
   | { type: 'ptt-error'; captureId: string; message: string }
   // ~30fps 32-bin waveform snapshots for the PTT visualizer (routed to the owner).
-  | { type: 'ptt-levels'; captureId: string; bins: number[] }
+  // `orbLevel` (0..1) is a SEPARATE fast-response loudness for the orb: the bars'
+  // `bins` come from a heavily smoothed analyser (springy bars), which lags too
+  // much to wave the orb per syllable, so the capture window taps a second
+  // low-smoothing analyser just for the orb lane.
+  | { type: 'ptt-levels'; captureId: string; bins: number[]; orbLevel?: number }
   // The capture window was recreated/reloaded — UI windows re-issue their
   // standing commands (live-view, screen-view, an active PTT is abandoned).
   | { type: 'capture-window-restarted' }
@@ -279,6 +283,10 @@ export type CaptureEvent =
  *  in the capture window. */
 export type WaveformSource = {
   getByteFrequencyData: (dest: Uint8Array) => void
+  /** Fast-response loudness 0..1 for the orb, when the source provides one (the
+   *  IPC PTT adapter fills it from `ptt-levels.orbLevel`). Absent on a plain
+   *  `AnalyserNode`; the orb then falls back to RMS of the frequency bins. */
+  getOrbLevel?: () => number
 }
 
 export type OmiOverlayApi = {
