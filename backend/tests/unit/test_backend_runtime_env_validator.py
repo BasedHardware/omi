@@ -897,3 +897,94 @@ def test_memory_maintenance_auto_dev_workflow_is_listed_and_targets_job():
         '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml'
         in manifest['environments']['dev']['cloud_run']['workflow_files']
     )
+
+
+def test_sync_backfill_co_deploy_is_required_per_workflow(tmp_path):
+    validator = load_validator()
+    values_file = tmp_path / 'backend_listen.yaml'
+    write_yaml(values_file, {'env': [{'name': 'OMI_LLM_GATEWAY_URL', 'value': 'http://gateway.local'}]})
+    incomplete = tmp_path / 'incomplete.yml'
+    write_yaml(
+        incomplete,
+        {
+            'env': {'SERVICE': 'backend'},
+            'jobs': {
+                'deploy': {
+                    'steps': [
+                        {
+                            'uses': 'google-github-actions/deploy-cloudrun@v2',
+                            'with': {
+                                'service': '${{ env.SERVICE }}-sync',
+                                'env_vars': 'SYNC_BACKFILL_ENABLED=true\n',
+                            },
+                        }
+                    ]
+                }
+            },
+        },
+    )
+    complete = tmp_path / 'complete.yml'
+    write_yaml(
+        complete,
+        {
+            'env': {'SERVICE': 'backend'},
+            'jobs': {
+                'deploy': {
+                    'steps': [
+                        {
+                            'uses': 'google-github-actions/deploy-cloudrun@v2',
+                            'with': {
+                                'service': '${{ env.SERVICE }}-sync',
+                                'env_vars': 'SYNC_BACKFILL_ENABLED=true\n',
+                            },
+                        },
+                        {
+                            'uses': 'google-github-actions/deploy-cloudrun@v2',
+                            'with': {
+                                'service': '${{ env.SERVICE }}-sync-backfill',
+                                'env_vars': 'SYNC_BACKFILL_ENABLED=true\n',
+                            },
+                        },
+                    ]
+                }
+            },
+        },
+    )
+    manifest_path = tmp_path / 'runtime_env.yaml'
+    write_yaml(
+        manifest_path,
+        {
+            'schema_version': 1,
+            'environments': {
+                'dev': {
+                    'gcp_project': 'based-hardware-dev',
+                    'runtime_gcp_project': 'based-hardware',
+                    'region': 'us-central1',
+                    'gke': {
+                        'backend-listen': {
+                            'values_file': str(values_file),
+                            'env': {'OMI_LLM_GATEWAY_URL': {'value': 'http://gateway.local'}},
+                        }
+                    },
+                    'cloud_run': {
+                        'workflow_files': [str(incomplete), str(complete)],
+                        'services': {
+                            'backend-sync': {'env': {}, 'secrets': {}},
+                            'backend-sync-backfill': {'env': {}, 'secrets': {}},
+                        },
+                        'jobs': {},
+                    },
+                }
+            },
+        },
+    )
+
+    errors = validator.validate_runtime_env(env='dev', manifest_path=manifest_path, check_workflows=True)
+
+    assert any(
+        error.message == 'deploys backend-sync without backend-sync-backfill' and str(incomplete) in error.scope
+        for error in errors
+    )
+    assert not any(
+        str(complete) in error.scope and 'without backend-sync-backfill' in error.message for error in errors
+    )

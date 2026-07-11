@@ -18,7 +18,7 @@ import repair_cloud_run_traffic  # noqa: E402
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
 DEFAULT_REGION = 'us-central1'
-DEFAULT_SERVICES = ('backend', 'backend-sync', 'backend-integration')
+DEFAULT_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
 
 
 @dataclass(frozen=True)
