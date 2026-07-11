@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from models.action_item import EvidenceRef
 from models.task_intelligence import StableId
@@ -53,7 +53,7 @@ class GoalMetric(BaseModel):
 
 
 class GoalCreate(BaseModel):
-    """Canonical create shape; legacy numeric fields remain accepted at this boundary."""
+    """Canonical create shape with explicit compatibility for released request fields."""
 
     model_config = ConfigDict(extra='forbid')
 
@@ -73,6 +73,32 @@ class GoalCreate(BaseModel):
     min_value: Optional[float] = None
     max_value: Optional[float] = None
     unit: Optional[str] = Field(default=None, max_length=64)
+
+    @model_validator(mode='before')
+    @classmethod
+    def normalize_legacy_description(cls, value: object) -> object:
+        """Promote the released `description` field without overriding its canonical replacement."""
+        if not isinstance(value, dict) or 'description' not in value:
+            return value
+        normalized = dict(value)
+        description = normalized.pop('description')
+        if normalized.get('desired_outcome') is None:
+            normalized['desired_outcome'] = description
+        return normalized
+
+    @field_validator('source', mode='before')
+    @classmethod
+    def normalize_legacy_source(cls, value: object) -> object:
+        """Normalize source values emitted by released desktop clients."""
+        if not isinstance(value, str):
+            return value
+        legacy_sources = {
+            'ai': GoalSource.ai_suggested,
+            'onboarding_step_flow': GoalSource.user,
+            'onboarding_typed': GoalSource.user,
+            'onboarding_selected': GoalSource.user,
+        }
+        return legacy_sources.get(value, value)
 
     @model_validator(mode='after')
     def normalize_legacy_metric(self):
