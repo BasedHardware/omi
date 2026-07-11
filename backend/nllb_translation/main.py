@@ -222,7 +222,7 @@ async def translate(req: TranslateRequest):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "model_loaded": _translator is not None}
+    return {"status": "ok", "model_loaded": _translator is not None, "model_dir": MODEL_DIR}
 
 
 @app.get("/ready")

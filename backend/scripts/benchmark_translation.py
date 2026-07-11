@@ -1,35 +1,43 @@
 #!/usr/bin/env python3
-"""Benchmark NLLB self-hosted translation against Google Cloud Translation V3.
+"""Benchmark self-hosted translation models against Google Cloud Translation V3.
 
-Uses WMT test sets via sacrebleu (no auth needed) as primary reference corpus.
-Evaluates with chrF++ (primary — robust for CJK and morphologically rich
-languages) and BLEU (secondary — widely understood baseline). Optionally
-runs COMET (neural metric, highest human-judgment correlation, needs GPU).
+Reusable benchmark for comparing any CTranslate2-based NLLB model variant
+(600M, 1.3B, 3.3B) against Google Cloud Translation V3. Uses WMT test sets
+via sacrebleu (no auth needed) as reference corpus.
 
-Languages are grouped into tiers (high/medium/low resource) to contextualize
-expected quality gaps between a distilled 600M model and a commercial API.
+Metrics: chrF++ (primary, robust for CJK), BLEU (secondary), COMET (optional).
+Results are labeled per model and saved as JSON + CSV for cross-model comparison.
 
-Usage:
-    # Install dependencies
+Prerequisites:
     pip install sacrebleu httpx google-cloud-translate
 
+Usage:
     # Dry run — validate dataset loading and dependencies
     python3 scripts/benchmark_translation.py --dry-run
 
-    # Full benchmark (requires NLLB deployed + Google Cloud credentials)
+    # Benchmark a specific model (label it for comparison)
     python3 scripts/benchmark_translation.py \
-        --nllb-url http://nllb-translation:8080 \
-        --output-dir /tmp/benchmark-results
+        --nllb-url http://localhost:10150 \
+        --model-name nllb-200-distilled-600M \
+        --output-dir /tmp/benchmark-results \
+        --skip-comet
+
+    # Compare multiple models (Google results cached, no re-billing)
+    for model in 600M 1.3B 3.3B; do
+        python3 scripts/benchmark_translation.py \
+            --nllb-url http://localhost:10150 \
+            --model-name "nllb-200-$model" \
+            --output-dir /tmp/benchmark-results \
+            --skip-comet
+    done
 
     # NLLB-only (skip Google, useful for quick iteration)
     python3 scripts/benchmark_translation.py \
-        --nllb-url http://nllb-translation:8080 \
-        --skip-google
+        --nllb-url http://localhost:10150 --skip-google
 
     # Specific languages only
     python3 scripts/benchmark_translation.py \
-        --nllb-url http://nllb-translation:8080 \
-        --languages es,zh,ja,de
+        --nllb-url http://localhost:10150 --languages de,zh,ja,ru,uk
 """
 
 import argparse
@@ -69,6 +77,22 @@ WMT_LANGPAIR_MAP: Dict[str, Tuple[str, str]] = {
 }
 
 
+def detect_model_name(nllb_url: str) -> str:
+    """Try to detect model name from NLLB service /health endpoint."""
+    try:
+        with httpx.Client(base_url=nllb_url, timeout=5.0) as client:
+            resp = client.get("/health")
+            if resp.status_code == 200:
+                data = resp.json()
+                model_dir = data.get("model_dir", "")
+                if model_dir:
+                    return model_dir.rstrip("/").split("/")[-1]
+                return data.get("model", data.get("model_name", "unknown"))
+    except Exception:
+        pass
+    return "unknown"
+
+
 def get_tier(lang: str) -> str:
     for tier, langs in LANG_TIERS.items():
         if lang in langs:
@@ -82,6 +106,12 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--nllb-url", type=str, default="http://localhost:8080", help="Base URL of NLLB service")
+    parser.add_argument(
+        "--model-name",
+        type=str,
+        default="",
+        help="Model name for labeling results (e.g. nllb-200-distilled-600M). Auto-detected from service if empty.",
+    )
     parser.add_argument(
         "--languages",
         type=str,
@@ -348,7 +378,7 @@ def run_benchmark_for_pair(
     return result
 
 
-def write_report(results: List[Dict[str, Any]], output_dir: Path) -> None:
+def write_report(results: List[Dict[str, Any]], output_dir: Path, model_name: str = "unknown") -> None:
     """Write JSON report (without raw translations) and CSV summary."""
     report_slim = []
     for r in results:
@@ -369,17 +399,23 @@ def write_report(results: List[Dict[str, Any]], output_dir: Path) -> None:
         }
         report_slim.append(entry)
 
-    json_path = output_dir / "benchmark_report.json"
+    report_name = model_name.replace("/", "_").replace(" ", "_")
+    json_path = output_dir / f"benchmark_{report_name}.json"
     with open(json_path, 'w', encoding='utf-8') as f:
         json.dump(
-            {"benchmark": "nllb-vs-google-wmt", "source": "en", "results": report_slim},
+            {
+                "benchmark": "nllb-vs-google-wmt",
+                "model": model_name,
+                "source": "en",
+                "results": report_slim,
+            },
             f,
             indent=2,
             ensure_ascii=False,
         )
     logger.info("JSON report: %s", json_path)
 
-    csv_path = output_dir / "benchmark_summary.csv"
+    csv_path = output_dir / f"benchmark_{report_name}.csv"
     with open(csv_path, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerow(
@@ -440,7 +476,7 @@ def _fmt4(v: Optional[float], w: int = 8) -> str:
     return f"{'--':>{w}}"
 
 
-def print_summary(results: List[Dict[str, Any]]) -> None:
+def print_summary(results: List[Dict[str, Any]], model_name: str = "unknown") -> None:
     """Print formatted summary table grouped by tier."""
     header = (
         f"{'Lang':>6s} {'Tier':>6s} {'Data':>5s}  "
@@ -451,7 +487,7 @@ def print_summary(results: List[Dict[str, Any]]) -> None:
     sep = "-" * len(header)
 
     print(f"\n{'=' * len(header)}")
-    print("BENCHMARK: NLLB-200-distilled-600M vs Google Cloud Translation V3")
+    print(f"BENCHMARK: {model_name} vs Google Cloud Translation V3")
     print("Corpus: WMT test sets (sacrebleu) | Source: English")
     print(f"{'=' * len(header)}")
     print(header)
@@ -611,6 +647,15 @@ def main() -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
     Path(args.cache_dir).mkdir(parents=True, exist_ok=True)
 
+    model_name = args.model_name
+    if not model_name:
+        model_name = detect_model_name(args.nllb_url)
+        if model_name == "unknown":
+            model_name = "nllb-200-distilled-600M"
+        logger.info("Model: %s (auto-detected)", model_name)
+    else:
+        logger.info("Model: %s", model_name)
+
     nllb_client: Optional[httpx.Client] = None
     try:
         nllb_client = httpx.Client(base_url=args.nllb_url, timeout=120.0)
@@ -662,8 +707,8 @@ def main() -> int:
         logger.info("Skipped %d languages (no WMT data): %s", len(skipped), ", ".join(skipped))
 
     if results:
-        write_report(results, output_dir)
-        print_summary(results)
+        write_report(results, output_dir, model_name)
+        print_summary(results, model_name)
     else:
         logger.error("No language pairs could be benchmarked")
         return 1
