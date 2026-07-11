@@ -32,6 +32,8 @@ covers:
   - desktop/macos/Desktop/Sources/ViewModelContainer.swift
   - desktop/macos/Desktop/Sources/Audio/BleAudioProcessor.swift
   - desktop/macos/Desktop/Sources/Audio/BleAudioService.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/RewindStorage.swift
+  - desktop/macos/Desktop/Sources/Services/QueryTracer.swift
 preconditions:
   - automation_bridge_ready
 
