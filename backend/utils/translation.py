@@ -27,10 +27,14 @@ from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
-TRANSLATION_MODE = os.environ.get("TRANSLATION_MODE", "google")
 HOSTED_TRANSLATION_API_URL = os.environ.get("HOSTED_TRANSLATION_API_URL", "")
+_TRANSLATION_MODE_RAW = os.environ.get("TRANSLATION_MODE", "")
+TRANSLATION_MODE = (
+    _TRANSLATION_MODE_RAW if _TRANSLATION_MODE_RAW else ("nllb" if HOSTED_TRANSLATION_API_URL else "google")
+)
 TRANSLATION_SHADOW_SAMPLE_RATE = float(os.environ.get("TRANSLATION_SHADOW_SAMPLE_RATE", "1.0"))
 TRANSLATION_SHADOW_TIMEOUT_SECONDS = float(os.environ.get("TRANSLATION_SHADOW_TIMEOUT_SECONDS", "2.0"))
+TRANSLATION_NLLB_TIMEOUT_SECONDS = float(os.environ.get("TRANSLATION_NLLB_TIMEOUT_SECONDS", "5.0"))
 
 # --- Prometheus metrics ---
 # Metric constructors are idempotent w.r.t. the default registry: if the module
@@ -660,6 +664,7 @@ class TranslationService:
         self.translation_cache: OrderedDict[str, Tuple[str, str]] = OrderedDict()
         self.MAX_CACHE_SIZE = 1000
         self._shadow_client: Optional[httpx.Client] = None
+        self._nllb_client: Optional[httpx.Client] = None
 
     def _get_shadow_client(self) -> httpx.Client:
         if self._shadow_client is None:
@@ -668,6 +673,67 @@ class TranslationService:
                 timeout=TRANSLATION_SHADOW_TIMEOUT_SECONDS,
             )
         return self._shadow_client
+
+    def _get_nllb_client(self) -> httpx.Client:
+        if self._nllb_client is None:
+            self._nllb_client = httpx.Client(
+                base_url=HOSTED_TRANSLATION_API_URL,
+                timeout=TRANSLATION_NLLB_TIMEOUT_SECONDS,
+            )
+        return self._nllb_client
+
+    def _translate_nllb_batch(
+        self, contents: List[str], dest_language: str, source_language: str = ""
+    ) -> List[Tuple[str, str]]:
+        TRANSLATION_BATCH_SIZE.labels(provider="nllb").observe(len(contents))
+        t0 = time.monotonic()
+        try:
+            client = self._get_nllb_client()
+            payload: Dict[str, object] = {
+                "contents": contents,
+                "target_language_code": dest_language,
+            }
+            if source_language:
+                payload["source_language_code"] = source_language
+            resp = client.post("/v1/translate", json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+            translations = data.get("translations", [])
+            results: List[Tuple[str, str]] = [
+                (t.get("translated_text", ""), t.get("detected_language_code", "")) for t in translations
+            ]
+            elapsed = time.monotonic() - t0
+            TRANSLATION_LATENCY.labels(provider="nllb", target_lang=dest_language).observe(elapsed)
+            TRANSLATION_REQUESTS.labels(provider="nllb", target_lang=dest_language, method="batch").inc()
+            total_chars = sum(len(c) for c in contents)
+            TRANSLATION_CHARS.labels(provider="nllb", target_lang=dest_language).inc(total_chars)
+            TRANSLATION_SENTENCES.labels(provider="nllb", target_lang=dest_language).inc(len(contents))
+            return results
+        except Exception:
+            TRANSLATION_ERRORS.labels(provider="nllb", error_type="api_error").inc()
+            raise
+
+    def _translate_batch(self, contents: List[str], dest_language: str, callsite: str = "") -> List[Tuple[str, str]]:
+        """Dispatch translation to the configured provider with fallback."""
+        if TRANSLATION_MODE == "nllb" and HOSTED_TRANSLATION_API_URL:
+            try:
+                results = self._translate_nllb_batch(contents, dest_language)
+                return results
+            except Exception as e:
+                logger.warning("NLLB translation failed, falling back to Google: %s", e)
+                record_fallback(
+                    component='other',
+                    from_mode='nllb',
+                    to_mode='google',
+                    reason='other',
+                    outcome='recovered',
+                    log=logger,
+                )
+                return self._translate_google_batch(contents, dest_language)
+        results = self._translate_google_batch(contents, dest_language)
+        if TRANSLATION_MODE == "shadow":
+            self._schedule_shadow_compare(callsite or "_translate_batch", dest_language, contents, results)
+        return results
 
     def _translate_google_batch(self, contents: List[str], dest_language: str) -> List[Tuple[str, str]]:
         TRANSLATION_BATCH_SIZE.labels(provider="google").observe(len(contents))
@@ -884,9 +950,9 @@ class TranslationService:
                 chunk_indices: List[int] = uncached_indices[chunk_start:chunk_end]
 
                 try:
-                    google_results = self._translate_google_batch(chunk, dest_language)
+                    batch_results = self._translate_batch(chunk, dest_language, "translate_text_by_sentence")
 
-                    for j, (trans_text, det_lang) in enumerate(google_results):
+                    for j, (trans_text, det_lang) in enumerate(batch_results):
                         idx = chunk_indices[j]
                         results[idx] = trans_text
                         detected_langs.append(det_lang)
@@ -894,8 +960,6 @@ class TranslationService:
                         text_hash = hashlib.md5(sentences[idx].encode()).hexdigest()
                         self._set_memory_cache(text_hash, dest_language, trans_text, det_lang)
                         cache_translation(text_hash, dest_language, trans_text, det_lang)
-
-                    self._schedule_shadow_compare("translate_text_by_sentence", dest_language, chunk, google_results)
 
                 except Exception as e:
                     logger.error(f"Batch translation error: {e}")
@@ -912,7 +976,7 @@ class TranslationService:
 
         translated_text = ' '.join(r for r in results if r is not None)
         elapsed = time.monotonic() - t0
-        provider = "google" if uncached_indices else "cache"
+        provider = TRANSLATION_MODE if uncached_indices else "cache"
         TRANSLATION_LATENCY.labels(provider=provider, target_lang=dest_language).observe(elapsed)
         TRANSLATION_REQUESTS.labels(provider=provider, target_lang=dest_language, method="by_sentence").inc()
         return (translated_text, dominant_lang)
@@ -1026,15 +1090,13 @@ class TranslationService:
                 chunk_hashes: List[str] = uncached_sent_hashes[chunk_start:chunk_end]
 
                 try:
-                    google_results = self._translate_google_batch(chunk, dest_language)
+                    batch_results = self._translate_batch(chunk, dest_language, "translate_units_batch")
 
-                    for j, (trans_text, det_lang) in enumerate(google_results):
+                    for j, (trans_text, det_lang) in enumerate(batch_results):
                         sent_hash = chunk_hashes[j]
                         self._set_memory_cache(sent_hash, dest_language, trans_text, det_lang)
                         cache_translation(sent_hash, dest_language, trans_text, det_lang)
                         sent_translation[sent_hash] = (trans_text, det_lang)
-
-                    self._schedule_shadow_compare("translate_units_batch", dest_language, chunk, google_results)
 
                 except Exception as e:
                     logger.error(f"Sentence-level batch translation error: {e}")
@@ -1115,7 +1177,7 @@ class TranslationService:
                 final_results.append((uid, orig_text, ''))
 
         elapsed = time.monotonic() - t0
-        provider = "google" if uncached_sent_hashes else "cache"
+        provider = TRANSLATION_MODE if uncached_sent_hashes else "cache"
         TRANSLATION_LATENCY.labels(provider=provider, target_lang=dest_language).observe(elapsed)
         TRANSLATION_REQUESTS.labels(provider=provider, target_lang=dest_language, method="units_batch").inc()
 
@@ -1147,20 +1209,20 @@ class TranslationService:
             return result
 
         try:
-            google_results = self._translate_google_batch([text], dest_language)
-            translated_text, detected_lang = google_results[0]
+            batch_results = self._translate_batch([text], dest_language, "translate_text")
+            translated_text, detected_lang = batch_results[0]
 
             self._set_memory_cache(text_hash, dest_language, translated_text, detected_lang)
             cache_translation(text_hash, dest_language, translated_text, detected_lang)
 
-            self._schedule_shadow_compare("translate_text", dest_language, [text], google_results)
-
             elapsed = time.monotonic() - t0
-            TRANSLATION_LATENCY.labels(provider="google", target_lang=dest_language).observe(elapsed)
-            TRANSLATION_REQUESTS.labels(provider="google", target_lang=dest_language, method="translate_text").inc()
+            TRANSLATION_LATENCY.labels(provider=TRANSLATION_MODE, target_lang=dest_language).observe(elapsed)
+            TRANSLATION_REQUESTS.labels(
+                provider=TRANSLATION_MODE, target_lang=dest_language, method="translate_text"
+            ).inc()
 
             return (translated_text, detected_lang)
         except Exception as e:
             logger.error(f"Translation error: {e}")
-            TRANSLATION_ERRORS.labels(provider="google", error_type="translate_text_error").inc()
+            TRANSLATION_ERRORS.labels(provider=TRANSLATION_MODE, error_type="translate_text_error").inc()
             return (text, "")

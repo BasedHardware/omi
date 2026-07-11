@@ -603,5 +603,208 @@ class TestNLLBLanguageMapping(unittest.TestCase):
             self.skipTest("nllb_translation dependencies not installed")
 
 
+class TestNllbPrimaryMode(unittest.TestCase):
+    """Tests for TRANSLATION_MODE=nllb where NLLB is the primary provider."""
+
+    def setUp(self):
+        self.service = _TranslationService()
+        self._orig_mode = _translation_module.TRANSLATION_MODE
+        self._orig_url = _translation_module.HOSTED_TRANSLATION_API_URL
+
+    def tearDown(self):
+        _translation_module.TRANSLATION_MODE = self._orig_mode
+        _translation_module.HOSTED_TRANSLATION_API_URL = self._orig_url
+        self.service._nllb_client = None
+
+    def test_nllb_batch_returns_translations(self):
+        _translation_module.TRANSLATION_MODE = "nllb"
+        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
+
+        mock_client = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = {
+            "translations": [
+                {"translated_text": "Hola", "detected_language_code": "en"},
+                {"translated_text": "Mundo", "detected_language_code": "en"},
+            ],
+            "model": "nllb-200-distilled-600M",
+            "latency_ms": 42,
+        }
+        mock_client.post.return_value = mock_resp
+
+        with patch("utils.translation.httpx.Client", return_value=mock_client):
+            self.service._nllb_client = None
+            results = self.service._translate_nllb_batch(["Hello", "World"], "es")
+            self.assertEqual(len(results), 2)
+            self.assertEqual(results[0], ("Hola", "en"))
+            self.assertEqual(results[1], ("Mundo", "en"))
+
+    def test_translate_batch_uses_nllb_when_mode_nllb(self):
+        _translation_module.TRANSLATION_MODE = "nllb"
+        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
+
+        with patch.object(self.service, '_translate_nllb_batch', return_value=[("Hola", "en")]) as mock_nllb:
+            with patch.object(self.service, '_translate_google_batch') as mock_google:
+                results = self.service._translate_batch(["Hello"], "es")
+                mock_nllb.assert_called_once_with(["Hello"], "es")
+                mock_google.assert_not_called()
+                self.assertEqual(results, [("Hola", "en")])
+
+    def test_translate_batch_falls_back_to_google_on_nllb_error(self):
+        _translation_module.TRANSLATION_MODE = "nllb"
+        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
+
+        with patch.object(self.service, '_translate_nllb_batch', side_effect=Exception("connection refused")):
+            with patch.object(self.service, '_translate_google_batch', return_value=[("Hola", "en")]) as mock_google:
+                with patch("utils.translation.record_fallback") as mock_fallback:
+                    results = self.service._translate_batch(["Hello"], "es")
+                    mock_google.assert_called_once()
+                    mock_fallback.assert_called_once()
+                    call_kwargs = mock_fallback.call_args[1]
+                    self.assertEqual(call_kwargs["from_mode"], "nllb")
+                    self.assertEqual(call_kwargs["to_mode"], "google")
+                    self.assertEqual(call_kwargs["outcome"], "recovered")
+                    self.assertEqual(results, [("Hola", "en")])
+
+    def test_translate_batch_uses_google_in_google_mode(self):
+        _translation_module.TRANSLATION_MODE = "google"
+        _translation_module.HOSTED_TRANSLATION_API_URL = ""
+
+        with patch.object(self.service, '_translate_nllb_batch') as mock_nllb:
+            with patch.object(self.service, '_translate_google_batch', return_value=[("Hola", "en")]) as mock_google:
+                results = self.service._translate_batch(["Hello"], "es")
+                mock_google.assert_called_once()
+                mock_nllb.assert_not_called()
+
+    def test_translate_text_uses_nllb_in_nllb_mode(self):
+        _translation_module.TRANSLATION_MODE = "nllb"
+        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
+        _mock_redis.get.return_value = None
+
+        with patch.object(self.service, '_translate_batch', return_value=[("Hola mundo", "en")]) as mock_batch:
+            result = self.service.translate_text("es", "Hello world")
+            self.assertEqual(result[0], "Hola mundo")
+            mock_batch.assert_called_once()
+
+    def test_translate_units_batch_uses_nllb_in_nllb_mode(self):
+        _translation_module.TRANSLATION_MODE = "nllb"
+        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
+        _mock_redis.get.return_value = None
+
+        with patch.object(self.service, '_translate_batch', return_value=[("Hola mundo", "en")]) as mock_batch:
+            units = [("seg1", "Hello world")]
+            results = self.service.translate_units_batch("es", units)
+            self.assertEqual(len(results), 1)
+            self.assertEqual(results[0][0], "seg1")
+            self.assertEqual(results[0][1], "Hola mundo")
+            mock_batch.assert_called()
+
+
+class TestTranslationModeAutoDetect(unittest.TestCase):
+    """Tests for auto-detection of TRANSLATION_MODE based on HOSTED_TRANSLATION_API_URL."""
+
+    def test_auto_detect_nllb_when_url_set(self):
+        import importlib
+
+        orig_env_mode = os.environ.get("TRANSLATION_MODE", "")
+        orig_env_url = os.environ.get("HOSTED_TRANSLATION_API_URL", "")
+        try:
+            os.environ.pop("TRANSLATION_MODE", None)
+            os.environ["HOSTED_TRANSLATION_API_URL"] = "http://nllb:8080"
+            for mod_name in list(sys.modules.keys()):
+                if 'translation' in mod_name and 'test' not in mod_name:
+                    del sys.modules[mod_name]
+            _restore_real_backend_package("utils")
+            import utils.translation as tm_fresh
+
+            self.assertEqual(tm_fresh.TRANSLATION_MODE, "nllb")
+        finally:
+            if orig_env_mode:
+                os.environ["TRANSLATION_MODE"] = orig_env_mode
+            else:
+                os.environ.pop("TRANSLATION_MODE", None)
+            if orig_env_url:
+                os.environ["HOSTED_TRANSLATION_API_URL"] = orig_env_url
+            else:
+                os.environ.pop("HOSTED_TRANSLATION_API_URL", None)
+            for mod_name in list(sys.modules.keys()):
+                if 'translation' in mod_name and 'test' not in mod_name:
+                    del sys.modules[mod_name]
+            _restore_real_backend_package("utils")
+            from utils.translation import TranslationService
+            import utils.translation as tm_restored
+
+            globals()['_TranslationService'] = TranslationService
+            globals()['_translation_module'] = tm_restored
+
+    def test_auto_detect_google_when_no_url(self):
+        import importlib
+
+        orig_env_mode = os.environ.get("TRANSLATION_MODE", "")
+        orig_env_url = os.environ.get("HOSTED_TRANSLATION_API_URL", "")
+        try:
+            os.environ.pop("TRANSLATION_MODE", None)
+            os.environ.pop("HOSTED_TRANSLATION_API_URL", None)
+            for mod_name in list(sys.modules.keys()):
+                if 'translation' in mod_name and 'test' not in mod_name:
+                    del sys.modules[mod_name]
+            _restore_real_backend_package("utils")
+            import utils.translation as tm_fresh
+
+            self.assertEqual(tm_fresh.TRANSLATION_MODE, "google")
+        finally:
+            if orig_env_mode:
+                os.environ["TRANSLATION_MODE"] = orig_env_mode
+            else:
+                os.environ.pop("TRANSLATION_MODE", None)
+            if orig_env_url:
+                os.environ["HOSTED_TRANSLATION_API_URL"] = orig_env_url
+            else:
+                os.environ.pop("HOSTED_TRANSLATION_API_URL", None)
+            for mod_name in list(sys.modules.keys()):
+                if 'translation' in mod_name and 'test' not in mod_name:
+                    del sys.modules[mod_name]
+            _restore_real_backend_package("utils")
+            from utils.translation import TranslationService
+            import utils.translation as tm_restored
+
+            globals()['_TranslationService'] = TranslationService
+            globals()['_translation_module'] = tm_restored
+
+    def test_explicit_mode_overrides_auto_detect(self):
+        orig_env_mode = os.environ.get("TRANSLATION_MODE", "")
+        orig_env_url = os.environ.get("HOSTED_TRANSLATION_API_URL", "")
+        try:
+            os.environ["TRANSLATION_MODE"] = "shadow"
+            os.environ["HOSTED_TRANSLATION_API_URL"] = "http://nllb:8080"
+            for mod_name in list(sys.modules.keys()):
+                if 'translation' in mod_name and 'test' not in mod_name:
+                    del sys.modules[mod_name]
+            _restore_real_backend_package("utils")
+            import utils.translation as tm_fresh
+
+            self.assertEqual(tm_fresh.TRANSLATION_MODE, "shadow")
+        finally:
+            if orig_env_mode:
+                os.environ["TRANSLATION_MODE"] = orig_env_mode
+            else:
+                os.environ.pop("TRANSLATION_MODE", None)
+            if orig_env_url:
+                os.environ["HOSTED_TRANSLATION_API_URL"] = orig_env_url
+            else:
+                os.environ.pop("HOSTED_TRANSLATION_API_URL", None)
+            for mod_name in list(sys.modules.keys()):
+                if 'translation' in mod_name and 'test' not in mod_name:
+                    del sys.modules[mod_name]
+            _restore_real_backend_package("utils")
+            from utils.translation import TranslationService
+            import utils.translation as tm_restored
+
+            globals()['_TranslationService'] = TranslationService
+            globals()['_translation_module'] = tm_restored
+
+
 if __name__ == "__main__":
     unittest.main()
