@@ -24,6 +24,7 @@ from database.vector_db import upsert_memory_vector, delete_memory_vector
 import database.vector_db as vector_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.conversation_enums import CategoryEnum
+from models.conversation import AppResult
 from utils.conversations.render import populate_speaker_names, redact_conversations_for_list
 from utils.apps import update_personas_async
 from utils.llm.memories import identify_category_for_memory
@@ -461,6 +462,7 @@ class SimpleConversation(BaseModel):
     finished_at: Optional[datetime]
     structured: SimpleStructured
     language: Optional[str] = None
+    apps_results: List[AppResult] = []
 
 
 class FullConversation(SimpleConversation):
