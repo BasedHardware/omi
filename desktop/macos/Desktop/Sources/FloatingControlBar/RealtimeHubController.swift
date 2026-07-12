@@ -1238,6 +1238,18 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       log("RealtimeHub: session start rejected behind canceled-turn continuity fence")
       return
     }
+    // Managed (Omi-billed) sessions are gated by the monthly free-tier chat limit —
+    // realtime turns count as questions (desktop_chat_realtime), same pool as typed
+    // chat and PTT. BYOK/client-direct sessions are exempt. The backend enforces this
+    // too (mint/relay return 402 past the cap); this guard just avoids warming a
+    // session the server will refuse. No popup here — warms are speculative; the
+    // user-facing popup comes from the PTT/chat gates on an actual action.
+    if auth.isEphemeral, !APIKeyService.isByokActive,
+      FloatingBarUsageLimiter.shared.isLimitReached
+    {
+      log("RealtimeHub: managed session warm blocked — monthly free-tier chat limit reached")
+      return
+    }
     let topLevelContext = voiceSessionSeedContext()
     sessionVoiceSeedContextSnapshot = topLevelContext
     let instructions = RealtimeHubTools.systemInstruction(
