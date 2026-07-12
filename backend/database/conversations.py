@@ -1180,11 +1180,15 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
     speechmatics_ref = conversation_ref.collection('speechmatics_streaming')
     whisperx_ref = conversation_ref.collection('fal_whisperx')
 
+    # Sort each provider's segments by start time, tolerating a legacy/partial doc missing 'start'
+    # (a bare x['start'] would KeyError and 500 the whole transcripts response).
     return {
-        'deepgram': list(sorted([doc.to_dict() for doc in deepgram_ref.stream()], key=lambda x: x['start'])),
-        'soniox': list(sorted([doc.to_dict() for doc in soniox_ref.stream()], key=lambda x: x['start'])),
-        'speechmatics': list(sorted([doc.to_dict() for doc in speechmatics_ref.stream()], key=lambda x: x['start'])),
-        'whisperx': list(sorted([doc.to_dict() for doc in whisperx_ref.stream()], key=lambda x: x['start'])),
+        'deepgram': list(sorted([doc.to_dict() for doc in deepgram_ref.stream()], key=lambda x: x.get('start', 0))),
+        'soniox': list(sorted([doc.to_dict() for doc in soniox_ref.stream()], key=lambda x: x.get('start', 0))),
+        'speechmatics': list(
+            sorted([doc.to_dict() for doc in speechmatics_ref.stream()], key=lambda x: x.get('start', 0))
+        ),
+        'whisperx': list(sorted([doc.to_dict() for doc in whisperx_ref.stream()], key=lambda x: x.get('start', 0))),
     }
 
 
