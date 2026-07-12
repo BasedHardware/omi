@@ -323,8 +323,8 @@
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
-      "__panelId__": "9",
+      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "__panelId__": "21",
       "summary": "Backend-listen has zero ready pods \u2014 all replicas are down or failing health checks",
       "threshold": "< 1 ready pod"
     },
