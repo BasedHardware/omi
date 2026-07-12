@@ -1563,7 +1563,32 @@ actor ActionItemStorage {
     }
   }
 
-  /// Clear all agent fields for a task (when user stops/removes session)
+  /// Stamp when a background investigation last started for a task —
+  /// RecurringTaskScheduler's dedup gate. Leaves all other agent fields alone.
+  func updateAgentStartedAt(
+    taskId: String,
+    startedAt: Date,
+    authorization: LocalMutationAuthorization
+  ) async throws {
+    try authorization.require()
+    let db = try await ensureInitialized()
+
+    try await authorization.withCommitLease {
+      try await db.write { database in
+        try authorization.require()
+        guard var rec = try Self.fetchRecord(database, surfacedId: taskId) else {
+          log("ActionItemStorage: updateAgentStartedAt - record not found for taskId \(taskId)")
+          return
+        }
+
+        rec.agentStartedAt = startedAt
+        try rec.update(database)
+        try authorization.require()
+      }
+    }
+  }
+
+    /// Clear all agent fields for a task (when user stops/removes session)
   func clearAgentState(
     taskId: String,
     authorization: LocalMutationAuthorization
