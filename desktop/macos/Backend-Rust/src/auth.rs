@@ -92,7 +92,7 @@ pub struct AuthError {
 
 impl IntoResponse for AuthError {
     fn into_response(self) -> Response {
-        let status = if self.error == "trial_expired" {
+        let status = if self.error == "trial_expired" || self.error == "quota_exceeded" {
             StatusCode::PAYMENT_REQUIRED
         } else if self.error == "byok_validation_failed" {
             StatusCode::FORBIDDEN
@@ -520,6 +520,7 @@ where
         // Validates SHA-256 fingerprints against Firestore enrollment.
         // Non-BYOK users who send BYOK headers get them silently cleared.
         let mut byok_stripped = false;
+        let mut byok_active = false;
         if let Some(byok_ext) = parts.extensions.get::<crate::byok::ByokCacheExt>() {
             // Get the Firestore service from the paywall checker (shares the same Arc)
             if let Some(checker) = parts.extensions.get::<crate::paywall::PaywallCheckerExt>() {
@@ -528,6 +529,7 @@ where
                 match crate::byok::validate_byok_request(&uid, &parts.headers, &byok_state) {
                     Ok(crate::byok::ByokValidation::Active) => {
                         // BYOK keys validated, proceed with user's keys
+                        byok_active = true;
                     }
                     Ok(crate::byok::ByokValidation::Inactive { clear_headers }) => {
                         byok_stripped = clear_headers;
@@ -563,6 +565,25 @@ where
             );
         }
 
+        // Monthly free-tier quota gate. BYOK users pay their own provider bill,
+        // so only Omi-managed spend is gated. Fails open inside the checker.
+        if !byok_active {
+            if let Some(quota) = parts.extensions.get::<crate::quota::ChatQuotaCheckerExt>() {
+                if quota.0.is_quota_blocked(&uid, token).await {
+                    return Err(AuthError {
+                        error: "quota_exceeded".to_string(),
+                        message: "Monthly free limit reached. Upgrade or bring your own keys."
+                            .to_string(),
+                    });
+                }
+            } else {
+                tracing::warn!(
+                    "PaywalledAuthUser: ChatQuotaChecker extension missing, failing open for uid={}",
+                    uid
+                );
+            }
+        }
+
         Ok(PaywalledAuthUser {
             uid,
             name,
@@ -577,6 +598,13 @@ pub fn paywall_checker_extension(
     checker: Arc<crate::paywall::PaywallChecker>,
 ) -> axum::Extension<crate::paywall::PaywallCheckerExt> {
     axum::Extension(crate::paywall::PaywallCheckerExt(checker))
+}
+
+/// Layer that adds the chat-quota checker to request extensions.
+pub fn chat_quota_checker_extension(
+    checker: Arc<crate::quota::ChatQuotaChecker>,
+) -> axum::Extension<crate::quota::ChatQuotaCheckerExt> {
+    axum::Extension(crate::quota::ChatQuotaCheckerExt(checker))
 }
 
 /// Layer that adds the BYOK state cache to request extensions.

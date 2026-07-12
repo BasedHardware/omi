@@ -47,12 +47,14 @@ mod fallback;
 mod llm;
 mod models;
 mod paywall;
+mod quota;
 mod routes;
 mod services;
 mod vertex;
 
 use auth::{
-    byok_cache_extension, firebase_auth_extension, paywall_checker_extension, FirebaseAuth,
+    byok_cache_extension, chat_quota_checker_extension, firebase_auth_extension,
+    paywall_checker_extension, FirebaseAuth,
 };
 use byok::ByokStateCache;
 use config::Config;
@@ -332,6 +334,9 @@ async fn main() {
         byok_cache.clone(),
     ));
 
+    // Monthly chat-quota checker — asks the Python backend (quota SoT) per uid.
+    let chat_quota_checker = Arc::new(quota::ChatQuotaChecker::new(config.base_api_url.clone()));
+
     let state = AppState {
         firestore,
         integrations,
@@ -378,6 +383,7 @@ async fn main() {
         .merge(auth_router)
         .layer(firebase_auth_extension(firebase_auth))
         .layer(paywall_checker_extension(paywall_checker))
+        .layer(chat_quota_checker_extension(chat_quota_checker))
         .layer(byok_cache_extension(byok_cache))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
