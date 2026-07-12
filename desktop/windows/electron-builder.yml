@@ -62,9 +62,12 @@ mac:
 dmg:
   artifactName: ${name}-${version}.${ext}
 linux:
+  # snap intentionally omitted: its default strict confinement blocks xprop,
+  # tesseract, and /proc/<pid>/exe, silently degrading active-window detection
+  # and OCR. Ship AppImage + deb (unconfined); revisit snap with classic
+  # confinement or explicit plugs if needed.
   target:
     - AppImage
-    - snap
     - deb
   maintainer: Based Hardware <team@basedhardware.com>
   category: Utility

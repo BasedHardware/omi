@@ -1,8 +1,9 @@
 # Omi on Linux
 
-Status: **MVP + screen-reading working** — builds, full test suite green (530
-passed), launches and renders on X11, app-usage tracking works, and **screen
-OCR ("what's on my screen") works** via a Tesseract-backed helper.
+Status: **MVP + screen-reading working** — builds, the full test suite passes
+(reproduce with `cd desktop/windows && npm test`), launches and renders on X11,
+app-usage tracking works, and **screen OCR ("what's on my screen") works** via a
+Tesseract-backed helper.
 
 ## Run from source
 ```bash
@@ -51,13 +52,17 @@ continuous capture explicitly. X11 sessions keep continuous Rewind on by default
   Windows (koffi) path is unchanged.
 - `src/main/automation/foregroundTargetLogic.ts` — uses `path.win32.basename` so
   exe-path comparison is correct on both Windows and Linux.
-- `resources/linux-ocr-helper/omi-ocr-helper` — a Node-script helper (executable,
-  `#!/usr/bin/env node`) that speaks the exact `ocr/helperProtocol.ts` stdio frame
-  protocol as `win-ocr-helper.exe`, backed by the `tesseract` CLI for OCR and
-  `xprop`/`/proc` for window info.
+- `resources/linux-ocr-helper/omi-ocr-helper` — a Node-script helper that speaks
+  the exact `ocr/helperProtocol.ts` stdio frame protocol as `win-ocr-helper.exe`,
+  backed by the `tesseract` CLI for OCR and `xprop`/`/proc` for window info.
+  `ocr/helperProcess.ts` spawns it with **Electron's bundled Node**
+  (`process.execPath` + `ELECTRON_RUN_AS_NODE=1`), so it needs no system `node`
+  in packaged AppImage/deb builds.
 - `src/main/ocr/resolveHelperPath.ts` — returns the Linux helper path on Linux;
-  the Windows path is unchanged. `electron-builder.yml` already unpacks
-  `resources/**`, so packaged Linux builds ship the helper.
+  the Windows path is unchanged. `electron-builder.yml` unpacks `resources/**`,
+  so packaged Linux builds ship the helper.
+- `electron-builder.yml` — Linux targets are **AppImage + deb** (snap omitted:
+  strict confinement blocks `xprop`/`tesseract`/`/proc`).
 
 ### Future enhancement
 For one-shot "look at my screen now" questions, a vision model (Claude vision, or
