@@ -19,8 +19,13 @@
 // (cursor leaves its footprint → grace → hide), suspended while voice/chat
 // activity is in flight (bar:keepAlive) so a spoken exchange isn't cut short.
 //
+// The HWND is created once and PERSISTS: after a one-time off-screen prime it is
+// never hidden/shown again — reveal moves it on-screen, dismiss parks it
+// off-screen (see the parking note by `barOnScreen`). This kills the OS
+// window-show fade that read as the pill "plummeting" from the top edge.
+//
 // Focus rules (the bar must never steal keystrokes):
-//   peek (hotkey tap / PTT)   → focusable:false, showInactive, click-through
+//   peek (hotkey tap / PTT)   → focusable:false, unpark inactive, click-through
 //                               with interactive islands
 //   ptt (dead — E2E only)     → same as peek
 //   expanded (click on pill)  → focusable:true + focused — the ONLY mode that
@@ -35,7 +40,8 @@ import {
   computeBarBounds,
   isCursorInPeekFootprint,
   isCursorOverPill,
-  type DisplayLike
+  type DisplayLike,
+  type Rect
 } from './placement'
 import { SummonGesture, type GestureKind } from './gesture'
 import {
@@ -56,7 +62,7 @@ let barReady = false
 let barEnabled = false
 let currentMode: BarMode | null = null
 /** True from the moment a graceful hide begins (slide-out sent) until the window
- *  is actually hidden. During this window win.isVisible() is still TRUE and
+ *  is actually parked. During this window barOnScreen is still TRUE and
  *  currentMode is still set, but the bar is on its way OUT — the summon gesture
  *  must treat it as NOT presented (see isBarCleanlyPresented): the live bug was a
  *  tap landing during a retract's slide-out seeing "visible", skipping showBar
@@ -67,27 +73,66 @@ let barHiding = false
 let barInteractive = false
 /** Display the bar is currently presented on (retract watchdog target). */
 let activeDisplayId: number | null = null
-let pendingShow: { mode: BarMode; reveal: BarReveal } | null = null
+let pendingShow: { mode: BarMode; reveal: BarReveal; bounds: Rect } | null = null
 let pendingPttDown = false
 let hideFallback: ReturnType<typeof setTimeout> | null = null
 // Per-reveal paint-ack handshake (see presentBar/commitReveal): the bar window
-// is ARMED (renderer told to reveal) but stays hidden until the renderer acks
+// is ARMED (renderer told to reveal) but stays parked until the renderer acks
 // it painted the revealed frame, so we never flash the previous off-screen
 // frame (blank-bar paint race). The token rejects stale acks from a reveal that
 // was cancelled or superseded before it painted.
 let revealToken = 0
-let pendingReveal: { token: number; mode: BarMode; reveal: BarReveal } | null = null
+let pendingReveal: { token: number; mode: BarMode; reveal: BarReveal; bounds: Rect } | null = null
 let revealFallback: ReturnType<typeof setTimeout> | null = null
 // If the renderer is wedged/slow and never acks, show anyway after this — the
 // bar must never become unsummonable.
 const REVEAL_ACK_FALLBACK_MS = 150
+
+// --- Persistent window / parking (kills the OS window-show fade) --------------
+// A transparent frameless window on Windows FADES IN whenever it goes hidden →
+// shown: Windows animates that first paint of the window surface via the OS
+// "Show animations" effect. It is DOM-independent (the pill's 96%-opaque surface
+// is visibly see-through for ~300ms even with every DOM element's opacity forced
+// to 1) and can't be disabled per-window (DWMWA_TRANSITIONS_FORCEDISABLED has no
+// effect) nor globally (turning the OS setting off makes transparent windows fail
+// to display — electron/electron#45730). It's what read as the pill "plummeting
+// from the top edge", and why prior renderer-only fixes changed nothing the user
+// saw — the motion was never in the DOM. (Diagnosed 2026-07-12 by frame capture:
+// HWND rect frozen, DOM grow-in-place, yet the window surface alpha-ramps on show.)
+//
+// Fix: NEVER hide()/show() the HWND after startup. The window is shown ONCE while
+// parked off-screen (the one unavoidable OS fade is spent invisibly, off-screen),
+// then every "hide" parks it off-screen and every reveal moves it back on-screen
+// — pure setBounds moves, which are instant and un-animated, so only the intended
+// CSS grow is ever visible. Logical visibility is tracked by `barOnScreen` (the
+// HWND is always technically visible after priming, so win.isVisible() can't be
+// the source of truth anymore).
+type ParkMode = 'offscreen' | 'opacity'
+// Evaluated live on 2026-07-12 (GDI frame capture of a real summon): 'offscreen'
+// moves the window to a far off-desktop point and back — instant, no fade, no
+// smear, and safe on every display layout (no real monitor is near the park
+// point). 'opacity' (setOpacity 0/1) was the alternative; see the evaluation note
+// in the PR for why 'offscreen' won.
+const PARK_MODE: ParkMode = 'offscreen'
+// Far outside any physical display (the classic Win32 "hidden window" corner). A
+// window here is fully off every monitor on any multi-display layout; moving it
+// back on-screen is a single atomic SetWindowPos (no slide, no smear).
+const PARKED_POS = { x: -32000, y: -32000 }
+/** Logical visibility: is the bar presented ON-SCREEN (revealed), as opposed to
+ *  parked (the new "hidden")? Replaces win.isVisible() everywhere — the primed
+ *  window is always technically visible, so isVisible() is useless as truth. */
+let barOnScreen = false
+/** True once the one-time off-screen prime show has run (the OS fade is spent). */
+let barPrimed = false
 
 export function getBarWindow(): BrowserWindow | null {
   return barWindow
 }
 
 export function isBarVisible(): boolean {
-  return !!(barWindow && !barWindow.isDestroyed() && barWindow.isVisible())
+  // Logical (on-screen) visibility — NOT win.isVisible(): the persistent window
+  // stays technically visible while parked off-screen (see the parking note).
+  return !!(barWindow && !barWindow.isDestroyed()) && barOnScreen
 }
 
 /** Whether the bar is up in a clean, interactive presentation (a real peek /
@@ -175,6 +220,8 @@ export function createBarWindow(): BrowserWindow {
     barWindow = null
     barReady = false
     currentMode = null
+    barOnScreen = false
+    barPrimed = false
     cancelPendingReveal()
   })
   win.webContents.on('did-fail-load', (_e, code, desc, url) =>
@@ -196,6 +243,9 @@ export function createBarWindow(): BrowserWindow {
   }
 
   barWindow = win
+  // Prime immediately: spend the one-time OS window-show fade off-screen so the
+  // very first real reveal is a fade-free on-screen move like every subsequent one.
+  primeBarWindow(win)
   return win
 }
 
@@ -239,12 +289,14 @@ export function showBar(mode: BarMode, reveal: BarReveal, display?: Electron.Dis
   const win = ensureBarWindow()
   const target = display ?? screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
   activeDisplayId = target.id
-  win.setBounds(computeBarBounds(displayLike(target)))
+  const bounds = computeBarBounds(displayLike(target))
+  // Do NOT move on-screen here — the window stays parked until commitReveal
+  // unparks it (after the paint ack), so a blank pre-reveal frame can't flash.
   if (!barReady) {
-    pendingShow = { mode, reveal }
+    pendingShow = { mode, reveal, bounds }
     return
   }
-  presentBar(win, mode, reveal)
+  presentBar(win, mode, reveal, bounds)
 }
 
 // Hit-testing rule (merge-blocker fix): the bar window is ALWAYS click-through
@@ -259,6 +311,46 @@ function applyClickThrough(win: BrowserWindow): void {
   win.setIgnoreMouseEvents(true, { forward: true })
 }
 
+/** One-time off-screen show at startup so the unavoidable OS window-show fade is
+ *  spent INVISIBLY (see the parking note). After this the HWND is never hidden or
+ *  re-shown — only moved/opacity-toggled — so no reveal ever fades. */
+function primeBarWindow(win: BrowserWindow): void {
+  if (barPrimed) return
+  barPrimed = true
+  const b = win.getBounds()
+  if (PARK_MODE === 'opacity') win.setOpacity(0)
+  else win.setBounds({ x: PARKED_POS.x, y: PARKED_POS.y, width: b.width, height: b.height })
+  win.showInactive()
+  win.setIgnoreMouseEvents(true, { forward: true })
+  barOnScreen = false
+  diag(`prime (${PARK_MODE}): off-screen show — OS window-show fade spent invisibly`)
+}
+
+/** Park the window — the persistent-window replacement for win.hide(). Keeps it
+ *  SHOWN (so no future OS show-fade) but invisible (off every display, or opacity
+ *  0) and click-through (no ghost hit-testing while parked). */
+function parkWindow(win: BrowserWindow): void {
+  barOnScreen = false
+  win.setIgnoreMouseEvents(true, { forward: true })
+  if (PARK_MODE === 'opacity') {
+    win.setOpacity(0)
+  } else {
+    const b = win.getBounds()
+    win.setBounds({ x: PARKED_POS.x, y: PARKED_POS.y, width: b.width, height: b.height })
+  }
+  diag(`park (${PARK_MODE})`)
+}
+
+/** Reveal the window on-screen at `bounds` — the persistent-window replacement
+ *  for win.showInactive(). A single atomic setBounds (offscreen) or opacity snap:
+ *  instant and un-animated, so only the intended CSS grow is ever visible. */
+function unparkWindow(win: BrowserWindow, bounds: Rect): void {
+  win.setBounds(bounds)
+  if (PARK_MODE === 'opacity') win.setOpacity(1)
+  barOnScreen = true
+  diag(`unpark (${PARK_MODE}) -> ${bounds.x},${bounds.y} ${bounds.width}x${bounds.height}`)
+}
+
 /** Invalidate an armed-but-not-yet-shown reveal (its token + fallback timer). */
 function cancelPendingReveal(): void {
   pendingReveal = null
@@ -269,12 +361,12 @@ function cancelPendingReveal(): void {
 }
 
 /**
- * ARM phase: prepare window state and tell the renderer to reveal, but do NOT
- * show the HWND yet. The window is shown in commitReveal, once the renderer
+ * ARM phase: prepare window state and tell the renderer to reveal, but keep the
+ * window PARKED (invisible). It is unparked in commitReveal, once the renderer
  * acks (bar:showAck) that it painted the revealed frame — otherwise the
  * compositor shows the previous off-screen frame first (the blank-bar race).
  */
-function presentBar(win: BrowserWindow, mode: BarMode, reveal: BarReveal): void {
+function presentBar(win: BrowserWindow, mode: BarMode, reveal: BarReveal, bounds: Rect): void {
   // A pending hide-fallback must not fire mid-reveal.
   if (hideFallback) {
     clearTimeout(hideFallback)
@@ -285,8 +377,16 @@ function presentBar(win: BrowserWindow, mode: BarMode, reveal: BarReveal): void 
   currentMode = mode
   applyClickThrough(win)
   win.setFocusable(mode === 'expanded')
+  // Size the (still-parked, invisible) window to the target so the renderer paints
+  // the revealed frame at the correct size; position stays parked until the ack.
+  if (PARK_MODE === 'opacity') {
+    win.setBounds(bounds)
+    win.setOpacity(0)
+  } else {
+    win.setBounds({ x: PARKED_POS.x, y: PARKED_POS.y, width: bounds.width, height: bounds.height })
+  }
   const token = ++revealToken
-  pendingReveal = { token, mode, reveal }
+  pendingReveal = { token, mode, reveal, bounds }
   if (revealFallback) clearTimeout(revealFallback)
   revealFallback = setTimeout(() => {
     // No paint ack arrived — present anyway so a wedged/slow renderer can never
@@ -309,7 +409,9 @@ function commitReveal(token: number): void {
     return
   }
   cancelPendingReveal()
-  win.showInactive()
+  // Unpark (move on-screen / opacity 1) — NOT showInactive: the window is already
+  // shown (primed), so this is a fade-free move, leaving only the CSS grow visible.
+  unparkWindow(win, pending.bounds)
   diag(`commitReveal mode=${pending.mode}`)
   if (pending.mode === 'expanded') win.focus()
   // Watch runs in every visible collapsed mode (peek + ptt) — it drives
@@ -401,10 +503,10 @@ let diagLastOverPill: boolean | null = null
 function peekTick(): void {
   const win = barWindow
   const plan = barWatchPlan(currentMode)
-  if (!win || win.isDestroyed() || !win.isVisible() || !plan.trackInteractivity) {
+  if (!win || win.isDestroyed() || !barOnScreen || !plan.trackInteractivity) {
     if (peekWatch) {
       diag(
-        `watch self-stop: win=${!!win && !win.isDestroyed()} visible=${!!win && !win.isDestroyed() && win.isVisible()} mode=${currentMode} track=${plan.trackInteractivity}`
+        `watch self-stop: win=${!!win && !win.isDestroyed()} onScreen=${barOnScreen} mode=${currentMode} track=${plan.trackInteractivity}`
       )
     }
     stopPeekWatch()
@@ -497,7 +599,7 @@ function clickTick(): void {
   if (mouseButtonSampler === undefined) mouseButtonSampler = makePrimaryMouseButtonSampler()
   if (!mouseButtonSampler) return
   const win = barWindow
-  if (!win || win.isDestroyed() || !win.isVisible()) return
+  if (!win || win.isDestroyed() || !barOnScreen) return
   if (!barWatchPlan(currentMode).trackInteractivity || peekWatchSuspended) {
     clickArmed = false
     return
@@ -544,7 +646,7 @@ function stopPeekWatch(): void {
 /** Mode transition while visible (peek ⇄ expanded, ptt → expanded). */
 export function setBarMode(mode: BarMode): void {
   const win = barWindow
-  if (!win || win.isDestroyed() || !win.isVisible()) return
+  if (!win || win.isDestroyed() || !barOnScreen) return
   if (currentMode === mode) return
   currentMode = mode
   if (mode === 'expanded') {
@@ -572,12 +674,12 @@ export function hideBar(): void {
   // slide out, and a late ack/fallback must not resurrect it.
   if (pendingReveal) {
     cancelPendingReveal()
-    if (!win.isVisible()) {
+    if (!barOnScreen) {
       currentMode = null
       return
     }
   }
-  if (!win.isVisible()) return
+  if (!barOnScreen) return
   // Mark the bar as on-its-way-out: a summon gesture arriving during the
   // slide-out must re-present it (restart the peek watch), not treat it as a
   // cleanly-open pill to toggle shut.
@@ -599,7 +701,10 @@ function hideBarNow(): void {
   stopPeekWatch()
   const win = barWindow
   if (!win || win.isDestroyed()) return
-  if (win.isVisible()) win.hide()
+  // Park (off-screen / opacity 0), NEVER win.hide() — hiding then re-showing the
+  // HWND is exactly what triggers the OS window-show fade (the "plummet"). The
+  // window stays shown; parking makes it invisible without a future fade.
+  parkWindow(win)
   win.setFocusable(false)
   applyClickThrough(win)
   currentMode = null
@@ -701,9 +806,9 @@ export function registerBarIpc(sendToMain: (channel: string, ...args: unknown[])
     if (!barWindow || e.sender.id !== barWindow.webContents.id) return
     barReady = true
     if (pendingShow) {
-      const { mode, reveal } = pendingShow
+      const { mode, reveal, bounds } = pendingShow
       pendingShow = null
-      presentBar(barWindow, mode, reveal)
+      presentBar(barWindow, mode, reveal, bounds)
     }
     if (pendingPttDown) {
       pendingPttDown = false
@@ -775,6 +880,8 @@ export function destroyBar(): void {
   cancelPendingReveal()
   if (hideFallback) clearTimeout(hideFallback)
   hideFallback = null
+  barOnScreen = false
+  barPrimed = false
   if (barWindow && !barWindow.isDestroyed()) barWindow.destroy()
   barWindow = null
 }
