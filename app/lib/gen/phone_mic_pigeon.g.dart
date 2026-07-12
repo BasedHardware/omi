@@ -34,6 +34,18 @@ enum PhoneMicCaptureState {
   rebuilding,
 }
 
+/// Capture sink selector, chosen once per session at start().
+///
+/// - stream: converted PCM16 chunks are forwarded to Dart via onAudioFrame for
+///   realtime transcription (the existing path).
+/// - batch: converted PCM16 chunks are opus-encoded natively and written to
+///   WAL-compatible .bin files on disk; nothing is sent to Dart except state and
+///   onBatchProgress. Used for "transcribe later" offline capture.
+enum PhoneMicCaptureMode {
+  stream,
+  batch,
+}
+
 
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
@@ -44,6 +56,9 @@ class _PigeonCodec extends StandardMessageCodec {
       buffer.putInt64(value);
     }    else if (value is PhoneMicCaptureState) {
       buffer.putUint8(129);
+      writeValue(buffer, value.index);
+    }    else if (value is PhoneMicCaptureMode) {
+      buffer.putUint8(130);
       writeValue(buffer, value.index);
     } else {
       super.writeValue(buffer, value);
@@ -56,16 +71,23 @@ class _PigeonCodec extends StandardMessageCodec {
       case 129: 
         final int? value = readValue(buffer) as int?;
         return value == null ? null : PhoneMicCaptureState.values[value];
+      case 130: 
+        final int? value = readValue(buffer) as int?;
+        return value == null ? null : PhoneMicCaptureMode.values[value];
       default:
         return super.readValueOfType(type, buffer);
     }
   }
 }
 
-/// Dart -> native. start() resolves once the engine is running, or throws a
+/// Dart -> native. start(mode) resolves once the engine is running, or throws a
 /// PlatformException with one of: permission_denied, session_config_failed,
-/// format_invalid, converter_init_failed, engine_start_failed. stop() resolves
-/// only after teardown is fully drained — no frames or events arrive after it.
+/// format_invalid, converter_init_failed, engine_start_failed. In batch mode it
+/// may additionally throw opus_init_failed (the native opus encoder could not be
+/// created) or batch_dir_unavailable (flutter.batchAudioDir is unset/empty).
+/// stop() resolves only after teardown is fully drained — no frames or events
+/// arrive after it, and in batch mode the current .bin file is finalized (fsynced
+/// + atomically promoted, so it is ingestable) before stop() resolves.
 class PhoneMicHostApi {
   /// Constructor for [PhoneMicHostApi].  The [binaryMessenger] named argument is
   /// available for dependency injection.  If it is left null, the default
@@ -79,14 +101,14 @@ class PhoneMicHostApi {
 
   final String pigeonVar_messageChannelSuffix;
 
-  Future<void> start() async {
+  Future<void> start(PhoneMicCaptureMode mode) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_phone_mic.PhoneMicHostApi.start$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[mode]);
     final List<Object?>? pigeonVar_replyList =
         await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
@@ -152,6 +174,37 @@ class PhoneMicHostApi {
       return (pigeonVar_replyList[0] as bool?)!;
     }
   }
+
+  /// DEBUG VERIFICATION ONLY — removed before merge. Encodes a 16kHz mono PCM16
+  /// WAV through the batch opus encoder + writer and returns the produced .bin
+  /// path, so the native encode+WAL round-trip can be validated end to end.
+  Future<String> debugEncodeWavToBin(String wavPath, String marker) async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_phone_mic.PhoneMicHostApi.debugEncodeWavToBin$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[wavPath, marker]);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as String?)!;
+    }
+  }
 }
 
 /// Native -> Dart.
@@ -159,13 +212,20 @@ abstract class PhoneMicFlutterApi {
   static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
 
   /// PCM16 little-endian mono @16kHz. Chunk sizes vary with the input route.
+  /// Stream mode only; batch mode never emits frames.
   void onAudioFrame(Uint8List pcm16leMono16k);
 
   void onStateChanged(PhoneMicCaptureState state);
 
   /// Non-fatal runtime failures (capture self-heals): converter_failed,
-  /// rebuild_failed, resume_failed, media_services_reset.
+  /// rebuild_failed, resume_failed, media_services_reset, batch_storage_full.
   void onCaptureError(String code, String message);
+
+  /// Emitted at 1Hz while batch capture runs. Its arrival is the liveness signal
+  /// for the Dart batch watchdog; the value is derived from the number of frames
+  /// actually written to disk, so mutes and interruptions freeze it while the
+  /// event keeps arriving.
+  void onBatchProgress(double capturedSeconds);
 
   static void setUp(PhoneMicFlutterApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
@@ -238,6 +298,31 @@ abstract class PhoneMicFlutterApi {
               'Argument for dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onCaptureError was null, expected non-null String.');
           try {
             api.onCaptureError(arg_code!, arg_message!);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onBatchProgress$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onBatchProgress was null.');
+          final List<Object?> args = (message as List<Object?>?)!;
+          final double? arg_capturedSeconds = (args[0] as double?);
+          assert(arg_capturedSeconds != null,
+              'Argument for dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onBatchProgress was null, expected non-null double.');
+          try {
+            api.onBatchProgress(arg_capturedSeconds!);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

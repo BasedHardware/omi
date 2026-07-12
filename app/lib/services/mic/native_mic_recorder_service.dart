@@ -66,7 +66,7 @@ class NativeMicRecorderService implements IMicRecorderService, PhoneMicFlutterAp
       // Throws a PlatformException (permission_denied, session_config_failed,
       // format_invalid, converter_init_failed, engine_start_failed) instead of
       // recording silence.
-      await _hostApi.start();
+      await _hostApi.start(PhoneMicCaptureMode.stream);
     } catch (e) {
       _sessionActive = false;
       _cancelStallWatchdog();
@@ -146,6 +146,11 @@ class NativeMicRecorderService implements IMicRecorderService, PhoneMicFlutterAp
   void onCaptureError(String code, String message) {
     // Native self-heals; the stall watchdog is the escalation path.
     Logger.error('[NativeMic] capture error $code: $message');
+  }
+
+  @override
+  void onBatchProgress(double capturedSeconds) {
+    // Batch-mode only; this service always starts in stream mode.
   }
 
   void _startStallWatchdog() {

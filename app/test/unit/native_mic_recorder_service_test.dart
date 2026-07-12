@@ -9,11 +9,13 @@ import 'package:omi/services/mic/native_mic_recorder_service.dart';
 class FakePhoneMicHostApi extends PhoneMicHostApi {
   int startCalls = 0;
   int stopCalls = 0;
+  PhoneMicCaptureMode? lastStartMode;
   PlatformException? startError;
 
   @override
-  Future<void> start() async {
+  Future<void> start(PhoneMicCaptureMode mode) async {
     startCalls++;
+    lastStartMode = mode;
     if (startError != null) throw startError!;
   }
 
@@ -24,6 +26,9 @@ class FakePhoneMicHostApi extends PhoneMicHostApi {
 
   @override
   Future<bool> isRecording() async => false;
+
+  @override
+  Future<String> debugEncodeWavToBin(String wavPath, String marker) async => '';
 }
 
 class Callbacks {
@@ -60,6 +65,8 @@ void main() {
   test('start calls host api and maps state events to callbacks', () async {
     await startService();
     expect(host.startCalls, 1);
+    // This service always drives the native capture in stream mode.
+    expect(host.lastStartMode, PhoneMicCaptureMode.stream);
 
     service.onStateChanged(PhoneMicCaptureState.starting);
     expect(cb.initializing, 1);
