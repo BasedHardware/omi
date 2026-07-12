@@ -285,6 +285,42 @@ def test_workflow_contracts_static_check_skips_workflows_without_tuple_check(tmp
     assert checker.check_no_large_tuple_results(contracts) == []
 
 
+def test_workflow_contracts_static_check_ignores_non_python_glob_matches(tmp_path, monkeypatch):
+    checker = _load_script("check_workflow_contracts")
+    fake_repo = tmp_path / "repo"
+    source_dir = fake_repo / "backend" / "utils" / "memory"
+    source_dir.mkdir(parents=True)
+    (source_dir / "contract.py").write_text("def safe_contract() -> tuple[int, int, int]:\n    return 1, 2, 3\n")
+    (source_dir / "ARCHITECTURE.md").write_text("# architecture\n")
+    pycache = source_dir / "__pycache__"
+    pycache.mkdir()
+    (pycache / "contract.cpython-311.pyc").write_bytes(b"\xa7\r\r\n")
+
+    monkeypatch.setattr(checker, "REPO_DIR", fake_repo)
+    contracts = {
+        "checks": {
+            "no_large_tuple_results": {
+                "allowlist": [
+                    {
+                        "path": "backend/utils/memory/contract.py",
+                        "function": "safe_contract",
+                    }
+                ]
+            }
+        },
+        "workflows": [
+            {
+                "risk": "high",
+                "sources": ["backend/utils/memory/**"],
+                "tests": ["tests/unit/test_contract.py"],
+                "checks": ["no_large_tuple_results"],
+            }
+        ],
+    }
+
+    assert checker.check_no_large_tuple_results(contracts) == []
+
+
 def test_workflow_contracts_static_check_validates_all_sources_when_manifest_changes(tmp_path, monkeypatch):
     checker = _load_script("check_workflow_contracts")
     fake_repo = tmp_path / "repo"

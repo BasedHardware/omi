@@ -30,6 +30,11 @@
           "reason": "Existing promotion apply contract; covered by short-term promotion contract tests until migrated."
         },
         {
+          "path": "backend/utils/memory/product_authorization.py",
+          "function": "_lookup_app_key_grant",
+          "reason": "Existing app-key grant lookup tuple; covered by memory authorization tests until the response contract is migrated."
+        },
+        {
           "path": "backend/utils/memory_ingestion/pipeline.py",
           "function": "_redact_input",
           "reason": "Existing pipeline stage contract; covered by memory ingestion contract tests until migrated."
