@@ -306,7 +306,7 @@
       }
     ],
     "updated": "2026-06-23T01:27:11Z",
-    "noDataState": "OK",
+    "noDataState": "Alerting",
     "execErrState": "Error",
     "for": "3m",
     "keep_firing_for": "0s",
@@ -317,7 +317,7 @@
     },
     "labels": {
       "instatus_component": "plugins",
-      "severity": "warning"
+      "severity": "critical"
     },
     "isPaused": false,
     "notification_settings": {
