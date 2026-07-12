@@ -329,6 +329,31 @@
       ]
     },
     {
+      "id": "conversation_lifecycle",
+      "risk": "high",
+      "sources": [
+        "backend/database/conversations.py",
+        "backend/routers/transcribe.py",
+        "backend/routers/pusher.py",
+        "backend/routers/conversations.py",
+        "backend/routers/sync.py",
+        "backend/routers/developer.py",
+        "backend/utils/sync/pipeline.py",
+        "backend/utils/conversations/process_conversation.py",
+        "backend/utils/conversations/postprocess_conversation.py",
+        "backend/utils/conversations/merge_conversations.py",
+        "backend/utils/imports/limitless.py"
+      ],
+      "tests": ["tests/unit/test_conversation_lifecycle_contract.py"],
+      "checks": [],
+      "invariants": [
+        "only one finalizer claim succeeds for an in-progress conversation",
+        "current direct lifecycle mutations remain observable by bounded writer label until convergence",
+        "merge rejects sources that are still processing",
+        "discard and generic status-write escape hatches remain characterized until the lifecycle service replaces them"
+      ]
+    },
+    {
       "id": "listen_pusher_pipeline",
       "risk": "high",
       "sources": [

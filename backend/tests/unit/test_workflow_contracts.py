@@ -41,6 +41,7 @@ def test_workflow_contract_sources_select_adjacent_tests():
     selected_cases = {
         "backend/utils/memory/legacy_backfill.py": "tests/unit/test_ws_c_backfill.py",
         "backend/utils/memory/canonical_memory_adapter.py": "testing/e2e/test_canonical_memory_pipeline.py",
+        "backend/routers/conversations.py": "tests/unit/test_conversation_lifecycle_contract.py",
         "backend/services/users/account_deletion.py": "tests/services/users/test_account_deletion.py",
         "backend/routers/sync.py": "tests/unit/test_sync_v2.py",
         "backend/utils/sync/pipeline.py": "tests/unit/test_sync_v2.py",
