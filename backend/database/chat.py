@@ -452,8 +452,10 @@ def get_chat_files_desc(uid: str, files_id: Optional[List[str]] = None, limit: i
         chunk_ref = chunk_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
         results.extend([_typed_doc(doc) for doc in chunk_ref.stream()])
 
-    # Sort all results by created_at and limit
-    results.sort(key=lambda x: x.get('created_at', datetime.min), reverse=True)
+    # Sort all results by created_at and limit. Use a tz-aware sentinel (mirroring the sort keys in
+    # action_items/task_recommendations/memory_ledger): stored created_at is tz-aware, so a naive
+    # datetime.min default would raise "can't compare offset-naive and offset-aware datetimes".
+    results.sort(key=lambda x: x.get('created_at') or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
     return results[:limit]
 
 
