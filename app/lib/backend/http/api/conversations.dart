@@ -10,20 +10,6 @@ import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
-class MetaWearablesPhotoCacheResult {
-  final String conversationId;
-  final String photoId;
-
-  const MetaWearablesPhotoCacheResult({required this.conversationId, required this.photoId});
-
-  factory MetaWearablesPhotoCacheResult.fromJson(Map<String, dynamic> json) {
-    return MetaWearablesPhotoCacheResult(
-      conversationId: json['conversation_id']?.toString() ?? '',
-      photoId: json['photo_id']?.toString() ?? '',
-    );
-  }
-}
-
 Future<CreateConversationResponse?> processInProgressConversation() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations',
@@ -44,51 +30,6 @@ Future<CreateConversationResponse?> processInProgressConversation() async {
     );
   }
   return null;
-}
-
-Future<MetaWearablesPhotoCacheResult?> cacheMetaWearablesPhoto(
-  Uint8List imageBytes, {
-  DateTime? capturedAt,
-  String? conversationId,
-  String? deviceUuid,
-  String? deviceName,
-  String? frameSha256,
-}) async {
-  final takenAt = capturedAt ?? DateTime.now();
-  final response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/meta-wearables/photos/cache',
-    headers: {'Content-Type': 'application/json'},
-    method: 'POST',
-    body: jsonEncode(buildMetaWearablesPhotoCachePayload(
-      imageBytes,
-      capturedAt: takenAt,
-      conversationId: conversationId,
-      deviceUuid: deviceUuid,
-      deviceName: deviceName,
-      frameSha256: frameSha256,
-    )),
-  );
-  if (response == null || response.statusCode != 200) return null;
-  return MetaWearablesPhotoCacheResult.fromJson(jsonDecode(response.body));
-}
-
-@visibleForTesting
-Map<String, dynamic> buildMetaWearablesPhotoCachePayload(
-  Uint8List imageBytes, {
-  required DateTime capturedAt,
-  String? conversationId,
-  String? deviceUuid,
-  String? deviceName,
-  String? frameSha256,
-}) {
-  return {
-    'base64': base64Encode(imageBytes),
-    'captured_at': capturedAt.toUtc().toIso8601String(),
-    if (conversationId != null) 'conversation_id': conversationId,
-    if (deviceUuid != null) 'device_uuid': deviceUuid,
-    if (deviceName != null) 'device_name': deviceName,
-    if (frameSha256 != null) 'frame_sha256': frameSha256,
-  };
 }
 
 Future<List<ServerConversation>> getConversations({

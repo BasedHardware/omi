@@ -3,11 +3,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/services/meta_wearables/meta_capture_diagnostics.dart';
 import 'package:omi/services/meta_wearables/meta_capture_queue.dart';
-
-import '../support/meta_wearables_mock_harness.dart';
 
 void main() {
   late Directory dir;
@@ -117,50 +114,6 @@ void main() {
     expect(cleared.lastUploadStatus, isNull);
     expect(cleared.lastFrameAt, isNull);
     expect(cleared.streamState, 'streaming', reason: 'omitted fields must still be preserved');
-  });
-
-  test('cache upload payload includes idempotency metadata', () async {
-    final source = File('lib/backend/http/api/conversations.dart').readAsStringSync();
-
-    expect(source, contains('device_uuid'));
-    expect(source, contains('frame_sha256'));
-    expect(source, contains('captured_at'));
-    expect(source, contains('conversation_id'));
-  });
-
-  test('cache upload payload helper propagates queue metadata', () {
-    final capturedAt = DateTime.utc(2026, 7, 5, 3, 4, 5);
-    final payload = buildMetaWearablesPhotoCachePayload(
-      Uint8List.fromList([1, 2, 3]),
-      capturedAt: capturedAt,
-      conversationId: 'conversation-1',
-      deviceUuid: 'glasses-1',
-      deviceName: 'Meta Glasses',
-      frameSha256: 'abc123',
-    );
-
-    expect(payload['base64'], base64Encode([1, 2, 3]));
-    expect(payload['captured_at'], capturedAt.toIso8601String());
-    expect(payload['conversation_id'], 'conversation-1');
-    expect(payload['device_uuid'], 'glasses-1');
-    expect(payload['device_name'], 'Meta Glasses');
-    expect(payload['frame_sha256'], 'abc123');
-  });
-
-  test('recording capture controller retains cache metadata', () async {
-    final controller = RecordingCaptureController();
-
-    await controller.cacheCapturedImage(
-      Uint8List.fromList([4, 5, 6]),
-      capturedAt: DateTime.utc(2026, 7, 5, 6),
-      deviceUuid: 'glasses-2',
-      deviceName: 'Meta Glasses 2',
-      frameSha256: 'def456',
-    );
-
-    expect(controller.deviceUuidValues, ['glasses-2']);
-    expect(controller.deviceNameValues, ['Meta Glasses 2']);
-    expect(controller.frameSha256Values, ['def456']);
   });
 
   test('meta capture enqueue does not bypass the durable queue', () {
