@@ -121,7 +121,7 @@
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
-      "__panelId__": "7",
+      "__panelId__": "122",
       "threshold": "0.1"
     },
     "labels": {
@@ -389,7 +389,7 @@
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
-      "__panelId__": "113"
+      "__panelId__": "21"
     },
     "labels": {
       "instatus_component": "speech-processing",
@@ -523,7 +523,7 @@
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
-      "__panelId__": "6",
+      "__panelId__": "123",
       "threshold": "30000ms"
     },
     "labels": {
@@ -658,7 +658,7 @@
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
-      "__panelId__": "5",
+      "__panelId__": "122",
       "threshold": "5 req/s"
     },
     "labels": {
