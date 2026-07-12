@@ -800,6 +800,14 @@ def parakeet_prerecorded_from_bytes(
         response.raise_for_status()
         result: Dict[str, Any] = response.json()
 
+        # A Parakeet result always carries both keys, even for silence ({"text": "",
+        # "segments": []}). A 200 body with neither key is a degraded or foreign
+        # responder (misrouted ILB, proxy error shell), not a no-speech verdict. Raise
+        # so the sync job stays truthful and clients keep the audio as retry material
+        # instead of marking the WAL synced and discarding it. See #9586.
+        if not isinstance(result, dict) or ('segments' not in result and 'text' not in result):
+            raise RuntimeError('Parakeet response contained neither segments nor text')
+
         raw_segments = result.get('segments', [])
         segments: List[Dict[str, Any]] = list(raw_segments) if isinstance(raw_segments, list) else []  # type: ignore[reportUnknownArgumentType]  # untyped external JSON
         full_text = (result.get('text') or '').strip()
