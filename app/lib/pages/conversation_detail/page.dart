@@ -551,10 +551,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         }
 
         final mimeType = file.path.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav';
-        await Share.shareXFiles(
-          [XFile(file.path, mimeType: mimeType)],
-          sharePositionOrigin: _shareSheetOrigin(),
-        );
+        await Share.shareXFiles([XFile(file.path, mimeType: mimeType)], sharePositionOrigin: _shareSheetOrigin());
 
         // Track successful completion
         final durationSeconds = DateTime.now().difference(startTime).inSeconds;
@@ -830,10 +827,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       bool shared = await setConversationVisibility(provider.conversation.id);
                                       if (!shared) {
                                         if (context.mounted) {
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                              SnackBar(content: Text(context.l10n.conversationUrlNotShared)));
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text(context.l10n.conversationUrlNotShared)),
+                                          );
                                         }
                                         setState(() {
                                           _isSharing = false;
@@ -846,8 +842,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                         conversation: provider.conversation,
                                         shareMethod: 'url_share',
                                       );
-                                      shareConversationLink(provider.conversation,
-                                          sharePositionOrigin: _shareSheetOrigin());
+                                      shareConversationLink(
+                                        provider.conversation,
+                                        sharePositionOrigin: _shareSheetOrigin(),
+                                      );
                                       // Small delay to let share sheet appear, then clear loading
                                       await Future.delayed(const Duration(milliseconds: 150));
                                       setState(() {

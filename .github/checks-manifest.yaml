@@ -13,10 +13,10 @@ checks:
     lanes: ["local", "ci"]
     reason: "all changes must be free of whitespace errors and conflict markers"
   - id: architecture-guardrails
-    command: ["python3", ".github/scripts/check_arch_guardrails.py", "--changed-files", "{changed_files}"]
+    command: ["python3", ".github/scripts/check_arch_guardrails.py", "--changed-files", "{changed_files}", "--base", "{base}"]
     triggers: ["all"]
     lanes: ["local", "ci"]
-    reason: "all changed source files receive advisory architecture checks"
+    reason: "advisory size checks plus oversized package-map baseline ratchet"
   - id: product-invariants
     command: ["python3", ".github/scripts/check_product_invariants.py", "--changed-files", "{changed_files}", "--pr-body-file", "{pr_body_file}"]
     triggers: ["all"]
@@ -109,5 +109,7 @@ exempt:
     reason: "release-policy full-tree check, not diff-scoped"
   - path: ".github/scripts/check-deployment-concurrency.py"
     reason: "deployment concurrency policy full-tree check, not diff-scoped"
+  - path: ".github/scripts/check_isinstance_return_ratchet.py"
+    reason: "typed error flow-control ratchet uses a committed baseline, not diff-scoped triggers"
   - path: "backend/scripts/check_app_client_openapi_compatibility.py"
     reason: "OpenAPI generation contract has component dependencies"
