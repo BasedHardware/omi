@@ -1197,6 +1197,7 @@ class _PlansSheetState extends State<PlansSheet> {
                               width: double.infinity,
                               height: 56,
                               child: ElevatedButton(
+                                key: const ValueKey('plans_sheet_upgrade_button'),
                                 onPressed: isLoading
                                     ? null
                                     : () {

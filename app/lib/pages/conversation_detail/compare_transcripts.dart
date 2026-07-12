@@ -41,6 +41,7 @@ class _CompareTranscriptsPageState extends State<CompareTranscriptsPage> {
         child: Column(
           children: [
             TabBar(
+              key: const ValueKey('compare_transcripts_tab_bar'),
               indicatorSize: TabBarIndicatorSize.label,
               isScrollable: false,
               padding: EdgeInsets.zero,

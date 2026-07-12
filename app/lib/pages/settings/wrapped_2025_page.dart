@@ -633,6 +633,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
               ),
               const Spacer(),
               GestureDetector(
+                key: const ValueKey('wrapped_generate_button'),
                 onTap: _generateWrapped,
                 child: Container(
                   width: double.infinity,
@@ -1542,6 +1543,7 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
                       scale: shareButtonScale == 0 ? 0 : (0.5 + shareButtonScale * 0.5),
                       alignment: Alignment.centerLeft,
                       child: GestureDetector(
+                        key: const ValueKey('wrapped_share_button'),
                         onTap: () {
                           HapticFeedback.mediumImpact();
                           widget.onShare?.call();

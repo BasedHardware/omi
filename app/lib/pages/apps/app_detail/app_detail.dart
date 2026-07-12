@@ -1861,6 +1861,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
+              key: const ValueKey('app_detail_submit_review_button'),
               onPressed: isSubmitting ? null : _submitReview,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.deepPurple,

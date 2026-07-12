@@ -44,6 +44,7 @@ class FilterBottomSheet extends StatelessWidget {
                     ],
                     const Spacer(),
                     IconButton(
+                      key: const ValueKey('filter_sheet_close_button'),
                       onPressed: () => Navigator.of(context).pop(),
                       icon: const Icon(Icons.close, color: Colors.white, size: 24),
                     ),
@@ -104,6 +105,7 @@ class FilterBottomSheet extends StatelessWidget {
                   children: [
                     Expanded(
                       child: TextButton(
+                        key: const ValueKey('filter_sheet_reset_button'),
                         onPressed: () {
                           provider.clearFilters();
                           PlatformManager.instance.analytics.appsClearFilters();
@@ -126,6 +128,7 @@ class FilterBottomSheet extends StatelessWidget {
                     const SizedBox(width: 16),
                     Expanded(
                       child: ElevatedButton(
+                        key: const ValueKey('filter_sheet_apply_button'),
                         onPressed: () {
                           Navigator.of(context).pop();
                           Future.microtask(() => provider.applyFilters());

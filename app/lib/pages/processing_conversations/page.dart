@@ -57,6 +57,7 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   IconButton(
+                    key: const ValueKey('processing_conversation_back_button'),
                     onPressed: () {
                       Navigator.pop(context);
                       return;
@@ -73,6 +74,7 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
             body: Column(
               children: [
                 TabBar(
+                  key: const ValueKey('processing_conversation_tab_bar'),
                   indicatorSize: TabBarIndicatorSize.label,
                   isScrollable: false,
                   padding: EdgeInsets.zero,
