@@ -1,5 +1,8 @@
 """Dev-cloud proof helpers for memory ``/v3`` readiness scripts and tests."""
 
+# LIFECYCLE: one-time
+# DELETE-AFTER: INV-MEM-3
+
 from __future__ import annotations
 
 import hashlib
