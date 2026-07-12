@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -275,7 +276,10 @@ def test_inventory_strict_raw_decode_site_gate_fails_with_actionable_sites():
 
     assert result.returncode == 1
     assert 'Raw Dart decode sites:' in result.stdout
-    assert 'app/lib/backend/schema/app.dart:32' in result.stdout
+    # Match the known app.dart raw-decode site by file with any line number (and either path
+    # separator), so a future edit that shifts the line (as #9470 did, :31 -> :32) does not re-break
+    # this gate on unrelated PRs.
+    assert re.search(r'app[/\\]lib[/\\]backend[/\\]schema[/\\]app\.dart:\d+', result.stdout), result.stdout
 
 
 def test_inventory_openapi_route_response_decode_migration_complete():
