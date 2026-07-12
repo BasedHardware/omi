@@ -70,8 +70,9 @@ struct FloatingControlBarView: View {
     }
     /// Chrome width that follows the hover morph: the side lobes (and their
     /// icons) slide outward with the expanding surface instead of standing
-    /// still while it widens around them. Chat mode keeps progress at 0, so
-    /// its chrome stays collapsed exactly as before.
+    /// still while it widens around them. Chat mode ignores this and lets the
+    /// chrome fill the live surface width (the chat window is user-resizable),
+    /// pinning the lobes to the actual outer edges.
     private var notchChromeMorphWidth: CGFloat {
         let expanded = max(notchChromeWidth, FloatingControlBarWindow.notchExpandedWidth)
         return notchChromeWidth + (expanded - notchChromeWidth) * notchSwitcherProgress
@@ -388,7 +389,11 @@ struct FloatingControlBarView: View {
                 .frame(width: notchHiddenCenterWidth, height: notchChromeHeight)
                 .allowsHitTesting(false)
         }
-        .frame(width: notchChromeMorphWidth, height: notchChromeHeight)
+        .frame(height: notchChromeHeight)
+        // Chat: fill the live (user-resizable) surface so the lobes hug its
+        // edges. Otherwise: interpolate with the hover morph.
+        .frame(width: state.showingAIConversation ? nil : notchChromeMorphWidth)
+        .frame(maxWidth: state.showingAIConversation ? .infinity : nil)
     }
 
     private var notchAgentLobe: some View {
@@ -467,6 +472,8 @@ struct FloatingControlBarView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .padding(.leading, OmiSpacing.xs)
+        // Breathing room between the settings gear and the island's right edge.
+        .padding(.trailing, OmiSpacing.md)
         .accessibilityElement(children: .contain)
     }
 
