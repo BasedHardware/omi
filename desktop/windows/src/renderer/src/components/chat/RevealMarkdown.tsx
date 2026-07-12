@@ -21,6 +21,11 @@ export function RevealMarkdown({
   // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
   targetRef.current = text
   useEffect(() => {
+    // A revealed message (every message except the one currently streaming) needs
+    // no timer — arming one per message would leave N idle 62Hz intervals ticking
+    // forever in an open thread. When streaming ends the parent flips this to true,
+    // re-running the effect so the reveal interval is cleared.
+    if (startRevealed) return
     const id = setInterval(() => {
       setShown((prev) => {
         const t = targetRef.current.length
@@ -30,6 +35,9 @@ export function RevealMarkdown({
       })
     }, REVEAL_MS)
     return () => clearInterval(id)
-  }, [])
-  return <Markdown text={text.slice(0, shown)} />
+  }, [startRevealed])
+  // Revealed messages always render in full — so a stream that finishes mid-reveal
+  // (startRevealed flips true, interval cleared) shows the whole reply, not a
+  // frozen prefix.
+  return <Markdown text={startRevealed ? text : text.slice(0, shown)} />
 }

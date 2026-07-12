@@ -197,6 +197,12 @@ export function Home(): React.JSX.Element {
   // Only fade the thread's top once it actually overflows — otherwise a short
   // thread would sit entirely inside the fade and look washed out.
   const [overflowing, setOverflowing] = useState(false)
+  // The thread overflows (and the top fade shows) once its content is taller than
+  // the viewport. Recomputed from several effects/handlers, so it lives in one spot.
+  const recomputeOverflow = useCallback((): void => {
+    const el = chatScrollRef.current
+    if (el) setOverflowing(el.scrollHeight > el.clientHeight + 4)
+  }, [])
   // Split layout: false = idle (centered block), true = widgets at top + bar at
   // bottom. A small lead-in lets the first bubble render before the move starts
   // (avoids a glitchy instant jump); both spacers then collapse together so the
@@ -290,8 +296,16 @@ export function Home(): React.JSX.Element {
     if (isInitialReveal || scrollModeRef.current === 'followingBottom') {
       scrollToLatest({ smooth: isNewMessage && !isInitialReveal })
     }
-    setOverflowing(el.scrollHeight > el.clientHeight + 4)
-  }, [chat.history, chat.sending, showThread, scrollToLatest, widgetsReady, widgetsH])
+    recomputeOverflow()
+  }, [
+    chat.history,
+    chat.sending,
+    showThread,
+    scrollToLatest,
+    recomputeOverflow,
+    widgetsReady,
+    widgetsH
+  ])
 
   // RevealMarkdown grows the streaming reply's text every 16ms WITHOUT a
   // chat.history change, so the effect above (keyed on history) can't follow it.
@@ -302,20 +316,19 @@ export function Home(): React.JSX.Element {
     const content = chatContentRef.current
     if (!content) return
     const ro = new ResizeObserver(() => {
-      const el = chatScrollRef.current
-      if (el) setOverflowing(el.scrollHeight > el.clientHeight + 4)
+      recomputeOverflow()
       if (scrollModeRef.current === 'followingBottom') scrollToLatest()
     })
     ro.observe(content)
     return () => ro.disconnect()
-  }, [scrollToLatest])
+  }, [scrollToLatest, recomputeOverflow])
 
   // Reveal an older page when the user scrolls near the top, capturing the
   // current distance-from-bottom so the view can be pinned in place afterward.
   const onThreadScroll = (): void => {
     const el = chatScrollRef.current
     if (!el) return
-    setOverflowing(el.scrollHeight > el.clientHeight + 4)
+    recomputeOverflow()
     const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
     if (distFromBottom <= 8) {
       // Resume live following when the reader scrolls back to the live edge.
