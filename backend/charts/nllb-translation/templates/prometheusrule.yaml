@@ -59,7 +59,7 @@ spec:
         - alert: NLLBMemoryPressure
           expr: >-
             process_resident_memory_bytes{job=~".*nllb.*"}
-            / on() group_left() (kube_pod_container_resource_limits{resource="memory", container=~".*nllb.*"} or vector(17179869184))
+            / scalar(max(kube_pod_container_resource_limits{resource="memory", container=~".*nllb.*"}) or vector(17179869184))
             > 0.85
           for: 5m
           labels:
@@ -71,7 +71,7 @@ spec:
         - alert: NLLBCPUSaturation
           expr: >-
             rate(process_cpu_seconds_total{job=~".*nllb.*"}[5m])
-            / on() group_left() (kube_pod_container_resource_limits{resource="cpu", container=~".*nllb.*"} or vector(4))
+            / scalar(max(kube_pod_container_resource_limits{resource="cpu", container=~".*nllb.*"}) or vector(4))
             > 0.9
           for: 10m
           labels:
