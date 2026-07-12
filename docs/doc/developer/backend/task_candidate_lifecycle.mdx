@@ -37,6 +37,49 @@ The per-user universal-contract mode controls compatibility behavior:
 - `read`: Candidates and canonical tasks are authoritative; staged endpoints are compatibility projections and
   never write `staged_tasks`.
 
+## Single-user Smart Tasks dogfood activation
+
+The task-intelligence control remains independently scoped from the canonical-memory cohort. The approved
+dogfood account is already the only active canonical-memory whitelist member; to make Smart Tasks fully active,
+an operator must explicitly create `users/{uid}/task_intelligence_control/state` in `read` mode. Do not change
+the canonical-memory list, runtime cohort environment, or any other user's control as part of this operation.
+
+Use the repo-tracked operator tool from a checkout containing the merged activation change. It defaults to a
+dry-run and is permanently restricted to the approved dogfood UID. First inspect the existing state and record
+its account generation (a missing document is the safe default: `off`, generation `0`):
+
+```bash
+cd backend
+python scripts/activate_task_intelligence_dogfood_user.py \
+  --credential-source gcloud-user \
+  --firestore-project based-hardware \
+  --inspect-existing \
+  --expected-account-generation 0
+```
+
+After reviewing that redacted control-only report, run the exact same command with `--apply`, the exact UID
+confirmation, and the `read` acknowledgement. The tool re-reads and transactionally fences the generation, so
+an account reset or concurrent control change fails closed rather than activating stale state:
+
+```bash
+cd backend
+python scripts/activate_task_intelligence_dogfood_user.py \
+  --credential-source gcloud-user \
+  --firestore-project based-hardware \
+  --inspect-existing \
+  --expected-account-generation 0 \
+  --apply \
+  --confirm-uid vi7SA9ckQCe4ccobWNxlbdcNdC23 \
+  --confirm-workflow-mode read
+```
+
+The tool writes only `workflow_mode: read` and the unchanged `account_generation`; rerunning after a successful
+activation is a no-op. The explicit `gcloud-user` source obtains a short-lived local user token without printing
+or persisting it, and sends the PATCH with the inspected Firestore document revision as a precondition. It does
+not deploy backend code or mutate production merely by merging this PR. Verify
+the live account's `workflow_mode=read`, matching generation, canonical-memory eligibility, and enabled
+intelligence product/evaluation surfaces before resuming dogfood.
+
 Staged reconciliation is resumable by checkpoint. It imports active rows as pending Candidates and terminal
 promotion history as accepted, rejected, or expired without replaying task mutations or notifications. Reports
 contain stable IDs and counts only—never task content.
