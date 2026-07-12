@@ -331,27 +331,48 @@ final class AACAudioDecoder: AudioCodecDecoder {
         logger.debug("AAC decoder initialized")
     }
 
+    /// Validates an ADTS frame header and returns the raw-AAC payload subrange
+    /// (past the 7-byte header) in `data`'s own index space, or nil when the frame
+    /// is malformed or incomplete.
+    ///
+    /// Two trap sources are guarded here: (1) a decoded `frameLength <= headerSize`
+    /// would form an invalid `header..<frameLength` range and crash the process on
+    /// corrupt BLE audio; (2) all reads are `startIndex`-relative, so a `Data` slice
+    /// with a non-zero `startIndex` does not trap absolute `[0]`/`subdata` access.
+    /// `static` so it is synchronously unit-testable without an initialized converter.
+    static func adtsRawAACRange(in data: Data) -> Range<Data.Index>? {
+        let headerSize = 7
+        guard data.count >= headerSize else { return nil }
+
+        let base = data.startIndex
+
+        // Validate ADTS sync word
+        guard data[base] == 0xFF, (data[base + 1] & 0xF0) == 0xF0 else { return nil }
+
+        // Extract frame length from ADTS header (13 bits → 0...8191)
+        let frameLength = (Int(data[base + 3] & 0x03) << 11) |
+            (Int(data[base + 4]) << 3) |
+            (Int(data[base + 5] & 0xE0) >> 5)
+
+        // frameLength counts the whole ADTS frame including its 7-byte header. A value
+        // that does not extend past the header is malformed (no payload / corrupt) and
+        // must not be turned into a subdata range.
+        guard frameLength > headerSize, data.count >= frameLength else { return nil }
+
+        return (base + headerSize)..<(base + frameLength)
+    }
+
     func decode(_ data: Data) -> [Int16]? {
         guard isInitialized, let converter = audioConverter else {
             logger.warning("AAC decoder not initialized")
             return nil
         }
 
-        guard data.count >= 7 else { return nil }
-
-        // Validate ADTS sync word
-        guard data[0] == 0xFF, (data[1] & 0xF0) == 0xF0 else {
-            logger.debug("Invalid ADTS sync word")
-            return nil
-        }
-
-        // Extract frame length from ADTS header
-        let frameLength = (Int(data[3] & 0x03) << 11) |
-                         (Int(data[4]) << 3) |
-                         (Int(data[5] & 0xE0) >> 5)
-
-        guard data.count >= frameLength else {
-            logger.debug("Incomplete ADTS frame: have \(data.count), need \(frameLength)")
+        // Extract the raw-AAC payload range, guarding against a malformed frame
+        // length that would otherwise form an invalid subdata range and trap the
+        // process (see adtsRawAACRange).
+        guard let rawAACRange = Self.adtsRawAACRange(in: data) else {
+            logger.debug("Malformed or incomplete ADTS frame (count \(data.count))")
             return nil
         }
 
@@ -360,9 +381,7 @@ final class AACAudioDecoder: AudioCodecDecoder {
         var outputSamples = [Int16](repeating: 0, count: aacFrameSize * outputChannels)
         let outputSize = UInt32(outputSamples.count * 2)
 
-        // Prepare input packet description (skip 7-byte ADTS header for raw AAC)
-        let rawAACOffset = 7
-        let rawAACData = data.subdata(in: rawAACOffset..<frameLength)
+        let rawAACData = data.subdata(in: rawAACRange)
 
         var packetDescription = AudioStreamPacketDescription(
             mStartOffset: 0,

@@ -7,6 +7,9 @@ covers:
   - desktop/macos/Desktop/Sources/DefaultsKey.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RawWebSocket.swift
+  - desktop/macos/Desktop/Sources/RealtimeOmni/RealtimeOmniService.swift
+  - desktop/macos/Desktop/Sources/RealtimeOmni/RealtimeOmniTestHarness.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSettings.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeVoiceTurnOutbox.swift

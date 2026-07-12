@@ -89,6 +89,10 @@ class TaskAgentSettings: ObservableObject {
     }
 
     /// Legacy tmux prompt builder retained until Ticket 14 removes that path.
+    /// `@MainActor` because it reads `TaskAgentManager.shared.getSession`, which is
+    /// now main-actor-isolated; the sole caller (`TaskAgentManager.buildPrompt`) is
+    /// already on the main actor.
+    @MainActor
     func buildTaskPrompt(for task: TaskActionItem) -> String {
         var prompt = buildCanonicalTaskPrompt(for: task)
 

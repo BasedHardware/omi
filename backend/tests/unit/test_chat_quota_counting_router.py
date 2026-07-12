@@ -155,6 +155,12 @@ def _make_chat_client():
     stt_streaming = _install_module('utils.stt.streaming', ModuleType('utils.stt.streaming'))
     stt_streaming.process_audio_dg = MagicMock()
     stt_streaming.get_stt_service_for_language = MagicMock()
+    # These quota-router tests do not exercise prerecorded STT. Loading the real
+    # module would import NumPy after this harness restores sys.modules between
+    # cases, which native extension modules cannot safely do in one process.
+    prerecorded = _install_module('utils.stt.pre_recorded', ModuleType('utils.stt.pre_recorded'))
+    prerecorded.PrerecordedSTTConfigurationError = type('PrerecordedSTTConfigurationError', (Exception,), {})
+    prerecorded.get_prerecorded_service = MagicMock()
 
     usage_tracker = _install_module('utils.llm.usage_tracker', ModuleType('utils.llm.usage_tracker'))
     usage_tracker.set_usage_context = MagicMock(return_value='usage-token')

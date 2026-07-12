@@ -1,6 +1,6 @@
 import inspect
 
-from utils.memory.v3_compatibility import (
+from utils.memory.v3.compatibility import (
     V3CompatibilityContext,
     V3CompatibilityDecision,
     V3CompatibilityReadPath,

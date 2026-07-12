@@ -5,7 +5,7 @@ from dataclasses import replace
 
 import pytest
 
-from utils.memory.v3_composed_get_service import (
+from utils.memory.v3.composed_get_service import (
     V3ComposedAdapters,
     V3ComposedCursor,
     V3ComposedDependencyDecision,
@@ -354,7 +354,7 @@ def test_bounded_scan_read_counts_response_cap_and_offset_semantics():
 
 
 def test_static_import_checks_prohibit_fastapi_router_production_clients_and_telemetry():
-    source = inspect.getsource(__import__('utils.memory.v3_composed_get_service', fromlist=['']))
+    source = inspect.getsource(__import__('utils.memory.v3.composed_get_service', fromlist=['']))
     for forbidden in [
         'fastapi',
         'routers.memories',

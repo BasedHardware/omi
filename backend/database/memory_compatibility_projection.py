@@ -16,7 +16,7 @@ from typing import Any, NoReturn, cast
 from google.cloud import firestore
 
 from database.memory_collections import MemoryCollections
-from utils.memory.v3_projection_reader_contract import (
+from utils.memory.v3.projection_reader_contract import (
     V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
     V3_COMPATIBILITY_PROJECTION_SOURCE,
     V3_COMPATIBILITY_PROJECTION_VERSION,

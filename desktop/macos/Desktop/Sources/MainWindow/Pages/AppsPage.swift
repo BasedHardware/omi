@@ -118,7 +118,10 @@ struct AppsPage: View {
     @ObservedObject var appProvider: AppProvider
     var appState: AppState? = nil
     @ObservedObject var connectorStatusStore: ImportConnectorStatusStore = ImportConnectorStatusStore()
+    @ObservedObject private var automationPresentationCoordinator =
+        DesktopAutomationPresentationCoordinator.shared
     var initialSection: AppsCatalogInitialSection = .imports
+    var handlesAutomationPresentations = false
     var onDismiss: (() -> Void)? = nil
     var onSelectApp: ((OmiApp) -> Void)? = nil
     var onSelectConnector: ((ImportConnector) -> Void)? = nil
@@ -127,6 +130,8 @@ struct AppsPage: View {
     @State private var selectedApp: OmiApp?
     @State private var selectedConnector: ImportConnector?
     @State private var selectedExportDestination: MemoryExportDestination?
+    @State private var activeAutomationCommand: DesktopAutomationPresentationCommand?
+    @State private var visibleAutomationPresentationTarget: DesktopAutomationPresentationTarget?
     @State private var exportStatuses: [MemoryExportDestination: MemoryExportStatus] = [:]
     @State private var viewAllSection: String? = nil  // "featured", "integrations", "notifications"
 
@@ -310,6 +315,12 @@ struct AppsPage: View {
                 selectedConnector = nil
             })
             .frame(width: 520, height: 620)
+            .onAppear {
+                automationPresentationDidAppear(.importConnector(connector.id))
+            }
+            .onDisappear {
+                automationPresentationDidDisappear(.importConnector(connector.id))
+            }
         }
         .dismissableSheet(item: $selectedExportDestination) { destination in
             ConnectDestinationSheet(
@@ -320,27 +331,22 @@ struct AppsPage: View {
                 }
             )
             .frame(width: 520, height: 620)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenExportRequested)) { note in
-            if let raw = note.userInfo?["destination"] as? String,
-                let dest = MemoryExportDestination(rawValue: raw) {
-                selectDestination(dest)
+            .onAppear {
+                automationPresentationDidAppear(.exportDestination(destination.rawValue))
+            }
+            .onDisappear {
+                automationPresentationDidDisappear(.exportDestination(destination.rawValue))
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenImportRequested)) { note in
-            if let raw = note.userInfo?["connector"] as? String {
-                if raw == "__more_sources" {
-                    if let connector = ImportConnector.all.first(where: {
-                        !$0.isConnected && $0.id != "chatgpt" && $0.id != "claude"
-                    }) ?? ImportConnector.all.first {
-                        selectConnector(connector)
-                    }
-                } else if let connector = ImportConnector.all.first(where: { $0.id == raw }) {
-                    selectConnector(connector)
-                }
-            }
+        .onChange(of: automationPresentationCoordinator.activeCommand?.generation) { _, _ in
+            consumeAutomationPresentationCommand()
+        }
+        .onChange(of: handlesAutomationPresentations) { _, isReady in
+            guard isReady else { return }
+            consumeAutomationPresentationCommand()
         }
         .onAppear {
+            consumeAutomationPresentationCommand()
             // If apps are already loaded, notify sidebar to clear loading indicator
             if !appProvider.isLoading {
                 NotificationCenter.default.post(name: .appsPageDidLoad, object: nil)
@@ -351,6 +357,9 @@ struct AppsPage: View {
                     await appProvider.fetchApps()
                 }
             }
+        }
+        .onDisappear {
+            rejectActiveAutomationPresentationIfNeeded()
         }
         .task {
             await connectorStatusStore.refresh()
@@ -386,6 +395,77 @@ struct AppsPage: View {
         } else {
             selectedExportDestination = destination
         }
+    }
+
+    private func consumeAutomationPresentationCommand() {
+        guard handlesAutomationPresentations else { return }
+        guard let command = automationPresentationCoordinator.activeCommand else {
+            activeAutomationCommand = nil
+            return
+        }
+
+        activeAutomationCommand = command
+        if visibleAutomationPresentationTarget == command.target {
+            acknowledgeAutomationPresentation(command.target)
+            return
+        }
+
+        selectedApp = nil
+        switch command.target {
+        case .importConnector(let identifier):
+            selectedExportDestination = nil
+            guard let connector = ImportConnector.all.first(where: { $0.id == identifier }) else {
+                rejectActiveAutomationPresentationIfNeeded()
+                return
+            }
+            selectConnector(connector)
+        case .exportDestination(let identifier):
+            selectedConnector = nil
+            guard let destination = MemoryExportDestination(rawValue: identifier) else {
+                rejectActiveAutomationPresentationIfNeeded()
+                return
+            }
+            selectDestination(destination)
+        }
+    }
+
+    private func automationPresentationDidAppear(
+        _ target: DesktopAutomationPresentationTarget
+    ) {
+        visibleAutomationPresentationTarget = target
+        acknowledgeAutomationPresentation(target)
+    }
+
+    private func automationPresentationDidDisappear(
+        _ target: DesktopAutomationPresentationTarget
+    ) {
+        guard visibleAutomationPresentationTarget == target else { return }
+        visibleAutomationPresentationTarget = nil
+    }
+
+    private func acknowledgeAutomationPresentation(
+        _ target: DesktopAutomationPresentationTarget
+    ) {
+        guard handlesAutomationPresentations,
+              let command = activeAutomationCommand,
+              command.target == target
+        else { return }
+
+        if automationPresentationCoordinator.acknowledgeVisible(
+            generation: command.generation,
+            target: target
+        ) {
+            activeAutomationCommand = nil
+        }
+    }
+
+    private func rejectActiveAutomationPresentationIfNeeded() {
+        guard handlesAutomationPresentations, let command = activeAutomationCommand else { return }
+        _ = automationPresentationCoordinator.rejectUnavailable(
+            generation: command.generation,
+            target: command.target
+        )
+        activeAutomationCommand = nil
     }
 
     private var searchBar: some View {

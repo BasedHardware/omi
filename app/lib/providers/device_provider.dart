@@ -598,7 +598,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         // Use a small delay to ensure the UI is ready
         Future.delayed(const Duration(milliseconds: 500), () {
           final context = globalNavigatorKey.currentContext;
-          if (context != null) {
+          if (context != null && context.mounted) {
             showFirmwareUpdateDialog(context);
           }
         });

@@ -451,7 +451,7 @@ actor TaskAssistant: ProactiveAssistant {
             let embedding = try await EmbeddingService.shared.embed(text: text)
             let data = await EmbeddingService.shared.floatsToData(embedding)
             try await StagedTaskStorage.shared.updateEmbedding(id: id, embedding: data)
-            await EmbeddingService.shared.addToIndex(id: id, embedding: embedding)
+            await EmbeddingService.shared.addToIndex(source: .staged, id: id, embedding: embedding)
             log("Task: Generated embedding for staged task \(id)")
         } catch {
             logError("Task: Failed to generate embedding for staged task \(id)", error: error)
@@ -1444,35 +1444,42 @@ actor TaskAssistant: ProactiveAssistant {
             let vectorResults = await EmbeddingService.shared.searchSimilar(query: queryEmbedding, topK: 10)
 
             for result in vectorResults where result.similarity > 0.3 {
-                if let record = try await ActionItemStorage.shared.getActionItem(id: result.id) {
-                    let status: String
-                    if record.deleted { status = "deleted" }
-                    else if record.completed { status = "completed" }
-                    else { status = "active" }
+                // Resolve against the exact table the embedding came from — the
+                // index key now carries its source, so no more guessing/fallback
+                // that returned an unrelated task on a rowid collision.
+                switch result.source {
+                case .actionItem:
+                    if let record = try await ActionItemStorage.shared.getActionItem(id: result.id) {
+                        let status: String
+                        if record.deleted { status = "deleted" }
+                        else if record.completed { status = "completed" }
+                        else { status = "active" }
 
-                    results.append(TaskSearchResult(
-                        id: result.id,
-                        description: record.description,
-                        status: status,
-                        similarity: Double(result.similarity),
-                        matchType: "vector",
-                        relevanceScore: record.relevanceScore
-                    ))
-                } else if let staged = try await StagedTaskStorage.shared.getStagedTask(id: result.id) {
-                    // Fallback: ID belongs to a staged task (shared embedding index)
-                    let status: String
-                    if staged.deleted { status = "deleted" }
-                    else if staged.completed { status = "completed" }
-                    else { status = "active" }
+                        results.append(TaskSearchResult(
+                            id: result.id,
+                            description: record.description,
+                            status: status,
+                            similarity: Double(result.similarity),
+                            matchType: "vector",
+                            relevanceScore: record.relevanceScore
+                        ))
+                    }
+                case .staged:
+                    if let staged = try await StagedTaskStorage.shared.getStagedTask(id: result.id) {
+                        let status: String
+                        if staged.deleted { status = "deleted" }
+                        else if staged.completed { status = "completed" }
+                        else { status = "active" }
 
-                    results.append(TaskSearchResult(
-                        id: result.id,
-                        description: staged.description,
-                        status: status,
-                        similarity: Double(result.similarity),
-                        matchType: "vector",
-                        relevanceScore: staged.relevanceScore
-                    ))
+                        results.append(TaskSearchResult(
+                            id: result.id,
+                            description: staged.description,
+                            status: status,
+                            similarity: Double(result.similarity),
+                            matchType: "vector",
+                            relevanceScore: staged.relevanceScore
+                        ))
+                    }
                 }
             }
         } catch {

@@ -590,7 +590,7 @@ class TestSegmentDeduplication:
 
 import sys
 from types import ModuleType
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 _STUB_MODULES = [
     'models',
@@ -1143,6 +1143,7 @@ class TestVoiceMessageRuntimeErrorHandling:
         sys.modules['utils.other.storage'].is_playback_unavailable = MagicMock(return_value=False)
         sys.modules['utils.other.storage'].mark_playback_unavailable = MagicMock()
         sys.modules['utils.notifications'].send_notification = MagicMock()
+        sys.modules['utils.notifications'].send_notification_async = AsyncMock()
         sys.modules['utils.retrieval.graph'].execute_graph_chat = MagicMock()
         sys.modules['utils.retrieval.graph'].execute_graph_chat_stream = MagicMock()
         sys.modules['utils.log_sanitizer'].sanitize = lambda v: v
