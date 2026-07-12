@@ -8,7 +8,7 @@
 #
 # Terminal state: this file is deleted (PLAN.md §4, condition #2).
 #
-# Total: 32 entries.
+# Total: 31 entries.
 #
 # The 4 entries marked "surfaced by P2" below were discovered by the alias-
 # resolution hardening of scan_import_time_side_effects.py: the old checker
@@ -16,7 +16,6 @@
 # `from openai import AsyncOpenAI; AsyncOpenAI()`), so these pre-existing
 # import-time constructions went undetected. Defer each into a lazy getter and
 # remove from this list.
-backend/agent-proxy/main.py
 backend/database/redis_db.py
 backend/main.py
 backend/migration/remove_soft_deleted_documents.py

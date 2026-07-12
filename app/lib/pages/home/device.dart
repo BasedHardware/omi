@@ -302,13 +302,14 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               chipValue: provider.connectedDevice == null
                   ? context.l10n.offline
                   : provider.havingNewFirmware
-                      ? context.l10n.available
-                      : null,
+                  ? context.l10n.available
+                  : null,
               onTap: provider.connectedDevice != null
                   ? () {
                       // Route to OmiGlass OTA page for openglass devices
                       final deviceName = provider.connectedDevice!.name.toLowerCase();
-                      final isOpenGlass = provider.connectedDevice!.type == DeviceType.openglass ||
+                      final isOpenGlass =
+                          provider.connectedDevice!.type == DeviceType.openglass ||
                           deviceName.contains('openglass') ||
                           deviceName.contains('omiglass') ||
                           deviceName.contains('glass');
@@ -377,8 +378,9 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               chipColor: pendingSeconds > 0 ? const Color(0xFF3D3520) : null,
               chipTextColor: pendingSeconds > 0 ? const Color(0xFFFFD060) : null,
               onTap: () {
-                final page =
-                    context.read<DeviceProvider>().supportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
+                final page = context.read<DeviceProvider>().supportsMultiFileSync
+                    ? const AutoSyncPage()
+                    : const SyncPage();
                 Navigator.of(context).push(MaterialPageRoute(builder: (context) => page));
               },
             ),
@@ -451,6 +453,8 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               if (mounted) {
                 context.read<DeviceProvider>().setIsConnected(false);
                 await context.read<DeviceProvider>().setConnectedDevice(null);
+              }
+              if (mounted) {
                 context.read<DeviceProvider>().updateConnectingStatus(false);
               }
 
@@ -499,7 +503,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                       if (provider.connectedDevice != null) {
                         await _bleUnpairDevice(provider.connectedDevice!);
                       }
-                      if (context.mounted) {
+                      if (mounted) {
                         context.read<DeviceProvider>().setIsConnected(false);
                         context.read<DeviceProvider>().setConnectedDevice(null);
                         context.read<DeviceProvider>().updateConnectingStatus(false);
@@ -597,8 +601,9 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             _buildProfileStyleItem(
               icon: FontAwesomeIcons.microphone,
               title: context.l10n.microphone,
-              chipValue:
-                  provider.connectedDevice != null ? context.l10n.raybanMetaMicrophoneReady : context.l10n.offline,
+              chipValue: provider.connectedDevice != null
+                  ? context.l10n.raybanMetaMicrophoneReady
+                  : context.l10n.offline,
               showChevron: false,
             ),
             const Divider(height: 1, color: Color(0xFF3C3C43)),

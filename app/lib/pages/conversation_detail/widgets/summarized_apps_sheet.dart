@@ -388,7 +388,7 @@ class _AppsListState extends State<_AppsList> {
       final success = await conversationProvider.enableApp(app);
 
       if (!success) {
-        if (mounted) {
+        if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(context.l10n.failedToInstallApp(app.name)),
@@ -411,14 +411,14 @@ class _AppsListState extends State<_AppsList> {
       conversationProvider.trackLastUsedSummarizationApp(app.id);
 
       // Close the bottom sheet
-      if (mounted) Navigator.pop(context);
+      if (context.mounted) Navigator.pop(context);
 
       // Set the app for reprocessing and reprocess the conversation
       conversationProvider.setSelectedAppForReprocessing(app);
       await conversationProvider.reprocessConversation(appId: app.id);
     } catch (e) {
       // Handle installation error
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(context.l10n.errorInstallingApp(app.name, e.toString())),
@@ -477,7 +477,7 @@ class _AppListItemState extends State<_AppListItem> {
           // Set as preferred app
           if (widget.provider != null) {
             widget.provider!.setPreferredSummarizationApp(widget.app.id);
-            if (mounted) {
+            if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(context.l10n.setAsDefaultSuccess(widget.app.name.decodeString)),
@@ -647,7 +647,8 @@ class _AppListItemState extends State<_AppListItem> {
 
   Widget _buildTrailingWidget() {
     // Check if this app is currently being processed
-    final isProcessing = widget.provider != null &&
+    final isProcessing =
+        widget.provider != null &&
         widget.provider!.loadingReprocessConversation &&
         widget.provider!.selectedAppForReprocessing?.id == widget.app.id;
 

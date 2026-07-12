@@ -338,6 +338,14 @@ class MemoryGraphViewModel: ObservableObject {
       let restoredLayout =
         loadCachedLayout(signature: signature).map { simulation.applyLayout($0) } ?? false
       if !restoredLayout {
+        // Suppress the render-driven simulation.tick() while the off-main physics
+        // run mutates the same node positions/velocities. The SceneKit delegate
+        // enqueues updateSimulation() on the main actor every frame; without this
+        // it would tick() concurrently with runSync() off-main — an unsynchronized
+        // read/write of non-atomic SIMD3 node state (torn positions, corrupt
+        // layout/camera). The post-layout block below re-enables animation once the
+        // detached run has completed.
+        isAnimating = false
         // Run initial layout off main thread for responsiveness
         await Task.detached(priority: .userInitiated) { [simulation] in
           simulation.runSync(ticks: 800)
@@ -532,6 +540,11 @@ class MemoryGraphViewModel: ObservableObject {
 
     let userName = AuthService.shared.displayName.isEmpty ? nil : AuthService.shared.givenName
     simulation.addNodesAndEdges(graphResponse: response, userNodeLabel: userName)
+
+    // Suppress the render-driven tick() while this off-main physics burst mutates
+    // the (already-live) scene's node state — same main-vs-detached data race as
+    // loadGraph. Re-enabled for the settle animation below, after the detached run.
+    isAnimating = false
 
     // Run a burst of physics to integrate new nodes
     await Task.detached(priority: .userInitiated) { [simulation] in

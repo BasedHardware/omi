@@ -71,6 +71,30 @@ final class RewindStorageVideoFrameExtractionTests: XCTestCase {
     }
   }
 
+  func testResetRebindsVideoEncoderToNextUserDirectory() async throws {
+    let maybeFirstVideosDir = await VideoChunkEncoder.shared.videosDirectoryForTesting()
+    let firstVideosDir = try XCTUnwrap(maybeFirstVideosDir)
+    let nextUserId = "video-frame-test-next-\(UUID().uuidString)"
+    let nextUserDir = FileManager.default
+      .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+      .appendingPathComponent("Omi", isDirectory: true)
+      .appendingPathComponent("users", isDirectory: true)
+      .appendingPathComponent(nextUserId, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: nextUserDir) }
+
+    await RewindStorage.shared.reset()
+    RewindDatabase.currentUserId = nextUserId
+    try await RewindStorage.shared.initialize()
+
+    let maybeReboundVideosDir = await VideoChunkEncoder.shared.videosDirectoryForTesting()
+    let reboundVideosDir = try XCTUnwrap(maybeReboundVideosDir)
+    XCTAssertNotEqual(reboundVideosDir.standardizedFileURL, firstVideosDir.standardizedFileURL)
+    XCTAssertEqual(
+      reboundVideosDir.standardizedFileURL,
+      nextUserDir.appendingPathComponent("Videos", isDirectory: true).standardizedFileURL
+    )
+  }
+
   private func createChunk(relativePath: String, colors: [NSColor], frameRate: Double) async throws -> URL {
     let maybeVideosDir = await RewindStorage.shared.getVideosDirectory()
     let videosDir = try XCTUnwrap(maybeVideosDir)

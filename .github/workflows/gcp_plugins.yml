@@ -22,6 +22,11 @@ env:
   SERVICE: plugins
   REGION: us-central1
 
+# Serialize writes to the selected Cloud Run service environment.
+concurrency:
+  group: deploy-cloud-run-plugins-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
 jobs:
   deploy:
     environment: ${{ github.event.inputs.environment }}

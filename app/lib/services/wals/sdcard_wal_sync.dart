@@ -15,7 +15,7 @@ import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 
 class SDCardWalSyncImpl implements SDCardWalSync {
-  List<Wal> _wals = const [];
+  List<Wal> _wals = [];
   BtDevice? _device;
 
   StreamSubscription? _storageStream;
@@ -35,6 +35,16 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   double get currentSpeedKBps => _currentSpeedKBps;
 
   static final Version _timestampMarkerMinVersion = Version.parse("3.0.16");
+
+  /// Parses an 83-byte SD card packet: byte 3 is the frame length, frame data starts at byte 4.
+  /// Returns null when the length byte is corrupted (frame would exceed the packet bounds).
+  static List<int>? parseLegacyPacketFrame(List<int> value) {
+    final amount = value[3];
+    if (amount <= 0 || 4 + amount > value.length) {
+      return null;
+    }
+    return value.sublist(4, 4 + amount);
+  }
 
   SDCardWalSyncImpl(this.listener);
 
@@ -306,8 +316,12 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         }
 
         if (value.length == 83) {
-          var amount = value[3];
-          bytesData.add(value.sublist(4, 4 + amount));
+          final frame = parseLegacyPacketFrame(value);
+          if (frame != null) {
+            bytesData.add(frame);
+          } else {
+            Logger.debug('Skipping corrupted SD card packet: invalid frame length ${value[3]}');
+          }
           offset += 80;
         } else if (value.length == 440) {
           var packageOffset = 0;
@@ -441,8 +455,12 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         }
 
         if (value.length == 83) {
-          var amount = value[3];
-          bytesData.add(value.sublist(4, 4 + amount));
+          final frame = parseLegacyPacketFrame(value);
+          if (frame != null) {
+            bytesData.add(frame);
+          } else {
+            Logger.debug('Skipping corrupted SD card packet: invalid frame length ${value[3]}');
+          }
           offset += 80;
         } else if (value.length == 440) {
           var packageOffset = 0;
@@ -454,7 +472,8 @@ class SDCardWalSyncImpl implements SDCardWalSync {
             }
             // Timestamp marker: 0xFF followed by 4-byte little-endian epoch
             if (packageSize == 0xFF && packageOffset + 5 <= value.length) {
-              var epoch = value[packageOffset + 1] |
+              var epoch =
+                  value[packageOffset + 1] |
                   (value[packageOffset + 2] << 8) |
                   (value[packageOffset + 3] << 16) |
                   (value[packageOffset + 4] << 24);

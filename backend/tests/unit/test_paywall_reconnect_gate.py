@@ -30,7 +30,7 @@ class TestAdmissionPhase:
         src = _read_source(TRANSCRIBE_SRC_PATH)
         handler_start = src.find('async def _stream_handler(')
         handler_body = src[handler_start:]
-        paywall_pos = handler_body.find('is_trial_paywalled(uid, source)')
+        paywall_pos = handler_body.find('run_blocking(db_executor, is_trial_paywalled, uid, source)')
         session_pos = handler_body.find('task_supervisor.start_session()')
         assert paywall_pos != -1, "is_trial_paywalled call not found in _stream_handler"
         assert session_pos != -1, "session start not found in _stream_handler"
@@ -40,7 +40,7 @@ class TestAdmissionPhase:
         src = _read_source(TRANSCRIBE_SRC_PATH)
         handler_start = src.find('async def _stream_handler(')
         handler_body = src[handler_start:]
-        paywall_pos = handler_body.find('if is_trial_paywalled(')
+        paywall_pos = handler_body.find('if await run_blocking(db_executor, is_trial_paywalled')
         session_pos = handler_body.find('task_supervisor.start_session()')
         paywall_block = handler_body[paywall_pos:session_pos]
         assert 'return' in paywall_block, "paywall rejection must return before session start"
@@ -49,7 +49,7 @@ class TestAdmissionPhase:
         src = _read_source(TRANSCRIBE_SRC_PATH)
         handler_start = src.find('async def _stream_handler(')
         handler_body = src[handler_start:]
-        paywall_pos = handler_body.find('if is_trial_paywalled(')
+        paywall_pos = handler_body.find('if await run_blocking(db_executor, is_trial_paywalled')
         session_pos = handler_body.find('task_supervisor.start_session()')
         paywall_block = handler_body[paywall_pos:session_pos]
         assert (
@@ -60,7 +60,7 @@ class TestAdmissionPhase:
         src = _read_source(TRANSCRIBE_SRC_PATH)
         handler_start = src.find('async def _stream_handler(')
         handler_body = src[handler_start:]
-        paywall_pos = handler_body.find('if is_trial_paywalled(')
+        paywall_pos = handler_body.find('if await run_blocking(db_executor, is_trial_paywalled')
         session_pos = handler_body.find('task_supervisor.start_session()')
         paywall_block = handler_body[paywall_pos:session_pos]
         assert 'trial_expired' in paywall_block, "paywall close must use reason 'trial_expired'"
@@ -79,7 +79,7 @@ class TestAdmissionPhase:
         src = _read_source(TRANSCRIBE_SRC_PATH)
         handler_start = src.find('async def _stream_handler(')
         handler_body = src[handler_start:]
-        paywall_pos = handler_body.find('if is_trial_paywalled(')
+        paywall_pos = handler_body.find('if await run_blocking(db_executor, is_trial_paywalled')
         session_pos = handler_body.find('task_supervisor.start_session()')
         paywall_block = handler_body[paywall_pos:session_pos]
         event_pos = paywall_block.find('FreemiumThresholdReachedEvent')
@@ -266,8 +266,8 @@ class TestPlatformFiltering:
         session_pos = handler_body.find('task_supervisor.start_session()')
         admission_body = handler_body[:session_pos]
         assert (
-            'is_trial_paywalled(uid, source)' in admission_body
-        ), "admission phase must call is_trial_paywalled with uid and source"
+            'run_blocking(db_executor, is_trial_paywalled, uid, source)' in admission_body
+        ), "admission phase must offload is_trial_paywalled with uid and source"
 
 
 class TestIsTrialPaywalledBehavioral:

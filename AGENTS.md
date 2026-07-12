@@ -19,7 +19,9 @@ Every change must satisfy this checklist before it is committed or put in a PR. 
 5. **No orphaned deferrals** — new `TODO`/`FIXME`/`HACK` comments reference a tracking issue or are resolved before merge.
 6. **Docs moved with the code** — if you changed setup, test commands, service boundaries, env vars, or agent-relevant behavior, the matching doc (this file, a component `AGENTS.md`, or `docs/doc/developer/`) is updated in the same PR. Product-direction or invariant changes update `PRODUCT.md` / `docs/product/invariants/` in the same PR.
 7. **Bug classes are closed, not patched around** — write down the root cause and the durable guard in the PR. When recent history contains the same failure class, fix the shared boundary, state model, harness, or static contract that allowed all of them.
-8. **PR contracts pass before opening the PR** — draft the PR body to a file, then run `scripts/pr-preflight --pr-body-file /tmp/pr-body.md` (or `scripts/pr-preflight --suggest` to get the paste-ready invariant IDs). Pre-push runs the same cheap contracts; Hygiene will fail if you skip this.
+8. **PR contracts pass before opening the PR** — run `make preflight`; it executes the same deterministic check manifest CI runs (`.github/checks-manifest.yaml`). Draft the PR body and run `scripts/pr-preflight --pr-body-file /tmp/pr-body.md` when product-invariant citations apply (or use `scripts/pr-preflight --suggest` to get the paste-ready IDs).
+
+A deterministic diff-scoped check failing for the first time in CI is a manifest bug: fix the manifest instead of adding a one-off workflow step. Register new checks in `.github/checks-manifest.yaml` with both `local` and `ci` lanes.
 
 ## Bug Fixes: Close the Failure Class
 
@@ -92,6 +94,7 @@ Improve the code you touch — within your blast radius:
 - New `TODO`, `FIXME`, and `HACK` comments must reference a tracking issue or be resolved before merge.
 - Existing markers are legacy debt; only delete or annotate them when the owner and next action are clear.
 - Packages over 12 source files need a package-root `ARCHITECTURE.md` or `README.md`; `.github/scripts/check_arch_guardrails.py` enforces the baseline ratchet.
+- Designated rollout scaffolding (`backend/scripts/*readiness*`, `*gauntlet*`, `*proof*`, and `backend/utils/**/*rollout*`, `*compat*`) needs a near-top `LIFECYCLE: permanent|one-time` header; one-time files also need `DELETE-AFTER: <GitHub issue URL or invariant ID>`. `.github/scripts/check_lifecycle_headers.py` enforces this with `.github/lifecycle-header-baseline.txt` as the frozen legacy census.
 
 ### Fallback / resilience telemetry
 
@@ -119,12 +122,13 @@ Optional ratchet (not CI): `python backend/scripts/check_fallback_instrumentatio
 
 ### Backend (Python)
 
+- **Composition errors** — step helpers raise a typed error caught once at the composition boundary. Do not add assigned-call `isinstance(...): return` flow control; `.github/scripts/check_isinstance_return_ratchet.py` ratchets existing occurrences.
 - **No in-function imports** — all imports at module top level.
-- **Import purity** — a module's top level must be referentially transparent: importing it must not construct clients/connections (`OpenAI(...)`, `Redis(...)`, `Pinecone(...)`, `DeepgramClient(...)`, `firebase_admin.initialize_app(...)`, `tiktoken.encoding_for_model(...)`, etc.), perform network/IO (`requests.*`, `httpx.*`, `open(...)`), read `os.environ["X"]` (subscript — use `os.getenv`/`.get`), or mutate global state. Defer construction into lazy getters (`_x=None; def get_x(): ...`); tests inject fakes via `monkeypatch.setattr` on the singleton. Scope: correctness side effects, not import duration (`import langchain` is slow-but-pure and fine). Run `python scripts/scan_import_time_side_effects.py` from `backend/`. Full prescription: `backend/docs/test_isolation.md`.
-- **Test isolation** — never mutate `sys.modules` at module scope in test files. Use `monkeypatch.setattr` on a lazy-held singleton, FastAPI `app.dependency_overrides` for router deps, or (reserve only) `backend/testing/import_isolation.py`. Run `python scripts/check_module_stub_pollution.py`. Do not extend `tests/unit/memory_import_isolation.py` (deprecated). See `backend/docs/test_isolation.md`.
+- **Import purity** — a module's top level must be referentially transparent: importing it must not construct clients/connections (`OpenAI(...)`, `Redis(...)`, `Pinecone(...)`, `DeepgramClient(...)`, `firebase_admin.initialize_app(...)`, `tiktoken.encoding_for_model(...)`, etc.), perform network/IO (`requests.*`, `httpx.*`, `open(...)`), read `os.environ["X"]` (subscript — use `os.getenv`/`.get`), or mutate global state. Defer construction into lazy getters (`_x=None; def get_x(): ...`); tests inject fakes via `monkeypatch.setattr` on the singleton. Scope: correctness side effects, not import duration (`import langchain` is slow-but-pure and fine). The shared preflight manifest runs the import-purity guard. Full prescription: `backend/docs/test_isolation.md`.
+- **Test isolation** — never mutate `sys.modules` at module scope in test files. Use `monkeypatch.setattr` on a lazy-held singleton, FastAPI `app.dependency_overrides` for router deps, or (reserve only) `backend/testing/import_isolation.py`. The shared preflight manifest runs the module-pollution guard. Do not extend `tests/unit/memory_import_isolation.py` (deprecated). See `backend/docs/test_isolation.md`.
 - **Import hierarchy** (low → high): `database/` → `utils/` → `routers/` → `main.py`. Never import upward.
 - **Memory management** — `del` byte arrays after processing, `.clear()` dicts/lists holding data.
-- **Async I/O** — never `requests.*` in async (use `httpx.AsyncClient` pools from `utils/http_client.py`), never `Thread().start().join()` (use `critical_executor`/`storage_executor`), never `time.sleep()` in async (use `asyncio.sleep()`). Run `python scripts/scan_async_blockers.py` from `backend/` before committing.
+- **Async I/O** — never `requests.*` in async (use `httpx.AsyncClient` pools from `utils/http_client.py`), never `Thread().start().join()` (use `critical_executor`/`storage_executor`), never `time.sleep()` in async (use `asyncio.sleep()`). The shared preflight manifest runs the async-blocker guard.
 - **`async def` vs `def` endpoints** — use `def` for endpoints that only call sync code (Firestore, Redis, file I/O); FastAPI runs `def` in a threadpool automatically. Only use `async def` when the endpoint genuinely `await`s something (httpx, file.read(), WebSocket, asyncio.sleep) or uses asyncio APIs directly. Never call sync DB/storage/file functions directly inside `async def` — wrap with `await run_blocking(executor, func, args)`.
 - **Blocking calls in async** — these block the event loop: `database.*` functions (Firestore sync SDK), `open()`/`shutil.*` (file I/O), `upload_*`/`delete_*` from storage (GCS SDK), `creds.refresh()` (Google auth HTTP). In `async def`, always offload via `await run_blocking(executor, func, args)` from `utils.executors`. Pool assignment: `critical_executor` for auth/rate-limits, `db_executor` for Firestore/Redis CRUD, `llm_executor` for LLM calls, `storage_executor` for GCS/file I/O, `postprocess_executor` for coordinators, `sync_executor` for STT/VAD. See `backend/CLAUDE.md` for full rules. Never use bare `asyncio.to_thread()`.
 
@@ -202,6 +206,8 @@ Keep this map up to date. When adding, removing, or changing inter-service calls
 - All user-facing strings must use l10n (`context.l10n.keyName`) — never hardcoded strings. Add keys to ARB files using `jq` (never read full ARB files). See skill `add-a-new-localization-key-l10n-arb`.
 - When adding new l10n keys, translate all non-English locales — never leave English text in a non-English ARB file. Don't hardcode the count; the authoritative list is whatever `ls app/lib/l10n/app_*.arb` returns minus `app_en.arb`. Use the `omi-add-missing-language-keys-l10n` skill, then verify with `cd app && flutter gen-l10n` — zero "untranslated message(s)" warnings means done.
 - **Firebase Prod Config** — never run `flutterfire configure`; it overwrites prod credentials. Prod config files live in `app/ios/Config/Prod/`, `app/lib/firebase_options_prod.dart`, `app/android/app/src/prod/`.
+- PR CI runs `flutter test` and an analyzer ratchet (`app/scripts/analyze_ratchet.sh`) — analyzer errors always fail; new info/warning lint occurrences above `app/analysis_baseline.json` fail. Run the script locally before committing app Dart changes.
+- Deliberate lint acceptances/improvements update the baseline via `--update-baseline` in the same PR.
 
 #### Verifying UI Changes (agent-flutter)
 

@@ -16,6 +16,25 @@ extension UserDefaults {
     }
 }
 
+private final class PendingToolTraceInputStore: @unchecked Sendable {
+    typealias Entry = (name: String, inputJson: String, started: ContinuousClock.Instant)
+
+    private let lock = NSLock()
+    private var entries: [String: Entry] = [:]
+
+    func set(_ entry: Entry, forKey key: String) {
+        lock.withLock {
+            entries[key] = entry
+        }
+    }
+
+    func removeValue(forKey key: String) -> Entry? {
+        lock.withLock {
+            entries.removeValue(forKey: key)
+        }
+    }
+}
+
 // MARK: - Chat Session Model
 
 /// A chat session that groups related messages
@@ -2422,8 +2441,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
         // Log prompt context summary
         let activeGoalCount = cachedGoals.filter { $0.isActive }.count
-        let historyMessages = messages.filter { !$0.text.isEmpty && !$0.isStreaming }
-        let historyCount = min(historyMessages.count, 20)
         log("ChatProvider: prompt built — schema: \(style.includesDatabaseSchema && !cachedDatabaseSchema.isEmpty ? "yes" : "no"), goals: \(activeGoalCount), tasks: \(cachedTasks.count), ai_profile: \(!cachedAIProfile.isEmpty ? "yes" : "no"), memories: \(cachedMemories.count), history: kernel-owned, claude_md: \(claudeMdEnabled && claudeMdContent != nil ? "yes" : "no"), project_claude_md: \(projectClaudeMdEnabled && projectClaudeMdContent != nil ? "yes" : "no"), skills: \(style.includesSkills ? enabledSkillNames.count : 0), dev_mode_in_skills: \(style.includesSkills && devModeEnabled && devModeContext != nil ? "yes" : "no"), prompt_length: \(prompt.count) chars")
 
         // Log per-section character breakdown
@@ -4093,8 +4110,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // Kernel control tools (spawn_agent, list_agent_sessions, …) execute in
             // the Node runtime and only surface via tool_activity + tool_result_display.
             // Pair started input with completed output for QueryTracer.tool_executions.
-            var pendingToolTraceInputs:
-                [String: (name: String, inputJson: String, started: ContinuousClock.Instant)] = [:]
+            let pendingToolTraceInputs = PendingToolTraceInputStore()
             let textDeltaHandler: AgentClient.TextDeltaHandler = { [weak self] delta in
                 let nowMs = ChatProvider.monotonicNowMs()
                 if responseMetrics.markFirstOutputIfNeeded() {
@@ -4149,7 +4165,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         let inputJson =
                             (try? String(data: JSONSerialization.data(withJSONObject: input), encoding: .utf8))
                             ?? "\(input)"
-                        pendingToolTraceInputs[trackedId] = (name, inputJson, ContinuousClock.now)
+                        pendingToolTraceInputs.set(
+                            (name, inputJson, ContinuousClock.now),
+                            forKey: trackedId)
                     }
                 } else if toolStatus != .running {
                     tracer?.end(spanKey)
@@ -4210,12 +4228,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
             let toolResultDisplayHandler: AgentClient.ToolResultDisplayHandler = { [weak self] toolUseId, name, output in
                 let nowMs = ChatProvider.monotonicNowMs()
-                if let tracer {
+                if tracer != nil {
                     let trackedId = ChatProvider.stallTrackingId(toolUseId: toolUseId, name: name)
                     let pending = pendingToolTraceInputs.removeValue(forKey: trackedId)
                     let inputJson = pending?.inputJson ?? ""
                     let durationMs = pending.map { (ContinuousClock.now - $0.started).milliseconds }
-                    tracer.captureToolExecution(
+                    tracer?.captureToolExecution(
                         toolUseId: toolUseId.isEmpty ? nil : toolUseId,
                         name: name,
                         input: inputJson,

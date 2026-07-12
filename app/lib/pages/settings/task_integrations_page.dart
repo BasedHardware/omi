@@ -170,7 +170,8 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
 
   bool _shouldShowSettingsIcon() {
     final selected = context.read<TaskIntegrationProvider>().selectedApp;
-    final hasSettings = (selected == TaskIntegrationApp.asana && AsanaService().isAuthenticated) ||
+    final hasSettings =
+        (selected == TaskIntegrationApp.asana && AsanaService().isAuthenticated) ||
         (selected == TaskIntegrationApp.clickup && ClickUpService().isAuthenticated) ||
         (selected == TaskIntegrationApp.todoist && TodoistService().isAuthenticated) ||
         (selected == TaskIntegrationApp.googleTasks && GoogleTasksService().isAuthenticated);
@@ -239,6 +240,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     if (app == TaskIntegrationApp.todoist) {
       final todoistService = TodoistService();
       if (!todoistService.isAuthenticated) {
+        final provider = context.read<TaskIntegrationProvider>();
         final shouldAuth = await _showAuthDialog(app);
         if (shouldAuth == true) {
           final success = await todoistService.authenticate();
@@ -248,7 +250,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                 SnackBar(content: Text(context.l10n.completeAuthBrowser), duration: const Duration(seconds: 5)),
               );
             }
-            await context.read<TaskIntegrationProvider>().setSelectedApp(app);
+            await provider.setSelectedApp(app);
             // Note: OAuth callback will save connection to Firebase
             // Provider will refresh when user returns to this page
             Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
@@ -275,6 +277,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     if (app == TaskIntegrationApp.asana) {
       final asanaService = AsanaService();
       if (!asanaService.isAuthenticated) {
+        final provider = context.read<TaskIntegrationProvider>();
         final shouldAuth = await _showAuthDialog(app);
         if (shouldAuth == true) {
           final success = await asanaService.authenticate();
@@ -284,7 +287,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                 SnackBar(content: Text(context.l10n.completeAuthBrowser), duration: const Duration(seconds: 5)),
               );
             }
-            await context.read<TaskIntegrationProvider>().setSelectedApp(app);
+            await provider.setSelectedApp(app);
             Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             // Track authentication failure
@@ -309,6 +312,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     if (app == TaskIntegrationApp.googleTasks) {
       final googleTasksService = GoogleTasksService();
       if (!googleTasksService.isAuthenticated) {
+        final provider = context.read<TaskIntegrationProvider>();
         final shouldAuth = await _showAuthDialog(app);
         if (shouldAuth == true) {
           final success = await googleTasksService.authenticate();
@@ -318,7 +322,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                 SnackBar(content: Text(context.l10n.completeAuthBrowser), duration: const Duration(seconds: 5)),
               );
             }
-            await context.read<TaskIntegrationProvider>().setSelectedApp(app);
+            await provider.setSelectedApp(app);
             Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             // Track authentication failure
@@ -343,6 +347,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     if (app == TaskIntegrationApp.clickup) {
       final clickupService = ClickUpService();
       if (!clickupService.isAuthenticated) {
+        final provider = context.read<TaskIntegrationProvider>();
         final shouldAuth = await _showAuthDialog(app);
         if (shouldAuth == true) {
           final success = await clickupService.authenticate();
@@ -352,7 +357,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                 SnackBar(content: Text(context.l10n.completeAuthBrowser), duration: const Duration(seconds: 5)),
               );
             }
-            await context.read<TaskIntegrationProvider>().setSelectedApp(app);
+            await provider.setSelectedApp(app);
             Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             // Track authentication failure
@@ -504,8 +509,9 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                       )
                     : Container(
                         decoration: BoxDecoration(
-                          color:
-                              isAvailable ? app.iconColor.withValues(alpha: 0.2) : Colors.grey.withValues(alpha: 0.1),
+                          color: isAvailable
+                              ? app.iconColor.withValues(alpha: 0.2)
+                              : Colors.grey.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: FaIcon(app.icon, color: isAvailable ? app.iconColor : Colors.grey, size: 24),

@@ -53,7 +53,7 @@ from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.retrieval.hybrid import rrf_rerank
 from utils.memory.canonical_vector_sync import delete_canonical_memory_vector, sync_canonical_memory_vector
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
-from utils.memory.v3_account_generation_source import read_memory_v3_trusted_account_generation
+from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
 
 logger = logging.getLogger(__name__)
 

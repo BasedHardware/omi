@@ -2,6 +2,16 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.71",
+      "date": "2026-07-11",
+      "changes": [
+        "Made macOS permission requests safer across chat and voice and kept notch transitions centered after push-to-talk",
+        "Improved push-to-talk reliability during reconnects and rapid state changes",
+        "Fixed the floating notch disappearing after macOS moves it between displays or Spaces",
+        "Added a consent-gated way to let Omi open macOS permission settings directly from main chat"
+      ]
+    },
+    {
       "version": "0.12.70",
       "date": "2026-07-11",
       "changes": [

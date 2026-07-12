@@ -113,6 +113,23 @@ struct LocalAgentTool {
   let annotations: [String: Any]
 }
 
+/// Shared parsing for the `Content-Length` header of the loopback HTTP servers
+/// (LocalAgentAPIServer + DesktopAutomationBridge). Both slice the body with
+/// `data.index(bodyStart, offsetBy: contentLength)`, which traps on a negative
+/// length, and add `contentLength` to a distance, which overflows on a huge one.
+/// Since both servers parse before authenticating, a malformed length from any
+/// local process would otherwise crash the whole app. Fail closed instead.
+enum LoopbackHTTPParsing {
+  /// Returns the validated body length, or `nil` if the header value is malformed,
+  /// negative, or exceeds `maxBytes` (caller should reject the request).
+  static func parseContentLength(_ value: String, maxBytes: Int) -> Int? {
+    guard let parsed = Int(value), parsed >= 0, parsed <= maxBytes else {
+      return nil
+    }
+    return parsed
+  }
+}
+
 final class LocalAgentAPIServer {
   static let shared = LocalAgentAPIServer()
   private static let maxRequestBytes = 1024 * 1024
@@ -230,10 +247,13 @@ final class LocalAgentAPIServer {
       let value = pieces[1].trimmingCharacters(in: .whitespaces)
       headers[key] = value
       if key == "content-length" {
-        contentLength = Int(value) ?? 0
-        if contentLength > Self.maxRequestBytes {
+        // Reject a negative/over-large length before it reaches the body-slice
+        // range below (which would trap on an unauthenticated request).
+        guard let parsed = LoopbackHTTPParsing.parseContentLength(value, maxBytes: Self.maxRequestBytes)
+        else {
           return nil
         }
+        contentLength = parsed
       }
     }
 

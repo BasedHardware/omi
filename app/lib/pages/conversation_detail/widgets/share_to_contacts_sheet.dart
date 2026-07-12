@@ -163,6 +163,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
     final selected = _selectedContacts;
     if (selected.isEmpty) return;
 
+    final l10n = context.l10n;
     setState(() {
       _isPreparingShare = true;
       _errorMessage = null;
@@ -175,7 +176,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
         if (!mounted) return;
         setState(() {
           _isPreparingShare = false;
-          _errorMessage = context.l10n.failedToPrepareConversationForSharing;
+          _errorMessage = l10n.failedToPrepareConversationForSharing;
         });
         return;
       }
@@ -185,7 +186,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
 
       // Build the share link and message
       final shareLink = 'https://h.omi.me/conversations/${widget.conversation.id}';
-      final message = context.l10n.heresWhatWeDiscussed(shareLink);
+      final message = l10n.heresWhatWeDiscussed(shareLink);
 
       // Build recipients string (comma-separated phone numbers)
       final recipients = selected.map((c) => c.phoneNumber).join(',');
@@ -206,12 +207,14 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
         // Track SMS opened
         PlatformManager.instance.analytics.shareToContactsSmsOpened(widget.conversation.id, selected.length);
         HapticFeedback.mediumImpact();
-        Navigator.of(context).pop();
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
         await launchUrl(smsUri);
       } else {
         setState(() {
           _isPreparingShare = false;
-          _errorMessage = context.l10n.couldNotOpenSmsApp;
+          _errorMessage = l10n.couldNotOpenSmsApp;
         });
       }
     } catch (e) {
@@ -372,8 +375,8 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                                 _selectedContacts.isEmpty
                                     ? context.l10n.selectContactsToShare
                                     : _selectedContacts.length > 1
-                                        ? context.l10n.shareWithContactsCount(_selectedContacts.length)
-                                        : context.l10n.shareWithContactCount(_selectedContacts.length),
+                                    ? context.l10n.shareWithContactsCount(_selectedContacts.length)
+                                    : context.l10n.shareWithContactCount(_selectedContacts.length),
                                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
                               ),
                       ),
