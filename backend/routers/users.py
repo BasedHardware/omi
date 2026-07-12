@@ -77,6 +77,7 @@ from models.users import (
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
 from utils.apps import get_available_app_by_id
 from utils.subscription import (
+    enforce_chat_quota,
     get_chat_quota_snapshot,
     get_paid_plan_definitions,
     get_plan_display_name,
@@ -1412,12 +1413,18 @@ class TestDailySummaryRequest(BaseModel):
 
 
 @router.post('/v1/users/daily-summary-settings/test', tags=['v1'], response_model=DailySummaryTestResponse)
-def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depends(auth.get_current_user_uid)):
+def test_daily_summary(
+    request: TestDailySummaryRequest = None,
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+):
     """
     Test endpoint to manually trigger daily summary for the authenticated user.
     This bypasses the time check and sends a summary immediately.
     Optionally accepts a date parameter (YYYY-MM-DD) to generate summary for a specific date.
     """
+    # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
+    enforce_chat_quota(uid, platform=x_app_platform)
     time_zone_name = notification_db.get_user_time_zone(uid)
     tokens = notification_db.get_all_tokens(uid)
 
@@ -1581,12 +1588,18 @@ _REGENERATE_COOLDOWN_SECONDS = 30
 
 
 @router.post('/v1/users/daily-summaries/{summary_id}/regenerate', tags=['v1'], response_model=DailySummaryResponse)
-def regenerate_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def regenerate_daily_summary(
+    summary_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+):
     """
     Re-run summary generation for the date of an existing daily summary and
     overwrite the same doc in place. No push notification — the user is
     already looking at the page.
     """
+    # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
+    enforce_chat_quota(uid, platform=x_app_platform)
     summary = daily_summaries_db.get_daily_summary(uid, summary_id)
     if not summary:
         raise HTTPException(status_code=404, detail='Daily summary not found')

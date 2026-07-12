@@ -17,7 +17,8 @@ from utils.byok import (
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.llm.gateway_client import raise_if_gateway_feature_mode_blocks_direct_model_surface
 from utils.other.endpoints import _verify_ws_auth  # type: ignore[reportPrivateUsage]  # shared WS auth helper, intentionally reused cross-module
-from utils.subscription import is_trial_paywalled
+from models.users import PlanType
+from utils.subscription import get_chat_quota_snapshot, is_trial_paywalled
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -103,6 +104,16 @@ async def omni_relay(websocket: WebSocket):
         logger.info(f"omni relay paywalled uid={uid}")
         await websocket.close(code=1008, reason="trial_expired")
         return
+
+    # Monthly free-tier chat quota: realtime turns count as questions, so they
+    # must also be blocked past the cap. BYOK sessions pay their own provider
+    # bill and are exempt (mirrors enforce_chat_quota / the Rust lane gate).
+    if not byok:
+        snapshot = await run_blocking(db_executor, get_chat_quota_snapshot, uid, "desktop")
+        if snapshot['plan'] == PlanType.basic and not snapshot['allowed']:
+            logger.info(f"omni relay quota exceeded uid={uid}")
+            await websocket.close(code=1008, reason="quota_exceeded")
+            return
 
     provider = websocket.query_params.get("provider", "gemini")
     model = websocket.query_params.get("model")
