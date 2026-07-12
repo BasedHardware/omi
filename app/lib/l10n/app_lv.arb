@@ -3055,7 +3055,7 @@
     "syncCustomSttWarningMessage": "Jūs izmantojat savu transkripcijas pakalpojumu. Šo ierakstu sinhronizēšana tos transkribē Omi serveros, un tie tiek ieskaitīti jūsu plāna transkripcijas limitā.",
     "transcribeLaterTitle": "Transkribēt vēlāk",
     "transcribeLaterDescription": "Ierakstiet audio tagad un transkribējiet to pēc pieprasījuma, nevis reāllaikā. Ieraksti tiek saglabāti jūsu tālrunī, un pēc tam jūs tos augšupielādējat, lai izveidotu sarunas.",
-    "transcribeLaterNote": "Pagaidām darbojas ar Omi un Limitless ierīcēm. Audio paliek jūsu tālrunī, līdz izvēlaties to augšupielādēt.",
+    "transcribeLaterNote": "Darbojas ar tālruņa mikrofonu un Omi un Limitless ierīcēm. Audio paliek jūsu tālrunī, līdz izvēlaties to augšupielādēt.",
     "transcribeLaterStorageFull": "Jūsu tālrunī ir maz brīvas vietas, tāpēc ierakstīšana ir apturēta. Atbrīvojiet vietu vai augšupielādējiet savus ierakstus, un tā automātiski atsāksies.",
     "unmute": "Ieslēgt skaņu",
     "newRecording": "Jauns ieraksts",
@@ -3143,5 +3143,6 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "phoneMicOfflineFallbackMessage": "Nav savienojuma — ieraksta lokāli. Tas tiks transkribēts, kad atkal būsiet tiešsaistē."
 }

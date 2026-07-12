@@ -9364,7 +9364,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'De momento funciona con dispositivos Omi y Limitless. El audio permanece en tu teléfono hasta que decidas subirlo.';
+      'Funciona con el micrófono del teléfono y con dispositivos Omi y Limitless. El audio permanece en tu teléfono hasta que decidas subirlo.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9595,4 +9595,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Error al conectar con Ray-Ban Meta: $error';
   }
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Sin conexión: se está grabando localmente. Se transcribirá cuando vuelvas a estar en línea.';
 }

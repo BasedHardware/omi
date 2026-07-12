@@ -3090,7 +3090,7 @@
     "syncCustomSttWarningMessage": "Używasz własnego dostawcy transkrypcji. Synchronizacja tych nagrań transkrybuje je na serwerach Omi i są wliczane do limitu transkrypcji w Twoim planie.",
     "transcribeLaterTitle": "Transkrypcja później",
     "transcribeLaterDescription": "Nagrywaj dźwięk teraz, a transkrypcję uruchamiaj na żądanie zamiast na żywo. Nagrania są zapisywane w telefonie, a następnie przesyłasz je, aby utworzyć rozmowy.",
-    "transcribeLaterNote": "Na razie działa z urządzeniami Omi i Limitless. Dźwięk pozostaje w telefonie, dopóki nie zdecydujesz się go przesłać.",
+    "transcribeLaterNote": "Działa z mikrofonem telefonu oraz urządzeniami Omi i Limitless. Dźwięk pozostaje w telefonie, dopóki nie zdecydujesz się go przesłać.",
     "transcribeLaterStorageFull": "W telefonie jest mało miejsca, więc nagrywanie zostało wstrzymane. Zwolnij miejsce lub prześlij nagrania, a nagrywanie wznowi się automatycznie.",
     "unmute": "Wyłącz wyciszenie",
     "newRecording": "Nowe nagranie",
@@ -3178,5 +3178,6 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "phoneMicOfflineFallbackMessage": "Brak połączenia – nagrywanie lokalne. Transkrypcja nastąpi po ponownym połączeniu z siecią."
 }

@@ -9392,7 +9392,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'ప్రస్తుతానికి Omi మరియు Limitless పరికరాలతో పనిచేస్తుంది. మీరు అప్‌లోడ్ చేయాలని ఎంచుకునే వరకు ఆడియో మీ ఫోన్‌లోనే ఉంటుంది.';
+      'ఫోన్ మైక్రోఫోన్, Omi మరియు Limitless పరికరాలతో పనిచేస్తుంది. మీరు అప్‌లోడ్ చేయాలని ఎంచుకునే వరకు ఆడియో మీ ఫోన్‌లోనే ఉంటుంది.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9621,4 +9621,8 @@ class AppLocalizationsTe extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Ray-Ban Meta కు కనెక్ట్ చేయడంలో లోపం: $error';
   }
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'కనెక్షన్ లేదు — స్థానికంగా రికార్డ్ చేయబడుతోంది. మీరు మళ్లీ ఆన్‌లైన్‌కి వచ్చినప్పుడు దీన్ని ట్రాన్స్‌క్రైబ్ చేయబడుతుంది.';
 }

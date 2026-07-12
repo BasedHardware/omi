@@ -9371,7 +9371,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Пакуль працуе з прыладамі Omi і Limitless. Аўдыя застаецца на тэлефоне, пакуль вы самі не вырашыце яго загрузіць.';
+      'Працуе з мікрафонам тэлефона, прыладамі Omi і Limitless. Аўдыя застаецца на тэлефоне, пакуль вы самі не вырашыце яго загрузіць.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9604,4 +9604,8 @@ class AppLocalizationsBe extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Памылка падключэння да Ray-Ban Meta: $error';
   }
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Няма злучэння — запіс вядзецца лакальна. Транскрыпцыя адбудзецца, калі вы зноў будзеце ў сетцы.';
 }

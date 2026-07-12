@@ -9340,7 +9340,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Praegu töötab Omi ja Limitless seadmetega. Heli jääb sinu telefoni seni, kuni otsustad selle üles laadida.';
+      'Töötab telefoni mikrofoni ning Omi ja Limitless seadmetega. Heli jääb sinu telefoni seni, kuni otsustad selle üles laadida.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9570,4 +9570,8 @@ class AppLocalizationsEt extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Viga Ray-Ban Metaga ühendamisel: $error';
   }
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Ühendus puudub – salvestatakse lokaalselt. See transkribeeritakse, kui oled taas võrgus.';
 }

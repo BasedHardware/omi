@@ -9428,7 +9428,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Gumagana muna sa mga Omi at Limitless device. Mananatili ang audio sa iyong telepono hangga\'t hindi mo ito ina-upload.';
+      'Gumagana sa mikropono ng telepono at sa mga Omi at Limitless device. Mananatili ang audio sa iyong telepono hangga\'t hindi mo ito ina-upload.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9663,4 +9663,8 @@ class AppLocalizationsTl extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Error sa pagkonekta sa Ray-Ban Meta: $error';
   }
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Walang koneksyon — nagre-record nang lokal. Ita-transcribe ito kapag online ka na ulit.';
 }

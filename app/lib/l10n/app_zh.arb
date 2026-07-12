@@ -3077,7 +3077,7 @@
     "syncCustomSttWarningMessage": "您使用的是自己的转录服务。同步这些录音会改为在 Omi 的服务器上转录，并计入您套餐的转录额度。",
     "transcribeLaterTitle": "稍后转写",
     "transcribeLaterDescription": "先录音，之后再按需转写，无需实时进行。录音会保存在手机上，上传后即可生成对话。",
-    "transcribeLaterNote": "目前支持 Omi 和 Limitless 设备。在你主动上传之前，音频会一直保留在手机上。",
+    "transcribeLaterNote": "支持手机麦克风以及 Omi 和 Limitless 设备。在你主动上传之前，音频会一直保留在手机上。",
     "transcribeLaterStorageFull": "手机存储空间不足，录音已暂停。请清理空间或上传录音，之后会自动恢复。",
     "unmute": "取消静音",
     "newRecording": "新建录音",
@@ -3165,5 +3165,6 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "phoneMicOfflineFallbackMessage": "无网络连接 — 正在本地录制。恢复联网后将自动转写。"
 }

@@ -10633,7 +10633,7 @@
     "syncCustomSttWarningMessage": "Gumagamit ka ng sarili mong transcription provider. Kapag in-sync ang mga recording na ito, ita-transcribe ang mga ito sa mga server ng Omi at mabibilang sa limitasyon ng transcription ng iyong plan.",
     "transcribeLaterTitle": "I-transcribe Mamaya",
     "transcribeLaterDescription": "Mag-record ng audio ngayon at i-transcribe ito kapag kailangan mo, sa halip na live. Naka-save ang mga recording sa iyong telepono, tapos i-a-upload mo ang mga ito para gumawa ng mga usapan.",
-    "transcribeLaterNote": "Gumagana muna sa mga Omi at Limitless device. Mananatili ang audio sa iyong telepono hangga't hindi mo ito ina-upload.",
+    "transcribeLaterNote": "Gumagana sa mikropono ng telepono at sa mga Omi at Limitless device. Mananatili ang audio sa iyong telepono hangga't hindi mo ito ina-upload.",
     "transcribeLaterStorageFull": "Kapos na sa storage ang iyong telepono, kaya naka-pause ang pag-record. Magbakante ng espasyo o i-upload ang iyong mga recording, at awtomatiko itong magpapatuloy.",
     "unmute": "I-unmute",
     "newRecording": "Bagong recording",
@@ -10721,5 +10721,6 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "phoneMicOfflineFallbackMessage": "Walang koneksyon — nagre-record nang lokal. Ita-transcribe ito kapag online ka na ulit."
 }

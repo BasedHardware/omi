@@ -9375,7 +9375,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Za sada radi s Omi i Limitless uređajima. Zvuk ostaje na tvom telefonu dok ga ne odlučiš prenijeti.';
+      'Radi s mikrofonom telefona te Omi i Limitless uređajima. Zvuk ostaje na tvom telefonu dok ga ne odlučiš prenijeti.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9607,4 +9607,8 @@ class AppLocalizationsHr extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Pogreška pri povezivanju s Ray-Ban Meta: $error';
   }
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Nema veze — snima se lokalno. Bit će transkribirano kad ponovno budeš na mreži.';
 }

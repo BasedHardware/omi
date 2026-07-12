@@ -9293,7 +9293,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'ขณะนี้รองรับอุปกรณ์ Omi และ Limitless เสียงจะอยู่ในเครื่องของคุณจนกว่าคุณจะเลือกอัปโหลด';
+      'รองรับไมโครโฟนของโทรศัพท์ รวมถึงอุปกรณ์ Omi และ Limitless เสียงจะอยู่ในเครื่องของคุณจนกว่าคุณจะเลือกอัปโหลด';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9522,4 +9522,8 @@ class AppLocalizationsTh extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'เกิดข้อผิดพลาดในการเชื่อมต่อกับ Ray-Ban Meta: $error';
   }
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'ไม่มีการเชื่อมต่อ — กำลังบันทึกในเครื่อง จะถอดเสียงเมื่อคุณกลับมาออนไลน์';
 }

@@ -3060,7 +3060,7 @@
     "syncCustomSttWarningMessage": "Bạn đang dùng nhà cung cấp phiên âm riêng. Đồng bộ các bản ghi này sẽ phiên âm chúng trên máy chủ của Omi và được tính vào giới hạn phiên âm của gói của bạn.",
     "transcribeLaterTitle": "Phiên âm sau",
     "transcribeLaterDescription": "Ghi âm ngay bây giờ và phiên âm khi cần thay vì xử lý trực tiếp. Bản ghi được lưu trên điện thoại của bạn, sau đó bạn tải lên để tạo cuộc trò chuyện.",
-    "transcribeLaterNote": "Hiện hoạt động với các thiết bị Omi và Limitless. Âm thanh được giữ trên điện thoại của bạn cho đến khi bạn chọn tải lên.",
+    "transcribeLaterNote": "Hoạt động với micrô của điện thoại cùng các thiết bị Omi và Limitless. Âm thanh được giữ trên điện thoại của bạn cho đến khi bạn chọn tải lên.",
     "transcribeLaterStorageFull": "Điện thoại của bạn sắp hết dung lượng nên việc ghi âm đã tạm dừng. Hãy giải phóng dung lượng hoặc tải bản ghi lên, sau đó quá trình ghi âm sẽ tự động tiếp tục.",
     "unmute": "Bật tiếng",
     "newRecording": "Ghi âm mới",
@@ -3148,5 +3148,6 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "phoneMicOfflineFallbackMessage": "Không có kết nối — đang ghi cục bộ. Bản ghi sẽ được chép lại khi bạn trực tuyến trở lại."
 }

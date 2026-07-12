@@ -3055,7 +3055,7 @@
     "syncCustomSttWarningMessage": "Anda menggunakan penyedia transkripsi sendiri. Menyegerakkan rakaman ini akan mentranskripsikannya di pelayan Omi dan dikira dalam had transkripsi pelan anda.",
     "transcribeLaterTitle": "Transkrip Kemudian",
     "transcribeLaterDescription": "Rakam audio sekarang dan transkripkannya bila perlu, bukan secara langsung. Rakaman disimpan dalam telefon anda, kemudian anda memuat naiknya untuk menghasilkan perbualan.",
-    "transcribeLaterNote": "Buat masa ini berfungsi dengan peranti Omi dan Limitless. Audio kekal dalam telefon anda sehingga anda memilih untuk memuat naiknya.",
+    "transcribeLaterNote": "Berfungsi dengan mikrofon telefon serta peranti Omi dan Limitless. Audio kekal dalam telefon anda sehingga anda memilih untuk memuat naiknya.",
     "transcribeLaterStorageFull": "Storan telefon anda hampir penuh, jadi rakaman dijeda. Kosongkan ruang atau muat naik rakaman anda, kemudian ia akan disambung semula secara automatik.",
     "unmute": "Nyahsenyap",
     "newRecording": "Rakaman baharu",
@@ -3143,5 +3143,6 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "phoneMicOfflineFallbackMessage": "Tiada sambungan — merakam secara setempat. Ia akan ditranskripsikan apabila anda dalam talian semula."
 }

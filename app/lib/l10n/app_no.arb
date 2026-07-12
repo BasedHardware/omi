@@ -3055,7 +3055,7 @@
     "syncCustomSttWarningMessage": "Du bruker din egen transkripsjonsleverandør. Synkronisering av disse opptakene transkriberer dem på Omis servere, og de teller mot transkripsjonsgrensen i abonnementet ditt.",
     "transcribeLaterTitle": "Transkriber senere",
     "transcribeLaterDescription": "Ta opp lyd nå og transkriber den ved behov i stedet for direkte. Opptakene lagres på telefonen, og du laster dem opp for å lage samtaler.",
-    "transcribeLaterNote": "Fungerer foreløpig med Omi- og Limitless-enheter. Lyden blir værende på telefonen til du velger å laste den opp.",
+    "transcribeLaterNote": "Fungerer med telefonens mikrofon samt Omi- og Limitless-enheter. Lyden blir værende på telefonen til du velger å laste den opp.",
     "transcribeLaterStorageFull": "Telefonen har lite lagringsplass, så opptaket er satt på pause. Frigjør plass eller last opp opptakene dine, så fortsetter det automatisk.",
     "unmute": "Slå på lyd",
     "newRecording": "Nytt opptak",
@@ -3143,5 +3143,6 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "phoneMicOfflineFallbackMessage": "Ingen tilkobling – tar opp lokalt. Det blir transkribert når du er tilkoblet igjen."
 }
