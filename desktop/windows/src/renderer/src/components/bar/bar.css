@@ -16,18 +16,32 @@ body.bar-body {
   align-items: flex-start;
 }
 
-/* Slide layer: enters from above the top edge. */
+/* Reveal layer: the bar GROWS out of its top-edge seat (the pill's spot) on
+   summon — a scale + fade from top-center — so revealing reads as inflating from
+   the top edge, never a whole-surface DROP from above it. Hide reverses it
+   (deflate toward the same seat), so summon/dismiss mirror the pill⇄panel deflate
+   language the user already likes. transform + opacity only; the pre-reveal state
+   is invisible (opacity 0), which also makes the paint-ack anti-blank guarantee
+   stronger than the old off-screen translate (nothing to flash). */
 .bar-slide {
-  transform: translateY(-110%);
-  transition: transform 220ms cubic-bezier(0.2, 0.9, 0.3, 1);
-  will-change: transform;
+  transform-origin: top center;
+  transform: scale(0.7);
+  opacity: 0;
+  transition:
+    transform 220ms cubic-bezier(0.2, 0.9, 0.3, 1),
+    opacity 150ms ease;
+  will-change: transform, opacity;
 }
 .bar-slide.bar-slide-in {
-  transform: translateY(0);
+  transform: none;
+  opacity: 1;
 }
 .bar-slide.bar-slide-out {
-  transform: translateY(-110%);
-  transition: transform 180ms cubic-bezier(0.6, 0, 0.8, 0.4);
+  transform: scale(0.7);
+  opacity: 0;
+  transition:
+    transform 180ms cubic-bezier(0.6, 0, 0.8, 0.4),
+    opacity 140ms ease;
 }
 
 /* The morphing surface — ONE element interpolating pill ⇄ panel (size +

@@ -70,15 +70,6 @@ async function findBarPage(app) {
   throw new Error('bar page (#/bar) not found')
 }
 
-/** Pull translateY (px) out of a computed `transform` matrix string. */
-function translateYpx(transform) {
-  if (!transform || transform === 'none') return 0
-  const m = transform.match(/matrix(3d)?\(([^)]+)\)/)
-  if (!m) return 0
-  const parts = m[2].split(',').map((v) => parseFloat(v.trim()))
-  return m[1] ? parts[13] : parts[5] // matrix3d ty@13, matrix ty@5
-}
-
 test('bar focus contract: peek/ptt never take or steal focus; expanded does', async (t) => {
   const { app, cleanup } = await launch()
   t.after(cleanup)
@@ -188,13 +179,13 @@ test('summon hotkey reveals the pill (peek), never the expanded chat (C5)', asyn
 })
 
 // Regression for the blank-bar paint race (C11): main used to showInactive()
-// the HWND BEFORE the renderer had painted the slide-in frame, so the compositor
-// flashed the previous off-screen translateY(-110%) frame — a blank window on
-// first hover. The fix holds the HWND hidden until the renderer acks (double-rAF)
-// it painted the revealed frame. This test proves (a) the structural invariant:
-// the show is DEFERRED after arming, not synchronous; and (b) the observable
-// outcome: the first frame the window shows is the descended slide-in frame, not
-// the off-screen blank one.
+// the HWND BEFORE the renderer had painted the revealing frame, so the compositor
+// flashed the previous un-revealed frame — a blank window on first hover. The fix
+// holds the HWND hidden until the renderer acks (double-rAF) it painted the
+// revealed frame. This test proves (a) the structural invariant: the show is
+// DEFERRED after arming, not synchronous; and (b) the observable outcome: the
+// first frame the window shows is the revealing (fade/scale-in) frame, not the
+// invisible pre-reveal one.
 test('paint-ack: reveal defers the HWND show until the renderer paints slide-in', async (t) => {
   const { app, cleanup } = await launch()
   t.after(cleanup)
@@ -232,32 +223,33 @@ test('paint-ack: reveal defers the HWND show until the renderer paints slide-in'
   )
 
   // (b) Observable outcome: read .bar-slide the instant the window becomes
-  // visible. Because the show was gated on the paint ack, the slide-in
-  // transition is already underway, so the surface is descended into view —
-  // never the off-screen translateY(-110%) blank the pre-fix code flashed.
-  // (translateY is -110% of the ~36px pill ≈ -40px, ratio -1.1; revealed sits
-  // well above.)
+  // visible. Because the show was gated on the paint ack, the reveal (a scale +
+  // fade GROW from the top-center seat, opacity 0→1) is already underway — so
+  // .bar-slide is fading/growing IN, never the invisible pre-reveal frame
+  // (opacity 0) the pre-fix code would have shown. (The entrance no longer uses
+  // an off-screen translateY(-110%); the anti-blank guarantee is stronger — the
+  // pre-reveal state is simply invisible, so a first opacity > 0 proves the show
+  // was gated on the revealing frame.)
   let first = null
   for (let i = 0; i < 100 && !first; i++) {
     const s = await app.evaluate(() => globalThis.__omiE2E.barState())
     if (s.visible) {
       first = await barPage.evaluate(() => {
         const el = document.querySelector('.bar-slide')
-        return el
-          ? { transform: getComputedStyle(el).transform, height: el.offsetHeight }
-          : { transform: 'no-element', height: 0 }
+        if (!el) return { opacity: 'no-element', transform: 'no-element' }
+        const cs = getComputedStyle(el)
+        return { opacity: cs.opacity, transform: cs.transform }
       })
       break
     }
     await new Promise((r) => setTimeout(r, 50))
   }
   assert.ok(first, 'bar never became visible after the paint ack')
-  assert.notEqual(first.transform, 'no-element', '.bar-slide missing at reveal')
-  const ratio = translateYpx(first.transform) / (first.height || 36)
+  assert.notEqual(first.opacity, 'no-element', '.bar-slide missing at reveal')
   assert.ok(
-    ratio > -1.0,
-    `visible frame was the off-screen blank (translateY ratio ${ratio.toFixed(2)}, ` +
-      `transform "${first.transform}", height ${first.height})`
+    parseFloat(first.opacity) > 0,
+    `visible frame was the invisible pre-reveal state (opacity ${first.opacity}, ` +
+      `transform "${first.transform}") — paint ack did not gate on the revealing frame`
   )
 })
 
