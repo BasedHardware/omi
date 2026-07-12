@@ -22,6 +22,45 @@ enum WALCloudSyncLogic {
     }
   }
 
+  /// Re-apply reconciled WAL transitions onto the current live array by id.
+  ///
+  /// `reconcileUploadedWals` runs per-job network `await`s on the main actor, so it
+  /// operates on a value-type SNAPSHOT of `wals` taken before those suspensions. During
+  /// the awaits, other main-actor work (the chunk timer's `createWalFromCurrentFrames`,
+  /// SD/WiFi `createSdCardWal`, write-completion mutations) can append new WALs to the
+  /// live array. Assigning the snapshot back wholesale (`wals = workingWals`) silently
+  /// drops those appended WALs — permanent data loss for an in-progress recording.
+  ///
+  /// This merges only the fields reconcile owns (`status`, `jobId`, `uploadedAt`),
+  /// matched by id, and only when reconcile actually changed them. Entries present in
+  /// `live` but absent from `snapshot`/`reconciled` (appended during the awaits) are
+  /// preserved, and concurrent updates to other fields of untouched entries are not
+  /// clobbered.
+  static func mergeReconciledUploads(
+    live: [WALEntry],
+    snapshot: [WALEntry],
+    reconciled: [WALEntry]
+  ) -> [WALEntry] {
+    var snapshotById: [String: WALEntry] = [:]
+    for wal in snapshot { snapshotById[wal.id] = wal }
+    var reconciledById: [String: WALEntry] = [:]
+    for wal in reconciled { reconciledById[wal.id] = wal }
+
+    var result = live
+    for index in result.indices {
+      let id = result[index].id
+      guard let updated = reconciledById[id], let original = snapshotById[id] else { continue }
+      guard updated.status != original.status
+        || updated.jobId != original.jobId
+        || updated.uploadedAt != original.uploadedAt
+      else { continue }
+      result[index].status = updated.status
+      result[index].jobId = updated.jobId
+      result[index].uploadedAt = updated.uploadedAt
+    }
+    return result
+  }
+
   /// Reconcile one job's WAL members after a status fetch. Returns whether any WAL changed.
   @discardableResult
   static func applyReconcileFetch(

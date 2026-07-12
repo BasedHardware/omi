@@ -52,6 +52,9 @@ jobs:
           scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
           cat /tmp/changed-files.txt
 
+      - name: Test package architecture map guardrail
+        run: python3 .github/scripts/test_check_package_architecture_maps.py
+
       - name: Test product invariant PR-body checker
         run: python3 .github/scripts/test_check_product_invariants.py
 
