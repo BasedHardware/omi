@@ -62,6 +62,9 @@ def test_response_model_filters_extra_fields():
     assert r.status_code == 200
     body = r.json()
     assert "secret_field" not in body
+    # Phone number and account-state flags are intentionally outside the exposed identity set.
+    assert "phone_number" not in body
+    assert "disabled" not in body
     assert body["uid"] == "u1"
     assert body["email"] == "a@b.com"
     assert body["email_verified"] is True
