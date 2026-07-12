@@ -4,11 +4,12 @@
 // agent and completes a real ACP handshake, so a green check means the command
 // actually works — not just that a string was saved.
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Bot, Terminal } from 'lucide-react'
 import { SettingRow } from '../SettingRow'
 import { getPreferences, setPreferences } from '../../../lib/preferences'
-import type { CodingAgentId, CodingAgentInfo } from '../../../../../shared/types'
+import { useCodingAgents } from '../../../hooks/useCodingAgents'
+import type { CodingAgentId } from '../../../../../shared/types'
 
 type ExternalAgentId = Exclude<CodingAgentId, 'acp'>
 
@@ -45,20 +46,11 @@ const EXTERNAL_AGENT_GUIDES: Record<ExternalAgentId, AgentGuide> = {
 type TestState = { running: boolean; verdict?: 'ok' | 'failed'; detail?: string }
 
 export function AgentsTab(): React.JSX.Element {
-  const [agents, setAgents] = useState<CodingAgentInfo[]>([])
+  const { agents, refresh } = useCodingAgents()
   const [commands, setCommands] = useState<Partial<Record<ExternalAgentId, string>>>(
     () => getPreferences().agentCommands ?? {}
   )
   const [tests, setTests] = useState<Partial<Record<CodingAgentId, TestState>>>({})
-
-  const refresh = (): void => {
-    void window.omi
-      .codingAgentList(getPreferences().agentCommands)
-      .then(setAgents)
-      .catch(() => setAgents([]))
-  }
-
-  useEffect(refresh, [])
 
   const saveCommand = (id: ExternalAgentId): void => {
     const trimmed = commands[id]?.trim()

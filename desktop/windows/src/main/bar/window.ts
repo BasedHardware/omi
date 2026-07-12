@@ -38,7 +38,12 @@ import {
   type DisplayLike
 } from './placement'
 import { SummonGesture, type GestureKind } from './gesture'
-import { evaluatePeekWatchdog, nextInteractivity } from './watchdog'
+import {
+  evaluatePeekWatchdog,
+  nextInteractivity,
+  barWatchPlan,
+  barGestureSeesOpen
+} from './watchdog'
 import { makeKeySampler } from './keyState'
 import { getAppSettings, setAppSettings } from '../appSettings'
 
@@ -49,6 +54,14 @@ let barWindow: BrowserWindow | null = null
 let barReady = false
 let barEnabled = false
 let currentMode: BarMode | null = null
+/** True from the moment a graceful hide begins (slide-out sent) until the window
+ *  is actually hidden. During this window win.isVisible() is still TRUE and
+ *  currentMode is still set, but the bar is on its way OUT — the summon gesture
+ *  must treat it as NOT presented (see isBarCleanlyPresented): the live bug was a
+ *  tap landing during a retract's slide-out seeing "visible", skipping showBar
+ *  (so the peek watch + interactivity never restarted) AND toggling the bar shut
+ *  on release — "the bar goes back up extremely quickly" + dead clicks. */
+let barHiding = false
 /** Whether real hit-testing is currently enabled (cursor over the surface). */
 let barInteractive = false
 /** Display the bar is currently presented on (retract watchdog target). */
@@ -74,6 +87,18 @@ export function getBarWindow(): BrowserWindow | null {
 
 export function isBarVisible(): boolean {
   return !!(barWindow && !barWindow.isDestroyed() && barWindow.isVisible())
+}
+
+/** Whether the bar is up in a clean, interactive presentation (a real peek /
+ *  ptt / expanded surface with its watch running) — as opposed to merely having
+ *  a shown HWND. A window mid-retract (barHiding) or shown-but-unpresented
+ *  (currentMode null, e.g. a hide that didn't fully take) is NOT cleanly
+ *  presented. The summon gesture keys off THIS, not raw window visibility, so a
+ *  tap always re-presents (restarting the peek watch + interactivity) unless the
+ *  bar is genuinely, cleanly open — the fix for the stuck-window inversion where
+ *  a tap saw "visible", skipped showBar, and left clicks dead / toggled it shut. */
+export function isBarCleanlyPresented(): boolean {
+  return barGestureSeesOpen({ visible: isBarVisible(), mode: currentMode, hiding: barHiding })
 }
 
 function displayLike(d: Electron.Display): DisplayLike {
@@ -254,6 +279,8 @@ function presentBar(win: BrowserWindow, mode: BarMode, reveal: BarReveal): void 
     clearTimeout(hideFallback)
     hideFallback = null
   }
+  // A fresh reveal supersedes any in-flight graceful hide.
+  barHiding = false
   currentMode = mode
   applyClickThrough(win)
   win.setFocusable(mode === 'expanded')
@@ -283,7 +310,9 @@ function commitReveal(token: number): void {
   cancelPendingReveal()
   win.showInactive()
   if (pending.mode === 'expanded') win.focus()
-  if (pending.mode === 'peek') startPeekWatch()
+  // Watch runs in every visible collapsed mode (peek + ptt) — it drives
+  // click-to-expand interactivity; only peek also runs the retract grace.
+  if (pending.mode !== 'expanded') startPeekWatch()
   else stopPeekWatch()
   send('overlay:shown')
   broadcastVisibility()
@@ -303,8 +332,17 @@ function commitReveal(token: number): void {
 // hit-testing on before the click lands (Bug A). 50ms keeps that imperceptible.
 const PEEK_WATCH_MS = 50
 const PEEK_GRACE_MS = 600
+// A freshly summoned pill the cursor has NOT yet reached lingers this long before
+// the retract grace can fire — a tap summon puts the pill at top-center while the
+// cursor is still at the working position, and 600ms was gone before the hand
+// arrived (live bug: "the bar goes back up extremely quickly"). Once the cursor
+// has visited the footprint and left, the short PEEK_GRACE_MS applies.
+const SUMMON_LINGER_MS = 3000
 let peekWatch: ReturnType<typeof setInterval> | null = null
 let peekOutsideSince: number | null = null
+/** Whether the cursor has entered the peek footprint since this reveal — gates
+ *  the long summon linger vs. the short post-visit grace. Reset per reveal. */
+let peekHasBeenHovered = false
 /** Harness-only (OMI_E2E hook): hold a peek bar open while screenshots are
  *  captured — on a live desktop the cursor is legitimately outside the
  *  footprint, so the watchdog would retract mid-capture. Never set in prod. */
@@ -326,12 +364,17 @@ export function setPeekWatchSuspended(suspended: boolean): void {
   peekWatchSuspended = suspended
 }
 
-/** One watchdog poll: drive interactivity from the OS cursor, then run the
- *  retract grace. Also called once synchronously at reveal so a cursor already
- *  over the pill / outside the footprint is handled without a tick's delay. */
+/** One watch poll. Runs while the bar is visible and collapsed (peek OR ptt):
+ *  drive interactivity from the OS cursor in EVERY such mode (Bug A — a ptt pill
+ *  that lingers after release must be as clickable as a tap pill), then run the
+ *  retract grace in PEEK ONLY (a ptt pill's lifetime is owned by the
+ *  gesture/keepAlive, not the cursor watchdog). Also called once synchronously
+ *  at reveal so a cursor already over the pill / outside the footprint is handled
+ *  without a tick's delay. */
 function peekTick(): void {
   const win = barWindow
-  if (!win || win.isDestroyed() || !win.isVisible() || currentMode !== 'peek') {
+  const plan = barWatchPlan(currentMode)
+  if (!win || win.isDestroyed() || !win.isVisible() || !plan.trackInteractivity) {
     stopPeekWatch()
     return
   }
@@ -356,14 +399,23 @@ function peekTick(): void {
   } else if (!wantInteractive && barInteractive) {
     applyClickThrough(win)
   }
+  // Retract grace is peek-only; a ptt pill never auto-retracts on the cursor.
+  if (!plan.runRetract) {
+    peekOutsideSince = null
+    return
+  }
+  const cursorInFootprint = isCursorInPeekFootprint(cursor, dl)
+  if (cursorInFootprint) peekHasBeenHovered = true
   const { outsideSince, retract } = evaluatePeekWatchdog({
     suspended: peekWatchSuspended,
     activityHold: barActivityHold,
     gestureActive: gestureActiveHold,
-    cursorInFootprint: isCursorInPeekFootprint(cursor, dl),
+    cursorInFootprint,
+    hasBeenHovered: peekHasBeenHovered,
     outsideSince: peekOutsideSince,
     now: Date.now(),
-    graceMs: PEEK_GRACE_MS
+    graceMs: PEEK_GRACE_MS,
+    lingerMs: SUMMON_LINGER_MS
   })
   peekOutsideSince = outsideSince
   if (retract) {
@@ -375,6 +427,7 @@ function peekTick(): void {
 function startPeekWatch(): void {
   stopPeekWatch()
   peekOutsideSince = null
+  peekHasBeenHovered = false
   peekTick()
   peekWatch = setInterval(peekTick, PEEK_WATCH_MS)
 }
@@ -398,7 +451,7 @@ export function setBarMode(mode: BarMode): void {
     win.setFocusable(false)
     applyClickThrough(win)
   }
-  if (mode === 'peek') startPeekWatch()
+  if (mode !== 'expanded') startPeekWatch()
   else stopPeekWatch()
   send('bar:mode', mode)
   broadcastVisibility()
@@ -420,6 +473,10 @@ export function hideBar(): void {
     }
   }
   if (!win.isVisible()) return
+  // Mark the bar as on-its-way-out: a summon gesture arriving during the
+  // slide-out must re-present it (restart the peek watch), not treat it as a
+  // cleanly-open pill to toggle shut.
+  barHiding = true
   send('overlay:willHide')
   send('bar:willHide')
   if (hideFallback) clearTimeout(hideFallback)
@@ -431,6 +488,7 @@ function hideBarNow(): void {
     clearTimeout(hideFallback)
     hideFallback = null
   }
+  barHiding = false
   // Kill any armed reveal so a late ack/fallback can't re-show after a hide.
   cancelPendingReveal()
   stopPeekWatch()
@@ -461,7 +519,10 @@ function sendPtt(phase: 'down' | 'up'): void {
 function onGestureStart(): void {
   if (!barEnabled) return
   broadcast('overlay:summoned')
-  gestureStartedVisible = isBarVisible()
+  // Key off a CLEAN presentation, not raw window visibility: a bar mid-retract or
+  // shown-but-unpresented must count as not-open, so a tap re-presents (restarts
+  // the peek watch + interactivity) instead of being swallowed / toggled shut.
+  gestureStartedVisible = isBarCleanlyPresented()
   // Pin the pill open for the whole physical hold (Bug B): the watchdog can't
   // retract while the key is down, so a silent hold never snaps shut before the
   // renderer's busy-derived keepAlive arms. Cleared in onGestureEnd.
@@ -597,6 +658,7 @@ export function destroyBar(): void {
   gesture?.dispose() // ends an active gesture → onGestureEnd clears the hold
   gesture = null
   gestureActiveHold = false
+  barHiding = false
   stopPeekWatch()
   cancelPendingReveal()
   if (hideFallback) clearTimeout(hideFallback)

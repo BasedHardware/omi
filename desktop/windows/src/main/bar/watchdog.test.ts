@@ -1,16 +1,25 @@
 import { describe, it, expect } from 'vitest'
-import { evaluatePeekWatchdog, nextInteractivity, type WatchdogInput } from './watchdog'
+import {
+  evaluatePeekWatchdog,
+  nextInteractivity,
+  barWatchPlan,
+  barGestureSeesOpen,
+  type WatchdogInput
+} from './watchdog'
 
-/** A baseline "nothing holds the pill, cursor is away" input. */
+/** A baseline "nothing holds the pill, cursor is away, already visited" input —
+ *  the short post-visit grace path unless a test overrides hasBeenHovered. */
 function base(over: Partial<WatchdogInput> = {}): WatchdogInput {
   return {
     suspended: false,
     activityHold: false,
     gestureActive: false,
     cursorInFootprint: false,
+    hasBeenHovered: true,
     outsideSince: null,
     now: 1000,
     graceMs: 600,
+    lingerMs: 3000,
     ...over
   }
 }
@@ -28,7 +37,7 @@ describe('evaluatePeekWatchdog — retract grace', () => {
     expect(s.outsideSince).toBe(null)
   })
 
-  it('(b) a tap (gesture no longer active) retracts after the normal grace', () => {
+  it('(b) a visited-then-left pill retracts after the short grace', () => {
     // First outside tick just stamps the clock, never retracts.
     let s = evaluatePeekWatchdog(base({ now: 1000, outsideSince: null }))
     expect(s.retract).toBe(false)
@@ -51,9 +60,32 @@ describe('evaluatePeekWatchdog — retract grace', () => {
     expect(evaluatePeekWatchdog(base({ now: 5600, outsideSince: 5000 })).retract).toBe(true)
   })
 
+  it('(d) a freshly summoned pill the cursor has NOT reached lingers ~3s, not 600ms', () => {
+    // Live bug: on a tap the cursor is at the working position, so the pill is
+    // "outside the footprint" from tick zero — it must survive the ~3s the hand
+    // needs to travel to it, not vanish at the short 600ms grace.
+    const stamp = evaluatePeekWatchdog(base({ hasBeenHovered: false, now: 0, outsideSince: null }))
+    expect(stamp.outsideSince).toBe(0)
+    expect(stamp.retract).toBe(false)
+    // Past the SHORT grace but well inside the linger: still open (the fix).
+    expect(
+      evaluatePeekWatchdog(base({ hasBeenHovered: false, now: 600, outsideSince: 0 })).retract
+    ).toBe(false)
+    expect(
+      evaluatePeekWatchdog(base({ hasBeenHovered: false, now: 2999, outsideSince: 0 })).retract
+    ).toBe(false)
+    // Only once the full linger elapses does an untouched pill retract.
+    expect(
+      evaluatePeekWatchdog(base({ hasBeenHovered: false, now: 3000, outsideSince: 0 })).retract
+    ).toBe(true)
+  })
+
   it('the E2E suspend hold, the renderer activity hold, and the cursor each pin the pill open', () => {
     for (const hold of [{ suspended: true }, { activityHold: true }, { cursorInFootprint: true }]) {
-      const s = evaluatePeekWatchdog(base({ ...hold, outsideSince: 0, now: 100000 }))
+      // Even an unvisited pill (the linger path) is trumped by an explicit hold.
+      const s = evaluatePeekWatchdog(
+        base({ ...hold, hasBeenHovered: false, outsideSince: 0, now: 100000 })
+      )
       expect(s.retract).toBe(false)
       expect(s.outsideSince).toBe(null)
     }
@@ -81,5 +113,46 @@ describe('nextInteractivity — main-driven hit-testing (Bug A)', () => {
     expect(nextInteractivity({ cursorOverPill: true, interactive: false, suspended: true })).toBe(
       false
     )
+  })
+})
+
+describe('barWatchPlan — which halves run per mode (Bug A live gap)', () => {
+  it('peek runs BOTH interactivity and the retract grace', () => {
+    expect(barWatchPlan('peek')).toEqual({ trackInteractivity: true, runRetract: true })
+  })
+
+  it('ptt arms interactivity (so a lingering pill is clickable) but NEVER retracts on the cursor', () => {
+    // The Bug A live gap: click-to-expand must work from a ptt-summoned pill, but
+    // a ptt pill's lifetime is owned by the gesture/keepAlive — the cursor
+    // watchdog must not hide it.
+    expect(barWatchPlan('ptt')).toEqual({ trackInteractivity: true, runRetract: false })
+  })
+
+  it('expanded and no-mode run neither half (the watch is stopped)', () => {
+    expect(barWatchPlan('expanded')).toEqual({ trackInteractivity: false, runRetract: false })
+    expect(barWatchPlan(null)).toEqual({ trackInteractivity: false, runRetract: false })
+  })
+})
+
+describe('barGestureSeesOpen — stuck-window inversion fix', () => {
+  it('a clean peek / ptt / expanded presentation reads as OPEN', () => {
+    expect(barGestureSeesOpen({ visible: true, mode: 'peek', hiding: false })).toBe(true)
+    expect(barGestureSeesOpen({ visible: true, mode: 'ptt', hiding: false })).toBe(true)
+    expect(barGestureSeesOpen({ visible: true, mode: 'expanded', hiding: false })).toBe(true)
+  })
+
+  it('a window MID-RETRACT (shown but sliding out) is NOT open — a tap must re-present', () => {
+    // The live inversion: a tap during the slide-out used to see raw visibility
+    // and skip showBar (peek watch never restarted → dead clicks) + toggle shut.
+    expect(barGestureSeesOpen({ visible: true, mode: 'peek', hiding: true })).toBe(false)
+  })
+
+  it('a shown-but-unpresented window (mode null, e.g. a hide that did not take) is NOT open', () => {
+    expect(barGestureSeesOpen({ visible: true, mode: null, hiding: false })).toBe(false)
+  })
+
+  it('a hidden window is NOT open', () => {
+    expect(barGestureSeesOpen({ visible: false, mode: 'peek', hiding: false })).toBe(false)
+    expect(barGestureSeesOpen({ visible: false, mode: null, hiding: false })).toBe(false)
   })
 })

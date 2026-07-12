@@ -313,6 +313,33 @@ test('pill click expands into the chat/agents surface (Bug A)', async (t) => {
   }
 })
 
+// Bug A live gap: a pill summoned by a HOTKEY HOLD (mode 'ptt') must expand on
+// click just like a tap-summoned peek pill. The original interactivity watch was
+// peek-only, so a ptt-mode pill (the one that lingers after a hold) had no watch
+// arming click-to-expand. The fix runs the interactivity half of the watch in
+// EVERY visible collapsed mode (peek + ptt); retract stays peek-only. This drives
+// a ptt reveal + pill click and asserts it reaches the same expanded chat surface.
+// (CDP click bypasses OS hit-testing; the OS-cursor path in ptt is proven by the
+// barWatchPlan unit test + the real-cursor pywinauto run noted in the PR.)
+test('pill click expands from a ptt-summoned pill too (Bug A live gap)', async (t) => {
+  const { app, cleanup } = await launch([], { OMI_E2E_FAKE_AUTH: '1' })
+  t.after(cleanup)
+  await app.firstWindow()
+  const barPage = await findBarPage(app)
+  await barShow(app, 'ptt')
+  // The ptt pill is collapsed (!expanded), so its content is clickable; a click
+  // must expand into the shared chat surface (Omi Chat + the always-on agent row).
+  await barPage.locator('.bar-content[role="button"]').click()
+  await barPage.waitForFunction(() => {
+    const texts = [...document.querySelectorAll('.bar-content-active .text-sm')].map((e) =>
+      (e.textContent ?? '').trim()
+    )
+    return texts.includes('Omi Chat') && texts.includes('Claude Code')
+  })
+  const s = await app.evaluate(() => globalThis.__omiE2E.barState())
+  assert.equal(s.focusable, true, 'a ptt-summoned pill must expand on click (focusable)')
+})
+
 // Skeptical-review screenshot of the expanded surface WITH the agent rows
 // (signed-in so the real rows render, not the sign-in prompt).
 test('bar expanded agents-surface screenshot (signed-in)', async (t) => {

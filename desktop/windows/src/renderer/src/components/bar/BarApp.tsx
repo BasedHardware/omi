@@ -19,6 +19,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { auth } from '../../lib/firebase'
 import { getPreferences, onPreferencesChange } from '../../lib/preferences'
 import { usePushToTalk } from '../../hooks/usePushToTalk'
+import { useCodingAgents } from '../../hooks/useCodingAgents'
 import { Orb } from '../orb/Orb'
 import { BarChatSurface } from './BarChatSurface'
 import { deriveOrbState, isBarBusy, deriveAgentRows, pillLabel } from './barDisplay'
@@ -27,7 +28,6 @@ import type {
   BarShowPayload,
   BarChatState,
   CodingAgentId,
-  CodingAgentInfo,
   WaveformSource
 } from '../../../../shared/types'
 import './bar.css'
@@ -66,7 +66,8 @@ export function BarApp(): React.JSX.Element {
   const [genesisNonce, setGenesisNonce] = useState(0)
   const [continuous, setContinuous] = useState(() => !!getPreferences().continuousRecording)
   const [chat, setChat] = useState<BarChatState>(EMPTY_CHAT)
-  const [agents, setAgents] = useState<CodingAgentInfo[]>([])
+  // Connected coding agents (shared fetch with Settings → Agents).
+  const { agents } = useCodingAgents()
   // Which adapter is running the current task (the shared engine only projects a
   // single global agentsActive; agent_selected names the adapter). At most one
   // row shows "Working…".
@@ -111,17 +112,6 @@ export function BarApp(): React.JSX.Element {
   useEffect(() => window.omiBar.requestChatState(), [])
 
   // --- coding agents (list view rows) -----------------------------------------
-  // The connected agents Omi can delegate to (Claude Code always; the external
-  // CLIs when configured). Refresh on mount and whenever the launch commands
-  // change in Settings, so a freshly-connected agent shows without a restart.
-  const refreshAgents = useCallback((): void => {
-    void window.omi
-      .codingAgentList(getPreferences().agentCommands)
-      .then(setAgents)
-      .catch(() => setAgents([]))
-  }, [])
-  useEffect(refreshAgents, [refreshAgents])
-  useEffect(() => onPreferencesChange(refreshAgents), [refreshAgents])
   // Track which adapter is running the current task; the terminal signal is the
   // global agentsActive dropping (no per-task "done" broadcast exists).
   useEffect(
@@ -279,12 +269,13 @@ export function BarApp(): React.JSX.Element {
   // `user` (from useAuth) is the single auth source — fake-aware for the E2E and
   // equivalent to a live session in prod (both read the same auth).
   const continuousListening = continuous && !!user
+  const agentsActive = chat.agentsActive ?? false
   const orb = deriveOrbState({
     recording: ptt.recording,
     transcribing: ptt.transcribing,
     status: chat.status,
     continuousListening,
-    agentsActive: chat.agentsActive ?? false
+    agentsActive
   })
   const orbState = orb.state
   // Pill wordmark → "Listening" whenever the user's voice is being captured
@@ -296,7 +287,7 @@ export function BarApp(): React.JSX.Element {
     : null
 
   // Connected coding agents to list under "Omi Chat" (at most one "Working…").
-  const agentRows = deriveAgentRows(agents, activeAgentId, chat.agentsActive ?? false)
+  const agentRows = deriveAgentRows(agents, activeAgentId, agentsActive)
 
   const surfaceStyle = expanded
     ? { width: PANEL_WIDTH, height: panelHeight }

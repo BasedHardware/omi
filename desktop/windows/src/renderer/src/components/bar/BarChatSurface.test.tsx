@@ -80,6 +80,23 @@ describe('BarChatSurface', () => {
     expect(props.onOpenConversation).toHaveBeenCalledTimes(1)
   })
 
+  it('list: every row leads with a status-dot column so all titles share one left margin', () => {
+    // Regression for the ragged-left defect: the Omi Chat row used to have no
+    // leading column while agent rows led with a dot, so the titles didn't line
+    // up. Assert every row's FIRST child is the status dot (same column slot).
+    renderSurface({
+      view: 'list',
+      agents: [{ id: 'acp', displayName: 'Claude Code', working: true }]
+    })
+    const rows = screen.getAllByRole('button')
+    expect(rows.length).toBe(2) // Omi Chat + one agent
+    for (const row of rows) {
+      const dot = row.querySelector('span.rounded-full')
+      expect(dot).toBeTruthy()
+      expect(row.firstElementChild).toBe(dot) // leading column, before the title
+    }
+  })
+
   it('conversation: renders the thread and the back chevron returns to the list', () => {
     const props = renderSurface({ view: 'conversation' })
     expect(screen.getByTestId('messages').textContent).toBe('1')

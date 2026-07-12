@@ -37,6 +37,21 @@ function ChevronLeft(): React.JSX.Element {
   )
 }
 
+/** Leading status column shared by EVERY list row so all titles line up on one
+ *  left margin (no ragged edge). The dot pulses when that row is active — Omi
+ *  thinking/speaking, or an agent running a task — and is a calm neutral marker
+ *  otherwise. Neutral/emerald only (no purple — brand rule). */
+function RowStatusDot({ active }: { active: boolean }): React.JSX.Element {
+  return (
+    <span
+      aria-hidden="true"
+      className={`h-2 w-2 shrink-0 rounded-full ${
+        active ? 'animate-pulse bg-emerald-400' : 'bg-neutral-600'
+      }`}
+    />
+  )
+}
+
 export type BarChatSurfaceProps = {
   chat: BarChatState
   /** Connected coding agents to list under "Omi Chat". */
@@ -121,12 +136,15 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
   if (view === 'list') {
     return (
       <div className="flex flex-col gap-1 px-3 pb-3 pt-1">
-        {/* Omi Chat — always present (INV-CHAT-1: the one shared thread). */}
+        {/* Omi Chat — always present (INV-CHAT-1: the one shared thread). Its
+            dot pulses while Omi is thinking/speaking, matching the agent rows so
+            every title shares one left margin. */}
         <button
           type="button"
           onClick={props.onOpenConversation}
           className="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/[0.06]"
         >
+          <RowStatusDot active={chat.status !== 'idle'} />
           <div className="min-w-0 flex-1">
             <div className="text-sm font-medium text-neutral-100">Omi Chat</div>
             <div className="truncate text-xs text-neutral-500">{omiChatListStatus(chat)}</div>
@@ -144,12 +162,7 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
             onClick={props.onOpenConversation}
             className="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/[0.06]"
           >
-            <span
-              aria-hidden="true"
-              className={`h-2 w-2 shrink-0 rounded-full ${
-                agent.working ? 'animate-pulse bg-emerald-400' : 'bg-neutral-600'
-              }`}
-            />
+            <RowStatusDot active={agent.working} />
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium text-neutral-100">{agent.displayName}</div>
               <div className="truncate text-xs text-neutral-500">{agentRowStatus(agent)}</div>
