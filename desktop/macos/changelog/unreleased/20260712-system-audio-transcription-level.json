@@ -1,0 +1,3 @@
+{
+  "change": "Fixed system audio being captured ~6 dB too quiet, improving transcription accuracy for meetings and calls"
+}
