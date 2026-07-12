@@ -77,7 +77,13 @@ function localToRow(c: LocalConversation): ConversationRow {
 // state: queued/in-flight/unconfirmed → "Sync pending" (neutral — it resolves
 // itself), a definitive failure → "Sync failed" with a Retry action, legacy
 // pre-sync rows → "Not synced" (the backfill banner offers to push those).
-function RowBadge({ r, onRetry }: { r: ConversationRow; onRetry?: (id: string) => void }): React.JSX.Element | null {
+function RowBadge({
+  r,
+  onRetry
+}: {
+  r: ConversationRow
+  onRetry?: (id: string) => void
+}): React.JSX.Element | null {
   if (r.localKind === 'chat') return <span className="badge shrink-0">Chat</span>
   if (r.source !== 'local') return null
   if (r.sync === 'pending') return <span className="badge shrink-0">Sync pending</span>
@@ -126,7 +132,9 @@ export function Conversations(): React.JSX.Element {
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
-  const [pendingDelete, setPendingDelete] = useState<{ ids: string[]; timeout: number } | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<{ ids: string[]; timeout: number } | null>(
+    null
+  )
   const pendingTimeoutRef = useRef<number | null>(null)
   // Full local set (including hidden synced rows) — drives the backfill banner.
   const [locals, setLocals] = useState<LocalConversation[]>([])
@@ -152,7 +160,10 @@ export function Conversations(): React.JSX.Element {
           title: c.structured?.title || 'Untitled conversation',
           emoji: c.structured?.emoji || undefined,
           subtitle: c.created_at ? new Date(c.created_at).toLocaleString() : '',
-          preview: c.structured?.overview || summarize(c.transcript_segments).slice(0, 200) || '(no transcript)',
+          preview:
+            c.structured?.overview ||
+            summarize(c.transcript_segments).slice(0, 200) ||
+            '(no transcript)',
           source: 'cloud',
           sortAt: created
         })
@@ -166,8 +177,10 @@ export function Conversations(): React.JSX.Element {
       // Reconcile: rows still awaiting sync whose cloud twin has now appeared
       // (same started_at/finished_at we posted) are adopted as done — this is
       // what dissolves a "Sync pending" row into its cloud conversation.
-      const localRows = reconcileSyncedLocals(await window.omi.listLocalConversations(), cloudLite, (id, patch) =>
-        window.omi.updateLocalConversationSync(id, patch)
+      const localRows = reconcileSyncedLocals(
+        await window.omi.listLocalConversations(),
+        cloudLite,
+        (id, patch) => window.omi.updateLocalConversationSync(id, patch)
       )
       setLocals(localRows)
       // Synced rows whose cloud twin is in this fetch are hidden (the cloud row
@@ -270,7 +283,9 @@ export function Conversations(): React.JSX.Element {
     if (filter === 'recording' && r.localKind !== 'recording') return false
     if (query.trim()) {
       const q = query.trim().toLowerCase()
-      return (r.title?.toLowerCase() ?? '').includes(q) || (r.preview?.toLowerCase() ?? '').includes(q)
+      return (
+        (r.title?.toLowerCase() ?? '').includes(q) || (r.preview?.toLowerCase() ?? '').includes(q)
+      )
     }
     return true
   })
@@ -336,7 +351,9 @@ export function Conversations(): React.JSX.Element {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Conversations"
-        subtitle={loading ? 'Loading…' : `${rows.length} conversation${rows.length === 1 ? '' : 's'}`}
+        subtitle={
+          loading ? 'Loading…' : `${rows.length} conversation${rows.length === 1 ? '' : 's'}`
+        }
         actions={
           <button
             onClick={() => navigate('/conversations/live')}
@@ -456,7 +473,7 @@ export function Conversations(): React.JSX.Element {
           </div>
         )}
         {(unsyncedPast > 0 || backfillRunning) && (
-          <div className="surface-panel mx-auto mb-5 flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
+          <div className="surface-panel mx-auto mb-5 flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
             <span className="text-sm text-white/60">
               {backfillRunning && backfill
                 ? `Syncing past recordings… ${backfill.synced + backfill.failed}/${backfill.total}`
@@ -476,7 +493,7 @@ export function Conversations(): React.JSX.Element {
           </div>
         )}
         {loading && (
-          <ul className="mx-auto max-w-3xl space-y-3">
+          <ul className="mx-auto max-w-5xl space-y-3">
             {Array.from({ length: 5 }).map((_, i) => (
               <ConversationSkeleton key={i} />
             ))}
@@ -502,7 +519,7 @@ export function Conversations(): React.JSX.Element {
           />
         )}
         {!loading && filtered.length > 0 && (
-          <ul className="mx-auto max-w-3xl space-y-2.5">
+          <ul className="mx-auto max-w-5xl space-y-2.5">
             {filtered.map((r) => {
               const checked = selected.has(r.id)
               return (
@@ -571,7 +588,8 @@ export function Conversations(): React.JSX.Element {
       {pendingDelete && (
         <div className="glass-strong mx-6 mb-4 flex items-center justify-between rounded-2xl px-4 py-3 lg:mx-10">
           <span className="text-sm text-white/80">
-            {pendingDelete.ids.length} conversation{pendingDelete.ids.length !== 1 ? 's' : ''} will be deleted in 5s
+            {pendingDelete.ids.length} conversation{pendingDelete.ids.length !== 1 ? 's' : ''} will
+            be deleted in 5s
           </span>
           <button
             onClick={undoDelete}
