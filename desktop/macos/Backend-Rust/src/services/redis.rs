@@ -1,13 +1,11 @@
-// Redis service for conversation visibility
-// Mirrors the Python backend's redis_db.py functionality for sharing conversations
+#![deny(dead_code, unreachable_pub)]
 
 use redis::aio::ConnectionManager;
-use redis::{AsyncCommands, Client, ConnectionAddr, ConnectionInfo, RedisConnectionInfo};
+use redis::{Client, ConnectionAddr, ConnectionInfo, RedisConnectionInfo};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-/// Redis service for conversation visibility and sharing
-pub struct RedisService {
+pub(crate) struct RedisService {
     client: Client,
     // ConnectionManager (not a bare MultiplexedConnection) so a dropped link
     // reconnects internally. A cached MultiplexedConnection stayed broken forever
@@ -16,40 +14,22 @@ pub struct RedisService {
     connection: Arc<RwLock<Option<ConnectionManager>>>,
 }
 
-/// Review data stored in Redis
-#[derive(Debug, Clone)]
-pub struct RedisReview {
-    pub score: i32,
-}
-
 impl RedisService {
-    /// Create a new Redis service with explicit connection parameters
-    /// This avoids URL encoding issues with special characters in passwords
-    pub fn new_with_params(
+    pub(crate) fn new_with_params(
         host: &str,
         port: u16,
         password: Option<&str>,
     ) -> Result<Self, redis::RedisError> {
         let info = ConnectionInfo {
-            addr: ConnectionAddr::Tcp(host.to_string(), port),
+            addr: ConnectionAddr::Tcp(host.to_owned(), port),
             redis: RedisConnectionInfo {
                 db: 0,
-                username: Some("default".to_string()),
-                password: password.map(|p| p.to_string()),
+                username: Some("default".to_owned()),
+                password: password.map(str::to_owned),
             },
         };
-        let client = Client::open(info)?;
         Ok(Self {
-            client,
-            connection: Arc::new(RwLock::new(None)),
-        })
-    }
-
-    /// Create a new Redis service from URL (legacy, may have encoding issues)
-    pub fn new(redis_url: &str) -> Result<Self, redis::RedisError> {
-        let client = Client::open(redis_url)?;
-        Ok(Self {
-            client,
+            client: Client::open(info)?,
             connection: Arc::new(RwLock::new(None)),
         })
     }
@@ -83,194 +63,20 @@ impl RedisService {
         Ok(conn)
     }
 
-    // ============================================================================
-    // CONVERSATION VISIBILITY - matches Python backend redis_db.py
-    // ============================================================================
-
-    /// Store conversation_id -> uid mapping for visibility lookup
-    /// Key format: memories-visibility:{conversation_id}
-    pub async fn store_conversation_to_uid(
-        &self,
-        conversation_id: &str,
-        uid: &str,
-    ) -> Result<(), redis::RedisError> {
-        let mut conn = self.get_connection().await?;
-        let key = format!("memories-visibility:{}", conversation_id);
-        let _: () = conn.set(&key, uid).await?;
-        tracing::info!(
-            "Stored conversation visibility: {} -> {}",
-            conversation_id,
-            uid
-        );
-        Ok(())
-    }
-
-    /// Remove conversation_id -> uid mapping
-    pub async fn remove_conversation_to_uid(
-        &self,
-        conversation_id: &str,
-    ) -> Result<(), redis::RedisError> {
-        let mut conn = self.get_connection().await?;
-        let key = format!("memories-visibility:{}", conversation_id);
-        let _: () = conn.del(&key).await?;
-        tracing::info!("Removed conversation visibility: {}", conversation_id);
-        Ok(())
-    }
-
-    /// Get the uid that owns a public conversation
-    /// Returns None if conversation is not public/shared
-    pub async fn get_conversation_uid(
-        &self,
-        conversation_id: &str,
-    ) -> Result<Option<String>, redis::RedisError> {
-        let mut conn = self.get_connection().await?;
-        let key = format!("memories-visibility:{}", conversation_id);
-        let uid: Option<String> = conn.get(&key).await?;
-        Ok(uid)
-    }
-
-    /// Add conversation to the public conversations set
-    /// Key: public-memories (SET)
-    pub async fn add_public_conversation(
-        &self,
-        conversation_id: &str,
-    ) -> Result<(), redis::RedisError> {
-        let mut conn = self.get_connection().await?;
-        let _: () = conn.sadd("public-memories", conversation_id).await?;
-        tracing::info!("Added conversation to public set: {}", conversation_id);
-        Ok(())
-    }
-
-    /// Remove conversation from the public conversations set
-    pub async fn remove_public_conversation(
-        &self,
-        conversation_id: &str,
-    ) -> Result<(), redis::RedisError> {
-        let mut conn = self.get_connection().await?;
-        let _: () = conn.srem("public-memories", conversation_id).await?;
-        tracing::info!("Removed conversation from public set: {}", conversation_id);
-        Ok(())
-    }
-
-    /// Get all public conversation IDs
-    pub async fn get_public_conversations(&self) -> Result<Vec<String>, redis::RedisError> {
-        let mut conn = self.get_connection().await?;
-        let ids: Vec<String> = conn.smembers("public-memories").await?;
-        Ok(ids)
-    }
-
-    /// Check if Redis connection is healthy
-    pub async fn health_check(&self) -> Result<bool, redis::RedisError> {
-        let mut conn = self.get_connection().await?;
-        let pong: String = redis::cmd("PING").query_async(&mut conn).await?;
-        Ok(pong == "PONG")
-    }
-
-    // ============================================================================
-    // TASK SHARING
-    // ============================================================================
-
-    /// Store task share data in Redis with 30-day TTL
-    /// Key format: task_share:{token}
-    pub async fn store_task_share(
-        &self,
-        token: &str,
-        uid: &str,
-        display_name: &str,
-        task_ids: &[String],
-    ) -> Result<(), redis::RedisError> {
-        let mut conn = self.get_connection().await?;
-        let key = format!("task_share:{}", token);
-        let value = serde_json::json!({
-            "uid": uid,
-            "display_name": display_name,
-            "task_ids": task_ids,
-        });
-        let _: () = conn
-            .set_ex(&key, value.to_string(), 30 * 24 * 60 * 60)
-            .await?;
-        tracing::info!("Stored task share: {} -> {} tasks", token, task_ids.len());
-        Ok(())
-    }
-
-    /// Get task share data from Redis
-    /// Returns (uid, display_name, task_ids) or None if expired/missing
-    pub async fn get_task_share(
-        &self,
-        token: &str,
-    ) -> Result<Option<(String, String, Vec<String>)>, redis::RedisError> {
-        let mut conn = self.get_connection().await?;
-        let key = format!("task_share:{}", token);
-        let raw: Option<String> = conn.get(&key).await?;
-        match raw {
-            Some(data) => {
-                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
-                    let uid = parsed["uid"].as_str().unwrap_or("").to_string();
-                    let display_name = parsed["display_name"].as_str().unwrap_or("").to_string();
-                    let task_ids: Vec<String> = parsed["task_ids"]
-                        .as_array()
-                        .map(|arr| {
-                            arr.iter()
-                                .filter_map(|v| v.as_str().map(String::from))
-                                .collect()
-                        })
-                        .unwrap_or_default();
-                    Ok(Some((uid, display_name, task_ids)))
-                } else {
-                    Ok(None)
-                }
-            }
-            None => Ok(None),
-        }
-    }
-
-    /// Atomically try to accept a task share for a user
-    /// Returns true if this is a new acceptance, false if already accepted
-    pub async fn try_accept_task_share(
-        &self,
-        token: &str,
-        uid: &str,
-    ) -> Result<bool, redis::RedisError> {
-        let mut conn = self.get_connection().await?;
-        let key = format!("task_share:{}:accepted", token);
-        let added: i32 = conn.sadd(&key, uid).await?;
-        // Set 30-day TTL on the accepted set
-        let _: () = conn.expire(&key, 30 * 24 * 60 * 60).await?;
-        Ok(added == 1)
-    }
-
-    // ============================================================================
-    // GEMINI RATE LIMITING — atomic burst + daily counters via Lua
-    // Issue #6098 L2
-    // ============================================================================
-
-    /// Check and record an API request for rate limiting under the given key
-    /// namespace (e.g. "gemini_rl" or "chat_rl"), keeping each budget isolated.
-    /// Uses a Lua script for atomic burst (sorted set) + daily (counter) in one round-trip.
-    /// Returns (daily_count, burst_count) so the caller can decide Allow/Degrade/Reject.
-    pub async fn check_rate_limit(
+    pub(crate) async fn check_rate_limit(
         &self,
         key_prefix: &str,
         uid: &str,
         _burst_limit: usize,
         burst_window_secs: u64,
     ) -> Result<(i64, i64), redis::RedisError> {
-        let mut conn = self.get_connection().await?;
-
+        let mut connection = self.get_connection().await?;
         let now_ms = chrono::Utc::now().timestamp_millis();
-        let day_ordinal = (now_ms / 86_400_000).to_string();
         let cutoff_ms = now_ms - (burst_window_secs as i64 * 1000);
+        let (burst_key, daily_key) = rate_limit_keys(key_prefix, uid, now_ms);
 
-        let burst_key = format!("{}:{}:burst", key_prefix, uid);
-        let daily_key = format!("{}:{}:daily:{}", key_prefix, uid, day_ordinal);
-
-        // Lua script: increment daily first (for unique member), prune burst, add, count.
-        // KEYS[1] = burst_key, KEYS[2] = daily_key
-        // ARGV[1] = cutoff_ms, ARGV[2] = now_ms, ARGV[3] = burst_ttl, ARGV[4] = daily_ttl
-        //
-        // The daily counter doubles as a nonce for the burst sorted set member.
-        // Without it, concurrent requests in the same millisecond would overwrite the
-        // same member (score=now_ms, member=now_ms) and ZCARD would undercount.
+        // The daily counter is also the nonce for the sorted-set member. That keeps
+        // concurrent requests in the same millisecond from overwriting each other.
         let script = r#"
 local daily = redis.call('INCR', KEYS[2])
 redis.call('EXPIRE', KEYS[2], ARGV[4])
@@ -280,49 +86,35 @@ local burst = redis.call('ZCARD', KEYS[1])
 redis.call('EXPIRE', KEYS[1], ARGV[3])
 return {daily, burst}
 "#;
-
-        let burst_ttl = (burst_window_secs * 2) as i64; // 2x window for safety
-        let daily_ttl: i64 = 172_800; // 48h
-
         let result: Vec<i64> = redis::cmd("EVAL")
             .arg(script)
-            .arg(2) // num keys
+            .arg(2)
             .arg(&burst_key)
             .arg(&daily_key)
             .arg(cutoff_ms)
             .arg(now_ms)
-            .arg(burst_ttl)
-            .arg(daily_ttl)
-            .query_async(&mut conn)
+            .arg((burst_window_secs * 2) as i64)
+            .arg(172_800_i64)
+            .query_async(&mut connection)
             .await?;
 
-        let daily_count = result.first().copied().unwrap_or(0);
-        let burst_count = result.get(1).copied().unwrap_or(0);
-
-        Ok((daily_count, burst_count))
+        Ok((
+            result.first().copied().unwrap_or(0),
+            result.get(1).copied().unwrap_or(0),
+        ))
     }
 
-    /// Check and record an OpenAI TTS request for rate limiting.
-    /// Uses a Lua script for atomic burst (sorted set) + daily character counter.
-    /// Returns (daily_chars, burst_count) so the caller can decide Allow/Reject.
-    pub async fn check_tts_rate_limit(
+    pub(crate) async fn check_tts_rate_limit(
         &self,
         uid: &str,
         chars: usize,
         burst_window_secs: u64,
     ) -> Result<(i64, i64), redis::RedisError> {
-        let mut conn = self.get_connection().await?;
-
+        let mut connection = self.get_connection().await?;
         let now_ms = chrono::Utc::now().timestamp_millis();
-        let day_ordinal = (now_ms / 86_400_000).to_string();
         let cutoff_ms = now_ms - (burst_window_secs as i64 * 1000);
+        let (burst_key, daily_chars_key) = tts_rate_limit_keys(uid, now_ms);
 
-        let burst_key = format!("tts_rl:{}:burst", uid);
-        let daily_chars_key = format!("tts_rl:{}:chars:{}", uid, day_ordinal);
-
-        // KEYS[1] = burst_key, KEYS[2] = daily_chars_key
-        // ARGV[1] = cutoff_ms, ARGV[2] = now_ms, ARGV[3] = burst_ttl,
-        // ARGV[4] = daily_ttl, ARGV[5] = character count
         let script = r#"
 local chars = redis.call('INCRBY', KEYS[2], ARGV[5])
 redis.call('EXPIRE', KEYS[2], ARGV[4])
@@ -332,10 +124,6 @@ local burst = redis.call('ZCARD', KEYS[1])
 redis.call('EXPIRE', KEYS[1], ARGV[3])
 return {chars, burst}
 "#;
-
-        let burst_ttl = (burst_window_secs * 2) as i64;
-        let daily_ttl: i64 = 172_800;
-
         let result: Vec<i64> = redis::cmd("EVAL")
             .arg(script)
             .arg(2)
@@ -343,141 +131,61 @@ return {chars, burst}
             .arg(&daily_chars_key)
             .arg(cutoff_ms)
             .arg(now_ms)
-            .arg(burst_ttl)
-            .arg(daily_ttl)
+            .arg((burst_window_secs * 2) as i64)
+            .arg(172_800_i64)
             .arg(chars as i64)
-            .query_async(&mut conn)
+            .query_async(&mut connection)
             .await?;
 
-        let daily_chars = result.first().copied().unwrap_or(0);
-        let burst_count = result.get(1).copied().unwrap_or(0);
-
-        Ok((daily_chars, burst_count))
-    }
-
-    // ============================================================================
-    // APP INSTALLS - matches Python backend redis_db.py
-    // ============================================================================
-
-    /// Get installs count for multiple apps
-    /// Key format: plugins:{app_id}:installs
-    /// Returns a HashMap of app_id -> installs count
-    pub async fn get_apps_installs_count(
-        &self,
-        app_ids: &[String],
-    ) -> Result<std::collections::HashMap<String, i32>, redis::RedisError> {
-        if app_ids.is_empty() {
-            return Ok(std::collections::HashMap::new());
-        }
-
-        let mut conn = self.get_connection().await?;
-        let keys: Vec<String> = app_ids
-            .iter()
-            .map(|id| format!("plugins:{}:installs", id))
-            .collect();
-
-        let counts: Vec<Option<String>> = conn.mget(&keys).await?;
-
-        let result: std::collections::HashMap<String, i32> = app_ids
-            .iter()
-            .zip(counts.iter())
-            .map(|(id, count)| {
-                let installs = count
-                    .as_ref()
-                    .and_then(|s| s.parse::<i32>().ok())
-                    .unwrap_or(0);
-                (id.clone(), installs)
-            })
-            .collect();
-
-        Ok(result)
-    }
-
-    // ============================================================================
-    // APP REVIEWS - matches Python backend redis_db.py
-    // ============================================================================
-
-    /// Get reviews for multiple apps
-    /// Key format: plugins:{app_id}:reviews
-    /// Returns a HashMap of app_id -> HashMap of uid -> review
-    /// Python stores reviews as: {uid: {score: int, review: str, ...}}
-    pub async fn get_apps_reviews(
-        &self,
-        app_ids: &[String],
-    ) -> Result<std::collections::HashMap<String, Vec<RedisReview>>, redis::RedisError> {
-        if app_ids.is_empty() {
-            return Ok(std::collections::HashMap::new());
-        }
-
-        let mut conn = self.get_connection().await?;
-        let keys: Vec<String> = app_ids
-            .iter()
-            .map(|id| format!("plugins:{}:reviews", id))
-            .collect();
-
-        let reviews_data: Vec<Option<String>> = conn.mget(&keys).await?;
-
-        let mut result: std::collections::HashMap<String, Vec<RedisReview>> =
-            std::collections::HashMap::new();
-
-        for (id, data) in app_ids.iter().zip(reviews_data.iter()) {
-            if let Some(raw) = data {
-                // Python stores reviews as a dict: {uid: {score: int, review: str, ...}}
-                // We need to parse this to extract scores
-                let reviews = parse_python_reviews(raw);
-                if !reviews.is_empty() {
-                    result.insert(id.clone(), reviews);
-                }
-            }
-        }
-
-        Ok(result)
+        Ok((
+            result.first().copied().unwrap_or(0),
+            result.get(1).copied().unwrap_or(0),
+        ))
     }
 }
 
-/// Parse Python dict format for reviews
-/// Format: {'uid1': {'score': 5, 'review': 'text', ...}, 'uid2': {...}}
-fn parse_python_reviews(raw: &str) -> Vec<RedisReview> {
-    let mut reviews = Vec::new();
+fn rate_limit_keys(prefix: &str, uid: &str, now_ms: i64) -> (String, String) {
+    let day = now_ms / 86_400_000;
+    (
+        format!("{prefix}:{uid}:burst"),
+        format!("{prefix}:{uid}:daily:{day}"),
+    )
+}
 
-    // Try to parse as JSON first (newer format)
-    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(raw) {
-        if let Some(obj) = parsed.as_object() {
-            for (_uid, review) in obj {
-                if let Some(score) = review.get("score").and_then(|s| s.as_i64()) {
-                    reviews.push(RedisReview {
-                        score: score as i32,
-                    });
-                }
-            }
-        }
-        return reviews;
+fn tts_rate_limit_keys(uid: &str, now_ms: i64) -> (String, String) {
+    let day = now_ms / 86_400_000;
+    (
+        format!("tts_rl:{uid}:burst"),
+        format!("tts_rl:{uid}:chars:{day}"),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rate_limit_keys_isolate_namespaces_users_and_days() {
+        let first = rate_limit_keys("gemini_rl", "user-a", 86_400_000);
+        let other_namespace = rate_limit_keys("chat_rl", "user-a", 86_400_000);
+        let other_user = rate_limit_keys("gemini_rl", "user-b", 86_400_000);
+        let next_day = rate_limit_keys("gemini_rl", "user-a", 172_800_000);
+
+        assert_eq!(first.0, "gemini_rl:user-a:burst");
+        assert_eq!(first.1, "gemini_rl:user-a:daily:1");
+        assert_ne!(first, other_namespace);
+        assert_ne!(first, other_user);
+        assert_ne!(first.1, next_day.1);
     }
 
-    // Fallback: parse Python dict format using regex.
-    // Compile the constant pattern once per process (and log at most once on the
-    // impossible error path) instead of recompiling on every call.
-    static SCORE_REGEX: std::sync::OnceLock<Option<regex::Regex>> = std::sync::OnceLock::new();
-    let score_regex = SCORE_REGEX.get_or_init(|| match regex::Regex::new(r"'score':\s*(\d+)") {
-        Ok(re) => Some(re),
-        Err(error) => {
-            tracing::error!(
-                "Failed to compile Redis review score fallback regex: {}",
-                error
-            );
-            None
-        }
-    });
-
-    if let Some(score_regex) = score_regex {
-        for cap in score_regex.captures_iter(raw) {
-            if let Some(score_match) = cap.get(1) {
-                if let Ok(score) = score_match.as_str().parse::<i32>() {
-                    reviews.push(RedisReview { score });
-                }
-            }
-        }
+    #[test]
+    fn tts_keys_keep_character_budget_separate_from_burst_budget() {
+        assert_eq!(
+            tts_rate_limit_keys("user-a", 86_400_000),
+            (
+                "tts_rl:user-a:burst".to_owned(),
+                "tts_rl:user-a:chars:1".to_owned()
+            )
+        );
     }
-
-    reviews
 }
