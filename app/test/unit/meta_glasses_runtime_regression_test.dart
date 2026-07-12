@@ -65,6 +65,24 @@ String _getterExpression(String source, String getterName) {
 
 void main() {
   group('Meta glasses runtime regressions', () {
+    test('vendored DAT plugin records auditable upstream provenance', () {
+      final provenance = _read('third_party/meta_wearables_dat_flutter/UPSTREAM.md');
+
+      expect(provenance, contains('f13cf7e2bfbbc25bdbd42ca4972be1834c724624'));
+      expect(provenance, contains('15 modified files'));
+      expect(provenance, contains('Why vendored'));
+    });
+
+    test('Meta photo ingestion uses only the deployed websocket transport', () {
+      final conversationsApi = _read('lib/backend/http/api/conversations.dart');
+      final controller = _read('lib/services/capture/capture_controller.dart');
+
+      expect(conversationsApi, isNot(contains('v1/meta-wearables/photos/cache')));
+      expect(conversationsApi, isNot(contains('cacheMetaWearablesPhoto')));
+      expect(controller, isNot(contains('cacheCapturedImage')));
+      expect(controller, contains("'type': 'image_chunk'"));
+    });
+
     test('background camera capture does not use shuttered still-photo loop', () {
       final provider = _read('lib/providers/meta_wearables_provider.dart');
       final automaticLoop = _functionBody(provider, '_startPhotoLoop');

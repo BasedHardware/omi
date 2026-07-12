@@ -82,7 +82,6 @@ class CaptureController extends ChangeNotifier
   static const Duration _photoUploadAckTimeout = Duration(seconds: 10);
   final Map<String, Completer<void>> _pendingPhotoUploadAcks = {};
   final Map<String, String> _pendingPhotoUploadIdsByPermanent = {};
-  String? _metaWearablesCaptureConversationId;
   int _inProgressConversationRefreshAttempts = 0;
   bool _isRefreshingInProgressConversation = false;
 
@@ -1253,46 +1252,6 @@ class CaptureController extends ChangeNotifier
       _pendingPhotoUploadAcks.remove(tempId);
       _pendingPhotoUploadIdsByPermanent.removeWhere((_, pendingTempId) => pendingTempId == tempId);
     }
-  }
-
-  /// Caches a glasses frame through REST. No phone mic and no listen socket.
-  Future<bool> cacheCapturedImage(
-    Uint8List imageBytes, {
-    bool addToUi = true,
-    DateTime? capturedAt,
-    String? deviceUuid,
-    String? deviceName,
-    String? frameSha256,
-  }) async {
-    final takenAt = capturedAt ?? DateTime.now();
-    final tempId = 'temp_meta_${takenAt.millisecondsSinceEpoch}';
-    final base64Image = base64Encode(imageBytes);
-
-    if (addToUi) {
-      photos.add(ConversationPhoto(id: tempId, base64: base64Image, createdAt: takenAt));
-      photos.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-      photos = List.from(photos);
-      notifyListeners();
-    }
-
-    final cached = await cacheMetaWearablesPhoto(
-      imageBytes,
-      capturedAt: takenAt,
-      conversationId: _metaWearablesCaptureConversationId,
-      deviceUuid: deviceUuid,
-      deviceName: deviceName,
-      frameSha256: frameSha256,
-    );
-    if (cached == null || cached.conversationId.isEmpty || cached.photoId.isEmpty) return false;
-
-    _metaWearablesCaptureConversationId = cached.conversationId;
-    final photoIndex = photos.indexWhere((p) => p.id == tempId);
-    if (photoIndex != -1) {
-      photos[photoIndex].id = cached.photoId;
-      _segmentsPhotosVersion++;
-      notifyListeners();
-    }
-    return true;
   }
 
   Future<bool> _waitForPhotoUploadAck(String tempId, Completer<void> ack) async {

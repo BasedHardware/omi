@@ -37,9 +37,6 @@ class RecordingCaptureController extends CaptureController {
   final List<Uint8List> ingestedImages = [];
   final List<bool> addToUiValues = [];
   final List<DateTime?> capturedAtValues = [];
-  final List<String?> deviceUuidValues = [];
-  final List<String?> deviceNameValues = [];
-  final List<String?> frameSha256Values = [];
   int streamRecordingCount = 0;
   int stopStreamRecordingCount = 0;
 
@@ -58,24 +55,6 @@ class RecordingCaptureController extends CaptureController {
     ingestedImages.add(Uint8List.fromList(imageBytes));
     addToUiValues.add(addToUi);
     capturedAtValues.add(capturedAt);
-    return true;
-  }
-
-  @override
-  Future<bool> cacheCapturedImage(
-    Uint8List imageBytes, {
-    bool addToUi = true,
-    DateTime? capturedAt,
-    String? deviceUuid,
-    String? deviceName,
-    String? frameSha256,
-  }) async {
-    ingestedImages.add(Uint8List.fromList(imageBytes));
-    addToUiValues.add(addToUi);
-    capturedAtValues.add(capturedAt);
-    deviceUuidValues.add(deviceUuid);
-    deviceNameValues.add(deviceName);
-    frameSha256Values.add(frameSha256);
     return true;
   }
 }
