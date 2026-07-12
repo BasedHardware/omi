@@ -85,6 +85,10 @@ def test_bucket_reason_respects_allowlist_override():
     assert fallback_mod.bucket_reason('custom', allowed=frozenset({'custom', 'other'})) == 'custom'
 
 
+def test_llm_gateway_is_a_bounded_fallback_component():
+    assert fallback_mod.bucket_component('llm_gateway') == 'llm_gateway'
+
+
 def test_record_fallback_never_raises_on_metric_or_log_failure(monkeypatch):
     class BoomCounter:
         def labels(self, **_labels):
