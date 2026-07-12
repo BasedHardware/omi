@@ -12,10 +12,22 @@
         "iconColor": "rgba(0, 211, 255, 1)",
         "name": "Annotations & Alerts",
         "type": "dashboard"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "enable": true,
+        "expr": "changes(kube_deployment_status_observed_generation{deployment=~\".*nllb.*\", namespace=~\".*omi.*\"}[2m]) > 0",
+        "iconColor": "#FF9830",
+        "name": "NLLB Deploys",
+        "titleFormat": "NLLB Deploy",
+        "step": "60s"
       }
     ]
   },
-  "description": "Omi Translation Pipeline \u2014 NLLB self-hosted service + backend TranslationService metrics (google or nllb provider)",
+  "description": "Omi Translation Pipeline — NLLB self-hosted service + backend TranslationService metrics (google or nllb provider)",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -525,7 +537,7 @@
           ]
         }
       },
-      "title": "NLLB \u2192 Google Fallback Rate",
+      "title": "NLLB → Google Fallback Rate",
       "type": "stat",
       "targets": [
         {
@@ -931,7 +943,7 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 8,
         "x": 0,
         "y": 38
       },
@@ -997,8 +1009,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
+        "w": 8,
+        "x": 16,
         "y": 38
       },
       "id": 39,
@@ -1025,6 +1037,54 @@
       ]
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "scheme",
+            "schemeName": "Oranges"
+          },
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          }
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 38
+      },
+      "id": 54,
+      "options": {
+        "calculate": true,
+        "cellGap": 1,
+        "color": {
+          "mode": "scheme",
+          "scheme": "Oranges"
+        },
+        "yAxis": {
+          "unit": "s"
+        }
+      },
+      "title": "Latency Distribution Heatmap",
+      "type": "heatmap",
+      "targets": [
+        {
+          "expr": "sum(increase(nllb_translation_latency_seconds_bucket[$__rate_interval])) by (le)",
+          "legendFormat": "{{le}}",
+          "format": "heatmap"
+        }
+      ]
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -1045,51 +1105,108 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "palette-classic"
           },
-          "thresholds": {
-            "steps": [
+          "custom": {
+            "axisBorderShow": false,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Request"
+            },
+            "properties": [
               {
-                "color": "green",
-                "value": null
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    5
+                  ],
+                  "fill": "dash"
+                }
               },
               {
-                "color": "yellow",
-                "value": 70
-              },
-              {
-                "color": "red",
-                "value": 90
+                "id": "custom.fillOpacity",
+                "value": 0
               }
             ]
           },
-          "unit": "percent",
-          "min": 0,
-          "max": 100
-        }
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Limit"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    5,
+                    5
+                  ],
+                  "fill": "dash"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
-        "h": 6,
+        "h": 8,
         "w": 12,
         "x": 0,
         "y": 47
       },
       "id": 40,
       "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "reduceOptions": {
+        "legend": {
           "calcs": [
-            "lastNotNull"
-          ]
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
         }
       },
-      "title": "CPU Utilization %",
-      "type": "stat",
+      "title": "CPU: Actual vs Request vs Limit",
+      "type": "timeseries",
       "targets": [
         {
-          "expr": "rate(process_cpu_seconds_total{job=~\".*nllb.*\"}[$__rate_interval]) / 4 * 100",
-          "legendFormat": "CPU %"
+          "expr": "sum(rate(container_cpu_usage_seconds_total{container=\"nllb-translation\", namespace=~\".*omi.*\"}[$__rate_interval]))",
+          "legendFormat": "Actual"
+        },
+        {
+          "expr": "max(kube_pod_container_resource_requests{container=\"nllb-translation\", resource=\"cpu\"})",
+          "legendFormat": "Request"
+        },
+        {
+          "expr": "max(kube_pod_container_resource_limits{container=\"nllb-translation\", resource=\"cpu\"})",
+          "legendFormat": "Limit"
         }
       ]
     },
@@ -1101,51 +1218,108 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "palette-classic"
           },
-          "thresholds": {
-            "steps": [
+          "custom": {
+            "axisBorderShow": false,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "unit": "bytes"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Request"
+            },
+            "properties": [
               {
-                "color": "green",
-                "value": null
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    5
+                  ],
+                  "fill": "dash"
+                }
               },
               {
-                "color": "yellow",
-                "value": 70
-              },
-              {
-                "color": "red",
-                "value": 85
+                "id": "custom.fillOpacity",
+                "value": 0
               }
             ]
           },
-          "unit": "percent",
-          "min": 0,
-          "max": 100
-        }
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Limit"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    5,
+                    5
+                  ],
+                  "fill": "dash"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
-        "h": 6,
+        "h": 8,
         "w": 12,
         "x": 12,
         "y": 47
       },
       "id": 41,
       "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "reduceOptions": {
+        "legend": {
           "calcs": [
-            "lastNotNull"
-          ]
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
         }
       },
-      "title": "Memory Utilization %",
-      "type": "stat",
+      "title": "Memory: Actual vs Request vs Limit",
+      "type": "timeseries",
       "targets": [
         {
-          "expr": "process_resident_memory_bytes{job=~\".*nllb.*\"} / 17179869184 * 100",
-          "legendFormat": "Memory %"
+          "expr": "sum(container_memory_working_set_bytes{container=\"nllb-translation\", namespace=~\".*omi.*\"})",
+          "legendFormat": "Actual"
+        },
+        {
+          "expr": "max(kube_pod_container_resource_requests{container=\"nllb-translation\", resource=\"memory\"})",
+          "legendFormat": "Request"
+        },
+        {
+          "expr": "max(kube_pod_container_resource_limits{container=\"nllb-translation\", resource=\"memory\"})",
+          "legendFormat": "Limit"
         }
       ]
     },
@@ -1585,7 +1759,7 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 6,
         "x": 0,
         "y": 97
       },
@@ -1634,8 +1808,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 8,
+        "w": 6,
+        "x": 6,
         "y": 97
       },
       "id": 43,
@@ -1690,8 +1864,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 16,
+        "w": 6,
+        "x": 12,
         "y": 97
       },
       "id": 44,
@@ -1713,6 +1887,61 @@
         {
           "expr": "sum(increase(nllb_requests_total[1h]))",
           "legendFormat": "requests/hr"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "unit": "reqps"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 97
+      },
+      "id": 55,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "title": "Traffic: Current vs Yesterday",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(nllb_requests_total{status=\"ok\"}[$__rate_interval]))",
+          "legendFormat": "Now"
+        },
+        {
+          "expr": "sum(rate(nllb_requests_total{status=\"ok\"}[$__rate_interval] offset 1d))",
+          "legendFormat": "Yesterday"
         }
       ]
     }
@@ -1779,5 +2008,5 @@
   "timezone": "utc",
   "title": "Omi Translation Pipeline",
   "uid": "omi-translation-pipeline",
-  "version": 2
+  "version": 3
 }
