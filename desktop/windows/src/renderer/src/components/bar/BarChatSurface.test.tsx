@@ -126,40 +126,33 @@ describe('BarChatSurface', () => {
     expect(props.onClose).toHaveBeenCalledTimes(1)
   })
 
-  it('view roots carry the direction-specific morph class (guards the anti-plummet fix)', () => {
-    // Regression for the list→conversation "plummet": a tall conversation bottom-
-    // pins to the growing surface, so opening it used to slide the whole view down
-    // from far above the top edge. The conversation root must use bar-view-enter-in
-    // (holds it invisible through that slide, then blooms it in at rest); the list
-    // root keeps bar-view-enter (the top-pinned deflate the user likes). If either
-    // class is swapped/dropped, the plummet returns — so pin them here.
+  it('the entering conversation carries NO enter-animation class — it is opaque, seated, from frame 1 (clip-reveal)', () => {
+    // Regression for the list→conversation open. The conversation must render fully
+    // opaque at its final layout with no opacity/transform animation: an opacity
+    // hold reads as a black flash and a transform reads as the page sliding in from
+    // above (both user-rejected). The overflow:clip surface reveals it top-down as
+    // the box grows. The list keeps bar-view-enter (its quick fade); the
+    // conversation must carry neither bar-view-enter nor bar-view-enter-in.
     renderSurface({ view: 'list' })
     expect(document.querySelector('.bar-view-enter')).toBeTruthy()
-    expect(document.querySelector('.bar-view-enter-in')).toBeNull()
     cleanup()
     renderSurface({ view: 'conversation' })
-    expect(document.querySelector('.bar-view-enter-in')).toBeTruthy()
+    const root = document.querySelector('[data-testid="messages"]')?.closest('.flex.flex-col')
+    expect(root).toBeTruthy()
+    expect(root?.className).not.toMatch(/bar-view-enter/)
   })
 
-  it('bar-view-enter-in holds the conversation invisible until the box is ~seated (encodes the anti-plummet mechanism)', () => {
-    // The mechanism, not just the wiring: a tall conversation is bottom-pinned to
-    // the surface, so its top sweeps ~460px downward WHILE the box height morph
-    // (~240ms) runs. The plummet is masked only because bar-view-enter-in keeps
-    // opacity 0 through most of that sweep, then blooms once the box is ~seated.
-    // Measured: opacity first exceeds 0 at ~62% of the 300ms curve, when the box
-    // is ~90% grown and the view is ~2px from rest. If someone shortens that hold
-    // the visible slide returns — so pin it: opacity must stay 0 until >= 55%.
+  it('the surface is overflow:clip, never a scroll container (encodes the clip-reveal mechanism)', () => {
+    // The mechanism: a tall conversation mounting into the still-small box overflows
+    // it. With overflow:hidden the surface is a SCROLL container, so the browser
+    // scroll-anchors it (scrollTop>0) and unwinds to 0 as the box grows — sliding
+    // the whole conversation down from above (the reported "page drops in from the
+    // top"). overflow:clip clips identically but is NOT scrollable, so the content
+    // stays seated and the box reveals it top-down. If this regresses to hidden/
+    // auto/scroll the slide returns — so pin clip.
     const css = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'bar.css'), 'utf8')
-    const block = css.match(/@keyframes\s+bar-view-enter-in\s*\{([\s\S]*?)\n\}/)?.[1]
-    expect(block).toBeTruthy()
-    let holdUntilPct = 0
-    let blooms = false
-    for (const [, selector, body] of (block as string).matchAll(/([\d%,\s]+?)\{([^}]*)\}/g)) {
-      const pcts = [...selector.matchAll(/(\d+)%/g)].map((x) => Number(x[1]))
-      if (/opacity:\s*0\b/.test(body)) holdUntilPct = Math.max(holdUntilPct, ...pcts)
-      if (pcts.includes(100) && /opacity:\s*1\b/.test(body)) blooms = true
-    }
-    expect(holdUntilPct).toBeGreaterThanOrEqual(55)
-    expect(blooms).toBe(true)
+    const body = css.match(/\.bar-surface\s*\{([^}]*)\}/)?.[1] ?? ''
+    const overflow = body.match(/(?:^|[^-])overflow:\s*([a-z]+)/)?.[1]
+    expect(overflow).toBe('clip')
   })
 })

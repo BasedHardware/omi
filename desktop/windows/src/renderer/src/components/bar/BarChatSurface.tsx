@@ -179,12 +179,11 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
   }
 
   return (
-    // bar-view-enter-in (not bar-view-enter): the conversation is tall and
-    // bottom-pins to the growing surface, so its top slides down from far above
-    // as the box inflates. Hold it invisible through that slide, then bloom it
-    // in at rest — a grow-from-the-top, never the "plummet" the list view (which
-    // stays short and top-pinned) never suffers.
-    <div key="conversation" className="bar-view-enter-in flex flex-col">
+    // NO enter-animation class (unlike the list's bar-view-enter). The
+    // conversation renders opaque at its final seated layout from frame 1; the
+    // overflow:clip surface reveals it top-down as the box grows (see bar.css).
+    // Any opacity/transform here reintroduces the black-flash / slide-from-above.
+    <div key="conversation" className="flex flex-col">
       <div className="flex items-center gap-1.5 px-2 pb-1 pt-1">
         <button
           type="button"

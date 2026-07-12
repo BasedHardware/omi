@@ -49,7 +49,14 @@ body.bar-body {
    (no top radius: it reads as part of the screen edge, notch-like). */
 .bar-surface {
   position: relative;
-  overflow: hidden;
+  /* overflow:CLIP, not hidden: `hidden` makes the surface a scroll container, and
+     when a tall conversation mounts into the still-small box it overflows and the
+     browser scroll-anchors the surface (scrollTop > 0), then unwinds it to 0 as
+     the box grows — which slid the whole conversation down from above (the
+     reported "page drops in from the top"). `clip` clips identically but is NOT
+     scrollable, so the content stays seated and the growing box reveals it
+     top-down — the exact mirror of how the shrinking box conceals the list. */
+  overflow: clip;
   background: rgba(15, 15, 15, 0.96);
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-top: none;
@@ -170,29 +177,16 @@ body.bar-body {
   }
 }
 
-/* ENTER the inline conversation (list → conversation). A tall conversation is
-   bottom-pinned to the surface's bottom edge, so as the box grows the whole
-   view's top slides down from far above (measured -414px -> +46px): the
-   "plummet" the user reported. Fix mirrors the box-leads pill->panel bloom:
-   hold the view invisible while the box inflates and that slide happens off-
-   screen, then bloom it in at its settled seat. The box morph runs ~240ms and
-   the view is within ~8px of rest by ~62% of this curve, so the visible bloom
-   lands in place — a grow-from-the-top, never a drop. */
-.bar-view-enter-in {
-  animation: bar-view-enter-in 300ms cubic-bezier(0.2, 0, 0, 1);
-  transform-origin: top center;
-}
-@keyframes bar-view-enter-in {
-  0%,
-  62% {
-    opacity: 0;
-    transform: scale(0.96);
-  }
-  100% {
-    opacity: 1;
-    transform: none;
-  }
-}
+/* ENTER the inline conversation (list → conversation): NO content animation.
+   The conversation renders at its final seated layout, fully opaque, from the
+   first frame; because the surface is overflow:CLIP (not a scroll container) the
+   content stays put while the box grows DOWNWARD and reveals it — the exact
+   mirror of how BACK's shrinking box conceals the stationary list. Any opacity
+   hold here reads as a black flash, and any transform reads as the page sliding
+   in from above (both user-rejected); so the conversation root carries no enter
+   class at all. The exiting list keeps .bar-view-enter (its quick fade), and the
+   incoming conversation is already opaque underneath it, so there is never an
+   empty frame. */
 
 /* Respect reduced-motion: swap instantly, no morph, no inflate. */
 @media (prefers-reduced-motion: reduce) {
@@ -208,8 +202,7 @@ body.bar-body {
   .bar-content {
     transform: none;
   }
-  .bar-view-enter,
-  .bar-view-enter-in {
+  .bar-view-enter {
     animation: none;
   }
 }
