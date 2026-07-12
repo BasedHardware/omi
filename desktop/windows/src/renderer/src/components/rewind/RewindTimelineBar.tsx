@@ -33,7 +33,9 @@ function breakZigzagPoints(width: number, height: number): string {
   const amp = Math.min(3, width * 0.22)
   // 5 rows → 4 diagonals → 3 gentle switchbacks, top to bottom.
   const rows = [0, height / 4, height / 2, (height * 3) / 4, height]
-  return rows.map((y, i) => `${(i % 2 === 0 ? cx - amp : cx + amp).toFixed(1)},${y.toFixed(1)}`).join(' ')
+  return rows
+    .map((y, i) => `${(i % 2 === 0 ? cx - amp : cx + amp).toFixed(1)},${y.toFixed(1)}`)
+    .join(' ')
 }
 
 // Axis ticks aligned to LOCAL time boundaries (round local hours/days), so labels
@@ -71,7 +73,10 @@ export function RewindTimelineBar({
   const frameTimes = frames.map((f) => f.ts)
   // Non-linear layout: activity to scale, long blank gaps collapsed to breaks.
   const mapping: TimelineMapping | null = hasSpan
-    ? buildTimelineMapping(frameTimes, minTs, maxTs, { pxPerHour: PX_PER_HOUR, minWidth: viewWidth })
+    ? buildTimelineMapping(frameTimes, minTs, maxTs, {
+        pxPerHour: PX_PER_HOUR,
+        minWidth: viewWidth
+      })
     : null
   const contentWidth = mapping ? mapping.width : viewWidth
 
@@ -81,7 +86,9 @@ export function RewindTimelineBar({
     onSeek(xToTs(clientX - rect.left, mapping))
   }
 
-  const ticks = mapping ? localAxisTicks(minTs, maxTs, Math.max(4, Math.round(contentWidth / 110))) : []
+  const ticks = mapping
+    ? localAxisTicks(minTs, maxTs, Math.max(4, Math.round(contentWidth / 110)))
+    : []
   // Ticks that land inside a collapsed break would pile up in ~16px — drop them;
   // the break mark stands in for that stretch of time.
   const visibleTicks = mapping ? ticks.filter((t) => !tsInBreak(t, mapping)) : []

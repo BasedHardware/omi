@@ -91,7 +91,12 @@ describe('buildTimelineMapping', () => {
   })
 
   it('emits one break per collapsed gap for multiple consecutive breaks', () => {
-    const m = buildTimelineMapping([0, MIN, 600_000, 660_000, 1_200_000, 1_260_000], 0, 1_260_000, OPTS)
+    const m = buildTimelineMapping(
+      [0, MIN, 600_000, 660_000, 1_200_000, 1_260_000],
+      0,
+      1_260_000,
+      OPTS
+    )
     expect(m.pieces.map((p) => p.kind)).toEqual(['linear', 'break', 'linear', 'break', 'linear'])
   })
 
@@ -133,12 +138,22 @@ describe('buildTimelineMapping default break threshold', () => {
   })
 
   it('does NOT collapse a 20-minute gap (stays linear, unmarked)', () => {
-    const m = buildTimelineMapping([0, MIN, 20 * 60_000, 20 * 60_000 + MIN], 0, 20 * 60_000 + MIN, DEFAULTS)
+    const m = buildTimelineMapping(
+      [0, MIN, 20 * 60_000, 20 * 60_000 + MIN],
+      0,
+      20 * 60_000 + MIN,
+      DEFAULTS
+    )
     expect(hasBreak(m)).toBe(false)
   })
 
   it('DOES collapse a 45-minute gap', () => {
-    const m = buildTimelineMapping([0, MIN, 45 * 60_000, 45 * 60_000 + MIN], 0, 45 * 60_000 + MIN, DEFAULTS)
+    const m = buildTimelineMapping(
+      [0, MIN, 45 * 60_000, 45 * 60_000 + MIN],
+      0,
+      45 * 60_000 + MIN,
+      DEFAULTS
+    )
     expect(hasBreak(m)).toBe(true)
   })
 })

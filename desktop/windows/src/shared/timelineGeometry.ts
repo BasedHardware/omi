@@ -70,7 +70,8 @@ export function axisTicks(minTs: number, maxTs: number, maxTicks: number): numbe
   // Tick count across the span is floor(span/iv)+1, so cap span/iv at maxTicks-1
   // to keep the inclusive count within maxTicks.
   const interval =
-    TICK_INTERVALS.find((iv) => span / iv <= maxTicks - 1) ?? TICK_INTERVALS[TICK_INTERVALS.length - 1]
+    TICK_INTERVALS.find((iv) => span / iv <= maxTicks - 1) ??
+    TICK_INTERVALS[TICK_INTERVALS.length - 1]
   const first = Math.ceil(minTs / interval) * interval
   const ticks: number[] = []
   for (let t = first; t <= maxTs; t += interval) ticks.push(t)
@@ -83,7 +84,10 @@ export function axisTicks(minTs: number, maxTs: number, maxTicks: number): numbe
  * timeline as solid activity blocks (filled where screenshots exist) rather than
  * a confusing field of individual hairlines.
  */
-export function activitySegments(sortedTs: number[], gapMs: number): { start: number; end: number }[] {
+export function activitySegments(
+  sortedTs: number[],
+  gapMs: number
+): { start: number; end: number }[] {
   if (sortedTs.length === 0) return []
   const segments: { start: number; end: number }[] = []
   let start = sortedTs[0]
@@ -161,7 +165,8 @@ export function buildTimelineMapping(
   const pieces: TimelinePiece[] = []
   let cursor = windowStart
   for (const b of breaks) {
-    if (b.start > cursor) pieces.push({ kind: 'linear', tStart: cursor, tEnd: b.start, xStart: 0, xEnd: 0 })
+    if (b.start > cursor)
+      pieces.push({ kind: 'linear', tStart: cursor, tEnd: b.start, xStart: 0, xEnd: 0 })
     pieces.push({ kind: 'break', tStart: b.start, tEnd: b.end, xStart: 0, xEnd: 0 })
     cursor = b.end
   }
@@ -171,7 +176,9 @@ export function buildTimelineMapping(
 
   // Natural (unstretched) width per piece.
   const natural = pieces.map((p) =>
-    p.kind === 'break' ? breakPx : Math.max(linearMinPx, ((p.tEnd - p.tStart) / 3_600_000) * pxPerHour)
+    p.kind === 'break'
+      ? breakPx
+      : Math.max(linearMinPx, ((p.tEnd - p.tStart) / 3_600_000) * pxPerHour)
   )
   const total = natural.reduce((a, b) => a + b, 0)
   const width = Math.max(total, minWidth)
@@ -241,7 +248,12 @@ export function tsInBreak(ts: number, m: TimelineMapping): boolean {
  * matching what the activity bar draws. Operates purely in the time domain, so
  * it is independent of the pixel mapping above.
  */
-export function frameIndexAtCursor(sortedTs: number[], cursorTs: number, gapMs: number, padMs: number): number {
+export function frameIndexAtCursor(
+  sortedTs: number[],
+  cursorTs: number,
+  gapMs: number,
+  padMs: number
+): number {
   if (sortedTs.length === 0) return -1
   const covered = activitySegments(sortedTs, gapMs).some(
     (s) => cursorTs >= s.start - padMs && cursorTs <= s.end + padMs
