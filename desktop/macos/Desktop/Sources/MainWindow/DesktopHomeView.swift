@@ -43,10 +43,6 @@ struct DesktopHomeView: View {
   @State private var lastActivationRefresh = Date.distantPast
   @State private var didScheduleAgentVMProvisioning = false
   @State private var proactiveMonitoringStartGate = RetryableDelayedStartGate()
-  // Anchor for the proactive-monitoring warmup budget. Captured at view
-  // creation (≈ launch) so the delay is spent once per session, not once per
-  // trigger — see StartupWarmupPolicy.remainingProactiveAssistantsStartDelay.
-  @State private var proactiveMonitoringWarmupAnchor = Date()
   @State private var didScheduleConversationWarmup = false
   @State private var initialFileIndexingBackfill = DelayedFileIndexingBackfillState()
 
@@ -734,7 +730,8 @@ struct DesktopHomeView: View {
     ) {
       async let conversations: Void = loadConversationsIfNeeded()
       async let folders: Void = loadFoldersIfNeeded()
-      _ = await (conversations, folders)
+      async let memories: Void = viewModelContainer.memoriesViewModel.loadMemoriesIfNeeded()
+      _ = await (conversations, folders, memories)
     }
     if !scheduled { didScheduleConversationWarmup = false }
   }
@@ -786,14 +783,12 @@ struct DesktopHomeView: View {
   private func scheduleProactiveMonitoringStart(reason: String) {
     guard proactiveMonitoringStartGate.reserve() else { return }
 
-    let delay = StartupWarmupPolicy.remainingProactiveAssistantsStartDelay(
-      elapsedSinceLaunch: Date().timeIntervalSince(proactiveMonitoringWarmupAnchor))
-    log(
-      "DesktopHomeView: Scheduling screen analysis start in \(String(format: "%.1f", delay))s (\(reason))"
-    )
+    // The coordinator anchors warmup delays to launch, so late triggers
+    // (API-key load, app re-activation) never re-pay the full delay.
+    log("DesktopHomeView: Scheduling screen analysis start (\(reason), launch-anchored)")
     let scheduled = viewModelContainer.scheduleSessionWarmup(
       id: .proactiveAssistantsStart,
-      delay: delay,
+      delay: StartupWarmupPolicy.proactiveAssistantsStartDelay,
       onCancel: { proactiveMonitoringStartGate.finishAttempt() }
     ) {
       let plugin = ProactiveAssistantsPlugin.shared

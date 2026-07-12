@@ -38,34 +38,58 @@ final class StartupWarmupPolicyTests: XCTestCase {
         )
     }
 
-    func testProactiveAssistantsRemainingDelayIsFullAtLaunch() {
+    func testRemainingWarmupDelayIsFullAtLaunch() {
         XCTAssertEqual(
-            StartupWarmupPolicy.remainingProactiveAssistantsStartDelay(elapsedSinceLaunch: 0),
+            StartupWarmupPolicy.remainingDelay(
+                StartupWarmupPolicy.proactiveAssistantsStartDelay, elapsedSinceLaunch: 0),
             StartupWarmupPolicy.proactiveAssistantsStartDelay
         )
     }
 
-    func testProactiveAssistantsRemainingDelayCountsDownFromLaunch() {
+    func testRemainingWarmupDelayCountsDownFromLaunch() {
         XCTAssertEqual(
-            StartupWarmupPolicy.remainingProactiveAssistantsStartDelay(elapsedSinceLaunch: 2.0),
+            StartupWarmupPolicy.remainingDelay(
+                StartupWarmupPolicy.proactiveAssistantsStartDelay, elapsedSinceLaunch: 2.0),
             StartupWarmupPolicy.proactiveAssistantsStartDelay - 2.0,
             accuracy: 0.0001
         )
     }
 
-    func testProactiveAssistantsRemainingDelayIsZeroOnceWindowHasElapsed() {
+    /// Post-onboarding / account-switch case: the main content appears minutes
+    /// after launch, so the content warmups (conversations, dashboard tasks,
+    /// memories) must fire immediately instead of leaving pages empty for
+    /// several seconds.
+    func testRemainingWarmupDelayIsZeroOnceLaunchWindowHasElapsed() {
+        for delay in [
+            StartupWarmupPolicy.conversationWarmupDelay,
+            StartupWarmupPolicy.dashboardNetworkRefreshDelay,
+            StartupWarmupPolicy.proactiveAssistantsStartDelay,
+        ] {
+            XCTAssertEqual(
+                StartupWarmupPolicy.remainingDelay(delay, elapsedSinceLaunch: 300), 0)
+        }
+    }
+
+    func testRemainingWarmupDelayClampsNegativeElapsedToFullDelay() {
         XCTAssertEqual(
-            StartupWarmupPolicy.remainingProactiveAssistantsStartDelay(
-                elapsedSinceLaunch: StartupWarmupPolicy.proactiveAssistantsStartDelay + 60),
-            0
+            StartupWarmupPolicy.remainingDelay(
+                StartupWarmupPolicy.proactiveAssistantsStartDelay, elapsedSinceLaunch: -5),
+            StartupWarmupPolicy.proactiveAssistantsStartDelay
         )
     }
 
-    func testProactiveAssistantsRemainingDelayClampsNegativeElapsedToFullDelay() {
-        XCTAssertEqual(
-            StartupWarmupPolicy.remainingProactiveAssistantsStartDelay(elapsedSinceLaunch: -5),
-            StartupWarmupPolicy.proactiveAssistantsStartDelay
-        )
+    func testStartupWarmupCoordinatorAnchorsDelaysToLaunch() throws {
+        let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let sourceURL = testsURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/StartupWarmupCoordinator.swift")
+        // omi-test-quality: source-inspection -- static contract: warmup scheduling and staged sleeps must route through the launch-anchored remainingStartupDelay (delay math is covered behaviorally by the remainingDelay tests above)
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        XCTAssertTrue(source.contains("let effectiveDelay = remainingStartupDelay(delay)"))
+        XCTAssertTrue(source.contains("sleepForStartupDelay(effectiveDelay)"))
+        XCTAssertTrue(source.contains("remainingStartupDelay(StartupWarmupPolicy.immediateWarmupDelay)"))
+        XCTAssertTrue(source.contains("remainingStartupDelay(StartupWarmupPolicy.deferredWarmupDelay)"))
     }
 
     func testConversationWarmupWaitsUntilAfterDeferredWarmupStarts() {
@@ -295,6 +319,10 @@ final class StartupWarmupPolicyTests: XCTestCase {
 
         XCTAssertTrue(source.contains("id: .agentVMProvisioning"))
         XCTAssertTrue(source.contains("id: .conversationWarmup"))
+        XCTAssertTrue(
+            source.contains("memoriesViewModel.loadMemoriesIfNeeded()"),
+            "Content warmup must prefetch memories so the Memories page is not empty on first open"
+        )
         XCTAssertTrue(source.contains("id: .initialFileIndexing"))
         XCTAssertTrue(source.contains("id: .proactiveAssistantsStart"))
         XCTAssertTrue(source.contains("viewModelContainer.resetStartupState()"))

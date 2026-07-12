@@ -18,11 +18,16 @@ class ViewModelContainer: ObservableObject {
     let memoryGraphViewModel = MemoryGraphViewModel()
     let chatProvider: ChatProvider
     let taskChatCoordinator: TaskChatCoordinator
+    /// Captured at container init (≈ app launch, before sign-in/onboarding UI).
+    /// The warmup coordinator is lazy — first touched when the main content
+    /// appears — so it must not anchor warmup delays to its own creation time.
+    private let launchDate = Date()
     private lazy var warmupCoordinator = StartupWarmupCoordinator(
         tasksStore: tasksStore,
         dashboardViewModel: dashboardViewModel,
         appProvider: appProvider,
         chatProvider: chatProvider,
+        launchAnchor: launchDate,
         retryDatabaseInit: { [weak self] in
             await self?.retryDatabaseInit() ?? false
         }
