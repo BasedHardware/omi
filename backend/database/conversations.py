@@ -234,8 +234,11 @@ def upsert_conversation(uid: str, conversation_data: dict):
             # Processing owns generated content, while these fields are explicitly
             # user-owned. The transaction retries if a concurrent mutation lands,
             # so an older in-memory Conversation cannot clobber that edit.
+            # A null existing value means "never user-set" (stub docs dump None
+            # fields), so only non-null values are preserved — otherwise the
+            # stub's folder_id: None would revert every AI folder assignment.
             for field in ('starred', 'folder_id', 'visibility', 'user_title'):
-                if field in existing:
+                if existing.get(field) is not None:
                     write_data[field] = existing[field]
 
             user_title = existing.get('user_title')
