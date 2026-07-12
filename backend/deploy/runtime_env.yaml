@@ -568,7 +568,7 @@ environments:
               value: prod
               category: runtime_identity
             HOSTED_PARAKEET_API_URL:
-              value: https://parakeet.omi.me
+              value: http://parakeet.omi.me
               category: service_discovery
             POSTHOG_HOST:
               value: https://app.posthog.com
@@ -648,7 +648,7 @@ environments:
               value: prod
               category: runtime_identity
             HOSTED_PARAKEET_API_URL:
-              value: https://parakeet.omi.me
+              value: http://parakeet.omi.me
               category: service_discovery
             POSTHOG_HOST:
               value: https://app.posthog.com
@@ -703,7 +703,7 @@ environments:
               value: prod
               category: runtime_identity
             HOSTED_PARAKEET_API_URL:
-              value: https://parakeet.omi.me
+              value: http://parakeet.omi.me
               category: service_discovery
             POSTHOG_HOST:
               value: https://app.posthog.com

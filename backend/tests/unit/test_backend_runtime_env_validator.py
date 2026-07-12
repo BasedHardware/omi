@@ -799,7 +799,7 @@ def test_provisional_prod_endpoint_requires_presence_but_not_exact_value(tmp_pat
                                         'value': 'TBD_STABLE_PRIVATE_ENDPOINT',
                                         'provisional': True,
                                     },
-                                    'HOSTED_PARAKEET_API_URL': {'value': 'https://parakeet.omi.me'},
+                                    'HOSTED_PARAKEET_API_URL': {'value': 'http://parakeet.omi.me'},
                                 },
                                 'secrets': {
                                     'OMI_LLM_GATEWAY_SERVICE_TOKEN': {
@@ -831,7 +831,7 @@ def test_provisional_prod_endpoint_requires_presence_but_not_exact_value(tmp_pat
     "backend": {
         "env": [
           {"name": "OMI_LLM_GATEWAY_URL", "value": "http://stable-private-endpoint"},
-          {"name": "HOSTED_PARAKEET_API_URL", "value": "https://parakeet.omi.me"},
+          {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omi.me"},
           {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}},
           {"name": "STT_PRERECORDED_MODEL", "valueFrom": {"secretKeyRef": {"name": "STT_PRERECORDED_MODEL"}}},
           {"name": "DEEPGRAM_API_KEY", "valueFrom": {"secretKeyRef": {"name": "DEEPGRAM_API_KEY"}}},
@@ -1178,3 +1178,39 @@ def test_sync_backfill_co_deploy_is_required_per_workflow(tmp_path):
     assert not any(
         str(complete) in error.scope and 'without backend-sync-backfill' in error.message for error in errors
     )
+
+
+_ILB_ENV_VARS = ['HOSTED_PARAKEET_API_URL', 'HOSTED_TRANSLATION_API_URL']
+
+
+@pytest.mark.parametrize('env_name', ['dev', 'prod'])
+def test_repo_ilb_endpoints_use_http_scheme(env_name):
+    """ILB endpoints are HTTP-only (no TLS) — https:// causes timeouts."""
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    env_config = validator._get_env_config(manifest, env_name)
+
+    violations = []
+
+    def _check_service(surface, svc_name, svc_cfg):
+        env_vars = svc_cfg.get('env', {})
+        for var_name in _ILB_ENV_VARS:
+            if var_name not in env_vars:
+                continue
+            value = env_vars[var_name]
+            url = value.get('value', '') if isinstance(value, dict) else value
+            if url.startswith('https://'):
+                violations.append(f'{env_name}/{surface}/{svc_name}: {var_name}={url}')
+
+    # cloud_run: nested under 'services' key
+    cloud_run_cfg = env_config.get('cloud_run', {})
+    for svc_name, svc_cfg in cloud_run_cfg.get('services', {}).items():
+        _check_service('cloud_run', svc_name, svc_cfg)
+
+    # gke: service entries are direct children (not under 'services')
+    gke_cfg = env_config.get('gke', {})
+    for svc_name, svc_cfg in gke_cfg.items():
+        if isinstance(svc_cfg, dict) and 'env' in svc_cfg:
+            _check_service('gke', svc_name, svc_cfg)
+
+    assert violations == [], f'ILB endpoints must use http:// (no TLS): {violations}'
