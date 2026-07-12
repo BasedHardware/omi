@@ -30,8 +30,15 @@ def get_google_maps_location(latitude: float, longitude: float) -> Optional[Geol
 
     key = os.getenv('GOOGLE_MAPS_API_KEY')
     url = f"https://maps.googleapis.com/maps/api/geocode/json?latlng={latitude},{longitude}&key={key}"
-    response = httpx.get(url)
-    data = response.json()
+    try:
+        response = httpx.get(url)
+        data = response.json()
+    except Exception as e:
+        # A Maps network error or a non-JSON 5xx response must not 500 the caller (conversation
+        # create/finalize); return None so the caller keeps the raw geolocation. Mirrors the guard
+        # in async_get_google_maps_location.
+        logger.error(f'get_google_maps_location error: {e}')
+        return None
     if data.get('status') != 'OK' or not data.get('results'):
         return None
     place = data['results'][0]
