@@ -42,9 +42,10 @@ import {
   evaluatePeekWatchdog,
   nextInteractivity,
   barWatchPlan,
-  barGestureSeesOpen
+  barGestureSeesOpen,
+  clickEdge
 } from './watchdog'
-import { makeKeySampler } from './keyState'
+import { makeKeySampler, makePrimaryMouseButtonSampler } from './keyState'
 import { getAppSettings, setAppSettings } from '../appSettings'
 
 export type BarMode = 'peek' | 'expanded' | 'ptt'
@@ -309,6 +310,7 @@ function commitReveal(token: number): void {
   }
   cancelPendingReveal()
   win.showInactive()
+  diag(`commitReveal mode=${pending.mode}`)
   if (pending.mode === 'expanded') win.focus()
   // Watch runs in every visible collapsed mode (peek + ptt) — it drives
   // click-to-expand interactivity; only peek also runs the retract grace.
@@ -343,6 +345,19 @@ let peekOutsideSince: number | null = null
 /** Whether the cursor has entered the peek footprint since this reveal — gates
  *  the long summon linger vs. the short post-visit grace. Reset per reveal. */
 let peekHasBeenHovered = false
+// Main-side click detection (hardware-click-eaten fix — see clickTick).
+// `undefined` = sampler not yet built; `null` = unavailable (off-Windows/koffi).
+let mouseButtonSampler: (() => boolean) | null | undefined = undefined
+/** clickEdge armed state (an up was observed over the pill). Reset per reveal. */
+let clickArmed = false
+// The physical button is sampled on its OWN faster timer than the 50ms watch: a
+// quick physical click's full down→up can fall between two 50ms samples, so the
+// pill click would be missed. ~16ms (≈60Hz) shrinks that window; the latch bit
+// (see makePrimaryMouseButtonSampler) covers presses shorter still. Runs only
+// while a collapsed bar is visible (started/stopped with the watch) — zero cost
+// when idle.
+const CLICK_SAMPLE_MS = 16
+let clickWatch: ReturnType<typeof setInterval> | null = null
 /** Harness-only (OMI_E2E hook): hold a peek bar open while screenshots are
  *  captured — on a live desktop the cursor is legitimately outside the
  *  footprint, so the watchdog would retract mid-capture. Never set in prod. */
@@ -364,6 +379,18 @@ export function setPeekWatchSuspended(suspended: boolean): void {
   peekWatchSuspended = suspended
 }
 
+// Dev-only diagnostic trail for the summon→click pipeline. Logs STATE
+// TRANSITIONS only (never per-tick), so it stays quiet; packaged builds are
+// silent. Added while chasing a live "clicks never arm" report — keep it: this
+// path has burned us repeatedly and the log is the fastest way to see which
+// link is dead on a real machine.
+const BAR_DIAG = is.dev
+function diag(msg: string): void {
+  if (BAR_DIAG) console.log(`[bar-diag] ${msg}`)
+}
+/** Last cursor-over-pill sample, to log only its transitions. */
+let diagLastOverPill: boolean | null = null
+
 /** One watch poll. Runs while the bar is visible and collapsed (peek OR ptt):
  *  drive interactivity from the OS cursor in EVERY such mode (Bug A — a ptt pill
  *  that lingers after release must be as clickable as a tap pill), then run the
@@ -375,6 +402,11 @@ function peekTick(): void {
   const win = barWindow
   const plan = barWatchPlan(currentMode)
   if (!win || win.isDestroyed() || !win.isVisible() || !plan.trackInteractivity) {
+    if (peekWatch) {
+      diag(
+        `watch self-stop: win=${!!win && !win.isDestroyed()} visible=${!!win && !win.isDestroyed() && win.isVisible()} mode=${currentMode} track=${plan.trackInteractivity}`
+      )
+    }
     stopPeekWatch()
     return
   }
@@ -382,6 +414,14 @@ function peekTick(): void {
     screen.getAllDisplays().find((d) => d.id === activeDisplayId) ?? screen.getPrimaryDisplay()
   const dl = displayLike(display)
   const cursor = screen.getCursorScreenPoint()
+  const overPill = isCursorOverPill(cursor, dl)
+  if (BAR_DIAG && overPill !== diagLastOverPill) {
+    const b = dl.bounds
+    diag(
+      `cursorOverPill ${diagLastOverPill}->${overPill} cursor=${cursor.x},${cursor.y} display=${b.x},${b.y} ${b.width}x${b.height} mode=${currentMode} interactive=${barInteractive}`
+    )
+    diagLastOverPill = overPill
+  }
   // Main-driven interactivity (Bug A): the OS cursor over the 148×36 pill hit
   // rect is the source of truth — enable hit-testing the instant it enters (no
   // async renderer mouseenter → IPC round-trip a fast click could beat), and
@@ -389,16 +429,19 @@ function peekTick(): void {
   // control under the top-center dead space stays clickable. The renderer's
   // mouseenter/leave path stays as a belt; here main leads.
   const wantInteractive = nextInteractivity({
-    cursorOverPill: isCursorOverPill(cursor, dl),
+    cursorOverPill: overPill,
     interactive: barInteractive,
     suspended: peekWatchSuspended
   })
   if (wantInteractive && !barInteractive) {
     barInteractive = true
     win.setIgnoreMouseEvents(false)
+    diag(`interactive ON cursor=${cursor.x},${cursor.y} mode=${currentMode}`)
   } else if (!wantInteractive && barInteractive) {
     applyClickThrough(win)
+    diag(`interactive OFF cursor=${cursor.x},${cursor.y} mode=${currentMode}`)
   }
+  // (Main-side click-to-expand runs on its own faster timer — see clickTick.)
   // Retract grace is peek-only; a ptt pill never auto-retracts on the cursor.
   if (!plan.runRetract) {
     peekOutsideSince = null
@@ -424,17 +467,77 @@ function peekTick(): void {
   }
 }
 
+/**
+ * Main-side click-to-expand — WHY this exists (do not "simplify it away"): a
+ * transparent, always-on-top, non-focusable overlay does NOT receive real
+ * hardware mouse-down messages, so the pill's DOM onClick never fires and the
+ * bar won't expand — the user's actual bug, for BOTH an external mouse and a
+ * touchpad button (only SendInput-injected clicks land, which masked it under
+ * synthetic testing). Two documented mechanisms, either/both in play across
+ * Chromium versions (formally unresolved, but this bypasses both):
+ *   • DWM/DirectComposition hit-tests transparent windows against the composited
+ *     frame's ALPHA channel, not WM_NCHITTEST/logical state — clicks fall
+ *     through the transparent regions (Electron #1335, #48064; MS DirectComposition
+ *     click-through Q&A). This also applies to the software-composited path
+ *     (repro'd with hardware accel off / SwiftShader), so it is not a GPU toggle.
+ *   • Chromium HWNDMessageHandler::OnMouseActivate returns MA_NOACTIVATEANDEAT
+ *     when CanActivate() is false (Electron's setFocusable(false)), discarding
+ *     the mouse-down before the window proc sees it.
+ * The fix reads the PHYSICAL primary button via GetAsyncKeyState (routing-
+ * independent; set by any source — external mouse OR touchpad) and, on an up→down
+ * edge over the pill, expands via the SAME setBarMode('expanded') path as the
+ * bar:expand IPC. The DOM onClick path STAYS as a second belt (assistive tech +
+ * our own E2E ride it); a duplicate expand is a no-op. We deliberately do NOT
+ * toggle setFocusable(true) transiently (taskbar flicker, focus-steal — Electron
+ * #23106). A WH_MOUSE_LL low-level hook is the idiomatic upgrade if polling
+ * latency ever bites, but from Electron-main via koffi the hook callback latency
+ * risks Windows silently unhooking us, so polling + the latch bit is the tradeoff.
+ */
+function clickTick(): void {
+  if (mouseButtonSampler === undefined) mouseButtonSampler = makePrimaryMouseButtonSampler()
+  if (!mouseButtonSampler) return
+  const win = barWindow
+  if (!win || win.isDestroyed() || !win.isVisible()) return
+  if (!barWatchPlan(currentMode).trackInteractivity || peekWatchSuspended) {
+    clickArmed = false
+    return
+  }
+  const display =
+    screen.getAllDisplays().find((d) => d.id === activeDisplayId) ?? screen.getPrimaryDisplay()
+  const dl = displayLike(display)
+  // Same-tick pairing: the button edge is judged against the cursor position read
+  // in THIS sample, never a stale one.
+  const cursor = screen.getCursorScreenPoint()
+  const edge = clickEdge({
+    buttonDown: mouseButtonSampler(),
+    overPill: isCursorOverPill(cursor, dl),
+    active: true, // gated above (collapsed + not suspended)
+    armed: clickArmed
+  })
+  clickArmed = edge.armed
+  if (edge.expand) {
+    diag(`main-click-detected cursor=${cursor.x},${cursor.y} mode=${currentMode}`)
+    setBarMode('expanded')
+  }
+}
+
 function startPeekWatch(): void {
   stopPeekWatch()
   peekOutsideSince = null
   peekHasBeenHovered = false
+  clickArmed = false
+  diagLastOverPill = null
+  diag(`watch START mode=${currentMode}`)
   peekTick()
   peekWatch = setInterval(peekTick, PEEK_WATCH_MS)
+  clickWatch = setInterval(clickTick, CLICK_SAMPLE_MS)
 }
 
 function stopPeekWatch(): void {
   if (peekWatch) clearInterval(peekWatch)
   peekWatch = null
+  if (clickWatch) clearInterval(clickWatch)
+  clickWatch = null
   peekOutsideSince = null
 }
 
@@ -451,6 +554,7 @@ export function setBarMode(mode: BarMode): void {
     win.setFocusable(false)
     applyClickThrough(win)
   }
+  diag(`setBarMode -> ${mode}`)
   if (mode !== 'expanded') startPeekWatch()
   else stopPeekWatch()
   send('bar:mode', mode)
@@ -463,6 +567,7 @@ export function setBarMode(mode: BarMode): void {
 export function hideBar(): void {
   const win = barWindow
   if (!win || win.isDestroyed()) return
+  diag(`hideBar (graceful) mode=${currentMode}`)
   // An armed-but-unshown reveal is cancelled outright — there is nothing to
   // slide out, and a late ack/fallback must not resurrect it.
   if (pendingReveal) {
@@ -523,6 +628,9 @@ function onGestureStart(): void {
   // shown-but-unpresented must count as not-open, so a tap re-presents (restarts
   // the peek watch + interactivity) instead of being swallowed / toggled shut.
   gestureStartedVisible = isBarCleanlyPresented()
+  diag(
+    `gesture START presented=${gestureStartedVisible} mode=${currentMode} hiding=${barHiding} watch=${!!peekWatch} sampler=${samplerAvailable}`
+  )
   // Pin the pill open for the whole physical hold (Bug B): the watchdog can't
   // retract while the key is down, so a silent hold never snaps shut before the
   // renderer's busy-derived keepAlive arms. Cleared in onGestureEnd.
@@ -548,6 +656,7 @@ function onGestureEnd(kind: GestureKind): void {
   // permanently suppressed (a stuck-open pill). The renderer's keepAlive takes
   // over from here for a real voice/chat exchange.
   gestureActiveHold = false
+  diag(`gesture END kind=${kind} startedPresented=${gestureStartedVisible} mode=${currentMode}`)
   if (!samplerAvailable) return
   sendPtt('up')
   // A tap on an already-open bar closes it (deferred to release so a HOLD on
@@ -607,7 +716,10 @@ export function registerBarIpc(sendToMain: (channel: string, ...args: unknown[])
     commitReveal(token)
   })
   ipcMain.on('bar:requestHide', () => hideBarNow())
-  ipcMain.on('bar:expand', () => setBarMode('expanded'))
+  ipcMain.on('bar:expand', () => {
+    diag('ipc bar:expand received')
+    setBarMode('expanded')
+  })
   ipcMain.on('bar:collapse', () => setBarMode('peek'))
   // Interactive islands — EVERY mode: the renderer toggles real hit-testing
   // as the cursor enters/leaves the visible surface, so the effective ignore

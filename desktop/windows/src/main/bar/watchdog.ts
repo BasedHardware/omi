@@ -90,6 +90,30 @@ export function barGestureSeesOpen(s: {
   return s.visible && s.mode !== null && !s.hiding
 }
 
+/** Edge-detect a primary-button CLICK on the pill from a polled physical-button
+ *  sample (main-side; the transparent overlay never receives real hardware
+ *  mouse-downs for EITHER an external mouse or a touchpad — see clickTick in
+ *  window.ts for the DComp-alpha / MA_NOACTIVATEANDEAT why). Fires once on the
+ *  up→down transition, and only after an UP has been observed over the pill first
+ *  (`armed`) — so a button already held when the cursor arrives, or held across
+ *  ticks, never (re)triggers, and a click that happened OFF the pill can't fire
+ *  when the cursor later slides on. Off the pill or when inactive it disarms.
+ *  Caller persists `armed` between ticks and calls setBarMode('expanded') on
+ *  `expand`. */
+export function clickEdge(i: {
+  buttonDown: boolean
+  overPill: boolean
+  /** Collapsed pill under the cursor and not the E2E screenshot hold. */
+  active: boolean
+  /** Prior tick's armed state (an up was seen over the pill). */
+  armed: boolean
+}): { armed: boolean; expand: boolean } {
+  if (!i.active || !i.overPill) return { armed: false, expand: false }
+  if (!i.buttonDown) return { armed: true, expand: false } // up over the pill → armed
+  if (i.armed) return { armed: false, expand: true } // up→down edge → expand once, disarm
+  return { armed: false, expand: false } // already down on arrival — ignore until released
+}
+
 /** The next interactivity (hit-testing) state for the window, driven by the OS
  *  cursor. While the E2E holds the bar open we freeze the current state so a
  *  screenshot run doesn't flip hit-testing under a parked cursor. */

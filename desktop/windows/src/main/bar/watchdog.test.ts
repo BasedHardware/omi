@@ -4,6 +4,7 @@ import {
   nextInteractivity,
   barWatchPlan,
   barGestureSeesOpen,
+  clickEdge,
   type WatchdogInput
 } from './watchdog'
 
@@ -154,5 +155,53 @@ describe('barGestureSeesOpen — stuck-window inversion fix', () => {
   it('a hidden window is NOT open', () => {
     expect(barGestureSeesOpen({ visible: false, mode: 'peek', hiding: false })).toBe(false)
     expect(barGestureSeesOpen({ visible: false, mode: null, hiding: false })).toBe(false)
+  })
+})
+
+describe('clickEdge — main-side pill click detection (touchpad/WM_POINTER fix)', () => {
+  it('fires once on the up→down edge after an UP was seen over the pill (armed)', () => {
+    // Cursor arrives over the pill with the button up → arm.
+    const armed = clickEdge({ buttonDown: false, overPill: true, active: true, armed: false })
+    expect(armed).toEqual({ armed: true, expand: false })
+    // Next tick the button is down → expand once, disarm.
+    const fired = clickEdge({ buttonDown: true, overPill: true, active: true, armed: armed.armed })
+    expect(fired).toEqual({ armed: false, expand: true })
+  })
+
+  it('does NOT fire for a button ALREADY down when the cursor arrives (needs an up first)', () => {
+    // Button already held as the cursor reaches the pill, never armed → ignore.
+    const r = clickEdge({ buttonDown: true, overPill: true, active: true, armed: false })
+    expect(r).toEqual({ armed: false, expand: false })
+  })
+
+  it('does not re-fire while the button stays held after a click', () => {
+    // Fire on the edge…
+    const fired = clickEdge({ buttonDown: true, overPill: true, active: true, armed: true })
+    expect(fired.expand).toBe(true)
+    // …then held down across the next ticks: disarmed, no repeat.
+    const held = clickEdge({ buttonDown: true, overPill: true, active: true, armed: fired.armed })
+    expect(held).toEqual({ armed: false, expand: false })
+  })
+
+  it('re-arms after release so a second click fires', () => {
+    let s = clickEdge({ buttonDown: true, overPill: true, active: true, armed: true }) // click 1
+    expect(s.expand).toBe(true)
+    s = clickEdge({ buttonDown: false, overPill: true, active: true, armed: s.armed }) // release
+    expect(s).toEqual({ armed: true, expand: false })
+    s = clickEdge({ buttonDown: true, overPill: true, active: true, armed: s.armed }) // click 2
+    expect(s.expand).toBe(true)
+  })
+
+  it('off the pill or inactive: never fires and disarms', () => {
+    // Off the pill (even armed + button down) → no fire, disarmed.
+    expect(clickEdge({ buttonDown: true, overPill: false, active: true, armed: true })).toEqual({
+      armed: false,
+      expand: false
+    })
+    // Inactive (E2E screenshot hold / not collapsed) → no fire, disarmed.
+    expect(clickEdge({ buttonDown: true, overPill: true, active: false, armed: true })).toEqual({
+      armed: false,
+      expand: false
+    })
   })
 })
