@@ -4659,7 +4659,10 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription ו-is $triggerDescription.';
   }
 
@@ -9501,4 +9504,25 @@ class AppLocalizationsHe extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'שגיאה בהתחברות ל-Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'אחסון המכשיר';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% מלא';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used מתוך $total בשימוש';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free פנוי';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'המכשיר כמעט מלא — סנכרן כדי לפנות מקום.';
 }

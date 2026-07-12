@@ -4672,7 +4672,10 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription และ $triggerDescription';
   }
 
@@ -9522,4 +9525,25 @@ class AppLocalizationsTh extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'เกิดข้อผิดพลาดในการเชื่อมต่อกับ Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'ที่จัดเก็บของอุปกรณ์';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return 'เต็ม $percent%';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return 'ใช้ไป $used จาก $total';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return 'ว่าง $free';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'อุปกรณ์เกือบเต็มแล้ว — ซิงค์เพื่อเพิ่มพื้นที่ว่าง';
 }

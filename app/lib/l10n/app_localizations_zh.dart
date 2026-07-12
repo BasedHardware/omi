@@ -4603,7 +4603,10 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription，$triggerDescription。';
   }
 
@@ -9398,4 +9401,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return '连接 Ray-Ban Meta 时出错：$error';
   }
+
+  @override
+  String get deviceStorageTitle => '设备存储';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '已用 $percent%';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$total 中已使用 $used';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '剩余 $free';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => '设备快满了 — 请同步以释放空间。';
 }

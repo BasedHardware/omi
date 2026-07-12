@@ -186,7 +186,7 @@ abstract class AppLocalizations {
     Locale('uk'),
     Locale('ur'),
     Locale('vi'),
-    Locale('zh')
+    Locale('zh'),
   ];
 
   /// Message shown after an expired authenticated session returns the user to sign-in
@@ -8935,7 +8935,10 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'{accessDescription} and is {triggerDescription}.'**
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription);
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  );
 
   /// Sentence starting with 'Is' for trigger description
   ///
@@ -17852,6 +17855,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error connecting to Ray-Ban Meta: {error}'**
   String errorConnectingRayBanMeta(String error);
+
+  /// Title of the on-device storage usage card on the Auto Sync page
+  ///
+  /// In en, this message translates to:
+  /// **'Device Storage'**
+  String get deviceStorageTitle;
+
+  /// Percentage of on-device storage used
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}% full'**
+  String deviceStoragePercentFull(int percent);
+
+  /// Used vs total on-device storage, e.g. 338 MB of 469 MB used
+  ///
+  /// In en, this message translates to:
+  /// **'{used} of {total} used'**
+  String deviceStorageUsedOfTotal(String used, String total);
+
+  /// Amount of free on-device storage, e.g. 131 MB free
+  ///
+  /// In en, this message translates to:
+  /// **'{free} free'**
+  String deviceStorageFree(String free);
+
+  /// Warning shown when on-device storage is 95% or more full
+  ///
+  /// In en, this message translates to:
+  /// **'Device nearly full — sync to free space.'**
+  String get deviceStorageNearlyFull;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
@@ -17912,7 +17945,7 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
         'uk',
         'ur',
         'vi',
-        'zh'
+        'zh',
       ].contains(locale.languageCode);
 
   @override
@@ -18022,8 +18055,10 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsZh();
   }
 
-  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-      'an issue with the localizations generation tool. Please file an issue '
-      'on GitHub with a reproducible sample app and the gen-l10n configuration '
-      'that was used.');
+  throw FlutterError(
+    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+    'an issue with the localizations generation tool. Please file an issue '
+    'on GitHub with a reproducible sample app and the gen-l10n configuration '
+    'that was used.',
+  );
 }

@@ -4708,7 +4708,10 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription і запушчаны $triggerDescription.';
   }
 
@@ -9604,4 +9607,25 @@ class AppLocalizationsBe extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Памылка падключэння да Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Сховішча прылады';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return 'запоўнена $percent%';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used з $total выкарыстана';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free вольна';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Прылада амаль запоўнена — сінхранізуйце, каб вызваліць месца.';
 }

@@ -4706,7 +4706,10 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription i pokrenuto sa $triggerDescription.';
   }
 
@@ -9600,4 +9603,25 @@ class AppLocalizationsBs extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Greška pri povezivanju s Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Pohrana uređaja';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% popunjeno';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used od $total iskorišteno';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free slobodno';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Uređaj je gotovo pun — sinkronizirajte da oslobodite prostor.';
 }

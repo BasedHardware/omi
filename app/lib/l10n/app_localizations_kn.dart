@@ -4714,7 +4714,10 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription ಮತ್ತು $triggerDescription ಆಗಿದೆ.';
   }
 
@@ -9604,4 +9607,25 @@ class AppLocalizationsKn extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Ray-Ban Meta ಗೆ ಸಂಪರ್ಕಿಸುವಲ್ಲಿ ದೋಷ: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'ಸಾಧನ ಸಂಗ್ರಹಣೆ';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% ತುಂಬಿದೆ';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$total ರಲ್ಲಿ $used ಬಳಸಲಾಗಿದೆ';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free ಖಾಲಿ';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'ಸಾಧನ ಬಹುತೇಕ ತುಂಬಿದೆ — ಸ್ಥಳವನ್ನು ಮುಕ್ತಗೊಳಿಸಲು ಸಿಂಕ್ ಮಾಡಿ.';
 }
