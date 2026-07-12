@@ -192,14 +192,22 @@ def test_shared_change_detection_and_backend_isolation_are_ci_wired():
     detect_changes = (repo / ".github/actions/detect-changes/action.yml").read_text()
     backend_checks = (repo / ".github/workflows/backend-checks.yml").read_text()
     desktop_checks = (repo / ".github/workflows/desktop-checks.yml").read_text()
+    agent_proxy_auto_deploy = (repo / ".github/workflows/gcp_backend_agent_proxy_auto_deploy.yml").read_text()
     swift_test_suites = (repo / "desktop/macos/scripts/swift-test-suites.sh").read_text()
     pre_push = (repo / "scripts/pre-push").read_text()
 
     assert 'FILES=$(scripts/changed-files "$DIFF_BASE"...HEAD)' in detect_changes
     assert "has_backend_isolation_gate" in detect_changes
     assert 'scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD' in desktop_checks
+    assert "- 'backend/utils/__init__.py'" in agent_proxy_auto_deploy
+    assert "- 'backend/utils/executors.py'" in agent_proxy_auto_deploy
     assert "scan_import_time_side_effects.py" in backend_checks
     assert "check_module_stub_pollution.py" in backend_checks
+    assert "^backend/agent-proxy/Dockerfile$" in detect_changes
+    assert "--dirs backend/routers backend/utils backend/agent-proxy backend/dependencies.py" in backend_checks
+    assert "--dirs backend/routers backend/utils backend/agent-proxy backend/dependencies.py" in pre_push
+    assert "unmanaged_thread_offload" in backend_checks
+    assert "unmanaged_thread_offload" in pre_push
     assert 'MERGE_BASE="$(git merge-base "${{ needs.changes.outputs.diff_base }}" HEAD)"' in backend_checks
     assert '--check-allowlist-monotonic "$MERGE_BASE"' in backend_checks
     assert 'BASE_REMOTE="${PRE_PUSH_BASE_REMOTE:-origin}"' in pre_push
