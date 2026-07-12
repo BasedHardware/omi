@@ -208,7 +208,7 @@
             "groupBys": [
               "metric.label.response_code_class"
             ],
-            "perSeriesAligner": "ALIGN_SUM",
+            "perSeriesAligner": "ALIGN_NONE",
             "preprocessor": "rate",
             "projectName": "based-hardware",
             "view": "FULL"
@@ -901,7 +901,9 @@
     "annotations": {
       "runbook": "backend/docs/runbooks/sync-dispatch-fallback.md",
       "summary": "Paused: backend-sync metrics not scraped by GKE Prometheus \u2014 use Cloud Logging",
-      "threshold": "0.2 (20% enqueue_failed)"
+      "threshold": "0.2 (20% enqueue_failed)",
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "3"
     },
     "isPaused": false,
     "notification_settings": {
