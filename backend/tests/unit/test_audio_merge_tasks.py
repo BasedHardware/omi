@@ -15,6 +15,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+# routers.sync (imported inside TestV2HandlerRetrySemantics) constructs Typesense /
+# OpenAI clients at import; provide hermetic dummy config so the import succeeds
+# without network. Matches the OPENAI_API_KEY default that conftest already sets.
+os.environ.setdefault('TYPESENSE_API_KEY', 'test-typesense-key')
+os.environ.setdefault('TYPESENSE_HOST', 'localhost')
+os.environ.setdefault('TYPESENSE_HOST_PORT', '8108')
+os.environ.setdefault('TYPESENSE_PROTOCOL', 'http')
+
 BACKEND_DIR = os.path.join(os.path.dirname(__file__), '..', '..')
 
 
@@ -203,6 +211,42 @@ class TestStorageArtifactHelpers:
         fn = src[src.index('def precache_conversation_audio') :]
         assert 'is_audio_merge_dispatch_enabled()' in fn[:1200]
         assert 'enqueue_conversation_audio_merge' in fn[:1200]
+
+
+class TestV2HandlerRetrySemantics:
+    """The v2 conversation-merge dispatch must NOT be masked by the invalid-payload
+    catch-all. A transient GCS/Firestore failure has to propagate (500 -> Cloud Tasks
+    retry); acking it 200 permanently loses the playback artifact because the named
+    task's tombstone blocks re-enqueue.
+    """
+
+    class _FakeRequest:
+        def __init__(self, payload=None, raise_on_json=None):
+            self._payload = payload
+            self._raise_on_json = raise_on_json
+
+        async def json(self):
+            if self._raise_on_json is not None:
+                raise self._raise_on_json
+            return self._payload
+
+    async def test_v2_transient_error_propagates_for_retry(self):
+        from unittest.mock import AsyncMock, patch
+
+        import routers.sync as sync
+
+        payload = {'schema_version': 2, 'conversation_id': 'c1', 'uid': 'u1', 'fingerprint': 'fp'}
+        with patch.object(sync, '_run_conversation_merge_job', new=AsyncMock(side_effect=RuntimeError('gcs 503'))):
+            with pytest.raises(RuntimeError):
+                await sync.run_audio_merge_job(self._FakeRequest(payload), task_retry_count=0)
+
+    async def test_malformed_payload_still_dropped_200(self):
+        import routers.sync as sync
+
+        req = self._FakeRequest(raise_on_json=ValueError('bad json'))
+        resp = await sync.run_audio_merge_job(req, task_retry_count=0)
+        assert resp.status_code == 200
+        assert b'invalid_payload' in resp.body
 
 
 if __name__ == '__main__':
