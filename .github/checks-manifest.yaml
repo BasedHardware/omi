@@ -109,5 +109,7 @@ exempt:
     reason: "release-policy full-tree check, not diff-scoped"
   - path: ".github/scripts/check-deployment-concurrency.py"
     reason: "deployment concurrency policy full-tree check, not diff-scoped"
+  - path: ".github/scripts/check_isinstance_return_ratchet.py"
+    reason: "memory composition error-flow full-tree ratchet, not diff-scoped"
   - path: "backend/scripts/check_app_client_openapi_compatibility.py"
     reason: "OpenAPI generation contract has component dependencies"
