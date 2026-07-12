@@ -35,7 +35,7 @@ pub struct Config {
     pub google_client_secret: Option<String>,
     /// Encryption secret for decrypting user data with enhanced protection level
     pub encryption_secret: Option<Vec<u8>>,
-    /// Redis host for conversation visibility
+    /// Redis host for shared metadata and server-key request metering
     pub redis_host: Option<String>,
     /// Redis port
     pub redis_port: u16,
@@ -176,7 +176,9 @@ impl Config {
             tracing::warn!("GEMINI_API_KEY not set - conversation processing will fail");
         }
         if self.redis_host.is_none() {
-            tracing::warn!("REDIS_DB_HOST not set - conversation visibility/sharing will not work");
+            tracing::warn!(
+                "REDIS_DB_HOST not set - readiness and server-key request metering will fail closed"
+            );
         }
         if self.encryption_secret.is_none() {
             tracing::warn!(
