@@ -37,7 +37,9 @@ class Callbacks {
   int stops = 0;
   int initializing = 0;
   int stalls = 0;
+  int batchStalls = 0;
   final interruptions = <bool>[];
+  final errors = <String>[];
 }
 
 void main() {
@@ -60,6 +62,13 @@ void main() {
         onInitializing: () => cb.initializing++,
         onStalled: () => cb.stalls++,
         onInterruption: cb.interruptions.add,
+      );
+
+  Future<void> startBatchService() => service.startBatch(
+        onStop: () => cb.stops++,
+        onInterruption: cb.interruptions.add,
+        onBatchStalled: () => cb.batchStalls++,
+        onError: (code, message) => cb.errors.add(code),
       );
 
   test('start calls host api and maps state events to callbacks', () async {
@@ -196,6 +205,129 @@ void main() {
       expect(cb.stalls, 1);
 
       service.stop();
+    });
+  });
+
+  test('startBatch drives native in batch mode and maps interruption', () async {
+    await startBatchService();
+    expect(host.startCalls, 1);
+    expect(host.lastStartMode, PhoneMicCaptureMode.batch);
+
+    // No onRecording/onByteReceived wiring in batch: running just arms the
+    // watchdog, and frames never arrive.
+    service.onStateChanged(PhoneMicCaptureState.running);
+    expect(cb.recording, 0);
+
+    service.onStateChanged(PhoneMicCaptureState.interrupted);
+    service.onStateChanged(PhoneMicCaptureState.interrupted); // dedup
+    expect(cb.interruptions, [true]);
+    service.onStateChanged(PhoneMicCaptureState.running);
+    expect(cb.interruptions, [true, false]);
+
+    service.stop();
+    expect(cb.stops, 1);
+  });
+
+  test('batch capture error is forwarded to the session onError', () async {
+    await startBatchService();
+    service.onStateChanged(PhoneMicCaptureState.running);
+    service.onCaptureError('batch_storage_full', 'disk full');
+    expect(cb.errors, ['batch_storage_full']);
+    service.stop();
+  });
+
+  test('batch start failure rethrows and clears callbacks', () async {
+    host.startError = PlatformException(code: 'opus_init_failed');
+    await expectLater(
+      startBatchService(),
+      throwsA(isA<PlatformException>().having((e) => e.code, 'code', 'opus_init_failed')),
+    );
+    // Late events after the failed start must be no-ops.
+    service.onStateChanged(PhoneMicCaptureState.running);
+    service.onCaptureError('batch_storage_full', 'x');
+    expect(cb.errors, isEmpty);
+  });
+
+  test('batch watchdog fires after 10s without progress, re-armed by progress', () {
+    fakeAsync((async) {
+      var now = DateTime(2026, 1, 1);
+      service = NativeMicRecorderService(hostApi: host, registerFlutterApi: false, now: () => now);
+      void elapse(Duration d) {
+        now = now.add(d);
+        async.elapse(d);
+      }
+
+      startBatchService();
+      async.flushMicrotasks();
+      service.onStateChanged(PhoneMicCaptureState.running);
+
+      // Progress arrivals keep it quiet.
+      elapse(const Duration(seconds: 6));
+      service.onBatchProgress(6);
+      elapse(const Duration(seconds: 6));
+      expect(cb.batchStalls, 0);
+
+      // Silence past the threshold trips it once.
+      elapse(const Duration(seconds: 11));
+      expect(cb.batchStalls, 1);
+      elapse(const Duration(seconds: 20));
+      expect(cb.batchStalls, 1);
+
+      // A progress arrival re-arms it.
+      service.onBatchProgress(7);
+      elapse(const Duration(seconds: 11));
+      expect(cb.batchStalls, 2);
+
+      service.stop();
+    });
+  });
+
+  test('batch watchdog is arrival-based, not suppressed during interruption', () {
+    fakeAsync((async) {
+      var now = DateTime(2026, 1, 1);
+      service = NativeMicRecorderService(hostApi: host, registerFlutterApi: false, now: () => now);
+      void elapse(Duration d) {
+        now = now.add(d);
+        async.elapse(d);
+      }
+
+      startBatchService();
+      async.flushMicrotasks();
+      service.onStateChanged(PhoneMicCaptureState.running);
+
+      // Progress keeps arriving (frozen value) through an interruption — no stall.
+      service.onStateChanged(PhoneMicCaptureState.interrupted);
+      for (var i = 0; i < 5; i++) {
+        elapse(const Duration(seconds: 3));
+        service.onBatchProgress(0);
+      }
+      expect(cb.batchStalls, 0);
+
+      // Progress stops while still interrupted — the stall still fires.
+      elapse(const Duration(seconds: 11));
+      expect(cb.batchStalls, 1);
+
+      service.stop();
+    });
+  });
+
+  test('stop cancels the batch watchdog', () {
+    fakeAsync((async) {
+      var now = DateTime(2026, 1, 1);
+      service = NativeMicRecorderService(hostApi: host, registerFlutterApi: false, now: () => now);
+      void elapse(Duration d) {
+        now = now.add(d);
+        async.elapse(d);
+      }
+
+      startBatchService();
+      async.flushMicrotasks();
+      service.onStateChanged(PhoneMicCaptureState.running);
+
+      service.stop();
+      elapse(const Duration(seconds: 30));
+      expect(cb.batchStalls, 0);
+      expect(cb.stops, 1);
     });
   });
 }
