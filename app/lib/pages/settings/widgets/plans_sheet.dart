@@ -60,23 +60,24 @@ class _PlansSheetState extends State<PlansSheet> {
   }
 
   Future<void> _handleTrainingDataOptIn() async {
+    final userProvider = context.read<UserProvider>();
+    final l10n = context.l10n;
     // Show dialog with explanation and acknowledgement
     final acknowledged = await showDialog<bool>(context: context, builder: (ctx) => _buildTrainingDataDialog(ctx));
 
     if (acknowledged != true) return;
 
     try {
-      final userProvider = context.read<UserProvider>();
       await userProvider.optInForTrainingData();
 
       // Track the opt-in submission
       PlatformManager.instance.analytics.trainingDataOptInSubmitted();
 
       if (mounted) {
-        AppSnackbar.showSnackbar(context.l10n.thankYouRequestUnderReview);
+        AppSnackbar.showSnackbar(l10n.thankYouRequestUnderReview);
       }
     } catch (e) {
-      AppSnackbar.showSnackbarError(context.l10n.anErrorOccurredTryAgain);
+      AppSnackbar.showSnackbarError(l10n.anErrorOccurredTryAgain);
     }
   }
 
@@ -288,7 +289,9 @@ class _PlansSheetState extends State<PlansSheet> {
       }
     } catch (e) {
       Logger.debug('Error switching to free plan: $e');
-      AppSnackbar.showSnackbarError(context.l10n.couldNotSwitchToFreePlan);
+      if (mounted) {
+        AppSnackbar.showSnackbarError(context.l10n.couldNotSwitchToFreePlan);
+      }
     } finally {
       if (mounted) setState(() => _isSwitchingToFree = false);
     }
@@ -487,6 +490,7 @@ class _PlansSheetState extends State<PlansSheet> {
 
   Future<void> _handleUpgrade(String priceId) async {
     final provider = context.read<UsageProvider>();
+    final l10n = context.l10n;
 
     // Find the selected pricing option to show in the dialog.
     PricingOption? selectedPrice;
@@ -544,7 +548,7 @@ class _PlansSheetState extends State<PlansSheet> {
           promotionCode: promoCode.isNotEmpty ? promoCode : null,
         );
         if (result != null && result['error'] == true) {
-          final detail = result['detail'] as String? ?? context.l10n.invalidPromotionCode;
+          final detail = result['detail'] as String? ?? l10n.invalidPromotionCode;
           if (promoCode.isNotEmpty) {
             setState(() => _promoCodeError = detail);
           } else {
@@ -554,9 +558,9 @@ class _PlansSheetState extends State<PlansSheet> {
         } else if (result != null) {
           setState(() => _promoCodeError = null);
           _promoCodeController.clear();
-          AppSnackbar.showSnackbar(context.l10n.planUpgradeScheduledMessage);
+          AppSnackbar.showSnackbar(l10n.planUpgradeScheduledMessage);
         } else {
-          AppSnackbar.showSnackbarError(context.l10n.couldNotSchedulePlanChange);
+          AppSnackbar.showSnackbarError(l10n.couldNotSchedulePlanChange);
         }
       } else {
         // New subscription (for basic users or canceled subscriptions)
@@ -568,7 +572,7 @@ class _PlansSheetState extends State<PlansSheet> {
           // Check if this was a reactivation
           if (sessionData.containsKey('status') && sessionData['status'] == 'reactivated') {
             // Quick reactivation - no charge now
-            final message = sessionData['message'] as String? ?? context.l10n.subscriptionReactivatedDefault;
+            final message = sessionData['message'] as String? ?? l10n.subscriptionReactivatedDefault;
             AppSnackbar.showSnackbar(message);
             PlatformManager.instance.analytics.upgradeSucceeded();
             await provider.fetchSubscription();
@@ -580,20 +584,20 @@ class _PlansSheetState extends State<PlansSheet> {
             ).push(MaterialPageRoute(builder: (context) => PaymentWebViewPage(checkoutUrl: sessionData['url']!)));
 
             if (checkoutResult == true) {
-              AppSnackbar.showSnackbar(context.l10n.subscriptionSuccessfulCharged);
+              AppSnackbar.showSnackbar(l10n.subscriptionSuccessfulCharged);
               PlatformManager.instance.analytics.upgradeSucceeded();
             } else {
               PlatformManager.instance.analytics.upgradeCancelled();
             }
           } else {
-            AppSnackbar.showSnackbarError(context.l10n.couldNotProcessSubscription);
+            AppSnackbar.showSnackbarError(l10n.couldNotProcessSubscription);
           }
         } else {
-          AppSnackbar.showSnackbarError(context.l10n.couldNotLaunchUpgradePage);
+          AppSnackbar.showSnackbarError(l10n.couldNotLaunchUpgradePage);
         }
       }
     } catch (e) {
-      AppSnackbar.showSnackbarError(context.l10n.anErrorOccurredTryAgain);
+      AppSnackbar.showSnackbarError(l10n.anErrorOccurredTryAgain);
     } finally {
       _loadAvailablePlans();
       if (mounted) setState(() => _isUpgrading = false);
@@ -1393,6 +1397,7 @@ class _PlansSheetState extends State<PlansSheet> {
                               onPressed: () async {
                                 final navigator = Navigator.of(context);
                                 final provider = context.read<UsageProvider>();
+                                final l10n = context.l10n;
                                 final portalData = await provider.openCustomerPortal();
                                 if (portalData != null && portalData['url'] != null && mounted) {
                                   await navigator.push(
@@ -1404,7 +1409,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                     ),
                                   );
                                 } else {
-                                  AppSnackbar.showSnackbarError(context.l10n.couldNotOpenPaymentSettings);
+                                  AppSnackbar.showSnackbarError(l10n.couldNotOpenPaymentSettings);
                                 }
                               },
                               icon: const Icon(Icons.credit_card, size: 20),

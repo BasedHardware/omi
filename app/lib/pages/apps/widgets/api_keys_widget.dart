@@ -64,7 +64,9 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
         _showNewKeyDialog();
       }
     } catch (e) {
-      AppSnackbar.showSnackbarError(context.l10n.failedToCreateApiKey(e.toString()));
+      if (mounted) {
+        AppSnackbar.showSnackbarError(context.l10n.failedToCreateApiKey(e.toString()));
+      }
     } finally {
       setState(() {
         _isCreatingKey = false;
@@ -110,9 +112,13 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
 
     try {
       await Provider.of<AddAppProvider>(context, listen: false).deleteApiKey(widget.appId, keyId);
-      AppSnackbar.showSnackbarSuccess(context.l10n.apiKeyRevokedSuccessfully);
+      if (mounted) {
+        AppSnackbar.showSnackbarSuccess(context.l10n.apiKeyRevokedSuccessfully);
+      }
     } catch (e) {
-      AppSnackbar.showSnackbarError(context.l10n.failedToRevokeApiKey(e.toString()));
+      if (mounted) {
+        AppSnackbar.showSnackbarError(context.l10n.failedToRevokeApiKey(e.toString()));
+      }
     } finally {
       setState(() {
         _deletingKeyId = null;

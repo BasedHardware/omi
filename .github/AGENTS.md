@@ -4,6 +4,21 @@ These rules apply to GitHub Actions workflows and custom actions under `.github/
 
 ## CI/CD Deploy Safety
 
+- Every workflow that mutates a persistent Cloud Run service/job, GKE Helm
+  release, or traffic/promotion state must use a workflow-level concurrency
+  group scoped to the exact target and logical environment. Manual and
+  automatic entry points for the same target must resolve to the same group.
+- Deployment group names are a cross-workflow API. Keep them aligned with
+  `.github/scripts/check-deployment-concurrency.py`; use
+  `cancel-in-progress: false` so a newer run cannot interrupt a remote mutation
+  or a staged validation/traffic promotion.
+- `deploy-backend-stack-<environment>` intentionally covers the four backend
+  Cloud Run services, traffic repair, backend-listen, LLM gateway, and
+  backend-secrets. Those paths share mutable releases, while unrelated services
+  retain their own groups and may deploy in parallel.
+- GitHub concurrency is serialization, not a FIFO queue: only one pending run is
+  retained and ordering is not guaranteed. Deploy workflows must not assume
+  that every intermediate commit will run.
 - Use immutable image tags for deploys. Build and push the short SHA tag, then deploy that exact tag.
 - Do not deploy Cloud Run services from an untagged image path; use `image:...:${SHORT_SHA}` so revisions show the source commit.
 - Do not let Helm chart-only deploys reset GKE workloads to `latest`. Preserve the currently deployed immutable tag or require an explicit tag input.

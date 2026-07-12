@@ -9,13 +9,15 @@ Detects dangerous patterns in async def endpoints and helpers:
   4. Blocking network I/O (GCS uploads, google auth refresh) in async def
   5. time.sleep on event loop
   6. The same blocking calls hidden behind module-local sync helpers
+  7. asyncio.to_thread(), which bypasses the repository's owned executor pools
 
-Skips calls already wrapped in asyncio.to_thread() or run_in_executor()
+Skips blocking calls already wrapped in asyncio.to_thread() or run_in_executor()
 (i.e. calls inside lambda bodies or nested def functions that are passed
-as arguments to these wrappers).
+as arguments to these wrappers), while separately reporting asyncio.to_thread()
+itself as an unmanaged offload.
 
 Usage:
-  python3 scan_async_blockers.py [--dirs backend/routers backend/utils] [--json]
+  python3 scan_async_blockers.py [--dirs backend/routers backend/utils backend/agent-proxy backend/dependencies.py] [--json]
   python3 scan_async_blockers.py --diff-base origin/main --fail-on high_network_io,mixed_await_sync_db
 
 Exit codes:
@@ -34,6 +36,8 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Sequence, Set, Tuple, Union, cast
 
 DEFAULT_FAIL_ON = ("high_network_io",)
+DEFAULT_SCAN_DIRS = ("backend/routers", "backend/utils", "backend/agent-proxy", "backend/dependencies.py")
+LOCAL_SCAN_DIRS = ("routers", "utils", "agent-proxy", "dependencies.py")
 FAIL_ON_CATEGORIES = (
     "high_network_io",
     "async_helpers_with_blocking",
@@ -41,6 +45,7 @@ FAIL_ON_CATEGORIES = (
     "mixed_await_sync_db",
     "no_await_should_be_def",
     "medium_file_io",
+    "unmanaged_thread_offload",
 )
 
 FunctionNode = Union[ast.FunctionDef, ast.AsyncFunctionDef]
@@ -48,6 +53,28 @@ BlockingEffectKey = Tuple[str, int, str]
 LocalHelperPath = Tuple[Tuple[str, int], ...]
 LocalHelperEffects = Dict[str, Dict[BlockingEffectKey, LocalHelperPath]]
 BLOCKING_EFFECT_FIELDS = ("db_calls", "file_io", "network_io", "sleeps")
+STORAGE_NETWORK_CALL_MARKERS = (
+    "upload",
+    "delete",
+    "deletion",
+    "download",
+    "signed_url",
+    "signed_uri",
+    "cleanup",
+)
+
+# Imported synchronous utility boundaries that hide blocking provider or
+# persistence work behind a business-level name. Keep this list exact and
+# import-aware: matching a same-named local helper would create false positives,
+# while omitting these imports lets async coordinators look clean even though the
+# imported implementation performs synchronous I/O.
+SYNC_DB_UTILITY_IMPORTS = {
+    "utils.apps": frozenset({"get_available_apps"}),
+    "utils.subscription": frozenset({"is_trial_paywalled"}),
+}
+SYNC_NETWORK_UTILITY_IMPORTS = {
+    "utils.notifications": frozenset({"send_notification"}),
+}
 
 
 def _node_lineno(node: ast.AST) -> int:
@@ -67,6 +94,10 @@ def get_db_imports(source: str) -> Tuple[Set[str], Set[str]]:
             else:
                 for alias in node.names:
                     db_names.add(alias.asname or alias.name)
+        if isinstance(node, ast.ImportFrom) and node.module == 'firebase_admin':
+            for alias in node.names:
+                if alias.name == 'firestore':
+                    db_module_aliases.add(alias.asname or alias.name)
         if isinstance(node, ast.Import):
             for alias in node.names:
                 if 'database' in alias.name:
@@ -82,6 +113,67 @@ def get_storage_imports(source: str) -> Set[str]:
             for alias in node.names:
                 names.add(alias.asname or alias.name)
     return names
+
+
+def get_prerecorded_stt_imports(source: str) -> Set[str]:
+    """Return imported synchronous prerecorded-STT callables.
+
+    The public ``prerecorded*`` entry points perform synchronous provider HTTP
+    calls. Keep the match import-aware so unrelated local helpers with similar
+    names do not become false positives.
+    """
+    names: Set[str] = set()
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom) or not node.module:
+            continue
+        if node.module != "utils.stt.pre_recorded":
+            continue
+        for alias in node.names:
+            if alias.name.startswith("prerecorded"):
+                names.add(alias.asname or alias.name)
+    return names
+
+
+def get_asyncio_to_thread_imports(source: str) -> Tuple[Set[str], Set[str]]:
+    """Return bound names for ``asyncio`` modules and direct ``to_thread`` imports.
+
+    Matching the imported binding, rather than the source spelling alone,
+    closes alias bypasses without treating an unrelated same-named helper as an
+    unmanaged executor boundary.
+    """
+    module_names: Set[str] = set()
+    callable_names: Set[str] = set()
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == 'asyncio':
+                    module_names.add(alias.asname or alias.name)
+        if isinstance(node, ast.ImportFrom) and node.module == 'asyncio':
+            for alias in node.names:
+                if alias.name == 'to_thread':
+                    callable_names.add(alias.asname or alias.name)
+    return module_names, callable_names
+
+
+def get_sync_utility_imports(source: str) -> Tuple[Set[str], Set[str]]:
+    """Return aliased synchronous utility imports grouped by blocking effect."""
+    db_names: Set[str] = set()
+    network_names: Set[str] = set()
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom) or not node.module:
+            continue
+        db_exports = SYNC_DB_UTILITY_IMPORTS.get(node.module, frozenset())
+        network_exports = SYNC_NETWORK_UTILITY_IMPORTS.get(node.module, frozenset())
+        for alias in node.names:
+            bound_name = alias.asname or alias.name
+            if alias.name in db_exports:
+                db_names.add(bound_name)
+            if alias.name in network_exports:
+                network_names.add(bound_name)
+    return db_names, network_names
 
 
 def _walk_body(node: FunctionNode) -> Iterator[ast.AST]:
@@ -147,11 +239,36 @@ def _collect_nested_func_lines(node: FunctionNode) -> Set[int]:
     return nested
 
 
+def _unmanaged_to_thread_calls(
+    node: ast.AsyncFunctionDef,
+    asyncio_module_names: Set[str],
+    asyncio_to_thread_names: Set[str],
+) -> List[Dict[str, Any]]:
+    """Return imported asyncio.to_thread calls outside nested function scopes."""
+    nested = _collect_nested_func_lines(node)
+    calls: List[Dict[str, Any]] = []
+    for child in _walk_body(node):
+        if not isinstance(child, ast.Call) or child.lineno in nested:
+            continue
+        is_module_call = (
+            isinstance(child.func, ast.Attribute)
+            and child.func.attr == 'to_thread'
+            and isinstance(child.func.value, ast.Name)
+            and child.func.value.id in asyncio_module_names
+        )
+        is_direct_call = isinstance(child.func, ast.Name) and child.func.id in asyncio_to_thread_names
+        if is_module_call or is_direct_call:
+            calls.append({"line": child.lineno, "call": "asyncio.to_thread() [unmanaged executor]"})
+    return calls
+
+
 def _scan_function_body(
     node: FunctionNode,
     db_names: Set[str],
     db_module_aliases: Set[str],
     storage_names: Set[str],
+    prerecorded_stt_names: Set[str],
+    sync_network_names: Set[str],
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], Set[int]]:
     """Return direct blocking calls in a function body, excluding nested scopes."""
     db_calls: List[Dict[str, Any]] = []
@@ -175,8 +292,12 @@ def _scan_function_body(
                 db_calls.append({"line": line, "call": child.func.id})
             if child.func.id in storage_names:
                 call_name = child.func.id
-                if any(kw in call_name.lower() for kw in ["upload", "delete", "download"]):
+                if any(marker in call_name.lower() for marker in STORAGE_NETWORK_CALL_MARKERS):
                     network_io.append({"line": line, "call": call_name})
+            if child.func.id in prerecorded_stt_names:
+                network_io.append({"line": line, "call": f"{child.func.id}() [sync STT]"})
+            if child.func.id in sync_network_names:
+                network_io.append({"line": line, "call": f"{child.func.id}() [sync notification]"})
             if child.func.id == 'open':
                 file_io.append({"line": line, "call": "open()"})
         if isinstance(child.func, ast.Attribute):
@@ -195,6 +316,8 @@ def _scan_function_body(
                 and child.func.value.id == 'creds'
             ):
                 network_io.append({"line": line, "call": "creds.refresh() [sync HTTP]"})
+            if child.func.attr == 'verify_id_token':
+                network_io.append({"line": line, "call": "verify_id_token() [sync HTTP]"})
 
     return db_calls, file_io, network_io, sleeps, body_call_lines
 
@@ -236,6 +359,8 @@ def analyze_local_sync_helpers(
     db_names: Set[str],
     db_module_aliases: Set[str],
     storage_names: Set[str],
+    prerecorded_stt_names: Set[str],
+    sync_network_names: Set[str],
 ) -> LocalHelperEffects:
     """Compute the shortest blocking path reachable from each local sync helper.
 
@@ -249,7 +374,14 @@ def analyze_local_sync_helpers(
     edges: Dict[str, List[Tuple[str, int]]] = {}
 
     for name, node in helpers.items():
-        db_calls, file_io, network_io, sleeps, _ = _scan_function_body(node, db_names, db_module_aliases, storage_names)
+        db_calls, file_io, network_io, sleeps, _ = _scan_function_body(
+            node,
+            db_names,
+            db_module_aliases,
+            storage_names,
+            prerecorded_stt_names,
+            sync_network_names,
+        )
         direct_by_field = {
             "db_calls": db_calls,
             "file_io": file_io,
@@ -306,10 +438,17 @@ def scan_async_function(
     db_module_aliases: Set[str],
     storage_names: Set[str],
     local_helper_effects: Optional[LocalHelperEffects] = None,
+    prerecorded_stt_names: Optional[Set[str]] = None,
+    sync_network_names: Optional[Set[str]] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], Set[int]]:
     """Scan direct and module-local transitive blocking calls on the event loop."""
     db_calls, file_io, network_io, sleeps, body_call_lines = _scan_function_body(
-        node, db_names, db_module_aliases, storage_names
+        node,
+        db_names,
+        db_module_aliases,
+        storage_names,
+        prerecorded_stt_names or set(),
+        sync_network_names or set(),
     )
     if local_helper_effects:
         propagated = _propagated_helper_calls(node, local_helper_effects)
@@ -323,6 +462,10 @@ def scan_async_function(
 def collect_py_files(dirs: Sequence[str]) -> List[str]:
     files: List[str] = []
     for d in dirs:
+        if os.path.isfile(d):
+            if d.endswith('.py') and os.path.basename(d) != '__init__.py':
+                files.append(d)
+            continue
         for root, _, fnames in os.walk(d):
             for fname in sorted(fnames):
                 if fname.endswith('.py') and fname != '__init__.py':
@@ -346,6 +489,7 @@ def scan_dirs(dirs: Sequence[str]) -> Dict[str, Any]:
         "mixed_await_sync_db": [],
         "time_sleep": [],
         "async_helpers_with_blocking": [],
+        "unmanaged_thread_offload": [],
     }
     total_def = 0
     total_async = 0
@@ -362,11 +506,26 @@ def scan_dirs(dirs: Sequence[str]) -> Dict[str, Any]:
 
         db_names, db_module_aliases = get_db_imports(source)
         storage_names = get_storage_imports(source)
-        local_helper_effects = analyze_local_sync_helpers(tree, db_names, db_module_aliases, storage_names)
+        prerecorded_stt_names = get_prerecorded_stt_imports(source)
+        asyncio_module_names, asyncio_to_thread_names = get_asyncio_to_thread_imports(source)
+        utility_db_names, sync_network_names = get_sync_utility_imports(source)
+        db_names.update(utility_db_names)
+        local_helper_effects = analyze_local_sync_helpers(
+            tree,
+            db_names,
+            db_module_aliases,
+            storage_names,
+            prerecorded_stt_names,
+            sync_network_names,
+        )
+        module_level_nodes = set(tree.body)
+        is_dependency_module = os.path.basename(fpath) == 'dependencies.py'
 
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                is_endpoint = any('router' in ast.dump(d).lower() for d in node.decorator_list)
+                is_endpoint = any('router' in ast.dump(d).lower() for d in node.decorator_list) or (
+                    is_dependency_module and isinstance(node, ast.AsyncFunctionDef) and node in module_level_nodes
+                )
                 if is_endpoint:
                     if isinstance(node, ast.AsyncFunctionDef):
                         total_async += 1
@@ -376,13 +535,24 @@ def scan_dirs(dirs: Sequence[str]) -> Dict[str, Any]:
             if not isinstance(node, ast.AsyncFunctionDef):
                 continue
 
-            is_endpoint = any('router' in ast.dump(d).lower() for d in node.decorator_list)
-            db_calls, file_io, network_io, sleeps, body_call_lines = scan_async_function(
-                node, db_names, db_module_aliases, storage_names, local_helper_effects
+            is_endpoint = any('router' in ast.dump(d).lower() for d in node.decorator_list) or (
+                is_dependency_module and node in module_level_nodes
             )
+            db_calls, file_io, network_io, sleeps, body_call_lines = scan_async_function(
+                node,
+                db_names,
+                db_module_aliases,
+                storage_names,
+                local_helper_effects=local_helper_effects,
+                prerecorded_stt_names=prerecorded_stt_names,
+                sync_network_names=sync_network_names,
+            )
+            unmanaged_offloads = _unmanaged_to_thread_calls(node, asyncio_module_names, asyncio_to_thread_names)
             endpoint_has_await = has_await(node)
             start_line, end_line = _line_span(node)
-            blocking_call_lines = {call["line"] for call in db_calls + file_io + network_io + sleeps}
+            blocking_call_lines = {
+                call["line"] for call in db_calls + file_io + network_io + sleeps + unmanaged_offloads
+            }
             all_calls_are_blocking = bool(body_call_lines) and body_call_lines <= blocking_call_lines
 
             if is_endpoint:
@@ -403,18 +573,30 @@ def scan_dirs(dirs: Sequence[str]) -> Dict[str, Any]:
                     results["medium_file_io"].append({**entry, "calls": file_io})
                 if sleeps:
                     results["time_sleep"].append({**entry, "calls": sleeps})
+                if unmanaged_offloads:
+                    results["unmanaged_thread_offload"].append({**entry, "calls": unmanaged_offloads})
                 if not endpoint_has_await:
                     results["no_await_should_be_def"].append(
                         {
                             **entry,
                             "db_calls": db_calls,
-                            "all_blocking": db_calls + file_io + network_io + sleeps,
+                            "all_blocking": db_calls + file_io + network_io + sleeps + unmanaged_offloads,
                             "all_calls_are_blocking": all_calls_are_blocking,
                         }
                     )
                 elif db_calls:
                     results["mixed_await_sync_db"].append({**entry, "db_calls": db_calls})
             else:
+                if unmanaged_offloads:
+                    results["unmanaged_thread_offload"].append(
+                        {
+                            "file": fpath,
+                            "line": start_line,
+                            "end_line": end_line,
+                            "function": node.name,
+                            "calls": unmanaged_offloads,
+                        }
+                    )
                 if network_io or file_io or sleeps or db_calls:
                     results["async_helpers_with_blocking"].append(
                         {
@@ -439,6 +621,7 @@ def scan_dirs(dirs: Sequence[str]) -> Dict[str, Any]:
         "mixed_await_sync_db": len(results["mixed_await_sync_db"]),
         "time_sleep_on_loop": len(results["time_sleep"]),
         "async_helpers_with_blocking": len(results["async_helpers_with_blocking"]),
+        "unmanaged_thread_offload": len(results["unmanaged_thread_offload"]),
     }
     return results
 
@@ -597,6 +780,7 @@ def print_report(results: Dict[str, Any]) -> None:
     print(f"  STRUCTURAL (async def, 0 await):     {s['no_await_should_be_def']}")
     print(f"  STRUCTURAL (mixed await+sync DB):    {s['mixed_await_sync_db']}")
     print(f"  time.sleep on loop:                  {s['time_sleep_on_loop']}")
+    print(f"  unmanaged asyncio.to_thread:         {s['unmanaged_thread_offload']}")
     print()
 
     if results["high_network_io"]:
@@ -612,6 +796,14 @@ def print_report(results: Dict[str, Any]) -> None:
             items = e.get("network_io", []) + e.get("file_io", []) + e.get("sleeps", []) + e.get("db_calls", [])
             calls = ", ".join(f"{c['call']}:{c['line']}" for c in items)
             print(f"  {e['file']}:{e['line']} | {e['function']} | {calls}")
+        print()
+
+    if results["unmanaged_thread_offload"]:
+        print("--- Unmanaged thread offloads ---")
+        for e in results["unmanaged_thread_offload"]:
+            calls = ", ".join(f"{c['call']}:{c['line']}" for c in e["calls"])
+            label = e.get("endpoint") or e.get("function") or "async def"
+            print(f"  {e['file']}:{e['line']} | {label} | {calls}")
         print()
 
     if results["medium_file_io"]:
@@ -694,8 +886,8 @@ def main() -> None:
     parser.add_argument(
         "--dirs",
         nargs="+",
-        default=["backend/routers", "backend/utils"],
-        help="Directories to scan (default: backend/routers backend/utils)",
+        default=list(DEFAULT_SCAN_DIRS),
+        help=f"Directories to scan (default: {' '.join(DEFAULT_SCAN_DIRS)})",
     )
     parser.add_argument("--json", action="store_true", help="Output JSON instead of text")
     parser.add_argument(
@@ -722,12 +914,12 @@ def main() -> None:
         help="Print every finding from the full async audit, including legacy findings outside the fail scope.",
     )
     args = parser.parse_args()
-    if args.dirs == ["backend/routers", "backend/utils"] and not os.path.isdir("backend/routers"):
-        args.dirs = ["routers", "utils"]
+    if tuple(args.dirs) == DEFAULT_SCAN_DIRS and not os.path.isdir(DEFAULT_SCAN_DIRS[0]):
+        args.dirs = list(LOCAL_SCAN_DIRS)
     fail_on = normalize_fail_on(args.fail_on or [",".join(DEFAULT_FAIL_ON)])
 
     for d in args.dirs:
-        if not os.path.isdir(d):
+        if not os.path.exists(d):
             print(f"Error: {d} not found", file=sys.stderr)
             sys.exit(2)
 

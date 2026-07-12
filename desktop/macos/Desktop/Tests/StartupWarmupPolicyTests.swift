@@ -280,7 +280,7 @@ final class StartupWarmupPolicyTests: XCTestCase {
 
         XCTAssertTrue(source.contains("private var sessionTasks: [StartupWarmupTaskID: Task<Void, Never>]"))
         XCTAssertTrue(source.contains("scheduleSessionWarmup(id: .mcpKeyWarmup"))
-        XCTAssertTrue(source.contains("guard await self.isCurrentSession(scope) else"))
+        XCTAssertTrue(source.contains("guard self.isCurrentSession(scope) else"))
         XCTAssertTrue(source.contains("guard isCurrentSession(scope) else { return }"))
         XCTAssertTrue(source.contains("sessionTasks.values.forEach { $0.cancel() }"))
         XCTAssertTrue(source.contains("sessionTasks.removeAll()"))

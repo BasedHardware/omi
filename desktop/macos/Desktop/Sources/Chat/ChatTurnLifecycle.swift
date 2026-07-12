@@ -1,0 +1,128 @@
+import Foundation
+
+enum ChatTurnRevocationReason: Equatable, Sendable {
+  case stop(ChatTurnStopReason)
+  case toolStall
+  case watchdogTimeout
+}
+
+/// Product authority for one in-flight chat turn.
+///
+/// This state deliberately lives outside analytics: disabling or refactoring
+/// telemetry must never make a stopped or timed-out bridge result authoritative.
+@MainActor
+final class ChatTurnLifecycle {
+  enum State: Equatable, Sendable {
+    case active
+    case completed
+    case revoked(ChatTurnRevocationReason)
+  }
+
+  private(set) var state: State = .active
+
+  var acceptsResult: Bool { state == .active }
+  var revocationReason: ChatTurnRevocationReason? {
+    guard case .revoked(let reason) = state else { return nil }
+    return reason
+  }
+  var stopReason: ChatTurnStopReason? {
+    guard case .revoked(.stop(let reason)) = state else { return nil }
+    return reason
+  }
+
+  @discardableResult
+  func revoke(_ reason: ChatTurnRevocationReason) -> Bool {
+    guard state == .active else { return false }
+    state = .revoked(reason)
+    return true
+  }
+
+  @discardableResult
+  func complete() -> Bool {
+    guard state == .active else { return false }
+    state = .completed
+    return true
+  }
+}
+
+struct ChatQueryResultAuthority {
+  static func acceptsContinuation(
+    currentGeneration: Int,
+    turnGeneration: Int,
+    turnAcceptsResult: Bool
+  ) -> Bool {
+    currentGeneration == turnGeneration && turnAcceptsResult
+  }
+
+  static func accepts(
+    currentGeneration: Int,
+    resultGeneration: Int,
+    turnAcceptsResult: Bool,
+    watchdogFired: Bool,
+    toolStallAbortFired: Bool
+  ) -> Bool {
+    acceptsContinuation(
+      currentGeneration: currentGeneration,
+      turnGeneration: resultGeneration,
+      turnAcceptsResult: turnAcceptsResult
+    )
+      && !watchdogFired
+      && !toolStallAbortFired
+  }
+}
+
+/// Generation ownership for ChatProvider's single-send bridge lock.
+///
+/// A stopped turn can finish unwinding after the stop grace period has already
+/// released the bridge and a newer turn has acquired it. Cleanup from the old
+/// task may release only the generation it originally acquired.
+struct ChatSendLockOwnership: Equatable, Sendable {
+  private(set) var generation: Int?
+
+  var isHeld: Bool { generation != nil }
+
+  @discardableResult
+  mutating func acquire(generation: Int) -> Bool {
+    guard self.generation == nil else { return false }
+    self.generation = generation
+    return true
+  }
+
+  @discardableResult
+  mutating func release(generation: Int) -> Bool {
+    guard self.generation == generation else { return false }
+    self.generation = nil
+    return true
+  }
+}
+
+/// Collects bridge callbacks that were emitted before `query()` returned so
+/// ChatProvider can apply them before it finalizes the visible response.
+///
+/// Agent adapters invoke callbacks synchronously but those callbacks hop to the
+/// main actor. Without an explicit drain, the query continuation can win that
+/// hop and persist a response before its last delta or tool event is applied.
+final class ChatTurnCallbackQueue: @unchecked Sendable {
+  private let lock = NSLock()
+  private var tasks: [Task<Void, Never>] = []
+
+  func submit(_ operation: @escaping @MainActor @Sendable () async -> Void) {
+    let task = Task { @MainActor in
+      await operation()
+    }
+    lock.withLock {
+      tasks.append(task)
+    }
+  }
+
+  func drain() async {
+    let pending = lock.withLock {
+      let snapshot = tasks
+      tasks.removeAll(keepingCapacity: true)
+      return snapshot
+    }
+    for task in pending {
+      await task.value
+    }
+  }
+}

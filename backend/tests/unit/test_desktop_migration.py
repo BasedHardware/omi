@@ -104,6 +104,7 @@ sys.modules["utils.llm.clients"].get_llm = MagicMock()
 # Stub google.cloud.firestore sentinels
 firestore_stub = sys.modules["google.cloud.firestore"]
 firestore_stub.Increment = lambda x: f"__increment_{x}__"
+firestore_stub.ArrayRemove = lambda values: ("__array_remove__", tuple(values))
 firestore_stub.Query = MagicMock()
 firestore_stub.Query.ASCENDING = "ASCENDING"
 firestore_stub.Query.DESCENDING = "DESCENDING"
@@ -892,6 +893,138 @@ class TestDeleteMessagesCount:
 
         assert result == 3
         mock_batch.commit.assert_called_once()
+
+    def test_delete_applies_inverse_session_metadata_in_same_preconditioned_batch(self):
+        """Source deletion and inverse count/ID/preview updates commit together."""
+        mock_msg_col = MagicMock()
+        mock_delete_query = MagicMock()
+        mock_msg_col.where.return_value = mock_delete_query
+        mock_delete_query.limit.return_value = mock_delete_query
+
+        doc1 = MagicMock()
+        doc1.id = 'msg-1'
+        doc1.update_time = object()
+        doc1.to_dict.return_value = {'id': 'logical-1', 'chat_session_id': 'sess-1', 'text': 'older'}
+        doc2 = MagicMock()
+        doc2.id = 'msg-2'
+        doc2.update_time = object()
+        doc2.to_dict.return_value = {'id': 'logical-2', 'chat_session_id': 'sess-1', 'text': 'latest'}
+        mock_delete_query.stream.side_effect = [[doc1, doc2], []]
+
+        mock_session_snapshot = MagicMock()
+        mock_session_snapshot.exists = True
+        mock_session_snapshot.update_time = object()
+        mock_session_snapshot.to_dict.return_value = {
+            'message_count': 5,
+            'message_ids': ['logical-1', 'logical-2', 'older-id'],
+            'preview': 'latest',
+        }
+        mock_session_ref = MagicMock()
+        mock_session_ref.get.return_value = mock_session_snapshot
+        mock_session_col = MagicMock()
+        mock_session_col.document.return_value = mock_session_ref
+
+        mock_user_ref = MagicMock()
+        mock_user_ref.collection.side_effect = lambda name: (
+            mock_session_col if name == 'chat_sessions' else mock_msg_col
+        )
+        mock_batch = MagicMock()
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value = mock_user_ref
+            patched_db.batch.return_value = mock_batch
+            patched_db.write_option.side_effect = lambda **kwargs: ('last_update', kwargs['last_update_time'])
+            result = chat_db.delete_messages('uid', app_id=None)
+
+        assert result == 2
+        mock_delete_query.limit.assert_called_with(chat_db.DELETE_MESSAGES_BATCH_LIMIT)
+        mock_batch.update.assert_called_once_with(
+            mock_session_ref,
+            {
+                'message_ids': firestore_stub.ArrayRemove(['logical-1', 'logical-2']),
+                'message_count': firestore_stub.Increment(-2),
+                'preview': None,
+            },
+            option=('last_update', mock_session_snapshot.update_time),
+        )
+        assert mock_batch.delete.call_count == 2
+        assert all(call.kwargs['option'][0] == 'last_update' for call in mock_batch.delete.call_args_list)
+
+    def test_overlapping_clear_requeries_after_precondition_conflict(self):
+        """A losing clear never applies a second decrement to already-deleted docs."""
+        mock_msg_col = MagicMock()
+        mock_delete_query = MagicMock()
+        mock_msg_col.where.return_value = mock_delete_query
+        mock_delete_query.limit.return_value = mock_delete_query
+
+        message = MagicMock()
+        message.id = 'msg-1'
+        message.update_time = object()
+        message.to_dict.return_value = {'id': 'logical-1', 'chat_session_id': 'sess-1'}
+        mock_delete_query.stream.side_effect = [[message], []]
+
+        mock_session_snapshot = MagicMock()
+        mock_session_snapshot.exists = True
+        mock_session_snapshot.update_time = object()
+        mock_session_snapshot.to_dict.return_value = {'message_count': 1}
+        mock_session_ref = MagicMock()
+        mock_session_ref.get.return_value = mock_session_snapshot
+        mock_session_col = MagicMock()
+        mock_session_col.document.return_value = mock_session_ref
+
+        mock_user_ref = MagicMock()
+        mock_user_ref.collection.side_effect = lambda name: (
+            mock_session_col if name == 'chat_sessions' else mock_msg_col
+        )
+        mock_batch = MagicMock()
+        mock_batch.commit.side_effect = chat_db.FailedPrecondition('overlapping clear won')
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value = mock_user_ref
+            patched_db.batch.return_value = mock_batch
+            patched_db.write_option.return_value = object()
+            result = chat_db.delete_messages('uid', app_id=None)
+
+        assert result == 0
+        mock_batch.commit.assert_called_once()
+
+    def test_persistent_precondition_conflict_is_bounded(self):
+        """A hot session cannot hold a sync worker in an unbounded retry loop."""
+        mock_msg_col = MagicMock()
+        mock_delete_query = MagicMock()
+        mock_msg_col.where.return_value = mock_delete_query
+        mock_delete_query.limit.return_value = mock_delete_query
+
+        message = MagicMock()
+        message.id = 'msg-1'
+        message.update_time = object()
+        message.to_dict.return_value = {'id': 'logical-1', 'chat_session_id': 'sess-1'}
+        mock_delete_query.stream.side_effect = [[message] for _ in range(chat_db.DELETE_MESSAGES_CONFLICT_RETRIES)]
+
+        mock_session_snapshot = MagicMock()
+        mock_session_snapshot.exists = True
+        mock_session_snapshot.update_time = object()
+        mock_session_snapshot.to_dict.return_value = {'message_count': 1}
+        mock_session_ref = MagicMock()
+        mock_session_ref.get.return_value = mock_session_snapshot
+        mock_session_col = MagicMock()
+        mock_session_col.document.return_value = mock_session_ref
+
+        mock_user_ref = MagicMock()
+        mock_user_ref.collection.side_effect = lambda name: (
+            mock_session_col if name == 'chat_sessions' else mock_msg_col
+        )
+        mock_batch = MagicMock()
+        mock_batch.commit.side_effect = chat_db.FailedPrecondition('persistent conflict')
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value = mock_user_ref
+            patched_db.batch.return_value = mock_batch
+            patched_db.write_option.return_value = object()
+            with pytest.raises(chat_db.FailedPrecondition, match='persistent conflict'):
+                chat_db.delete_messages('uid', app_id=None)
+
+        assert mock_batch.commit.call_count == chat_db.DELETE_MESSAGES_CONFLICT_RETRIES
 
 
 class TestLlmUsageBucketParam:

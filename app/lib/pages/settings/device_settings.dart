@@ -766,7 +766,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                 await provider.setConnectedDevice(null);
                 provider.updateConnectingStatus(false);
                 PlatformManager.instance.analytics.disconnectFriendClicked();
-                if (context.mounted) {
+                if (mounted) {
                   Navigator.of(context).pop();
                   ScaffoldMessenger.of(
                     context,
@@ -814,7 +814,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       provider.setIsConnected(false);
                       provider.setConnectedDevice(null);
                       provider.updateConnectingStatus(false);
-                      if (context.mounted) {
+                      if (mounted) {
                         Navigator.of(context).pop();
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(

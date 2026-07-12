@@ -213,13 +213,14 @@ def _generated_feature_route_items(
         provider = override.primary.provider if override is not None else legacy_provider
         lane_id = feature_lane_id(feature)
         route_id = f"route.{feature}.model_config.001"
-        capabilities = _capabilities_for_feature(feature)
+        surface = _surface_for_feature(feature, provider)
+        capabilities = _capabilities_for_feature(feature, provider=provider, surface=surface)
         credential_policy = _credential_policy()
 
         lanes.append(
             {
                 'lane_id': lane_id,
-                'surface': 'openai.chat_completions',
+                'surface': surface,
                 'capabilities': capabilities,
                 'objective': {'quality': 0.6, 'latency': 0.2, 'cost': 0.2},
                 'credential_policy': credential_policy,
@@ -235,7 +236,7 @@ def _generated_feature_route_items(
             {
                 'route_artifact_id': route_id,
                 'lane_id': lane_id,
-                'surface': 'openai.chat_completions',
+                'surface': surface,
                 'primary': primary,
                 'fallbacks': [],
                 'provider_options': provider_options,
@@ -277,14 +278,20 @@ def _generated_feature_route_items(
     return lanes, artifacts, bundles
 
 
-def _capabilities_for_feature(feature: str) -> dict[str, Any]:
+def _surface_for_feature(feature: str, provider: str) -> str:
+    if feature == 'chat_agent' and provider == 'anthropic':
+        return 'anthropic.messages'
+    return 'openai.chat_completions'
+
+
+def _capabilities_for_feature(feature: str, *, provider: str, surface: str) -> dict[str, Any]:
     structured_output = 'json_schema' if is_structured_output_feature(feature) else 'none'
-    provider = get_provider(feature)
+    anthropic_messages = surface == 'anthropic.messages'
     return {
         'text_input': True,
-        'streaming': provider in {'openai', 'openrouter', 'perplexity', 'gemini'},
+        'streaming': anthropic_messages or provider in {'openai', 'openrouter', 'perplexity', 'gemini'},
         'structured_output': structured_output,
-        'tools': feature == 'memory_l2',
+        'tools': anthropic_messages or feature == 'memory_l2',
     }
 
 

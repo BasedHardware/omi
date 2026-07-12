@@ -120,7 +120,7 @@ final class QueryTracerTests: XCTestCase {
     // MARK: - 8. JSONL serialization
 
     func testJSONLSerialization() throws {
-        let tracer = QueryTracer(query: "json test", inputMode: .voicePTTBatch)
+        let tracer = QueryTracer(query: "json test", inputMode: .voicePTTBatch, capturesContent: true)
         tracer.begin("step1")
         tracer.end("step1")
 
@@ -132,6 +132,8 @@ final class QueryTracerTests: XCTestCase {
         XCTAssertNotNil(json)
         XCTAssertTrue(trace.trace_id.hasPrefix("t_"))
         XCTAssertEqual(json?["query_text"] as? String, "json test")
+        XCTAssertEqual(json?["query_length"] as? Int, 9)
+        XCTAssertEqual(json?["content_captured"] as? Bool, true)
         XCTAssertEqual(json?["input_mode"] as? String, "voice_ptt_batch")
         XCTAssertEqual(json?["token_count"] as? Int, 5)
         XCTAssertEqual(json?["model"] as? String, "gpt-4")
@@ -143,7 +145,7 @@ final class QueryTracerTests: XCTestCase {
     // MARK: - 9. Tool execution capture
 
     func testToolExecutionCapture() {
-        let tracer = QueryTracer(query: "tools", inputMode: .text)
+        let tracer = QueryTracer(query: "tools", inputMode: .text, capturesContent: true)
         tracer.captureToolExecution(
             toolUseId: "call-1",
             name: "spawn_agent",
@@ -158,6 +160,57 @@ final class QueryTracerTests: XCTestCase {
         XCTAssertEqual(trace.tool_executions?[0].tool_use_id, "call-1")
         XCTAssertTrue(trace.tool_executions?[0].input.contains("GAUNTLET-TEST-SPAWN") ?? false)
         XCTAssertEqual(trace.tool_executions?[0].dur_ms, 42)
+    }
+
+    func testProductionTraceKeepsShapeWithoutUserContent() {
+        let tracer = QueryTracer(
+            query: "private spoken request",
+            inputMode: .voicePTTBatch,
+            capturesContent: false
+        )
+        tracer.captureRequest(
+            systemPrompt: "private system prompt",
+            messages: [["role": "user", "content": "private history"]],
+            hasScreenshot: true
+        )
+        tracer.captureResponse(text: "private response")
+        tracer.captureToolExecution(
+            toolUseId: "call-1",
+            name: "WebSearch: private health query",
+            input: "private tool input",
+            output: "private tool output",
+            durationMs: 8
+        )
+
+        let trace = tracer.buildTrace(tokenCount: 3, model: "test-model")
+        XCTAssertEqual(trace.query_text, "")
+        XCTAssertEqual(trace.query_length, 22)
+        XCTAssertFalse(trace.content_captured)
+        XCTAssertNil(trace.request?.system_prompt)
+        XCTAssertNil(trace.request?.messages)
+        XCTAssertNil(trace.request?.response_text)
+        XCTAssertEqual(trace.request?.has_screenshot, true)
+        XCTAssertEqual(trace.tool_executions?.first?.name, "websearch")
+        XCTAssertEqual(trace.tool_executions?.first?.input, "")
+        XCTAssertEqual(trace.tool_executions?.first?.output, "")
+        XCTAssertEqual(tracer.toolNameForTrace("Read: /Users/person/private.txt"), "read")
+    }
+
+    func testTraceFilesArePrivate() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("query-tracer-permissions-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        QueryTracer.prepareLogDirectory(directory)
+        let file = directory.appendingPathComponent("traces.jsonl")
+        QueryTracer.appendTraceLine("{}", to: file)
+
+        let directoryAttributes = try FileManager.default.attributesOfItem(atPath: directory.path)
+        let fileAttributes = try FileManager.default.attributesOfItem(atPath: file.path)
+        let directoryMode = try XCTUnwrap(directoryAttributes[.posixPermissions] as? NSNumber).intValue
+        let fileMode = try XCTUnwrap(fileAttributes[.posixPermissions] as? NSNumber).intValue
+        XCTAssertEqual(directoryMode & 0o777, 0o700)
+        XCTAssertEqual(fileMode & 0o777, 0o600)
     }
 
     // MARK: - 10. Summary line format
@@ -176,5 +229,12 @@ final class QueryTracerTests: XCTestCase {
         XCTAssertTrue(line.contains("mode="), "Summary should contain mode=")
         XCTAssertTrue(line.contains("ttft="), "Summary should contain ttft=")
         XCTAssertTrue(line.contains("parse="), "Summary should contain stage names")
+    }
+
+    func testFinalizeIsExactlyOnce() {
+        let tracer = QueryTracer(query: "one terminal trace", inputMode: .text)
+
+        XCTAssertTrue(tracer.finalize(tokenCount: 0, model: "test-model"))
+        XCTAssertFalse(tracer.finalize(tokenCount: 99, model: "late-model"))
     }
 }
