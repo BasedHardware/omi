@@ -144,6 +144,15 @@ for the greater of the current HPA desire or its recent peak, plus
 `maxSurge`. A configured autoscaler maximum is not evidence that the zone can
 actually supply those nodes.
 
+This is currently a mandatory operator gate; `prepare-cloud-run` does not yet
+compute schedulable slots or prove provider stock. Alert with bounded labels and
+use rates or dwell where applicable for: eligible-pool headroom, a pool held at
+its configured maximum, pending or unschedulable backend-listen pods, fresh
+`FailedScaleUp` or `GCE_STOCKOUT` events, HPA desired replicas above computed
+schedulable slots, unhealthy NEG endpoints, and repeated GKE-dwell resets or
+timeouts. A high configured maximum, such as 50 in a stock-constrained zone, is
+not usable headroom until the provider actually creates the nodes.
+
 Do not shrink requests as a first response to a blocked rollout. Request changes
 create another ReplicaSet and must be justified by observed peak usage plus
 headroom, exercised under representative load, and paired with an explicit
@@ -191,6 +200,17 @@ separate fail-closed helper is implemented and exercised.
 
 Use at least a two-minute dwell before candidate work and reconfirm for at least
 one minute immediately before traffic cutover.
+
+The gate's timeout is a wall-clock budget, not a cumulative-health budget. Each
+unhealthy sample discards the accumulated healthy interval while the outer
+deadline continues. A cluster that recovers near the deadline therefore still
+fails closed unless it can complete a fresh uninterrupted dwell. With the
+current prepare settings, one attempt can spend 900 seconds in this gate, then
+also pay Helm rollback/rollout time and the mandatory rollback dwell; a rerun
+starts a new dwell from zero. Do not blindly extend the deadline. The helper
+should emit every reset reason and timestamp, the longest healthy interval, HPA
+current/desired state, pending-pod count, and remaining wall-clock budget so a
+timeout is operationally diagnosable.
 
 ### 4. Reuse immutable candidates or start a fresh serialized deploy
 
@@ -288,6 +308,14 @@ for the guarded rollout. Use the explicit two-phase path:
    exact handoff values. Never transcribe the digest or suffix from an earlier
    run. The resume lane owns candidate activation, temporary-tag smoke, ordered
    promotion, convergence, and all-service rollback.
+
+The prepare suffix is
+`<short-sha>-<GITHUB_RUN_ID>-<GITHUB_RUN_ATTEMPT>`. Re-running the same Actions
+run creates a new candidate identity (`...-1` becomes `...-2`) even when source
+and image contents are unchanged. Resume only the suffix emitted by the
+successful attempt. Prove all earlier-attempt revisions remain zero traffic and
+record them for explicit retention or cleanup; never substitute their suffix
+into the successful handoff.
 
 Candidate preparation intentionally leaves GKE on the new SHA after success so
 the resume identity/dwell gate cannot mix two builds. Run the resume promptly.

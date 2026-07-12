@@ -5,7 +5,8 @@ readiness, beta visibility, canonical channel state, stable nomination, and
 stable promotion. Those are separate gates. No workflow or Firestore mutation
 was performed while preparing this record. A second live read at `23:26 UTC`
 found no drift in any canonical, legacy, appcast, redirect, GitHub, or desktop
-backend surface.
+backend surface. A third read at `00:40 UTC` on July 12, after the Python backend
+cutover, again found no drift; that deploy did not mutate desktop release state.
 
 ## Decision summary
 
@@ -33,6 +34,7 @@ qualifying `.71` first.
 | `Omi.zip` SHA-256 | `5904314bb6a26a9466e0cfb4cce1cdc72aeaa556d26c959141b671b939acd0cc` |
 | `omi.dmg` SHA-256 | `24db5a53c7c32db9a7b9e20a02b061171d7ccf7b6a7948ae633c03951075883a` |
 | Qualification evidence | `qualification-evidence-0.12.70+12070-20260711T060737Z.json`, Tier 2, passed, exact source SHA |
+| Qualification evidence SHA-256 | `cbf38fa79938bbd2bc869412e1674d1ee03e0afb88fbc6561475ffbe12cdc9b0` |
 
 Local verification against the published artifacts showed:
 
@@ -76,10 +78,25 @@ The failed `.70` stable nomination run was GitHub Actions `29142470735`; it
 stopped because the beta pointer was missing. No `.70` stable promotion has
 succeeded.
 
+The Python backend contention hotfix is an operational prerequisite for this
+release sequence, not part of the macOS artifact identity. Backend prepare and
+resume deploy source `f92baff14418bfa46b64ac84f1eb64715855d32e`; canonical
+macOS registration must still preserve desktop source
+`2bdd18a7e397b4c7aab8199443def178c0e9b0e0` and the published `.70` asset
+digests above. Neither backend phase writes the immutable `.70` manifest or the
+`macos-beta` pointer, and `.70` remains beta-visible through the legacy surfaces
+while backend rollout is in progress. The Python `backend` service is also
+distinct from the Rust `desktop-backend`: the latter's `.0` health and traffic
+identity are a later stable-promotion gate, not part of canonical beta
+registration.
+
 ## Gate 1: canonical beta convergence
 
 This is state-changing and requires explicit release authorization. If `.70`
-remains the intended target, dispatch exactly:
+remains the intended target, the Python backend prerequisite is now satisfied:
+guarded resume run `29173381925` succeeded and its bounded production soak was
+clean. The post-cutover release-state refresh still found the canonical
+manifest and `macos-beta` pointer absent. Dispatch exactly:
 
 ```bash
 gh workflow run desktop_promote_beta.yml \
