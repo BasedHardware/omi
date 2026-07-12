@@ -236,6 +236,13 @@ final class RawWebSocket {
           reason = String(data: payload.subdata(in: (payload.startIndex + 2)..<payload.endIndex), encoding: .utf8) ?? ""
         }
         closed = true
+        // Cancel the keepalive timer on a server-initiated close, exactly like close()
+        // and fail() do. Without this, a resumed DispatchSourceTimer outlives the
+        // deallocated socket and keeps firing its wakeup forever. Gemini idle-closes
+        // the warm hub socket with a 1008 close frame (opcode 0x8) every ~2.5 min, so
+        // this path leaked one zombie 20s timer per re-warm across the app's lifetime.
+        pingTimer?.cancel()
+        pingTimer = nil
         onClose?(code, reason)
         conn?.cancel(); conn = nil
       case 0x9:  // ping → pong
@@ -261,5 +268,12 @@ final class RawWebSocket {
     pingTimer = nil
     onError?(message)
     conn?.cancel(); conn = nil
+  }
+
+  deinit {
+    // A resumed DispatchSourceTimer keeps firing (and is leaked) if it is released
+    // without being cancelled. Every teardown path cancels pingTimer, but guard the
+    // release regardless so no future path can reintroduce a zombie keepalive timer.
+    pingTimer?.cancel()
   }
 }

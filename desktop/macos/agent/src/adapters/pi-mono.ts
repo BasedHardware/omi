@@ -188,7 +188,7 @@ function resolveBundledPi(): string {
   // Note: URL.pathname percent-encodes spaces (%20) which breaks existsSync
   // for app bundles with spaces in their name (e.g. "Omi Beta.app").
   const direct = decodeURIComponent(new URL(
-    "../../node_modules/@mariozechner/pi-coding-agent/dist/cli.js",
+    "../../node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
     import.meta.url
   ).pathname);
   if (existsSync(direct)) return direct;

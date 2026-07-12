@@ -16,6 +16,11 @@ on:
         required: false
         default: ''
 
+# Serialize Helm writers to this environment's Parakeet release.
+concurrency:
+  group: deploy-gke-parakeet-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
 env:
   SERVICE: parakeet
   REGION: us-central1

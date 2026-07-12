@@ -16,9 +16,10 @@ CACHE_LOCK="$DESKTOP_DIR/.harness/agent-runtime-prepare.lock.d"
 # shellcheck source=agent-runtime-cache.sh
 source "$SCRIPT_DIR/agent-runtime-cache.sh"
 
-NODE_VERSION="${OMI_AGENT_NODE_VERSION:-v22.14.0}"
-NODE_DARWIN_ARM64_SHA256="e9404633bc02a5162c5c573b1e2490f5fb44648345d64a958b17e325729a5e42"
-NODE_DARWIN_X64_SHA256="6698587713ab565a94a360e091df9f6d91c8fadda6d00f0cf6526e9b40bed250"
+NODE_VERSION="${OMI_AGENT_NODE_VERSION:-v22.19.0}"
+NODE_MIN_VERSION="v22.19.0"
+NODE_DARWIN_ARM64_SHA256="c59006db713c770d6ec63ae16cb3edc11f49ee093b5c415d667bb4f436c6526d"
+NODE_DARWIN_X64_SHA256="3cfed4795cd97277559763c5f56e711852d2cc2420bda1cea30c8aa9ac77ce0c"
 
 MODE="universal"
 SKIP_NPM=0
@@ -105,6 +106,37 @@ verify_sha256() {
     echo "  actual:   $actual" >&2
     exit 1
   fi
+}
+
+node_version_at_least() {
+  local version="${1#v}"
+  local minimum="${2#v}"
+  local version_major version_minor version_patch
+  local minimum_major minimum_minor minimum_patch
+
+  IFS=. read -r version_major version_minor version_patch <<<"$version"
+  IFS=. read -r minimum_major minimum_minor minimum_patch <<<"$minimum"
+  version_minor="${version_minor:-0}"
+  version_patch="${version_patch:-0}"
+  minimum_minor="${minimum_minor:-0}"
+  minimum_patch="${minimum_patch:-0}"
+
+  [[ "$version_major" =~ ^[0-9]+$ ]] || return 1
+  [[ "$version_minor" =~ ^[0-9]+$ ]] || return 1
+  [[ "$version_patch" =~ ^[0-9]+$ ]] || return 1
+  [[ "$minimum_major" =~ ^[0-9]+$ ]] || return 1
+  [[ "$minimum_minor" =~ ^[0-9]+$ ]] || return 1
+  [[ "$minimum_patch" =~ ^[0-9]+$ ]] || return 1
+
+  if [ "$version_major" -ne "$minimum_major" ]; then
+    [ "$version_major" -gt "$minimum_major" ]
+    return
+  fi
+  if [ "$version_minor" -ne "$minimum_minor" ]; then
+    [ "$version_minor" -gt "$minimum_minor" ]
+    return
+  fi
+  [ "$version_patch" -ge "$minimum_patch" ]
 }
 
 install_agent_deps_and_build() {
@@ -456,10 +488,10 @@ stage_unsafe_local_node() {
     exit 1
   fi
 
-  local node_major
-  node_major="$("$node_bin" -e 'console.log(process.versions.node.split(".")[0])')"
-  if [ "$node_major" -lt 22 ]; then
-    echo "ERROR: Node.js 22+ is required for the agent runtime; found $("$node_bin" --version) at $node_bin" >&2
+  local node_version
+  node_version="$("$node_bin" --version)"
+  if ! node_version_at_least "$node_version" "$NODE_MIN_VERSION"; then
+    echo "ERROR: Node.js $NODE_MIN_VERSION or newer is required for the agent runtime; found $node_version at $node_bin" >&2
     exit 1
   fi
 
@@ -477,6 +509,10 @@ stage_unsafe_local_node() {
     rm -f "$NODE_RESOURCE"
     stage_universal_node
     return
+  fi
+  if ! node_version_at_least "$staged_version" "$NODE_MIN_VERSION"; then
+    echo "ERROR: staged Node $staged_version is below required $NODE_MIN_VERSION" >&2
+    exit 1
   fi
   log "Staged unsafe local Node $staged_version from $node_bin"
 }
@@ -529,8 +565,8 @@ validate_runtime_tree() {
     "$AGENT_DIR/src/runtime/control-tool-manifest.ts" \
     "$AGENT_DIR/src/runtime/node-tools.ts" \
     "$AGENT_DIR/src/runtime/omi-tool-manifest.ts" \
-    "$AGENT_DIR/node_modules/@mariozechner/pi-coding-agent/dist/cli.js" \
-    "$AGENT_PACKAGED_NODE_MODULES/@mariozechner/pi-coding-agent/dist/cli.js" \
+    "$AGENT_DIR/node_modules/@earendil-works/pi-coding-agent/dist/cli.js" \
+    "$AGENT_PACKAGED_NODE_MODULES/@earendil-works/pi-coding-agent/dist/cli.js" \
     "$AGENT_DIR/node_modules/@zed-industries/claude-agent-acp/dist/acp-agent.js" \
     "$AGENT_PACKAGED_NODE_MODULES/@zed-industries/claude-agent-acp/dist/acp-agent.js" \
     "$PI_MONO_DIR/index.ts" \
@@ -543,6 +579,7 @@ validate_runtime_tree() {
 
   local staged_version
   staged_version="$("$NODE_RESOURCE" --version 2>/dev/null)" || return 1
+  node_version_at_least "$staged_version" "$NODE_MIN_VERSION" || return 1
   if [ "$MODE" = "universal" ]; then
     [ "$staged_version" = "$NODE_VERSION" ] || return 1
     command -v lipo >/dev/null 2>&1 || return 1
@@ -550,10 +587,6 @@ validate_runtime_tree() {
     arches="$(lipo -archs "$NODE_RESOURCE" 2>/dev/null)" || return 1
     case " $arches " in *" arm64 "*) ;; *) return 1 ;; esac
     case " $arches " in *" x86_64 "*) ;; *) return 1 ;; esac
-  else
-    local major="${staged_version#v}"
-    major="${major%%.*}"
-    [ "$major" -ge 22 ] 2>/dev/null || return 1
   fi
 }
 

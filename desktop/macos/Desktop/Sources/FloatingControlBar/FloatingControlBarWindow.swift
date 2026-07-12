@@ -3177,7 +3177,7 @@ class FloatingControlBarManager {
             if case .visible(let fromVoice) = presentation {
                 prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice)
             }
-            provider.stopAgent(owner: turnOwner)
+            provider.stopAgent(owner: turnOwner, reason: .superseded)
             return
         }
 
@@ -3196,7 +3196,7 @@ class FloatingControlBarManager {
                     return
                 }
                 pendingFollowUpQuery = nil
-                provider.stopAgent(owner: turnOwner)
+                provider.stopAgent(owner: turnOwner, reason: .superseded)
             }
             routerTracer?.mark("router_classify", metadata: ["route": "agent", "provider": directive.provider.rawValue])
             await resolveDelegationAndDispatch(
@@ -3221,7 +3221,7 @@ class FloatingControlBarManager {
                     return
                 }
                 pendingFollowUpQuery = nil
-                provider.stopAgent(owner: turnOwner)
+                provider.stopAgent(owner: turnOwner, reason: .superseded)
             }
             routerTracer?.mark("router_classify", metadata: ["route": "agent", "source": "explicit"])
             await resolveDelegationAndDispatch(
@@ -3628,7 +3628,7 @@ class FloatingControlBarManager {
             }
             pendingFollowUpQuery = PendingFollowUpQuery(text: query, presentation: .visible(fromVoice: fromVoice))
             prepareVisibleQueryState(query, in: window, fromVoice: fromVoice)
-            provider.stopAgent(owner: turnOwner)
+            provider.stopAgent(owner: turnOwner, reason: .superseded)
             return
         }
 
