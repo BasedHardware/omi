@@ -1508,173 +1508,174 @@
         "y": 53
       },
       "id": 58,
-      "panels": [],
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "lineWidth": 2,
+                "showPoints": "never",
+                "stacking": {
+                  "mode": "none"
+                }
+              },
+              "unit": "percent",
+              "min": 0,
+              "max": 100
+            }
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 54
+          },
+          "id": 59,
+          "options": {
+            "legend": {
+              "calcs": [
+                "mean",
+                "max"
+              ],
+              "displayMode": "table",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "title": "GPU Compute Utilization %",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "DCGM_FI_DEV_GPU_UTIL{pod=~\".*nllb.*\"}",
+              "legendFormat": "GPU Util %"
+            }
+          ]
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "lineWidth": 2,
+                "showPoints": "never",
+                "stacking": {
+                  "mode": "none"
+                }
+              },
+              "unit": "percent",
+              "min": 0,
+              "max": 100
+            }
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 8,
+            "y": 54
+          },
+          "id": 60,
+          "options": {
+            "legend": {
+              "calcs": [
+                "mean",
+                "max"
+              ],
+              "displayMode": "table",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "title": "GPU Memory Utilization %",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "DCGM_FI_DEV_FB_USED{pod=~\".*nllb.*\"} / (DCGM_FI_DEV_FB_USED{pod=~\".*nllb.*\"} + DCGM_FI_DEV_FB_FREE{pod=~\".*nllb.*\"}) * 100",
+              "legendFormat": "GPU Mem %"
+            }
+          ]
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "lineWidth": 2,
+                "showPoints": "never",
+                "stacking": {
+                  "mode": "none"
+                }
+              },
+              "unit": "decmbytes"
+            }
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 16,
+            "y": 54
+          },
+          "id": 61,
+          "options": {
+            "legend": {
+              "calcs": [
+                "mean",
+                "max"
+              ],
+              "displayMode": "table",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "title": "GPU Memory Used",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "DCGM_FI_DEV_FB_USED{pod=~\".*nllb.*\"}",
+              "legendFormat": "Used"
+            },
+            {
+              "expr": "DCGM_FI_DEV_FB_USED{pod=~\".*nllb.*\"} + DCGM_FI_DEV_FB_FREE{pod=~\".*nllb.*\"}",
+              "legendFormat": "Total"
+            }
+          ]
+        }
+      ],
       "title": "GPU (requires DCGM exporter)",
       "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "drawStyle": "line",
-            "fillOpacity": 20,
-            "lineWidth": 2,
-            "showPoints": "never",
-            "stacking": {
-              "mode": "none"
-            }
-          },
-          "unit": "percent",
-          "min": 0,
-          "max": 100
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 0,
-        "y": 54
-      },
-      "id": 59,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "title": "GPU Compute Utilization %",
-      "type": "timeseries",
-      "targets": [
-        {
-          "expr": "DCGM_FI_DEV_GPU_UTIL{pod=~\".*nllb.*\"}",
-          "legendFormat": "GPU Util %"
-        }
-      ]
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "drawStyle": "line",
-            "fillOpacity": 20,
-            "lineWidth": 2,
-            "showPoints": "never",
-            "stacking": {
-              "mode": "none"
-            }
-          },
-          "unit": "percent",
-          "min": 0,
-          "max": 100
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 54
-      },
-      "id": 60,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "title": "GPU Memory Utilization %",
-      "type": "timeseries",
-      "targets": [
-        {
-          "expr": "DCGM_FI_DEV_FB_USED{pod=~\".*nllb.*\"} / (DCGM_FI_DEV_FB_USED{pod=~\".*nllb.*\"} + DCGM_FI_DEV_FB_FREE{pod=~\".*nllb.*\"}) * 100",
-          "legendFormat": "GPU Mem %"
-        }
-      ]
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "drawStyle": "line",
-            "fillOpacity": 20,
-            "lineWidth": 2,
-            "showPoints": "never",
-            "stacking": {
-              "mode": "none"
-            }
-          },
-          "unit": "bytes"
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 54
-      },
-      "id": 61,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "title": "GPU Memory Used",
-      "type": "timeseries",
-      "targets": [
-        {
-          "expr": "DCGM_FI_DEV_FB_USED{pod=~\".*nllb.*\"}",
-          "legendFormat": "Used"
-        },
-        {
-          "expr": "DCGM_FI_DEV_FB_USED{pod=~\".*nllb.*\"} + DCGM_FI_DEV_FB_FREE{pod=~\".*nllb.*\"}",
-          "legendFormat": "Total"
-        }
-      ]
     },
     {
       "datasource": {

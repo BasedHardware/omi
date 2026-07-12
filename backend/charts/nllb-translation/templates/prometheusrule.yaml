@@ -101,6 +101,7 @@ spec:
             AND
             (sum(rate(nllb_requests_total{status!="ok"}[6h]))
             / clamp_min(sum(rate(nllb_requests_total[6h])), 0.001)) / 0.005 > 6
+            AND sum(rate(nllb_requests_total[30m])) > 0.1
           for: 15m
           labels:
             severity: warning
