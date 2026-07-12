@@ -1257,11 +1257,11 @@
           "legendFormat": "Actual"
         },
         {
-          "expr": "max(kube_pod_container_resource_requests{container=\"nllb-translation\", resource=\"cpu\"})",
+          "expr": "sum(kube_pod_container_resource_requests{container=\"nllb-translation\", resource=\"cpu\"})",
           "legendFormat": "Request"
         },
         {
-          "expr": "max(kube_pod_container_resource_limits{container=\"nllb-translation\", resource=\"cpu\"})",
+          "expr": "sum(kube_pod_container_resource_limits{container=\"nllb-translation\", resource=\"cpu\"})",
           "legendFormat": "Limit"
         }
       ]
@@ -1370,11 +1370,11 @@
           "legendFormat": "Actual"
         },
         {
-          "expr": "max(kube_pod_container_resource_requests{container=\"nllb-translation\", resource=\"memory\"})",
+          "expr": "sum(kube_pod_container_resource_requests{container=\"nllb-translation\", resource=\"memory\"})",
           "legendFormat": "Request"
         },
         {
-          "expr": "max(kube_pod_container_resource_limits{container=\"nllb-translation\", resource=\"memory\"})",
+          "expr": "sum(kube_pod_container_resource_limits{container=\"nllb-translation\", resource=\"memory\"})",
           "legendFormat": "Limit"
         }
       ]

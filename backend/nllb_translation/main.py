@@ -194,7 +194,11 @@ def _resolve_nllb_code(bcp47_code: str) -> Optional[str]:
 _inference_pool = ThreadPoolExecutor(max_workers=INFERENCE_WORKERS, thread_name_prefix="nllb-infer")
 
 
-def _translate_batch(texts: List[str], source_nllb: str, target_nllb: str) -> List[TranslationResult]:
+def _translate_batch(
+    texts: List[str], source_nllb: str, target_nllb: str, t_queued: float = 0.0
+) -> List[TranslationResult]:
+    if t_queued > 0:
+        QUEUE_WAIT.observe(time.monotonic() - t_queued)
     if not _translator or not _tokenizer:
         raise RuntimeError("Model not loaded")
 
@@ -253,12 +257,11 @@ async def translate(req: TranslateRequest):
             return TranslateResponse(translations=[], latency_ms=0)
 
         total_chars = sum(len(c) for c in req.contents)
-        QUEUE_WAIT.observe(time.monotonic() - t_queued)
         t0 = time.monotonic()
         loop = asyncio.get_running_loop()
         translations = await loop.run_in_executor(
             _inference_pool,
-            partial(_translate_batch, req.contents, source_nllb or "", target_nllb),
+            partial(_translate_batch, req.contents, source_nllb or "", target_nllb, t_queued),
         )
         latency = time.monotonic() - t0
 
