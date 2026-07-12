@@ -15,6 +15,7 @@ import 'package:omi/pages/home/omiglass_ota_update.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
@@ -34,6 +35,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   bool isConnected = false;
   bool isDeviceStorageSupport = false;
   bool supportsMultiFileSync = SharedPreferencesUtil().deviceSupportsMultiFileSync;
+
+  // Latest on-device ring-buffer storage snapshot (firmware 3.0.20+ only).
+  // Surfaced on the Auto Sync page as a storage-usage indicator. Null when the
+  // device predates the ring protocol or hasn't been read yet.
+  RingStatus? _ringStatus;
+  RingStatus? get ringStatus => _ringStatus;
+
   BtDevice? connectedDevice;
   BtDevice? pairedDevice;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
@@ -524,6 +532,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       // ring firmware no longer serves).
       if (WalSyncs.isRingBufferFirmware(fwVersion)) {
         final ringStatus = await connection.getRingStatus();
+        if (ringStatus != null) {
+          _ringStatus = ringStatus;
+          notifyListeners();
+        }
         if (ringStatus == null || ringStatus.unreadPackets <= 0) return;
         Logger.debug(
           'DeviceProvider: Ring auto-sync detected ${ringStatus.unreadPackets} unread packets (${ringStatus.usedBytes} bytes)',
@@ -539,6 +551,27 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       onOfflineDataDetected?.call(device, status.fileCount, status.totalUsedBytes);
     } catch (e) {
       Logger.debug('DeviceProvider: Auto-sync check failed: $e');
+    }
+  }
+
+  /// Refresh the on-device ring-buffer storage snapshot for the storage-usage
+  /// indicator. No-op on firmware < 3.0.20 (the ring protocol isn't served) or
+  /// when there's no active connection. Safe to call from UI (e.g. on page open).
+  Future<void> refreshRingStorageStatus() async {
+    try {
+      final fwVersion = pairedDevice?.firmwareRevision ?? connectedDevice?.firmwareRevision;
+      if (!WalSyncs.isRingBufferFirmware(fwVersion)) return;
+      final deviceId = pairedDevice?.id ?? connectedDevice?.id;
+      if (deviceId == null) return;
+      final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+      if (connection == null) return;
+      final status = await connection.getRingStatus();
+      if (status != null) {
+        _ringStatus = status;
+        notifyListeners();
+      }
+    } catch (e) {
+      Logger.debug('DeviceProvider: refreshRingStorageStatus failed: $e');
     }
   }
 
