@@ -943,7 +943,7 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 6,
         "x": 0,
         "y": 38
       },
@@ -1009,8 +1009,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 16,
+        "w": 6,
+        "x": 12,
         "y": 38
       },
       "id": 39,
@@ -1044,6 +1044,62 @@
       "fieldConfig": {
         "defaults": {
           "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "unit": "s"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 38
+      },
+      "id": 56,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "title": "Request Queue Wait Time",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(nllb_request_queue_duration_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(nllb_request_queue_duration_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
             "mode": "scheme",
             "schemeName": "Oranges"
           },
@@ -1058,8 +1114,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 8,
+        "w": 6,
+        "x": 6,
         "y": 38
       },
       "id": 54,
@@ -1175,7 +1231,7 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 8,
         "x": 0,
         "y": 47
       },
@@ -1288,8 +1344,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
+        "w": 8,
+        "x": 8,
         "y": 47
       },
       "id": 41,
@@ -1324,12 +1380,67 @@
       ]
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 120
+              },
+              {
+                "color": "red",
+                "value": 300
+              }
+            ]
+          },
+          "unit": "s",
+          "min": 0
+        }
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 16,
+        "y": 47
+      },
+      "id": 57,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "title": "Model Load Time",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "nllb_model_load_duration_seconds",
+          "legendFormat": "load time"
+        }
+      ]
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 53
+        "y": 62
       },
       "id": 20,
       "panels": [],
@@ -1363,7 +1474,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 54
+        "y": 63
       },
       "id": 21,
       "options": {
@@ -1385,6 +1496,183 @@
         {
           "expr": "sum(rate(omi_translation_requests_total[$__rate_interval])) by (provider)",
           "legendFormat": "{{ provider }}"
+        }
+      ]
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 53
+      },
+      "id": 58,
+      "panels": [],
+      "title": "GPU (requires DCGM exporter)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 54
+      },
+      "id": 59,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "title": "GPU Compute Utilization %",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "DCGM_FI_DEV_GPU_UTIL{pod=~\".*nllb.*\"}",
+          "legendFormat": "GPU Util %"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 54
+      },
+      "id": 60,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "title": "GPU Memory Utilization %",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "DCGM_FI_DEV_FB_USED{pod=~\".*nllb.*\"} / (DCGM_FI_DEV_FB_USED{pod=~\".*nllb.*\"} + DCGM_FI_DEV_FB_FREE{pod=~\".*nllb.*\"}) * 100",
+          "legendFormat": "GPU Mem %"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "unit": "bytes"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 54
+      },
+      "id": 61,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "title": "GPU Memory Used",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "DCGM_FI_DEV_FB_USED{pod=~\".*nllb.*\"}",
+          "legendFormat": "Used"
+        },
+        {
+          "expr": "DCGM_FI_DEV_FB_USED{pod=~\".*nllb.*\"} + DCGM_FI_DEV_FB_FREE{pod=~\".*nllb.*\"}",
+          "legendFormat": "Total"
         }
       ]
     },
@@ -1415,7 +1703,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 54
+        "y": 63
       },
       "id": 22,
       "options": {
@@ -1475,7 +1763,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 62
+        "y": 71
       },
       "id": 23,
       "options": {
@@ -1541,7 +1829,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 62
+        "y": 71
       },
       "id": 24,
       "options": {
@@ -1593,7 +1881,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 70
+        "y": 79
       },
       "id": 25,
       "options": {
@@ -1645,7 +1933,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 70
+        "y": 79
       },
       "id": 26,
       "options": {
@@ -1697,7 +1985,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 87
+        "y": 96
       },
       "id": 34,
       "options": {
@@ -1728,7 +2016,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 96
+        "y": 105
       },
       "id": 53,
       "panels": [],
@@ -1761,7 +2049,7 @@
         "h": 8,
         "w": 6,
         "x": 0,
-        "y": 97
+        "y": 106
       },
       "id": 42,
       "options": {
@@ -1810,7 +2098,7 @@
         "h": 8,
         "w": 6,
         "x": 6,
-        "y": 97
+        "y": 106
       },
       "id": 43,
       "options": {
@@ -1866,7 +2154,7 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 97
+        "y": 106
       },
       "id": 44,
       "options": {
@@ -1917,7 +2205,7 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 97
+        "y": 106
       },
       "id": 55,
       "options": {
@@ -2008,5 +2296,5 @@
   "timezone": "utc",
   "title": "Omi Translation Pipeline",
   "uid": "omi-translation-pipeline",
-  "version": 3
+  "version": 4
 }
