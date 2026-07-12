@@ -15,6 +15,15 @@ logger = logging.getLogger(__name__)
 BACKFILL_SLOT_TTL_SECONDS = 2 * 24 * 60 * 60
 
 
+def _admission_limits_enabled() -> bool:
+    # Disabled by default. Cloud Tasks queue concurrency is the sole pacer for
+    # historical recovery, so the app-level per-user in-flight slot and daily
+    # speech caps below are redundant — and they refused legitimate uploads
+    # (202-then-queue is defeated when the endpoint 429s the upload itself).
+    # Set SYNC_BACKFILL_ADMISSION_LIMITS=true to restore the old gating.
+    return os.getenv('SYNC_BACKFILL_ADMISSION_LIMITS', 'false').lower() == 'true'
+
+
 def per_user_daily_limit_ms() -> int:
     return max(0, int(float(os.getenv('SYNC_BACKFILL_USER_DAILY_HOURS', '4')) * 60 * 60 * 1000))
 
@@ -34,6 +43,10 @@ def _day_suffix() -> str:
 
 
 def try_acquire_backfill_slot(uid: str, job_id: str) -> bool:
+    # Admission gating disabled by default: always admit so the upload is
+    # accepted (202) and Cloud Tasks paces processing. See _admission_limits_enabled.
+    if not _admission_limits_enabled():
+        return True
     key = f'sync_backfill:inflight:{uid}'
     acquired = redis_client.set(key, job_id, nx=True, ex=BACKFILL_SLOT_TTL_SECONDS)
     if acquired:
@@ -90,7 +103,10 @@ return {1, global_used + amount}
 
 
 def reserve_backfill_speech(uid: str, job_id: str, speech_ms: int) -> BackfillReservation:
-    if speech_ms <= 0:
+    # Daily/global speech caps disabled by default — the Cloud Tasks queue
+    # bounds concurrent STT load; a per-day upload refusal is the wrong tool
+    # (cost/volume belongs in billing). See _admission_limits_enabled.
+    if not _admission_limits_enabled() or speech_ms <= 0:
         return BackfillReservation(allowed=True)
     retry_after = retry_after_next_utc_day()
     suffix = _day_suffix()
