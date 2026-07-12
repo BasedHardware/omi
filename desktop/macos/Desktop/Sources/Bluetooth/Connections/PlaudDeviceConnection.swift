@@ -131,20 +131,36 @@ final class PlaudDeviceConnection: BaseDeviceConnection {
             withResponse: true
         )
 
-        // Wait for response with timeout
+        // Wait for response with timeout.
+        //
+        // Both the timeout task and the response sink race to resume the same
+        // continuation, so a raw `continuation.resume` on each path double-resumes
+        // (a fatalError). Cancelling the timeout task does NOT prevent it either:
+        // `try? await Task.sleep` swallows the CancellationError and falls through
+        // to the resume. A lock-guarded one-shot ensures exactly one resume wins.
         return await withCheckedContinuation { continuation in
+            let resumeLock = NSLock()
+            var didResume = false
+            func resumeOnce(_ value: [UInt8]?) {
+                resumeLock.lock()
+                defer { resumeLock.unlock() }
+                guard !didResume else { return }
+                didResume = true
+                continuation.resume(returning: value)
+            }
+
             var cancellable: AnyCancellable?
             let timeoutTask = Task {
                 try? await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds
                 cancellable?.cancel()
-                continuation.resume(returning: nil)
+                resumeOnce(nil)
             }
 
             cancellable = commandQueues[cmdId]?
                 .first()
                 .sink { response in
                     timeoutTask.cancel()
-                    continuation.resume(returning: response)
+                    resumeOnce(response)
                 }
         }
     }

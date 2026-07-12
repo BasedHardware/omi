@@ -22,6 +22,11 @@ env:
   SERVICE: memory-maintenance-job
   REGION: us-central1
 
+# Share the development lock with the auto-deploy workflow that writes this Cloud Run job.
+concurrency:
+  group: deploy-cloud-run-memory-maintenance-job-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
 jobs:
   deploy:
     environment: ${{ github.event.inputs.environment }}

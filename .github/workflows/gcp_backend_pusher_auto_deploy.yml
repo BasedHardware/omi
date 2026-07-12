@@ -7,6 +7,11 @@ on:
       - 'backend/pusher/**'
       - 'backend/charts/pusher/**'
 
+# Share the development pusher lock with manual deployments.
+concurrency:
+  group: deploy-gke-pusher-development
+  cancel-in-progress: false
+
 env:
   SERVICE: pusher
   REGION: us-central1

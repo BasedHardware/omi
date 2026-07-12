@@ -829,9 +829,12 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       // Directly share the summary link
                                       bool shared = await setConversationVisibility(provider.conversation.id);
                                       if (!shared) {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(SnackBar(content: Text(context.l10n.conversationUrlNotShared)));
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                              SnackBar(content: Text(context.l10n.conversationUrlNotShared)));
+                                        }
                                         setState(() {
                                           _isSharing = false;
                                         });

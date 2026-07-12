@@ -1,6 +1,14 @@
 import Foundation
 import GRDB
 
+/// A bound query parameter for the sync batch query. Kept as a small typed enum
+/// (rather than `any DatabaseValueConvertible`) so `buildBatchQuery` is pure and
+/// its output is `Equatable`-testable.
+enum SyncQueryArg: Equatable {
+    case int(Int64)
+    case text(String)
+}
+
 /// Polls the local GRDB database every 3 seconds for new/changed rows and
 /// POSTs them to the cloud agent VM's `/sync` endpoint.
 ///
@@ -253,6 +261,34 @@ actor AgentSyncService {
 
     // MARK: - Per-table sync
 
+    /// Build the batch SELECT for a table's next sync page.
+    ///
+    /// Append-only tables paginate by `id`. Mutable tables paginate by a COMPOUND
+    /// `(updatedAt, id)` cursor: a strict `updatedAt > ?` skips every row past the
+    /// first page when more than `batchSize` rows share the same `updatedAt`
+    /// (e.g. a bulk status update touching >100 rows in the same second), silently
+    /// diverging the VM's copy. The `OR (updatedAt = ? AND id > ?)` clause plus
+    /// `ORDER BY updatedAt ASC, id ASC` resumes correctly within such a run.
+    static func buildBatchQuery(
+        tableName: String,
+        selectCols: String,
+        appendOnly: Bool,
+        lastId: Int64,
+        lastUpdatedAt: String,
+        batchSize: Int
+    ) -> (sql: String, args: [SyncQueryArg]) {
+        if appendOnly {
+            return (
+                "SELECT \(selectCols) FROM \"\(tableName)\" WHERE id > ? ORDER BY id ASC LIMIT ?",
+                [.int(lastId), .int(Int64(batchSize))]
+            )
+        }
+        return (
+            "SELECT \(selectCols) FROM \"\(tableName)\" WHERE updatedAt > ? OR (updatedAt = ? AND id > ?) ORDER BY updatedAt ASC, id ASC LIMIT ?",
+            [.text(lastUpdatedAt), .text(lastUpdatedAt), .int(lastId), .int(Int64(batchSize))]
+        )
+    }
+
     private func syncTable(_ spec: TableSpec) async -> Int {
         guard let dbPool = await getDBPool() else { return 0 }
 
@@ -281,16 +317,21 @@ actor AgentSyncService {
 
         do {
             let selectCols = columns.map { "\"\($0)\"" }.joined(separator: ", ")
+            let batchSize = self.batchSize
             let rows: [[String: Any]] = try await dbPool.read { db in
-                let sql: String
-                let args: [any DatabaseValueConvertible]
-
-                if spec.appendOnly {
-                    sql = "SELECT \(selectCols) FROM \"\(spec.name)\" WHERE id > ? ORDER BY id ASC LIMIT ?"
-                    args = [cursor.lastId, self.batchSize]
-                } else {
-                    sql = "SELECT \(selectCols) FROM \"\(spec.name)\" WHERE updatedAt > ? ORDER BY updatedAt ASC LIMIT ?"
-                    args = [cursor.lastUpdatedAt, self.batchSize]
+                let (sql, queryArgs) = Self.buildBatchQuery(
+                    tableName: spec.name,
+                    selectCols: selectCols,
+                    appendOnly: spec.appendOnly,
+                    lastId: cursor.lastId,
+                    lastUpdatedAt: cursor.lastUpdatedAt,
+                    batchSize: batchSize
+                )
+                let args: [any DatabaseValueConvertible] = queryArgs.map { arg in
+                    switch arg {
+                    case .int(let v): return v
+                    case .text(let v): return v
+                    }
                 }
 
                 let dbRows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args))
@@ -333,8 +374,13 @@ actor AgentSyncService {
                     }
                 } else {
                     if let lastUpdatedAt = rows.last?["updatedAt"] as? String {
+                        // Advance BOTH updatedAt and id so the compound cursor can
+                        // resume within a run of rows sharing the same updatedAt
+                        // (otherwise a >batchSize same-timestamp bulk update loses
+                        // every row past the first page).
+                        let lastRowId = (rows.last?["id"] as? Int64) ?? cursor.lastId
                         cursors[spec.name] = SyncCursor(
-                            lastId: cursor.lastId,
+                            lastId: lastRowId,
                             lastUpdatedAt: lastUpdatedAt
                         )
                     }

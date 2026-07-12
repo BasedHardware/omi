@@ -5,6 +5,8 @@ separate axes. The pure composer accepts both for hermetic tests; the production
 resolver obtains cohort membership from the canonical memory owner.
 """
 
+# LIFECYCLE: permanent
+
 from models.task_intelligence import TaskIntelligenceRolloutDecision, TaskWorkflowMode
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 

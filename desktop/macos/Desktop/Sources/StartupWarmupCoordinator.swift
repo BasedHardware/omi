@@ -56,7 +56,7 @@ final class StartupWarmupCoordinator {
                 await MainActor.run { onCancel?() }
                 return
             }
-            guard await self.isCurrentSession(scope) else {
+            guard self.isCurrentSession(scope) else {
                 await MainActor.run { onCancel?() }
                 return
             }
@@ -116,7 +116,7 @@ final class StartupWarmupCoordinator {
         }
 
         guard await sleepForStartupDelay(StartupWarmupPolicy.deferredWarmupDelay) else { return }
-        guard await AuthState.shared.isSignedIn else {
+        guard AuthState.shared.isSignedIn else {
             log("DATA LOAD: Skipping DB lifecycle warmup because user is signed out")
             scheduleState.releaseDatabaseWarmup()
             return
@@ -201,12 +201,12 @@ final class StartupWarmupCoordinator {
 
             while !Task.isCancelled {
                 guard await self.sleepForStartupDelay(delay) else { return }
-                guard await self.isCurrentSession(scope) else {
+                guard self.isCurrentSession(scope) else {
                     await MainActor.run { self.sessionTasks[.databaseRetry] = nil }
                     return
                 }
                 let didRecover = await self.retryDatabaseInit()
-                guard await self.isCurrentSession(scope) else {
+                guard self.isCurrentSession(scope) else {
                     await MainActor.run { self.sessionTasks[.databaseRetry] = nil }
                     return
                 }

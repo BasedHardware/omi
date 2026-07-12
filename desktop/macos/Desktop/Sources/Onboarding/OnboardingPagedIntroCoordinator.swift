@@ -470,10 +470,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     let configuration = NSWorkspace.OpenConfiguration()
     configuration.activates = true
 
-    if let browserBundleId = LSCopyDefaultHandlerForURLScheme("https" as CFString)?
-      .takeRetainedValue() as String?,
-      let browserURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: browserBundleId)
-    {
+    if let browserURL = NSWorkspace.shared.urlForApplication(toOpen: url) {
       NSWorkspace.shared.open([url], withApplicationAt: browserURL, configuration: configuration) {
         _, error in
         if let error {

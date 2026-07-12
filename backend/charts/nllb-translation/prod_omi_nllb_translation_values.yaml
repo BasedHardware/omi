@@ -1,0 +1,130 @@
+replicaCount: 1
+
+image:
+  repository: gcr.io/based-hardware/nllb-translation
+  pullPolicy: IfNotPresent
+  tag: ""
+
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: false
+
+env:
+  - name: NLLB_MODEL_DIR
+    value: "/models/nllb-200-distilled-600M-ct2-int8"
+  - name: CT2_DEVICE
+    value: "cuda"
+  - name: CT2_COMPUTE_TYPE
+    value: "int8_float16"
+  - name: CT2_INTER_THREADS
+    value: "1"
+  - name: CT2_INTRA_THREADS
+    value: "4"
+  - name: NLLB_MAX_BATCH_SIZE
+    value: "64"
+  - name: NLLB_BEAM_SIZE
+    value: "1"
+  - name: NLLB_INFERENCE_WORKERS
+    value: "2"
+
+resources:
+  requests:
+    cpu: 2
+    memory: 8Gi
+    nvidia.com/gpu: 1
+  limits:
+    cpu: 4
+    memory: 16Gi
+    nvidia.com/gpu: 1
+
+livenessProbe:
+  tcpSocket:
+    port: 8080
+  failureThreshold: 10
+  periodSeconds: 30
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8080
+  failureThreshold: 30
+  periodSeconds: 10
+
+startupProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  failureThreshold: 120
+  periodSeconds: 10
+
+metrics:
+  enabled: true
+  port: 8080
+  path: /metrics
+  serviceMonitor:
+    enabled: true
+    interval: "15s"
+    labels:
+      release: prod-kube-prometheus-stack
+
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 2
+  targetCPUUtilizationPercentage: 70
+
+nodeSelector:
+  cloud.google.com/gke-accelerator: nvidia-l4
+  cloud.google.com/gke-nodepool: nllb-translation-pool
+
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+
+affinity: {}
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+initContainers:
+  - name: model-downloader
+    image: python:3.11-slim
+    command:
+      - sh
+      - -c
+      - |
+        if [ -f /models/nllb-200-distilled-600M-ct2-int8/model.bin ]; then
+          echo "Model already exists, skipping download"
+          exit 0
+        fi
+        pip install -q huggingface_hub
+        python3 -c "
+        from huggingface_hub import snapshot_download
+        snapshot_download('JustFrederik/nllb-200-distilled-600M-ct2-int8', local_dir='/models/nllb-200-distilled-600M-ct2-int8', revision='302d78f00e6fdb50a1064059df7c392b735e9d05')
+        "
+    volumeMounts:
+      - name: model-data
+        mountPath: /models
+
+volumeMounts:
+  - name: model-data
+    mountPath: /models
+    readOnly: true
+
+volumes:
+  - name: model-data
+    emptyDir:
+      sizeLimit: 2Gi

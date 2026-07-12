@@ -12,6 +12,11 @@ env:
   SERVICE: memory-maintenance-job
   REGION: us-central1
 
+# Share the lock with manual development deploys of this Cloud Run job.
+concurrency:
+  group: deploy-cloud-run-memory-maintenance-job-development
+  cancel-in-progress: false
+
 jobs:
   deploy:
     environment: development

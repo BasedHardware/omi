@@ -111,42 +111,49 @@ extension AppState {
 
   /// Trigger automation permission by attempting to use Apple Events
   nonisolated func triggerAutomationPermission() {
-    // Run a simple AppleScript to trigger the permission prompt
-    // This must be done on a background thread since it's nonisolated
+    // NSAppleScript is main-thread-only; each build+execute below runs on the
+    // main actor. The scripts are tiny (executeAndReturnError blocks only
+    // briefly) and the delays between them stay off-main. Keeping the NSDictionary
+    // error local to each MainActor.run block also avoids crossing a non-Sendable
+    // value back to this detached task.
     Task.detached {
       // First, ensure System Events is running — without it, the TCC prompt won't appear
       // and checkAutomationPermission returns -600 (procNotFound)
-      let launchScript = NSAppleScript(
-        source: """
-              launch application "System Events"
-          """)
-      var launchError: NSDictionary?
-      launchScript?.executeAndReturnError(&launchError)
-      if let launchError = launchError {
-        log("AUTOMATION_TRIGGER: Failed to launch System Events: \(launchError)")
-      } else {
-        log("AUTOMATION_TRIGGER: System Events launched successfully")
+      await MainActor.run {
+        let launchScript = NSAppleScript(
+          source: """
+                launch application "System Events"
+            """)
+        var launchError: NSDictionary?
+        launchScript?.executeAndReturnError(&launchError)
+        if let launchError = launchError {
+          log("AUTOMATION_TRIGGER: Failed to launch System Events: \(launchError)")
+        } else {
+          log("AUTOMATION_TRIGGER: System Events launched successfully")
+        }
       }
 
       // Small delay to let System Events initialize
       try? await Task.sleep(nanoseconds: 500_000_000)
 
       // Now trigger the actual TCC prompt
-      let script = NSAppleScript(
-        source: """
-              tell application "System Events"
-                  return name of first process whose frontmost is true
-              end tell
-          """)
-      var error: NSDictionary?
-      script?.executeAndReturnError(&error)
+      await MainActor.run {
+        let script = NSAppleScript(
+          source: """
+                tell application "System Events"
+                    return name of first process whose frontmost is true
+                end tell
+            """)
+        var error: NSDictionary?
+        script?.executeAndReturnError(&error)
 
-      if let error = error {
-        let errorNum = error[NSAppleScript.errorNumber] as? Int ?? 0
-        let errorMsg = error[NSAppleScript.errorMessage] as? String ?? "unknown"
-        log("AUTOMATION_TRIGGER: AppleScript failed: \(errorNum) - \(errorMsg)")
-      } else {
-        log("AUTOMATION_TRIGGER: AppleScript succeeded, permission may have been granted")
+        if let error = error {
+          let errorNum = error[NSAppleScript.errorNumber] as? Int ?? 0
+          let errorMsg = error[NSAppleScript.errorMessage] as? String ?? "unknown"
+          log("AUTOMATION_TRIGGER: AppleScript failed: \(errorNum) - \(errorMsg)")
+        } else {
+          log("AUTOMATION_TRIGGER: AppleScript succeeded, permission may have been granted")
+        }
       }
 
       // Re-check permission status after the TCC dialog
@@ -394,9 +401,12 @@ extension AppState {
       // -600 (procNotFound) = System Events not running — try to launch it and retry
       if status == -600 {
         log("AUTOMATION_CHECK: status=-600 (procNotFound), launching System Events and retrying...")
-        let launchScript = NSAppleScript(source: "launch application \"System Events\"")
-        var launchError: NSDictionary?
-        launchScript?.executeAndReturnError(&launchError)
+        // NSAppleScript is main-thread-only — build+execute on the main actor.
+        await MainActor.run {
+          let launchScript = NSAppleScript(source: "launch application \"System Events\"")
+          var launchError: NSDictionary?
+          launchScript?.executeAndReturnError(&launchError)
+        }
 
         // Wait for System Events to initialize
         try? await Task.sleep(nanoseconds: 1_000_000_000)

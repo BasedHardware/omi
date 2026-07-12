@@ -264,7 +264,7 @@ struct ConversationDetailView: View {
                                 isUser: isUser,
                                 personId: personId
                             )
-                            await updateDisplayedConversation(segmentIndices: segmentIndices, isUser: isUser, personId: personId)
+                            updateDisplayedConversation(segmentIndices: segmentIndices, isUser: isUser, personId: personId)
                         }
                         selectedSegmentForNaming = nil
                     }
@@ -919,9 +919,14 @@ struct ConversationDetailView: View {
                 Spacer()
             }
 
-            let memoryApps = appProvider.apps.filter {
-                $0.capabilities.contains("memories") &&
-                !displayConversation.appsResults.contains(where: { $0.appId == $0.id })
+            let memoryApps = appProvider.apps.filter { app in
+                // Name the outer element: inside the inner closure a bare `$0`
+                // shadows it, so `$0.appId == $0.id` compared an appsResults entry
+                // to itself (always true for any entry with a non-nil app_id, since
+                // AppResponse.id == appId ?? uuid), which excluded every app and
+                // left this section perpetually empty.
+                app.capabilities.contains("memories") &&
+                    !displayConversation.appsResults.contains(where: { $0.appId == app.id })
             }.prefix(4)
 
             if memoryApps.isEmpty && !appProvider.isLoading {

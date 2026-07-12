@@ -75,8 +75,20 @@ jobs:
       - name: Test brand UI ratchet helper
         run: python3 .github/scripts/test_check_brand_ui.py
 
+      - name: Test lifecycle header checker
+        run: python3 .github/scripts/test_check_lifecycle_headers.py
+
+      - name: Test version-prefixed filename lint
+        run: python3 .github/scripts/test_check_version_prefixed_filenames.py
+
       - name: Check desktop prod promotion policy
         run: python3 .github/scripts/check-desktop-prod-promotion-policy.py
+
+      - name: Test deployment concurrency policy
+        run: python3 .github/scripts/check-deployment-concurrency.py --self-test
+
+      - name: Check deployment concurrency policy
+        run: python3 .github/scripts/check-deployment-concurrency.py
 
       - name: Check desktop release terminology
         run: python3 .github/scripts/check-desktop-release-terminology.py

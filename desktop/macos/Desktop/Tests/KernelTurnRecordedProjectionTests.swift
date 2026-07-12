@@ -111,6 +111,55 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 1)
   }
 
+  /// Regression: the applied-key cache evicted an ARBITRARY 32 keys (hash-ordered
+  /// `suffix(32)` over an unordered Set), so after the cache exceeded its cap a
+  /// re-delivered turn_recorded whose key was randomly dropped could double-append.
+  /// Eviction now drops OLDEST-first, so keys that are still among the most-recent
+  /// survivors keep deduping. This applies enough distinct turns to force an
+  /// eviction, then re-delivers a band of keys the oldest-first policy guarantees
+  /// are retained — asserting zero duplicate appends.
+  func testDedupSurvivesEvictionOfMostRecentKeys() {
+    let provider = ChatProvider()
+    let projection = provider.kernelTurnProjection
+    let surface = provider.mainChatSurfaceReference()
+
+    func makeTurn(_ index: Int) -> AgentRuntimeProcess.KernelTurnRecorded {
+      .init(
+        conversationId: "conv-evict",
+        surfaceKind: surface.surfaceKind,
+        externalRefKind: surface.externalRefKind,
+        externalRefId: surface.externalRefId,
+        userText: "user-\(index)",
+        assistantText: "reply-\(index)",
+        origin: "realtime_voice",
+        interrupted: false,
+        idempotencyKey: "evict-key-\(index)",
+        userTurnId: nil,
+        assistantTurnId: nil
+      )
+    }
+
+    // 96 distinct turns exceeds the 64 cap → at least one eviction fires (trim to
+    // the most-recent 32). Under oldest-first eviction, keys 33..95 all remain
+    // tracked afterward.
+    let total = 96
+    for i in 0..<total {
+      projection.apply(makeTurn(i))
+    }
+    XCTAssertEqual(provider.messages.filter { $0.sender == .user }.count, total)
+
+    // Re-deliver keys 33..64 — the band that straddles the trim boundary and that
+    // the hash-ordered `suffix(32)` could have evicted, but oldest-first keeps.
+    for i in 33...64 {
+      projection.apply(makeTurn(i))
+    }
+
+    XCTAssertEqual(
+      provider.messages.filter { $0.sender == .user }.count, total,
+      "re-delivered turns whose keys are still tracked must not double-append")
+    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, total)
+  }
+
   func testRapidPTTRoleProjectionsShowEveryUserTurnBeforeFinalReply() {
     let provider = ChatProvider()
     let projection = provider.kernelTurnProjection

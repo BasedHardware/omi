@@ -125,8 +125,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       } else if (_isInitialLoad) {
         // Auto-focus the text field only on initial load, not on app switches
         Future.delayed(const Duration(milliseconds: 300), () {
+          if (!mounted) return;
           final voiceRecorderProvider = context.read<VoiceRecorderProvider>();
-          if (mounted && !voiceRecorderProvider.isActive && _isInitialLoad) {
+          if (!voiceRecorderProvider.isActive && _isInitialLoad) {
             textFieldFocusNode.requestFocus();
           }
         });
