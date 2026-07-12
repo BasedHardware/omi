@@ -1,4 +1,3 @@
-import Combine
 import CoreBluetooth
 import Foundation
 import os.log
@@ -24,39 +23,58 @@ final class BeeDeviceConnection: BaseDeviceConnection {
     private let logger = Logger(subsystem: "me.omi.desktop", category: "BeeDeviceConnection")
 
     private var audioBuffer = [UInt8]()
-    private var audioStreamSubject = PassthroughSubject<Data, Error>()
     private var controlSubscription: Task<Void, Never>?
     private var audioSubscription: Task<Void, Never>?
-    private var responseCompleters: [UInt16: CheckedContinuation<[UInt8]?, Never>] = [:]
-    private var isRecording = false
+    private let responseOperations: DeviceOperationBroker<UInt16, Data>
+    private let responseGate = UncorrelatedOperationGate<UInt16>()
+    private let commandQueue = DeviceCommandQueue()
+    private var audioStartAttempted = false
+    private lazy var audioStreamController = DeviceAudioStreamController(
+        start: { [weak self] in
+            guard let self else { throw DeviceTransportError.disposed }
+            try await self.startAudioSession()
+        },
+        stop: { [weak self] in
+            guard let self else { return }
+            try await self.stopAudioSession()
+        }
+    )
 
     // MARK: - Initialization
 
-    override init(device: BtDevice, transport: DeviceTransport) {
-        super.init(device: device, transport: transport)
+    override init(
+        device: BtDevice,
+        transport: DeviceTransport,
+        operationClock: any DeviceOperationClock = ContinuousDeviceOperationClock()
+    ) {
+        self.responseOperations = DeviceOperationBroker(clock: operationClock)
+        super.init(
+            device: device,
+            transport: transport,
+            operationClock: operationClock
+        )
     }
 
     // MARK: - Connection
 
-    override func connect() async throws {
-        try await super.connect()
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
+    override func prepareDeviceAfterConnect() async throws {
+        try await operationClock.sleep(for: .seconds(1))
 
         startControlListener()
         startAudioListener()
     }
 
-    override func disconnect() async {
-        if isRecording {
-            _ = try? await sendCommand(cmdId: Command.mute, payload: [0x00])
-        }
+    override func teardownDevice() async {
+        await audioStreamController.finish()
+        await commandQueue.close()
+        audioBuffer.removeAll(keepingCapacity: false)
 
         controlSubscription?.cancel()
         audioSubscription?.cancel()
         controlSubscription = nil
         audioSubscription = nil
-
-        await super.disconnect()
+        await responseOperations.cancelAll(reason: .disconnected)
+        responseGate.reset()
     }
 
     // MARK: - Listeners
@@ -88,7 +106,7 @@ final class BeeDeviceConnection: BaseDeviceConnection {
             do {
                 for try await data in stream {
                     if let frame = self?.processAudioPacket(Array(data)) {
-                        self?.audioStreamSubject.send(Data(frame))
+                        self?.audioStreamController.yield(Data(frame))
                     }
                 }
             } catch {
@@ -99,7 +117,9 @@ final class BeeDeviceConnection: BaseDeviceConnection {
 
     // MARK: - Response Handling
 
-    private func handleControlResponse(_ data: [UInt8]) {
+    /// Parses one physical control notification. Internal for deterministic
+    /// command-correlation tests without Bluetooth hardware.
+    func handleControlResponse(_ data: [UInt8]) {
         guard data.count >= 2 else { return }
 
         let responseCode = UInt16(data[0]) | (UInt16(data[1]) << 8)
@@ -110,18 +130,26 @@ final class BeeDeviceConnection: BaseDeviceConnection {
             let echoedCmd = UInt16(payload[0]) | (UInt16(payload[1]) << 8)
             let actualPayload = payload.count > 2 ? Array(payload.dropFirst(2)) : []
 
-            if let continuation = responseCompleters.removeValue(forKey: echoedCmd) {
-                continuation.resume(returning: actualPayload)
-            }
-        } else if let continuation = responseCompleters.removeValue(forKey: responseCode) {
-            continuation.resume(returning: payload)
+            completeResponse(commandID: echoedCmd, payload: actualPayload)
+        } else {
+            completeResponse(commandID: responseCode, payload: payload)
+        }
+    }
+
+    private func completeResponse(commandID: UInt16, payload: [UInt8]) {
+        guard let handle = responseGate.takeHandleForCallback(key: commandID) else { return }
+        Task {
+            await responseOperations.succeed(
+                handle: handle,
+                value: Data(payload)
+            )
         }
     }
 
     // MARK: - Audio Processing
 
     /// Process AAC audio packet with ADTS framing
-    private func processAudioPacket(_ data: [UInt8]) -> [UInt8]? {
+    func processAudioPacket(_ data: [UInt8]) -> [UInt8]? {
         guard data.count >= 2 else { return nil }
 
         audioBuffer.append(contentsOf: data.dropFirst(2))
@@ -140,7 +168,7 @@ final class BeeDeviceConnection: BaseDeviceConnection {
     /// at the head and every later packet re-hit it — audio went permanently
     /// silent while the buffer grew without bound. Treat `< 7` as a false sync and
     /// advance one byte so the scanner keeps making progress.
-    static func nextADTSFrame(from buffer: inout [UInt8]) -> [UInt8]? {
+    nonisolated static func nextADTSFrame(from buffer: inout [UInt8]) -> [UInt8]? {
         while buffer.count >= 7 {
             // Look for ADTS sync word (0xFF 0xFx)
             guard buffer[0] == 0xFF, (buffer[1] & 0xF0) == 0xF0 else {
@@ -172,24 +200,44 @@ final class BeeDeviceConnection: BaseDeviceConnection {
     // MARK: - Command Sending
 
     private func sendCommand(cmdId: UInt16, payload: [UInt8]) async throws -> [UInt8]? {
+        try await commandQueue.run { [weak self] in
+            guard let self else { throw DeviceTransportError.disposed }
+            return try await self.sendCommandSerially(cmdId: cmdId, payload: payload)
+        }
+    }
+
+    private func sendCommandSerially(cmdId: UInt16, payload: [UInt8]) async throws -> [UInt8]? {
+        guard responseGate.canStart(cmdId) else {
+            throw DeviceConnectionError.operationFailed(
+                "A previous command response is ambiguous; reconnect the device"
+            )
+        }
         let command: [UInt8] = [UInt8(cmdId & 0xFF), UInt8((cmdId >> 8) & 0xFF)] + payload
 
-        try await transport.writeCharacteristic(
-            data: Data(command),
-            serviceUUID: DeviceUUIDs.Bee.service,
-            characteristicUUID: CBUUID(string: Self.controlCharacteristicUUID),
-            withResponse: true
-        )
-
-        return await withCheckedContinuation { continuation in
-            responseCompleters[cmdId] = continuation
-
-            Task {
-                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 second timeout
-                if let cont = responseCompleters.removeValue(forKey: cmdId) {
-                    cont.resume(returning: nil)
+        do {
+            let response = try await responseOperations.perform(
+                key: cmdId,
+                timeout: .seconds(5),
+                onTerminal: { [weak self] handle, termination in
+                    self?.responseGate.terminal(handle: handle, termination: termination)
                 }
+            ) { [weak self] handle in
+                guard let self else { throw DeviceTransportError.disposed }
+                guard self.responseGate.register(handle) else {
+                    throw DeviceConnectionError.operationFailed(
+                        "Command callback identity is no longer trustworthy"
+                    )
+                }
+                try await self.transport.writeCharacteristic(
+                    data: Data(command),
+                    serviceUUID: DeviceUUIDs.Bee.service,
+                    characteristicUUID: CBUUID(string: Self.controlCharacteristicUUID),
+                    withResponse: true
+                )
             }
+            return Array(response)
+        } catch DeviceOperationBrokerError.timedOut {
+            return nil
         }
     }
 
@@ -228,7 +276,7 @@ final class BeeDeviceConnection: BaseDeviceConnection {
     override func getBatteryLevelStream() -> AsyncThrowingStream<Int, Error> {
         // Bee uses command-based battery retrieval, poll every 60 seconds
         return AsyncThrowingStream { [weak self] continuation in
-            Task { [weak self] in
+            let pollingTask = Task { [weak self] in
                 guard let self = self else {
                     continuation.finish()
                     return
@@ -245,7 +293,12 @@ final class BeeDeviceConnection: BaseDeviceConnection {
 
                 // Poll every 60 seconds
                 while await self.isConnected() {
-                    try? await Task.sleep(nanoseconds: 60_000_000_000)
+                    do {
+                        try await self.operationClock.sleep(for: .seconds(60))
+                    } catch {
+                        break
+                    }
+                    guard !Task.isCancelled else { break }
 
                     let level = await self.getBatteryLevel()
                     if level >= 0 && level != lastLevel {
@@ -255,6 +308,9 @@ final class BeeDeviceConnection: BaseDeviceConnection {
                 }
 
                 continuation.finish()
+            }
+            continuation.onTermination = { @Sendable _ in
+                pollingTask.cancel()
             }
         }
     }
@@ -266,37 +322,67 @@ final class BeeDeviceConnection: BaseDeviceConnection {
     }
 
     override func getAudioStream() -> AsyncThrowingStream<Data, Error> {
-        return AsyncThrowingStream { [weak self] continuation in
-            guard let self = self else {
-                continuation.finish()
-                return
-            }
+        audioStreamController.makeStream()
+    }
 
-            Task { [weak self] in
-                guard let self = self else {
-                    continuation.finish()
-                    return
-                }
+    private func startAudioSession() async throws {
+        audioBuffer.removeAll(keepingCapacity: true)
+        audioStartAttempted = true
+        guard try await sendCommand(cmdId: Command.unmute, payload: [0x01]) != nil else {
+            throw DeviceConnectionError.operationFailed("Bee did not acknowledge audio start")
+        }
+    }
 
-                // Send unmute command to start audio
-                _ = try? await self.sendCommand(cmdId: Command.unmute, payload: [0x01])
-                self.isRecording = true
+    private func stopAudioSession() async throws {
+        // Notifications can still arrive while the mute acknowledgement is in
+        // flight. Clear both before and after teardown so no partial AAC frame
+        // can cross the physical recording-session boundary.
+        defer { audioBuffer.removeAll(keepingCapacity: true) }
+        audioBuffer.removeAll(keepingCapacity: true)
+        guard audioStartAttempted else { return }
+        audioStartAttempted = false
 
-                let cancellable = self.audioStreamSubject
-                    .sink(
-                        receiveCompletion: { _ in continuation.finish() },
-                        receiveValue: { data in continuation.yield(data) }
+        if responseGate.canStart(Command.mute) {
+            do {
+                guard try await sendCommand(cmdId: Command.mute, payload: [0x00]) != nil else {
+                    throw DeviceConnectionError.operationFailed(
+                        "Bee did not acknowledge audio stop"
                     )
-
-                continuation.onTermination = { @Sendable _ in
-                    cancellable.cancel()
-                    Task { @MainActor in
-                        self.isRecording = false
-                        _ = try? await self.sendCommand(cmdId: Command.mute, payload: [0x00])
-                    }
                 }
+                return
+            } catch {
+                await transport.disconnect()
+                throw error
             }
         }
+
+        // Unmute and mute share one uncorrelated device command ID. If setup
+        // was cancelled after the unmute write, its response key is poisoned;
+        // issue the compensating mute directly on the still-valid BLE write
+        // channel, then retire the physical session rather than reopening that
+        // command ID and risking a late mute response aliasing a new unmute.
+        let command = [
+            UInt8(Command.mute & 0xFF),
+            UInt8((Command.mute >> 8) & 0xFF),
+            0x00,
+        ]
+        do {
+            try await commandQueue.run { [weak self] in
+                guard let self else { throw DeviceTransportError.disposed }
+                try await self.transport.writeCharacteristic(
+                    data: Data(command),
+                    serviceUUID: DeviceUUIDs.Bee.service,
+                    characteristicUUID: CBUUID(string: Self.controlCharacteristicUUID),
+                    withResponse: true
+                )
+            }
+        } catch {
+            logger.debug("Compensating Bee mute could not be confirmed: \(error.localizedDescription)")
+        }
+        await transport.disconnect()
+        throw DeviceConnectionError.operationFailed(
+            "Bee audio command identity is ambiguous; reconnect the device"
+        )
     }
 
     // MARK: - Unsupported Features

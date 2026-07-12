@@ -119,7 +119,7 @@ final class AudioSourceManager: ObservableObject {
             .store(in: &cancellables)
 
         // Monitor device connection state
-        deviceProvider.$isConnected
+        deviceProvider.isConnectedPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] isConnected in
                 self?.handleDeviceConnectionChanged(isConnected: isConnected)
