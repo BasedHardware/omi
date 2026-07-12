@@ -9,8 +9,6 @@ Pinned against a fake Firestore via patch.object on the db proxy, no live servic
 import os
 from unittest.mock import MagicMock, patch
 
-from google.api_core.exceptions import NotFound
-
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
@@ -44,9 +42,11 @@ def test_update_person_existing_updates_and_returns_true():
 
 def test_update_person_deleted_between_check_and_update_returns_false():
     # The person passes the existence check but is deleted before .update() lands, so Firestore
-    # raises NotFound. That race must still 404, not surface as a 500.
+    # raises NotFound. That race must still 404, not surface as a 500. Use users_db.NotFound (the exact
+    # class update_person catches) rather than importing google.api_core here, so this test is not
+    # broken by another test in the full suite that stubs the google namespace in sys.modules.
     fake_db = MagicMock()
     ref = _person_ref(fake_db, exists=True)
-    ref.update.side_effect = NotFound("person deleted mid-rename")
+    ref.update.side_effect = users_db.NotFound("person deleted mid-rename")
     with patch.object(users_db, "db", fake_db):
         assert users_db.update_person("u1", "racing", "Alice") is False
