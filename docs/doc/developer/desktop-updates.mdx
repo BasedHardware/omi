@@ -60,6 +60,23 @@ This uses a dedicated detached worktree and `/Applications/omi-main.app`. It nev
 
 Static GCS/CDN appcast delivery remains a follow-up. The existing beta download redirect may still be maintained, but it is not the source of channel truth.
 
+## Stable repair installer
+
+Stable promotion publishes an immutable repair DMG and its SHA-256 manifest to
+`gs://omi_macos_updates/stable/<release-tag>/`. It first uses a create-only GCS
+generation precondition; a retry is accepted only when the existing bytes are
+identical. The artifact and versioned manifest are externally probed before
+either legacy or pointer-based stable visibility can move. After the Firestore
+stable pointer advances, the workflow updates the no-cache `stable/index.html`
+landing page and `stable/latest.json` manifest to reference that exact
+immutable DMG. This gives support a recovery link that does not depend on
+runtime GitHub enumeration or the appcast endpoint.
+
+The public stable repair page is
+`https://storage.googleapis.com/omi_macos_updates/stable/index.html`. Confirm
+the bucket and public-read/CDN configuration before a stable promotion; the
+workflow probes the versioned DMG and manifest before it advances the pointer.
+
 ## First rollout after merge
 
 Merging this control-plane change does not make a beta live. For the first rollout:
