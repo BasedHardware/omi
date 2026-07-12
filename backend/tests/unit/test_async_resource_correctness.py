@@ -259,7 +259,8 @@ rename to backend/routers/new_name.py
 
     scope = scanner.changed_scope("origin/main", ["backend/routers"])
 
-    assert "--diff-filter=ACMR" in captured["cmd"]
+    assert "--no-renames" in captured["cmd"]
+    assert "--diff-filter=ACMRTD" in captured["cmd"]
     assert scope["ranges"]["backend/routers/example.py"] == [(42, 42)]
     assert scope["ranges"]["backend/routers/new_name.py"] == [(10, 10)]
     assert scanner.finding_in_changed_scope(

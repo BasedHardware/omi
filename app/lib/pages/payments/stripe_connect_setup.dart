@@ -219,7 +219,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                                       if (url != null) {
                                         provider.startStripePolling();
                                         await launchUrl(Uri.parse(url));
-                                      } else {
+                                      } else if (context.mounted) {
                                         AppSnackbar.showSnackbarError(context.l10n.errorConnectingToStripe);
                                       }
                                     }
@@ -282,7 +282,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                                 if (res != null) {
                                   provider.startStripePolling();
                                   await launchUrl(Uri.parse(res));
-                                } else {
+                                } else if (context.mounted) {
                                   AppSnackbar.showSnackbarError(context.l10n.errorConnectingToStripe);
                                 }
                               },
@@ -358,7 +358,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                                 if (url != null) {
                                   provider.startStripePolling();
                                   await launchUrl(Uri.parse(url));
-                                } else {
+                                } else if (context.mounted) {
                                   AppSnackbar.showSnackbarError(context.l10n.errorUpdatingStripeDetails);
                                 }
                               },

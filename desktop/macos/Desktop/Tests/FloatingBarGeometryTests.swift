@@ -44,6 +44,30 @@ final class FloatingBarGeometryTests: XCTestCase {
         )
     }
 
+    func testScreenChangeReconcilesTheFloatingBarPresentationAndFrame() throws {
+        // omi-test-quality: source-inspection -- static contract: AppKit delegate callback must retain the reconciliation wiring
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("Sources/FloatingControlBar/FloatingControlBarWindow.swift"),
+            encoding: .utf8
+        )
+        guard let methodStart = source.range(of: "func windowDidChangeScreen(_ notification: Notification)") else {
+            return XCTFail("Expected the floating bar to reconcile direct window screen changes")
+        }
+        guard let nextMethod = source.range(of: "func windowDidResignKey", range: methodStart.upperBound..<source.endIndex) else {
+            return XCTFail("Expected windowDidChangeScreen to precede the next window delegate method")
+        }
+
+        let method = String(source[methodStart.lowerBound..<nextMethod.lowerBound])
+        XCTAssertTrue(method.contains("let previousUsesNotchIsland = state.usesNotchIsland"))
+        XCTAssertTrue(method.contains("updateNotchIslandState()"))
+        XCTAssertTrue(method.contains("guard !state.showingAIConversation else { return }"))
+        XCTAssertTrue(method.contains("frameForCurrentState(on: screen, usesNotchIsland: state.usesNotchIsland)"))
+        XCTAssertTrue(method.contains("resizeToFrame("))
+    }
+
     func testTopCenterExpansionKeepsTopEdgeAndHorizontalCenterFixed() {
         let compactFrame = NSRect(x: 586, y: 876, width: 268, height: 58)
         let expandedFrame = FloatingControlBarGeometry.topCenterAnchoredFrame(
@@ -77,6 +101,65 @@ final class FloatingBarGeometryTests: XCTestCase {
         XCTAssertEqual(agentListFrame.midX, displayFrame.midX)
         XCTAssertEqual(collapsedFrame.origin.x, 680)
         XCTAssertLessThanOrEqual(abs(collapsedFrame.midX - displayFrame.midX), 0.5)
+    }
+
+    func testNotchSurfaceStateSequenceStaysCenteredAndTopAnchoredOnOffsetDisplay() {
+        let screenFrame = NSRect(x: 1920, y: -100, width: 1728, height: 1117)
+        let shiftedTransientFrame = NSRect(x: 2637, y: 959, width: 351, height: 58)
+        let glowOutset = NSSize(
+            width: FloatingControlBarWindow.notchGlowOutsetX * 2,
+            height: FloatingControlBarWindow.notchGlowOutsetBottom
+        )
+        let pttSurfaceSize = NSSize(
+            width: FloatingControlBarWindow.notchHiddenCenterWidth
+                + FloatingControlBarWindow.notchActiveSideWidth * 2,
+            height: FloatingControlBarWindow.notchChromeHeight
+        )
+        let agentListSurfaceSize = NSSize(
+            width: FloatingControlBarWindow.notchExpandedWidth,
+            height: FloatingControlBarWindow.notchChromeHeight
+                + FloatingControlBarWindow.notchHoverMenuHeight(agentCount: 3)
+        )
+        let collapsedSurfaceSize = NSSize(
+            width: FloatingControlBarWindow.notchHiddenCenterWidth
+                + FloatingControlBarWindow.notchCompactSideWidth * 2,
+            height: FloatingControlBarWindow.notchChromeHeight
+        )
+        func windowSize(_ surfaceSize: NSSize) -> NSSize {
+            NSSize(
+                width: surfaceSize.width + glowOutset.width,
+                height: surfaceSize.height + glowOutset.height
+            )
+        }
+
+        let placement = FloatingControlBarGeometry.SurfacePlacement.notch(screenFrame: screenFrame)
+        let pttFrame = FloatingControlBarGeometry.surfaceTransitionFrame(
+            currentFrame: shiftedTransientFrame,
+            targetSize: windowSize(pttSurfaceSize),
+            transition: .pushToTalk(expanded: true),
+            placement: placement
+        )
+        let agentListFrame = FloatingControlBarGeometry.surfaceTransitionFrame(
+            currentFrame: pttFrame,
+            targetSize: windowSize(agentListSurfaceSize),
+            transition: .agentSwitcher(visible: true),
+            placement: placement
+        )
+        let collapsedFrame = FloatingControlBarGeometry.surfaceTransitionFrame(
+            currentFrame: agentListFrame,
+            targetSize: windowSize(collapsedSurfaceSize),
+            transition: .agentSwitcher(visible: false),
+            placement: placement
+        )
+
+        XCTAssertNotEqual(shiftedTransientFrame.midX, screenFrame.midX)
+        XCTAssertEqual(pttFrame.size, windowSize(pttSurfaceSize))
+        XCTAssertEqual(agentListFrame.size, windowSize(agentListSurfaceSize))
+        XCTAssertEqual(collapsedFrame.size, windowSize(collapsedSurfaceSize))
+        for frame in [pttFrame, agentListFrame, collapsedFrame] {
+            XCTAssertEqual(frame.midX, screenFrame.midX, accuracy: 0.5)
+            XCTAssertEqual(frame.maxY, screenFrame.maxY)
+        }
     }
 
     func testNotchIslandExpansionRecentersShiftedPanelOnDisplay() {
@@ -168,6 +251,31 @@ final class FloatingBarGeometryTests: XCTestCase {
         XCTAssertEqual(collapsedFrame.midX, shiftedVoiceFrame.midX)
         XCTAssertEqual(collapsedFrame.midY, shiftedVoiceFrame.midY)
         XCTAssertEqual(collapsedFrame.size, compactSize)
+    }
+
+    func testDraggablePillPTTSequencePreservesUserCenter() {
+        let draggedPillFrame = NSRect(x: 184, y: 612, width: compactSize.width, height: compactSize.height)
+        let placement = FloatingControlBarGeometry.SurfacePlacement.pill(
+            draggable: true,
+            canonicalCompactFrame: draggedPillFrame
+        )
+        let expandedFrame = FloatingControlBarGeometry.surfaceTransitionFrame(
+            currentFrame: draggedPillFrame,
+            targetSize: voiceSize,
+            transition: .pushToTalk(expanded: true),
+            placement: placement
+        )
+        let collapsedFrame = FloatingControlBarGeometry.surfaceTransitionFrame(
+            currentFrame: expandedFrame,
+            targetSize: compactSize,
+            transition: .pushToTalk(expanded: false),
+            placement: placement
+        )
+
+        XCTAssertEqual(expandedFrame.midX, draggedPillFrame.midX)
+        XCTAssertEqual(expandedFrame.midY, draggedPillFrame.midY)
+        XCTAssertEqual(collapsedFrame.midX, draggedPillFrame.midX)
+        XCTAssertEqual(collapsedFrame.midY, draggedPillFrame.midY)
     }
 
     func testNotchChromeActivationIgnoresTransparentBottomOutset() {

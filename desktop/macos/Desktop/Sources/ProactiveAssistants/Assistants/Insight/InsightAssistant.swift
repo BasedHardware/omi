@@ -137,8 +137,14 @@ actor InsightAssistant: ProactiveAssistant {
             // Grab the latest frame (may have been updated or cleared during sleep)
             guard let frame = pendingFrame else { continue }
             pendingFrame = nil
+            // Capture the previous analysis time BEFORE advancing it: the activity
+            // lookback window is "since the last analysis", so it must use the prior
+            // timestamp. Overwriting lastAnalysisTime first (and then reading it in
+            // extractAdvice) collapsed the window to ~0s, leaving every insight run
+            // with an empty activity summary.
+            let previousAnalysisTime = lastAnalysisTime
             lastAnalysisTime = Date()
-            await processFrame(frame)
+            await processFrame(frame, since: previousAnalysisTime)
         }
 
         log("Advice assistant stopped")
@@ -463,10 +469,10 @@ actor InsightAssistant: ProactiveAssistant {
 
     // MARK: - Analysis
 
-    private func processFrame(_ frame: CapturedFrame) async {
+    private func processFrame(_ frame: CapturedFrame, since previousAnalysisTime: Date) async {
         guard await isEnabled else { return }
         do {
-            guard let result = try await extractAdvice(from: frame) else {
+            guard let result = try await extractAdvice(from: frame, since: previousAnalysisTime) else {
                 return
             }
 
@@ -481,10 +487,14 @@ actor InsightAssistant: ProactiveAssistant {
         }
     }
 
-    private func extractAdvice(from frame: CapturedFrame) async throws -> InsightExtractionResult? {
+    private func extractAdvice(from frame: CapturedFrame, since previousAnalysisTime: Date) async throws
+        -> InsightExtractionResult?
+    {
         let now = Date()
-        // Cap lookback: since last analysis or max 1 hour ago
-        let lookbackStart = max(lastAnalysisTime, now.addingTimeInterval(-3600))
+        // Cap lookback: since last analysis or max 1 hour ago. Uses the previous
+        // analysis time captured before the loop advanced lastAnalysisTime — not
+        // the just-overwritten instance value (which would make the window ~0s).
+        let lookbackStart = max(previousAnalysisTime, now.addingTimeInterval(-3600))
         let (result, _) = try await runAdviceExtraction(
             jpegData: nil,
             appName: frame.appName,
@@ -583,7 +593,7 @@ actor InsightAssistant: ProactiveAssistant {
         var chosenScreenshotId: Int64?
         var investigationFindings: String?
 
-        for iteration in 0..<7 {
+        phase1Loop: for iteration in 0..<7 {
             let iterContents = contents
             let iterSystemPrompt = currentSystemPrompt
             let iterTools = [phase1Tools]
@@ -662,8 +672,11 @@ actor InsightAssistant: ProactiveAssistant {
                 ), sqlCount)
 
             default:
+                // `break` alone only exits the switch, leaving chosenScreenshotId
+                // nil, so the loop re-sent the identical request. Break the labeled
+                // loop to actually abort on an unknown tool call.
                 log("Insight: P1 unknown tool: \(toolCall.name), breaking")
-                break
+                break phase1Loop
             }
 
             // Break out of loop if request_screenshot was called

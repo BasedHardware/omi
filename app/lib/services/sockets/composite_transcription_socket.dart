@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
-
 import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -91,9 +89,13 @@ class CompositeTranscriptionSocket implements IPureSocket {
     CustomSttLogService.instance.info('Composite', 'Disconnecting...');
     DebugLogManager.logEvent('composite_socket_disconnecting', {});
 
+    // Mark disconnected before touching the children: their disconnect()
+    // fires onClosed, which would otherwise hit _onSocketClosed while the
+    // composite still looks connected and trigger a spurious
+    // "socket closed unexpectedly" teardown on top of this intentional one.
+    _status = PureSocketStatus.disconnected;
     await _disconnectBothQuietly();
 
-    _status = PureSocketStatus.disconnected;
     onClosed();
   }
 
@@ -102,9 +104,9 @@ class CompositeTranscriptionSocket implements IPureSocket {
     CustomSttLogService.instance.info('Composite', 'Stopping...');
     DebugLogManager.logEvent('composite_socket_stopping', {});
 
-    await Future.wait([primarySocket.stop(), secondarySocket.stop()]);
-
+    // Same ordering requirement as disconnect().
     _status = PureSocketStatus.disconnected;
+    await Future.wait([primarySocket.stop(), secondarySocket.stop()]);
   }
 
   /// Called when either socket closes unexpectedly

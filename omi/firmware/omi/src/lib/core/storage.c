@@ -47,7 +47,7 @@ LOG_MODULE_REGISTER(storage, CONFIG_LOG_DEFAULT_LEVEL);
 #define STORAGE_CONTROL_NOTIFY_SIZE 32
 #define STORAGE_NOTIFY_VALUE_MAX_LEN ((CONFIG_BT_L2CAP_TX_MTU > 3U) ? (CONFIG_BT_L2CAP_TX_MTU - 3U) : 20U)
 
-#define SYNC_SPEED_LOG_INTERVAL_MS (30 * 1000)
+#define SYNC_SPEED_LOG_INTERVAL_MS (2 * 1000)
 
 static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t storage_write_handler(struct bt_conn *conn,
@@ -104,6 +104,13 @@ static uint8_t read_request_pending;
 static uint8_t advance_request_pending;
 static uint8_t stop_requested;
 
+/* On connect the SD may still be remounting. Hold a sync request and wait up to
+ * this long for the card to become ready, then read -- instead of replying
+ * "not ready" (the app only triggers sync once, so it would give up). */
+#define STORAGE_SD_READY_TIMEOUT_MS 5000
+static int64_t info_deadline;
+static int64_t read_deadline;
+
 static uint64_t pending_start_seq;
 static uint32_t pending_packet_count;
 static uint64_t pending_advance_seq;
@@ -127,6 +134,10 @@ typedef enum {
     SYNC_SPEED_MODE_BLE,
 } sync_speed_mode_t;
 
+/* Sync-speed metering is purely a logging aid. Compile it out entirely when
+ * logging is disabled (release build) so it costs nothing on the transfer hot
+ * path. */
+#if defined(CONFIG_LOG)
 static sync_speed_mode_t sync_speed_mode = SYNC_SPEED_MODE_NONE;
 static int64_t sync_speed_window_start_ms;
 static uint64_t sync_speed_window_bytes;
@@ -155,6 +166,16 @@ static void sync_speed_add_bytes(uint32_t bytes)
         sync_speed_window_bytes = 0;
     }
 }
+#else
+static inline void sync_speed_reset(sync_speed_mode_t mode)
+{
+    ARG_UNUSED(mode);
+}
+static inline void sync_speed_add_bytes(uint32_t bytes)
+{
+    ARG_UNUSED(bytes);
+}
+#endif /* CONFIG_LOG */
 
 static void storage_status_cache_set(const sd_ring_info_t *info)
 {
@@ -206,6 +227,47 @@ static int storage_notify(struct bt_conn *conn, const void *data, uint16_t len)
     }
 
     return bt_gatt_notify(conn, &storage_service.attrs[STORAGE_WRITE_NOTIFY_ATTR_IDX], data, len);
+}
+
+/* Completion callback: a bulk DATA notification was sent, free its throttle slot. */
+static void storage_data_tx_done(struct bt_conn *conn, void *user_data)
+{
+    ARG_UNUSED(conn);
+    ARG_UNUSED(user_data);
+    transport_bulk_tx_release();
+}
+
+/* Send a bulk DATA notification through the shared TX throttle so the sync
+ * stream never consumes the TX buffers reserved for short control notifications
+ * (battery / charging / status). Returns the same codes as storage_notify():
+ * 0 on success, -EAGAIN if unsubscribed, -ENOMEM if no throttle slot / no buffer
+ * (caller yields and retries). */
+static int storage_notify_data(struct bt_conn *conn, const void *data, uint16_t len)
+{
+    if (!storage_notify_ready(conn)) {
+        return -EAGAIN;
+    }
+
+    /* Reserve a shared slot; short timeout so a stalled link doesn't hang the
+     * transfer -> falls back to the -ENOMEM yield/retry path. */
+    if (transport_bulk_tx_acquire(K_MSEC(200)) != 0) {
+        return -ENOMEM;
+    }
+
+    struct bt_gatt_notify_params params = {
+        .attr = &storage_service.attrs[STORAGE_WRITE_NOTIFY_ATTR_IDX],
+        .data = data,
+        .len = len,
+        .func = storage_data_tx_done,
+        .user_data = NULL,
+    };
+
+    int err = bt_gatt_notify_cb(conn, &params);
+    if (err) {
+        /* Callback will not fire -> release the slot we just took. */
+        transport_bulk_tx_release();
+    }
+    return err;
 }
 
 static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value)
@@ -348,9 +410,7 @@ static int start_pending_read(struct bt_conn *conn)
     current_read_seq = pending_start_seq;
     remaining_packets = requested_packets;
     transfer_end_status = 0;
-    sync_speed_mode = SYNC_SPEED_MODE_NONE;
-    sync_speed_window_bytes = 0;
-    sync_speed_window_start_ms = 0;
+    sync_speed_reset(SYNC_SPEED_MODE_NONE);
 
     return 0;
 }
@@ -395,9 +455,11 @@ static void write_to_gatt(struct bt_conn *conn)
         return;
     }
 
+#if defined(CONFIG_LOG)
     if (sync_speed_mode != SYNC_SPEED_MODE_BLE) {
         sync_speed_reset(SYNC_SPEED_MODE_BLE);
     }
+#endif
 
     uint16_t ble_chunk = get_ble_data_chunk_size(conn);
 
@@ -433,7 +495,7 @@ static void write_to_gatt(struct bt_conn *conn)
             data_notify_buf[0] = NOTIFY_DATA;
             memcpy(data_notify_buf + 1, storage_buffer + bytes_sent, payload);
 
-            int err = storage_notify(conn, data_notify_buf, payload + 1U);
+            int err = storage_notify_data(conn, data_notify_buf, payload + 1U);
             if (err == -ENOMEM) {
                 k_yield();
                 if (consume_stop_request()) {
@@ -561,9 +623,22 @@ static void storage_write(void)
         }
 
         if (info_requested) {
-            info_requested = 0;
-            if (conn) {
+            if (!conn) {
+                info_requested = 0;
+                info_deadline = 0;
+            } else if (sd_is_ready()) {
                 (void) send_ring_info_response(conn);
+                info_requested = 0;
+                info_deadline = 0;
+            } else {
+                /* SD still remounting after connect: wait for it, up to timeout. */
+                if (info_deadline == 0) {
+                    info_deadline = k_uptime_get() + STORAGE_SD_READY_TIMEOUT_MS;
+                } else if (k_uptime_get() >= info_deadline) {
+                    (void) send_ack(conn, STORAGE_NOT_READY);
+                    info_requested = 0;
+                    info_deadline = 0;
+                }
             }
         }
 
@@ -590,11 +665,23 @@ static void storage_write(void)
         }
 
         if (read_request_pending) {
-            read_request_pending = 0;
-            if (conn) {
+            if (!conn) {
+                read_request_pending = 0;
+                read_deadline = 0;
+            } else if (sd_is_ready()) {
                 int ret = start_pending_read(conn);
                 if (ret < 0) {
                     (void) send_ack(conn, storage_status_from_error(ret, STORAGE_NOT_READY));
+                }
+                read_request_pending = 0;
+                read_deadline = 0;
+            } else {
+                if (read_deadline == 0) {
+                    read_deadline = k_uptime_get() + STORAGE_SD_READY_TIMEOUT_MS;
+                } else if (k_uptime_get() >= read_deadline) {
+                    (void) send_ack(conn, STORAGE_NOT_READY);
+                    read_request_pending = 0;
+                    read_deadline = 0;
                 }
             }
         }

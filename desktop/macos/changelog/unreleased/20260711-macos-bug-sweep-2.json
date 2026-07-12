@@ -1,0 +1,3 @@
+{
+  "change": "Fixed more reliability issues: Rewind's 'Rebuild Index' recovery now actually restores your video history, task search no longer returns the wrong task, screen-file indexing no longer drops your files when a folder is temporarily unreadable, and voice turns can't be duplicated in chat"
+}

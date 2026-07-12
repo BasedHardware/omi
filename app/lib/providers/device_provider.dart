@@ -143,15 +143,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     return connection.getStorageList();
   }
 
-  Future<BtDevice?> _getConnectedDevice() async {
-    var deviceId = SharedPreferencesUtil().btDevice.id;
-    if (deviceId.isEmpty) {
-      return null;
-    }
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    return connection?.device;
-  }
-
   initiateBleBatteryListener() async {
     if (connectedDevice == null) {
       return;
@@ -598,7 +589,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         // Use a small delay to ensure the UI is ready
         Future.delayed(const Duration(milliseconds: 500), () {
           final context = globalNavigatorKey.currentContext;
-          if (context != null) {
+          if (context != null && context.mounted) {
             showFirmwareUpdateDialog(context);
           }
         });

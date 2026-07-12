@@ -175,9 +175,20 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
   func testPermissionRedirectChecksTurnBeforeOpeningSettings() throws {
     let source = try realtimeHubControllerSource()
 
-    XCTAssertTrue(source.contains("directPermissionRedirect(forDelegationBrief: brief)"))
+    XCTAssertTrue(source.contains("originatingUserText: userText"))
     XCTAssertTrue(source.contains("dropping stale spawn_agent permission redirect before side effects"))
     XCTAssertTrue(source.contains("name: permissionRedirect.tool.rawValue"))
+    XCTAssertTrue(source.contains("if permissionRedirect.recoveredFromDelegation"))
+    XCTAssertTrue(source.contains("from: \"agent\""))
+    XCTAssertTrue(source.contains("to: \"native\""))
+  }
+
+  func testRealtimeDirectPermissionToolsUseCanonicalExecutorDescriptor() throws {
+    let source = try realtimeHubControllerSource()
+
+    XCTAssertTrue(source.contains("RealtimeHubTools.permissionExecutorRoute("))
+    XCTAssertTrue(source.contains("name: executorRoute.toolName"))
+    XCTAssertTrue(source.contains("originatingUserText: originatingUserText"))
   }
 
   func testBargeInReplacementCommitIsDeferredInsteadOfRejected() throws {

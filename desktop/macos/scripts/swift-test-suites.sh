@@ -54,6 +54,16 @@ if [ "$PREBUILD" != "0" ] && [ "$PREBUILD" != "1" ]; then
   fail "OMI_SWIFT_TEST_PREBUILD must be 0 or 1, got '$PREBUILD'"
 fi
 
+# Static guardrails are part of the authoritative Swift component suite, not a
+# separate best-effort lint. Run their fixture tests first so a broken checker
+# cannot turn a green scan into false confidence. Skip when the hermetic
+# launcher fixture overrides discovery — that path only validates runner
+# parallelism/skip wiring, and the real suite job already runs the ratchet.
+if [ -z "${OMI_SWIFT_TEST_DISCOVERY_ROOT:-}" ]; then
+  python3 "$SCRIPT_DIR/tests/test_check_desktop_test_quality.py"
+  python3 "$SCRIPT_DIR/check_desktop_test_quality.py"
+fi
+
 # Discover suites recursively so tests in subfolders of Desktop/Tests are not
 # silently skipped (SwiftPM compiles the whole Tests target; this must match).
 declare -a suites=()

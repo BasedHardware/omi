@@ -118,12 +118,66 @@ def test_cloud_run_clone_preserves_live_contract_and_overlays_lane_settings():
 
 
 def test_deploy_contract_routes_both_backfill_budget_alerts():
-    workflow = (Path(__file__).resolve().parents[3] / '.github/workflows/gcp_backend.yml').read_text()
+    action = (Path(__file__).resolve().parents[3] / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
+    manual = (Path(__file__).resolve().parents[3] / '.github/workflows/gcp_backend.yml').read_text()
 
-    assert 'SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS' in workflow
-    assert 'for THRESHOLD in 70 90' in workflow
-    assert 'gcloud monitoring policies create' in workflow
-    assert '--notification-channels="$ALERT_CHANNELS"' in workflow
+    assert 'SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS' in manual
+    assert "provision_budget_alerts: ${{ github.event.inputs.environment == 'prod' && 'true' || 'false' }}" in manual
+    assert 'for THRESHOLD in 70 90' in action
+    assert 'gcloud monitoring policies create' in action
+    assert '--notification-channels="$ALERT_CHANNELS"' in action
+
+
+def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
+    root = Path(__file__).resolve().parents[3]
+    action = (root / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
+    manual = (root / '.github/workflows/gcp_backend.yml').read_text()
+    auto_dev = (root / '.github/workflows/gcp_backend_auto_dev.yml').read_text()
+
+    for workflow in (manual, auto_dev):
+        assert 'uses: ./.github/actions/sync-backfill-lifecycle' in workflow
+        assert 'id: sync-backfill' in workflow
+        assert 'mode: worker' in workflow
+        assert 'mode: platform' in workflow
+        assert '${{ steps.sync-backfill.outputs.sync_backfill_env_vars }}' in workflow
+        assert '${{ steps.sync-backfill.outputs.revision }}' in workflow
+        assert 'provision_sync_ledger_ttl: \'true\'' in workflow
+        assert '--wait-revision-ready backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }}' in workflow
+        assert 'gcloud run services update-traffic backend-sync-backfill' in workflow
+        assert '--cloud-run-service backend-sync-backfill' in workflow
+        assert (
+            '--expect-cloud-run-traffic backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }}' in workflow
+        )
+
+    assert "provision_budget_alerts: 'false'" in auto_dev
+    assert 'id: backfill-service' in action
+    assert 'id: backfill-runtime' in action
+    assert 'id: deploy-backend-sync-backfill' in action
+    assert 'render_cloud_run_clone_env.py' in action
+    assert 'SYNC_TASKS_QUEUE=sync-backfill' in action
+    assert '--min-instances=0' in action
+    assert '--max-instances=4' in action
+    assert '--concurrency=1' in action
+    assert 'gcloud run services add-iam-policy-binding backend-sync-backfill' in action
+    assert 'gcloud tasks queues create sync-backfill' in action
+    assert '--max-concurrent-dispatches=4' in action
+    assert 'collection-group=sync_content_ledger' in action
+    assert "inputs.provision_sync_ledger_ttl == 'true'" in action
+    assert "inputs.provision_budget_alerts == 'true'" in action
+
+
+def test_cloud_run_default_service_lists_include_sync_backfill():
+    root = Path(__file__).resolve().parents[2] / 'scripts'
+    preflight = (root / 'preflight-cloud-run-deploy.py').read_text()
+    repair = (root / 'repair_cloud_run_traffic.py').read_text()
+    status = (root / 'deploy_status_report.py').read_text()
+    manual = (Path(__file__).resolve().parents[3] / '.github/workflows/gcp_backend.yml').read_text()
+
+    assert "DEFAULT_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')" in preflight
+    assert "DEFAULT_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')" in repair
+    assert "'backend-sync-backfill'" in status
+    assert '--cloud-run-service backend-sync-backfill' in manual
+    assert manual.index('repair-traffic:') < manual.index('--cloud-run-service backend-sync-backfill')
 
 
 def test_processed_segment_marker_follows_partial_result_checkpoint():

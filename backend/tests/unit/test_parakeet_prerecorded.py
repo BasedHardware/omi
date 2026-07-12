@@ -75,37 +75,80 @@ def test_cdist_stub_handles_pairwise_rows():
 class TestFactoryRouting:
 
     def test_parakeet_routing_in_get_prerecorded_service(self):
-        with patch.object(pr, 'stt_prerecorded_models', ['parakeet']):
+        with patch.object(pr, 'get_prerecorded_models', return_value=('parakeet',)):
             service, lang, model = pr.get_prerecorded_service('en')
             assert service == pr.PrerecordedSTTService.PARAKEET
             assert model == 'parakeet'
 
     def test_parakeet_routing_with_supported_language(self):
-        with patch.object(pr, 'stt_prerecorded_models', ['parakeet']):
+        with patch.object(pr, 'get_prerecorded_models', return_value=('parakeet',)):
             service, lang, model = pr.get_prerecorded_service('fr')
             assert service == pr.PrerecordedSTTService.PARAKEET
             assert lang == 'fr'
 
     def test_parakeet_fallback_to_deepgram_for_unsupported_language(self):
-        with patch.object(pr, 'stt_prerecorded_models', ['parakeet']):
+        with patch.object(pr, 'get_prerecorded_models', return_value=('parakeet',)):
             service, lang, model = pr.get_prerecorded_service('zh-CN')
             assert service == pr.PrerecordedSTTService.DEEPGRAM
 
     def test_parakeet_fallback_for_cjk(self):
-        with patch.object(pr, 'stt_prerecorded_models', ['parakeet']):
+        with patch.object(pr, 'get_prerecorded_models', return_value=('parakeet',)):
             for unsupported in ['ja', 'zh', 'ko', 'hi', 'vi']:
                 service, lang, model = pr.get_prerecorded_service(unsupported)
                 assert service == pr.PrerecordedSTTService.DEEPGRAM, f'{unsupported} should fall back to Deepgram'
 
     def test_get_prerecorded_provider_returns_parakeet(self):
-        with patch.object(pr, 'stt_prerecorded_models', ['parakeet']):
+        with patch.object(pr, 'get_prerecorded_models', return_value=('parakeet',)):
             provider = pr.get_prerecorded_provider()
             assert isinstance(provider, pr.ParakeetPrerecordedProvider)
 
     def test_unknown_model_falls_back_to_deepgram(self):
-        with patch.object(pr, 'stt_prerecorded_models', ['unknown-model']):
+        with patch.object(pr, 'get_prerecorded_models', return_value=('unknown-model',)):
             provider = pr.get_prerecorded_provider()
             assert isinstance(provider, pr.DeepgramPrerecordedProvider)
+            assert pr.get_prerecorded_service('en')[0] == pr.PrerecordedSTTService.DEEPGRAM
+
+    def test_model_selection_reads_environment_at_call_time(self, monkeypatch):
+        monkeypatch.setenv('STT_PRERECORDED_MODEL', 'parakeet')
+        assert pr.get_prerecorded_service('en')[0] == pr.PrerecordedSTTService.PARAKEET
+
+        monkeypatch.setenv('STT_PRERECORDED_MODEL', 'dg-nova-3')
+        assert pr.get_prerecorded_service('en')[0] == pr.PrerecordedSTTService.DEEPGRAM
+
+    def test_deepgram_client_is_constructed_lazily_once(self, monkeypatch):
+        client = MagicMock()
+        factory = MagicMock(return_value=client)
+        monkeypatch.setattr(pr, '_deepgram_client', None)
+        monkeypatch.setattr(pr, '_deepgram_options', MagicMock())
+        monkeypatch.setattr(pr, 'DeepgramClient', factory)
+        monkeypatch.setenv('DEEPGRAM_API_KEY', 'test-key')
+
+        assert pr._get_deepgram_client() is client
+        assert pr._get_deepgram_client() is client
+        assert factory.call_count == 1
+
+    def test_deepgram_process_client_reports_missing_key(self, monkeypatch):
+        monkeypatch.setattr(pr, '_deepgram_client', None)
+        monkeypatch.setattr(pr, 'get_byok_key', lambda _provider: None)
+        monkeypatch.delenv('DEEPGRAM_API_KEY', raising=False)
+
+        with pytest.raises(pr.PrerecordedSTTConfigurationError) as exc_info:
+            pr._deepgram_client_for_request()
+
+        assert exc_info.value.provider == pr.PrerecordedSTTService.DEEPGRAM
+        assert exc_info.value.missing_env == 'DEEPGRAM_API_KEY'
+
+    def test_deepgram_byok_does_not_require_process_key(self, monkeypatch):
+        client = MagicMock()
+        factory = MagicMock(return_value=client)
+        monkeypatch.setattr(pr, '_deepgram_client', None)
+        monkeypatch.setattr(pr, '_deepgram_options', MagicMock())
+        monkeypatch.setattr(pr, 'get_byok_key', lambda _provider: 'user-byok-key')
+        monkeypatch.setattr(pr, 'DeepgramClient', factory)
+        monkeypatch.delenv('DEEPGRAM_API_KEY', raising=False)
+
+        assert pr._deepgram_client_for_request() is client
+        assert factory.call_args.args[0] == 'user-byok-key'
 
 
 class TestTranscribeBytes:
@@ -326,12 +369,16 @@ class TestTranscribeUrl:
     def test_rejects_streamed_overflow_without_content_length(self):
         chunk_size = 10 * 1024 * 1024  # 10MB per chunk
         num_chunks = (pr._PARAKEET_MAX_DOWNLOAD_BYTES // chunk_size) + 2
+        sized_chunk = MagicMock()
+        sized_chunk.__len__.return_value = chunk_size
 
         def make_stream_resp():
             resp = MagicMock()
             resp.raise_for_status = MagicMock()
             resp.headers = {}
-            resp.iter_bytes = MagicMock(return_value=iter([b'\x00' * chunk_size] * num_chunks))
+            # The overflow branch only needs chunk lengths. Avoid allocating tens
+            # of megabytes in a fast unit test (and charging its GC to the next test).
+            resp.iter_bytes = MagicMock(return_value=iter([sized_chunk] * num_chunks))
             resp.__enter__ = MagicMock(return_value=resp)
             resp.__exit__ = MagicMock(return_value=False)
             return resp
@@ -413,7 +460,8 @@ class TestOutputFormat:
         assert len(result) >= 1
 
     def test_multiple_segments_preserve_timestamps(self):
-        wav = _make_wav(duration_s=5.0)
+        # No WAV parsing occurs when diarization and raw-PCM wrapping are disabled.
+        wav = b'test-audio'
         segments = [
             {"text": "First segment", "start": 0.0, "end": 1.5},
             {"text": "Second segment", "start": 2.0, "end": 3.5},

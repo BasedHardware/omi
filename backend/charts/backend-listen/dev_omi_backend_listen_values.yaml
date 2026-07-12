@@ -179,6 +179,10 @@ env:
     value: "http://vad.omiapi.com:80/v1/speaker-identification"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
     value: "http://diarizer.omiapi.com:80"
+  - name: HOSTED_TRANSLATION_API_URL
+    value: "http://nllb.omiapi.com"
+  - name: TRANSLATION_SERVICE_MODELS
+    value: "nllb,google"
   - name: PINECONE_API_KEY
     valueFrom:
       secretKeyRef:
@@ -214,7 +218,7 @@ env:
         name: dev-omi-backend-secrets
         key: STT_PRERECORDED_MODEL
   - name: HOSTED_PARAKEET_API_URL
-    value: "http://dev-omi-parakeet.dev-omi-backend.svc.cluster.local:8080"
+    value: "http://parakeet.omiapi.com"
   - name: NO_SOCKET_TIMEOUT
     value: "true"
   - name: HOSTED_PUSHER_API_URL

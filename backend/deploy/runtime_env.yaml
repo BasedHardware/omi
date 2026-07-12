@@ -24,8 +24,19 @@ environments:
             secret:
               name: dev-omi-backend-secrets
               key: STT_PRERECORDED_MODEL
+          DEEPGRAM_API_KEY:
+            secret:
+              name: dev-omi-backend-secrets
+              key: DEEPGRAM_API_KEY
+          MODULATE_API_KEY:
+            secret:
+              name: dev-omi-backend-secrets
+              key: MODULATE_API_KEY
           HOSTED_PARAKEET_API_URL:
-            value: http://dev-omi-parakeet.dev-omi-backend.svc.cluster.local:8080
+            value: http://parakeet.omiapi.com
+            category: service_discovery
+          HOSTED_TRANSLATION_API_URL:
+            value: http://nllb.omiapi.com
             category: service_discovery
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
@@ -176,6 +187,12 @@ environments:
             STT_PRERECORDED_MODEL:
               secret: STT_PRERECORDED_MODEL
               version: latest
+            DEEPGRAM_API_KEY:
+              secret: DEEPGRAM_API_KEY
+              version: latest
+            MODULATE_API_KEY:
+              secret: MODULATE_API_KEY
+              version: latest
         backend-sync: &dev_backend_sync
           env:
             SYNC_FRESH_MAX_AGE_SECONDS:
@@ -281,6 +298,12 @@ environments:
             STT_PRERECORDED_MODEL:
               secret: STT_PRERECORDED_MODEL
               version: latest
+            DEEPGRAM_API_KEY:
+              secret: DEEPGRAM_API_KEY
+              version: latest
+            MODULATE_API_KEY:
+              secret: MODULATE_API_KEY
+              version: latest
         backend-sync-backfill:
           <<: *dev_backend_sync
           provisional: true
@@ -364,6 +387,12 @@ environments:
               version: latest
             STT_PRERECORDED_MODEL:
               secret: STT_PRERECORDED_MODEL
+              version: latest
+            DEEPGRAM_API_KEY:
+              secret: DEEPGRAM_API_KEY
+              version: latest
+            MODULATE_API_KEY:
+              secret: MODULATE_API_KEY
               version: latest
       jobs:
         notifications-job:
@@ -458,6 +487,24 @@ environments:
           OMI_ENV_STAGE:
             value: prod
             category: runtime_identity
+          STT_PRERECORDED_MODEL:
+            secret:
+              name: prod-omi-backend-secrets
+              key: STT_PRERECORDED_MODEL
+          DEEPGRAM_API_KEY:
+            secret:
+              name: prod-omi-backend-secrets
+              key: DEEPGRAM_API_KEY
+          MODULATE_API_KEY:
+            secret:
+              name: prod-omi-backend-secrets
+              key: MODULATE_API_KEY
+          HOSTED_PARAKEET_API_URL:
+            value: http://parakeet.omi.me
+            category: service_discovery
+          HOSTED_TRANSLATION_API_URL:
+            value: http://nllb.omi.me
+            category: service_discovery
           SERVICE_ACCOUNT_JSON:
             secret:
               name: prod-omi-backend-secrets
@@ -520,6 +567,9 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            HOSTED_PARAKEET_API_URL:
+              value: https://parakeet.omi.me
+              category: service_discovery
             POSTHOG_HOST:
               value: https://app.posthog.com
               category: telemetry
@@ -563,6 +613,15 @@ environments:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
               version: latest
+            STT_PRERECORDED_MODEL:
+              secret: STT_PRERECORDED_MODEL
+              version: latest
+            DEEPGRAM_API_KEY:
+              secret: DEEPGRAM_API_KEY
+              version: latest
+            MODULATE_API_KEY:
+              secret: MODULATE_API_KEY
+              version: latest
         backend-sync: &prod_backend_sync
           env:
             SYNC_FRESH_MAX_AGE_SECONDS:
@@ -588,6 +647,9 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            HOSTED_PARAKEET_API_URL:
+              value: https://parakeet.omi.me
+              category: service_discovery
             POSTHOG_HOST:
               value: https://app.posthog.com
               category: telemetry
@@ -623,6 +685,15 @@ environments:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
               version: latest
+            STT_PRERECORDED_MODEL:
+              secret: STT_PRERECORDED_MODEL
+              version: latest
+            DEEPGRAM_API_KEY:
+              secret: DEEPGRAM_API_KEY
+              version: latest
+            MODULATE_API_KEY:
+              secret: MODULATE_API_KEY
+              version: latest
         backend-sync-backfill:
           <<: *prod_backend_sync
           provisional: true
@@ -631,6 +702,9 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            HOSTED_PARAKEET_API_URL:
+              value: https://parakeet.omi.me
+              category: service_discovery
             POSTHOG_HOST:
               value: https://app.posthog.com
               category: telemetry
@@ -661,6 +735,15 @@ environments:
               version: latest
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
+              version: latest
+            STT_PRERECORDED_MODEL:
+              secret: STT_PRERECORDED_MODEL
+              version: latest
+            DEEPGRAM_API_KEY:
+              secret: DEEPGRAM_API_KEY
+              version: latest
+            MODULATE_API_KEY:
+              secret: MODULATE_API_KEY
               version: latest
       jobs:
         notifications-job:

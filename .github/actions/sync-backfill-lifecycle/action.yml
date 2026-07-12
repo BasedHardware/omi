@@ -1,0 +1,223 @@
+name: Sync Backfill Lifecycle
+description: Deploy and provision the bounded backend-sync-backfill worker lane
+
+inputs:
+  mode:
+    description: 'worker (deploy backfill revision) or platform (queue/IAM/TTL/alerts)'
+    required: true
+  project_id:
+    description: GCP project ID
+    required: true
+  region:
+    description: Cloud Run / Cloud Tasks region
+    required: true
+    default: us-central1
+  service:
+    description: Base Cloud Run service name (backend)
+    required: true
+    default: backend
+  image:
+    description: Container image for the backfill worker (mode=worker)
+    required: false
+    default: ''
+  revision_suffix:
+    description: Cloud Run revision suffix (mode=worker)
+    required: false
+    default: ''
+  cloud_run_flags:
+    description: Shared Cloud Run network/runtime flags (mode=worker)
+    required: false
+    default: ''
+  backfill_env_vars:
+    description: Manifest-rendered backend-sync-backfill env overlay (mode=worker)
+    required: false
+    default: ''
+  backfill_secrets:
+    description: Manifest-rendered backend-sync-backfill secrets overlay (mode=worker)
+    required: false
+    default: ''
+  provision_sync_ledger_ttl:
+    description: Provision and verify Firestore sync_content_ledger TTL (mode=platform)
+    required: false
+    default: 'true'
+  provision_budget_alerts:
+    description: Provision routed backfill budget alerts (mode=platform, prod only)
+    required: false
+    default: 'false'
+  alert_notification_channels:
+    description: Monitoring notification channel IDs for budget alerts
+    required: false
+    default: ''
+
+outputs:
+  service_url:
+    description: Predicted backend-sync-backfill Cloud Run URL
+    value: ${{ steps.backfill-service.outputs.url }}
+  revision:
+    description: backend-sync-backfill revision name for this deploy
+    value: ${{ steps.capture-backend-sync-backfill-revision.outputs.revision }}
+  sync_backfill_env_vars:
+    description: SYNC_BACKFILL_* overlay for the backend-sync admission deploy
+    value: ${{ steps.backfill-service.outputs.sync_backfill_env_vars }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve backfill service URL
+      if: ${{ inputs.mode == 'worker' }}
+      id: backfill-service
+      shell: bash
+      run: |
+        PROJECT_NUMBER="$(gcloud projects describe "${{ inputs.project_id }}" --format='value(projectNumber)')"
+        URL="https://${{ inputs.service }}-sync-backfill-${PROJECT_NUMBER}.${{ inputs.region }}.run.app"
+        echo "url=${URL}" >> "$GITHUB_OUTPUT"
+        {
+          echo "sync_backfill_env_vars<<EOF"
+          echo "SYNC_BACKFILL_TASKS_QUEUE=sync-backfill"
+          echo "SYNC_BACKFILL_TASKS_HANDLER_URL=${URL}/v2/sync-jobs/run"
+          echo "SYNC_BACKFILL_TASKS_OIDC_AUDIENCE=${URL}/v2/sync-jobs/run"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Clone complete backend-sync runtime contract for backfill worker
+      if: ${{ inputs.mode == 'worker' }}
+      id: backfill-runtime
+      shell: bash
+      env:
+        ENV_OVERLAY: |-
+          ${{ inputs.backfill_env_vars }}
+          SYNC_TASKS_QUEUE=sync-backfill
+          SYNC_TASKS_HANDLER_URL=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
+          SYNC_TASKS_OIDC_AUDIENCE=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
+        SECRET_OVERLAY: ${{ inputs.backfill_secrets }}
+      run: |
+        gcloud run services describe backend-sync \
+          --region=${{ inputs.region }} \
+          --project=${{ inputs.project_id }} \
+          --format=json > /tmp/backend-sync-live.json
+        python3 backend/scripts/render_cloud_run_clone_env.py \
+          --source-json /tmp/backend-sync-live.json >> "$GITHUB_OUTPUT"
+
+    - name: Deploy ${{ inputs.service }}-sync-backfill to Cloud Run
+      if: ${{ inputs.mode == 'worker' }}
+      id: deploy-backend-sync-backfill
+      uses: google-github-actions/deploy-cloudrun@v2
+      with:
+        service: ${{ inputs.service }}-sync-backfill
+        region: ${{ inputs.region }}
+        project_id: ${{ inputs.project_id }}
+        image: ${{ inputs.image }}
+        no_traffic: true
+        flags: >-
+          --revision-suffix=${{ inputs.revision_suffix }}
+          --min-instances=0
+          --max-instances=4
+          --concurrency=1
+          ${{ inputs.cloud_run_flags }}
+        env_vars: ${{ steps.backfill-runtime.outputs.env_vars }}
+        secrets: ${{ steps.backfill-runtime.outputs.secrets }}
+
+    - name: Capture ${{ inputs.service }}-sync-backfill revision
+      if: ${{ inputs.mode == 'worker' }}
+      id: capture-backend-sync-backfill-revision
+      shell: bash
+      run: |
+        echo "revision=backend-sync-backfill-${{ inputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
+
+    - name: Configure bounded sync backfill queue
+      if: ${{ inputs.mode == 'platform' }}
+      shell: bash
+      run: |
+        INVOKER_SA="$(
+          gcloud run services describe backend-sync \
+            --region=${{ inputs.region }} \
+            --project=${{ inputs.project_id }} \
+            --format=json \
+            | jq -r '.spec.template.spec.containers[0].env[] | select(.name == "SYNC_TASKS_INVOKER_SA") | .value'
+        )"
+        test -n "$INVOKER_SA"
+        gcloud run services add-iam-policy-binding backend-sync-backfill \
+          --region=${{ inputs.region }} \
+          --project=${{ inputs.project_id }} \
+          --member="serviceAccount:${INVOKER_SA}" \
+          --role=roles/run.invoker \
+          --quiet
+        if gcloud tasks queues describe sync-backfill --location=${{ inputs.region }} --project=${{ inputs.project_id }} >/dev/null 2>&1; then
+          gcloud tasks queues update sync-backfill \
+            --location=${{ inputs.region }} \
+            --project=${{ inputs.project_id }} \
+            --max-concurrent-dispatches=4
+        else
+          gcloud tasks queues create sync-backfill \
+            --location=${{ inputs.region }} \
+            --project=${{ inputs.project_id }} \
+            --max-concurrent-dispatches=4
+        fi
+
+    - name: Provision and verify sync ledger TTL
+      if: ${{ inputs.mode == 'platform' && inputs.provision_sync_ledger_ttl == 'true' }}
+      shell: bash
+      run: |
+        gcloud firestore fields ttls update expires_at \
+          --collection-group=sync_content_ledger \
+          --database='(default)' \
+          --project=${{ inputs.project_id }} \
+          --enable-ttl \
+          --quiet
+        gcloud firestore fields ttls list \
+          --collection-group=sync_content_ledger \
+          --database='(default)' \
+          --project=${{ inputs.project_id }} \
+          --format='value(name)' | grep '/fields/expires_at$'
+
+    - name: Provision routed backfill budget alerts
+      if: ${{ inputs.mode == 'platform' && inputs.provision_budget_alerts == 'true' }}
+      shell: bash
+      env:
+        ALERT_CHANNELS: ${{ inputs.alert_notification_channels }}
+      run: |
+        test -n "$ALERT_CHANNELS"
+        for THRESHOLD in 70 90; do
+          METRIC="sync_backfill_budget_${THRESHOLD}"
+          DISPLAY_NAME="Sync backfill daily budget ${THRESHOLD}%"
+          LOG_FILTER="resource.type=\"cloud_run_revision\" resource.labels.service_name=\"backend-sync-backfill\" \"sync_backfill_budget_threshold threshold=${THRESHOLD}\""
+          if gcloud logging metrics describe "$METRIC" --project=${{ inputs.project_id }} >/dev/null 2>&1; then
+            gcloud logging metrics update "$METRIC" \
+              --project=${{ inputs.project_id }} \
+              --description="$DISPLAY_NAME threshold crossing" \
+              --log-filter="$LOG_FILTER"
+          else
+            gcloud logging metrics create "$METRIC" \
+              --project=${{ inputs.project_id }} \
+              --description="$DISPLAY_NAME threshold crossing" \
+              --log-filter="$LOG_FILTER"
+          fi
+
+          POLICY="$(
+            gcloud monitoring policies list \
+              --project=${{ inputs.project_id }} \
+              --filter="displayName=\"${DISPLAY_NAME}\"" \
+              --format='value(name)' \
+              --limit=1
+          )"
+          if [[ -z "$POLICY" ]]; then
+            POLICY="$(
+              gcloud monitoring policies create \
+                --project=${{ inputs.project_id }} \
+                --display-name="$DISPLAY_NAME" \
+                --condition-display-name="$DISPLAY_NAME" \
+                --condition-filter="metric.type=\"logging.googleapis.com/user/${METRIC}\" AND resource.type=\"cloud_run_revision\"" \
+                --duration=0s \
+                --if='> 0' \
+                --trigger-count=1 \
+                --combiner=OR \
+                --notification-channels="$ALERT_CHANNELS" \
+                --documentation="Backfill has crossed ${THRESHOLD}% of the 555-hour UTC-day allowance." \
+                --format='value(name)'
+            )"
+          fi
+          test -n "$POLICY"
+          gcloud monitoring policies describe "$POLICY" \
+            --project=${{ inputs.project_id }} \
+            --format='value(notificationChannels)' | grep -q .
+        done

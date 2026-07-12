@@ -36,6 +36,16 @@ final class ChatStreamingBuffer {
     flushWorkItem = nil
   }
 
+  /// Drop only the buffered deltas for a revoked turn. A newer turn may already
+  /// share this buffer, so cancelling or flushing the whole queue would either
+  /// lose its tokens or apply the stopped turn's late output.
+  func discardPendingSegments(messageId: String) {
+    pendingSegments.removeAll { $0.messageId == messageId }
+    if pendingSegments.isEmpty {
+      cancelPendingFlush()
+    }
+  }
+
   func flush(
     messages: inout [ChatMessage],
     normalizeText: (_ message: ChatMessage, _ text: String) -> String = { _, text in text }

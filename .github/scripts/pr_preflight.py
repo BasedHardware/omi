@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run fast, deterministic pull-request contract checks."""
+"""Resolve PR metadata, then run the shared deterministic check manifest."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from pr_metadata import PullRequestMetadata, load_from_api, load_from_gh
+from run_checks import load_manifest, resolve_checks
 
 
 @dataclass(frozen=True)
@@ -38,18 +39,10 @@ def changed_files(root: Path, base: str, head: str) -> list[str]:
     return [line for line in output.splitlines() if line]
 
 
-def select_checks(files: list[str]) -> list[Check]:
-    checks = [
-        Check("diff-hygiene", "all PRs"),
-        Check("architecture-guardrails", "all PRs"),
-        Check("product-invariants", "all PRs; changed paths determine required citations"),
-        Check("desktop-changelog-data", "repository-wide changelog schema contract"),
-    ]
-    if any(path.startswith("desktop/macos/") for path in files):
-        checks.append(Check("desktop-changelog-entry", "desktop files changed"))
-    if any(path.startswith("desktop/macos/Desktop/Sources/") and path.endswith(".swift") for path in files):
-        checks.append(Check("desktop-e2e-flow-coverage", "desktop Swift sources changed"))
-    return checks
+def select_checks(files: list[str], lane: str = "ci") -> list[Check]:
+    root = Path(__file__).resolve().parents[2]
+    manifest = load_manifest(root / ".github/checks-manifest.yaml")
+    return [Check(check.id, check.reason) for check in resolve_checks(manifest, files, lane)]
 
 
 def resolve_pr_metadata(
@@ -58,13 +51,20 @@ def resolve_pr_metadata(
     repository: str | None,
     pr_number: int | None,
 ) -> PullRequestMetadata | None:
+    if body_file is None:
+        env_body = os.getenv("OMI_PR_BODY_FILE", "").strip()
+        if env_body:
+            body_file = Path(env_body)
     if body_file:
+        resolved = body_file.expanduser()
+        if not resolved.is_file():
+            raise RuntimeError(f"PR body file not found: {resolved}")
         return PullRequestMetadata(
             number=0,
-            body=body_file.read_text(encoding="utf-8"),
+            body=resolved.read_text(encoding="utf-8"),
             updated_at="local file",
             labels=(),
-            source=str(body_file.resolve()),
+            source=str(resolved.resolve()),
         )
     if repository and pr_number:
         return load_from_api(repository, pr_number, os.getenv("GITHUB_TOKEN", ""))
@@ -72,82 +72,26 @@ def resolve_pr_metadata(
         return load_from_gh(root)
     except RuntimeError as exc:
         print(f"PR metadata: unavailable ({exc})")
-        print("If invariant citations are required, rerun with --pr-body-file <draft.md>.")
+        print("If invariant citations are required, rerun with --pr-body-file <draft.md>")
+        print("or set OMI_PR_BODY_FILE, or run: scripts/pr-preflight --suggest")
         return None
-
-
-def command_for_check(
-    check: Check,
-    files_path: Path,
-    base: str,
-    head: str,
-    body_path: Path,
-    skip_changelog: bool,
-) -> list[str]:
-    python = sys.executable
-    commands = {
-        "architecture-guardrails": [
-            python,
-            ".github/scripts/check_arch_guardrails.py",
-            "--changed-files",
-            str(files_path),
-        ],
-        "product-invariants": [
-            python,
-            ".github/scripts/check_product_invariants.py",
-            "--changed-files",
-            str(files_path),
-            "--pr-body-file",
-            str(body_path),
-        ],
-        "desktop-changelog-data": [python, ".github/scripts/desktop-changelog.py", "validate"],
-        "desktop-changelog-entry": [
-            python,
-            ".github/scripts/check-desktop-changelog.py",
-            "--base",
-            base,
-            "--head",
-            head,
-            *(["--skip"] if skip_changelog else []),
-        ],
-        "desktop-e2e-flow-coverage": [
-            python,
-            "desktop/macos/scripts/check-e2e-flow-coverage.py",
-            "--strict",
-            *files_path.read_text(encoding="utf-8").splitlines(),
-        ],
-    }
-    return commands[check.name]
-
-
-def check_diff_hygiene(root: Path, base: str, head: str, files: list[str]) -> int:
-    diff_check = subprocess.run(["git", "diff", "--check", f"{base}...{head}"], cwd=root, check=False)
-    if diff_check.returncode:
-        return diff_check.returncode
-    failed = False
-    for path in files:
-        result = subprocess.run(
-            ["git", "grep", "-n", "-I", "-E", "^(<<<<<<<|>>>>>>>)", head, "--", path],
-            cwd=root,
-            check=False,
-        )
-        if result.returncode == 0:
-            failed = True
-    if failed:
-        print("FAIL: unresolved merge conflict markers found in changed files", file=sys.stderr)
-        return 1
-    return 0
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", default="origin/main")
     parser.add_argument("--head", default="HEAD")
+    parser.add_argument("--lane", choices=("local", "ci"), default="ci")
     parser.add_argument("--pr-body-file", type=Path)
     parser.add_argument("--repository", help="GitHub repository as owner/name; requires --pr-number")
     parser.add_argument("--pr-number", type=int, help="Load current PR metadata through the GitHub API")
     parser.add_argument("--head-branch", help="PR head branch, used for release-changelog policy")
     parser.add_argument("--list", action="store_true", help="Print selected checks without running them")
+    parser.add_argument(
+        "--suggest",
+        action="store_true",
+        help="Print a paste-ready product-invariants PR body section for the diff and exit 0",
+    )
     parser.add_argument("--root", type=Path)
     return parser.parse_args()
 
@@ -165,58 +109,80 @@ def main() -> int:
     except subprocess.CalledProcessError as exc:
         print(f"FAIL: could not resolve preflight diff: {exc.stderr.strip()}", file=sys.stderr)
         return 1
-    checks = select_checks(files)
-    print(f"PR preflight: base={args.base} ({merge_base[:12]}) head={args.head} files={len(files)}")
+    checks = select_checks(files, args.lane)
+    summary = f"PR preflight: lane={args.lane} base={args.base} ({merge_base[:12]}) head={args.head} files={len(files)}"
+    print(summary, file=sys.stderr if args.suggest else sys.stdout)
     for check in checks:
-        print(f"  SELECTED {check.name}: {check.reason}")
+        print(f"  SELECTED {check.name}: {check.reason}", file=sys.stderr if args.suggest else sys.stdout)
     if args.list:
         return 0
-
-    try:
-        metadata = resolve_pr_metadata(root, args.pr_body_file, args.repository, args.pr_number)
-    except RuntimeError as exc:
-        print(f"FAIL: {exc}", file=sys.stderr)
-        return 1
-    labels = metadata.labels if metadata else ()
-    head_branch = args.head_branch or os.getenv("GITHUB_HEAD_REF", "")
-    if not head_branch:
-        head_branch = subprocess.run(
-            ["git", "symbolic-ref", "--short", "-q", "HEAD"],
-            cwd=root,
-            check=False,
-            stdout=subprocess.PIPE,
-            text=True,
-        ).stdout.strip()
-    skip_changelog = "no-changelog-needed" in labels or head_branch.startswith("changelog/v")
-    if metadata:
-        print(f"PR metadata: {metadata.source}, updated_at={metadata.updated_at}")
 
     with tempfile.TemporaryDirectory(prefix="omi-pr-preflight-") as temp_dir:
         temp = Path(temp_dir)
         files_path = temp / "changed-files.txt"
-        body_path = temp / "pr-body.txt"
         files_path.write_text("".join(f"{path}\n" for path in files), encoding="utf-8")
+        if args.suggest:
+            return subprocess.run(
+                [
+                    sys.executable,
+                    ".github/scripts/check_product_invariants.py",
+                    "--changed-files",
+                    str(files_path),
+                    "--suggest",
+                ],
+                cwd=root,
+                check=False,
+            ).returncode
+
+        try:
+            metadata = resolve_pr_metadata(root, args.pr_body_file, args.repository, args.pr_number)
+        except RuntimeError as exc:
+            print(f"FAIL: {exc}", file=sys.stderr)
+            return 1
+        labels = metadata.labels if metadata else ()
+        head_branch = args.head_branch or os.getenv("GITHUB_HEAD_REF", "")
+        if not head_branch:
+            head_branch = subprocess.run(
+                ["git", "symbolic-ref", "--short", "-q", "HEAD"],
+                cwd=root,
+                check=False,
+                stdout=subprocess.PIPE,
+                text=True,
+            ).stdout.strip()
+        skip_changelog = (
+            "no-changelog-needed" in labels
+            or head_branch.startswith("changelog/v")
+            or os.getenv("PRE_PUSH_SKIP_DESKTOP_CHANGELOG") == "1"
+        )
+        if metadata:
+            print(f"PR metadata: {metadata.source}, updated_at={metadata.updated_at}")
+        elif any(check.name == "product-invariants" for check in checks):
+            print("PR metadata: none (product-invariants will use an empty body)")
+
+        body_path = temp / "pr-body.txt"
         body_path.write_text(metadata.body if metadata else "", encoding="utf-8")
-        failures: list[str] = []
-        for check in checks:
-            phase_started = time.monotonic()
-            print(f"==> {check.name}", flush=True)
-            if check.name == "diff-hygiene":
-                returncode = check_diff_hygiene(root, args.base, args.head, files)
-            else:
-                command = command_for_check(check, files_path, args.base, args.head, body_path, skip_changelog)
-                returncode = subprocess.run(command, cwd=root, check=False).returncode
-            elapsed = time.monotonic() - phase_started
-            status = "PASS" if returncode == 0 else "FAIL"
-            print(f"<== {status} {check.name} ({elapsed:.2f}s)", flush=True)
-            if returncode:
-                failures.append(check.name)
-                break
+        command = [
+            sys.executable,
+            ".github/scripts/run_checks.py",
+            "--lane",
+            args.lane,
+            "--base",
+            args.base,
+            "--head",
+            args.head,
+            "--changed-files",
+            str(files_path),
+            "--pr-body-file",
+            str(body_path),
+        ]
+        if skip_changelog:
+            command.append("--skip-changelog")
+        result = subprocess.run(command, cwd=root, check=False)
 
     elapsed = time.monotonic() - started
-    if failures:
-        print(f"PR preflight failed in {elapsed:.2f}s: {', '.join(failures)}", file=sys.stderr)
-        return 1
+    if result.returncode:
+        print(f"PR preflight failed in {elapsed:.2f}s.", file=sys.stderr)
+        return result.returncode
     print(f"PR preflight passed: {len(checks)} checks in {elapsed:.2f}s.")
     return 0
 

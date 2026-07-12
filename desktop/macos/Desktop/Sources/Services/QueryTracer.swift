@@ -48,6 +48,8 @@ struct QueryTrace: Codable, Sendable {
     let trace_id: String
     let timestamp: String
     let query_text: String
+    let query_length: Int
+    let content_captured: Bool
     let input_mode: String
     let model: String?
     let total_ms: Int64
@@ -65,7 +67,7 @@ struct QueryTrace: Codable, Sendable {
     let flagged_gaps: [TraceFlaggedGap]
 
     enum CodingKeys: String, CodingKey {
-        case trace_id, timestamp, query_text, input_mode, model
+        case trace_id, timestamp, query_text, query_length, content_captured, input_mode, model
         case total_ms, ttft_ms, token_count, tps
         case input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd
         case request, tool_executions
@@ -147,6 +149,8 @@ final class QueryTracer: @unchecked Sendable {
     private struct State {
         var origin: ContinuousClock.Instant
         var query: String
+        var queryLength: Int
+        var capturesContent: Bool
         var inputMode: QueryInputMode
         var traceId: String
         var spanStack: [OpenSpan] = []
@@ -159,14 +163,21 @@ final class QueryTracer: @unchecked Sendable {
         var responseText: String?
         var hasScreenshot: Bool = false
         var toolExecutions: [TraceToolExecution] = []
+        var finalized = false
     }
 
-    init(query: String, inputMode: QueryInputMode) {
+    init(
+        query: String,
+        inputMode: QueryInputMode,
+        capturesContent: Bool = AnalyticsManager.isDevBuild
+    ) {
         let now = ContinuousClock.now
         let id = "t_" + (0..<6).map { _ in String(format: "%x", Int.random(in: 0...15)) }.joined()
         lock = OSAllocatedUnfairLock(initialState: State(
             origin: now,
-            query: query,
+            query: capturesContent ? query : "",
+            queryLength: query.count,
+            capturesContent: capturesContent,
             inputMode: inputMode,
             traceId: id
         ))
@@ -176,7 +187,8 @@ final class QueryTracer: @unchecked Sendable {
 
     func updateQuery(_ query: String) {
         lock.withLock { state in
-            state.query = query
+            state.queryLength = query.count
+            state.query = state.capturesContent ? query : ""
         }
     }
 
@@ -258,15 +270,17 @@ final class QueryTracer: @unchecked Sendable {
         hasScreenshot: Bool = false
     ) {
         lock.withLock { state in
+            state.hasScreenshot = hasScreenshot
+            guard state.capturesContent else { return }
             state.systemPrompt = systemPrompt
             state.messages = messages
-            state.hasScreenshot = hasScreenshot
         }
     }
 
     /// Capture the final response text.
     func captureResponse(text: String) {
         lock.withLock { state in
+            guard state.capturesContent else { return }
             state.responseText = text
         }
     }
@@ -274,13 +288,20 @@ final class QueryTracer: @unchecked Sendable {
     /// Capture a tool call execution (name, input, output, duration).
     func captureToolExecution(toolUseId: String?, name: String, input: String, output: String, durationMs: Int64? = nil) {
         lock.withLock { state in
+            let safeName = state.capturesContent ? name : ChatTelemetryDimension.toolName(name)
             state.toolExecutions.append(TraceToolExecution(
                 tool_use_id: toolUseId,
-                name: name,
-                input: input,
-                output: output,
+                name: safeName,
+                input: state.capturesContent ? input : "",
+                output: state.capturesContent ? output : "",
                 dur_ms: durationMs
             ))
+        }
+    }
+
+    func toolNameForTrace(_ name: String) -> String {
+        lock.withLock { state in
+            state.capturesContent ? name : ChatTelemetryDimension.toolName(name)
         }
     }
 
@@ -390,6 +411,8 @@ final class QueryTracer: @unchecked Sendable {
             trace_id: snapshot.traceId,
             timestamp: Self.isoFormatter.string(from: Date()),
             query_text: snapshot.query,
+            query_length: snapshot.queryLength,
+            content_captured: snapshot.capturesContent,
             input_mode: snapshot.inputMode.rawValue,
             model: model,
             total_ms: totalMs,
@@ -416,10 +439,60 @@ final class QueryTracer: @unchecked Sendable {
     private static let logDir: URL = {
         let dir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Logs/Omi")
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        prepareLogDirectory(dir)
         return dir
     }()
 
+    static func prepareLogDirectory(_ directory: URL) {
+        let permissions = NSNumber(value: Int16(0o700))
+        try? FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: permissions]
+        )
+        // Repair an existing directory created by an older build with broader
+        // permissions; createDirectory attributes only apply on first creation.
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: permissions],
+            ofItemAtPath: directory.path
+        )
+    }
+
+    static func appendTraceLine(_ line: String, to logFile: URL) {
+        guard let lineData = (line + "\n").data(using: .utf8) else { return }
+        let permissions = NSNumber(value: Int16(0o600))
+
+        if FileManager.default.fileExists(atPath: logFile.path) {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: permissions],
+                ofItemAtPath: logFile.path
+            )
+        } else {
+            _ = FileManager.default.createFile(
+                atPath: logFile.path,
+                contents: lineData,
+                attributes: [.posixPermissions: permissions]
+            )
+            return
+        }
+
+        // Use the throwing seek/write/close APIs, not seekToEndOfFile()/
+        // write(_:)/closeFile(). The legacy ObjC variants raise
+        // NSFileHandleOperationException on I/O failure (disk full, file
+        // removed mid-write); Swift cannot catch that, so it aborts the
+        // whole process — and finalize() runs on every completed query, so
+        // a full disk would crash the app on each one. Drop the trace instead.
+        guard let handle = try? FileHandle(forWritingTo: logFile) else { return }
+        defer { try? handle.close() }
+        do {
+            try handle.seekToEnd()
+            try handle.write(contentsOf: lineData)
+        } catch {
+            log("QueryTracer: failed to append trace: \(error.localizedDescription)")
+        }
+    }
+
+    @discardableResult
     func finalize(
         tokenCount: Int,
         model: String?,
@@ -428,7 +501,14 @@ final class QueryTracer: @unchecked Sendable {
         cacheReadTokens: Int? = nil,
         cacheWriteTokens: Int? = nil,
         costUsd: Double? = nil
-    ) {
+    ) -> Bool {
+        let shouldFinalize = lock.withLock { state in
+            guard !state.finalized else { return false }
+            state.finalized = true
+            return true
+        }
+        guard shouldFinalize else { return false }
+
         let trace = buildTrace(
             tokenCount: tokenCount,
             model: model,
@@ -459,18 +539,14 @@ final class QueryTracer: @unchecked Sendable {
                 let backup = Self.logDir.appendingPathComponent("traces.1.jsonl")
                 try? FileManager.default.removeItem(at: backup)
                 try? FileManager.default.moveItem(at: logFile, to: backup)
+                try? FileManager.default.setAttributes(
+                    [.posixPermissions: NSNumber(value: Int16(0o600))],
+                    ofItemAtPath: backup.path
+                )
             }
 
-            if let handle = try? FileHandle(forWritingTo: logFile) {
-                handle.seekToEndOfFile()
-                if let lineData = (jsonString + "\n").data(using: .utf8) {
-                    handle.write(lineData)
-                }
-                handle.closeFile()
-            } else {
-                // First write — create the file
-                try? (jsonString + "\n").data(using: .utf8)?.write(to: logFile)
-            }
+            Self.appendTraceLine(jsonString, to: logFile)
         }
+        return true
     }
 }

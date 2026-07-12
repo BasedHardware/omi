@@ -14,6 +14,13 @@ import 'package:omi/utils/logger.dart';
 class UserProvider with ChangeNotifier {
   static const int _migrationNotificationId = 1337;
 
+  /// Fetches the server's private-cloud-sync flag. Returns `null` on a failed
+  /// fetch so the loader can preserve the last known state. Injectable for tests.
+  final Future<bool?> Function() _privateCloudSyncFetcher;
+
+  UserProvider({Future<bool?> Function()? privateCloudSyncFetcher})
+      : _privateCloudSyncFetcher = privateCloudSyncFetcher ?? getPrivateCloudSyncEnabled;
+
   String _dataProtectionLevel = 'standard';
   bool _isLoading = false;
   bool _privateCloudSyncEnabled = false;
@@ -179,15 +186,23 @@ class UserProvider with ChangeNotifier {
     prefs.cachedTranscriptionVocabulary = _transcriptionVocabulary;
   }
 
+  @visibleForTesting
+  Future<void> loadPrivateCloudSyncStatus() => _loadPrivateCloudSyncStatus(_sessionGeneration);
+
   Future<void> _loadPrivateCloudSyncStatus(int generation) async {
     try {
-      final enabled = await getPrivateCloudSyncEnabled();
+      final enabled = await _privateCloudSyncFetcher();
       if (generation != _sessionGeneration) return;
-      _privateCloudSyncEnabled = enabled;
+      // A failed fetch returns null — keep the last known state instead of
+      // flipping the toggle off, which would misreport cloud sync as disabled
+      // (and lose recordings the user meant to keep) on a transient error.
+      if (enabled != null) {
+        _privateCloudSyncEnabled = enabled;
+      }
     } catch (e) {
       if (generation != _sessionGeneration) return;
       Logger.error('Failed to load private cloud sync status: $e');
-      _privateCloudSyncEnabled = false;
+      // Keep the cached value on error, don't reset.
     }
   }
 

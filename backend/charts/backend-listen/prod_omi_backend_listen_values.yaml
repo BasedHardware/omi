@@ -298,7 +298,11 @@ env:
         name: prod-omi-backend-secrets
         key: STT_PRERECORDED_MODEL
   - name: HOSTED_PARAKEET_API_URL
-    value: "http://prod-omi-parakeet.prod-omi-backend.svc.cluster.local:8080"
+    value: "http://parakeet.omi.me"
+  - name: HOSTED_TRANSLATION_API_URL
+    value: "http://nllb.omi.me"
+  - name: TRANSLATION_SERVICE_MODELS
+    value: "nllb,google"
   - name: ENCRYPTION_SECRET
     valueFrom:
       secretKeyRef:

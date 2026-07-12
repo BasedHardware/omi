@@ -11,7 +11,7 @@ import pytest
 from testing.import_isolation import load_module_fresh, stub_modules
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState, SourceStateReason
-from utils.memory.v3_account_generation_source import read_memory_v3_trusted_account_generation
+from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
 from models.memory_apply import ApplyStatus, MemoryControlState
 from models.memory_contracts import DurablePatchDecision, LifecycleState
 from models.memory_operations import MemoryOperation, MemoryOperationType

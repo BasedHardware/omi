@@ -148,7 +148,7 @@ __LEGACY_ITEM_BLOCK__
         memory_pkg.__path__ = ["utils/memory"]
         sys.modules["utils.memory"] = memory_pkg
         setattr(utils_pkg, "memory", memory_pkg)
-        production_runtime = types.ModuleType("utils.memory.v3_production_runtime")
+        production_runtime = types.ModuleType("utils.memory.v3.production_runtime")
         class ProductionV3GetRuntime:
             def __init__(self, enabled=False, source_decision="disabled", service=None, adapters=None, **kwargs):
                 self.enabled = enabled
@@ -161,10 +161,10 @@ __LEGACY_ITEM_BLOCK__
             return ProductionV3GetRuntime(enabled=False, source_decision="disabled")
         production_runtime.V3GetRuntime = ProductionV3GetRuntime
         production_runtime.build_v3_production_runtime = build_v3_production_runtime
-        sys.modules["utils.memory.v3_production_runtime"] = production_runtime
+        sys.modules["utils.memory.v3.production_runtime"] = production_runtime
         setattr(memory_pkg, "v3_production_runtime", production_runtime)
 
-        composed = types.ModuleType("utils.memory.v3_composed_get_service")
+        composed = types.ModuleType("utils.memory.v3.composed_get_service")
         class V3ComposedRequestParams:
             def __init__(self, limit=None, offset=None, cursor=None, include_archive=False, include_historical=False):
                 self.limit = limit
@@ -182,7 +182,7 @@ __LEGACY_ITEM_BLOCK__
                 self.decision = decision
         composed.V3ComposedRequestParams = V3ComposedRequestParams
         composed.V3ComposedResponse = V3ComposedResponse
-        sys.modules["utils.memory.v3_composed_get_service"] = composed
+        sys.modules["utils.memory.v3.composed_get_service"] = composed
         setattr(memory_pkg, "v3_composed_get_service", composed)
 
         memory_system_mod = types.ModuleType("utils.memory.memory_system")
@@ -279,11 +279,11 @@ __PIN_STUB_BLOCK__        surface_routing.pin_memory_system = pin_memory_system
         with_auth_response = client_with_override.get("/v3/memories")
 
         memory_adapter_modules = [
-            "utils.memory.v3_compatibility",
-            "utils.memory.v3_request_adapter",
+            "utils.memory.v3.compatibility",
+            "utils.memory.v3.request_adapter",
             "testing.memory.v3_route_planner",
-            "utils.memory.v3_memory_read_service",
-            "utils.memory.v3_response_adapter",
+            "utils.memory.v3.memory_read_service",
+            "utils.memory.v3.response_adapter",
         ]
         loaded_adapters = [name for name in memory_adapter_modules if name in sys.modules]
 

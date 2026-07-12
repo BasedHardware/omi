@@ -18,6 +18,32 @@ Every change must satisfy this checklist before it is committed or put in a PR. 
 4. **Verification evidence is written down** — the commands you ran and what they showed, in the commit message or PR description.
 5. **No orphaned deferrals** — new `TODO`/`FIXME`/`HACK` comments reference a tracking issue or are resolved before merge.
 6. **Docs moved with the code** — if you changed setup, test commands, service boundaries, env vars, or agent-relevant behavior, the matching doc (this file, a component `AGENTS.md`, or `docs/doc/developer/`) is updated in the same PR. Product-direction or invariant changes update `PRODUCT.md` / `docs/product/invariants/` in the same PR.
+7. **Bug classes are closed, not patched around** — write down the root cause and the durable guard in the PR. When recent history contains the same failure class, fix the shared boundary, state model, harness, or static contract that allowed all of them.
+8. **PR contracts pass before opening the PR** — run `make preflight`; it executes the same deterministic check manifest CI runs (`.github/checks-manifest.yaml`). Draft the PR body and run `scripts/pr-preflight --pr-body-file /tmp/pr-body.md` when product-invariant citations apply (or use `scripts/pr-preflight --suggest` to get the paste-ready IDs).
+
+A deterministic diff-scoped check failing for the first time in CI is a manifest bug: fix the manifest instead of adding a one-off workflow step. Register new checks in `.github/checks-manifest.yaml` with both `local` and `ci` lanes.
+
+## Bug Fixes: Close the Failure Class
+
+Before implementing a bug fix, inspect recent fixes in the same subsystem. The
+unit of work is the violated contract, not only the line where the symptom
+appeared.
+
+- Identify the authoritative owner, identity, state transition, or boundary
+  contract that failed. Avoid adding another observer, fallback boolean, status
+  string heuristic, or call-site exception when ownership is the real problem.
+- If two or more recent fixes share the cause, add a reusable guard surface in
+  the same PR: a typed state/policy model, behavioral contract test, fault
+  harness, compatibility check, or narrow static checker.
+- A regression test must execute production behavior through a controllable
+  seam. Reading production source and asserting that strings occur in a certain
+  order is a static tripwire, not behavioral coverage; label and test static
+  checkers as such.
+- Record the root cause, recurrence evidence, durable guard, real-path exercise,
+  and any deliberately deferred high-blast-radius follow-up in the PR body.
+- Do not broaden a safe bug-fix PR into an unreviewable migration. Land the
+  enforceable guard now and track schema, data-migration, or deploy-rollout work
+  explicitly when it requires its own rollback plan.
 
 ## Leave It Better Than You Found It
 
@@ -55,7 +81,8 @@ Improve the code you touch — within your blast radius:
 ### Product invariants
 
 - Read [`PRODUCT.md`](PRODUCT.md) before changing product behavior. Locked rules live in [`docs/product/invariants/`](docs/product/invariants/) (shared chat continuity, memory tiers, agent control plane, integrations harness, brand UI).
-- If you touch a locked invariant’s path globs, name the invariant ID in the PR and update its guard test when behavior changes.
+- If you touch a locked invariant’s path globs, name **every** matched invariant ID in the PR body (path-based, not intent-based — e.g. touching `ChatProvider.swift` requires `INV-AUTH-1` even when the diff is not about auth). Discover IDs with `scripts/pr-preflight --suggest`; do not invent a partial list.
+- Update the invariant’s guard test when behavior changes.
 - Do not paste product essays into this file — keep the registry as the SSOT and link here.
 
 ### UI / Design (all platforms)
@@ -66,6 +93,8 @@ Improve the code you touch — within your blast radius:
 
 - New `TODO`, `FIXME`, and `HACK` comments must reference a tracking issue or be resolved before merge.
 - Existing markers are legacy debt; only delete or annotate them when the owner and next action are clear.
+- Packages over 12 source files need a package-root `ARCHITECTURE.md` or `README.md`; `.github/scripts/check_arch_guardrails.py` enforces the baseline ratchet.
+- Designated rollout scaffolding (`backend/scripts/*readiness*`, `*gauntlet*`, `*proof*`, and `backend/utils/**/*rollout*`, `*compat*`) needs a near-top `LIFECYCLE: permanent|one-time` header; one-time files also need `DELETE-AFTER: <GitHub issue URL or invariant ID>`. `.github/scripts/check_lifecycle_headers.py` enforces this with `.github/lifecycle-header-baseline.txt` as the frozen legacy census.
 
 ### Fallback / resilience telemetry
 
@@ -93,12 +122,13 @@ Optional ratchet (not CI): `python backend/scripts/check_fallback_instrumentatio
 
 ### Backend (Python)
 
+- **Composition errors** — step helpers raise a typed error caught once at the composition boundary. Do not add assigned-call `isinstance(...): return` flow control; `.github/scripts/check_isinstance_return_ratchet.py` ratchets existing occurrences.
 - **No in-function imports** — all imports at module top level.
-- **Import purity** — a module's top level must be referentially transparent: importing it must not construct clients/connections (`OpenAI(...)`, `Redis(...)`, `Pinecone(...)`, `DeepgramClient(...)`, `firebase_admin.initialize_app(...)`, `tiktoken.encoding_for_model(...)`, etc.), perform network/IO (`requests.*`, `httpx.*`, `open(...)`), read `os.environ["X"]` (subscript — use `os.getenv`/`.get`), or mutate global state. Defer construction into lazy getters (`_x=None; def get_x(): ...`); tests inject fakes via `monkeypatch.setattr` on the singleton. Scope: correctness side effects, not import duration (`import langchain` is slow-but-pure and fine). Run `python scripts/scan_import_time_side_effects.py` from `backend/`. Full prescription: `backend/docs/test_isolation.md`.
-- **Test isolation** — never mutate `sys.modules` at module scope in test files. Use `monkeypatch.setattr` on a lazy-held singleton, FastAPI `app.dependency_overrides` for router deps, or (reserve only) `backend/testing/import_isolation.py`. Run `python scripts/check_module_stub_pollution.py`. Do not extend `tests/unit/memory_import_isolation.py` (deprecated). See `backend/docs/test_isolation.md`.
+- **Import purity** — a module's top level must be referentially transparent: importing it must not construct clients/connections (`OpenAI(...)`, `Redis(...)`, `Pinecone(...)`, `DeepgramClient(...)`, `firebase_admin.initialize_app(...)`, `tiktoken.encoding_for_model(...)`, etc.), perform network/IO (`requests.*`, `httpx.*`, `open(...)`), read `os.environ["X"]` (subscript — use `os.getenv`/`.get`), or mutate global state. Defer construction into lazy getters (`_x=None; def get_x(): ...`); tests inject fakes via `monkeypatch.setattr` on the singleton. Scope: correctness side effects, not import duration (`import langchain` is slow-but-pure and fine). The shared preflight manifest runs the import-purity guard. Full prescription: `backend/docs/test_isolation.md`.
+- **Test isolation** — never mutate `sys.modules` at module scope in test files. Use `monkeypatch.setattr` on a lazy-held singleton, FastAPI `app.dependency_overrides` for router deps, or (reserve only) `backend/testing/import_isolation.py`. The shared preflight manifest runs the module-pollution guard. Do not extend `tests/unit/memory_import_isolation.py` (deprecated). See `backend/docs/test_isolation.md`.
 - **Import hierarchy** (low → high): `database/` → `utils/` → `routers/` → `main.py`. Never import upward.
 - **Memory management** — `del` byte arrays after processing, `.clear()` dicts/lists holding data.
-- **Async I/O** — never `requests.*` in async (use `httpx.AsyncClient` pools from `utils/http_client.py`), never `Thread().start().join()` (use `critical_executor`/`storage_executor`), never `time.sleep()` in async (use `asyncio.sleep()`). Run `python scripts/scan_async_blockers.py` from `backend/` before committing.
+- **Async I/O** — never `requests.*` in async (use `httpx.AsyncClient` pools from `utils/http_client.py`), never `Thread().start().join()` (use `critical_executor`/`storage_executor`), never `time.sleep()` in async (use `asyncio.sleep()`). The shared preflight manifest runs the async-blocker guard.
 - **`async def` vs `def` endpoints** — use `def` for endpoints that only call sync code (Firestore, Redis, file I/O); FastAPI runs `def` in a threadpool automatically. Only use `async def` when the endpoint genuinely `await`s something (httpx, file.read(), WebSocket, asyncio.sleep) or uses asyncio APIs directly. Never call sync DB/storage/file functions directly inside `async def` — wrap with `await run_blocking(executor, func, args)`.
 - **Blocking calls in async** — these block the event loop: `database.*` functions (Firestore sync SDK), `open()`/`shutil.*` (file I/O), `upload_*`/`delete_*` from storage (GCS SDK), `creds.refresh()` (Google auth HTTP). In `async def`, always offload via `await run_blocking(executor, func, args)` from `utils.executors`. Pool assignment: `critical_executor` for auth/rate-limits, `db_executor` for Firestore/Redis CRUD, `llm_executor` for LLM calls, `storage_executor` for GCS/file I/O, `postprocess_executor` for coordinators, `sync_executor` for STT/VAD. See `backend/CLAUDE.md` for full rules. Never use bare `asyncio.to_thread()`.
 
@@ -129,6 +159,7 @@ backend (main.py)
   ├── ──────► vad (modal/)
   ├── ──────► deepgram (self-hosted or cloud)
   ├── ──────► parakeet (parakeet/)
+  ├── ──────► nllb-translation (nllb_translation/)
   └── ──────► llm-gateway (llm_gateway/main.py)
 
 pusher
@@ -149,9 +180,9 @@ memory-maintenance-job (modal/memory_maintenance_job.py)  [cron]
 agent-vm-reaper (backend/charts/agent-vm-reaper)  [cron]
 ```
 
-Helm charts: `backend/charts/{agent-proxy,agent-vm-reaper,backend-listen,backend-secrets,deepgram-self-hosted,diarizer,llm-gateway,monitoring,parakeet,pusher,vad}/`
+Helm charts: `backend/charts/{agent-proxy,agent-vm-reaper,backend-listen,backend-secrets,deepgram-self-hosted,diarizer,llm-gateway,monitoring,nllb-translation,parakeet,pusher,vad}/`
 
-- **backend** (`main.py`) — REST API. Streams audio to pusher via WebSocket (`utils/pusher.py`). Calls diarizer for speaker embeddings (`utils/stt/speaker_embedding.py`). Calls vad for voice activity detection and speaker identification (`utils/stt/vad.py`, `utils/stt/speech_profile.py`). Calls deepgram or parakeet for STT (`HOSTED_PARAKEET_API_URL`, `utils/stt/streaming.py`).
+- **backend** (`main.py`) — REST API. Streams audio to pusher via WebSocket (`utils/pusher.py`). Calls diarizer for speaker embeddings (`utils/stt/speaker_embedding.py`). Calls vad for voice activity detection and speaker identification (`utils/stt/vad.py`, `utils/stt/speech_profile.py`). Calls deepgram or parakeet for STT (`HOSTED_PARAKEET_API_URL`, `utils/stt/streaming.py`). Calls NLLB translation when `HOSTED_TRANSLATION_API_URL` is set and NLLB is selected (`utils/translation.py`).
 - **hosted MCP OAuth** (`routers/mcp_sse.py`) — Provider-neutral OAuth for `/v1/mcp/sse`. Configure public or confidential clients with `MCP_OAUTH_CLIENTS_JSON`; allowlist the exact connector callback URI from the provider. The temporary `MCP_OAUTH_CHATGPT_*` envs still define the legacy confidential ChatGPT test client, and `MCP_OAUTH_PUBLIC_*` can expose a no-secret PKCE public client. Also set `MCP_AUTHORIZATION_SERVER_URL`, optional `MCP_RESOURCE_URL`, and token TTL env vars.
 - **llm-gateway** (`llm_gateway/main.py`) — Internal FastAPI service for Omi-managed LLM auto lanes. Called by backend with service auth for `omi:auto:*` chat-completions routes; not exposed to clients.
 - **pusher** (`pusher/main.py`) — Receives audio via binary WebSocket protocol. Calls diarizer and deepgram for speaker sample extraction (`utils/speaker_identification.py` → `utils/speaker_sample.py`).
@@ -160,6 +191,7 @@ Helm charts: `backend/charts/{agent-proxy,agent-vm-reaper,backend-listen,backend
 - **vad** (`modal/main.py`) — GPU. `/v1/vad` and `/v1/speaker-identification`. Called by backend only.
 - **deepgram** — STT. Streaming uses self-hosted (`DEEPGRAM_SELF_HOSTED_URL`) or cloud based on `DEEPGRAM_SELF_HOSTED_ENABLED`. Pre-recorded always uses Deepgram cloud. Called by backend and pusher.
 - **parakeet** (`parakeet/`) — GPU STT service for streaming and pre-recorded transcription. Called by backend when `HOSTED_PARAKEET_API_URL` is set and parakeet is selected.
+- **nllb-translation** (`nllb_translation/`) — GPU translation service. Called by backend when `HOSTED_TRANSLATION_API_URL` is set and NLLB is selected.
 - **backend-sync** (`main.py`, same image as backend) — Cloud Run admission service for `/v2/sync-local-files`. The server classifies whole batches: recordings no more than six hours old enter `sync-jobs` (fresh), while older or untrusted batches enter `sync-backfill` and the scale-to-zero **backend-sync-backfill** worker. Fresh keeps its bounded inline fallback; backfill never falls into fresh/inline capacity. Backfill defaults to one in-flight job per UID, four processed speech hours per UID/day, 555 processed speech hours globally/day, a 30-day lookback, and four queue workers. Live fair-use reads only `realtime + sync_fresh`; `sync_backfill` is separately metered. A 45-day Firestore content ledger protects transcription and usage side effects across job expiry and re-upload. Audio playback merges (`/v1/sync/audio/*`) follow the same pattern via queue `audio-merge` building 30-day MP3 artifacts under `playback/` (`AUDIO_MERGE_DISPATCH_MODE`) — per-part files plus one dense per-conversation `conversation.mp3` whose spans manifest + audio_files fingerprint are stamped on the conversation doc (`conversation_audio`); a fingerprint mismatch after late chunks re-enqueues the build. Account deletion uses `ACCOUNT_DELETION_DISPATCH_MODE=cloud_tasks` to enqueue durable wipes to queue `account-deletion`, which posts `/v1/users/account-deletion-wipes/run`; API success is returned only after the deletion marker is persisted and the wipe task is durably enqueued.
 - **notifications-job** (`modal/job.py`) — Cron job, reads Firestore/Redis, sends push notifications and runs X connector sync. It has no canonical maintenance flags or Typesense secrets; its deploy workflow removes only those retired bindings and preserves unrelated notification/X-sync env.
 - **memory-maintenance-job** (`modal/memory_maintenance_job.py`) — Cloud Run Job and sole host for canonical ST→LT maintenance (TTL → consolidation → promotion). Manual deploy via `.github/workflows/gcp_memory_maintenance_job.yml`; auto-dev on push to `main` via `gcp_memory_maintenance_job_auto_dev.yml`. Enablement is a multi-var contract (`MEMORY_MODE`, `MEMORY_ENABLED_USERS`, cron/fast-track/consolidation flags) enforced by `backend/scripts/validate-backend-runtime-env.py`; prod stays `MEMORY_MODE=off` until Gate 3.
@@ -176,6 +208,8 @@ Keep this map up to date. When adding, removing, or changing inter-service calls
 - All user-facing strings must use l10n (`context.l10n.keyName`) — never hardcoded strings. Add keys to ARB files using `jq` (never read full ARB files). See skill `add-a-new-localization-key-l10n-arb`.
 - When adding new l10n keys, translate all non-English locales — never leave English text in a non-English ARB file. Don't hardcode the count; the authoritative list is whatever `ls app/lib/l10n/app_*.arb` returns minus `app_en.arb`. Use the `omi-add-missing-language-keys-l10n` skill, then verify with `cd app && flutter gen-l10n` — zero "untranslated message(s)" warnings means done.
 - **Firebase Prod Config** — never run `flutterfire configure`; it overwrites prod credentials. Prod config files live in `app/ios/Config/Prod/`, `app/lib/firebase_options_prod.dart`, `app/android/app/src/prod/`.
+- PR CI runs `flutter test` and an analyzer ratchet (`app/scripts/analyze_ratchet.sh`) — analyzer errors always fail; new info/warning lint occurrences above `app/analysis_baseline.json` fail. Run the script locally before committing app Dart changes.
+- Deliberate lint acceptances/improvements update the baseline via `--update-baseline` in the same PR.
 
 #### Verifying UI Changes (agent-flutter)
 

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterator, List, Optional, cast
 
-from google.api_core.exceptions import AlreadyExists, Conflict
+from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -16,6 +16,8 @@ from .helpers import prepare_for_read, prepare_for_write, set_data_protection_le
 logger = logging.getLogger(__name__)
 
 BATCH_LIMIT = 500  # Firestore hard limit
+DELETE_MESSAGES_BATCH_LIMIT = 200  # Leaves room for one session-counter write per deleted message.
+DELETE_MESSAGES_CONFLICT_RETRIES = 3
 
 
 def _typed_doc(doc: Any) -> Dict[str, Any]:
@@ -254,10 +256,20 @@ def get_messages(
 
 
 def get_message_count(uid: str) -> int:
-    """Return the total number of chat messages for a user."""
-    user_ref = db.collection('users').document(uid)
-    docs = user_ref.collection('messages').count().get()
-    return int(docs[0][0].value) if docs and docs[0] else 0
+    """Return the number of chat messages visible to the user.
+
+    Reported messages are hidden from every chat view (``get_messages`` and ``get_app_messages``
+    skip ``reported == True``), so this stat excludes them too; otherwise it would exceed the number
+    of messages the user can actually see anywhere. Uses count() aggregation (total minus the
+    reported subset) rather than streaming every message. A ``reported == False`` count would be
+    wrong because legacy messages may omit the field.
+    """
+    messages_ref = db.collection('users').document(uid).collection('messages')
+    total_res = messages_ref.count().get()
+    total = int(total_res[0][0].value) if total_res and total_res[0] else 0
+    reported_res = messages_ref.where(filter=FieldFilter('reported', '==', True)).count().get()
+    reported = int(reported_res[0][0].value) if reported_res and reported_res[0] else 0
+    return max(0, total - reported)
 
 
 def iter_all_messages(uid: str, batch_size: int = 1000) -> Iterator[Dict[str, Any]]:
@@ -818,8 +830,9 @@ def save_message(
 
 
 def delete_messages(uid: str, app_id: Optional[str] = None, session_id: Optional[str] = None) -> int:
-    """Delete messages matching app_id/session_id.  Returns count deleted."""
-    col = db.collection('users').document(uid).collection('messages')
+    """Delete messages and apply inverse session metadata updates atomically."""
+    user_ref = db.collection('users').document(uid)
+    col = user_ref.collection('messages')
     if session_id:
         # Session-scoped delete: filter by session only (same logic as get_messages)
         query = col.where(filter=FieldFilter('chat_session_id', '==', session_id))
@@ -828,13 +841,72 @@ def delete_messages(uid: str, app_id: Optional[str] = None, session_id: Optional
         query = col.where(filter=FieldFilter('plugin_id', '==', app_id))
 
     deleted = 0
+    consecutive_conflicts = 0
     while True:
-        docs: List[Any] = list(query.limit(BATCH_LIMIT).stream())
+        docs: List[Any] = list(query.limit(DELETE_MESSAGES_BATCH_LIMIT).stream())
         if not docs:
             break
+
+        deleted_by_session: Dict[str, int] = {}
+        deleted_message_ids_by_session: Dict[str, List[str]] = {}
+        deleted_previews_by_session: Dict[str, set[str]] = {}
+        for doc in docs:
+            data = _typed_doc(doc)
+            message_session_id = data.get('chat_session_id') or data.get('session_id')
+            if isinstance(message_session_id, str) and message_session_id:
+                deleted_by_session[message_session_id] = deleted_by_session.get(message_session_id, 0) + 1
+                stored_message_id = data.get('id')
+                deleted_message_ids_by_session.setdefault(message_session_id, []).append(
+                    stored_message_id if isinstance(stored_message_id, str) and stored_message_id else doc.id
+                )
+                text = data.get('text')
+                if isinstance(text, str) and text:
+                    deleted_previews_by_session.setdefault(message_session_id, set()).add(text[:100])
+
+        session_snapshots: Dict[str, Any] = {}
+        for message_session_id in deleted_by_session:
+            session_snapshots[message_session_id] = (
+                user_ref.collection('chat_sessions').document(message_session_id).get()
+            )
+
         batch = db.batch()
         for doc in docs:
-            batch.delete(col.document(doc.id))
-        batch.commit()
+            delete_option = db.write_option(last_update_time=doc.update_time)
+            batch.delete(col.document(doc.id), option=delete_option)
+
+        for message_session_id, deleted_from_session in deleted_by_session.items():
+            session_snapshot = session_snapshots[message_session_id]
+            if not session_snapshot.exists:
+                continue
+            session_data = _typed_doc(session_snapshot)
+            stored_count = session_data.get('message_count')
+            updates: Dict[str, Any] = {}
+            if isinstance(session_data.get('message_ids'), list):
+                updates['message_ids'] = firestore.ArrayRemove(deleted_message_ids_by_session[message_session_id])
+            if isinstance(stored_count, int) and stored_count > 0:
+                decrement = min(stored_count, deleted_from_session)
+                updates['message_count'] = firestore.Increment(-decrement)
+            current_preview = session_data.get('preview')
+            if isinstance(current_preview, str) and current_preview in deleted_previews_by_session.get(
+                message_session_id, set()
+            ):
+                updates['preview'] = None
+            if not updates:
+                continue
+            session_ref = user_ref.collection('chat_sessions').document(message_session_id)
+            option = db.write_option(last_update_time=session_snapshot.update_time)
+            batch.update(session_ref, updates, option=option)
+
+        try:
+            batch.commit()
+        except FailedPrecondition:
+            # Another clear or a concurrent session mutation won the race.
+            # The batch is atomic, so re-query before applying any decrement.
+            consecutive_conflicts += 1
+            if consecutive_conflicts >= DELETE_MESSAGES_CONFLICT_RETRIES:
+                raise
+            continue
         deleted += len(docs)
+        consecutive_conflicts = 0
+
     return deleted

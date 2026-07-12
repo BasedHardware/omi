@@ -386,40 +386,45 @@ enum RealtimeHubBargeInContinuity {
 /// boundaries. Realtime providers can leave short gaps between streamed audio
 /// buffers; clearing the glow on every empty queue makes the notch resize and
 /// shimmer restart repeatedly.
+@MainActor
 final class RealtimeResponseGlowGate {
   private let idleClearDelay: TimeInterval
+  private let scheduler: DelayedActionScheduling
   private let setActive: (Bool) -> Void
-  private var idleClearWorkItem: DispatchWorkItem?
+  private var idleClearCancellation: DelayedActionCancellation?
   private(set) var isActive = false
 
-  init(idleClearDelay: TimeInterval = 0.75, setActive: @escaping (Bool) -> Void) {
+  init(
+    idleClearDelay: TimeInterval = 0.75,
+    scheduler: DelayedActionScheduling? = nil,
+    setActive: @escaping (Bool) -> Void
+  ) {
     self.idleClearDelay = idleClearDelay
+    self.scheduler = scheduler ?? TaskDelayedActionScheduler()
     self.setActive = setActive
   }
 
   func markPlaybackActive() {
-    idleClearWorkItem?.cancel()
-    idleClearWorkItem = nil
+    idleClearCancellation?.cancel()
+    idleClearCancellation = nil
     guard !isActive else { return }
     isActive = true
     setActive(true)
   }
 
   func scheduleIdleClear() {
-    idleClearWorkItem?.cancel()
-    let workItem = DispatchWorkItem { [weak self] in
+    idleClearCancellation?.cancel()
+    idleClearCancellation = scheduler.schedule(after: idleClearDelay) { [weak self] in
       guard let self else { return }
+      self.idleClearCancellation = nil
       self.isActive = false
       self.setActive(false)
-      self.idleClearWorkItem = nil
     }
-    idleClearWorkItem = workItem
-    DispatchQueue.main.asyncAfter(deadline: .now() + idleClearDelay, execute: workItem)
   }
 
   func clearImmediately() {
-    idleClearWorkItem?.cancel()
-    idleClearWorkItem = nil
+    idleClearCancellation?.cancel()
+    idleClearCancellation = nil
     guard isActive else {
       setActive(false)
       return
@@ -2882,6 +2887,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     case .checkPermissionStatus, .requestPermission:
       // Permission prompts belong to this desktop process. Reuse the canonical
       // chat executor so PTT and main chat trigger exactly the same native flow.
+      let originatingUserText = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard let executorRoute = RealtimeHubTools.permissionExecutorRoute(
+        for: tool, arguments: arguments)
+      else {
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name,
+          output: "Permission tool routing is unavailable.", expectedTurnEpoch: toolTurnEpoch)
+        return
+      }
       runToolAndSpeak(
         source: source,
         callId: callId, name: name,
@@ -2890,7 +2904,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         expectedTurnEpoch: toolTurnEpoch
       ) {
         await ChatToolExecutor.execute(
-          ToolCall(name: name, arguments: arguments, thoughtSignature: nil)
+          ToolCall(
+            name: executorRoute.toolName,
+            arguments: executorRoute.type.map { ["type": $0] } ?? [:],
+            thoughtSignature: nil),
+          originatingUserText: originatingUserText
         )
       }
     case .getActionItems:
@@ -3107,8 +3125,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     name: String,
     expectedTurnEpoch: Int
   ) async {
-    let userText = turnTranscript
-    if let permissionRedirect = RealtimeHubTools.directPermissionRedirect(forDelegationBrief: brief) {
+    let userText = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let permissionRedirect = RealtimeHubTools.directPermissionRedirect(
+      forDelegationBrief: brief,
+      originatingUserText: userText)
+    {
       guard
         isCurrentToolTurn(
           source: source, callId: callId, name: name, expectedTurnEpoch: expectedTurnEpoch)
@@ -3119,12 +3140,22 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       log(
         "RealtimeHub[\(providerTag)]: redirecting spawn_agent permission request to \(permissionRedirect.tool.rawValue) type=\(permissionRedirect.type)"
       )
+      if permissionRedirect.recoveredFromDelegation {
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "other",
+          from: "agent",
+          to: "native",
+          reason: "other",
+          outcome: .recovered,
+          extra: ["surface": "realtime", "permission": permissionRedirect.type])
+      }
       let output = await ChatToolExecutor.execute(
         ToolCall(
           name: permissionRedirect.tool.rawValue,
           arguments: ["type": permissionRedirect.type],
           thoughtSignature: nil
-        )
+        ),
+        originatingUserText: userText
       )
       sendToolResultIfCurrent(
         source: source, callId: callId, name: name, output: output,

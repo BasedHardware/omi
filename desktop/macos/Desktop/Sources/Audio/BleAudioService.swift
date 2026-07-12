@@ -265,21 +265,24 @@ extension BleAudioService {
 // MARK: - BleAudioProcessorDelegate
 
 extension BleAudioService: BleAudioProcessor.Delegate {
-    func bleAudioProcessor(_ processor: BleAudioProcessor, didDecodeSamples samples: [Int16]) {
+    nonisolated func bleAudioProcessor(_ processor: BleAudioProcessor, didDecodeSamples samples: [Int16]) {
         // PCM delivery uses pcmDataPublisher; delegate path is unused.
         // Reset the degraded flag on successful decode so it reflects the
         // current processor state rather than staying sticky.
-        if isDecodeDegraded {
-            isDecodeDegraded = false
-            logger.info("BLE decode recovered — clearing degraded flag")
+        Task { @MainActor [weak self] in
+            guard let self, self.isDecodeDegraded else { return }
+            self.isDecodeDegraded = false
+            self.logger.info("BLE decode recovered — clearing degraded flag")
         }
     }
 
-    func bleAudioProcessor(_ processor: BleAudioProcessor, didFailWithError error: Error) {
-        isDecodeDegraded = true
-        logger.error("BLE decode degraded: \(error.localizedDescription)")
+    nonisolated func bleAudioProcessor(_ processor: BleAudioProcessor, didFailWithError error: Error) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.isDecodeDegraded = true
+            self.logger.error("BLE decode degraded: \(error.localizedDescription)")
+        }
     }
 }
 
 // MARK: - Integration with DeviceProvider
-

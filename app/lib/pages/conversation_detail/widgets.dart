@@ -241,6 +241,7 @@ class GetSummaryWidgets extends StatelessWidget {
         if (folderProvider.folders.isEmpty) {
           await folderProvider.loadFolders();
         }
+        if (!context.mounted) return;
         final newFolderId = await showMoveToFolderSheet(
           context,
           conversationId: conversationId,
@@ -1375,18 +1376,20 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
                 return;
               } else {
                 webhookOnConversationCreatedCall(widget.conversation, returnRawBody: true).then((response) {
-                  showDialog(
-                    context: context,
-                    builder: (c) => getDialog(
-                      context,
-                      () => Navigator.pop(context),
-                      () => Navigator.pop(context),
-                      context.l10n.result,
-                      response,
-                      okButtonText: context.l10n.ok,
-                      singleButton: true,
-                    ),
-                  );
+                  if (context.mounted) {
+                    showDialog(
+                      context: context,
+                      builder: (c) => getDialog(
+                        context,
+                        () => Navigator.pop(context),
+                        () => Navigator.pop(context),
+                        context.l10n.result,
+                        response,
+                        okButtonText: context.l10n.ok,
+                        singleButton: true,
+                      ),
+                    );
+                  }
                   changeLoadingAppIntegrationTest(false);
                 });
               }
@@ -1537,7 +1540,7 @@ class _CalendarEventDetailsSheetState extends State<CalendarEventDetailsSheet> {
               onTap: () async {
                 setState(() => _unlinking = true);
                 await widget.onUnlink!();
-                if (!mounted) return;
+                if (!context.mounted) return;
                 Navigator.pop(context);
               },
             ),

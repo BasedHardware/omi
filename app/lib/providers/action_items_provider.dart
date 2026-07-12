@@ -166,6 +166,9 @@ class ActionItemsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  static bool shouldAutoRevealCompleted(List<ActionItemWithMetadata> items) =>
+      items.isNotEmpty && items.every((item) => item.completed);
+
   Future<void> fetchActionItems({bool showShimmer = false}) async {
     if (showShimmer) {
       setLoading(true);
@@ -184,6 +187,10 @@ class ActionItemsProvider extends ChangeNotifier {
 
       _actionItems = response.actionItems;
       _hasMore = response.hasMore;
+
+      if (!_showCompletedView && shouldAutoRevealCompleted(_actionItems)) {
+        _showCompletedView = true;
+      }
     } catch (e) {
       Logger.debug('Error fetching action items: $e');
     } finally {

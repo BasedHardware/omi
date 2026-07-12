@@ -16,11 +16,19 @@ class PowerMonitor: ObservableObject {
     var onPowerSourceChanged: ((Bool) -> Void)?
 
     private var runLoopSource: CFRunLoopSource?
+    private let batteryStateProbe: @Sendable () -> Bool
+    private var powerProbeGeneration: UInt64 = 0
 
-    private init() {
-        isOnBattery = Self.checkBatteryState()
+    init(
+        batteryStateProbe: @escaping @Sendable () -> Bool = { PowerMonitor.checkBatteryState() },
+        startMonitoring: Bool = true
+    ) {
+        self.batteryStateProbe = batteryStateProbe
+        isOnBattery = batteryStateProbe()
         Self.cachedIsOnBattery = isOnBattery
-        startMonitoring()
+        if startMonitoring {
+            startMonitoringPowerSource()
+        }
     }
 
     // MARK: - Power Source Detection
@@ -51,7 +59,7 @@ class PowerMonitor: ObservableObject {
 
     // MARK: - Monitoring
 
-    private func startMonitoring() {
+    private func startMonitoringPowerSource() {
         let context = UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
         if let source = IOPSCreateLimitedPowerNotification({ context in
             guard let context = context else { return }
@@ -66,14 +74,18 @@ class PowerMonitor: ObservableObject {
         }
     }
 
-    private func handlePowerSourceChanged() {
+    func handlePowerSourceChanged() {
         let wasOnBattery = isOnBattery
+        powerProbeGeneration &+= 1
+        let generation = powerProbeGeneration
+        let batteryStateProbe = batteryStateProbe
 
         // IOPSCopyPowerSourcesInfo can block on Mach IPC — check off main thread
         Task.detached(priority: .utility) { [weak self] in
-            let nowOnBattery = Self.checkBatteryState()
+            let nowOnBattery = batteryStateProbe()
             guard let self else { return }
             await MainActor.run {
+                guard self.powerProbeGeneration == generation else { return }
                 self.isOnBattery = nowOnBattery
                 Self.cachedIsOnBattery = nowOnBattery
 

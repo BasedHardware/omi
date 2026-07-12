@@ -6,6 +6,7 @@ import re
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -41,6 +42,8 @@ def with_memory_env(payload: str) -> str:
         {"name": "POSTHOG_HOST", "value": "https://app.posthog.com"},
         {"name": "STT_PRERECORDED_MODEL", "value": "parakeet,dg-nova-3"},
         {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omiapi.com"},
+        {"name": "DEEPGRAM_API_KEY", "valueFrom": {"secretKeyRef": {"name": "DEEPGRAM_API_KEY", "key": "latest"}}},
+        {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},
         {"name": "GOOGLE_CLIENT_ID", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_ID", "key": "latest"}}},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET", "key": "latest"}}},
         {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "latest"}}},
@@ -58,7 +61,9 @@ def with_memory_env(payload: str) -> str:
 GOOGLE_OAUTH_SECRETS = '''\
         {"name": "GOOGLE_CLIENT_ID", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_ID"}}},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET"}}},
-        {"name": "STT_PRERECORDED_MODEL", "valueFrom": {"secretKeyRef": {"name": "STT_PRERECORDED_MODEL", "key": "latest"}}},'''
+        {"name": "STT_PRERECORDED_MODEL", "valueFrom": {"secretKeyRef": {"name": "STT_PRERECORDED_MODEL", "key": "latest"}}},
+        {"name": "DEEPGRAM_API_KEY", "valueFrom": {"secretKeyRef": {"name": "DEEPGRAM_API_KEY", "key": "latest"}}},
+        {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},'''
 
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
@@ -74,6 +79,8 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
 STANDARD_CLOUD_RUN_SECRETS = {
     'GOOGLE_CLIENT_ID': {'secret': 'GOOGLE_CLIENT_ID', 'version': 'latest'},
     'GOOGLE_CLIENT_SECRET': {'secret': 'GOOGLE_CLIENT_SECRET', 'version': 'latest'},
+    'DEEPGRAM_API_KEY': {'secret': 'DEEPGRAM_API_KEY', 'version': 'latest'},
+    'MODULATE_API_KEY': {'secret': 'MODULATE_API_KEY', 'version': 'latest'},
 }
 
 
@@ -110,10 +117,57 @@ def test_repo_gke_values_match_manifest():
     assert errors == []
 
 
+def test_repo_prod_gke_values_match_manifest():
+    validator = load_validator()
+
+    errors = validator.validate_runtime_env(env='prod')
+
+    assert errors == []
+
+
 def test_repo_cloud_run_workflows_match_manifest():
     validator = load_validator()
 
     errors = validator.validate_runtime_env(env='dev', check_workflows=True)
+
+    assert errors == []
+
+
+def test_repo_prod_cloud_run_workflows_match_manifest(monkeypatch):
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    env_config = validator._get_env_config(manifest, 'prod')
+    load_yaml = validator._load_yaml
+
+    def load_workflow_only(path):
+        if path == validator.DEFAULT_MANIFEST:
+            pytest.fail('workflow validation must reuse the already-loaded runtime manifest')
+        return load_yaml(path)
+
+    monkeypatch.setattr(
+        validator,
+        '_load_yaml',
+        load_workflow_only,
+    )
+
+    errors = validator._validate_cloud_run_workflows(
+        'prod',
+        env_config,
+        strict_provisional=False,
+        manifest_path=validator.DEFAULT_MANIFEST,
+        manifest=manifest,
+    )
+
+    assert errors == []
+
+
+def test_repo_prod_rendered_cloud_run_state_matches_manifest():
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    env_config = validator._get_env_config(manifest, 'prod')
+    rendered_state = validator._build_rendered_cloud_run_state(env_config)
+
+    errors = validator._validate_cloud_run(env_config, rendered_state, strict_provisional=False)
 
     assert errors == []
 
@@ -130,7 +184,9 @@ def test_parakeet_cloud_run_surface_requires_hosted_endpoint():
                         'STT_PRERECORDED_MODEL': {
                             'secret': 'STT_PRERECORDED_MODEL',
                             'version': 'latest',
-                        }
+                        },
+                        'DEEPGRAM_API_KEY': {'secret': 'DEEPGRAM_API_KEY', 'version': 'latest'},
+                        'MODULATE_API_KEY': {'secret': 'MODULATE_API_KEY', 'version': 'latest'},
                     },
                 }
                 for service in ('backend', 'backend-sync', 'backend-integration')
@@ -139,14 +195,15 @@ def test_parakeet_cloud_run_surface_requires_hosted_endpoint():
     }
     del env_config['cloud_run']['services']['backend']['env']['HOSTED_PARAKEET_API_URL']
 
-    errors = validator._validate_prerecorded_stt_contract('dev', env_config)
+    for environment in ('dev', 'prod'):
+        errors = validator._validate_prerecorded_stt_contract(environment, env_config)
 
-    assert errors == [
-        validator.ValidationError(
-            'dev/cloud_run/backend',
-            'required Cloud Run service is missing non-empty HOSTED_PARAKEET_API_URL',
-        )
-    ]
+        assert errors == [
+            validator.ValidationError(
+                f'{environment}/cloud_run/backend',
+                'required Cloud Run service is missing non-empty HOSTED_PARAKEET_API_URL',
+            )
+        ]
 
 
 def test_dev_cloud_run_prerecorded_stt_services_require_both_bindings():
@@ -163,7 +220,7 @@ def test_dev_cloud_run_prerecorded_stt_services_require_both_bindings():
 
     errors = validator._validate_prerecorded_stt_contract('dev', env_config)
 
-    assert len(errors) == 6
+    assert len(errors) == 12
     assert {error.scope for error in errors} == {
         'dev/cloud_run/backend',
         'dev/cloud_run/backend-sync',
@@ -171,8 +228,122 @@ def test_dev_cloud_run_prerecorded_stt_services_require_both_bindings():
     }
     assert {error.message for error in errors} == {
         'required Cloud Run service is missing STT_PRERECORDED_MODEL',
+        'required Cloud Run service is missing non-empty DEEPGRAM_API_KEY',
+        'required Cloud Run service is missing non-empty MODULATE_API_KEY',
         'required Cloud Run service is missing non-empty HOSTED_PARAKEET_API_URL',
     }
+
+
+def test_literal_deepgram_model_does_not_require_parakeet_endpoint():
+    validator = load_validator()
+    env_config = {
+        'gke': {
+            'backend-listen': {
+                'env': {
+                    'STT_PRERECORDED_MODEL': {'value': 'dg-nova-3'},
+                    'DEEPGRAM_API_KEY': {'secret': {'name': 'secret', 'key': 'DEEPGRAM_API_KEY'}},
+                },
+            }
+        },
+        'cloud_run': {'services': {}},
+    }
+
+    assert validator._validate_prerecorded_stt_contract('prod', env_config) == []
+
+
+def test_literal_modulate_model_requires_its_declared_api_key_binding():
+    validator = load_validator()
+    env_config = {
+        'gke': {
+            'backend-listen': {
+                'env': {
+                    'STT_PRERECORDED_MODEL': {'value': 'modulate-velma-2'},
+                    'DEEPGRAM_API_KEY': {'secret': {'name': 'secret', 'key': 'DEEPGRAM_API_KEY'}},
+                },
+            }
+        },
+        'cloud_run': {'services': {}},
+    }
+
+    assert validator._validate_prerecorded_stt_contract('prod', env_config) == [
+        validator.ValidationError(
+            'prod/gke/backend-listen',
+            'STT_PRERECORDED_MODEL requires non-empty MODULATE_API_KEY',
+        )
+    ]
+
+
+def test_literal_model_configs_require_deepgram_language_and_unknown_token_fallback():
+    validator = load_validator()
+    cases = (
+        ('parakeet', {'HOSTED_PARAKEET_API_URL': {'value': 'http://parakeet.local'}}),
+        ('modulate-velma-2', {'MODULATE_API_KEY': {'secret': {'name': 'secret', 'key': 'MODULATE_API_KEY'}}}),
+        ('unknown-model', {}),
+    )
+
+    for models, provider_env in cases:
+        env_config = {
+            'gke': {
+                'backend-listen': {
+                    'env': {
+                        'STT_PRERECORDED_MODEL': {'value': models},
+                        **provider_env,
+                    },
+                }
+            },
+            'cloud_run': {'services': {}},
+        }
+
+        assert validator._validate_prerecorded_stt_contract('prod', env_config) == [
+            validator.ValidationError(
+                'prod/gke/backend-listen',
+                'STT_PRERECORDED_MODEL requires non-empty DEEPGRAM_API_KEY',
+            )
+        ]
+
+
+def test_full_validation_reports_missing_provider_binding_once():
+    """Missing HOSTED_PARAKEET_API_URL must surface once per service, not fan out.
+
+    Uses the pure STT contract helper with a tiny synthetic env so this stays under
+    the fast-unit CPU budget (full-manifest validate_runtime_env is covered elsewhere).
+    """
+    validator = load_validator()
+    env_config = {
+        'gke': {},
+        'cloud_run': {
+            'services': {
+                service: {
+                    'env': {'HOSTED_PARAKEET_API_URL': {'value': 'http://parakeet.local'}},
+                    'secrets': {
+                        'STT_PRERECORDED_MODEL': {
+                            'secret': 'STT_PRERECORDED_MODEL',
+                            'version': 'latest',
+                        },
+                        'DEEPGRAM_API_KEY': {'secret': 'DEEPGRAM_API_KEY', 'version': 'latest'},
+                        'MODULATE_API_KEY': {'secret': 'MODULATE_API_KEY', 'version': 'latest'},
+                    },
+                }
+                for service in ('backend', 'backend-sync', 'backend-integration')
+            }
+        },
+    }
+    del env_config['cloud_run']['services']['backend']['env']['HOSTED_PARAKEET_API_URL']
+
+    errors = validator._validate_prerecorded_stt_contract('dev', env_config)
+    matching = [
+        error
+        for error in errors
+        if error.scope == 'dev/cloud_run/backend' and 'HOSTED_PARAKEET_API_URL' in error.message
+    ]
+
+    assert matching == [
+        validator.ValidationError(
+            'dev/cloud_run/backend',
+            'required Cloud Run service is missing non-empty HOSTED_PARAKEET_API_URL',
+        )
+    ]
+    assert len(errors) == 1
 
 
 def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
@@ -426,6 +597,14 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
                                         'secret': 'STT_PRERECORDED_MODEL',
                                         'version': 'latest',
                                     },
+                                    'DEEPGRAM_API_KEY': {
+                                        'secret': 'DEEPGRAM_API_KEY',
+                                        'version': 'latest',
+                                    },
+                                    'MODULATE_API_KEY': {
+                                        'secret': 'MODULATE_API_KEY',
+                                        'version': 'latest',
+                                    },
                                 },
                             }
                         },
@@ -619,13 +798,20 @@ def test_provisional_prod_endpoint_requires_presence_but_not_exact_value(tmp_pat
                                     'OMI_LLM_GATEWAY_URL': {
                                         'value': 'TBD_STABLE_PRIVATE_ENDPOINT',
                                         'provisional': True,
-                                    }
+                                    },
+                                    'HOSTED_PARAKEET_API_URL': {'value': 'https://parakeet.omi.me'},
                                 },
                                 'secrets': {
                                     'OMI_LLM_GATEWAY_SERVICE_TOKEN': {
                                         'secret': 'OMI_LLM_GATEWAY_SERVICE_TOKEN',
                                         'version': 'latest',
-                                    }
+                                    },
+                                    'STT_PRERECORDED_MODEL': {
+                                        'secret': 'STT_PRERECORDED_MODEL',
+                                        'version': 'latest',
+                                    },
+                                    'DEEPGRAM_API_KEY': {'secret': 'DEEPGRAM_API_KEY', 'version': 'latest'},
+                                    'MODULATE_API_KEY': {'secret': 'MODULATE_API_KEY', 'version': 'latest'},
                                 },
                             }
                         },
@@ -643,9 +829,13 @@ def test_provisional_prod_endpoint_requires_presence_but_not_exact_value(tmp_pat
 {
   "services": {
     "backend": {
-      "env": [
-        {"name": "OMI_LLM_GATEWAY_URL", "value": "http://stable-private-endpoint"},
-        {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}}
+        "env": [
+          {"name": "OMI_LLM_GATEWAY_URL", "value": "http://stable-private-endpoint"},
+          {"name": "HOSTED_PARAKEET_API_URL", "value": "https://parakeet.omi.me"},
+          {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}},
+          {"name": "STT_PRERECORDED_MODEL", "valueFrom": {"secretKeyRef": {"name": "STT_PRERECORDED_MODEL"}}},
+          {"name": "DEEPGRAM_API_KEY", "valueFrom": {"secretKeyRef": {"name": "DEEPGRAM_API_KEY"}}},
+          {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY"}}}
       ]
     }
   }
@@ -896,4 +1086,95 @@ def test_memory_maintenance_auto_dev_workflow_is_listed_and_targets_job():
     assert (
         '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml'
         in manifest['environments']['dev']['cloud_run']['workflow_files']
+    )
+
+
+def test_sync_backfill_co_deploy_is_required_per_workflow(tmp_path):
+    validator = load_validator()
+    values_file = tmp_path / 'backend_listen.yaml'
+    write_yaml(values_file, {'env': [{'name': 'OMI_LLM_GATEWAY_URL', 'value': 'http://gateway.local'}]})
+    incomplete = tmp_path / 'incomplete.yml'
+    write_yaml(
+        incomplete,
+        {
+            'env': {'SERVICE': 'backend'},
+            'jobs': {
+                'deploy': {
+                    'steps': [
+                        {
+                            'uses': 'google-github-actions/deploy-cloudrun@v2',
+                            'with': {
+                                'service': '${{ env.SERVICE }}-sync',
+                                'env_vars': 'SYNC_BACKFILL_ENABLED=true\n',
+                            },
+                        }
+                    ]
+                }
+            },
+        },
+    )
+    complete = tmp_path / 'complete.yml'
+    write_yaml(
+        complete,
+        {
+            'env': {'SERVICE': 'backend'},
+            'jobs': {
+                'deploy': {
+                    'steps': [
+                        {
+                            'uses': 'google-github-actions/deploy-cloudrun@v2',
+                            'with': {
+                                'service': '${{ env.SERVICE }}-sync',
+                                'env_vars': 'SYNC_BACKFILL_ENABLED=true\n',
+                            },
+                        },
+                        {
+                            'uses': 'google-github-actions/deploy-cloudrun@v2',
+                            'with': {
+                                'service': '${{ env.SERVICE }}-sync-backfill',
+                                'env_vars': 'SYNC_BACKFILL_ENABLED=true\n',
+                            },
+                        },
+                    ]
+                }
+            },
+        },
+    )
+    manifest_path = tmp_path / 'runtime_env.yaml'
+    write_yaml(
+        manifest_path,
+        {
+            'schema_version': 1,
+            'environments': {
+                'dev': {
+                    'gcp_project': 'based-hardware-dev',
+                    'runtime_gcp_project': 'based-hardware',
+                    'region': 'us-central1',
+                    'gke': {
+                        'backend-listen': {
+                            'values_file': str(values_file),
+                            'env': {'OMI_LLM_GATEWAY_URL': {'value': 'http://gateway.local'}},
+                        }
+                    },
+                    'cloud_run': {
+                        'workflow_files': [str(incomplete), str(complete)],
+                        'services': {
+                            'backend-sync': {'env': {}, 'secrets': {}},
+                            'backend-sync-backfill': {'env': {}, 'secrets': {}},
+                        },
+                        'jobs': {},
+                    },
+                }
+            },
+        },
+    )
+
+    errors = validator.validate_runtime_env(env='dev', manifest_path=manifest_path, check_workflows=True)
+
+    assert any(
+        error.message == 'deploys backend-sync without backend-sync-backfill' and str(incomplete) in error.scope
+        for error in errors
+    )
+    assert not any(
+        str(complete) in error.scope and 'without backend-sync-backfill' in error.message for error in errors
     )
