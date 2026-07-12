@@ -235,9 +235,9 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
                                       if (isSuccessful) {
                                         updateShowButton(false);
                                         if (context.mounted) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(content: Text(context.l10n.reviewAddedSuccessfully)),
-                                          );
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(SnackBar(content: Text(context.l10n.reviewAddedSuccessfully)));
                                         }
                                         bool hadReview = widget.app.userReview != null;
                                         if (!hadReview) widget.app.ratingCount += 1;

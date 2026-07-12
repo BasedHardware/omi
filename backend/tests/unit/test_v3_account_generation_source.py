@@ -3,12 +3,12 @@ from datetime import datetime, timezone
 import pytest
 
 from database.memory_compatibility_projection import read_v3_compatibility_projection_page
-from utils.memory.v3_account_generation_source import (
+from utils.memory.v3.account_generation_source import (
     V3AccountGenerationFailureReason,
     V3TrustedAccountGenerationReadError,
     read_memory_v3_trusted_account_generation,
 )
-from utils.memory.v3_projection_reader_contract import (
+from utils.memory.v3.projection_reader_contract import (
     V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
     V3_COMPATIBILITY_PROJECTION_SOURCE,
     V3_COMPATIBILITY_PROJECTION_VERSION,

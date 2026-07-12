@@ -1351,7 +1351,9 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("options.enableWatchdogTerminationTracking = !isDev"))
     XCTAssertTrue(source.contains("options.appHangTimeoutInterval = isDev ? 0 : 3.0"))
     XCTAssertTrue(source.contains("guard !AnalyticsManager.isDevBuild else { return }"))
-    XCTAssertTrue(source.contains("if !AnalyticsManager.isDevBuild {\n      SentrySDK.capture(message: \"App Terminating\")"))
+    XCTAssertTrue(source.contains("let breadcrumb = Breadcrumb(level: .info, category: \"lifecycle\")"))
+    XCTAssertTrue(source.contains("breadcrumb.message = \"App Terminating\""))
+    XCTAssertFalse(source.contains("SentrySDK.capture(message: \"App Terminating\")"))
     XCTAssertTrue(loggerSource.contains("if !isDevBuild {\n    let breadcrumb = Breadcrumb(level: .info, category: \"app\")"))
     XCTAssertTrue(loggerSource.contains("guard !isDevBuild else { return }"))
   }

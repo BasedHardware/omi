@@ -16,6 +16,12 @@ env:
   SERVICE: omi-web-app
   REGION: us-central1
 
+# Serialize writes to the same Cloud Run service. A dispatch from a non-deploy
+# ref gets an isolated group rather than sharing a production deployment lock.
+concurrency:
+  group: deploy-cloud-run-omi-web-app-${{ github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}
+  cancel-in-progress: false
+
 jobs:
   deploy:
     environment: ${{ (github.ref == 'refs/heads/development' && 'development') || (github.ref == 'refs/heads/main' && 'prod') }}
@@ -26,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Google Auth
         id: auth

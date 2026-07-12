@@ -8,6 +8,7 @@ import yaml
 import pytest
 
 from llm_gateway.gateway.config_loader import feature_lane_id, load_gateway_config, load_generated_route_overrides
+from llm_gateway.gateway.schemas import Surface
 from utils.llm.model_config import get_all_configured_features, get_route_options, get_model, get_provider
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -49,6 +50,7 @@ class DirectUse:
 DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('llm_gateway/routers/openai_compatible.py', 'OPENAI_API_KEY'),
     DirectUse('llm_gateway/routers/anthropic_messages.py', 'ANTHROPIC_API_KEY'),
+    DirectUse('llm_gateway/routers/health.py', 'ANTHROPIC_API_KEY'),
     DirectUse('utils/llm/app_generator.py', 'OpenAI'),
     DirectUse('utils/llm/providers.py', 'ChatGoogleGenerativeAI'),
     DirectUse('utils/llm/providers.py', 'ChatOpenAI'),
@@ -115,7 +117,13 @@ def test_anthropic_generated_lanes_do_not_advertise_streaming_without_adapter_su
     for feature in get_all_configured_features():
         if get_provider(feature) == 'anthropic':
             lane = config.lanes[feature_lane_id(feature)]
-            assert lane.capabilities.streaming is False
+            if feature == 'chat_agent':
+                assert lane.surface == Surface.ANTHROPIC_MESSAGES
+                assert lane.capabilities.streaming is True
+                assert lane.capabilities.tools is True
+            else:
+                assert lane.surface == Surface.OPENAI_CHAT_COMPLETIONS
+                assert lane.capabilities.streaming is False
 
 
 def test_inventory_surfaces_have_status_guardrails_and_resolvable_code_paths():

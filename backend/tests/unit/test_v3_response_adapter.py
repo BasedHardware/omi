@@ -2,11 +2,11 @@ import inspect
 
 import pytest
 
-from utils.memory.v3_memory_read_service import (
+from utils.memory.v3.memory_read_service import (
     V3CompatibilityReadPath,
     V3MemoryReadServiceResult,
 )
-from utils.memory.v3_response_adapter import (
+from utils.memory.v3.response_adapter import (
     V3ResponseShapeError,
     adapt_v3_memory_response,
 )
@@ -156,7 +156,7 @@ def test_archive_default_unavailable_and_stale_short_term_are_explicit_proof_fie
 
 
 def test_response_adapter_is_pure_local_and_has_no_route_database_cloud_or_testclient_dependency():
-    source = inspect.getsource(__import__('utils.memory.v3_response_adapter', fromlist=['']))
+    source = inspect.getsource(__import__('utils.memory.v3.response_adapter', fromlist=['']))
     forbidden = [
         'FastAPI',
         'TestClient',

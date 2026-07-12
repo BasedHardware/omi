@@ -16,6 +16,11 @@ on:
         required: false
         default: ''
 
+# Serialize Helm writers to this environment's NLLB translation release.
+concurrency:
+  group: deploy-gke-nllb-translation-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
 env:
   SERVICE: nllb-translation
   SERVICE_UNDERSCORE: nllb_translation

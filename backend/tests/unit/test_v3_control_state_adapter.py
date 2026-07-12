@@ -3,13 +3,13 @@ from dataclasses import dataclass
 from config.memory_rollout import MemoryRolloutMode, MemoryRolloutConfig
 from database.memory_collections import MemoryCollections
 from utils.memory.default_read_rollout import DEFAULT_READ_ROLLOUT_TIMEOUT_SECONDS
-from utils.memory.v3_control_reader_contract import (
+from utils.memory.v3.control_reader_contract import (
     V3ControlDecisionReason,
     V3ControlReaderRequest,
     V3ControlRouteFamily,
     decide_v3_control_route,
 )
-from utils.memory.v3_control_state_adapter import read_v3_control, resolve_v3_effective_mode
+from utils.memory.v3.control_state_adapter import read_v3_control, resolve_v3_effective_mode
 
 
 @dataclass

@@ -4,7 +4,7 @@
 # The 6 entries in group (1) were reintroduced by the origin/main merge (main's
 # versions differ from this branch's migration). Re-migrate them next.
 #
-# The 52 entries in group (2) were surfaced by the P1 hardening of
+# The 51 entries in group (2) were surfaced by the P1 hardening of
 # check_module_stub_pollution.py, which fixed a blind spot: the old checker only
 # inspected direct tree.body statements, so module-scope sys.modules writes
 # wrapped in top-level for/if/try/with blocks (the common
@@ -39,7 +39,6 @@ backend/tests/unit/test_conversation_source_unknown.py
 backend/tests/unit/test_conversation_structure_timezone.py
 backend/tests/unit/test_conversations_to_string.py
 backend/tests/unit/test_daily_notification_timezone_selection.py
-backend/tests/unit/test_daily_summary_race_condition.py
 backend/tests/unit/test_dev_api_action_items_poison.py
 backend/tests/unit/test_dev_api_canonical_grant_ordering.py
 backend/tests/unit/test_dev_api_conversations_poison.py
@@ -65,7 +64,6 @@ backend/tests/unit/test_memory_imports.py
 backend/tests/unit/test_new_usage_tracking_gaps.py
 backend/tests/unit/test_oauth_callback_uid_guard.py
 backend/tests/unit/test_omi_qos_tiers.py
-backend/tests/unit/test_realtime_integrations_usage_tracking.py
 backend/tests/unit/test_resample_pcm_divzero.py
 backend/tests/unit/test_speech_profile_wav_decode.py
 backend/tests/unit/test_sync_file_paths_filename_none.py

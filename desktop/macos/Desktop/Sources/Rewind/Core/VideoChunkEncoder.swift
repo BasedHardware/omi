@@ -368,6 +368,14 @@ actor VideoChunkEncoder {
         SentrySDK.addBreadcrumb(breadcrumb)
     }
 
+    /// Presentation timestamp (in seconds) for the frame at `frameOffset` within a chunk.
+    /// Callers pass the offset of the frame being written now; the writer requires strictly
+    /// increasing timestamps, so this must be a strictly increasing function of frameOffset
+    /// for 0, 1, 2, … `nonisolated static` so it is synchronously unit-testable.
+    nonisolated static func framePresentationSeconds(frameOffset: Int, frameRate: Double) -> Double {
+        Double(max(0, frameOffset)) / frameRate
+    }
+
     private func writeFrame(image: CGImage) async throws {
         guard let input = writerInput,
               let adaptor = pixelBufferAdaptor,
@@ -391,7 +399,18 @@ actor VideoChunkEncoder {
             try createPixelBuffer(from: image, size: outputSize, adaptor: adaptor)
         }
 
-        let presentationTime = CMTime(seconds: Double(max(0, frameOffsetInChunk - 1)) / frameRate, preferredTimescale: 600)
+        // frameOffsetInChunk is the index of the frame being written RIGHT NOW; it is
+        // incremented in addFrame only AFTER this write succeeds (so a failed write does
+        // not consume an offset). The presentation timestamp must therefore be derived
+        // from the current offset directly. A stale `- 1` here (left over from when the
+        // offset was pre-incremented before writeFrame) makes frame 0 and frame 1 both
+        // resolve to PTS 0, and AVAssetWriterInputPixelBufferAdaptor.append requires
+        // strictly increasing timestamps — so every chunk's second frame is rejected,
+        // failures cascade to an emergency reset, and no video chunk is ever persisted.
+        let presentationTime = CMTime(
+            seconds: Self.framePresentationSeconds(frameOffset: frameOffsetInChunk, frameRate: frameRate),
+            preferredTimescale: 600
+        )
         guard adaptor.append(pixelBuffer, withPresentationTime: presentationTime) else {
             if let writerError = assetWriter?.error {
                 throw RewindError.storageWriteFailed("Failed to append frame to HEVC writer", underlying: writerError)
