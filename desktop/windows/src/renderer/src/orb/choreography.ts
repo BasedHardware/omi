@@ -171,10 +171,12 @@ export type OrbFrame = {
   genesis: number
   /** Time feed for the shader's noise field (seconds). */
   noiseTime: number
-  /** Unroll / disc-fade progress 0..1: 0 = idle ring (dark disc + orbiting dots),
-   *  1 = the dots have fanned out into the flat line. The shader fades the dark
-   *  DISC out as this rises while the DOTS travel at full opacity — so the ring
-   *  visibly unrolls into the line instead of a ring↔line opacity crossfade. */
+  /** Roll-up progress 0..1 (the lower staging band, see AUDIO_STAGE_SPLIT): 0 =
+   *  idle ring (dark disc + orbiting dots), 1 = the dots have fanned out onto the
+   *  flat line. The shader fades the dark DISC out as this rises while the DOTS
+   *  travel at full opacity — the ring visibly unrolls into the line instead of a
+   *  ring↔line opacity crossfade. Saturates before the bar handoff begins, so on
+   *  exit the bars are gone before this starts falling (a true mirror of entry). */
   waveMix: number
   /** Dot→bar handoff 0..1, staged AFTER the unroll (0 through the line-up, ramps
    *  once the row is formed). ON the line the white dots crossfade to the bar
@@ -350,6 +352,42 @@ export function waveMixFor(_state: OrbState, speechMerge: number): number {
   return easeInOut(Math.min(1, Math.max(0, speechMerge)))
 }
 
+/**
+ * Audio-staging split. The waveform entrance/exit is TWO stages of the single
+ * speech-merge envelope, and they must never overlap or the exit reads as a
+ * bars↔ring CROSSFADE (the dark disc + orbiting dots fade in WHILE the bars fade
+ * out) instead of a roll-up. So the envelope is split into two DISJOINT bands:
+ *   • lower band [0, SPLIT] — the dots' roll-up (ring ↔ flat line) and the disc
+ *     fade. Owns `unrollProgressFor`.
+ *   • upper band [SPLIT, 1] — the dot ↔ bar handoff (bars fade in/out ON the
+ *     already-formed line). Owns `barResponseFor`.
+ * Because the bands don't overlap, ENTRY (roll out over the lower band, THEN bars
+ * over the upper) and EXIT (envelope runs the other way: bars fade over the upper
+ * band, THEN the dots roll up over the lower) are exact time-reverses — a true
+ * mirror. And because BOTH are pure functions of the one envelope, every driver
+ * that steps that envelope (the app's OrbAnimator, the deterministic harness)
+ * reproduces the identical staging: there is no separately-stepped bar gain to
+ * forget to mirror (the class of bug where the harness disagreed with live).
+ */
+export const AUDIO_STAGE_SPLIT = 0.55
+
+/** Roll-up progress 0..1 from the eased audio envelope (see `waveMixFor`): 0 =
+ *  idle ring, 1 = dots fanned onto the flat line. Reaches 1 by AUDIO_STAGE_SPLIT
+ *  so the whole upper band is free for the bar handoff (dots held on the line). */
+export function unrollProgressFor(audioMix: number): number {
+  return Math.min(1, Math.max(0, audioMix) / AUDIO_STAGE_SPLIT)
+}
+
+/** Dot→bar handoff gain 0..1 from the eased audio envelope: pinned at 0 through
+ *  the whole roll-up (lower band) so the traveling dots are never crossfaded, then
+ *  eased 0→1 across the UPPER band (dots already on the line). eased at both ends
+ *  for a gentle fade. This REPLACES the animator's old separately-stepped
+ *  `waveResponse`; callers may still pass an explicit `waveResponse` to override
+ *  it (the isolation checks pin it to 0). */
+export function barResponseFor(audioMix: number): number {
+  return easeInOut((Math.min(1, Math.max(0, audioMix)) - AUDIO_STAGE_SPLIT) / (1 - AUDIO_STAGE_SPLIT))
+}
+
 /** Per-dot stagger for the unroll (0 = all dots straighten together, 1 = fully
  *  sequential fan-out). A moderate value reads as the ring PEELING open from one
  *  end into the line rather than squashing flat all at once. */
@@ -417,15 +455,11 @@ export function unrollPositions(
   return out
 }
 
-/** Seconds for the bar RESPONSE to ramp in after the dots finish lining up (and
- *  to fall back to flat dots on the way out). The unroll (waveMix) plays first;
- *  only once the row is formed do the bars come alive — one staged sequence, never
- *  everything at once. */
-export const WAVE_RESPONSE_ATTACK = 0.3
-export const WAVE_RESPONSE_RELEASE = 0.18
-/** waveMix past which the line-up is considered complete and the bar response is
- *  allowed to ramp in. */
-export const WAVE_RESPONSE_GATE = 0.9
+// The bar handoff used to be a separately-stepped gain (WAVE_RESPONSE_ATTACK /
+// _RELEASE / _GATE) that the animator eased and the harness had to mirror by hand
+// — the source of the exit crossfade (release began too late and overlapped the
+// roll-up) and of the harness disagreeing with live. It is now the deterministic
+// UPPER staging band, barResponseFor / AUDIO_STAGE_SPLIT (above).
 
 /** Entry-whirl shape. On entry to a whirling state the spin target OVERSHOOTS its
  *  cruise by `WHIRL_ADD` (scaled per preset), decaying with `WHIRL_TAU` so the
@@ -573,10 +607,10 @@ export type OrbInputs = {
   /** Canvas aspect (width / height). Lays out the bar row and the dots' glide
    *  line so a wide mount gets more slots than a square one. Defaults to 1. */
   aspect?: number
-  /** Bar-response gain 0..1: multiplies the waveform levels so the bars only come
-   *  alive AFTER the unroll finishes (and flatten to dots before the roll-back).
-   *  The animator ramps it (WAVE_RESPONSE_*); deterministic renders default to 1
-   *  (full response, e.g. a held speaking frame). */
+  /** Bar-response gain 0..1 OVERRIDE. Normally omitted — the handoff is derived
+   *  from the envelope's upper staging band (barResponseFor), so the app and the
+   *  harness agree. Supply it only to isolate the dots (the checks pin it to 0 so
+   *  no bars render) or to force a specific gain in a static frame. */
   waveResponse?: number
   params?: OrbParams
 }
@@ -593,9 +627,14 @@ export function computeOrbFrame(input: OrbInputs): OrbFrame {
   // Waveform crossfade: on an audio state the speech-merge envelope glides the
   // ring dots into a horizontal line and hands off to the bar visualizer. 0 on
   // every non-audio state (idle/thinking/agents keep their ring/pose untouched).
+  // The one envelope is split into two DISJOINT stages (see AUDIO_STAGE_SPLIT):
+  // `unrollU` (the roll-up, lower band) drives the dot travel + disc fade, and the
+  // bar handoff (upper band) rides on top only once the dots are on the line — so
+  // entry and exit are exact mirrors and the exit never crossfades bars↔ring.
   const aspect = input.aspect ?? 1
-  const waveMix = waveMixFor(state, input.speechMerge ?? 0)
-  const audioGlide = waveMix > 0
+  const audioMix = waveMixFor(state, input.speechMerge ?? 0)
+  const unrollU = unrollProgressFor(audioMix)
+  const audioGlide = unrollU > 0
   // Dot glide line half-width (disc units), clamped so the edge dots never leave
   // the unit disc even as they line up (they fade out as the bars take over).
   const lineHalf = Math.min(waveHalfWidth(aspect) / p.discRadius, 0.88)
@@ -662,7 +701,7 @@ export function computeOrbFrame(input: OrbInputs): OrbFrame {
   // exact ring at 0 and the exact line at 1. The dots fade out with the ring layer
   // as the bar visualizer fades in. Mutually exclusive with the agents pose (audio
   // states ≠ agents). Computed once per frame from the live orbit angle.
-  const unroll = audioGlide ? unrollPositions(waveMix, angle, lineHalf, p) : null
+  const unroll = audioGlide ? unrollPositions(unrollU, angle, lineHalf, p) : null
 
   const dots: OrbDot[] = []
   for (let i = 0; i < DOT_COUNT; i++) {
@@ -719,20 +758,24 @@ export function computeOrbFrame(input: OrbInputs): OrbFrame {
   // are supplied. The RESPONSE gain (1 by default; the animator ramps it in after
   // the unroll) scales every level, so during the line-up the row is flat dots and
   // the bars only come alive once the row is formed — and flatten before the exit.
-  const response = Math.min(1, Math.max(0, input.waveResponse ?? 1))
+  // Bar-response gain: the UPPER-band handoff (barResponseFor) — 0 through the
+  // whole roll-up, easing in only once the dots are on the line. A caller may
+  // override it (the isolation checks pin it to 0 to render only the traveling
+  // dots); by default it is derived from the same envelope, so the app and the
+  // harness stage the bars identically with nothing separately stepped.
+  const response = Math.min(1, Math.max(0, input.waveResponse ?? barResponseFor(audioMix)))
   let bars: WaveBar[] = []
-  if (waveMix > 0) {
+  if (unrollU > 0) {
     const slotCount = input.waveLevels?.length ?? slotCountForAspect(aspect)
     const raw = input.waveLevels ?? new Array<number>(slotCount).fill(0)
     const levels = response === 1 ? raw : raw.map((l) => l * response)
     bars = waveBars(levels, aspect)
   }
-  // Dot→bar handoff, STAGED after the unroll: the response gain is held at 0
-  // through the line-up (see WAVE_RESPONSE_GATE) and only ramps once the row is
-  // formed, so barMix is ~0 while the dots travel (they stay fully visible) and
-  // rises only on the line as the bars take over. The waveMix factor keeps it 0
-  // on the ring (idle defaults waveResponse to 1, but waveMix is 0 there).
-  const barMix = waveMix * response
+  // Dot→bar handoff: barResponse rides on the roll-up (unrollU), so it is 0 while
+  // the dots travel (they stay fully visible — never a ring↔line opacity crossfade)
+  // and rises only once the row is formed. On exit the reverse: bars fade off the
+  // line FIRST, then the dots roll up at full opacity. 0 on the ring (unrollU 0).
+  const barMix = unrollU * response
 
   return {
     dots,
@@ -743,7 +786,7 @@ export function computeOrbFrame(input: OrbInputs): OrbFrame {
     morph: Math.min(1, Math.max(0, input.morph ?? 0)),
     genesis: genesisTime === Infinity ? 1 : genesisScale(genesisTime, p),
     noiseTime: t,
-    waveMix,
+    waveMix: unrollU,
     barMix,
     waveBars: bars,
     params: p

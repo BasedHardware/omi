@@ -25,9 +25,6 @@ import {
   waveMixFor,
   SPIN_EASE_TAU,
   FLOW_EASE_TAU,
-  WAVE_RESPONSE_ATTACK,
-  WAVE_RESPONSE_RELEASE,
-  WAVE_RESPONSE_GATE,
   DEFAULT_ORB_PARAMS,
   type OrbParams,
   type OrbState
@@ -92,9 +89,6 @@ export class OrbAnimator {
   private waveWrite = 0
   private wavePushAccum = 0
   private waveDisplay = new Float32Array(slotCountForAspect(1))
-  /** Bar-response gain 0..1: ramps in only AFTER the unroll line-up completes, so
-   *  the dots fan out into a flat row first and the bars come alive after. */
-  private waveResponse = 0
   private visible = true
   private raf: number | null = null
   private lastFrameAt = 0
@@ -267,14 +261,11 @@ export class OrbAnimator {
     // the speech gate is fully closed, reset to silence so a later re-open never
     // flashes stale bars.
     const waveLevels = this.stepWaveform(dt)
-    // Bar-response gain: hold at 0 through the unroll line-up, then ramp in once
-    // the row is formed (waveMix past the gate), and fall FAST on the way out so
-    // the bars flatten to dots before the row rolls back into the ring — one
-    // staged sequence, never everything at once.
-    const responseTarget = waveMixFor(this.state, this.speechMerge) >= WAVE_RESPONSE_GATE ? 1 : 0
-    const respTau =
-      responseTarget > this.waveResponse ? WAVE_RESPONSE_ATTACK : WAVE_RESPONSE_RELEASE
-    this.waveResponse += (responseTarget - this.waveResponse) * (1 - Math.exp(-dt / respTau))
+    // The dot→bar handoff is no longer a separately-stepped gain here: it is the
+    // UPPER staging band of the same speech-merge envelope (see barResponseFor /
+    // AUDIO_STAGE_SPLIT), derived inside computeOrbFrame. That keeps entry and exit
+    // exact mirrors and means the deterministic harness — which steps the identical
+    // envelope — reproduces the live bar staging with nothing left to mirror.
     // Ease the orbit-speed multiplier toward the state's (whirl-shaped) target
     // and integrate the warped orbit clock (incremental → no angle jump when the
     // speed changes). The target itself carries the entry whirl (a decaying
@@ -314,7 +305,6 @@ export class OrbAnimator {
       // change reads as one smooth motion in both directions.
       morph: easeInOut(this.morph),
       waveLevels,
-      waveResponse: this.waveResponse,
       aspect: this.aspect,
       params: this.params
     })
@@ -333,7 +323,6 @@ export class OrbAnimator {
         this.waveWrite = 0
         this.wavePushAccum = 0
       }
-      this.waveResponse = 0 // next open starts flat (bars ramp in after the unroll)
       return undefined
     }
     this.wavePushAccum += dt

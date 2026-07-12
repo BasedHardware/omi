@@ -265,7 +265,11 @@ async function main() {
         waveLevels: levels
       })
     const ring = whiteAreaSpan(await unrollFrame(0)) // idle ring
-    const mid = whiteAreaSpan(await unrollFrame(0.5)) // waveMix≈0.5 — mid-arc
+    // Mid-arc = the ROLL-UP midpoint. The roll-up now occupies the lower staging
+    // band (it completes by AUDIO_STAGE_SPLIT=0.55 of the eased envelope, leaving
+    // the upper band for the bar handoff), so uRoll≈0.5 lands at speechMerge≈0.375
+    // — sampling at 0.5 would catch the roll-up already ~90% flattened.
+    const mid = whiteAreaSpan(await unrollFrame(0.375))
     const line = whiteAreaSpan(await unrollFrame(1)) // dots fanned onto the line
     const vRing = ring.vSpread
     console.log(

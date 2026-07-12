@@ -18,6 +18,9 @@ import {
   mergeAmount,
   MERGE_XFADE,
   waveMixFor,
+  unrollProgressFor,
+  barResponseFor,
+  AUDIO_STAGE_SPLIT,
   unrollPositions,
   spinTargetFor,
   anchorWhirlStart,
@@ -726,6 +729,56 @@ describe('waveform crossfade', () => {
       prevMix = mix
     }
     expect(prevMix).toBeLessThan(0.05) // fully dissolved
+  })
+
+  // The staging is TWO disjoint bands of the one envelope so entry and exit are
+  // exact mirrors: the bar handoff may only happen once the dots are on the line.
+  it('audio staging is disjoint: bars stay off (barResponse 0) until the roll-up is complete', () => {
+    for (let i = 0; i <= 100; i++) {
+      const m = i / 100
+      const u = unrollProgressFor(m)
+      const r = barResponseFor(m)
+      // Below the split the dots are still traveling — NO bars may show.
+      if (m < AUDIO_STAGE_SPLIT - 1e-9) {
+        expect(u).toBeLessThan(1)
+        expect(r).toBe(0)
+      }
+      // Any bar response implies the roll-up has fully completed (dots on the line).
+      if (r > 0) expect(u).toBe(1)
+    }
+    // Endpoints: ring (0,0) and full line with bars (1,1).
+    expect(unrollProgressFor(0)).toBe(0)
+    expect(barResponseFor(0)).toBe(0)
+    expect(unrollProgressFor(1)).toBe(1)
+    expect(barResponseFor(1)).toBe(1)
+  })
+
+  // Regression for the live-only exit CROSSFADE: entering thinking as speech ends,
+  // the OLD separately-stepped bar gain kept the bars lit (barMix ~0.27) WHILE the
+  // dots were already rolling back up — the disc + dots faded in over the fading
+  // bars (a crossfade). Driving the real envelope down (no waveResponse override,
+  // so the staged handoff is used), the bars MUST be gone before the roll-up
+  // travels: whenever the dots are mid-roll-up, barMix is ~0 (dots at full opacity).
+  it('exit is a true mirror: no bars linger while the dots roll back up (no crossfade)', () => {
+    let merge = 1
+    let sawTravel = false
+    for (let i = 0; i < 90; i++) {
+      merge = stepMergeEnvelope(merge, 0, 1 / 60)
+      const f = computeOrbFrame({
+        t: 40,
+        state: 'thinking', // speech ended → state moved off 'speaking'
+        stateTime: i / 60,
+        speechMerge: merge,
+        waveLevels: new Array(24).fill(0.6)
+      })
+      // While the dots are visibly traveling (roll-up in progress, not yet a ring),
+      // the bars must have fully handed off — barMix ~0 so the dots are solid.
+      if (f.waveMix > 0.05 && f.waveMix < 0.95) {
+        sawTravel = true
+        expect(f.barMix).toBeLessThan(0.02)
+      }
+    }
+    expect(sawTravel).toBe(true) // the roll-up actually happened in the window
   })
 })
 
