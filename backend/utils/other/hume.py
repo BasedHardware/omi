@@ -105,8 +105,13 @@ class HumeJobModelPredictionResponseModel:
             return model
 
         for prediction in data["results"]["predictions"]:
-            for grouped_prediction in prediction['models'][prediction_model]['grouped_predictions']:
-                for grouped_prediction_prediction in grouped_prediction['predictions']:
+            # A failed or partial Hume job can omit the requested model, grouped_predictions, or the
+            # inner predictions list; guard the nested lookups so one malformed prediction yields no
+            # emotions instead of a KeyError that 500s the whole callback (mirrors the .get(...) style
+            # used elsewhere in this module).
+            grouped_predictions = prediction.get('models', {}).get(prediction_model, {}).get('grouped_predictions', [])
+            for grouped_prediction in grouped_predictions:
+                for grouped_prediction_prediction in grouped_prediction.get('predictions', []):
                     model.append(cls.from_dict(grouped_prediction_prediction))
 
         return model
