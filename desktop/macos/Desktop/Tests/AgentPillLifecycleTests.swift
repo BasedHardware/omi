@@ -420,12 +420,14 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("static func quadraticBezier(from start: CGPoint, control: CGPoint, to end: CGPoint, progress: CGFloat) -> CGPoint"))
     XCTAssertTrue(source.contains("let rowRevealProgress = NotchAgentStackMetrics.smoothStep((progress - 0.38) / 0.62)"))
     XCTAssertTrue(source.contains("let logoPlaceholderProgress = NotchAgentStackMetrics.smoothStep(progress / 0.42)"))
-    // The hover-menu content morph must share the window's expand/collapse
-    // durations (see notchHoverMenuExpand/CollapseDuration) so the rows and the
-    // NSPanel finish together — a duration mismatch made the surface keep
-    // sliding open after the rows settled ("expands, then slides").
-    XCTAssertTrue(source.contains("? .easeOut(duration: FloatingControlBarWindow.notchHoverMenuExpandDuration)"))
-    XCTAssertTrue(source.contains(": .easeOut(duration: FloatingControlBarWindow.notchHoverMenuCollapseDuration)"))
+    // Fixed window, animated content: the notch NSPanel frame never animates
+    // for hover expand/collapse (window-frame animation was the hover jank),
+    // so the content morph (notchSwitcherProgress) carries the whole visible
+    // transition using the SHARED animation constants — one authority for the
+    // spring on open and the settle on close, both Reduce Motion-gated.
+    XCTAssertTrue(source.contains("? FloatingControlBarWindow.notchHoverMenuExpandAnimation"))
+    XCTAssertTrue(source.contains(": FloatingControlBarWindow.notchHoverMenuCollapseAnimation"))
+    // Pill mode still resizes its panel with these durations.
     XCTAssertEqual(FloatingControlBarWindow.notchHoverMenuExpandDuration, 0.16, accuracy: 0.0001)
     XCTAssertEqual(FloatingControlBarWindow.notchHoverMenuCollapseDuration, 0.10, accuracy: 0.0001)
     XCTAssertFalse(source.contains(".animation(.spring(response: 0.18, dampingFraction: 0.9), value: shouldShowNotchHoverMenu)"))
@@ -518,10 +520,15 @@ final class AgentPillLifecycleTests: XCTestCase {
   func testAgentSwitcherResizeMatchesContentMorphDurations() throws {
     let windowSource = try floatingControlBarWindowSource()
 
-    // The hover-menu window resize must animate with the same durations as the
-    // SwiftUI content morph, or the panel keeps sliding after the rows settle.
+    // Pill mode still resizes its panel, and that resize must animate with the
+    // same durations as its content, or the panel keeps sliding after the rows
+    // settle. Notch mode is fixed-window: the switcher open/close must never
+    // animate the NSPanel frame — it only re-asserts the constant idle/hover
+    // surface frame and lets the SwiftUI content morph carry the transition.
     XCTAssertTrue(windowSource.contains("static let notchHoverMenuExpandDuration: TimeInterval = 0.16"))
     XCTAssertTrue(windowSource.contains("static let notchHoverMenuCollapseDuration: TimeInterval = 0.10"))
+    XCTAssertTrue(windowSource.contains("static let notchHoverMenuExpandAnimation: Animation = .spring(response: 0.35, dampingFraction: 0.75)"))
+    XCTAssertTrue(windowSource.contains("static let notchHoverMenuCollapseAnimation: Animation = .spring(response: 0.3, dampingFraction: 1.0)"))
 
     guard let start = windowSource.range(of: "func resizeForAgentSwitcher(visible: Bool)"),
       let end = windowSource.range(of: "private func pillAgentListWindowSize(")
@@ -530,6 +537,9 @@ final class AgentPillLifecycleTests: XCTestCase {
     }
     let body = String(windowSource[start.lowerBound..<end.lowerBound])
 
+    // Notch: fixed frame only, before any pill-mode resize.
+    XCTAssertTrue(body.contains("if notchModeEnabled {"))
+    XCTAssertTrue(body.contains("assertNotchFixedHoverSurfaceFrame()"))
     XCTAssertTrue(body.contains("animationDuration: Self.notchHoverMenuExpandDuration"))
     XCTAssertTrue(body.contains("animationDuration: Self.notchHoverMenuCollapseDuration"))
     XCTAssertTrue(body.contains("resizeSurfaceTransition("))
