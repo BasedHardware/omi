@@ -159,6 +159,7 @@ backend (main.py)
   ├── ──────► vad (modal/)
   ├── ──────► deepgram (self-hosted or cloud)
   ├── ──────► parakeet (parakeet/)
+  ├── ──────► nllb-translation (nllb_translation/)
   └── ──────► llm-gateway (llm_gateway/main.py)
 
 pusher
@@ -179,9 +180,9 @@ memory-maintenance-job (modal/memory_maintenance_job.py)  [cron]
 agent-vm-reaper (backend/charts/agent-vm-reaper)  [cron]
 ```
 
-Helm charts: `backend/charts/{agent-proxy,agent-vm-reaper,backend-listen,backend-secrets,deepgram-self-hosted,diarizer,llm-gateway,monitoring,parakeet,pusher,vad}/`
+Helm charts: `backend/charts/{agent-proxy,agent-vm-reaper,backend-listen,backend-secrets,deepgram-self-hosted,diarizer,llm-gateway,monitoring,nllb-translation,parakeet,pusher,vad}/`
 
-- **backend** (`main.py`) — REST API. Streams audio to pusher via WebSocket (`utils/pusher.py`). Calls diarizer for speaker embeddings (`utils/stt/speaker_embedding.py`). Calls vad for voice activity detection and speaker identification (`utils/stt/vad.py`, `utils/stt/speech_profile.py`). Calls deepgram or parakeet for STT (`HOSTED_PARAKEET_API_URL`, `utils/stt/streaming.py`).
+- **backend** (`main.py`) — REST API. Streams audio to pusher via WebSocket (`utils/pusher.py`). Calls diarizer for speaker embeddings (`utils/stt/speaker_embedding.py`). Calls vad for voice activity detection and speaker identification (`utils/stt/vad.py`, `utils/stt/speech_profile.py`). Calls deepgram or parakeet for STT (`HOSTED_PARAKEET_API_URL`, `utils/stt/streaming.py`). Calls NLLB translation when `HOSTED_TRANSLATION_API_URL` is set and NLLB is selected (`utils/translation.py`).
 - **hosted MCP OAuth** (`routers/mcp_sse.py`) — Provider-neutral OAuth for `/v1/mcp/sse`. Configure public or confidential clients with `MCP_OAUTH_CLIENTS_JSON`; allowlist the exact connector callback URI from the provider. The temporary `MCP_OAUTH_CHATGPT_*` envs still define the legacy confidential ChatGPT test client, and `MCP_OAUTH_PUBLIC_*` can expose a no-secret PKCE public client. Also set `MCP_AUTHORIZATION_SERVER_URL`, optional `MCP_RESOURCE_URL`, and token TTL env vars.
 - **llm-gateway** (`llm_gateway/main.py`) — Internal FastAPI service for Omi-managed LLM auto lanes. Called by backend with service auth for `omi:auto:*` chat-completions routes; not exposed to clients.
 - **pusher** (`pusher/main.py`) — Receives audio via binary WebSocket protocol. Calls diarizer and deepgram for speaker sample extraction (`utils/speaker_identification.py` → `utils/speaker_sample.py`).
@@ -190,6 +191,7 @@ Helm charts: `backend/charts/{agent-proxy,agent-vm-reaper,backend-listen,backend
 - **vad** (`modal/main.py`) — GPU. `/v1/vad` and `/v1/speaker-identification`. Called by backend only.
 - **deepgram** — STT. Streaming uses self-hosted (`DEEPGRAM_SELF_HOSTED_URL`) or cloud based on `DEEPGRAM_SELF_HOSTED_ENABLED`. Pre-recorded always uses Deepgram cloud. Called by backend and pusher.
 - **parakeet** (`parakeet/`) — GPU STT service for streaming and pre-recorded transcription. Called by backend when `HOSTED_PARAKEET_API_URL` is set and parakeet is selected.
+- **nllb-translation** (`nllb_translation/`) — GPU translation service. Called by backend when `HOSTED_TRANSLATION_API_URL` is set and NLLB is selected.
 - **backend-sync** (`main.py`, same image as backend) — Cloud Run admission service for `/v2/sync-local-files`. The server classifies whole batches: recordings no more than six hours old enter `sync-jobs` (fresh), while older or untrusted batches enter `sync-backfill` and the scale-to-zero **backend-sync-backfill** worker. Fresh keeps its bounded inline fallback; backfill never falls into fresh/inline capacity. Backfill defaults to one in-flight job per UID, four processed speech hours per UID/day, 555 processed speech hours globally/day, a 30-day lookback, and four queue workers. Live fair-use reads only `realtime + sync_fresh`; `sync_backfill` is separately metered. A 45-day Firestore content ledger protects transcription and usage side effects across job expiry and re-upload. Audio playback merges (`/v1/sync/audio/*`) follow the same pattern via queue `audio-merge` building 30-day MP3 artifacts under `playback/` (`AUDIO_MERGE_DISPATCH_MODE`) — per-part files plus one dense per-conversation `conversation.mp3` whose spans manifest + audio_files fingerprint are stamped on the conversation doc (`conversation_audio`); a fingerprint mismatch after late chunks re-enqueues the build. Account deletion uses `ACCOUNT_DELETION_DISPATCH_MODE=cloud_tasks` to enqueue durable wipes to queue `account-deletion`, which posts `/v1/users/account-deletion-wipes/run`; API success is returned only after the deletion marker is persisted and the wipe task is durably enqueued.
 - **notifications-job** (`modal/job.py`) — Cron job, reads Firestore/Redis, sends push notifications and runs X connector sync. It has no canonical maintenance flags or Typesense secrets; its deploy workflow removes only those retired bindings and preserves unrelated notification/X-sync env.
 - **memory-maintenance-job** (`modal/memory_maintenance_job.py`) — Cloud Run Job and sole host for canonical ST→LT maintenance (TTL → consolidation → promotion). Manual deploy via `.github/workflows/gcp_memory_maintenance_job.yml`; auto-dev on push to `main` via `gcp_memory_maintenance_job_auto_dev.yml`. Enablement is a multi-var contract (`MEMORY_MODE`, `MEMORY_ENABLED_USERS`, cron/fast-track/consolidation flags) enforced by `backend/scripts/validate-backend-runtime-env.py`; prod stays `MEMORY_MODE=off` until Gate 3.
