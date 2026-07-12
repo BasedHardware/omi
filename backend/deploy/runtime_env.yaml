@@ -33,10 +33,10 @@ environments:
               name: dev-omi-backend-secrets
               key: MODULATE_API_KEY
           HOSTED_PARAKEET_API_URL:
-            value: http://dev-omi-parakeet.dev-omi-backend.svc.cluster.local:8080
+            value: http://parakeet.omiapi.com
             category: service_discovery
           HOSTED_TRANSLATION_API_URL:
-            value: http://dev-omi-nllb-translation:8080
+            value: http://nllb.omiapi.com
             category: service_discovery
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
