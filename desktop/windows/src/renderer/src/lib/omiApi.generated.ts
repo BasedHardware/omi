@@ -8646,7 +8646,7 @@ export async function generate_app_endpoint_v1_app_generate_post(header: { autho
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function generate_description_endpoint_v1_app_generate_description_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: GenerateDescriptionRequest, init?: OmiApiClientInit): Promise<AppDescriptionGenerationResponse> {
+export async function generate_description_endpoint_v1_app_generate_description_post(header: { X_App_Platform?: string, authorization?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: GenerateDescriptionRequest, init?: OmiApiClientInit): Promise<AppDescriptionGenerationResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/app/generate-description`;
   const _search = "";
@@ -8656,8 +8656,8 @@ export async function generate_description_endpoint_v1_app_generate_description_
       ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
-      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
@@ -8667,7 +8667,7 @@ export async function generate_description_endpoint_v1_app_generate_description_
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function generate_description_and_emoji_endpoint_v1_app_generate_description_emoji_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: GenerateDescriptionEmojiRequest, init?: OmiApiClientInit): Promise<AppDescriptionEmojiGenerationResponse> {
+export async function generate_description_and_emoji_endpoint_v1_app_generate_description_emoji_post(header: { X_App_Platform?: string, authorization?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: GenerateDescriptionEmojiRequest, init?: OmiApiClientInit): Promise<AppDescriptionEmojiGenerationResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/app/generate-description-emoji`;
   const _search = "";
@@ -8677,8 +8677,8 @@ export async function generate_description_and_emoji_endpoint_v1_app_generate_de
       ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
-      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
@@ -11184,7 +11184,7 @@ export async function create_canonical_goal_v1_goals_canonical_post(header: { Id
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function extract_and_update_progress_v1_goals_extract_progress_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ProgressExtractRequest, init?: OmiApiClientInit): Promise<ProgressExtractResponse> {
+export async function extract_and_update_progress_v1_goals_extract_progress_post(header: { X_App_Platform?: string, authorization?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ProgressExtractRequest, init?: OmiApiClientInit): Promise<ProgressExtractResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/goals/extract-progress`;
   const _search = "";
@@ -11194,8 +11194,8 @@ export async function extract_and_update_progress_v1_goals_extract_progress_post
       ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
-      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
@@ -13275,7 +13275,7 @@ export async function delete_daily_summary_v1_users_daily_summaries__summary_id_
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function regenerate_daily_summary_v1_users_daily_summaries__summary_id__regenerate_post(path: { summary_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<DailySummaryResponse> {
+export async function regenerate_daily_summary_v1_users_daily_summaries__summary_id__regenerate_post(path: { summary_id: string }, header: { X_App_Platform?: string, authorization?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<DailySummaryResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/daily-summaries/${path.summary_id}/regenerate`;
   const _search = "";
@@ -13284,8 +13284,8 @@ export async function regenerate_daily_summary_v1_users_daily_summaries__summary
     headers: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
-      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
@@ -13356,7 +13356,7 @@ export async function update_daily_summary_settings_v1_users_daily_summary_setti
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function test_daily_summary_v1_users_daily_summary_settings_test_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: TestDailySummaryRequest, init?: OmiApiClientInit): Promise<DailySummaryTestResponse> {
+export async function test_daily_summary_v1_users_daily_summary_settings_test_post(header: { X_App_Platform?: string, authorization?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: TestDailySummaryRequest, init?: OmiApiClientInit): Promise<DailySummaryTestResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/daily-summary-settings/test`;
   const _search = "";
@@ -13366,8 +13366,8 @@ export async function test_daily_summary_v1_users_daily_summary_settings_test_po
       ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
-      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
