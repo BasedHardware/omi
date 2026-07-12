@@ -273,9 +273,11 @@ class AudioCaptureService: @unchecked Sendable {
         // fall back to the system default instead of pinning capture to a stale device.
         let inputDeviceID = try resolveInputDeviceID()
         self.deviceID = inputDeviceID
+        registerActiveCapture(deviceID: inputDeviceID)
 
         // 2. Get device stream format
         guard let streamFormat = getStreamFormat(for: deviceID) else {
+            unregisterActiveCapture()
             throw AudioCaptureError.noInputAvailable
         }
 
@@ -289,12 +291,14 @@ class AudioCaptureService: @unchecked Sendable {
             channels: 1,
             interleaved: false
         ) else {
+            unregisterActiveCapture()
             throw AudioCaptureError.converterCreationFailed
         }
         self.inputFormat = inputFmt
 
         // 4. Create target format: Float32 at 16kHz mono
         guard let targetFmt = AVAudioFormat(standardFormatWithSampleRate: targetSampleRate, channels: 1) else {
+            unregisterActiveCapture()
             throw AudioCaptureError.converterCreationFailed
         }
         self.targetFormat = targetFmt
@@ -303,6 +307,7 @@ class AudioCaptureService: @unchecked Sendable {
 
         // 5. Create audio converter for resampling
         guard let converter = AVAudioConverter(from: inputFmt, to: targetFmt) else {
+            unregisterActiveCapture()
             throw AudioCaptureError.converterCreationFailed
         }
         self.audioConverter = converter
@@ -315,6 +320,7 @@ class AudioCaptureService: @unchecked Sendable {
         }
 
         guard ioProcStatus == noErr, let validProcID = procID else {
+            unregisterActiveCapture()
             throw AudioCaptureError.engineStartFailed(
                 NSError(domain: "AudioCapture", code: Int(ioProcStatus),
                         userInfo: [NSLocalizedDescriptionKey: "Failed to create IOProc: \(ioProcStatus)"])
@@ -327,6 +333,7 @@ class AudioCaptureService: @unchecked Sendable {
         guard startStatus == noErr else {
             AudioDeviceDestroyIOProcID(deviceID, validProcID)
             self.ioProcID = nil
+            unregisterActiveCapture()
             throw AudioCaptureError.engineStartFailed(
                 NSError(domain: "AudioCapture", code: Int(startStatus),
                         userInfo: [NSLocalizedDescriptionKey: "Failed to start device: \(startStatus)"])
@@ -369,10 +376,13 @@ class AudioCaptureService: @unchecked Sendable {
 
         // AudioDeviceStop can block waiting for the IO thread — run off main thread
         if let procID = procID, devID != kAudioObjectUnknown {
-            audioQueue.async {
+            audioQueue.async { [self] in
                 AudioDeviceStop(devID, procID)
                 AudioDeviceDestroyIOProcID(devID, procID)
+                unregisterActiveCapture()
             }
+        } else {
+            unregisterActiveCapture()
         }
 
         log("AudioCapture: Stopped capturing")
@@ -384,6 +394,141 @@ class AudioCaptureService: @unchecked Sendable {
     }
 
     /// Get the name of the current default input device (microphone)
+    /// A selectable audio input device.
+    struct InputDeviceInfo: Identifiable, Equatable, Sendable {
+        let id: AudioDeviceID
+        let uid: String
+        let name: String
+        let isBluetooth: Bool
+    }
+
+    /// Ray-Ban Meta / Oakley Meta glasses expose no vendor API on macOS; the
+    /// input-device name is the only identity signal, so match Meta's product
+    /// names precisely rather than anything containing "glass".
+    static func isMetaGlassesName(_ name: String) -> Bool {
+        let lower = name.lowercased()
+        return lower.contains("ray-ban") || lower.contains("rayban")
+            || lower.contains("oakley meta") || lower.contains("meta glasses")
+    }
+
+    /// Enumerate every device with input channels (HAL walk, same pattern as
+    /// findBuiltInMicDeviceID). Device IDs are not stable across reconnects, so
+    /// persistence must use the UID.
+    static func listInputDevices() -> [InputDeviceInfo] {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(
+            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size
+        ) == noErr else { return [] }
+
+        let count = Int(size) / MemoryLayout<AudioDeviceID>.size
+        guard count > 0 else { return [] }
+        var deviceIDs = [AudioDeviceID](repeating: kAudioObjectUnknown, count: count)
+        guard AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceIDs
+        ) == noErr else { return [] }
+
+        var result: [InputDeviceInfo] = []
+        for id in deviceIDs where id != kAudioObjectUnknown {
+            guard deviceHasInputChannels(id) else { continue }
+            guard let name = deviceName(for: id), let uid = deviceUID(for: id) else { continue }
+
+            var transport: UInt32 = 0
+            var tsize = UInt32(MemoryLayout<UInt32>.size)
+            var taddr = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyTransportType,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
+            let isBT = AudioObjectGetPropertyData(id, &taddr, 0, nil, &tsize, &transport) == noErr
+                && (transport == kAudioDeviceTransportTypeBluetooth
+                    || transport == kAudioDeviceTransportTypeBluetoothLE)
+            result.append(InputDeviceInfo(id: id, uid: uid, name: name, isBluetooth: isBT))
+        }
+        return result
+    }
+
+    static func deviceName(for deviceID: AudioDeviceID) -> String? {
+        var name: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioObjectPropertyName,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &name) == noErr,
+            let cfName = name?.takeRetainedValue()
+        else { return nil }
+        return cfName as String
+    }
+
+    static func deviceUID(for deviceID: AudioDeviceID) -> String? {
+        var uid: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceUID,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &uid) == noErr,
+            let cfUID = uid?.takeRetainedValue()
+        else { return nil }
+        return cfUID as String
+    }
+
+    static func inputDeviceID(forUID uid: String) -> AudioDeviceID? {
+        listInputDevices().first(where: { $0.uid == uid })?.id
+    }
+
+    /// UserDefaults key for the user's explicit microphone choice ("" = system default).
+    static let preferredInputUIDDefaultsKey = DefaultsKey.preferredMicrophoneDeviceUID.rawValue
+
+    // MARK: - Active-capture registry
+    //
+    // Tracks which devices are held by a live capture so other audio consumers
+    // (push-to-talk) can avoid opening a second IOProc against the same device
+    // — or joining a Bluetooth mic's A2DP↔HFP profile flap — which races the
+    // two instances' stream-format reconfiguration paths.
+    private static let activeCapturesLock = NSLock()
+    private static var activeCaptures: [ObjectIdentifier: AudioDeviceID] = [:]
+
+    private func registerActiveCapture(deviceID: AudioDeviceID) {
+        Self.activeCapturesLock.lock()
+        Self.activeCaptures[ObjectIdentifier(self)] = deviceID
+        Self.activeCapturesLock.unlock()
+    }
+
+    private func unregisterActiveCapture() {
+        Self.activeCapturesLock.lock()
+        Self.activeCaptures.removeValue(forKey: ObjectIdentifier(self))
+        Self.activeCapturesLock.unlock()
+    }
+
+    /// True when a live capture already holds this device.
+    static func isDeviceActivelyCaptured(
+        _ deviceID: AudioDeviceID,
+        excluding excludedCapture: AudioCaptureService? = nil
+    ) -> Bool {
+        activeCapturesLock.lock()
+        defer { activeCapturesLock.unlock() }
+        let excludedID = excludedCapture.map(ObjectIdentifier.init)
+        return activeCaptures.contains { owner, activeDeviceID in
+            activeDeviceID == deviceID && (excludedID.map { owner != $0 } ?? true)
+        }
+    }
+
+    /// True when any capture is currently running in this process.
+    static func hasActiveCapture(excluding excludedCapture: AudioCaptureService? = nil) -> Bool {
+        activeCapturesLock.lock()
+        defer { activeCapturesLock.unlock() }
+        guard let excludedCapture else { return !activeCaptures.isEmpty }
+        return activeCaptures.keys.contains { $0 != ObjectIdentifier(excludedCapture) }
+    }
+
     static func getCurrentMicrophoneName() -> String? {
         var deviceID: AudioDeviceID = 0
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
@@ -446,7 +591,7 @@ class AudioCaptureService: @unchecked Sendable {
         return defaultDeviceID
     }
 
-    private static func currentDefaultInputDeviceID() -> AudioDeviceID? {
+    static func currentDefaultInputDeviceID() -> AudioDeviceID? {
         var deviceID: AudioDeviceID = kAudioObjectUnknown
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
         var address = AudioObjectPropertyAddress(
@@ -641,6 +786,7 @@ class AudioCaptureService: @unchecked Sendable {
     // MARK: - Property Listeners
 
     private func installPropertyListeners() {
+        registerActiveCapture(deviceID: deviceID)
         updateDefaultDeviceListener()
         installDeviceFormatListener()
     }
@@ -771,6 +917,12 @@ class AudioCaptureService: @unchecked Sendable {
     private static let maxRetries = 3
 
     private func reconfigureAfterChange(retryCount: Int) {
+        guard isCapturing else {
+            isReconfiguring = false
+            unregisterActiveCapture()
+            return
+        }
+
         let newDeviceID: AudioDeviceID
         do {
             newDeviceID = try resolveInputDeviceID()
@@ -781,6 +933,7 @@ class AudioCaptureService: @unchecked Sendable {
         }
 
         self.deviceID = newDeviceID
+        registerActiveCapture(deviceID: newDeviceID)
 
         // Get new format
         guard let streamFormat = getStreamFormat(for: deviceID) else {
@@ -860,6 +1013,8 @@ class AudioCaptureService: @unchecked Sendable {
         } else {
             logError("AudioCapture: Giving up after \(retryCount + 1) attempts")
             isReconfiguring = false
+            isCapturing = false
+            unregisterActiveCapture()
         }
     }
 
@@ -990,6 +1145,7 @@ class AudioCaptureService: @unchecked Sendable {
                 AudioDeviceStop(deviceID, procID)
                 AudioDeviceDestroyIOProcID(deviceID, procID)
             }
+            unregisterActiveCapture()
         }
     }
 }

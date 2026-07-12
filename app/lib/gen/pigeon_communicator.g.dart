@@ -432,17 +432,17 @@ class _PigeonCodec extends StandardMessageCodec {
   @override
   Object? readValueOfType(int type, ReadBuffer buffer) {
     switch (type) {
-      case 129: 
+      case 129:
         return BlePeripheral.decode(readValue(buffer)!);
-      case 130: 
+      case 130:
         return BleService.decode(readValue(buffer)!);
-      case 131: 
+      case 131:
         return BleDisconnectEvent.decode(readValue(buffer)!);
-      case 132: 
+      case 132:
         return BleBatteryPoint.decode(readValue(buffer)!);
-      case 133: 
+      case 133:
         return BleDeviceDiagnostics.decode(readValue(buffer)!);
-      case 134: 
+      case 134:
         return RayBanMetaGlasses.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);

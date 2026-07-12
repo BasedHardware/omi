@@ -130,6 +130,32 @@ final class TranscriptionTransportTests: XCTestCase {
     XCTAssertTrue(deinitBody.contains("AudioDeviceDestroyIOProcID"))
   }
 
+  func testAudioCaptureRegistrySurvivesUntilTeardownAndDeinitUnregisters() throws {
+    let src = try source(relativePath: "Sources/AudioCaptureService.swift")
+
+    guard let stopRange = src.range(of: "func stopCapture()") else {
+      return XCTFail("stopCapture not found")
+    }
+    let stopBody = String(src[stopRange.lowerBound...].prefix(1600))
+    XCTAssertTrue(stopBody.contains("AudioDeviceDestroyIOProcID(devID, procID)"))
+    XCTAssertTrue(stopBody.contains("unregisterActiveCapture()"))
+    guard
+      let destroyRange = stopBody.range(of: "AudioDeviceDestroyIOProcID(devID, procID)"),
+      let unregisterRange = stopBody.range(of: "unregisterActiveCapture()")
+    else {
+      return XCTFail("stopCapture teardown ordering markers not found")
+    }
+    XCTAssertTrue(
+      destroyRange.lowerBound < unregisterRange.lowerBound,
+      "registry ownership should be released after HAL teardown completes")
+
+    guard let deinitRange = src.range(of: "deinit {") else {
+      return XCTFail("deinit not found")
+    }
+    let deinitBody = String(src[deinitRange.lowerBound...].prefix(900))
+    XCTAssertTrue(deinitBody.contains("unregisterActiveCapture()"))
+  }
+
   // MARK: Helper
 
   private func source(relativePath: String) throws -> String {

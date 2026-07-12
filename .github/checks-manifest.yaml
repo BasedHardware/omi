@@ -82,6 +82,11 @@ checks:
     triggers: ["backend/**/*.py", "backend/testing/workflow_contracts.json", ".github/workflows/**/*.yml", ".github/actions/detect-changes/**", "scripts/pre-push", "scripts/changed-files"]
     lanes: ["local", "ci"]
     reason: "workflow boundary sources changed"
+  - id: backend-isinstance-return-ratchet
+    command: ["python3", ".github/scripts/check_isinstance_return_ratchet.py"]
+    triggers: ["backend/utils/memory/**/*.py", ".github/scripts/check_isinstance_return_ratchet.py", ".github/scripts/isinstance_return_ratchet_baseline.json"]
+    lanes: ["local", "ci"]
+    reason: "backend memory flow-control ratchet changed"
   - id: desktop-userdefaults-ratchet
     command: ["python3", "desktop/macos/scripts/check-userdefaults-key-ratchet.py"]
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/scripts/check-userdefaults-key-ratchet.py"]

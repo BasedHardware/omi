@@ -25,10 +25,7 @@ void main() {
   testWidgets('intro screen shows Skip for now below Get Started and fires onSkip', (tester) async {
     var started = false;
     var skipped = false;
-    await tester.pumpWidget(_app(OnboardingIntroScreen(
-      onStart: () => started = true,
-      onSkip: () => skipped = true,
-    )));
+    await tester.pumpWidget(_app(OnboardingIntroScreen(onStart: () => started = true, onSkip: () => skipped = true)));
     await tester.pump();
 
     final skipFinder = find.byKey(const Key('device_onboarding_skip_button'));
@@ -44,10 +41,7 @@ void main() {
 
   testWidgets('back arrow fires onSkip', (tester) async {
     var skipped = false;
-    await tester.pumpWidget(_app(OnboardingIntroScreen(
-      onStart: () {},
-      onSkip: () => skipped = true,
-    )));
+    await tester.pumpWidget(_app(OnboardingIntroScreen(onStart: () {}, onSkip: () => skipped = true)));
     await tester.pump();
 
     await tester.tap(find.byIcon(Icons.arrow_back_ios_new));

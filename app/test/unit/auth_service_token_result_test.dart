@@ -312,11 +312,7 @@ AuthService _service(
 
 final class _FakeTokenGateway implements AuthTokenGateway {
   _FakeTokenGateway({
-    this.user = const AuthUserSnapshot(
-      uid: 'user-1',
-      email: 'person@example.com',
-      displayName: 'Person Example',
-    ),
+    this.user = const AuthUserSnapshot(uid: 'user-1', email: 'person@example.com', displayName: 'Person Example'),
     this.results = const [],
     this.error,
     this.refreshCompleter,

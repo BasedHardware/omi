@@ -63,12 +63,14 @@ class ConversationAudioUrlInfo {
       duration: generated.duration,
       capturedDuration: generated.capturedDuration,
       spans: generated.spans
-          .map((s) => ConversationAudioSpan(
-                fileId: s.fileId,
-                wallOffset: s.wallOffset,
-                artifactOffset: s.artifactOffset,
-                len: s.len,
-              ))
+          .map(
+            (s) => ConversationAudioSpan(
+              fileId: s.fileId,
+              wallOffset: s.wallOffset,
+              artifactOffset: s.artifactOffset,
+              len: s.len,
+            ),
+          )
           .toList(),
     );
   }

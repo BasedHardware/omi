@@ -396,10 +396,12 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
                                 trackShape: _GapAwareTrackShape(
                                   _singleArtifact && _timelineMapper!.wallDuration > 0
                                       ? _timelineMapper!.gapRangesWall
-                                          .map((gap) => (
-                                                gap.$1 / _timelineMapper!.wallDuration,
-                                                gap.$2 / _timelineMapper!.wallDuration,
-                                              ))
+                                          .map(
+                                            (gap) => (
+                                              gap.$1 / _timelineMapper!.wallDuration,
+                                              gap.$2 / _timelineMapper!.wallDuration,
+                                            ),
+                                          )
                                           .toList()
                                       : const [],
                                 ),

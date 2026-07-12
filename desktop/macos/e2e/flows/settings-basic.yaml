@@ -9,6 +9,8 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/SettingsSidebar.swift
   - desktop/macos/Desktop/Sources/MemoryExportService.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Integrations.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Transcription.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/MicrophonePickerCard.swift
 preconditions:
   - automation_bridge_ready
 

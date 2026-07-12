@@ -273,6 +273,20 @@ struct DashboardPage: View {
     }
 
     private var listeningModeTitle: String {
+        // Surface the explicitly-chosen mic as the visible capture source. Meta
+        // glasses advertise a Bluetooth codename (e.g. "EL AI 000F"), so product-
+        // name matching alone can't identify them — an explicit user selection is
+        // the reliable signal, and showing its real name stays honest either way.
+        if appState.isTranscribing, let name = appState.recordingInputDeviceName {
+            if AudioCaptureService.isMetaGlassesName(name) {
+                return "Ray-Ban Meta"
+            }
+            let preferredUID = UserDefaults.standard.string(
+                forKey: AudioCaptureService.preferredInputUIDDefaultsKey) ?? ""
+            if !preferredUID.isEmpty {
+                return name
+            }
+        }
         switch listeningCaptureMode {
         case .always:
             return "Always"

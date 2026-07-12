@@ -65,4 +65,55 @@ final class PushToTalkStateMachineTests: XCTestCase {
     XCTAssertEqual(VoiceTurnCoordinator.shared.model.staleEventCount, 0)
     XCTAssertEqual(VoiceTurnCoordinator.shared.model.invalidTransitionCount, 0)
   }
+
+  func testLateMicCaptureStartParksWarmInsteadOfLeakingIntoIdlePTT() throws {
+    let source = try pushToTalkManagerSource()
+
+    XCTAssertTrue(source.contains("let generation = micCaptureGeneration"))
+    XCTAssertTrue(source.contains("self.parkMicCapture(capture, lease: lease, overrideID: overrideDeviceID)"))
+    XCTAssertTrue(source.contains("self.audioCaptureService === capture"))
+    XCTAssertTrue(source.contains("PushToTalkManager: mic capture start completed after turn ended — parked warm"))
+    XCTAssertTrue(source.contains("voiceTurnCoordinator.send(.captureStarted(turnID: turnID, captureID: captureID))"))
+  }
+
+  func testWarmMicReuseRestoresLeaseAndCancelDiscardsParking() throws {
+    let source = try pushToTalkManagerSource()
+
+    XCTAssertTrue(source.contains("activeMicLease = parked.lease"))
+    XCTAssertTrue(source.contains("activeMicOverrideID = overrideDeviceID"))
+    XCTAssertTrue(source.contains("stopAudioTranscription(parkWarm: false)"))
+    XCTAssertTrue(source.contains("private func stopAudioTranscription(parkWarm: Bool = true)"))
+  }
+
+  func testPTTContentionIgnoresManagersOwnParkedCapture() throws {
+    let source = try pushToTalkManagerSource()
+
+    XCTAssertTrue(source.contains("let parkedCapture = parkedMicCapture?.service"))
+    XCTAssertTrue(source.contains("isDeviceActivelyCaptured(defaultInput, excluding: parkedCapture)"))
+    XCTAssertTrue(source.contains("hasActiveCapture(excluding: parkedCapture)"))
+  }
+
+  func testMicrophonePickerUsesDeviceListenerInsteadOfPolling() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/MainWindow/Pages/Settings/Sections/MicrophonePickerCard.swift")
+    // omi-test-quality: source-inspection -- static contract: settings listens for CoreAudio device changes
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("AudioObjectAddPropertyListenerBlock"))
+    XCTAssertTrue(source.contains("kAudioHardwarePropertyDevices"))
+    XCTAssertTrue(source.contains(".task(id: deviceListObserver.revision)"))
+    XCTAssertFalse(source.contains("refreshDevicesPeriodically"))
+    XCTAssertFalse(source.contains("Task.sleep"))
+  }
+
+  private func pushToTalkManagerSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar/PushToTalkManager.swift")
+    // omi-test-quality: source-inspection -- static contract: PTT routes around its parked warm capture
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
 }

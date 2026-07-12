@@ -24,35 +24,32 @@ class _ExpiredAuthenticationProvider extends AuthenticationProvider {
 }
 
 void main() {
-  testWidgets(
-    'expired session replaces the home shell with reauthentication UI and a clear message',
-    (tester) async {
-      final authProvider = _ExpiredAuthenticationProvider();
-      addTearDown(authProvider.dispose);
+  testWidgets('expired session replaces the home shell with reauthentication UI and a clear message', (tester) async {
+    final authProvider = _ExpiredAuthenticationProvider();
+    addTearDown(authProvider.dispose);
 
-      await tester.pumpWidget(
-        ChangeNotifierProvider<AuthenticationProvider>.value(
-          value: authProvider,
-          child: MaterialApp(
-            navigatorKey: globalNavigatorKey,
-            localizationsDelegates: const [
-              AppLocalizations.delegate,
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
-            ],
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: const MobileApp(),
-          ),
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AuthenticationProvider>.value(
+        value: authProvider,
+        child: MaterialApp(
+          navigatorKey: globalNavigatorKey,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const MobileApp(),
         ),
-      );
-      await tester.pump();
+      ),
+    );
+    await tester.pump();
 
-      expect(find.byType(OnboardingWrapper), findsOneWidget);
-      expect(find.byType(HomePageWrapper), findsNothing);
-      expect(find.text('Session expired — sign in again.'), findsOneWidget);
+    expect(find.byType(OnboardingWrapper), findsOneWidget);
+    expect(find.byType(HomePageWrapper), findsNothing);
+    expect(find.text('Session expired — sign in again.'), findsOneWidget);
 
-      await tester.pumpAndSettle();
-    },
-  );
+    await tester.pumpAndSettle();
+  });
 }

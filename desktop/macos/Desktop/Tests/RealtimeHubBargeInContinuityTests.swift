@@ -603,6 +603,18 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertTrue(source.contains("interrupting: pendingInputTurnInterrupting"))
   }
 
+  func testSeedStaleReconnectDefersUntilTurnCompletion() throws {
+    let source = try realtimeHubControllerSource()
+
+    XCTAssertTrue(source.contains("pendingSessionRefreshReason = reason"))
+    XCTAssertTrue(source.contains("private func applyPendingSessionRefreshIfIdle()"))
+    XCTAssertTrue(source.contains("private func refreshVoiceSeedAfterPersistenceFence(reason: String) async -> Bool"))
+    XCTAssertGreaterThanOrEqual(
+      source.components(separatedBy: "refreshVoiceSeedAfterPersistenceFence").count - 1,
+      3,
+      "deferred voice seed refresh should be checked by helper definition plus deferred and canceled-turn paths")
+  }
+
   func testPTTArmsVoiceSeedPrefetchBeforeMicCapture() throws {
     let pttSource = try pushToTalkManagerSource()
     let prefetchRange = try XCTUnwrap(pttSource.range(of: "prefetchVoiceSeedContextIfNeeded()"))

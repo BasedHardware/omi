@@ -106,10 +106,7 @@ class _OnboardingIntroScreenState extends State<OnboardingIntroScreen> with Sing
               TextButton(
                 key: const Key('device_onboarding_skip_button'),
                 onPressed: widget.onSkip ?? () => Navigator.of(context).maybePop(),
-                child: Text(
-                  context.l10n.skipForNow,
-                  style: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 15),
-                ),
+                child: Text(context.l10n.skipForNow, style: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 15)),
               ),
               const SizedBox(height: 8),
             ],

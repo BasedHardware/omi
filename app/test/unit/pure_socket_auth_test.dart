@@ -9,9 +9,7 @@ void main() {
     final socket = PureSocket(
       'wss://example.invalid',
       headersProvider: () async {
-        throw AuthTokenUnavailableException(
-          const AuthTokenTransientFailure(failureClass: 'offline'),
-        );
+        throw AuthTokenUnavailableException(const AuthTokenTransientFailure(failureClass: 'offline'));
       },
     );
 

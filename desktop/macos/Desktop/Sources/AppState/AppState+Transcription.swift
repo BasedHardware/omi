@@ -103,8 +103,22 @@ extension AppState {
 
       // Initialize audio services based on source
       if effectiveSource == .microphone {
-        // Initialize audio capture service
-        audioCaptureService = AudioCaptureService()
+        // Initialize audio capture service, honoring an explicit microphone
+        // choice (e.g. Ray-Ban Meta glasses) from Settings -> Transcription.
+        // Device IDs aren't stable across reconnects, so resolve the UID now.
+        if let preferredUID = UserDefaults.standard.string(
+          forKey: AudioCaptureService.preferredInputUIDDefaultsKey),
+          !preferredUID.isEmpty,
+          let preferredID = AudioCaptureService.inputDeviceID(forUID: preferredUID)
+        {
+          audioCaptureService = AudioCaptureService(overrideDeviceID: preferredID)
+          recordingInputDeviceName =
+            AudioCaptureService.deviceName(for: preferredID) ?? recordingInputDeviceName
+          let preferredName = recordingInputDeviceName ?? "?"
+          log("Transcription: using preferred microphone \(preferredName) (uid=\(preferredUID))")
+        } else {
+          audioCaptureService = AudioCaptureService()
+        }
 
         // Initialize audio mixer for combining mic and system audio
         audioMixer = AudioMixer()

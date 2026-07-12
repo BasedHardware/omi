@@ -478,9 +478,7 @@ Future<String?> _createSyncCaptureManifest(List<File> files, String conversation
     method: 'POST',
   );
   if (response?.statusCode != 200) return null;
-  final body = wire.GeneratedSyncCaptureManifestResponse.fromJson(
-    jsonDecode(response!.body) as Map<String, dynamic>,
-  );
+  final body = wire.GeneratedSyncCaptureManifestResponse.fromJson(jsonDecode(response!.body) as Map<String, dynamic>);
   return body.manifest;
 }
 
@@ -534,10 +532,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   if (shouldRequestSyncCaptureManifest(conversationId, syncLane)) {
     captureManifest = await _createSyncCaptureManifest(files, conversationId!);
     if (captureManifest == null) {
-      throw SyncRateLimitedException(
-        kind: SyncRateLimitKind.backfillPaced,
-        retryAfterSeconds: 30,
-      );
+      throw SyncRateLimitedException(kind: SyncRateLimitKind.backfillPaced, retryAfterSeconds: 30);
     }
   }
   var url = '${Env.apiBaseUrl}v2/sync-local-files';
