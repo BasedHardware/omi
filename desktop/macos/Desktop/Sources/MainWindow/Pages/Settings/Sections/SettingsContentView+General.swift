@@ -115,6 +115,8 @@ extension SettingsContentView {
       settingsCard(settingId: "general.notifications") {
         VStack(spacing: OmiSpacing.md) {
           HStack(spacing: OmiSpacing.lg) {
+            // Same leading pattern as Screen Capture / Audio Recording:
+            // status dot + info-tinted SF icon.
             Circle()
               .fill(
                 appState.hasNotificationPermission && !appState.isNotificationBannerDisabled
@@ -126,6 +128,10 @@ extension SettingsContentView {
               .shadow(
                 color: appState.hasNotificationPermission && !appState.isNotificationBannerDisabled
                   ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
+
+            Image(systemName: "bell.fill")
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(OmiColors.info)
 
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Notifications")

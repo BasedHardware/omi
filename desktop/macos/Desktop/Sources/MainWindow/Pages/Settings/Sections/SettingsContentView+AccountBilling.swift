@@ -33,7 +33,7 @@ extension SettingsContentView {
               ProactiveAssistantsPlugin.shared.stopMonitoring()
               try? AuthService.shared.signOut()
             }
-            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+            .buttonStyle(OmiButtonStyle(.primary, size: .compact))
             .disabled(isDeletingAccount)
           }
 
@@ -288,13 +288,13 @@ extension SettingsContentView {
                     .scaledFont(size: OmiType.body, weight: .semibold)
                 }
               }
-              .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
               .disabled(isOpeningCustomerPortal)
             } else {
               Button("Refresh") {
                 loadSubscriptionInfo()
               }
-              .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
               .disabled(isLoadingSubscription)
             }
           }
@@ -539,7 +539,7 @@ extension SettingsContentView {
           Text(APIKeyService.isByokActive ? "Manage your keys" : "Switch to your own keys")
             .scaledFont(size: OmiType.body, weight: .semibold)
         }
-        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
       }
     }
   }

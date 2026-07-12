@@ -283,7 +283,7 @@ extension SettingsContentView {
                 }
               }
             }
-            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+            .buttonStyle(OmiButtonStyle(.primary, size: .compact))
 
             if !aiChatWorkingDirectory.isEmpty {
               Button("Clear") {
@@ -293,7 +293,7 @@ extension SettingsContentView {
                 Task { await chatProvider?.discoverClaudeConfig() }
                 chatProvider?.workingDirectory = nil
               }
-              .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
             }
           }
 
@@ -353,7 +353,7 @@ extension SettingsContentView {
                   fileViewerContent = aiChatClaudeMdContent ?? ""
                   showFileViewer = true
                 }
-                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
 
                 Toggle("", isOn: $claudeMdEnabled)
                   .toggleStyle(OmiToggleStyle())
@@ -400,7 +400,7 @@ extension SettingsContentView {
                     fileViewerContent = aiChatProjectClaudeMdContent ?? ""
                     showFileViewer = true
                   }
-                  .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+                  .buttonStyle(OmiButtonStyle(.primary, size: .compact))
 
                   Toggle("", isOn: $projectClaudeMdEnabled)
                     .toggleStyle(OmiToggleStyle())
@@ -452,7 +452,7 @@ extension SettingsContentView {
               Image(systemName: "arrow.clockwise")
                 .scaledFont(size: OmiType.body)
             }
-            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+            .buttonStyle(OmiButtonStyle(.primary, size: .compact))
           }
 
           let allSkills:
@@ -564,7 +564,7 @@ extension SettingsContentView {
                         ?? "Unable to read file"
                       showFileViewer = true
                     }
-                    .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+                    .buttonStyle(OmiButtonStyle(.primary, size: .compact))
                   }
                   .padding(.vertical, OmiSpacing.xs)
                   .padding(.horizontal, OmiSpacing.xxs)
@@ -656,7 +656,7 @@ extension SettingsContentView {
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
 
                 Button(action: {
                   playwrightExtensionToken = ""
@@ -669,7 +669,7 @@ extension SettingsContentView {
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
               }
             }
           }

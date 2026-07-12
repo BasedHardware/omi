@@ -211,7 +211,7 @@ extension SettingsContentView {
                 }
               }
             }
-            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+            .buttonStyle(OmiButtonStyle(.primary, size: .compact))
 
             if !aiChatWorkingDirectory.isEmpty {
               Button("Clear") {
@@ -220,7 +220,7 @@ extension SettingsContentView {
                 Task { await chatProvider?.discoverClaudeConfig() }
                 chatProvider?.workingDirectory = nil
               }
-              .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
             }
           }
 
@@ -308,7 +308,7 @@ extension SettingsContentView {
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
 
                 Button(action: {
                   playwrightExtensionToken = ""
@@ -321,7 +321,7 @@ extension SettingsContentView {
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
               }
             }
           }
@@ -383,7 +383,7 @@ extension SettingsContentView {
                 showProfileAndStats.toggle()
               }
             }
-            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+            .buttonStyle(OmiButtonStyle(.primary, size: .compact))
           }
         }
       }
@@ -420,7 +420,7 @@ extension SettingsContentView {
                 Text(aiProfileText == nil ? "Generate Now" : "Regenerate")
                   .scaledFont(size: OmiType.caption)
               }
-              .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
             }
           }
 
@@ -439,7 +439,7 @@ extension SettingsContentView {
                 Button("Cancel") {
                   isEditingAIProfile = false
                 }
-                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
 
                 Button("Save") {
                   if let id = aiProfileId {

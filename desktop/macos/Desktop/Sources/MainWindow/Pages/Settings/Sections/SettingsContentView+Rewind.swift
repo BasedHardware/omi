@@ -62,7 +62,7 @@ extension SettingsContentView {
             Button("Reset to Defaults") {
               rewindSettings.resetToDefaults()
             }
-            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+            .buttonStyle(OmiButtonStyle(.primary, size: .compact))
           }
 
           Divider()
