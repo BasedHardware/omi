@@ -141,47 +141,38 @@ extension SettingsContentView {
 
             Spacer()
 
-            if appState.hasNotificationPermission && !appState.isNotificationBannerDisabled {
-              // Show enabled badge
-              Text("Enabled")
-                .scaledFont(size: OmiType.caption, weight: .medium)
-                .foregroundColor(.green)
-                .padding(.horizontal, OmiSpacing.sm)
-                .padding(.vertical, OmiSpacing.xxs)
-                .background(
-                  Capsule()
-                    .fill(Color.green.opacity(0.15))
-                )
-            } else {
-              // Show button to enable or fix
-              Button(action: {
-                if appState.isNotificationBannerDisabled {
-                  // Banners off — user needs to change style in System Settings
-                  appState.openNotificationPreferences()
-                } else {
-                  // Auth not granted — try lsregister repair first
-                  AnalyticsManager.shared.notificationRepairTriggered(
-                    reason: "settings_fix_button",
-                    previousStatus: "not_authorized",
-                    currentStatus: "not_authorized"
-                  )
-                  appState.repairNotificationAndFallback()
+            // Toggle mirrors the effective notification state. macOS ownership
+            // caveat: the app can request/repair permission but cannot revoke
+            // it, so flipping OFF (or fixing disabled banners) deep-links to
+            // System Settings; the toggle re-syncs from the real permission.
+            Toggle(
+              "",
+              isOn: Binding(
+                get: {
+                  appState.hasNotificationPermission && !appState.isNotificationBannerDisabled
+                },
+                set: { newValue in
+                  if newValue {
+                    if appState.isNotificationBannerDisabled {
+                      // Banners off — user needs to change style in System Settings
+                      appState.openNotificationPreferences()
+                    } else {
+                      // Auth not granted — try lsregister repair first
+                      AnalyticsManager.shared.notificationRepairTriggered(
+                        reason: "settings_fix_button",
+                        previousStatus: "not_authorized",
+                        currentStatus: "not_authorized"
+                      )
+                      appState.repairNotificationAndFallback()
+                    }
+                  } else {
+                    appState.openNotificationPreferences()
+                  }
                 }
-              }) {
-                Text(appState.isNotificationBannerDisabled ? "Fix" : "Enable")
-                  .scaledFont(size: OmiType.caption, weight: .semibold)
-                  .foregroundColor(.white)
-                  .padding(.horizontal, OmiSpacing.md)
-                  .padding(.vertical, OmiSpacing.xs)
-                  .background(
-                    RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
-                      .fill(
-                        appState.isNotificationBannerDisabled
-                          ? OmiColors.warning : OmiColors.info)
-                  )
-              }
-              .buttonStyle(.plain)
-            }
+              )
+            )
+            .toggleStyle(OmiToggleStyle())
+            .labelsHidden()
           }
 
           // Warning when banners are disabled
@@ -266,13 +257,13 @@ extension SettingsContentView {
         VStack(spacing: OmiSpacing.md) {
           HStack(spacing: OmiSpacing.lg) {
             Image(systemName: "textformat.size")
-              .scaledFont(size: OmiType.subheading, weight: .medium)
+              .scaledFont(size: 16, weight: .medium)
               .foregroundColor(OmiColors.info)
               .frame(width: 12)
 
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Font Size")
-                .scaledFont(size: OmiType.subheading, weight: .semibold)
+                .scaledFont(size: 16, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
               Text("Scale: \(Int(fontScaleSettings.scale * 100))%")
@@ -286,27 +277,29 @@ extension SettingsContentView {
               Button("Reset") {
                 fontScaleSettings.resetToDefault()
               }
-              .scaledFont(size: OmiType.caption, weight: .medium)
+              .scaledFont(size: 12, weight: .medium)
               .foregroundColor(OmiColors.info)
               .buttonStyle(.plain)
             }
           }
 
           HStack(spacing: OmiSpacing.md) {
+            // The small/large "A" pair illustrates the scale range — keep the
+            // original 12/18 ratio rather than the type registers.
             Text("A")
-              .scaledFont(size: OmiType.caption, weight: .medium)
+              .scaledFont(size: 12, weight: .medium)
               .foregroundColor(OmiColors.textTertiary)
 
             Slider(value: $fontScaleSettings.scale, in: 0.5...2.0, step: 0.05)
               .tint(OmiColors.info)
 
             Text("A")
-              .scaledFont(size: OmiType.heading, weight: .medium)
+              .scaledFont(size: 18, weight: .medium)
               .foregroundColor(OmiColors.textTertiary)
           }
 
           Text("The quick brown fox jumps over the lazy dog")
-            .scaledFont(size: OmiType.body)
+            .scaledFont(size: 14)
             .foregroundColor(OmiColors.textSecondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, OmiSpacing.xxs)
