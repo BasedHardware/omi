@@ -275,8 +275,14 @@ void main() {
     test('recent timestamps without server capture proof remain backfill', () {
       const now = 2000000000;
 
-      expect(syncUploadLaneForTimestamp(now - 60, now, hasServerCaptureProof: false), SyncUploadLane.backfill);
-      expect(syncUploadLaneForTimestamp(now - 60, now, hasServerCaptureProof: true), SyncUploadLane.fresh);
+      expect(
+        syncUploadLaneForTimestamp(now - 60, now, hasServerCaptureProof: false),
+        SyncUploadLane.backfill,
+      );
+      expect(
+        syncUploadLaneForTimestamp(now - 60, now, hasServerCaptureProof: true),
+        SyncUploadLane.fresh,
+      );
     });
 
     test('historical batches are bounded to three newest WALs', () {
@@ -309,7 +315,11 @@ void main() {
       final forcedBackfill = oversizedFreshConversationIds(oversized, now);
       expect(forcedBackfill, {'oversized-conversation'});
 
-      final batch = nextSyncUploadBatch(oversized, now, forcedBackfillConversationIds: forcedBackfill);
+      final batch = nextSyncUploadBatch(
+        oversized,
+        now,
+        forcedBackfillConversationIds: forcedBackfill,
+      );
       expect(batch.length, 3);
       expect(batch.every((wal) => wal.conversationId == 'oversized-conversation'), isTrue);
     });

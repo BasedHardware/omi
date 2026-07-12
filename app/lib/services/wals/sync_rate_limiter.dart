@@ -119,9 +119,8 @@ class SyncRateLimiter extends ChangeNotifier {
   /// also picks the persistence mode (fairUse persists, backendBusy is
   /// in-memory only).
   void markLimited({int? retryAfterSeconds, RateLimitReason reason = RateLimitReason.fairUse}) {
-    final requested = (retryAfterSeconds != null && retryAfterSeconds > 0)
-        ? retryAfterSeconds
-        : _defaultCooldownSeconds;
+    final requested =
+        (retryAfterSeconds != null && retryAfterSeconds > 0) ? retryAfterSeconds : _defaultCooldownSeconds;
     final maxCooldown = reason == RateLimitReason.fairUse ? _maxFairUseCooldownSeconds : _maxBackendBusyCooldownSeconds;
     final secs = requested > maxCooldown ? maxCooldown : requested;
     final untilMs = DateTime.now().add(Duration(seconds: secs)).millisecondsSinceEpoch;

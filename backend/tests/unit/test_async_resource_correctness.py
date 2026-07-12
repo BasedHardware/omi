@@ -237,8 +237,7 @@ def test_scan_async_blockers_keeps_deletion_only_hunks_in_changed_scope(monkeypa
 
     def fake_run(*args, **kwargs):
         captured["cmd"] = args[0]
-        return types.SimpleNamespace(
-            stdout="""
+        return types.SimpleNamespace(stdout="""
 diff --git a/backend/routers/example.py b/backend/routers/example.py
 index 1111111..2222222 100644
 --- a/backend/routers/example.py
@@ -254,8 +253,7 @@ rename to backend/routers/new_name.py
 @@ -10 +10 @@ async def renamed_endpoint():
 -    await old_call()
 +    await new_call()
-"""
-        )
+""")
 
     monkeypatch.setattr(scanner.subprocess, "run", fake_run)
 
