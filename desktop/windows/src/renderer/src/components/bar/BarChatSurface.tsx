@@ -179,7 +179,12 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
   }
 
   return (
-    <div key="conversation" className="bar-view-enter flex flex-col">
+    // bar-view-enter-in (not bar-view-enter): the conversation is tall and
+    // bottom-pins to the growing surface, so its top slides down from far above
+    // as the box inflates. Hold it invisible through that slide, then bloom it
+    // in at rest — a grow-from-the-top, never the "plummet" the list view (which
+    // stays short and top-pinned) never suffers.
+    <div key="conversation" className="bar-view-enter-in flex flex-col">
       <div className="flex items-center gap-1.5 px-2 pb-1 pt-1">
         <button
           type="button"

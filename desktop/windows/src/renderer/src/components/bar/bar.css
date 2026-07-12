@@ -117,7 +117,9 @@ body.bar-body {
 
 /* Inner view swap (chat list ⇄ inline conversation) morphs in place — a gentle
    grow-and-fade seated at the top, never a fresh sheet sliding down from the
-   edge. Keyed remount in BarChatSurface replays this on every view change. */
+   edge. Keyed remount in BarChatSurface replays this on every view change.
+   Used by the LIST view (the back/collapse direction the user already likes:
+   the box shrinks up around a short, top-pinned list — no slide). */
 .bar-view-enter {
   animation: bar-view-enter 200ms cubic-bezier(0.3, 0.8, 0.3, 1);
   transform-origin: top center;
@@ -128,6 +130,30 @@ body.bar-body {
     transform: scale(0.97);
   }
   to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ENTER the inline conversation (list → conversation). A tall conversation is
+   bottom-pinned to the surface's bottom edge, so as the box grows the whole
+   view's top slides down from far above (measured -414px -> +46px): the
+   "plummet" the user reported. Fix mirrors the box-leads pill->panel bloom:
+   hold the view invisible while the box inflates and that slide happens off-
+   screen, then bloom it in at its settled seat. The box morph runs ~240ms and
+   the view is within ~8px of rest by ~62% of this curve, so the visible bloom
+   lands in place — a grow-from-the-top, never a drop. */
+.bar-view-enter-in {
+  animation: bar-view-enter-in 300ms cubic-bezier(0.2, 0, 0, 1);
+  transform-origin: top center;
+}
+@keyframes bar-view-enter-in {
+  0%,
+  62% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  100% {
     opacity: 1;
     transform: none;
   }
@@ -145,7 +171,8 @@ body.bar-body {
   .bar-content {
     transform: none;
   }
-  .bar-view-enter {
+  .bar-view-enter,
+  .bar-view-enter-in {
     animation: none;
   }
 }
