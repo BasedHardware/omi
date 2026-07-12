@@ -264,7 +264,11 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
       encoding: .utf8
     )
     let resetStart = try XCTUnwrap(systemActions.range(of: "func resetOnboardingAndRestart"))
-    let resetBody = String(systemActions[resetStart.lowerBound...].prefix(1200))
+    let resetRemainder = systemActions[resetStart.lowerBound...]
+    let asynchronousCleanup = try XCTUnwrap(
+      resetRemainder.range(of: "Task { @MainActor [self] in")
+    )
+    let resetBody = String(resetRemainder[..<asynchronousCleanup.lowerBound])
     XCTAssertTrue(resetBody.contains("resetOnboardingRequested"))
     let notificationRange = try XCTUnwrap(resetBody.range(of: "resetOnboardingRequested"))
     let udClearRange = try XCTUnwrap(resetBody.range(of: "removeObject(forKey:"))

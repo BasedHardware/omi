@@ -20,7 +20,13 @@ final class APIClientAuthRecoveryTests: XCTestCase {
     let source = try sourceFile("APIClient.swift")
     let deleteRange = source.range(of: "func delete(")
     XCTAssertNotNil(deleteRange)
-    let snippet = String(source[deleteRange!.lowerBound...]).prefix(900)
+    let requestExecutionRange = source.range(
+      of: "// MARK: - Request Execution",
+      range: deleteRange!.upperBound..<source.endIndex)
+    XCTAssertNotNil(requestExecutionRange)
+    let snippet = String(source[
+      deleteRange!.lowerBound..<requestExecutionRange!.lowerBound
+    ])
     XCTAssertTrue(snippet.contains("performVoidRequest"))
     // Whitespace-agnostic check: the old pattern of throwing .unauthorized
     // before the status-code guard should not reappear in the delete method.

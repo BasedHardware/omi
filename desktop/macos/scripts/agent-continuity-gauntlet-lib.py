@@ -3197,8 +3197,17 @@ def self_check() -> int:
         print("self-check failed: agent-continuity-gauntlet.sh missing", file=sys.stderr)
         return 1
     source = (DESKTOP_DIR / "Desktop/Sources/Providers/ChatProvider.swift").read_text(encoding="utf-8")
-    if "clearOwnerState()" not in source:
-        print("self-check failed: ChatProvider sign-out must call clearOwnerState()", file=sys.stderr)
+    if "resetSessionStateForAuthChange()" not in source:
+        print(
+            "self-check failed: ChatProvider must reset projected session state on auth change",
+            file=sys.stderr,
+        )
+        return 1
+    if "clearOwnerState()" in source:
+        print(
+            "self-check failed: RuntimeOwnerIdentity must remain the exclusive owner revoker",
+            file=sys.stderr,
+        )
         return 1
     driver_source = (SCRIPT_DIR / "agent-continuity-gauntlet-lib.py").read_text(encoding="utf-8")
     missing_auth_checks = bridge_auth_self_check_failures(driver_source)

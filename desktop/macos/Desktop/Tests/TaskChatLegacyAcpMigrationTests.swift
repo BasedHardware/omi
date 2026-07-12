@@ -206,7 +206,9 @@ final class TaskChatKernelIdentityTests: XCTestCase {
     let branch = String(rest[..<elseRange.lowerBound])
 
     XCTAssertTrue(branch.contains("surfaceCurrentRuntimeFailureIfNeeded(fallbackMessage: \"Agent failed\")"))
-    XCTAssertTrue(branch.contains("await finishJournalUpdate(messageId: aiMessageId, status: .failed)"))
+    XCTAssertTrue(
+      branch.contains("await finishJournalUpdate(messageId: aiMessageId, status: .failed, lease: lease)")
+    )
     XCTAssertFalse(branch.contains("persistMessage("))
   }
 
