@@ -15,6 +15,8 @@ import { auth, onAuthStateChanged } from '../../lib/firebase'
 import { getPreferences, onPreferencesChange, setPreferences } from '../../lib/preferences'
 import { cn } from '../../lib/utils'
 import { Orb } from '../orb/Orb'
+import { deriveMainWindowOrbState } from '../bar/barDisplay'
+import { useAppState } from '../../state/appState'
 import type { User } from 'firebase/auth'
 import type { RewindSettings } from '../../../../shared/types'
 
@@ -39,6 +41,7 @@ export function Sidebar(): React.JSX.Element {
     () => localStorage.getItem(COLLAPSE_KEY) === '1'
   )
   const [rewind, setRewind] = useState<RewindSettings | null>(null)
+  const { chat } = useAppState()
   const { pathname } = useLocation()
 
   useEffect(() => onAuthStateChanged(auth, (u) => setUser(u)), [])
@@ -82,6 +85,17 @@ export function Sidebar(): React.JSX.Element {
   const toggleMic = (): void => {
     setPreferences({ continuousRecording: !getPreferences().continuousRecording })
   }
+
+  // The header orb mirrors the app's live activity — the same states the bar orb
+  // shows, projected from the one chat engine: thinking while a reply streams,
+  // agents while a coding-agent task runs, speaking while a spoken reply plays,
+  // a calm listening orbit while always-on mic is live, else idle.
+  const orbState = deriveMainWindowOrbState({
+    speaking: chat.speaking,
+    sending: chat.sending,
+    agentActive: chat.agentActive,
+    continuousListening: micOn && !!user
+  })
 
   // The label/name text fades with opacity (and is width-clipped by flexbox) so
   // collapsing animates smoothly instead of popping. Row padding/alignment stay
@@ -168,7 +182,7 @@ export function Sidebar(): React.JSX.Element {
         )}
       >
         <div className="flex min-w-0 items-center gap-2.5">
-          <Orb size={22} preset="compact" state={micOn && user ? 'listening' : 'idle'} />
+          <Orb size={22} preset="compact" state={orbState} />
           {/* Wordmark as text (crisp at every DPI, no network fetch). */}
           <span
             className={cn(
