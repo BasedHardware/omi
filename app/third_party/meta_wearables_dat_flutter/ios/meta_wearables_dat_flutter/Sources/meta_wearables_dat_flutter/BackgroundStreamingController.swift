@@ -9,9 +9,8 @@
 //
 // Mechanics:
 //   1. `enable()` activates an AVAudioSession with `.playAndRecord` /
-//      `.videoRecording`, plus `.allowBluetoothHFP` so the BLE link to
-//      the glasses survives, and `.mixWithOthers` so the host app
-//      doesn't fight Apple Music / Spotify.
+//      `.videoRecording`, uses the built-in microphone, keeps A2DP output
+//      available, and mixes with Apple Music / Spotify.
 //   2. Registers observers for `AVAudioSession.interruptionNotification`,
 //      `routeChangeNotification`, and `mediaServicesWereResetNotification`
 //      so the session is automatically re-activated when iOS recovers.
@@ -73,26 +72,24 @@ final class BackgroundStreamingController {
 
   private func activateSession() throws {
     let session = AVAudioSession.sharedInstance()
-    // `.playAndRecord` is required to keep the mic open and to qualify
-    // for `audio` background mode. `.videoRecording` matches what
-    // Meta's iOS sample uses. `.allowBluetoothHFP` keeps the BLE-HFP
-    // route alive while the screen is locked. `.mixWithOthers`
-    // prevents the host app from muting other audio.
-    var options: AVAudioSession.CategoryOptions = [.mixWithOthers]
-    // Bluetooth HFP options are unavailable on the simulator (no BT hardware).
-    #if !targetEnvironment(simulator)
-    if #available(iOS 14.5, *) {
-      options.insert(.allowBluetoothHFP)
-    } else {
-      options.insert(.allowBluetooth)
-    }
-    #endif
+    // Meta's background-streaming pattern keeps the glasses HFP route alive;
+    // mixWithOthers prevents this keep-alive from silencing other media.
+    let options: AVAudioSession.CategoryOptions = [.mixWithOthers, .allowBluetoothHFP]
     try session.setCategory(
       .playAndRecord,
       mode: .videoRecording,
       options: options,
     )
+    guard let glassesMic = session.availableInputs?.first(where: { $0.portType == .bluetoothHFP }) else {
+      throw NSError(
+        domain: "MetaWearablesDatAudioRoute",
+        code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "Meta glasses Bluetooth microphone is unavailable"]
+      )
+    }
+    try session.setPreferredInput(glassesMic)
     try session.setActive(true)
+    try session.setPreferredInput(glassesMic)
   }
 
   private func registerObservers() {
@@ -166,8 +163,8 @@ final class BackgroundStreamingController {
       let rawReason = info[AVAudioSessionRouteChangeReasonKey] as? UInt,
       let reason = AVAudioSession.RouteChangeReason(rawValue: rawReason)
     else { return }
-    // The glasses' BLE-HFP route can disappear when battery dies or
-    // they are folded; if iOS yanked it, log so the host app can show
+    // The glasses route can disappear when battery dies or they are folded;
+    // if iOS yanked it, log so the host app can show
     // an error UI.
     if reason == .oldDeviceUnavailable {
       print("[meta_wearables_dat_flutter] AVAudioSession route lost " +

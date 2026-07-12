@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -17,17 +16,34 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   const pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
+  const audioSessionChannel = MethodChannel('com.omi.ios/audioSession');
   late Directory tempDir;
   late MetaWearablesMockHarness harness;
+  late List<String> audioSessionCalls;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({'metaGlassesAutoCapture': true});
     await SharedPreferencesUtil.init();
+    audioSessionCalls = [];
     tempDir = await Directory.systemTemp.createTemp('meta-glasses-autostart-');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       pathProviderChannel,
       (call) async {
         if (call.method == 'getApplicationDocumentsDirectory') return tempDir.path;
+        return null;
+      },
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      audioSessionChannel,
+      (call) async {
+        audioSessionCalls.add(call.method);
+        if (call.method == 'configureForMetaGlassesCapture' || call.method == 'getCurrentAudioRoute') {
+          return <String, dynamic>{
+            'input': 'BluetoothHFP',
+            'output': 'BluetoothHFP',
+            'glassesInput': true,
+          };
+        }
         return null;
       },
     );
@@ -39,6 +55,10 @@ void main() {
     MetaWearablesDatPlatform.instance = MethodChannelMetaWearablesDat();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       pathProviderChannel,
+      null,
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      audioSessionChannel,
       null,
     );
     if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
@@ -80,7 +100,7 @@ void main() {
 
     expect(provider.devices.single.linkState, DeviceLinkState.disconnected);
     expect(provider.isCapturing, isTrue);
-    expect(controller.streamRecordingCount, 0);
+    expect(controller.streamRecordingCount, 1);
     expect(harness.platform.lastStreamDeviceUuid, isNull);
     expect(harness.platform.frameCaptureCount, 1);
     expect(controller.ingestedImages, hasLength(1));
@@ -101,7 +121,7 @@ void main() {
 
     await _waitFor(() => provider.isCapturing);
     expect(provider.isCapturing, isTrue);
-    expect(controller.streamRecordingCount, 0);
+    expect(controller.streamRecordingCount, 1);
     expect(harness.platform.lastStreamDeviceUuid, isNull);
 
     await _makeMockEligible();
@@ -128,7 +148,7 @@ void main() {
     await _waitFor(() => provider.isCapturing);
 
     expect(provider.isCapturing, isTrue);
-    expect(controller.streamRecordingCount, 0);
+    expect(controller.streamRecordingCount, 1);
     expect(harness.platform.lastStreamDeviceUuid, isNull);
     expect(harness.platform.frameCaptureCount, 1);
     expect(controller.ingestedImages, hasLength(1));
@@ -150,7 +170,7 @@ void main() {
     await _drainAutoStart();
     await _waitFor(() => provider.isCapturing);
 
-    expect(controller.streamRecordingCount, 0);
+    expect(controller.streamRecordingCount, 1);
     expect(provider.devices.single.linkState, DeviceLinkState.connected);
     expect(provider.isActive(provider.devices.single), isTrue);
     expect(harness.platform.lastStreamDeviceUuid, RecordingMetaWearablesMockPlatform.uuid);
@@ -158,7 +178,7 @@ void main() {
     provider.dispose();
   });
 
-  test('auto-started camera stream never starts phone mic recording', () async {
+  test('auto-started camera stream starts recording only after confirmed glasses HFP routing', () async {
     await MetaWearablesDat.enableMockDevice(initiallyRegistered: true, initialPermissionsGranted: true);
     await MetaWearablesDat.pairMockRayBanMeta();
     await _enableAutoCaptureForTest();
@@ -166,13 +186,15 @@ void main() {
 
     final provider = MetaWearablesProvider();
     await provider.init();
-    final controller = _BlockingCaptureController();
+    final controller = RecordingCaptureController();
 
     provider.attachCaptureController(controller);
     await _drainAutoStart();
     await _waitFor(() => provider.isCapturing);
+    await _waitFor(() => controller.ingestedImages.length == 1);
 
-    expect(controller.streamRecordingCount, 0);
+    expect(controller.streamRecordingCount, 1);
+    expect(audioSessionCalls, containsAllInOrder(['configureForMetaGlassesCapture', 'getCurrentAudioRoute']));
     expect(harness.platform.backgroundStreamingEnabled, isTrue);
     expect(harness.platform.lastStreamDeviceUuid, RecordingMetaWearablesMockPlatform.uuid);
     expect(harness.platform.frameCaptureCount, 1);
@@ -200,7 +222,7 @@ void main() {
     await _drainAutoStart();
     await _waitFor(() => provider.isCapturing);
 
-    expect(controller.streamRecordingCount, 0);
+    expect(controller.streamRecordingCount, 1);
     expect(harness.platform.lastStreamDeviceUuid, RecordingMetaWearablesMockPlatform.uuid);
     expect(harness.platform.frameCaptureCount, 1);
     expect(controller.ingestedImages, hasLength(1));
@@ -336,19 +358,9 @@ Future<void> _makeMockEligible() async {
 }
 
 Future<void> _waitFor(bool Function() condition) async {
-  for (var i = 0; i < 20; i++) {
+  for (var i = 0; i < 100; i++) {
     if (condition()) return;
     await Future<void>.delayed(const Duration(milliseconds: 10));
   }
   fail('Timed out waiting for async auto-start to settle.');
-}
-
-class _BlockingCaptureController extends RecordingCaptureController {
-  final Completer<void> _neverReturns = Completer<void>();
-
-  @override
-  Future<void> streamRecording() async {
-    streamRecordingCount += 1;
-    return _neverReturns.future;
-  }
 }
