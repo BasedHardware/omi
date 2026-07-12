@@ -12,6 +12,7 @@ import XCTest
 /// attenuating all system audio fed to transcription by ~6 dB. This test pins the mono
 /// contract at the production format factory, independent of any source channel count.
 final class SystemAudioConverterFormatTests: XCTestCase {
+    @available(macOS 14.4, *)
     func testConverterInputFormatIsAlwaysMono() {
         for sampleRate in [16000.0, 44100.0, 48000.0] {
             let format = SystemAudioCaptureService.makeConverterInputFormat(sampleRate: sampleRate)
