@@ -96,14 +96,6 @@ class SharedPreferencesUtil {
     await saveString('btDevice', jsonEncode(value.toJson()));
   }
 
-  Future<void> btDeviceRemove(String id) async {
-    final devices = btDevices.where((device) => device.id != id).toList();
-    await saveStringList('btDevices', devices.map((device) => jsonEncode(device.toJson())).toList());
-    if (btDevice.id == id) {
-      await remove('btDevice');
-    }
-  }
-
   List<BtDevice> _upsertBtDevice(BtDevice value) {
     final devices = btDevices;
     final index = devices.indexWhere((device) => device.id == value.id);
