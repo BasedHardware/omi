@@ -24,6 +24,11 @@ env:
   SERVICE: frontend
   REGION: us-central1
 
+# Serialize writes to the same Cloud Run service while allowing dev and prod to proceed independently.
+concurrency:
+  group: deploy-cloud-run-frontend-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}
+  cancel-in-progress: false
+
 jobs:
   deploy:
     environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || (github.ref == 'refs/heads/main' && 'prod') }}

@@ -83,7 +83,7 @@ class TaskAssistantSettings {
 
     /// Apps that never contain useful content for proactive assistants — utility/media/system apps + our own app.
     /// Shared across Advice, Focus, and Memory assistants (Task extraction uses whitelist instead).
-    static let builtInExcludedApps: Set<String> = [
+    nonisolated static let builtInExcludedApps: Set<String> = [
         "Omi",
         "Omi Beta",
         "omi",

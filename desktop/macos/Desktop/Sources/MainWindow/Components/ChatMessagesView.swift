@@ -424,8 +424,14 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         guard let anchorId = prependAnchorId else { return }
         prependAnchorId = nil
 
-        // If the user scrolled during the load, don't override their position
-        guard scrollMode != .freeScrolling else { return }
+        // Only bail if the user is *physically* scrolling right now — not on
+        // scrollMode. Prepend ("Load earlier") only happens while reading history,
+        // i.e. scrollMode == .freeScrolling, so guarding on that mode made this
+        // restore (and the scrollTo below) dead code — the viewport jumped on every
+        // page-up. userIsScrolling is the real "don't fight the user's drag" signal
+        // (set by UserScrollDetector on any scroll interaction — wheel, drag, or
+        // keyboard scroll — and auto-cleared 0.3s after the last one).
+        guard !userIsScrolling else { return }
 
         // Verify the anchor message is still in the list
         let stillExists = messages.contains { $0.id == anchorId }
@@ -433,7 +439,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
 
         // Scroll anchor to top without animation
         let work = DispatchWorkItem { [self] in
-            guard self.scrollMode != .freeScrolling else { return }
+            guard !self.userIsScrolling else { return }
             proxy.scrollTo(anchorId, anchor: .top)
         }
         initialScrollWorkItems.append(work)

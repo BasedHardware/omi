@@ -549,7 +549,7 @@ class AppProvider extends BaseProvider {
         updatePrefApps();
         final context = globalNavigatorKey.currentState?.context;
         AppSnackbar.showSnackbarSuccess(
-          context != null ? context.l10n.appDeletedSuccessfully : 'App deleted successfully',
+          context != null && context.mounted ? context.l10n.appDeletedSuccessfully : 'App deleted successfully',
         );
         notifyListeners();
       } else {
@@ -558,7 +558,9 @@ class AppProvider extends BaseProvider {
     } else {
       final context = globalNavigatorKey.currentState?.context;
       AppSnackbar.showSnackbarError(
-        context != null ? context.l10n.appDeleteFailed : 'Failed to delete app. Please try again later.',
+        context != null && context.mounted
+            ? context.l10n.appDeleteFailed
+            : 'Failed to delete app. Please try again later.',
       );
     }
   }
@@ -796,13 +798,12 @@ class AppProvider extends BaseProvider {
     bool success = false;
     String? errorMessage;
 
-    final context = globalNavigatorKey.currentState?.context;
-
     try {
       if (isEnabled) {
         success = await enableAppServer(appId);
         if (!success) {
-          errorMessage = context != null
+          final context = globalNavigatorKey.currentState?.context;
+          errorMessage = context != null && context.mounted
               ? context.l10n.errorActivatingAppIntegration
               : 'Error activating the app. If this is an integration app, make sure the setup is completed.';
         } else {
@@ -816,12 +817,19 @@ class AppProvider extends BaseProvider {
     } catch (e) {
       print('Error toggling app $appId: $e');
       success = false;
-      errorMessage =
-          context != null ? context.l10n.errorUpdatingAppStatus : 'An error occurred while updating the app status.';
+      final context = globalNavigatorKey.currentState?.context;
+      errorMessage = context != null && context.mounted
+          ? context.l10n.errorUpdatingAppStatus
+          : 'An error occurred while updating the app status.';
     }
 
     if (!success && errorMessage != null) {
-      AppDialog.show(title: context != null ? context.l10n.error : 'Error', content: errorMessage, singleButton: true);
+      final context = globalNavigatorKey.currentState?.context;
+      AppDialog.show(
+        title: context != null && context.mounted ? context.l10n.error : 'Error',
+        content: errorMessage,
+        singleButton: true,
+      );
     }
 
     if (success) {

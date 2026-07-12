@@ -19,6 +19,7 @@ from utils.integration_telemetry import (
     emit_sync_failed,
     emit_sync_succeeded,
 )
+from utils.executors import db_executor, run_blocking
 from utils.other import endpoints as auth
 from utils.retrieval.tools.calendar_tools import get_google_calendar_events
 from utils.retrieval.tools.google_utils import refresh_google_token
@@ -91,7 +92,7 @@ async def list_google_calendar_events(
 
     Used by the event picker UI when manually linking a conversation to a calendar event.
     """
-    access_token, integration = _get_google_calendar_token(uid)
+    access_token, integration = await run_blocking(db_executor, _get_google_calendar_token, uid)
     telemetry_context = IntegrationTelemetryContext(
         integration_name=GOOGLE_CALENDAR,
         operation='fetch_events',

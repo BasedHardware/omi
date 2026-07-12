@@ -19,7 +19,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   static const int pagesPerChunk = 25;
   static const Duration _persistBatchDuration = Duration(seconds: 90);
 
-  List<Wal> _wals = const [];
+  List<Wal> _wals = [];
   BtDevice? _device;
   LocalWalSync? _localSync;
 

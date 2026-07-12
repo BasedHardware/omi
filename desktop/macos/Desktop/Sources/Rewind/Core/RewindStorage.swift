@@ -28,11 +28,12 @@ actor RewindStorage {
     }
 
     /// Reset storage state (called on user switch / sign-out)
-    func reset() {
+    func reset() async {
         screenshotsDirectory = nil
         videosDirectory = nil
         frameCache.removeAllObjects()
         corruptedChunks.removeAll()
+        await VideoChunkEncoder.shared.resetForUserSwitch()
         log("RewindStorage: Reset for user switch")
     }
 
@@ -512,13 +513,47 @@ actor RewindStorage {
 
     // MARK: - Delete Screenshot
 
+    /// Resolve the on-disk file to delete for a stored screenshot relative path,
+    /// or `nil` when the path is unsafe to delete.
+    ///
+    /// Video-based screenshots persist `imagePath` as "" (see
+    /// `RewindDatabase.insertScreenshot`), and retention cleanup can hand those
+    /// empty strings back. `root.appendingPathComponent("")` resolves to the
+    /// Screenshots directory itself, so a naive `removeItem` would recursively
+    /// wipe the entire screenshot store. Refuse empty/whitespace paths, the
+    /// storage root itself, and any path that escapes the root via `..`
+    /// (e.g. "../outside.jpg") so retention cleanup can never delete a file
+    /// outside the screenshot store.
+    static func screenshotDeletionURL(relativePath: String, in root: URL) -> URL? {
+        let trimmed = relativePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        // Use the trimmed value for the component too (not the raw relativePath),
+        // so a whitespace-padded stored path resolves consistently.
+        let candidate = root.appendingPathComponent(trimmed).standardizedFileURL
+        let standardizedRoot = root.standardizedFileURL
+        // Require the candidate to sit strictly inside the root: reject the root
+        // itself, and require the root path + "/" as a prefix so a standardized
+        // "../" escape (which lands beside or above the root) is refused.
+        let rootPath = standardizedRoot.path
+        let rootPrefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
+        guard candidate.path != rootPath, candidate.path.hasPrefix(rootPrefix) else {
+            return nil
+        }
+        return candidate
+    }
+
     /// Delete a screenshot file
     func deleteScreenshot(relativePath: String) async throws {
         guard let screenshotsDirectory = screenshotsDirectory else {
             throw RewindError.storageError("Storage not initialized")
         }
 
-        let fullPath = screenshotsDirectory.appendingPathComponent(relativePath)
+        guard
+            let fullPath = Self.screenshotDeletionURL(
+                relativePath: relativePath, in: screenshotsDirectory)
+        else {
+            return
+        }
 
         if fileManager.fileExists(atPath: fullPath.path) {
             try fileManager.removeItem(at: fullPath)
@@ -687,7 +722,10 @@ actor RewindStorage {
 
         var chunks: [VideoChunkInfo] = []
 
-        // Enumerate all .hevc files in videos directory (including subdirectories)
+        // Enumerate all video chunk files in the videos directory (recursively).
+        // The encoder writes .mp4 chunks (VideoChunkEncoder.generateChunkPath);
+        // .hevc is only matched for legacy installs. Filtering on .hevc alone made
+        // "Rebuild Index" recover ZERO frames from a store full of .mp4 chunks.
         let enumerator = fileManager.enumerator(
             at: videosDirectory,
             includingPropertiesForKeys: [.isRegularFileKey, .creationDateKey],
@@ -695,7 +733,8 @@ actor RewindStorage {
         )
 
         while let fileURL = enumerator?.nextObject() as? URL {
-            guard fileURL.pathExtension == "hevc" else { continue }
+            let ext = fileURL.pathExtension.lowercased()
+            guard ext == "mp4" || ext == "hevc" else { continue }
 
             // Get relative path from videos directory
             let relativePath = fileURL.path.replacingOccurrences(of: videosDirectory.path + "/", with: "")

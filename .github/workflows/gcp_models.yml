@@ -22,6 +22,11 @@ on:
         required: false
         default: ''
 
+# This workflow's Helm target is VAD; serialize writers to that release.
+concurrency:
+  group: deploy-gke-vad-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
 env:
   SERVICE: models
   REGION: us-central1

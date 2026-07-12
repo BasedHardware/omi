@@ -62,8 +62,9 @@ List<TextSpan> highlightSearchMatches(String text, String searchQuery, {int curr
       TextSpan(
         text: text.substring(index, index + searchQuery.length),
         style: TextStyle(
-          backgroundColor:
-              isCurrentResult ? Colors.orange.withValues(alpha: 0.9) : Colors.deepPurple.withValues(alpha: 0.6),
+          backgroundColor: isCurrentResult
+              ? Colors.orange.withValues(alpha: 0.9)
+              : Colors.deepPurple.withValues(alpha: 0.6),
           color: Colors.white,
           fontWeight: FontWeight.bold,
         ),
@@ -241,6 +242,7 @@ class GetSummaryWidgets extends StatelessWidget {
         if (folderProvider.folders.isEmpty) {
           await folderProvider.loadFolders();
         }
+        if (!context.mounted) return;
         final newFolderId = await showMoveToFolderSheet(
           context,
           conversationId: conversationId,
@@ -889,15 +891,15 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
                     ],
                   )
                 : _isEditing
-                    ? _buildEditor(context, content)
-                    : GestureDetector(
-                        onDoubleTap: widget.onSaveSummary == null ? null : () => _startEditing(content),
-                        child: ConversationMarkdownWidget(
-                          content: content,
-                          searchQuery: widget.searchQuery,
-                          currentResultIndex: widget.currentResultIndex,
-                        ),
-                      ),
+                ? _buildEditor(context, content)
+                : GestureDetector(
+                    onDoubleTap: widget.onSaveSummary == null ? null : () => _startEditing(content),
+                    child: ConversationMarkdownWidget(
+                      content: content,
+                      searchQuery: widget.searchQuery,
+                      currentResultIndex: widget.currentResultIndex,
+                    ),
+                  ),
           ),
 
           // App info in a more subtle format below the content - only show if content is not empty
@@ -1375,18 +1377,20 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
                 return;
               } else {
                 webhookOnConversationCreatedCall(widget.conversation, returnRawBody: true).then((response) {
-                  showDialog(
-                    context: context,
-                    builder: (c) => getDialog(
-                      context,
-                      () => Navigator.pop(context),
-                      () => Navigator.pop(context),
-                      context.l10n.result,
-                      response,
-                      okButtonText: context.l10n.ok,
-                      singleButton: true,
-                    ),
-                  );
+                  if (context.mounted) {
+                    showDialog(
+                      context: context,
+                      builder: (c) => getDialog(
+                        context,
+                        () => Navigator.pop(context),
+                        () => Navigator.pop(context),
+                        context.l10n.result,
+                        response,
+                        okButtonText: context.l10n.ok,
+                        singleButton: true,
+                      ),
+                    );
+                  }
                   changeLoadingAppIntegrationTest(false);
                 });
               }
@@ -1537,7 +1541,7 @@ class _CalendarEventDetailsSheetState extends State<CalendarEventDetailsSheet> {
               onTap: () async {
                 setState(() => _unlinking = true);
                 await widget.onUnlink!();
-                if (!mounted) return;
+                if (!context.mounted) return;
                 Navigator.pop(context);
               },
             ),

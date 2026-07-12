@@ -28,7 +28,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from database.google_credentials import prepare_google_credentials
 from database.memory_collections import MemoryCollections
-from utils.memory.v3_limited_rollout_config import GLOBAL_READ_GATE_PATH, WRITE_CONVERGENCE_GATE_PATH
+from utils.memory.v3.limited_rollout_config import GLOBAL_READ_GATE_PATH, WRITE_CONVERGENCE_GATE_PATH
 
 FIRST_USER_UID = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
 DEFAULT_PROJECT = "based-hardware"

@@ -347,10 +347,8 @@ extension AppState {
             // the in-memory window, the event payload has all fields needed
             if let sessionId = currentSessionId {
               let mapped = newTranslations.map { TranscriptTranslation(lang: $0.lang, text: $0.text) }
-              var translationsJson: String?
-              if let jsonData = try? JSONEncoder().encode(mapped) {
-                translationsJson = String(data: jsonData, encoding: .utf8)
-              }
+              let translationsJson = (try? JSONEncoder().encode(mapped))
+                .flatMap { String(data: $0, encoding: .utf8) }
               Task {
                 try? await TranscriptionStorage.shared.upsertSegment(
                   sessionId: sessionId,

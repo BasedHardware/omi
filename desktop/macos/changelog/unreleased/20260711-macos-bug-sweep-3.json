@@ -1,0 +1,3 @@
+{
+  "change": "Fixed more reliability issues: a system-audio cleanup deadlock, a Bluetooth crash while syncing recordings from storage, a possible hang when importing large connector sessions, agent sync no longer skipping same-second bulk edits, and the 'screen recording needs reset' notice no longer being lost if you were snoozed"
+}

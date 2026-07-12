@@ -821,6 +821,14 @@ def set_assignee_conversation_segment(
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation)
 
+    # Bound-check segment_idx before indexing. Same class as the events / action-items
+    # handlers above (0 <= idx < len): an out-of-range idx (e.g. a stale client after
+    # reprocess/merge shrank the segments) otherwise raises IndexError -> HTTP 500, and a
+    # negative idx would silently mutate the wrong segment. This is a single-target route,
+    # so a missing segment is a 404 rather than a skip.
+    if not (0 <= segment_idx < len(conversation.transcript_segments)):
+        raise HTTPException(status_code=404, detail="Segment not found")
+
     if value == 'null':
         value = None
 
