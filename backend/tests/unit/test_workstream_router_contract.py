@@ -72,6 +72,56 @@ def test_task_intelligence_mutations_reject_stale_account_generation(monkeypatch
     assert error.value.detail == 'account generation mismatch'
 
 
+@pytest.mark.parametrize('surface', ['get', 'evaluate', 'debug'])
+def test_task_intelligence_reads_fail_closed_when_generation_changes_during_projection_read(monkeypatch, surface):
+    generations = iter([3, 4])
+    projection_reads = []
+    monkeypatch.setattr(
+        task_recommendations_router,
+        '_rollout',
+        lambda _uid: SimpleNamespace(
+            intelligence_product_enabled=True,
+            account_generation=next(generations),
+        ),
+    )
+    monkeypatch.setattr(task_recommendations_router, '_bound_device_id', lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        task_recommendations_router.recommendations,
+        'evaluate',
+        lambda *args, **kwargs: projection_reads.append('evaluate') or object(),
+    )
+    monkeypatch.setattr(
+        task_recommendations_router.recommendations,
+        'get_debug_projection',
+        lambda *args, **kwargs: projection_reads.append('debug') or object(),
+    )
+
+    with pytest.raises(HTTPException) as error:
+        if surface == 'get':
+            task_recommendations_router.get_what_matters_now(
+                request_context=object(),
+                device_id=None,
+                uid='u1',
+            )
+        elif surface == 'evaluate':
+            task_recommendations_router.evaluate_what_matters_now(
+                request=task_recommendations_router.EvaluationRequest(),
+                request_context=object(),
+                uid='u1',
+            )
+        else:
+            task_recommendations_router.get_evaluation_debug_projection(
+                request_context=object(),
+                evaluation_id='evaluation-old-generation',
+                x_omi_debug=True,
+                device_id=None,
+                uid='u1',
+            )
+
+    assert error.value.status_code == 404
+    assert projection_reads == ['debug' if surface == 'debug' else 'evaluate']
+
+
 def test_qualitative_goal_create_forwards_canonical_shape_without_numeric_defaults(monkeypatch):
     captured = {}
 

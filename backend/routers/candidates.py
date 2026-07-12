@@ -1,12 +1,16 @@
 """Canonical Candidate lifecycle API."""
 
-from typing import Annotated, Optional
+from datetime import datetime, timezone
+from typing import Annotated, Literal, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 
 import database.candidates as candidates_db
+import database.task_recommendations as recommendation_db
 import database.task_intelligence_control as task_control_db
+from models.action_item import TaskCreatePayload
 from models.candidate import (
+    CandidateAction,
     CandidateCreate,
     CandidateListResponse,
     CandidateMigrationReport,
@@ -15,10 +19,14 @@ from models.candidate import (
     CandidateResolutionReceipt,
     CandidateResolutionRequest,
     CandidateStatus,
+    CandidateSubjectKind,
 )
 from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
 from utils.other import endpoints as auth
 from utils.task_intelligence import candidate_service
+from utils.task_intelligence.capture_policy import MINIMUM_CAPTURE_CONFIDENCE
+from utils.task_intelligence.recommendations import candidate_recommendation_dedupe_key
+from utils.task_intelligence.rollout import resolve_task_intelligence_for_user
 from utils.task_intelligence.task_links import TaskLinkValidationError
 from utils.task_intelligence.staged_migration import migrate_staged_tasks
 
@@ -26,6 +34,9 @@ router = APIRouter()
 
 IdempotencyHeader = Annotated[str, Header(alias='Idempotency-Key', min_length=1, max_length=512)]
 AccountGenerationHeader = Annotated[int, Header(alias='X-Account-Generation', ge=0)]
+SUGGESTED_CANDIDATE_LIMIT = 5
+SUGGESTED_CANDIDATE_RAW_LIMIT = 500
+SUGGESTED_CANDIDATE_FRESHNESS = candidates_db.PENDING_CANDIDATE_REUSE_WINDOW
 
 
 def _require_candidate_write_control(uid: str, account_generation: int) -> None:
@@ -44,6 +55,105 @@ def _raise_store_error(exc: candidates_db.CandidateStoreError) -> None:
     if isinstance(exc, candidates_db.WorkstreamCandidateResolverUnavailableError):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+def _require_suggested_rollout(uid: str):
+    control = task_control_db.get_task_workflow_control(uid)
+    rollout = resolve_task_intelligence_for_user(
+        uid=uid,
+        workflow_mode=control.workflow_mode,
+        account_generation=control.account_generation,
+    )
+    if not rollout.intelligence_product_enabled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
+    return rollout
+
+
+def _has_suggested_candidate_shape(
+    candidate: CandidateRecord,
+    *,
+    now: datetime,
+    enforce_freshness: bool = True,
+) -> bool:
+    if candidate.proposed_action != CandidateAction.create:
+        return False
+    if candidate.subject_kind == CandidateSubjectKind.task:
+        if not isinstance(candidate.task_change, TaskCreatePayload):
+            return False
+    elif candidate.subject_kind == CandidateSubjectKind.workstream:
+        if candidate.workstream_proposal is None:
+            return False
+    else:
+        return False
+    if (
+        candidate.capture_confidence < MINIMUM_CAPTURE_CONFIDENCE
+        or candidate.ownership_confidence < MINIMUM_CAPTURE_CONFIDENCE
+        or not candidate.evidence_refs
+    ):
+        return False
+    created_at = candidate.created_at
+    if created_at.tzinfo is None:
+        return False
+    return not enforce_freshness or created_at >= now - SUGGESTED_CANDIDATE_FRESHNESS
+
+
+def _is_suggested_candidate(candidate: CandidateRecord, *, now: datetime) -> bool:
+    return candidate.status == CandidateStatus.pending and _has_suggested_candidate_shape(candidate, now=now)
+
+
+def _suggested_candidates(
+    candidates: list[CandidateRecord],
+    *,
+    limit: int,
+    suppressed_dedupe_keys: set[str],
+    now: Optional[datetime] = None,
+) -> list[CandidateRecord]:
+    current_time = now or datetime.now(timezone.utc)
+    eligible = [candidate for candidate in candidates if _is_suggested_candidate(candidate, now=current_time)]
+    eligible.sort(key=lambda candidate: candidate.created_at, reverse=True)
+    eligible_with_identity = [
+        (candidate, candidates_db.suggested_candidate_semantic_identity(candidate.as_proposal()))
+        for candidate in eligible
+    ]
+    terminal_resolutions: dict[str, list[datetime]] = {}
+    for candidate in candidates:
+        if (
+            candidate.status not in {CandidateStatus.accepted, CandidateStatus.rejected}
+            or candidate.resolved_at is None
+            or candidate.resolved_at.tzinfo is None
+            or not _has_suggested_candidate_shape(candidate, now=current_time, enforce_freshness=False)
+        ):
+            continue
+        semantic_identity = candidates_db.suggested_candidate_semantic_identity(candidate.as_proposal())
+        if semantic_identity is not None:
+            terminal_resolutions.setdefault(semantic_identity, []).append(candidate.resolved_at)
+    suppressed_semantic_identities = {
+        semantic_identity
+        for candidate in candidates
+        if _has_suggested_candidate_shape(candidate, now=current_time, enforce_freshness=False)
+        and (semantic_identity := candidates_db.suggested_candidate_semantic_identity(candidate.as_proposal()))
+        is not None
+        and candidate_recommendation_dedupe_key(candidate.candidate_id) in suppressed_dedupe_keys
+    }
+    projection: list[CandidateRecord] = []
+    seen: set[str] = set()
+    for candidate, semantic_identity in eligible_with_identity:
+        if candidate_recommendation_dedupe_key(candidate.candidate_id) in suppressed_dedupe_keys:
+            continue
+        if semantic_identity is not None and semantic_identity in suppressed_semantic_identities:
+            continue
+        if semantic_identity is not None and any(
+            candidate.created_at <= resolved_at for resolved_at in terminal_resolutions.get(semantic_identity, [])
+        ):
+            continue
+        dedupe_key = semantic_identity or candidate.candidate_id
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        projection.append(candidate)
+        if len(projection) == min(limit, SUGGESTED_CANDIDATE_LIMIT):
+            break
+    return projection
 
 
 @router.post('/v1/candidates', response_model=CandidateRecord, tags=['candidates'])
@@ -70,8 +180,36 @@ def list_candidates(
     candidate_status: Optional[CandidateStatus] = Query(default=None, alias='status'),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    surface: Optional[Literal['suggested']] = Query(default=None),
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    if surface == 'suggested':
+        rollout = _require_suggested_rollout(uid)
+        records = candidates_db.list_candidates(
+            uid,
+            status=None,
+            account_generation=rollout.account_generation,
+            limit=SUGGESTED_CANDIDATE_RAW_LIMIT,
+            offset=0,
+        )
+        now = datetime.now(timezone.utc)
+        suppressed = recommendation_db.list_active_override_dedupe_keys(
+            uid,
+            now=now,
+            account_generation=rollout.account_generation,
+        )
+        refreshed_rollout = _require_suggested_rollout(uid)
+        if refreshed_rollout.account_generation != rollout.account_generation:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
+        return CandidateListResponse(
+            candidates=_suggested_candidates(
+                records,
+                limit=limit,
+                suppressed_dedupe_keys=suppressed,
+                now=now,
+            ),
+            has_more=False,
+        )
     control = task_control_db.get_task_workflow_control(uid)
     records = candidates_db.list_candidates(
         uid,

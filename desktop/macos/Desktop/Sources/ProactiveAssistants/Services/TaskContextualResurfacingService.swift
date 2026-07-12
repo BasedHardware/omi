@@ -750,20 +750,45 @@ actor TaskContextualResurfacingService {
 
   private let client: any TaskContextualResurfacingClient
   private let debounceInterval: TimeInterval
+  private let deviceID: () -> String
+  private let ownerID: () -> String?
+  private let sendInterruption: @MainActor (TaskInterruptionCandidate) -> Void
   private var accumulator = TaskContextEventAccumulator()
+  private var accumulatorOwnerID: String?
   private var debounceTask: Task<Void, Never>?
   private var lastMaterialHint: String?
   private var lastEvaluationAt: Date?
+  private var lastOwnerID: String?
+  private var hasObservedOwner = false
 
   init(
     client: any TaskContextualResurfacingClient = APIClient.shared,
-    debounceInterval: TimeInterval = 2
+    debounceInterval: TimeInterval = 2,
+    deviceIDProvider: @escaping () -> String = { ClientDeviceService.shared.clientDeviceId },
+    ownerIDProvider: @escaping () -> String? = { RuntimeOwnerIdentity.currentOwnerId() },
+    sendInterruption: @escaping @MainActor (TaskInterruptionCandidate) -> Void = { candidate in
+      _ = NotificationService.shared.sendContextualTaskInterruption(candidate)
+    }
   ) {
     self.client = client
     self.debounceInterval = debounceInterval
+    self.deviceID = deviceIDProvider
+    self.ownerID = ownerIDProvider
+    self.sendInterruption = sendInterruption
   }
 
   func observe(_ event: TaskLocalContextEvent) {
+    guard let observedOwnerID = ownerID() else {
+      accumulator = TaskContextEventAccumulator()
+      accumulatorOwnerID = nil
+      debounceTask?.cancel()
+      debounceTask = nil
+      return
+    }
+    if accumulatorOwnerID != observedOwnerID {
+      accumulator = TaskContextEventAccumulator()
+      accumulatorOwnerID = observedOwnerID
+    }
     accumulator.insert(event)
     debounceTask?.cancel()
     debounceTask = Task { [weak self] in
@@ -780,18 +805,40 @@ actor TaskContextualResurfacingService {
   func flush() async {
     debounceTask?.cancel()
     debounceTask = nil
+    guard let flushOwnerID = ownerID() else {
+      accumulator = TaskContextEventAccumulator()
+      accumulatorOwnerID = nil
+      return
+    }
+    guard accumulatorOwnerID == flushOwnerID else {
+      accumulator = TaskContextEventAccumulator()
+      accumulatorOwnerID = flushOwnerID
+      return
+    }
     let now = Date()
     let events = accumulator.drain(now: now)
     guard !events.isEmpty else { return }
-    let materialFingerprint = events.map { event in
+    if hasObservedOwner, flushOwnerID != lastOwnerID {
+      lastMaterialHint = nil
+      lastEvaluationAt = nil
+    }
+    lastOwnerID = flushOwnerID
+    hasObservedOwner = true
+    let matches = Self.contextMatches(events)
+    let semanticFingerprint = matches.map { match in
       [
-        event.kind.rawValue,
-        event.referenceHash,
-        event.subject?.kind.rawValue ?? "none",
-        event.subject?.id ?? "none",
-        event.urgency.rawValue,
+        match.subjectKind.rawValue,
+        match.subjectId,
+        match.signals.map(\.rawValue).sorted().joined(separator: ","),
       ].joined(separator: "|")
-    }.sorted().joined(separator: "||")
+    }.joined(separator: "||")
+    // Urgency is a privacy-safe control input, not model material. Including only
+    // its bounded state forces an authenticated gate recheck when a context moves
+    // from passive to interruptible while keeping the semantic snapshot stable.
+    let urgencyControl = events.contains { $0.urgency == .timeSensitive }
+      ? TaskContextUrgency.timeSensitive.rawValue
+      : TaskContextUrgency.canWait.rawValue
+    let materialFingerprint = "\(semanticFingerprint)||urgency:\(urgencyControl)"
     let materialHash = SHA256.hash(data: Data(materialFingerprint.utf8))
       .map { String(format: "%02x", $0) }.joined()
     let materialHint = "ctx:\(materialHash.prefix(32))"
@@ -803,11 +850,11 @@ actor TaskContextualResurfacingService {
     }
     do {
       let control = try await client.getCandidateWorkflowControl()
+      guard ownerID() == flushOwnerID else { return }
       guard control.workflowMode == .read, let accountGeneration = control.accountGeneration else { return }
-      let deviceID = ClientDeviceService.shared.deviceIdHash
-      let matches = Self.contextMatches(events)
+      let scopedDeviceID = deviceID()
       let snapshot = OmiAPI.NormalizedContextSnapshot(
-        deviceId: deviceID,
+        deviceId: scopedDeviceID,
         expiresAt: Self.iso8601(now.addingTimeInterval(5 * 60)),
         generatedAt: Self.iso8601(now),
         matches: matches,
@@ -818,15 +865,25 @@ actor TaskContextualResurfacingService {
         snapshot,
         accountGeneration: accountGeneration
       )
+      guard ownerID() == flushOwnerID else { return }
       let projection = try await client.evaluateWhatMattersNow(
-        OmiAPI.EvaluationRequest(deviceId: deviceID, materialHint: materialHint)
+        OmiAPI.EvaluationRequest(deviceId: scopedDeviceID, materialHint: materialHint)
       )
+      guard ownerID() == flushOwnerID else { return }
       lastMaterialHint = materialHint
       lastEvaluationAt = now
+      let currentOwnerID = ownerID
       await MainActor.run {
+        guard currentOwnerID() == flushOwnerID else { return }
         NotificationCenter.default.post(name: .whatMattersNowContextDidRefresh, object: projection)
       }
-      await interruptIfEligible(projection: projection, events: events, now: now)
+      guard ownerID() == flushOwnerID else { return }
+      await interruptIfEligible(
+        projection: projection,
+        events: events,
+        now: now,
+        ownerID: flushOwnerID
+      )
     } catch {
       logError("TaskContextualResurfacing: context re-evaluation failed", error: error)
     }
@@ -835,7 +892,8 @@ actor TaskContextualResurfacingService {
   private func interruptIfEligible(
     projection: OmiAPI.WhatMattersNowProjection,
     events: [TaskLocalContextEvent],
-    now: Date
+    now: Date,
+    ownerID flushOwnerID: String
   ) async {
     let urgentSubjects = Set(events.filter { $0.urgency == .timeSensitive }.compactMap(\.subject))
     guard !urgentSubjects.isEmpty else { return }
@@ -857,8 +915,11 @@ actor TaskContextualResurfacingService {
       expiresAt: expiresAt,
       canWait: false
     )
-    _ = await MainActor.run {
-      NotificationService.shared.sendContextualTaskInterruption(candidate)
+    let currentOwnerID = ownerID
+    let deliver = sendInterruption
+    await MainActor.run {
+      guard currentOwnerID() == flushOwnerID else { return }
+      deliver(candidate)
     }
   }
 

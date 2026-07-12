@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "policy_version": "capture.v1",
+  "policy_version": "capture.v2",
   "cases": [
     {
       "id": "explicit_create",
@@ -13,16 +13,16 @@
     {
       "id": "clear_commitment",
       "inputs": {
-        "transcript": {"text": "I will send Sarah the budget by Friday.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.95, "deadline_confidence": 1}},
-        "screen": {"text": "Me: I will send Sarah the budget by Friday.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.95, "deadline_confidence": 1}}
+        "transcript": {"text": "I will send Sarah the budget by Friday.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.95, "ownership_confidence": 1, "deadline_confidence": 1}},
+        "screen": {"text": "Me: I will send Sarah the budget by Friday.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.95, "ownership_confidence": 1, "deadline_confidence": 1}}
       },
       "expected": {"outcome": "auto_accept_silent", "interruption": "none"}
     },
     {
       "id": "immediate_commitment",
       "inputs": {
-        "transcript": {"text": "I will update the pricing table now.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.9, "immediate_action": true}},
-        "screen": {"text": "Me: I will update the pricing table now.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.9, "immediate_action": true}}
+        "transcript": {"text": "I will update the pricing table now.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.9, "ownership_confidence": 1, "immediate_action": true}},
+        "screen": {"text": "Me: I will update the pricing table now.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.9, "ownership_confidence": 1, "immediate_action": true}}
       },
       "expected": {"outcome": "auto_accept_silent", "interruption": "none"}
     },
@@ -40,21 +40,45 @@
         "transcript": {"text": "I will handle the Sarah thing.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": false, "capture_confidence": 0.95}},
         "screen": {"text": "Me: I will handle the Sarah thing.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": false, "capture_confidence": 0.95}}
       },
-      "expected": {"outcome": "pending_candidate", "interruption": "none"}
+      "expected": {"outcome": "ignore", "interruption": "none"}
     },
     {
       "id": "unaccepted_request",
       "inputs": {
-        "transcript": {"text": "Sarah asked whether you could send the budget.", "stub_output": {"direct_request": true, "owner": "unknown", "concrete_deliverable": true}},
-        "screen": {"text": "Sarah: Could you send the budget?", "stub_output": {"direct_request": true, "owner": "unknown", "concrete_deliverable": true}}
+        "transcript": {"text": "Sarah asked you to send the budget.", "stub_output": {"direct_request": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.95, "ownership_confidence": 0.95}},
+        "screen": {"text": "Sarah to you: Could you send the budget?", "stub_output": {"direct_request": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.95, "ownership_confidence": 0.95}}
       },
       "expected": {"outcome": "pending_candidate", "interruption": "none"}
+    },
+    {
+      "id": "owned_direct_request_at_confidence_floors",
+      "inputs": {
+        "transcript": {"text": "Sarah asked you to send the launch recap.", "stub_output": {"direct_request": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.8, "ownership_confidence": 0.8}},
+        "screen": {"text": "Sarah to you: Please send the launch recap.", "stub_output": {"direct_request": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.8, "ownership_confidence": 0.8}}
+      },
+      "expected": {"outcome": "pending_candidate", "interruption": "none"}
+    },
+    {
+      "id": "owned_direct_request_below_ownership_floor",
+      "inputs": {
+        "transcript": {"text": "Sarah may have asked you to send the launch recap.", "stub_output": {"direct_request": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.8, "ownership_confidence": 0.79}},
+        "screen": {"text": "Sarah may have asked you to send the launch recap.", "stub_output": {"direct_request": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.8, "ownership_confidence": 0.79}}
+      },
+      "expected": {"outcome": "ignore", "interruption": "none"}
     },
     {
       "id": "inferred_next_step",
       "inputs": {
         "transcript": {"text": "The pricing discussion may benefit from a written recap.", "stub_output": {"inferred_next_step": true, "owner": "unknown"}},
         "screen": {"text": "Pricing discussion open; a recap could be useful.", "stub_output": {"inferred_next_step": true, "owner": "unknown"}}
+      },
+      "expected": {"outcome": "ignore", "interruption": "none"}
+    },
+    {
+      "id": "owned_concrete_inferred_next_step",
+      "inputs": {
+        "transcript": {"text": "The user needs to send a written pricing recap.", "stub_output": {"inferred_next_step": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.9, "ownership_confidence": 0.9}},
+        "screen": {"text": "The current work indicates the user needs to send a written pricing recap.", "stub_output": {"inferred_next_step": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.9, "ownership_confidence": 0.9}}
       },
       "expected": {"outcome": "pending_candidate", "interruption": "none"}
     },
