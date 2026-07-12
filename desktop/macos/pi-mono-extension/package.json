@@ -10,7 +10,7 @@
     "test": "npx --yes tsx --test index.test.ts"
   },
   "dependencies": {
-    "@mariozechner/pi-ai": "^0.67.2",
-    "@mariozechner/pi-coding-agent": "^0.67.2"
+    "@earendil-works/pi-ai": "^0.80.6",
+    "@earendil-works/pi-coding-agent": "^0.80.6"
   }
 }

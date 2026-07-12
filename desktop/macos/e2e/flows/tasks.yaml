@@ -14,6 +14,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/SuggestedTasksSection.swift
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/SuggestedTasksStore.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskAgentSettings.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskAgentManager.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatCoordinator.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatRuntime.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskThreadProjection.swift
@@ -21,6 +22,7 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenCandidateAdapter.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Insight/InsightAssistant.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/EmbeddingService.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistantSettings.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskDeduplicationService.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskModels.swift

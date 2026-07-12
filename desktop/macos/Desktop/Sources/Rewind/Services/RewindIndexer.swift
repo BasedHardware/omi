@@ -701,9 +701,9 @@ actor RewindIndexer {
 
     /// Extract frame metadata from a video chunk
     private func extractFramesFromChunk(_ chunkInfo: VideoChunkInfo) async throws -> [FrameMetadata] {
-        // Parse the chunk filename to extract timestamp info
-        // Format: chunk_YYYYMMDD_HHMMSS.hevc
-        guard let timestamp = parseChunkTimestamp(chunkInfo.filename) else {
+        // Parse the chunk's capture time from its relative path (the day lives in
+        // the parent directory: "<yyyy-MM-dd>/chunk_HHmmss.mp4").
+        guard let timestamp = Self.parseChunkTimestamp(relativePath: chunkInfo.relativePath) else {
             return []
         }
 
@@ -725,8 +725,45 @@ actor RewindIndexer {
         return frames
     }
 
-    /// Parse timestamp from chunk filename
-    private func parseChunkTimestamp(_ filename: String) -> Date? {
+    /// Parse a chunk's capture timestamp from its stored relative path.
+    ///
+    /// New format (VideoChunkEncoder.generateChunkPath):
+    ///   "<yyyy-MM-dd>/chunk_<HHmmss>.<ext>" — day directory + time-only filename.
+    /// Legacy flat format: "chunk_<YYYYMMDD>_<HHMMSS>.hevc".
+    ///
+    /// The encoder wrote both parts with local-time DateFormatters, so parse in the
+    /// current time zone to round-trip. Pure + static so rebuild parsing is testable.
+    static func parseChunkTimestamp(relativePath: String) -> Date? {
+        let parts = relativePath.split(separator: "/").map(String.init)
+        let filename = parts.last ?? relativePath
+
+        // New format: day directory + "chunk_HHmmss.<ext>".
+        if parts.count >= 2, let time = timeComponentFromChunkFilename(filename) {
+            let dayStr = parts[parts.count - 2]
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = .current
+            formatter.dateFormat = "yyyy-MM-dd'T'HHmmss"
+            if let date = formatter.date(from: "\(dayStr)T\(time)") {
+                return date
+            }
+        }
+
+        // Legacy flat format: chunk_YYYYMMDD_HHMMSS.hevc
+        return parseLegacyChunkTimestamp(filename)
+    }
+
+    /// Extract the "HHmmss" component from "chunk_HHmmss.<ext>", or nil if the
+    /// filename doesn't match the time-only chunk shape.
+    private static func timeComponentFromChunkFilename(_ filename: String) -> String? {
+        guard filename.hasPrefix("chunk_") else { return nil }
+        let afterPrefix = filename.dropFirst("chunk_".count)
+        let stem = afterPrefix.split(separator: ".").first.map(String.init) ?? String(afterPrefix)
+        guard stem.count == 6, stem.allSatisfy({ $0.isNumber }) else { return nil }
+        return stem
+    }
+
+    private static func parseLegacyChunkTimestamp(_ filename: String) -> Date? {
         // Expected format: chunk_YYYYMMDD_HHMMSS.hevc
         guard filename.hasPrefix("chunk_"),
               filename.hasSuffix(".hevc"),
@@ -745,6 +782,7 @@ actor RewindIndexer {
               timeStr.allSatisfy({ $0.isNumber }) else { return nil }
 
         let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyyMMddHHmmss"
         return formatter.date(from: dateStr + timeStr)
     }

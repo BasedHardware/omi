@@ -21,8 +21,8 @@ from database.vector_db import (
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.memory_imports import MemoryImportBatchRequest, MemoryImportBatchResponse
 from utils.apps import update_personas_async
-from utils.memory.v3_composed_get_service import V3ComposedRequestParams, V3ComposedResponse
-from utils.memory.v3_production_runtime import build_v3_production_runtime
+from utils.memory.v3.composed_get_service import V3ComposedRequestParams, V3ComposedResponse
+from utils.memory.v3.production_runtime import build_v3_production_runtime
 from utils.memory.canonical_activation import canonical_read_enabled, canonical_write_decision, canonical_write_enabled
 from utils.memory.canonical_memory_adapter import (
     memory_item_to_memorydb,

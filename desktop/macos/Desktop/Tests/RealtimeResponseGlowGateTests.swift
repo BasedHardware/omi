@@ -2,9 +2,11 @@ import XCTest
 @testable import Omi_Computer
 
 final class RealtimeResponseGlowGateTests: XCTestCase {
+  @MainActor
   func testIdleClearIsCancelledByNextAudioChunk() {
     var states: [Bool] = []
-    let gate = RealtimeResponseGlowGate(idleClearDelay: 0.05) { active in
+    let scheduler = ManualDelayedActionScheduler()
+    let gate = RealtimeResponseGlowGate(scheduler: scheduler) { active in
       states.append(active)
     }
 
@@ -12,31 +14,23 @@ final class RealtimeResponseGlowGateTests: XCTestCase {
     gate.scheduleIdleClear()
     gate.markPlaybackActive()
 
-    let expectation = expectation(description: "idle clear would have fired")
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-      expectation.fulfill()
-    }
-    wait(for: [expectation], timeout: 2.0)
-
+    XCTAssertFalse(scheduler.fireNext())
     XCTAssertEqual(states, [true])
     XCTAssertTrue(gate.isActive)
   }
 
+  @MainActor
   func testIdleClearEventuallyTurnsGlowOff() {
     var states: [Bool] = []
-    let gate = RealtimeResponseGlowGate(idleClearDelay: 0.02) { active in
+    let scheduler = ManualDelayedActionScheduler()
+    let gate = RealtimeResponseGlowGate(scheduler: scheduler) { active in
       states.append(active)
     }
 
     gate.markPlaybackActive()
     gate.scheduleIdleClear()
 
-    let expectation = expectation(description: "idle clear fired")
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-      expectation.fulfill()
-    }
-    wait(for: [expectation], timeout: 2.0)
-
+    XCTAssertTrue(scheduler.fireNext())
     XCTAssertEqual(states, [true, false])
     XCTAssertFalse(gate.isActive)
   }

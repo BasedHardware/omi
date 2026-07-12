@@ -176,15 +176,16 @@ if _utils_pkg is None:
 _utils_pkg.__path__ = [os.path.join(_BACKEND_DIR, "utils")]
 
 for name in _utils_stubs:
-    module = sys.modules.get(name)
-    if module is None:
-        module = types.ModuleType(name)
+    # Always install a fresh module instead of mutating an already-imported
+    # production module and leaking mocked executor attributes to later tests.
+    module = types.ModuleType(name)
     _install_module(name, module)
 
 sys.modules["utils.conversations"].__path__ = [os.path.join(_BACKEND_DIR, "utils", "conversations")]
 
 sys.modules["utils.apps"].get_available_apps = MagicMock(return_value=[])
 sys.modules["utils.notifications"].send_notification = MagicMock()
+sys.modules["utils.notifications"].send_notification_async = AsyncMock()
 sys.modules["utils.conversations.factory"].deserialize_conversations = MagicMock(return_value=[])
 sys.modules["utils.conversations.render"].conversations_to_string = MagicMock(return_value="")
 sys.modules["utils.conversations.render"].conversation_to_dict = MagicMock(return_value={})
@@ -252,6 +253,7 @@ from concurrent.futures import ThreadPoolExecutor as _TPE
 _executors_mod = sys.modules["utils.executors"]
 _executors_mod.critical_executor = _TPE(max_workers=2, thread_name_prefix="test-critical")
 _executors_mod.db_executor = _TPE(max_workers=2, thread_name_prefix="test-db")
+_executors_mod.postprocess_executor = _TPE(max_workers=2, thread_name_prefix="test-postprocess")
 _executors_mod.storage_executor = _TPE(max_workers=2, thread_name_prefix="test-storage")
 
 
@@ -477,13 +479,14 @@ class TestAsyncTriggerRealtimeIntegrations:
         with patch.object(app_integrations, "get_available_apps", return_value=[app1]), patch.object(
             app_integrations, "process_mentor_notification", return_value=None
         ), patch.object(app_integrations, "get_webhook_client", return_value=mock_client), patch.object(
-            app_integrations, "send_app_notification"
+            app_integrations, "send_app_notification_async", new_callable=AsyncMock
         ) as mock_notify, patch.object(
             app_integrations, "add_app_message", return_value={"id": "msg-1"}
         ):
             result = await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
 
-        mock_notify.assert_called_once()
+        mock_notify.assert_awaited_once_with("uid-1", "App a1", "a1", "Important info here")
+        assert result == [{"id": "msg-1"}]
 
     @pytest.mark.asyncio
     async def test_url_query_param_handling(self):

@@ -86,4 +86,21 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
   func testCaptureKitFailureDoesNotCreatePermissionFailureWhenTccIsDenied() {
     XCTAssertFalse(ScreenRecordingPermissionPolicy.shouldMarkCaptureKitBroken(tccGranted: false))
   }
+
+  func testScreenCaptureRestartsUseSharedRelaunchCommand() throws {
+    let src = try sourceFile("Sources/ScreenCaptureService.swift")
+    XCTAssertTrue(src.contains("static func screenCaptureRelaunchCommand(appPath: String) -> String"))
+    XCTAssertTrue(src.contains("AppState.relaunchCommand("))
+
+    guard let softRange = src.range(of: "static func softRecoveryAndRestart()"),
+      let resetRange = src.range(of: "static func resetScreenCapturePermissionAndRestart()")
+    else { return XCTFail("screen-capture restart helpers must exist") }
+    let softSnippet = String(src[softRange.lowerBound...]).prefix(4200)
+    let resetSnippet = String(src[resetRange.lowerBound...]).prefix(3000)
+
+    XCTAssertTrue(softSnippet.contains("screenCaptureRelaunchCommand(appPath: bundleURL.path)"))
+    XCTAssertTrue(resetSnippet.contains("screenCaptureRelaunchCommand(appPath: bundleURL.path)"))
+    XCTAssertFalse(softSnippet.contains("sleep 0.5 && open"))
+    XCTAssertFalse(resetSnippet.contains("sleep 0.5 && open"))
+  }
 }

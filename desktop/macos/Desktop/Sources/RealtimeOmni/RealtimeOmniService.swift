@@ -25,7 +25,10 @@ import Network
 @MainActor
 protocol RealtimeOmniServiceDelegate: AnyObject {
     func omniDidConnect()
-    func omniDidReceiveInputTranscript(_ text: String, isFinal: Bool)
+    /// `itemID` is the provider's stable per-utterance id (OpenAI `item_id`) when
+    /// available, else nil. Consumers dedup relay re-deliveries by this id, NOT by
+    /// text, so legitimately repeated phrases within a turn are not dropped.
+    func omniDidReceiveInputTranscript(_ text: String, isFinal: Bool, itemID: String?)
     func omniDidReceiveAudio(_ pcm24k: Data)
     func omniDidFinishTurn()
     func omniDidError(_ message: String)
@@ -328,9 +331,13 @@ final class RealtimeOmniService: NSObject {
         case "response.output_audio.delta":
             if let b64 = e["delta"] as? String, let d = Data(base64Encoded: b64) { delegate?.omniDidReceiveAudio(d) }
         case "conversation.item.input_audio_transcription.delta":
-            if let t = e["delta"] as? String { delegate?.omniDidReceiveInputTranscript(t, isFinal: false) }
+            if let t = e["delta"] as? String {
+                delegate?.omniDidReceiveInputTranscript(t, isFinal: false, itemID: e["item_id"] as? String)
+            }
         case "conversation.item.input_audio_transcription.completed":
-            if let t = e["transcript"] as? String { delegate?.omniDidReceiveInputTranscript(t, isFinal: true) }
+            if let t = e["transcript"] as? String {
+                delegate?.omniDidReceiveInputTranscript(t, isFinal: true, itemID: e["item_id"] as? String)
+            }
         case "response.done":
             delegate?.omniDidFinishTurn()
         case "error":
@@ -346,7 +353,8 @@ final class RealtimeOmniService: NSObject {
         if e["setupComplete"] != nil { markReady(); return }
         guard let sc = e["serverContent"] as? [String: Any] else { return }
         if let it = sc["inputTranscription"] as? [String: Any], let t = it["text"] as? String {
-            delegate?.omniDidReceiveInputTranscript(t, isFinal: false)
+            // Gemini input transcription carries no per-utterance id.
+            delegate?.omniDidReceiveInputTranscript(t, isFinal: false, itemID: nil)
         }
         if let parts = (sc["modelTurn"] as? [String: Any])?["parts"] as? [[String: Any]] {
             for p in parts {
@@ -358,7 +366,8 @@ final class RealtimeOmniService: NSObject {
             }
         }
         if (sc["turnComplete"] as? Bool) == true {
-            delegate?.omniDidReceiveInputTranscript("", isFinal: true)
+            // One final per Gemini turn; no id, so consumers treat it as distinct.
+            delegate?.omniDidReceiveInputTranscript("", isFinal: true, itemID: nil)
             delegate?.omniDidFinishTurn()
         }
     }

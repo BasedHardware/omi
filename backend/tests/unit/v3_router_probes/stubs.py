@@ -241,7 +241,7 @@ def install_router_import_stubs(
     sys.modules["database.memory_compatibility_projection"] = projection_db
     setattr(database_pkg, "memory_compatibility_projection", projection_db)
 
-    composed = types.ModuleType("utils.memory.v3_composed_get_service")
+    composed = types.ModuleType("utils.memory.v3.composed_get_service")
 
     class V3ComposedRequestParams:
         def __init__(self, limit=None, offset=None, cursor=None, include_archive=False, include_historical=False):
@@ -262,10 +262,10 @@ def install_router_import_stubs(
 
     composed.V3ComposedRequestParams = V3ComposedRequestParams
     composed.V3ComposedResponse = V3ComposedResponse
-    sys.modules["utils.memory.v3_composed_get_service"] = composed
+    sys.modules["utils.memory.v3.composed_get_service"] = composed
     setattr(memory_pkg, "v3_composed_get_service", composed)
 
-    production_runtime = types.ModuleType("utils.memory.v3_production_runtime")
+    production_runtime = types.ModuleType("utils.memory.v3.production_runtime")
 
     class ProductionV3GetRuntime:
         def __init__(self, enabled=False, source_decision="disabled", service=None, adapters=None, **kwargs):
@@ -281,7 +281,7 @@ def install_router_import_stubs(
 
     production_runtime.V3GetRuntime = ProductionV3GetRuntime
     production_runtime.build_v3_production_runtime = build_v3_production_runtime
-    sys.modules["utils.memory.v3_production_runtime"] = production_runtime
+    sys.modules["utils.memory.v3.production_runtime"] = production_runtime
     setattr(memory_pkg, "v3_production_runtime", production_runtime)
 
     canonical_adapter = types.ModuleType("utils.memory.canonical_memory_adapter")

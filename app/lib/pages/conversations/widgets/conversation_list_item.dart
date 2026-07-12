@@ -132,7 +132,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
               context,
               ConversationDetailPage(conversation: widget.conversation, isFromOnboarding: widget.isFromOnboarding),
             );
-            if (mounted) {
+            if (context.mounted) {
               // Don't upsert if the conversation was deleted while on the detail page
               if (result is Map && result['deleted'] == true) return;
               bool stillExists = provider.conversations.any((c) => c.id == widget.conversation.id);

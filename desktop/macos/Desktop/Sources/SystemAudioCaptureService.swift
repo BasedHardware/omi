@@ -179,13 +179,8 @@ class SystemAudioCaptureService: @unchecked Sendable {
         sourceSampleRate = format.mSampleRate
         log("SystemAudioCapture: Source format - \(format.mSampleRate)Hz, \(format.mChannelsPerFrame) channels, \(format.mBitsPerChannel) bits")
 
-        // 5. Create AVAudioFormat for conversion
-        guard let inputFmt = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: format.mSampleRate,
-            channels: AVAudioChannelCount(format.mChannelsPerFrame),
-            interleaved: false
-        ) else {
+        // 5. Create AVAudioFormat for conversion (see makeConverterInputFormat — MONO).
+        guard let inputFmt = Self.makeConverterInputFormat(sampleRate: format.mSampleRate) else {
             cleanup()
             throw SystemAudioCaptureError.formatError
         }
@@ -295,6 +290,23 @@ class SystemAudioCaptureService: @unchecked Sendable {
         )
 
         return status == noErr ? format : nil
+    }
+
+    /// Builds the converter input format. It is ALWAYS mono: `handleAudioInput`
+    /// down-mixes stereo source frames into a single channel (channel 0) and never
+    /// fills a second channel, so the converter must see a mono input and perform only
+    /// sample-rate conversion. Declaring the source channel count here made the
+    /// converter run its own stereo→mono downmix against the unwritten channel 1,
+    /// averaging our real mix against silence (~6 dB attenuation of all system audio
+    /// fed to transcription). The microphone path (AudioCaptureService) likewise builds
+    /// its input format with channels: 1. `static` so the mono contract is unit-testable.
+    static func makeConverterInputFormat(sampleRate: Double) -> AVAudioFormat? {
+        AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: sampleRate,
+            channels: 1,
+            interleaved: false
+        )
     }
 
     /// Handle incoming audio data from the tap
@@ -434,23 +446,26 @@ class SystemAudioCaptureService: @unchecked Sendable {
     }
 
     deinit {
-        // Use sync in deinit to ensure cleanup completes before deallocation
+        // Call the HAL teardown directly — do NOT `audioQueue.sync` here.
+        // deinit can run *on* audioQueue (the last strong reference is captured by
+        // the `audioQueue.async` block in startCapture and released when that block
+        // finishes), and dispatching sync to the current serial queue deadlocks it
+        // permanently. Mirrors AudioCaptureService.deinit. The object has no
+        // remaining references, so no concurrent audioQueue work can touch it, and
+        // these HAL calls are thread-safe — a direct call completes cleanup before
+        // deallocation (which `audioQueue.async` could not guarantee).
         let procID = self.ioProcID
         let aggDevID = self.aggregateDeviceID
         let tID = self.tapID
-        if procID != nil || aggDevID != kAudioObjectUnknown || tID != kAudioObjectUnknown {
-            audioQueue.sync {
-                if let procID = procID, aggDevID != kAudioObjectUnknown {
-                    AudioDeviceStop(aggDevID, procID)
-                    AudioDeviceDestroyIOProcID(aggDevID, procID)
-                }
-                if aggDevID != kAudioObjectUnknown {
-                    AudioHardwareDestroyAggregateDevice(aggDevID)
-                }
-                if tID != kAudioObjectUnknown {
-                    AudioHardwareDestroyProcessTap(tID)
-                }
-            }
+        if let procID = procID, aggDevID != kAudioObjectUnknown {
+            AudioDeviceStop(aggDevID, procID)
+            AudioDeviceDestroyIOProcID(aggDevID, procID)
+        }
+        if aggDevID != kAudioObjectUnknown {
+            AudioHardwareDestroyAggregateDevice(aggDevID)
+        }
+        if tID != kAudioObjectUnknown {
+            AudioHardwareDestroyProcessTap(tID)
         }
     }
 }

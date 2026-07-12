@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# LIFECYCLE: one-time
+# DELETE-AFTER: INV-MEM-3
+
 from __future__ import annotations
 
 import argparse

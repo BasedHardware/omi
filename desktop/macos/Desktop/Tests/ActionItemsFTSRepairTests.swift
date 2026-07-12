@@ -73,9 +73,9 @@ final class ActionItemsFTSRepairTests: XCTestCase {
     XCTAssertEqual(ftsDescriptions, durableDescriptions)
   }
 
-  func testRepairToleratesMissingActionItemsFTSShadowTable() async throws {
+  func testRepairRebuildsDroppedActionItemsFTSFromDurableRows() async throws {
     let existing = try await ActionItemStorage.shared.insertLocalActionItem(
-      ActionItemRecord(description: "shadow table durable row", source: "test"))
+      ActionItemRecord(description: "direct repair durable row", source: "test"))
     XCTAssertNotNil(existing.id)
 
     guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
@@ -83,14 +83,10 @@ final class ActionItemsFTSRepairTests: XCTestCase {
     }
 
     try await dbQueue.write { db in
-      try db.execute(sql: "PRAGMA writable_schema = ON")
-      let schemaVersion = (try Int.fetchOne(db, sql: "PRAGMA schema_version")) ?? 0
-      defer { try? db.execute(sql: "PRAGMA writable_schema = OFF") }
-      try db.execute(sql: "DELETE FROM sqlite_master WHERE type = 'table' AND name = 'action_items_fts_data'")
-      try db.execute(sql: "PRAGMA schema_version = \(schemaVersion + 1)")
+      try db.execute(sql: "DROP TABLE action_items_fts")
     }
 
-    try await RewindDatabase.shared.repairActionItemsFTS(in: dbQueue, reason: "missing shadow table test")
+    try await RewindDatabase.shared.repairActionItemsFTS(in: dbQueue, reason: "direct repair test")
 
     let matches = try await dbQueue.read { db in
       try String.fetchAll(
@@ -99,10 +95,10 @@ final class ActionItemsFTSRepairTests: XCTestCase {
           SELECT action_items.description
           FROM action_items_fts
           JOIN action_items ON action_items_fts.rowid = action_items.id
-          WHERE action_items_fts MATCH 'shadow'
+          WHERE action_items_fts MATCH 'direct'
           ORDER BY action_items.id
           """)
     }
-    XCTAssertEqual(matches, ["shadow table durable row"])
+    XCTAssertEqual(matches, ["direct repair durable row"])
   }
 }

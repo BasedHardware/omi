@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from llm_gateway.gateway import auth
 from llm_gateway.gateway.auth import ServiceAuthDependency, ServiceCaller, require_service_auth
 from llm_gateway.main import app as gateway_app
 
@@ -55,6 +56,23 @@ def test_wrong_token_is_rejected(monkeypatch):
     )
 
     assert response.status_code == 401
+
+
+def test_auth_rejection_uses_bounded_reason_without_caller_or_token_labels(monkeypatch):
+    recorded: list[str] = []
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    monkeypatch.setattr(auth, 'observe_auth_rejection', lambda reason: recorded.append(reason))
+
+    response = TestClient(_protected_app()).get(
+        '/protected',
+        headers={
+            'authorization': 'Bearer attacker-controlled-value',
+            'x-omi-service-caller': 'attacker-controlled-caller',
+        },
+    )
+
+    assert response.status_code == 401
+    assert recorded == ['invalid_token']
 
 
 def test_unknown_caller_is_rejected(monkeypatch):

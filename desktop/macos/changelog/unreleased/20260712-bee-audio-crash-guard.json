@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a crash that could occur when a Bee device sent a corrupted audio frame"
+}

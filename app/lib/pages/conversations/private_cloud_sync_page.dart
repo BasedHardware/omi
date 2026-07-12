@@ -18,6 +18,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
   bool _isSaving = false;
 
   Future<void> _togglePrivateCloudSync(bool value) async {
+    final userProvider = context.read<UserProvider>();
     if (value) {
       final confirmed = await _showEnableDialog();
       if (confirmed != true) return;
@@ -25,7 +26,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
 
     setState(() => _isSaving = true);
     try {
-      await context.read<UserProvider>().setPrivateCloudSync(value);
+      await userProvider.setPrivateCloudSync(value);
       if (!mounted) return;
       setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
