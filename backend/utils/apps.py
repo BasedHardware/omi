@@ -234,7 +234,9 @@ def compute_app_score(app: App) -> float:
     """
     rating_avg = app.rating_avg or 0
     rating_count = app.rating_count or 0
-    installs = app.installs or 0
+    # Clamp negative install counts (counter drift) so math.log(1 + installs) below never hits a domain
+    # error; the source is also floored in redis_db.get_apps_installs_count.
+    installs = max(0, app.installs or 0)
 
     rating_factor = (rating_avg / 5) ** 2  # Steep drop for low ratings
     score = rating_factor * math.log(1 + rating_count) * math.sqrt(math.log(1 + installs))

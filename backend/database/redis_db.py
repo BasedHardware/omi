@@ -314,7 +314,10 @@ def get_apps_installs_count(app_ids: List[str]) -> Dict[str, int]:
     counts = r.mget(keys)
     if counts is None:
         return {}
-    return {app_id: int(count) if count else 0 for app_id, count in zip(app_ids, counts)}
+    # Clamp to >= 0: the install counter is a plain INCR/DECR with no floor, so drift (a disable with no
+    # matching enable, or a DECR on an evicted key) can leave a negative value. A negative install count
+    # would later hit math.log(1 + installs) in compute_app_score and 500 the whole marketplace sort.
+    return {app_id: max(0, int(count)) if count else 0 for app_id, count in zip(app_ids, counts)}
 
 
 def cache_user_name(uid: str, name: str, ttl: int = 60 * 60 * 24 * 7) -> None:
