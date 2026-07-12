@@ -54,9 +54,9 @@ jobs:
         if: needs.changes.outputs.has_backend_async_gate == 'true'
         run: |
           python3 backend/scripts/scan_async_blockers.py \
-            --dirs backend/routers backend/utils \
+            --dirs backend/routers backend/utils backend/agent-proxy backend/dependencies.py \
             --diff-base "${{ needs.changes.outputs.diff_base }}" \
-            --fail-on high_network_io,async_helpers_with_blocking,time_sleep,mixed_await_sync_db,no_await_should_be_def
+            --fail-on high_network_io,async_helpers_with_blocking,time_sleep,mixed_await_sync_db,no_await_should_be_def,unmanaged_thread_offload
 
       - name: Check backend import purity
         if: needs.changes.outputs.has_backend_isolation_gate == 'true'

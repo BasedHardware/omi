@@ -96,6 +96,12 @@ jobs:
       - name: Check typed error flow-control ratchet
         run: python3 .github/scripts/check_isinstance_return_ratchet.py
 
+      - name: Test lifecycle header checker
+        run: python3 .github/scripts/test_check_lifecycle_headers.py
+
+      - name: Check lifecycle headers for rollout scaffolding
+        run: python3 .github/scripts/check_lifecycle_headers.py --changed-files /tmp/changed-files.txt
+
       - name: Check brand UI purple ratchet (INV-UI-1)
         if: github.event_name == 'pull_request'
         run: |
@@ -109,6 +115,12 @@ jobs:
 
       - name: Check desktop prod promotion policy
         run: python3 .github/scripts/check-desktop-prod-promotion-policy.py
+
+      - name: Test deployment concurrency policy
+        run: python3 .github/scripts/check-deployment-concurrency.py --self-test
+
+      - name: Check deployment concurrency policy
+        run: python3 .github/scripts/check-deployment-concurrency.py
 
       - name: Check desktop release terminology
         run: python3 .github/scripts/check-desktop-release-terminology.py

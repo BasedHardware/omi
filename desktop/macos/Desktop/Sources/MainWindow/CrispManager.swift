@@ -7,6 +7,15 @@ import Foundation
 class CrispManager: ObservableObject {
     static let shared = CrispManager()
 
+    /// First-launch polling watermark, in epoch MILLISECONDS to match Crisp
+    /// message timestamps (`CrispOperatorMessage.timestamp` and the `?since=`
+    /// filter in the Rust route). Seeding this in seconds (~1e9) left it ~1000x
+    /// below every real message timestamp (~1e12), so the first poll treated all
+    /// historical operator messages as new and fired a notification for each.
+    nonisolated static func initialWatermark(now: Date = Date()) -> UInt64 {
+        UInt64(now.timeIntervalSince1970 * 1000)
+    }
+
     /// Number of unread operator messages (shown as badge in sidebar)
     @Published private(set) var unreadCount = 0
 
@@ -80,7 +89,7 @@ class CrispManager: ObservableObject {
         // On subsequent launches, keep the persisted value so the first
         // poll picks up messages that arrived while the app was closed.
         if lastSeenTimestamp == 0 {
-            lastSeenTimestamp = UInt64(Date().timeIntervalSince1970)
+            lastSeenTimestamp = Self.initialWatermark()
         }
 
         if performInitialPoll {

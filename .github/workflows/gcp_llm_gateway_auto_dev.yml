@@ -14,6 +14,12 @@ on:
       - 'backend/Dockerfile'
       - '.github/workflows/gcp_llm_gateway*.yml'
 
+# LLM Gateway deployment reapplies development backend-secrets, so it shares
+# the full development backend mutation domain instead of racing that deploy.
+concurrency:
+  group: deploy-backend-stack-development
+  cancel-in-progress: false
+
 env:
   SERVICE: llm-gateway
   REGION: us-central1

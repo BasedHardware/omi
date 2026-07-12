@@ -33,7 +33,7 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 /// On any failure (cancel, BLE drop, NOTIFY_DONE error status) the ring is left
 /// untouched — the next sync session resumes from the same read_seq.
 class RingStorageSyncImpl implements RingStorageSync {
-  List<Wal> _wals = const [];
+  List<Wal> _wals = [];
   BtDevice? _device;
 
   StreamSubscription? _notifyStream;

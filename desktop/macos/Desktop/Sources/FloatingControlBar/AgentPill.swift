@@ -1230,7 +1230,7 @@ final class AgentPillsManager: ObservableObject {
             return false
         }
 
-        if let pill = findPill(matching: preference) {
+        if findPill(matching: preference) != nil {
             return true
         }
 

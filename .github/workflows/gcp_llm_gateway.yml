@@ -12,6 +12,12 @@ on:
         required: true
         default: 'main'
 
+# LLM Gateway deployment reapplies shared backend-secrets, so it joins the
+# full backend mutation domain for the selected environment.
+concurrency:
+  group: deploy-backend-stack-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
 env:
   SERVICE: llm-gateway
   REGION: us-central1

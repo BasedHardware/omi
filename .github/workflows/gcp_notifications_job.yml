@@ -26,6 +26,11 @@ env:
   SERVICE: notifications-job
   REGION: us-central1
 
+# Serialize writes to the selected Cloud Run job environment.
+concurrency:
+  group: deploy-cloud-run-notifications-job-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
 jobs:
   deploy:
     environment: ${{ github.event.inputs.environment }}

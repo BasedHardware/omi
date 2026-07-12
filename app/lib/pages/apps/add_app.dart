@@ -741,7 +741,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                           Navigator.pop(context);
                                           String? appId = await provider.submitApp();
                                           App? app;
-                                          if (appId != null) {
+                                          if (appId != null && context.mounted) {
                                             app = await context.read<AppProvider>().getAppFromId(appId);
                                           }
                                           var paymentProvider = PaymentMethodProvider();

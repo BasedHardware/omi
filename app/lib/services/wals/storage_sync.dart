@@ -20,7 +20,7 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 ///
 /// Closely follows the proven BLE sync pattern from PR #5905's sdcard_wal_sync changes.
 class StorageSyncImpl implements StorageSync {
-  List<Wal> _wals = const [];
+  List<Wal> _wals = [];
   BtDevice? _device;
 
   StreamSubscription? _storageStream;

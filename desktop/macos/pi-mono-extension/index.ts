@@ -26,8 +26,8 @@ import {
   type ToolCallEvent,
   type ToolCallEventResult,
   type ToolResultEvent,
-} from "@mariozechner/pi-coding-agent";
-import { Type } from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-coding-agent";
+import { Type } from "@earendil-works/pi-ai";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createConnection, type Socket } from "node:net";
