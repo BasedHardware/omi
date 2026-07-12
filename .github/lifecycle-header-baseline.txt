@@ -14,7 +14,7 @@ backend/scripts/vector_repair_outbox_oidc_iam_proof.py
 backend/scripts/vector_search_provider_readiness.py
 backend/utils/memory/default_read_rollout.py
 backend/utils/memory/memory_read_rollout_core.py
-backend/utils/memory/v3_compatibility.py
-backend/utils/memory/v3_limited_rollout_config.py
+backend/utils/memory/v3/compatibility.py
+backend/utils/memory/v3/limited_rollout_config.py
 backend/utils/memory_ingestion/rollout.py
 backend/utils/memory_ingestion/rollout_cli.py
