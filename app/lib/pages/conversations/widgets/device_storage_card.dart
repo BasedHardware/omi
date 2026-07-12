@@ -23,9 +23,11 @@ class DeviceStorageCard extends StatelessWidget {
     final percent = (fraction * 100).round();
     final nearlyFull = fraction >= 0.95;
 
+    // Neutral white for normal usage (brand INV-UI-1: white/neutral accents);
+    // amber/red are reserved for the near-full warning/critical bands.
     final Color barColor = fraction >= 0.95
         ? ResponsiveHelper.errorColor
-        : (fraction >= 0.80 ? ResponsiveHelper.warningColor : ResponsiveHelper.purplePrimary);
+        : (fraction >= 0.80 ? ResponsiveHelper.warningColor : Colors.white);
 
     return Container(
       padding: const EdgeInsets.all(16),

@@ -31,7 +31,7 @@ Color? _barColor(WidgetTester tester) {
 }
 
 void main() {
-  testWidgets('normal fill: percent, bar value and purple color, no warning', (tester) async {
+  testWidgets('normal fill: percent, bar value and neutral color, no warning', (tester) async {
     await tester.pumpWidget(_app(DeviceStorageCard(status: _status(usedMb: 338, freeMb: 131))));
     await tester.pump();
 
@@ -42,7 +42,7 @@ void main() {
 
     final indicator = tester.widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator));
     expect(indicator.value, closeTo(0.7207, 0.001));
-    expect(_barColor(tester), ResponsiveHelper.purplePrimary);
+    expect(_barColor(tester), Colors.white);
 
     // No nearly-full warning below 95%.
     expect(find.text('Device nearly full — sync to free space.'), findsNothing);
