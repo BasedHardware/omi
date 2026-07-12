@@ -103,16 +103,60 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(message?.payload["result"] as? String, #"{"ok":true,"artifacts":[]}"#)
   }
 
-  func testUnroutedToolCallsFailClosed() throws {
+  func testLegacyMainChatAliasReceiptRoutesByRequestAndOwner() {
+    let message = AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"legacy_main_chat_sessions_imported","protocolVersion":2,"requestId":"legacy-1","clientId":"client-1","ownerId":"owner-1","acceptedEntries":[{"chatId":"default","agentSessionId":"ses-1"}],"acceptedCount":1,"importedCount":1}"#
+    )
+
+    XCTAssertEqual(message?.kind, .legacyMainChatSessionsImported)
+    XCTAssertEqual(
+      message?.requestKey,
+      AgentRuntimeProcess.RuntimeMessage.RequestKey(clientId: "client-1", requestId: "legacy-1")
+    )
+    XCTAssertEqual(message?.payload["ownerId"] as? String, "owner-1")
+  }
+
+  func testLegacyMainChatAliasImportWireMessageCarriesOwnerAndEntries() {
+    let entry = LegacyMainChatSessionAliasEntry(chatId: "default", agentSessionId: "ses-1")
+    let message = AgentRuntimeProcess.importLegacyMainChatSessionsWireMessage(
+      clientId: "client-1",
+      requestId: "legacy-1",
+      ownerId: "owner-1",
+      entries: [entry]
+    )
+
+    XCTAssertEqual(message["type"] as? String, "import_legacy_main_chat_sessions")
+    XCTAssertEqual(message["protocolVersion"] as? Int, 2)
+    XCTAssertEqual(message["ownerId"] as? String, "owner-1")
+    XCTAssertEqual(
+      message["entries"] as? [[String: String]],
+      [["chatId": "default", "agentSessionId": "ses-1"]]
+    )
+  }
+
+  func testAuthorizedToolExecutionCarriesLedgerIdentityWithoutRequestScope() {
+    let message = AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"authorized_tool_execution","protocolVersion":2,"invocationId":"invoke-1","ownerId":"owner-1","sessionId":"session-1","runId":"run-1","attemptId":"attempt-1","profileGeneration":2,"manifestVersion":1,"manifestDigest":"sha256:test","daemonBootEpoch":"boot-1","executionGeneration":3,"toolName":"get_memories","input":{},"inputHash":"sha256:e3b0","effectClass":"read_only","retryPolicy":"safe_retry","surfaceKind":"background_agent","externalRefKind":null,"externalRefId":null,"originatingUserText":"find memories","precedingAssistantText":null,"runMode":"act","chatMode":null}"#)
+
+    XCTAssertEqual(message?.kind, .authorizedToolExecution)
+    XCTAssertNil(message?.requestKey)
+    XCTAssertEqual(message?.payload["invocationId"] as? String, "invoke-1")
+    XCTAssertEqual(message?.payload["attemptId"] as? String, "attempt-1")
+  }
+
+  func testSwiftHasNoCapabilityAuthorityOrRequestScopedExecution() throws {
     let processSourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
     let processSource = try String(contentsOf: processSourceURL, encoding: .utf8)
 
-    XCTAssertTrue(processSource.contains("Self.unroutedToolCallError(toolName: name)"))
-    XCTAssertTrue(processSource.contains(#""code": "unrouted_tool_call""#))
-    XCTAssertFalse(processSource.contains("originatingClientScope: AgentClientScope.floatingPill"))
+    XCTAssertTrue(processSource.contains("AuthorizedToolExecution.parse("))
+    XCTAssertTrue(processSource.contains(#"case .authorizedToolExecution:"#))
+    XCTAssertFalse(processSource.contains("RunToolCapabilityRegistry"))
+    XCTAssertFalse(processSource.contains("toolCapabilities"))
+    XCTAssertFalse(processSource.contains("tool_capability_register"))
+    XCTAssertFalse(processSource.contains("guard let request = routedRequest(for: message) else"))
   }
 
   func testV2MessagesWithoutClientIdDoNotHaveRequestKey() {
@@ -151,8 +195,10 @@ final class AgentRuntimeProcessTests: XCTestCase {
     let bridgeSource = try String(contentsOf: bridgeSourceURL, encoding: .utf8)
 
     XCTAssertTrue(bridgeSource.contains("AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) == AgentAdapterId.piMono.rawValue"))
-    XCTAssertTrue(bridgeSource.contains("if isPiMonoHarness, tokenRefreshTask == nil"))
-    XCTAssertTrue(bridgeSource.contains("guard isPiMonoHarness else { return false }"))
+    XCTAssertTrue(bridgeSource.contains("if isPiMonoHarness {"))
+    XCTAssertTrue(bridgeSource.contains("if adapterId == AgentAdapterId.piMono.rawValue"))
+    XCTAssertTrue(bridgeSource.contains("ensureTokenRefreshTask()"))
+    XCTAssertFalse(bridgeSource.contains("guard isPiMonoHarness else { return false }"))
     XCTAssertFalse(bridgeSource.contains(#"harnessMode == "piMono""#))
   }
 
@@ -490,18 +536,23 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains(#""ownerId": ownerId"#))
   }
 
-  func testToolResultsEchoRequestScope() throws {
+  func testAuthorizedToolResultsEchoExactLedgerTupleWithoutRequestScope() throws {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-    XCTAssertTrue(source.contains("completeToolCall("))
-    XCTAssertTrue(source.contains("requestId: request.requestId"))
-    XCTAssertTrue(source.contains("clientId: request.clientId"))
-    XCTAssertTrue(source.contains(#"if let requestId { payload["requestId"] = requestId }"#))
-    XCTAssertTrue(source.contains(#"if let clientId { payload["clientId"] = clientId }"#))
+    XCTAssertTrue(source.contains("completeAuthorizedToolExecution("))
+    XCTAssertTrue(source.contains(#""type": "authorized_tool_execution_result""#))
+    XCTAssertTrue(source.contains(#""invocationId": command.invocationID"#))
+    XCTAssertTrue(source.contains(#""profileGeneration": command.profileGeneration"#))
+    XCTAssertTrue(source.contains(#""manifestDigest": command.manifestDigest"#))
+    XCTAssertTrue(source.contains(#""daemonBootEpoch": command.daemonBootEpoch"#))
+    XCTAssertTrue(source.contains(#""executionGeneration": command.executionGeneration"#))
+    XCTAssertTrue(source.contains(#""inputHash": command.inputHash"#))
+    XCTAssertFalse(source.contains(#""requestId": command."#))
+    XCTAssertFalse(source.contains(#""clientId": command."#))
   }
 
   func testStartupTimeoutResumesInitContinuations() throws {

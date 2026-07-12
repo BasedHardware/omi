@@ -57,13 +57,61 @@ actor APIClient {
   func buildHeaders(
     requireAuth: Bool = true,
     forceRefreshAuth: Bool = false,
-    includeBYOK: Bool = true
+    includeBYOK: Bool = true,
+    expectedAuthOwnerId: String? = nil
   ) async throws -> [String: String] {
     try await transport.buildHeaders(
       requireAuth: requireAuth,
       forceRefreshAuth: forceRefreshAuth,
-      includeBYOK: includeBYOK
+      includeBYOK: includeBYOK,
+      expectedAuthOwnerId: expectedAuthOwnerId
     )
+  }
+
+  /// Owner-bound transport for the realtime hub's higher-model escalation.
+  /// The body can contain the pinned turn's private transcript and about-user
+  /// context, so both the initial credential and any 401 refresh stay bound to
+  /// that same immutable owner. `performAuthenticatedData` also rejects a late
+  /// response after an account switch.
+  func askHigherModel(
+    body: [String: Any],
+    expectedOwnerID: String,
+    customBaseURL: String? = nil
+  ) async throws -> String {
+    let base = customBaseURL ?? rustBackendURL
+    guard !base.isEmpty else { throw APIError.invalidResponse }
+    let normalized = base.hasSuffix("/") ? base : base + "/"
+    guard let url = URL(string: normalized + "v2/chat/completions") else {
+      throw APIError.invalidResponse
+    }
+    guard JSONSerialization.isValidJSONObject(body) else {
+      throw APIError.invalidResponse
+    }
+
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.timeoutInterval = 30
+    request.allHTTPHeaderFields = try await buildHeaders(
+      requireAuth: true,
+      expectedAuthOwnerId: expectedOwnerID)
+    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+    let (data, response) = try await performAuthenticatedData(
+      for: request,
+      authPolicy: .ownerBound(expectedOwnerID))
+    guard (200..<300).contains(response.statusCode) else {
+      throw APIError.httpError(
+        statusCode: response.statusCode,
+        detail: OmiHTTPTransport.extractErrorDetail(from: data))
+    }
+    guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let choices = json["choices"] as? [[String: Any]],
+      let message = choices.first?["message"] as? [String: Any],
+      let text = message["content"] as? String
+    else {
+      throw APIError.invalidResponse
+    }
+    return text.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   // MARK: - HTTP Methods
@@ -72,7 +120,8 @@ actor APIClient {
     _ endpoint: String,
     requireAuth: Bool = true,
     customBaseURL: String? = nil,
-    includeBYOK: Bool = true
+    includeBYOK: Bool = true,
+    expectedOwnerId: String? = nil
   ) async throws -> T {
     let base = customBaseURL ?? baseURL
     guard let url = URL(string: base + endpoint) else {
@@ -80,9 +129,14 @@ actor APIClient {
     }
     var request = URLRequest(url: url)
     request.httpMethod = "GET"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
+    request.allHTTPHeaderFields = try await buildHeaders(
+      requireAuth: requireAuth,
+      includeBYOK: includeBYOK,
+      expectedAuthOwnerId: expectedOwnerId)
 
-    return try await performRequest(request)
+    return try await performRequest(
+      request,
+      authPolicy: expectedOwnerId.map { .ownerBound($0) } ?? .default)
   }
 
   func post<T: Decodable, B: Encodable>(
@@ -90,7 +144,8 @@ actor APIClient {
     body: B,
     requireAuth: Bool = true,
     customBaseURL: String? = nil,
-    includeBYOK: Bool = true
+    includeBYOK: Bool = true,
+    expectedOwnerId: String? = nil
   ) async throws -> T {
     let base = customBaseURL ?? baseURL
     guard let url = URL(string: base + endpoint) else {
@@ -99,17 +154,23 @@ actor APIClient {
     log("APIClient: POST \(url.absoluteString)")
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
+    request.allHTTPHeaderFields = try await buildHeaders(
+      requireAuth: requireAuth,
+      includeBYOK: includeBYOK,
+      expectedAuthOwnerId: expectedOwnerId)
     request.httpBody = try transport.encoder.encode(body)
 
-    return try await performRequest(request)
+    return try await performRequest(
+      request,
+      authPolicy: expectedOwnerId.map { .ownerBound($0) } ?? .default)
   }
 
   func post<T: Decodable>(
     _ endpoint: String,
     requireAuth: Bool = true,
     customBaseURL: String? = nil,
-    includeBYOK: Bool = true
+    includeBYOK: Bool = true,
+    expectedOwnerId: String? = nil
   ) async throws -> T {
     let base = customBaseURL ?? baseURL
     guard let url = URL(string: base + endpoint) else {
@@ -117,9 +178,14 @@ actor APIClient {
     }
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
+    request.allHTTPHeaderFields = try await buildHeaders(
+      requireAuth: requireAuth,
+      includeBYOK: includeBYOK,
+      expectedAuthOwnerId: expectedOwnerId)
 
-    return try await performRequest(request)
+    return try await performRequest(
+      request,
+      authPolicy: expectedOwnerId.map { .ownerBound($0) } ?? .default)
   }
 
   /// Phase 2 realtime hub: ask the backend to mint a short-lived ephemeral token
@@ -174,7 +240,7 @@ actor APIClient {
       guard let retry = try await authorizedRetryRequest(
         from: request,
         retriedAuth: false,
-        signOutOn401: true
+        authPolicy: .default
       ) else {
         throw CredentialHealthError.requiresLogin(message: "Please sign in again to use voice responses.")
       }
@@ -273,13 +339,18 @@ actor APIClient {
     requireAuth: Bool = true,
     customBaseURL: String? = nil,
     includeBYOK: Bool = true,
-    authPolicy: RequestAuthPolicy = .default
+    authPolicy: RequestAuthPolicy = .default,
+    expectedAuthOwnerId: String? = nil
   ) async throws {
     let base = customBaseURL ?? baseURL
     let url = URL(string: base + endpoint)!
     var request = URLRequest(url: url)
     request.httpMethod = "DELETE"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
+    request.allHTTPHeaderFields = try await buildHeaders(
+      requireAuth: requireAuth,
+      includeBYOK: includeBYOK,
+      expectedAuthOwnerId: expectedAuthOwnerId
+    )
 
     try await performVoidRequest(request, authPolicy: authPolicy)
   }
@@ -294,6 +365,7 @@ actor APIClient {
     /// When true, a post-refresh HTTP 401 is returned to the caller instead of
     /// throwing `.unauthorized`, so provider-shaped bodies can be inspected.
     var returnsPersistent401Response: Bool = false
+    var expectedAuthOwnerId: String? = nil
 
     static let `default` = RequestAuthPolicy(signOutOn401: true)
     static let sessionPreserving = RequestAuthPolicy(signOutOn401: false)
@@ -302,6 +374,15 @@ actor APIClient {
       recordsAuthRetryTelemetry: false,
       returnsPersistent401Response: true
     )
+
+    static func ownerBound(_ ownerId: String) -> RequestAuthPolicy {
+      RequestAuthPolicy(
+        signOutOn401: false,
+        recordsAuthRetryTelemetry: true,
+        returnsPersistent401Response: false,
+        expectedAuthOwnerId: ownerId
+      )
+    }
   }
 
   private func invalidateSessionAfterUnauthorized(endpoint: String, signOutOn401: Bool) async {
@@ -323,27 +404,33 @@ actor APIClient {
   private func authorizedRetryRequest(
     from request: URLRequest,
     retriedAuth: Bool,
-    signOutOn401: Bool
+    authPolicy: RequestAuthPolicy
   ) async throws -> URLRequest? {
     if retriedAuth {
       await invalidateSessionAfterUnauthorized(
         endpoint: endpointLabel(for: request),
-        signOutOn401: signOutOn401
+        signOutOn401: authPolicy.signOutOn401
       )
       return nil
     }
     let authService = await MainActor.run { AuthService.shared }
     do {
       var retry = request
-      retry.setValue(
-        try await authService.getAuthHeader(forceRefresh: true),
-        forHTTPHeaderField: "Authorization"
-      )
+      let authHeader: String
+      if let expectedOwnerId = authPolicy.expectedAuthOwnerId {
+        authHeader = try await authService.getAuthHeader(
+          forceRefresh: true,
+          expectedUserId: expectedOwnerId
+        )
+      } else {
+        authHeader = try await authService.getAuthHeader(forceRefresh: true)
+      }
+      retry.setValue(authHeader, forHTTPHeaderField: "Authorization")
       return retry
     } catch AuthError.notSignedIn {
       await invalidateSessionAfterUnauthorized(
         endpoint: endpointLabel(for: request),
-        signOutOn401: signOutOn401
+        signOutOn401: authPolicy.signOutOn401
       )
       return nil
     }
@@ -354,8 +441,10 @@ actor APIClient {
     authPolicy: RequestAuthPolicy = .default,
     retriedAuth: Bool = false
   ) async throws -> (Data, HTTPURLResponse) {
+    try validateExpectedOwner(authPolicy)
     let endpoint = endpointLabel(for: request)
     let (data, response) = try await session.data(for: request)
+    try validateExpectedOwner(authPolicy)
     guard let httpResponse = response as? HTTPURLResponse else {
       throw APIError.invalidResponse
     }
@@ -370,7 +459,7 @@ actor APIClient {
       guard let retryRequest = try await authorizedRetryRequest(
         from: request,
         retriedAuth: retriedAuth,
-        signOutOn401: authPolicy.signOutOn401
+        authPolicy: authPolicy
       ) else {
         if authPolicy.recordsAuthRetryTelemetry {
           DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "unauthorized")
@@ -401,6 +490,16 @@ actor APIClient {
     }
 
     return (data, httpResponse)
+  }
+
+  /// An owner-bound request may finish after the app has signed out or switched
+  /// accounts. The authorization header still belongs to the original owner,
+  /// so never let that response flow into the new owner's local state.
+  private nonisolated func validateExpectedOwner(_ authPolicy: RequestAuthPolicy) throws {
+    guard let expectedOwnerId = authPolicy.expectedAuthOwnerId else { return }
+    guard AuthorizedToolExecution.isOwnerCurrent(expectedOwnerId) else {
+      throw AuthError.userChangedDuringRequest
+    }
   }
 
   private func performRequest<T: Decodable>(
@@ -2101,7 +2200,7 @@ extension APIClient {
       guard let retry = try await authorizedRetryRequest(
         from: request,
         retriedAuth: false,
-        signOutOn401: true
+        authPolicy: .default
       ) else {
         throw APIError.unauthorized
       }
@@ -2302,24 +2401,32 @@ extension APIClient {
     _ endpoint: String,
     body: B,
     requireAuth: Bool = true,
-    customBaseURL: String? = nil
+    customBaseURL: String? = nil,
+    expectedOwnerId: String? = nil
   ) async throws -> T {
     let base = customBaseURL ?? baseURL
     let url = URL(string: base + endpoint)!
     var request = URLRequest(url: url)
     request.httpMethod = "PATCH"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
+    request.allHTTPHeaderFields = try await buildHeaders(
+      requireAuth: requireAuth,
+      expectedAuthOwnerId: expectedOwnerId)
     request.httpBody = try JSONEncoder().encode(body)
 
-    return try await performPatchRequest(request)
+    return try await performPatchRequest(
+      request,
+      authPolicy: expectedOwnerId.map { .ownerBound($0) } ?? .default)
   }
 
-  private func performPatchRequest<T: Decodable>(_ request: URLRequest) async throws -> T {
+  private func performPatchRequest<T: Decodable>(
+    _ request: URLRequest,
+    authPolicy: RequestAuthPolicy = .default
+  ) async throws -> T {
     // Delegate to performRequest so PATCH gets the same 401 refresh-and-retry as
     // GET/POST. PATCH previously threw `.unauthorized` on the first 401, which
     // surfaced as a user-visible failure (e.g. the onboarding language step)
     // whenever the ID token was momentarily stale right after sign-in.
-    return try await performRequest(request)
+    return try await performRequest(request, authPolicy: authPolicy)
   }
 }
 
@@ -2604,7 +2711,8 @@ extension APIClient {
     indentLevel: Int? = nil,
     relevanceScore: Int? = nil,
     recurrenceRule: String? = nil,
-    recurrenceParentId: String? = nil
+    recurrenceParentId: String? = nil,
+    expectedOwnerId: String? = nil
   ) async throws -> TaskActionItem {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -2643,12 +2751,18 @@ extension APIClient {
       relevanceScore: relevanceScore
     )
 
-    return try await patch("v1/action-items/\(id)", body: request)
+    return try await patch(
+      "v1/action-items/\(id)",
+      body: request,
+      expectedOwnerId: expectedOwnerId)
   }
 
   /// Deletes an action item
-  func deleteActionItem(id: String) async throws {
-    try await delete("v1/action-items/\(id)")
+  func deleteActionItem(id: String, expectedOwnerId: String? = nil) async throws {
+    try await delete(
+      "v1/action-items/\(id)",
+      authPolicy: expectedOwnerId.map { .ownerBound($0) } ?? .default,
+      expectedAuthOwnerId: expectedOwnerId)
   }
 
   /// Creates a new action item
@@ -2669,7 +2783,8 @@ extension APIClient {
     provenance: [OmiAPI.EvidenceRef]? = nil,
     status: String? = nil,
     sortOrder: Int? = nil,
-    indentLevel: Int? = nil
+    indentLevel: Int? = nil,
+    expectedOwnerId: String? = nil
   ) async throws -> TaskActionItem {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -2713,7 +2828,10 @@ extension APIClient {
       relevanceScore: relevanceScore
     )
 
-    return try await post("v1/action-items", body: request)
+    return try await post(
+      "v1/action-items",
+      body: request,
+      expectedOwnerId: expectedOwnerId)
   }
 
   private func taskMutationBody<Wire: Encodable>(
@@ -4287,12 +4405,18 @@ extension APIClient {
   /// missing") even though the backend had already saved the language, silently
   /// (pre-await-fix) or now visibly blocking the caller on a save that succeeded.
   @discardableResult
-  func updateUserLanguage(_ language: String) async throws -> SetUserLanguageResponse {
+  func updateUserLanguage(
+    _ language: String,
+    expectedOwnerId: String? = nil
+  ) async throws -> SetUserLanguageResponse {
     struct UpdateRequest: Encodable {
       let language: String
     }
     let body = UpdateRequest(language: language)
-    return try await patch("v1/users/language", body: body)
+    return try await patch(
+      "v1/users/language",
+      body: body,
+      expectedOwnerId: expectedOwnerId)
   }
 
   /// Fetches recording permission status
@@ -4360,7 +4484,8 @@ extension APIClient {
   /// Updates user profile (onboarding data)
   func updateUserProfile(
     name: String? = nil, motivation: String? = nil, useCase: String? = nil, job: String? = nil,
-    company: String? = nil
+    company: String? = nil,
+    expectedOwnerId: String? = nil
   ) async throws {
     struct UpdateRequest: Encodable {
       let name: String?
@@ -4371,7 +4496,10 @@ extension APIClient {
     }
     let body = UpdateRequest(
       name: name, motivation: motivation, use_case: useCase, job: job, company: company)
-    let _: UserProfileResponse = try await patch("v1/users/profile", body: body)
+    let _: UserProfileResponse = try await patch(
+      "v1/users/profile",
+      body: body,
+      expectedOwnerId: expectedOwnerId)
   }
 
   /// Deletes the authenticated user's account and all server data.
@@ -5199,58 +5327,11 @@ struct EmptyBody: Encodable {}
 
 extension APIClient {
 
-  /// Save a chat message to the backend
-  func saveMessage(
-    text: String,
-    sender: String,
-    appId: String? = nil,
-    sessionId: String? = nil,
-    metadata: String? = nil,
-    clientMessageId: String? = nil,
-    messageSource: String = "desktop_chat"
-  ) async throws -> SaveMessageResponse {
-    struct SaveRequest: Encodable {
-      let text: String
-      let sender: String
-      let app_id: String?
-      let session_id: String?
-      let metadata: String?
-      let client_message_id: String?
-      let message_source: String
-    }
-    let body = SaveRequest(
-      text: text,
-      sender: sender,
-      app_id: appId,
-      session_id: sessionId,
-      metadata: metadata,
-      client_message_id: clientMessageId,
-      message_source: messageSource
-    )
-    return try await post("v2/desktop/messages", body: body)
-  }
-
-  /// Fetch chat message history
-  func getMessages(
-    appId: String? = nil,
-    limit: Int = 100,
-    offset: Int = 0
-  ) async throws -> [ChatMessageDB] {
-    var queryItems: [String] = [
-      "limit=\(limit)",
-      "offset=\(offset)",
-    ]
-
-    if let appId = appId {
-      queryItems.append("app_id=\(appId)")
-    }
-
-    let endpoint = "v2/desktop/messages?\(queryItems.joined(separator: "&"))"
-    return try await get(endpoint)
-  }
-
   /// Clear chat message history
-  func deleteMessages(appId: String? = nil) async throws -> MessageDeleteResponse {
+  func deleteMessages(
+    appId: String? = nil,
+    expectedOwnerId: String? = nil
+  ) async throws -> MessageDeleteResponse {
     var endpoint = "v2/desktop/messages"
     if let appId = appId {
       endpoint += "?app_id=\(appId)"
@@ -5259,25 +5340,15 @@ extension APIClient {
     let url = URL(string: baseURL + endpoint)!
     var request = URLRequest(url: url)
     request.httpMethod = "DELETE"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+    request.allHTTPHeaderFields = try await buildHeaders(
+      requireAuth: true,
+      expectedAuthOwnerId: expectedOwnerId
+    )
 
-    return try await performRequest(request)
-  }
-
-  /// Fetch messages for a specific session
-  func getMessages(
-    sessionId: String,
-    limit: Int = 100,
-    offset: Int = 0
-  ) async throws -> [ChatMessageDB] {
-    let queryItems: [String] = [
-      "session_id=\(sessionId)",
-      "limit=\(limit)",
-      "offset=\(offset)",
-    ]
-
-    let endpoint = "v2/desktop/messages?\(queryItems.joined(separator: "&"))"
-    return try await get(endpoint)
+    return try await performRequest(
+      request,
+      authPolicy: expectedOwnerId.map { .ownerBound($0) } ?? .default
+    )
   }
 
   /// Rate a message (thumbs up/down)
@@ -5634,12 +5705,23 @@ extension APIClient {
   }
 
   /// Delete a chat session and its messages
-  func deleteChatSession(sessionId: String) async throws {
-    try await delete("v2/chat-sessions/\(sessionId)")
+  func deleteChatSession(
+    sessionId: String,
+    expectedOwnerId: String? = nil
+  ) async throws {
+    try await delete(
+      "v2/chat-sessions/\(sessionId)",
+      authPolicy: expectedOwnerId.map { .ownerBound($0) } ?? .default,
+      expectedAuthOwnerId: expectedOwnerId
+    )
   }
 
   /// Generate an initial greeting message for a new chat session
-  func getInitialMessage(sessionId: String, appId: String? = nil) async throws
+  func getInitialMessage(
+    sessionId: String,
+    appId: String? = nil,
+    expectedOwnerId: String? = nil
+  ) async throws
     -> InitialMessageResponse
   {
     struct InitialMessageRequest: Encodable {
@@ -5653,7 +5735,20 @@ extension APIClient {
     }
 
     let body = InitialMessageRequest(sessionId: sessionId, appId: appId)
-    return try await post("v2/chat/initial-message", body: body)
+    guard let expectedOwnerId else {
+      return try await post("v2/chat/initial-message", body: body)
+    }
+    guard let url = URL(string: baseURL + "v2/chat/initial-message") else {
+      throw APIError.invalidResponse
+    }
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.allHTTPHeaderFields = try await buildHeaders(
+      requireAuth: true,
+      expectedAuthOwnerId: expectedOwnerId
+    )
+    request.httpBody = try transport.encoder.encode(body)
+    return try await performRequest(request, authPolicy: .ownerBound(expectedOwnerId))
   }
 
   /// Generate a title for a chat session based on its messages
@@ -5696,74 +5791,6 @@ struct InitialMessageResponse: Codable {
   enum CodingKeys: String, CodingKey {
     case message
     case messageId = "message_id"
-  }
-}
-
-// MARK: - Chat Message Models
-
-/// Response from saving a message
-struct SaveMessageResponse: Codable {
-  let id: String
-  let createdAt: Date
-  let sessionId: String?
-  let created: Bool?
-
-  enum CodingKeys: String, CodingKey {
-    case id
-    case createdAt = "created_at"
-    case sessionId = "session_id"
-    case created
-  }
-}
-
-/// Persisted chat message from database
-struct ChatMessageDB: Codable, Identifiable {
-  let id: String
-  let text: String
-  let createdAt: Date
-  let sender: String
-  let appId: String?
-  let sessionId: String?
-  let rating: Int?
-  let reported: Bool
-  /// JSON string with extra info (attachments, etc.); see ChatMessage.decodeAttachments.
-  let metadata: String?
-
-  enum CodingKeys: String, CodingKey {
-    case id, text, sender, rating, reported, metadata
-    case createdAt = "created_at"
-    case appId = "app_id"
-    case sessionId = "session_id"
-  }
-
-  init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    id = try container.decode(String.self, forKey: .id)
-    text = try container.decodeIfPresent(String.self, forKey: .text) ?? ""
-    createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
-    sender = try container.decodeIfPresent(String.self, forKey: .sender) ?? "human"
-    appId = try container.decodeIfPresent(String.self, forKey: .appId)
-    sessionId = try container.decodeIfPresent(String.self, forKey: .sessionId)
-    rating = try container.decodeIfPresent(Int.self, forKey: .rating)
-    reported = try container.decodeIfPresent(Bool.self, forKey: .reported) ?? false
-    metadata = try container.decodeIfPresent(String.self, forKey: .metadata)
-  }
-}
-
-/// Response from deleting messages
-struct MessageDeleteResponse: Codable {
-  let status: String
-  let deletedCount: Int?
-
-  enum CodingKeys: String, CodingKey {
-    case status
-    case deletedCount = "deleted_count"
-  }
-
-  init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    status = try container.decodeIfPresent(String.self, forKey: .status) ?? "ok"
-    deletedCount = try container.decodeIfPresent(Int.self, forKey: .deletedCount)
   }
 }
 
@@ -6287,13 +6314,17 @@ extension APIClient {
     endDate: String? = nil,
     limit: Int = 20,
     offset: Int = 0,
-    includeTranscript: Bool = true
+    includeTranscript: Bool = true,
+    expectedOwnerId: String? = nil
   ) async throws -> ToolResponse {
     var params =
       "v1/tools/conversations?limit=\(limit)&offset=\(offset)&include_transcript=\(includeTranscript)"
     if let sd = startDate { params += "&start_date=\(encodeQueryDate(sd))" }
     if let ed = endDate { params += "&end_date=\(encodeQueryDate(ed))" }
-    return try await get(params, customBaseURL: nil)
+    return try await get(
+      params,
+      customBaseURL: nil,
+      expectedOwnerId: expectedOwnerId)
   }
 
   func toolSearchConversations(
@@ -6301,29 +6332,46 @@ extension APIClient {
     startDate: String? = nil,
     endDate: String? = nil,
     limit: Int = 5,
-    includeTranscript: Bool = true
+    includeTranscript: Bool = true,
+    expectedOwnerId: String? = nil
   ) async throws -> ToolResponse {
     let body = SearchRequest(
       query: query, startDate: startDate, endDate: endDate, limit: limit,
       includeTranscript: includeTranscript)
-    return try await post("v1/tools/conversations/search", body: body, customBaseURL: nil)
+    return try await post(
+      "v1/tools/conversations/search",
+      body: body,
+      customBaseURL: nil,
+      expectedOwnerId: expectedOwnerId)
   }
 
   func toolGetMemories(
     limit: Int = 50,
     offset: Int = 0,
     startDate: String? = nil,
-    endDate: String? = nil
+    endDate: String? = nil,
+    expectedOwnerId: String? = nil
   ) async throws -> ToolResponse {
     var params = "v1/tools/memories?limit=\(limit)&offset=\(offset)"
     if let sd = startDate { params += "&start_date=\(encodeQueryDate(sd))" }
     if let ed = endDate { params += "&end_date=\(encodeQueryDate(ed))" }
-    return try await get(params, customBaseURL: nil)
+    return try await get(
+      params,
+      customBaseURL: nil,
+      expectedOwnerId: expectedOwnerId)
   }
 
-  func toolSearchMemories(query: String, limit: Int = 5) async throws -> ToolResponse {
+  func toolSearchMemories(
+    query: String,
+    limit: Int = 5,
+    expectedOwnerId: String? = nil
+  ) async throws -> ToolResponse {
     let body = MemorySearchRequest(query: query, limit: limit)
-    return try await post("v1/tools/memories/search", body: body, customBaseURL: nil)
+    return try await post(
+      "v1/tools/memories/search",
+      body: body,
+      customBaseURL: nil,
+      expectedOwnerId: expectedOwnerId)
   }
 
   func toolGetActionItems(
@@ -6333,7 +6381,8 @@ extension APIClient {
     startDate: String? = nil,
     endDate: String? = nil,
     dueStartDate: String? = nil,
-    dueEndDate: String? = nil
+    dueEndDate: String? = nil,
+    expectedOwnerId: String? = nil
   ) async throws -> ToolResponse {
     var params = "v1/tools/action-items?limit=\(limit)&offset=\(offset)"
     if let c = completed { params += "&completed=\(c)" }
@@ -6341,22 +6390,40 @@ extension APIClient {
     if let ed = endDate { params += "&end_date=\(encodeQueryDate(ed))" }
     if let dsd = dueStartDate { params += "&due_start_date=\(encodeQueryDate(dsd))" }
     if let ded = dueEndDate { params += "&due_end_date=\(encodeQueryDate(ded))" }
-    return try await get(params, customBaseURL: nil)
+    return try await get(
+      params,
+      customBaseURL: nil,
+      expectedOwnerId: expectedOwnerId)
   }
 
   func toolCreateActionItem(
-    description: String, dueAt: String? = nil, conversationId: String? = nil
+    description: String,
+    dueAt: String? = nil,
+    conversationId: String? = nil,
+    expectedOwnerId: String? = nil
   ) async throws -> ToolResponse {
     let body = CreateActionItemRequest(
       description: description, dueAt: dueAt, conversationId: conversationId)
-    return try await post("v1/tools/action-items", body: body, customBaseURL: nil)
+    return try await post(
+      "v1/tools/action-items",
+      body: body,
+      customBaseURL: nil,
+      expectedOwnerId: expectedOwnerId)
   }
 
   func toolUpdateActionItem(
-    id: String, completed: Bool? = nil, description: String? = nil, dueAt: String? = nil
+    id: String,
+    completed: Bool? = nil,
+    description: String? = nil,
+    dueAt: String? = nil,
+    expectedOwnerId: String? = nil
   ) async throws -> ToolResponse {
     let body = UpdateActionItemRequest(completed: completed, description: description, dueAt: dueAt)
-    return try await patch("v1/tools/action-items/\(id)", body: body, customBaseURL: nil)
+    return try await patch(
+      "v1/tools/action-items/\(id)",
+      body: body,
+      customBaseURL: nil,
+      expectedOwnerId: expectedOwnerId)
   }
 
   func toolCreateCalendarEvent(
@@ -6365,7 +6432,8 @@ extension APIClient {
     endTime: String,
     description: String? = nil,
     location: String? = nil,
-    attendees: String? = nil
+    attendees: String? = nil,
+    expectedOwnerId: String? = nil
   ) async throws -> ToolResponse {
     let body = CreateCalendarEventRequest(
       title: title,
@@ -6375,7 +6443,11 @@ extension APIClient {
       location: location,
       attendees: attendees
     )
-    return try await post("v1/tools/calendar-events", body: body, customBaseURL: nil)
+    return try await post(
+      "v1/tools/calendar-events",
+      body: body,
+      customBaseURL: nil,
+      expectedOwnerId: expectedOwnerId)
   }
 
   // MARK: - X (Twitter) Connector

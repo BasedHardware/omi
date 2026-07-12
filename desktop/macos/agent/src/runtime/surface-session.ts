@@ -29,6 +29,11 @@ export interface LegacyMainChatSessionEntry {
   agentSessionId: string;
 }
 
+export interface LegacyMainChatSessionImportReceipt {
+  acceptedEntries: LegacyMainChatSessionEntry[];
+  importedCount: number;
+}
+
 export const LEGACY_MAIN_CHAT_SESSION_COMPATIBILITY = {
   owner: "desktop-agent-runtime",
   removalCondition: "all supported desktop versions have imported UserDefaults main-chat session aliases",
@@ -253,18 +258,29 @@ export function importLegacyMainChatSessions(
   store: AgentStore,
   input: { ownerId: string; entries: LegacyMainChatSessionEntry[] },
   nowMs: () => number,
-): number {
+): LegacyMainChatSessionImportReceipt {
+  const acceptedEntries = input.entries.map((entry) => ({
+    chatId: typeof entry?.chatId === "string" ? entry.chatId.trim() : "",
+    agentSessionId: typeof entry?.agentSessionId === "string" ? entry.agentSessionId.trim() : "",
+  }));
+  const seenChatIds = new Set<string>();
+  for (const entry of acceptedEntries) {
+    if (!entry.chatId || !entry.agentSessionId) {
+      throw new Error("invalid_legacy_main_chat_session_entry");
+    }
+    if (seenChatIds.has(entry.chatId)) {
+      throw new Error("duplicate_legacy_main_chat_session_entry");
+    }
+    seenChatIds.add(entry.chatId);
+  }
+
   const now = nowMs();
   let imported = 0;
-  for (const entry of input.entries) {
-    const chatId = entry.chatId.trim();
-    const agentSessionId = entry.agentSessionId.trim();
-    if (!chatId || !agentSessionId) continue;
-
+  for (const entry of acceptedEntries) {
     const surfaceRef: SurfaceRef = {
       surfaceKind: "main_chat",
       externalRefKind: "chat",
-      externalRefId: chatId,
+      externalRefId: entry.chatId,
     };
     const existing = store.getOptionalRow(
       `SELECT conversation_id FROM surface_conversations
@@ -276,7 +292,7 @@ export function importLegacyMainChatSessions(
     const resolvedSessionId = resolveLegacyAgentSessionId(store, {
       ownerId: input.ownerId,
       surfaceRef,
-      legacySessionId: agentSessionId,
+      legacySessionId: entry.agentSessionId,
       defaultAdapterId: "acp",
     });
 
@@ -300,7 +316,7 @@ export function importLegacyMainChatSessions(
     }
     imported += 1;
   }
-  return imported;
+  return { acceptedEntries, importedCount: imported };
 }
 
 export function clearOwnerSurfaceState(store: AgentStore, ownerId: string, nowMs: () => number): {

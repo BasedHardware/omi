@@ -241,7 +241,10 @@ describe("surface_conversations", () => {
       },
       () => 1,
     );
-    expect(imported).toBe(1);
+    expect(imported).toEqual({
+      acceptedEntries: [{ chatId: "default", agentSessionId: "ses_legacy_other" }],
+      importedCount: 1,
+    });
 
     const row = store.getRow(
       `SELECT conversation_id, agent_session_id FROM surface_conversations
@@ -261,7 +264,22 @@ describe("surface_conversations", () => {
       },
       () => 1,
     );
-    expect(imported).toBe(1);
+    expect(imported).toEqual({
+      acceptedEntries: [{ chatId: "default", agentSessionId: "ses_legacy_1" }],
+      importedCount: 1,
+    });
+
+    expect(importLegacyMainChatSessions(
+      store,
+      {
+        ownerId: "owner-a",
+        entries: [{ chatId: "default", agentSessionId: "ses_legacy_1" }],
+      },
+      () => 2,
+    )).toEqual({
+      acceptedEntries: [{ chatId: "default", agentSessionId: "ses_legacy_1" }],
+      importedCount: 0,
+    });
 
     const resolved = resolveSurfaceSession(
       store,
@@ -276,6 +294,22 @@ describe("surface_conversations", () => {
       () => 2,
     );
     expect(resolved.agentSessionId).toBe("ses_legacy_1");
+  });
+
+  it("rejects an invalid legacy alias batch atomically instead of acknowledging partial import", () => {
+    expect(() => importLegacyMainChatSessions(
+      store,
+      {
+        ownerId: "owner-a",
+        entries: [
+          { chatId: "default", agentSessionId: "ses_valid" },
+          { chatId: "other", agentSessionId: "   " },
+        ],
+      },
+      () => 1,
+    )).toThrow("invalid_legacy_main_chat_session_entry");
+    expect(store.allRows("SELECT * FROM surface_conversations")).toEqual([]);
+    expect(store.allRows("SELECT * FROM sessions")).toEqual([]);
   });
 
   it("does not rewrite an imported session profile during surface resolution", () => {

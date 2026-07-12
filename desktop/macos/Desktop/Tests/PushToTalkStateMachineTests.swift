@@ -3,23 +3,18 @@ import XCTest
 @testable import Omi_Computer
 
 final class PushToTalkStateMachineTests: XCTestCase {
-  func testLegacyPublishedStateIsDerivedFromAuthoritativeVoiceTurnPhase() {
-    XCTAssertEqual(PushToTalkManager.legacyState(for: nil), .idle)
-    XCTAssertEqual(PushToTalkManager.legacyState(for: .idle), .idle)
-    XCTAssertEqual(PushToTalkManager.legacyState(for: .recording), .listening)
-    XCTAssertEqual(PushToTalkManager.legacyState(for: .pendingLockDecision), .pendingLockDecision)
-    XCTAssertEqual(PushToTalkManager.legacyState(for: .lockedRecording), .lockedListening)
-    XCTAssertEqual(PushToTalkManager.legacyState(for: .finalizing), .finalizing)
-    XCTAssertEqual(PushToTalkManager.legacyState(for: .awaitingResponse), .idle)
-    XCTAssertEqual(PushToTalkManager.legacyState(for: .awaitingTools), .idle)
-    XCTAssertEqual(PushToTalkManager.legacyState(for: .playing(.nativeRealtime)), .idle)
-    XCTAssertEqual(PushToTalkManager.legacyState(for: .terminal(.success)), .idle)
+  func testRecordingProjectionComesDirectlyFromAuthoritativePhase() {
+    XCTAssertTrue(VoiceTurnPhase.recording.isRecording)
+    XCTAssertTrue(VoiceTurnPhase.pendingLockDecision.isRecording)
+    XCTAssertTrue(VoiceTurnPhase.lockedRecording.isRecording)
+    XCTAssertFalse(VoiceTurnPhase.finalizing.isRecording)
+    XCTAssertTrue(VoiceTurnPhase.terminal(.success).isTerminal)
   }
 
   func testCaptureStartAfterFinalizationProducesStopEffect() {
     let reducer = VoiceTurnReducer()
     let turnID = VoiceTurnID()
-    var model = reducer.reduce(.idle, .start(turnID: turnID, intent: .hold)).model
+    var model = reducer.reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
     model = reducer.reduce(model, .finalize(turnID: turnID)).model
     let captureID = VoiceCaptureID(42)
 
@@ -35,7 +30,7 @@ final class PushToTalkStateMachineTests: XCTestCase {
     let reducer = VoiceTurnReducer()
     let turnID = VoiceTurnID()
     let captureID = VoiceCaptureID(9)
-    var model = reducer.reduce(.idle, .start(turnID: turnID, intent: .hold)).model
+    var model = reducer.reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
     model = reducer.reduce(model, .captureStarted(turnID: turnID, captureID: captureID)).model
 
     let cancelled = reducer.reduce(model, .cancel(turnID: turnID, reason: .cancelled))
@@ -51,8 +46,24 @@ final class PushToTalkStateMachineTests: XCTestCase {
   @MainActor
   func testHeadlessAutomationRunsRealLifecycleWithoutMicrophonePermission() {
     let manager = PushToTalkManager.shared
+    let previousAuthOwner = UserDefaults.standard.object(forKey: .authUserId)
+    let previousAutomationOwner = UserDefaults.standard.object(forKey: .automationOwnerOverride)
     manager.cleanup()
-    defer { manager.cleanup() }
+    UserDefaults.standard.set("ptt-headless-owner", forKey: .authUserId)
+    UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+    defer {
+      manager.cleanup()
+      if let previousAuthOwner {
+        UserDefaults.standard.set(previousAuthOwner, forKey: .authUserId)
+      } else {
+        UserDefaults.standard.removeObject(forKey: .authUserId)
+      }
+      if let previousAutomationOwner {
+        UserDefaults.standard.set(previousAutomationOwner, forKey: .automationOwnerOverride)
+      } else {
+        UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+      }
+    }
 
     let started = manager.beginPushToTalkForAutomation()
     XCTAssertEqual(started["listening"], "true")

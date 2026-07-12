@@ -46,7 +46,7 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
   func run(timeoutSeconds: Double) async -> [String: String] {
     let s = RealtimeHubSession(
       provider: provider, auth: auth,
-      instructions: RealtimeHubTools.systemInstruction(aboutUser: ""),
+      instructions: RealtimeHubTools.systemInstruction(),
       delegate: self)
     session = s
     let rate = s.requiredInputSampleRate

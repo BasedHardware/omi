@@ -5,6 +5,38 @@ import OmiSupport
 import SwiftUI
 import UniformTypeIdentifiers
 
+struct ChatLegacyCompatibilityMetadata: Equatable {
+    static let owner = "desktop-main-chat"
+    static let removalCondition = "all supported desktop versions have checkpointed backend chat history into the kernel journal"
+    static let removeBy = "2026-10-01"
+    static let pageSize = 100
+}
+
+enum ChatLegacyPageCollector {
+    static func all<Element>(
+        fetchPage: (_ limit: Int, _ offset: Int) async throws -> [Element]
+    ) async throws -> [Element] {
+        var rows: [Element] = []
+        var offset = 0
+        while true {
+            let page = try await fetchPage(ChatLegacyCompatibilityMetadata.pageSize, offset)
+            rows.append(contentsOf: page)
+            offset += page.count
+            if page.count < ChatLegacyCompatibilityMetadata.pageSize { return rows }
+        }
+    }
+}
+
+struct ChatRunAccountingPolicy: Equatable {
+    let usesOmiAccountQuota: Bool
+    let recordsPersonalProviderUsage: Bool
+
+    init(pinnedAdapterID: String) {
+        usesOmiAccountQuota = pinnedAdapterID == AgentAdapterId.piMono.rawValue
+        recordsPersonalProviderUsage = pinnedAdapterID == AgentAdapterId.acp.rawValue
+    }
+}
+
 // MARK: - UserDefaults Extension for KVO
 
 extension UserDefaults {
@@ -730,7 +762,7 @@ extension ChatContentBlock {
     }
 }
 
-enum ChatSender {
+enum ChatSender: Equatable {
     case user
     case ai
 }
@@ -832,9 +864,6 @@ enum ChatMode: String, CaseIterable {
 enum ChatSystemPromptStyle {
     case main
     case floating
-
-    var includesDatabaseSchema: Bool { self == .main }
-    var includesSkills: Bool { self == .main }
 }
 
 /// State management for chat functionality with Claude Agent SDK
@@ -855,12 +884,10 @@ class ChatProvider: ObservableObject {
 ================================================================================
 🚨 FLOATING BAR MODE — READ THIS FIRST BEFORE ANYTHING ELSE 🚨
 ================================================================================
-SCOPE TOOLS TO THE USER'S OWN DATA. First decide whether the question actually needs the user's personal data. If it's about the user — their memories, facts, preferences, past conversations, tasks, schedule, goals, or app/screen activity — use the available data tools (get_memories, search_memories, execute_sql, get_daily_recap, etc.) to look it up before answering; don't guess. If it's chit-chat, a greeting, or general knowledge that does NOT depend on the user's data, answer directly and immediately WITHOUT calling any tools. The user expects personalized answers when the question is about them — but not a tool round-trip for "hey" or a general question.
-NEVER ask follow-up questions or ask for clarification. ALWAYS give a direct, concrete answer immediately using whatever you know about the user from their memories, context, and facts. If memories mention their devices, preferences, work, budget, or interests — use that to give a specific recommendation, not a generic one.
-Search the web only when you genuinely need current or unfamiliar information you don't already know (e.g. a product/version detail you're unsure of). Don't reflexively look up things you already know — answer general knowledge directly.
+Tool calls are untrusted capability proposals. The kernel owns the authoritative route, clarification decision, authorization, execution profile, and background-agent identity for this surface. Use returned Omi data rather than inventing personal facts, and never claim a proposed action or agent start succeeded before its canonical tool result.
 If a screenshot is attached and the user asks a deictic question like "which one", "which option", "which suits me", "what should I choose", or "what's on my screen", ground the answer in the visible options first and prefer what is actually on screen over unrelated context.
 If the screenshot already clearly shows the relevant options, do not ignore it just because the query is short or ambiguous.
-Respond concisely in 1-2 sentences. No lists. No headers. NEVER ask follow-up questions — just answer.
+Respond concisely in 1-2 sentences. No lists. No headers.
 A screenshot may be attached — use it silently only if relevant. Never mention or acknowledge it.
 BROWSER TABS: when you use the browser (Playwright), on your FIRST browser action open ONE dedicated tab with the browser_tabs tool (action: "new"), then do ALL browser work in that single tab and reuse it for every step. NEVER navigate, reload, switch, or close the user's other tabs, and never hijack their active tab — work only in the tab you opened so you don't interfere with what the user is doing.
 ================================================================================
@@ -1011,24 +1038,15 @@ private var activeBridgeSendGeneration: Int?
         return session
     }
     lazy var kernelTurnProjection = KernelTurnProjection(host: self)
-    private var pendingSurfaceTurns: [String: PendingSurfaceTurn] = [:]
+    private var journalUpdateTasks: [String: Task<Void, Never>] = [:]
     private var agentBridgeStarted = false
     /// Tracks the harness mode the bridge is actually running (NOT the @AppStorage preference).
     /// @AppStorage("chatBridgeMode") can be updated by other views sharing the same key,
     /// so comparing against it in switchBridgeMode() would always match → no-op.
     private var activeBridgeHarness: String = "piMono"
-    /// True while switchBridgeMode is in the critical section between stopping the old
-    /// bridge and starting the new one.  sendMessage checks this to avoid racing.
-    private var modeSwitchInProgress = false
-    /// Continuations for callers waiting on an in-flight mode switch. Supports
-    /// arbitrary overlap (A→B→A→B) without losing waiters.
-    private struct ModeSwitchWaiter {
-        let id: UUID
-        let continuation: CheckedContinuation<Void, Never>
-    }
-
-    private var modeSwitchWaiters: [ModeSwitchWaiter] = []
-    private let modeSwitchWaitTimeoutSeconds: TimeInterval = 90
+    /// Orders rapid preference changes without treating them as runtime lifecycle.
+    /// The kernel applies each preference only when creating future sessions.
+    private var profilePreferenceChangeGeneration: UInt64 = 0
 
     enum BridgeMode: String {
         case omiAI = "agentSDK"     // Legacy, auto-migrated to piMono
@@ -1039,6 +1057,8 @@ private var activeBridgeSendGeneration: Int?
     }
     @AppStorage("chatBridgeMode") var bridgeMode: String = BridgeMode.piMono.rawValue
 
+    /// Future-session preference hint for startup/UI only. A live send must use
+    /// `ChatRunAccountingPolicy` from its resolved immutable session profile.
     var isUsingOmiAccountProvider: Bool {
         resolvedHarnessMode() == "piMono"
     }
@@ -1144,11 +1164,6 @@ private var activeBridgeSendGeneration: Int?
     private var aiProfileLoaded = false
     private var cachedDatabaseSchema: String = ""
     private var schemaLoaded = false
-    /// System prompt built once at warmup and reused for every query.
-    /// Turn context (history, coordinator route, context packet) is assembled by the kernel.
-    private var cachedMainSystemPrompt: String = ""
-    private var cachedFloatingSystemPrompt: String = ""
-    private var cachedFloatingPillSystemPrompt: String = ""
 
     // MARK: - CLAUDE.md & Skills (Global)
     @Published var claudeMdContent: String?
@@ -1158,7 +1173,33 @@ private var activeBridgeSendGeneration: Int?
     @AppStorage("disabledSkillsJSON") private var disabledSkillsJSON: String = ""
 
     // MARK: - Project-level CLAUDE.md & Skills
-    @AppStorage("aiChatWorkingDirectory") var aiChatWorkingDirectory: String = ""
+    @AppStorage("aiChatWorkingDirectory") var aiChatWorkingDirectory: String = "" {
+        didSet {
+            guard aiChatWorkingDirectory != oldValue, agentBridgeStarted else { return }
+            profilePreferenceChangeGeneration &+= 1
+            let changeGeneration = profilePreferenceChangeGeneration
+            let requestedDirectory = aiChatWorkingDirectory
+            Task { @MainActor [weak self] in
+                guard let self,
+                    let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: self.activeBridgeHarness)
+                else { return }
+                let directory = requestedDirectory.isEmpty
+                    ? AgentRuntimeProcess.defaultArtifactsDirectory()
+                    : requestedDirectory
+                do {
+                    _ = try await self.resolvedAgentClient().configureDefaultExecutionProfile(
+                        adapterId: adapterId,
+                        modelProfile: self.activeBridgeHarness == "hermes" || self.activeBridgeHarness == "openclaw"
+                            ? nil : ModelQoS.Claude.chat,
+                        workingDirectory: directory
+                    )
+                } catch {
+                    guard changeGeneration == self.profilePreferenceChangeGeneration else { return }
+                    logError("Failed to configure future-session working directory", error: error)
+                }
+            }
+        }
+    }
     @Published var projectClaudeMdContent: String?
     @Published var projectClaudeMdPath: String?
     @Published var projectDiscoveredSkills: [(name: String, description: String, path: String)] = []
@@ -1188,22 +1229,6 @@ private var activeBridgeSendGeneration: Int?
         isRestoringDraft = false
         log("ChatProvider initialized, will start Claude bridge on first use")
 
-        // When the last in-flight save completes, re-run any poll cycle
-        // that was deferred while saves were active. Keeps suppression
-        // from permanently dropping a fetch of other-platform messages.
-        //
-        // The flag is intentionally NOT cleared here — only
-        // `pollForNewMessages` clears it, and only once it actually gets
-        // past its guards and commits to a fetch. Otherwise a retry that
-        // bails again (e.g. on `isSending` because the next turn is mid-
-        // stream) would drop the deferral permanently; leaving the flag
-        // set lets the next drain (e.g. the AI-response save) retry once
-        // sending has finished.
-        pendingSaves.onDrained = { [weak self] in
-            guard let self, self.pollDeferredDuringSave else { return }
-            Task { [weak self] in await self?.pollForNewMessages() }
-        }
-
         // Migrate legacy "agentSDK" persisted mode to the new default "piMono".
         // Pre-6594 installs may have the old agentSDK tag saved; the settings
         // picker no longer offers it, so leaving it stored would leave the UI
@@ -1228,7 +1253,7 @@ private var activeBridgeSendGeneration: Int?
         activationObserver = NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
             .sink { [weak self] _ in
                 Task { @MainActor in
-                    await self?.pollForNewMessages()
+                    await self?.refreshJournalProjection()
                 }
             }
 
@@ -1274,7 +1299,7 @@ private var activeBridgeSendGeneration: Int?
         refreshAllObserver = NotificationCenter.default.publisher(for: .refreshAllData)
             .sink { [weak self] _ in
                 Task { @MainActor in
-                    await self?.pollForNewMessages()
+                    await self?.refreshJournalProjection()
                 }
             }
 
@@ -1287,10 +1312,6 @@ private var activeBridgeSendGeneration: Int?
                     guard let self = self else { return }
                     guard !self.isSending else {
                         log("ChatProvider: Skipping bridge restart — query in progress")
-                        return
-                    }
-                    guard !self.modeSwitchInProgress else {
-                        log("ChatProvider: Playwright setting changed but mode switch in progress — skipping bridge restart")
                         return
                     }
                     guard self.agentBridgeStarted else { return }
@@ -1372,11 +1393,6 @@ private var activeBridgeSendGeneration: Int?
     /// Ensures the bridge is started (restarting if needed to pick up new token),
     /// then sends a lightweight test query that triggers a browser_snapshot tool call.
     func testPlaywrightConnection() async throws -> Bool {
-        // Don't restart bridge during a mode switch — caller should retry after switch completes
-        guard !modeSwitchInProgress else {
-            log("ChatProvider: testPlaywrightConnection skipped — mode switch in progress")
-            return false
-        }
         // Restart bridge to pick up new extension token
         agentBridgeStarted = false
         do {
@@ -1394,30 +1410,14 @@ private var activeBridgeSendGeneration: Int?
         bridgeMode == BridgeMode.userClaude.rawValue
     }
 
-    /// Ensure the agent bridge is started (restarts if the process died).
-    /// - Parameter fromModeSwitch: true when called from within switchBridgeMode,
-    ///   which already holds modeSwitchInProgress. External callers (sendMessage)
-    ///   pass false (the default) and will wait for any in-flight switch.
+    /// Ensure the shared agent daemon is started (restarts only after process death).
     func ensureBridgeStartedForKernel() async -> Bool {
         await ensureBridgeStarted()
     }
 
     private func ensureBridgeStarted(
-        fromModeSwitch: Bool = false,
         authoritativeGeneration: Int? = nil
     ) async -> Bool {
-        // Wait for any in-flight mode switch to finish before touching the bridge.
-        // Without this, a query arriving mid-switch could restart the OLD bridge
-        // with the wrong harness mode. Skipped when called from switchBridgeMode
-        // itself (which holds the flag). External callers join the waiters array
-        // and are woken when the switch (including warmup) completes. Waiters
-        // time out after modeSwitchWaitTimeoutSeconds without releasing the
-        // switcher's lock — only the switcher clears modeSwitchInProgress.
-        while !fromModeSwitch && modeSwitchInProgress {
-            guard await waitForModeSwitchCompletion() else {
-                return false
-            }
-        }
         if agentBridgeStarted {
             let alive = await resolvedAgentClient().isAlive
             if alive {
@@ -1449,31 +1449,23 @@ private var activeBridgeSendGeneration: Int?
                 }
             )
             await kernelTurnProjection.attachClient(resolvedAgentClient())
-            // Pre-warm ACP sessions with their respective system prompts.
-            // This is the only place the system prompt is built and applied.
-            let promptContext = formatMemoriesSection()
-            let mainSystemPrompt = buildSystemPrompt(contextString: promptContext, style: .main)
-            let floatingSystemPrompt = buildFloatingBarSystemPrompt(contextString: promptContext)
-            let floatingPillSystemPrompt = buildFloatingBarSystemPrompt(
-                contextString: promptContext,
-                excludingToolNames: ["spawn_agent", "run_agent_and_wait"]
-            )
-            let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
-                ? ModelQoS.Claude.defaultSelection
-                : ShortcutSettings.shared.selectedModel
-            cachedMainSystemPrompt = mainSystemPrompt
-            cachedFloatingSystemPrompt = floatingSystemPrompt
-            cachedFloatingPillSystemPrompt = floatingPillSystemPrompt
-            // Hermes and OpenClaw ignore Omi's Claude model aliases, so leave
-            // the model hint nil to avoid recording a model ID in binding metadata
-            // that could trigger spurious context-changed sessions later.
+            // Preferences are kernel-owned defaults for future sessions. Existing
+            // sessions keep their immutable execution profile and the shared
+            // daemon stays alive when this preference changes.
             let usesNativeModelChoice = activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw"
-            let mainWarmupModel = usesNativeModelChoice ? nil : ModelQoS.Claude.chat
-            let floatingWarmupModel = usesNativeModelChoice ? nil : floatingModel
-            await resolvedAgentClient().warmupSession(cwd: effectiveAgentWorkingDirectory(), sessions: [
-                .init(key: "main", model: mainWarmupModel, systemPrompt: mainSystemPrompt),
-                .init(key: "floating", model: floatingWarmupModel, systemPrompt: floatingSystemPrompt)
-            ])
+            guard let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: activeBridgeHarness) else {
+                throw BridgeError.agentError("Unknown AI runtime mode: \(activeBridgeHarness)")
+            }
+            _ = try await resolvedAgentClient().configureDefaultExecutionProfile(
+                adapterId: adapterId,
+                modelProfile: usesNativeModelChoice ? nil : ModelQoS.Claude.chat,
+                workingDirectory: effectiveAgentWorkingDirectory()
+            )
+            let warmSurfaces: [AgentSurfaceReference] = [.mainChat(chatId: nil), .floatingChat()]
+            for surface in warmSurfaces {
+                let session = try await resolvedAgentClient().resolveSurfaceSession(surface)
+                await resolvedAgentClient().warmupSession(session)
+            }
             return true
         } catch {
             logError("Failed to start agent bridge", error: error)
@@ -1511,9 +1503,6 @@ private var activeBridgeSendGeneration: Int?
         aiProfileLoaded = false
         cachedDatabaseSchema = ""
         schemaLoaded = false
-        cachedMainSystemPrompt = ""
-        cachedFloatingSystemPrompt = ""
-        cachedFloatingPillSystemPrompt = ""
     }
 
     private var runtimeOwnerId: String? {
@@ -1547,155 +1536,227 @@ private var activeBridgeSendGeneration: Int?
         return .mainChat(chatId: mainChatRuntimeChatId(sessionId: sessionId))
     }
 
-    private static let conversationTurnBackfillKey = "conversationTurnBackfill_v1"
-
-    private func backfillConversationTurnsIfNeeded(for surface: AgentSurfaceReference) async {
-        let ownerId = runtimeOwnerId ?? "unknown"
-        let key = "\(Self.conversationTurnBackfillKey).\(ownerId).\(surface.key)"
-        guard !UserDefaults.standard.bool(forKey: key) else { return }
-        let recent = messages
-            .filter { !$0.copyableText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !$0.isStreaming }
-            .suffix(50)
-        guard !recent.isEmpty else { return }
-        let turns = recent.map { message in
-            (
-                role: message.sender == .user ? "user" : "assistant",
-                content: message.copyableText,
-                createdAtMs: Int(message.createdAt.timeIntervalSince1970 * 1_000)
-            )
+    private func journalOrigin(for surface: AgentSurfaceReference) -> String {
+        switch surface.surfaceKind {
+        case "floating_chat", "floating_bar": return "floating_chat"
+        case "realtime": return "realtime_voice"
+        case "task_chat": return "task_chat"
+        case "workstream": return "workstream"
+        default: return "typed_chat"
         }
-        await resolvedAgentClient().importConversationTurns(surface: surface, turns: turns)
-        UserDefaults.standard.set(true, forKey: key)
     }
 
-    private func isFloatingPillSurface(_ surface: AgentSurfaceReference) -> Bool {
-        surface.surfaceKind == "floating_bar" && surface.externalRefKind == "pill"
+    private struct KernelQueryContext {
+        let session: AgentSurfaceSession
+        let snapshot: AgentContextSnapshot
+    }
+
+    private func resolveKernelQuerySession(
+        surface: AgentSurfaceReference,
+        requestedModelProfile: String?
+    ) async throws -> AgentSurfaceSession {
+        let requestedHarness = bridgeHarnessOverride?.rawValue ?? activeBridgeHarness
+        guard let requestedAdapter = AgentRuntimeProcess.adapterId(forHarnessMode: requestedHarness) else {
+            throw BridgeError.agentError("Unknown AI runtime mode: \(requestedHarness)")
+        }
+        let usesNativeModelChoice = requestedHarness == "hermes" || requestedHarness == "openclaw"
+        return try await resolvedAgentClient().resolveSurfaceSession(
+            surface,
+            creationProfile: AgentSessionCreationProfile(
+                adapterId: requestedAdapter,
+                modelProfile: requestedModelProfile ?? modelOverride
+                    ?? (usesNativeModelChoice ? nil : ModelQoS.Claude.chat),
+                workingDirectory: effectiveAgentWorkingDirectory()
+            )
+        )
+    }
+
+    private func prepareKernelQueryContext(
+        surface: AgentSurfaceReference,
+        systemPromptStyle: ChatSystemPromptStyle,
+        systemPromptPrefix: String?,
+        systemPromptSuffix: String?,
+        notificationContext: String?,
+        screenPayload: [String: Any]?,
+        includeScreenSource: Bool = true,
+        requestedModelProfile: String? = nil,
+        pinnedSession: AgentSurfaceSession? = nil
+    ) async throws -> KernelQueryContext {
+        let client = resolvedAgentClient()
+        let session: AgentSurfaceSession
+        if let pinnedSession {
+            session = pinnedSession
+        } else {
+            session = try await resolveKernelQuerySession(
+                surface: surface,
+                requestedModelProfile: requestedModelProfile
+            )
+        }
+        let initialSnapshot = try await client.getContextSnapshot(
+            sessionId: session.sessionId,
+            surfaceKind: surface.surfaceKind
+        )
+        let workspacePath = session.profile.workingDirectory
+        let memoryText = formatMemoriesSection()
+        let goalText = formatGoalSection()
+        let taskText = formatTasksSection()
+        let identityText = formatAIProfileSection()
+        var surfacePayload: [String: Any] = [
+            "presentation": systemPromptStyle == .floating ? "floating" : "main",
+            "onboarding": isOnboarding,
+        ]
+        if let systemPromptPrefix, !systemPromptPrefix.isEmpty {
+            surfacePayload["experienceContext"] = systemPromptPrefix
+        }
+        if let systemPromptSuffix, !systemPromptSuffix.isEmpty {
+            surfacePayload["responseContext"] = systemPromptSuffix
+        }
+        if let notificationContext, !notificationContext.isEmpty {
+            surfacePayload["notificationContext"] = notificationContext
+        }
+        let capturedAtMs = Int(Date().timeIntervalSince1970 * 1_000)
+        let screenOutcome: AgentContextSourceOutcome = screenPayload == nil ? .empty : .available
+        var sources: [(AgentContextSource, AgentContextSourceOutcome, [String: Any], Int?)] = [
+            (
+                .identity,
+                identityText.isEmpty ? .empty : .available,
+                identityText.isEmpty ? [:] : ["profile": identityText, "timeZone": TimeZone.current.identifier],
+                nil
+            ),
+            (
+                .memories,
+                memoryText.isEmpty ? .empty : .available,
+                memoryText.isEmpty ? [:] : ["content": memoryText],
+                nil
+            ),
+            (
+                .goals,
+                goalText.isEmpty ? .empty : .available,
+                goalText.isEmpty ? [:] : ["content": goalText],
+                nil
+            ),
+            (
+                .tasks,
+                taskText.isEmpty ? .empty : .available,
+                taskText.isEmpty ? [:] : ["content": taskText],
+                nil
+            ),
+            (
+                .workspace,
+                .available,
+                [
+                    "workingDirectory": workspacePath,
+                    "databaseSchema": cachedDatabaseSchema,
+                    "enabledSkills": getEnabledSkillNames().sorted(),
+                ],
+                nil
+            ),
+            (.surface, .available, surfacePayload, nil),
+        ]
+        if includeScreenSource {
+            sources.append((
+                .screen,
+                screenOutcome,
+                screenPayload ?? [:],
+                screenPayload == nil ? nil : capturedAtMs + 120_000
+            ))
+        }
+        for (source, outcome, payload, expiresAtMs) in sources {
+            let revision = try AgentContextRevision.make(source: source, payload: payload, outcome: outcome)
+            guard initialSnapshot.sourceRevision(for: source) != revision else { continue }
+            _ = try await client.updateContextSource(
+                sessionId: session.sessionId,
+                surfaceKind: surface.surfaceKind,
+                source: source,
+                sourceRevision: revision,
+                outcome: outcome,
+                capturedAtMs: capturedAtMs,
+                expiresAtMs: expiresAtMs,
+                payload: payload
+            )
+        }
+        let snapshot = try await client.getContextSnapshot(
+            sessionId: session.sessionId,
+            surfaceKind: surface.surfaceKind
+        )
+        return KernelQueryContext(session: session, snapshot: snapshot)
+    }
+
+    /// Publishes realtime inputs through the same typed kernel source path used
+    /// by main chat, then returns the kernel's exact surface renderer. Realtime
+    /// never selects, concatenates, or re-renders source material itself.
+    func prepareRealtimeVoiceContextSnapshot() async -> KernelVoiceContextSnapshot {
+        guard await ensureBridgeStartedForKernel() else { return .empty }
+        do {
+            let context = try await prepareKernelQueryContext(
+                surface: .realtimeVoice(),
+                systemPromptStyle: .floating,
+                systemPromptPrefix: nil,
+                systemPromptSuffix: nil,
+                notificationContext: nil,
+                screenPayload: nil,
+                includeScreenSource: false
+            )
+            return KernelTurnProjection.voiceContextSnapshot(
+                from: context.snapshot,
+                sessionId: context.session.sessionId
+            )
+        } catch {
+            log("ChatProvider: realtime kernel context preparation failed: \(error.localizedDescription)")
+            return .empty
+        }
+    }
+
+    private static func queryAttachments(_ attachments: [ChatAttachment]) -> [AgentQueryAttachment] {
+        attachments.map { attachment in
+            AgentQueryAttachment(
+                attachmentId: attachment.serverId ?? attachment.id,
+                displayName: attachment.fileName,
+                mimeType: attachment.mimeType,
+                sizeBytes: attachment.data?.count,
+                uri: attachment.localFileURL?.absoluteString
+                    ?? attachment.thumbnailURL
+                    ?? attachment.serverId.map { "omi-file:\($0)" }
+            )
+        }
     }
 
     /// Switch between bridge modes (Omi AI via piMono, or user's Claude OAuth)
     func switchBridgeMode(to mode: BridgeMode) async {
-        // Normalize legacy omiAI to piMono
         let resolvedMode: BridgeMode = (mode == .omiAI) ? .piMono : mode
         let newHarness = Self.harnessMode(for: resolvedMode)
         let previousHarness = activeBridgeHarness
-        // Compare against the actual running harness, NOT @AppStorage (which may
-        // already reflect the new value because another view wrote the same key).
         guard newHarness != previousHarness else { return }
-
-        // Serialize overlapping switches. The SettingsPage picker fires onChange
-        // in a new Task on each toggle, so rapid A→B→A→B can overlap multiple calls.
-        // Without serialization, overlapping calls could overwrite agentClient and
-        // leak intermediate bridge processes. Loop re-checks after waking because
-        // another waiter may have started a new switch before this one resumes.
-        while modeSwitchInProgress {
-            log("ChatProvider: switchBridgeMode waiting for in-flight switch to finish")
-            await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
-                modeSwitchWaiters.append(ModeSwitchWaiter(id: UUID(), continuation: c))
-            }
-        }
-
-        // Re-check after waiting — the in-flight switch may have already reached
-        // the same target mode we wanted.
-        guard newHarness != activeBridgeHarness else { return }
-
-        log("ChatProvider: Switching bridge mode from \(activeBridgeHarness) to \(resolvedMode.rawValue)")
-
-        // Update activeBridgeHarness immediately so a rapid second flip (e.g. user
-        // toggles back before the first switch finishes) sees the correct target
-        // mode in the guard above and doesn't no-op incorrectly.
+        log("ChatProvider: Updating future-session profile from \(previousHarness) to \(resolvedMode.rawValue)")
+        profilePreferenceChangeGeneration &+= 1
+        let preferenceChange = profilePreferenceChangeGeneration
         activeBridgeHarness = newHarness
-
-        // Block queries during the transition so sendMessage doesn't race and
-        // restart the OLD bridge while we're replacing it.
-        modeSwitchInProgress = true
-        defer {
-            if modeSwitchInProgress {
-                finishModeSwitchWaiters()
-            }
-        }
-
-        // Stop the current bridge and wait for the subprocess to fully terminate.
-        // This is critical: without the wait, the old Node.js process can still be
-        // alive when the new one starts, causing log confusion and session reuse.
-        await resolvedAgentClient().stopAndWaitForExit()
-        agentBridgeStarted = false
-
-        // Switch mode and recreate client session
         bridgeMode = resolvedMode.rawValue
-        agentClient = AgentClient.makeSession(harnessMode: newHarness)
         AnalyticsManager.shared.chatBridgeModeChanged(from: previousHarness, to: resolvedMode.rawValue)
 
-        // Check Claude connection status when switching to user's Claude account
         if mode == .userClaude {
             checkClaudeConnectionStatus()
         }
-
-        // Warm up the new bridge. Keep modeSwitchInProgress = true so external
-        // callers (sendMessage) block until warmup completes. Pass fromModeSwitch
-        // so ensureBridgeStarted skips its own mode-switch wait.
-        let started = await ensureBridgeStarted(fromModeSwitch: true)
-        log("ChatProvider: Bridge mode switch complete — \(resolvedMode.rawValue) started=\(started)")
-
-        // Unblock queries and wake all waiting switches now that the bridge
-        // is fully started and warmed.
-        finishModeSwitchWaiters()
-    }
-
-    private func waitForModeSwitchCompletion() async -> Bool {
-        log("ChatProvider: ensureBridgeStarted waiting for mode switch to complete")
-        let waiterID = UUID()
-        let completed = await withTaskGroup(of: Bool.self) { group in
-            group.addTask { @MainActor in
-                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-                    self.modeSwitchWaiters.append(
-                        ModeSwitchWaiter(id: waiterID, continuation: continuation))
-                }
-                return true
+        guard agentBridgeStarted else { return }
+        do {
+            guard let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: newHarness) else {
+                throw BridgeError.agentError("Unknown AI runtime mode: \(newHarness)")
             }
-            group.addTask {
-                try? await Task.sleep(
-                    nanoseconds: UInt64(self.modeSwitchWaitTimeoutSeconds * 1_000_000_000))
-                return false
-            }
-            let first = await group.next() ?? false
-            group.cancelAll()
-            if first {
-                // Drain the cancelled timeout task.
-                _ = await group.next()
-            } else {
-                // Timeout won: resume the suspended waiter continuation so the
-                // child task completes before the group returns. Without this,
-                // withTaskGroup's implicit wait for remaining tasks would hang
-                // because withCheckedContinuation does not resume on cancellation.
-                if let idx = self.modeSwitchWaiters.firstIndex(where: { $0.id == waiterID }) {
-                    let waiter = self.modeSwitchWaiters.remove(at: idx)
-                    waiter.continuation.resume()
-                }
-                // Drain the now-resumed waiter task.
-                _ = await group.next()
-            }
-            return first
-        }
-        guard completed else {
-            // Timeout: Do NOT clear modeSwitchInProgress —
-            // the in-flight switchBridgeMode still owns the serialization lock.
-            log(
-                "ChatProvider: mode switch wait timed out after \(Int(modeSwitchWaitTimeoutSeconds))s "
-                    + "(failure_class=mode_switch_timeout recovery_action=fail_soft recovery_result=degraded)")
-            DesktopDiagnosticsManager.shared.recordChatBridgeModeSwitchTimeout(
-                waitSeconds: Int(modeSwitchWaitTimeoutSeconds)
+            let usesNativeModelChoice = newHarness == "hermes" || newHarness == "openclaw"
+            let configured = try await resolvedAgentClient().configureDefaultExecutionProfile(
+                adapterId: adapterId,
+                modelProfile: usesNativeModelChoice ? nil : ModelQoS.Claude.chat,
+                workingDirectory: effectiveAgentWorkingDirectory()
             )
-            return false
-        }
-        return true
-    }
-
-    private func finishModeSwitchWaiters() {
-        modeSwitchInProgress = false
-        let waiters = modeSwitchWaiters
-        modeSwitchWaiters.removeAll()
-        for waiter in waiters {
-            waiter.continuation.resume()
+            guard preferenceChange == profilePreferenceChangeGeneration else { return }
+            log(
+                "ChatProvider: Future-session profile configured "
+                    + "generation=\(configured.preferenceGeneration) adapter=\(configured.adapterId)"
+            )
+        } catch {
+            guard preferenceChange == profilePreferenceChangeGeneration else { return }
+            logError("Failed to configure future-session profile", error: error)
+            errorMessage = "Could not update AI provider preference. Try again."
         }
     }
 
@@ -1848,9 +1909,8 @@ private var activeBridgeSendGeneration: Int?
         // 3. Update state
         isClaudeConnected = false
 
-        // 4. Switch back to piMono through the serialized switchBridgeMode path
-        //    so all bridge lifecycle state (activeBridgeHarness, modeSwitchInProgress,
-        //    waiters) stays consistent.
+        // 4. Make piMono the default for future sessions without migrating or
+        //    restarting sessions that are already running.
         await switchBridgeMode(to: .piMono)
     }
 
@@ -1937,31 +1997,48 @@ private var activeBridgeSendGeneration: Int?
         }
     }
 
-    /// Fetch and display an initial greeting message for a new session
+    /// Fetch an initial greeting for a new session, then admit it through the
+    /// canonical journal before it can appear in any visible projection.
     private func fetchInitialMessage(
         for session: ChatSession,
         authoritativeSendGeneration: Int? = nil
     ) async {
         do {
+            guard let ownerId = runtimeOwnerId else {
+                log("ChatProvider: initial greeting skipped because owner is unavailable")
+                return
+            }
             let response = try await APIClient.shared.getInitialMessage(
                 sessionId: session.id,
-                appId: selectedAppId
+                appId: selectedAppId,
+                expectedOwnerId: ownerId
             )
             guard authoritativeSendGeneration.map({ sendGeneration == $0 }) ?? true else { return }
 
-            // Add the AI greeting to messages (already has server ID)
-            let greetingMessage = ChatMessage(
-                id: response.messageId,
-                text: response.message,
-                createdAt: Date(),
-                sender: .ai,
-                isStreaming: false,
-                rating: nil,
-                isSynced: true
+            let surface = AgentSurfaceReference.mainChat(
+                chatId: mainChatRuntimeChatId(sessionId: session.id)
             )
-            messages.append(greetingMessage)
+            let accepted = await kernelTurnProjection.importRemoteTurn(
+                surface: surface,
+                turn: KernelJournalRemoteTurn(
+                    remoteId: response.messageId,
+                    canonicalTurnId: response.messageId,
+                    role: "assistant",
+                    content: response.message,
+                    contentBlocksJSON: "[]",
+                    resourcesJSON: "[]",
+                    metadataJSON: "{}",
+                    createdAtMs: Int(Date().timeIntervalSince1970 * 1_000)
+                ),
+                ownerID: ownerId
+            )
+            guard accepted else {
+                log("ChatProvider: initial greeting journal admission failed")
+                return
+            }
+            await kernelTurnProjection.refresh(surface: surface)
 
-            // Update session preview
+            // Preview is also downstream of canonical journal acceptance.
             if let index = sessions.firstIndex(where: { $0.id == session.id }) {
                 sessions[index].preview = response.message
             }
@@ -1986,86 +2063,32 @@ private var activeBridgeSendGeneration: Int?
         errorMessage = nil
         hasMoreMessages = false
 
-        do {
-            let persistedMessages = try await APIClient.shared.getMessages(
-                sessionId: session.id,
-                limit: messagesPageSize
-            )
-            messages = persistedMessages.map(ChatMessage.init(from:))
-                .sorted(by: { $0.createdAt < $1.createdAt })
-            await rehydrateMissingArtifactResourcesFromKernel()
-            messagesPaginationOffset = persistedMessages.count
-            // If we got a full page, there might be more messages
-            hasMoreMessages = persistedMessages.count == messagesPageSize
-            log("ChatProvider loaded \(messages.count) messages for session \(session.id), hasMore: \(hasMoreMessages)")
-        } catch {
-            logError("Failed to load messages for session", error: error)
+        let surface = mainChatSurfaceReference()
+        guard await ensureBridgeStartedForKernel() else {
             messages = []
             resetMessagesPagination()
+            isLoading = false
+            return
         }
+        await importLegacyBackendMessagesIfNeeded(surface: surface, sessionId: session.id)
+        await kernelTurnProjection.reload(surface: surface)
+        await rehydrateMissingArtifactResourcesFromKernel()
+        messagesPaginationOffset = messages.count
+        hasMoreMessages = false
+        log("ChatProvider loaded \(messages.count) kernel journal messages for session \(session.id)")
 
         isLoading = false
     }
 
     /// Load more (older) messages for the current session
     func loadMoreMessages() async {
-        guard hasMoreMessages,
-              !isLoadingMoreMessages else { return }
+        guard !isLoadingMoreMessages else { return }
 
         isLoadingMoreMessages = true
 
-        do {
-            // A burst of live messages (e.g. from another device) shifts the
-            // newest-first window, so a fetched page can dedupe entirely to
-            // messages we already hold. Consume up to a few windows per call so
-            // one user action always yields visible progress; the cursor
-            // advances every iteration, so this terminates. Deliberately NOT
-            // derived from the local message count — overcounting (deletions,
-            // polling gaps) would overshoot and silently skip history, while a
-            // duplicate window only costs a redundant fetch.
-            var appendedCount = 0
-            var existingIds = Set(messages.map(\.id))
-            for _ in 0..<3 {
-                let offset = messagesPaginationOffset
-                let olderMessages: [ChatMessageDB]
-                if let sessionId = currentSessionId {
-                    olderMessages = try await APIClient.shared.getMessages(
-                        sessionId: sessionId,
-                        limit: messagesPageSize,
-                        offset: offset
-                    )
-                } else {
-                    olderMessages = try await APIClient.shared.getMessages(
-                        appId: selectedAppId,
-                        limit: messagesPageSize,
-                        offset: offset
-                    )
-                }
-
-                // Advance by raw records consumed — even when dedupe below drops
-                // some — so the next request can never re-issue the same window.
-                messagesPaginationOffset += olderMessages.count
-
-                // Drop the window overlap before appending.
-                let newMessages = olderMessages.map(ChatMessage.init(from:))
-                    .filter { !existingIds.contains($0.id) }
-                existingIds.formUnion(newMessages.map(\.id))
-
-                // Append older messages and re-sort to ensure correct chronological order
-                if !newMessages.isEmpty {
-                    messages.append(contentsOf: newMessages)
-                    messages.sort(by: { $0.createdAt < $1.createdAt })
-                }
-                appendedCount += newMessages.count
-
-                // Check if there are more (based on the raw page size, pre-dedupe)
-                hasMoreMessages = olderMessages.count == messagesPageSize
-                if appendedCount > 0 || !hasMoreMessages { break }
-            }
-            log("Loaded \(appendedCount) more messages, total: \(messages.count), hasMore: \(hasMoreMessages)")
-        } catch {
-            logError("Failed to load more messages", error: error)
-        }
+        await kernelTurnProjection.refresh(surface: mainChatSurfaceReference())
+        messagesPaginationOffset = messages.count
+        hasMoreMessages = false
 
         isLoadingMoreMessages = false
     }
@@ -2076,29 +2099,27 @@ private var activeBridgeSendGeneration: Int?
     /// Delete a chat session
     func deleteSession(_ session: ChatSession) async {
         deletingSessionIds.insert(session.id)
-        do {
-            try await APIClient.shared.deleteChatSession(sessionId: session.id)
+        let surface = AgentSurfaceReference.mainChat(chatId: session.id)
+        guard await kernelTurnProjection.clear(surface: surface) else {
             deletingSessionIds.remove(session.id)
-            sessions.removeAll { $0.id == session.id }
-
-            // If deleted the current session, select another or clear
-            if currentSession?.id == session.id {
-                if let nextSession = sessions.first {
-                    await selectSession(nextSession)
-                } else {
-                    currentSession = nil
-                    messages = []
-                    resetMessagesPagination()
-                }
-            }
-
-            log("Deleted chat session: \(session.id)")
-            AnalyticsManager.shared.chatSessionDeleted()
-        } catch {
-            deletingSessionIds.remove(session.id)
-            logError("Failed to delete chat session", error: error)
             errorMessage = "Failed to delete chat"
+            return
         }
+        deletingSessionIds.remove(session.id)
+        sessions.removeAll { $0.id == session.id }
+
+        if currentSession?.id == session.id {
+            if let nextSession = sessions.first {
+                await selectSession(nextSession)
+            } else {
+                currentSession = nil
+                messages = []
+                resetMessagesPagination()
+            }
+        }
+
+        log("Deleted kernel chat session projection: \(session.id)")
+        AnalyticsManager.shared.chatSessionDeleted()
     }
 
     /// Toggle starred status for a session
@@ -2402,186 +2423,6 @@ private var activeBridgeSendGeneration: Int?
         }
     }
 
-    // MARK: - Build System Prompt with Variables
-
-    /// Builds the system prompt for ACP session initialization.
-    /// Called once at warmup (via ensureBridgeStarted) and cached in cachedMainSystemPrompt.
-    /// Conversation history is injected here so the brand-new ACP session starts with context
-    /// from before the app launch. After session/new the ACP SDK owns history natively.
-    /// Display name for prompts, with a stable fallback — one source so the
-    /// cached static prefix and the live-context tail never disagree.
-    private var promptUserName: String {
-        AuthService.shared.displayName.isEmpty ? "there" : AuthService.shared.givenName
-    }
-
-    /// When `staticBody` is true, build a cache-friendly prefix with no live data:
-    /// the datetime is blanked and the memories fallback is skipped, because the
-    /// live context is appended separately after the cache-split sentinel.
-    private func buildSystemPrompt(contextString: String, style: ChatSystemPromptStyle, staticBody: Bool = false) -> String {
-        let userName = promptUserName
-
-        // Backend context (memories + conversations); fall back to local memories
-        // when empty — unless building the static body (live data lives in the tail).
-        let contextSection = (contextString.isEmpty && !staticBody) ? formatMemoriesSection() : contextString
-
-        // Build individual sections
-        let goalSection = formatGoalSection()
-        let tasksSection = formatTasksSection()
-        let aiProfileSection = formatAIProfileSection()
-
-        // Build base prompt with goals, AI profile, and dynamic schema
-        var prompt = ChatPromptBuilder.buildDesktopChat(
-            userName: userName,
-            memoriesSection: contextSection,
-            goalSection: goalSection,
-            tasksSection: tasksSection,
-            aiProfileSection: aiProfileSection,
-            databaseSchema: style.includesDatabaseSchema ? cachedDatabaseSchema : "",
-            currentDatetime: staticBody ? "" : nil
-        )
-
-        // Append global CLAUDE.md instructions if enabled
-        if claudeMdEnabled, let claudeMd = claudeMdContent {
-            prompt += "\n\n<claude_md>\n\(claudeMd)\n</claude_md>"
-        }
-
-        // Append project CLAUDE.md instructions if enabled
-        if projectClaudeMdEnabled, let projectClaudeMd = projectClaudeMdContent {
-            prompt += "\n\n<project_claude_md>\n\(projectClaudeMd)\n</project_claude_md>"
-        }
-
-        // Append enabled skills as available context (global + project)
-        let enabledSkillNames = getEnabledSkillNames()
-        if style.includesSkills && !enabledSkillNames.isEmpty {
-            let allSkills = discoveredSkills + projectDiscoveredSkills
-            let skillNames = allSkills
-                .filter { enabledSkillNames.contains($0.name) && ($0.name != "dev-mode" || devModeEnabled) }
-                .map { $0.name }
-                .joined(separator: ", ")
-            if !skillNames.isEmpty {
-                prompt += "\n\n<available_skills>\nAvailable skills: \(skillNames)\nUse the load_skill tool to get full instructions for any skill before using it.\n</available_skills>"
-            }
-        }
-
-        // Log prompt context summary
-        let activeGoalCount = cachedGoals.filter { $0.isActive }.count
-        log("ChatProvider: prompt built — schema: \(style.includesDatabaseSchema && !cachedDatabaseSchema.isEmpty ? "yes" : "no"), goals: \(activeGoalCount), tasks: \(cachedTasks.count), ai_profile: \(!cachedAIProfile.isEmpty ? "yes" : "no"), memories: \(cachedMemories.count), history: kernel-owned, claude_md: \(claudeMdEnabled && claudeMdContent != nil ? "yes" : "no"), project_claude_md: \(projectClaudeMdEnabled && projectClaudeMdContent != nil ? "yes" : "no"), skills: \(style.includesSkills ? enabledSkillNames.count : 0), dev_mode_in_skills: \(style.includesSkills && devModeEnabled && devModeContext != nil ? "yes" : "no"), prompt_length: \(prompt.count) chars")
-
-        // Log per-section character breakdown
-        let baseTemplate = ChatPromptBuilder.buildDesktopChat(
-            userName: userName, memoriesSection: "", goalSection: "", tasksSection: "", aiProfileSection: "", databaseSchema: "")
-        let allSkillsForSize = (discoveredSkills + projectDiscoveredSkills)
-            .filter { enabledSkillNames.contains($0.name) && ($0.name != "dev-mode" || devModeEnabled) }
-            .map { $0.name }.joined(separator: ", ")
-        let skillsSectionSize = allSkillsForSize.isEmpty ? 0 : allSkillsForSize.count + 80 // names + wrapper
-        log("ChatProvider: prompt breakdown — " +
-            "base_template:\(baseTemplate.count)c, " +
-            "context:\(contextSection.count)c, " +
-            "goals:\(goalSection.count)c, " +
-            "tasks:\(tasksSection.count)c, " +
-            "ai_profile:\(aiProfileSection.count)c, " +
-            "schema:\(style.includesDatabaseSchema ? cachedDatabaseSchema.count : 0)c, " +
-            "history:kernel-owned, " +
-            "claude_md:\(claudeMdContent?.count ?? 0)c, " +
-            "project_claude_md:\(projectClaudeMdContent?.count ?? 0)c, " +
-            "skills:\(style.includesSkills ? skillsSectionSize : 0)c")
-
-        return prompt
-    }
-
-    /// Sentinel separating the static (cacheable) system prefix from the
-    /// per-conversation live context. The Rust chat proxy splits on this so the
-    /// `cache_control` breakpoint covers only the stable prefix. Must match
-    /// `SYSTEM_CACHE_SPLIT` in `Backend-Rust/src/routes/chat_completions.rs`.
-    static let cacheSplitSentinel = "<<<OMI_CACHE_SPLIT_V1>>>"
-
-    private func buildFloatingBarSystemPrompt(
-        contextString: String,
-        excludingToolNames excludedToolNames: Set<String> = []
-    ) -> String {
-        // Cache-friendly split: the static prefix is byte-identical across
-        // conversations (so the proxy can cache it); volatile data — datetime,
-        // memories, screen — goes in the live tail after the sentinel, which the
-        // proxy leaves uncached. See SYSTEM_CACHE_SPLIT in chat_completions.rs.
-        var staticBody = buildSystemPrompt(contextString: "", style: .floating, staticBody: true)
-        if !excludedToolNames.isEmpty {
-            let fullToolPrompt = DesktopCapabilityRegistry.desktopToolPrompt
-                .replacingOccurrences(of: "{user_name}", with: promptUserName)
-            let scopedToolPrompt = DesktopCapabilityRegistry.scopedDesktopToolPrompt(excluding: excludedToolNames)
-                .replacingOccurrences(of: "{user_name}", with: promptUserName)
-            staticBody = staticBody.replacingOccurrences(
-                of: fullToolPrompt,
-                with: scopedToolPrompt
-            )
-        }
-        let staticPrefix = Self.floatingBarSystemPromptPrefix + "\n\n"
-            + staticBody
-
-        let tz = TimeZone.current.identifier
-        var live = "<live_context>\nCurrent date/time in \(promptUserName)'s timezone (\(tz)): "
-            + ChatPromptBuilder.currentDatetimeString()
-        if !contextString.isEmpty {
-            live += "\n\(contextString)"
-        }
-        live += "\n</live_context>"
-
-        return staticPrefix + "\n\n" + Self.cacheSplitSentinel + "\n\n" + live
-    }
-
-    /// Build system prompt for task chat sessions.
-    func buildTaskChatSystemPrompt() -> String {
-        let userName = promptUserName
-        let contextSection = formatMemoriesSection()
-        let goalSection = formatGoalSection()
-        let tasksSection = formatTasksSection()
-        let aiProfileSection = formatAIProfileSection()
-
-        var prompt = ChatPromptBuilder.buildDesktopChat(
-            userName: userName,
-            memoriesSection: contextSection,
-            goalSection: goalSection,
-            tasksSection: tasksSection,
-            aiProfileSection: aiProfileSection,
-            databaseSchema: cachedDatabaseSchema
-        )
-
-        // NO conversation_history — SDK handles this via resume
-
-        if claudeMdEnabled, let claudeMd = claudeMdContent {
-            prompt += "\n\n<claude_md>\n\(claudeMd)\n</claude_md>"
-        }
-        if projectClaudeMdEnabled, let projectClaudeMd = projectClaudeMdContent {
-            prompt += "\n\n<project_claude_md>\n\(projectClaudeMd)\n</project_claude_md>"
-        }
-
-        let enabledSkillNames = getEnabledSkillNames()
-        if !enabledSkillNames.isEmpty {
-            let allSkills = discoveredSkills + projectDiscoveredSkills
-            let skillNames = allSkills
-                .filter { enabledSkillNames.contains($0.name) && ($0.name != "dev-mode" || devModeEnabled) }
-                .map { $0.name }
-                .joined(separator: ", ")
-            if !skillNames.isEmpty {
-                prompt += "\n\n<available_skills>\nAvailable skills: \(skillNames)\nUse the load_skill tool to get full instructions for any skill before using it.\n</available_skills>"
-            }
-        }
-
-        log("ChatProvider: task chat prompt built — prompt_length: \(prompt.count) chars")
-        return prompt
-    }
-
-    /// Builds system prompt using cached memories only (for simple messages)
-    private func buildSystemPromptSimple() -> String {
-        let userName = promptUserName
-        let memoriesSection = formatMemoriesSection()
-
-        return ChatPromptBuilder.buildDesktopChat(
-            userName: userName,
-            memoriesSection: memoriesSection
-        )
-    }
-
-
     // MARK: - Chat Lab Helpers
 
     /// Build a system prompt for the Chat Lab using a custom template but real user context.
@@ -2622,23 +2463,22 @@ private var activeBridgeSendGeneration: Int?
         }
 
         do {
-            let currentChatMode = chatMode
+            let surface = AgentSurfaceReference.chatLab(labSessionId: labSessionId)
+            let kernelContext = try await prepareKernelQueryContext(
+                surface: surface,
+                systemPromptStyle: .main,
+                systemPromptPrefix: systemPrompt,
+                systemPromptSuffix: nil,
+                notificationContext: nil,
+                screenPayload: nil,
+                requestedModelProfile: ModelQoS.Claude.chatLabQuery
+            )
             let result = try await resolvedAgentClient().query(
                 prompt: question,
-                systemPrompt: systemPrompt,
-                surface: .chatLab(labSessionId: labSessionId),
-                model: ModelQoS.Claude.chatLabQuery,
+                session: kernelContext.session,
+                surface: surface,
+                expectedContext: kernelContext.snapshot.freshness,
                 onTextDelta: { _ in },
-                onToolCall: { callId, name, input in
-                    let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
-                    let result = await ChatToolExecutor.execute(
-                        toolCall,
-                        originatingChatMode: currentChatMode,
-                        originatingSurfaceRef: .chatLab(labSessionId: labSessionId)
-                    )
-                    log("ChatLab: tool \(name) executed")
-                    return result
-                },
                 onToolActivity: { _, _, _, _ in },
                 onThinkingDelta: { _ in }
             )
@@ -2916,195 +2756,94 @@ private var activeBridgeSendGeneration: Int?
         log("Switched to default chat")
     }
 
-    /// Load messages for the default chat (no session filter - compatible with Flutter)
-    /// Retries up to 3 times on failure.
+    /// Load the kernel-owned default-chat journal. The backend is consulted only
+    /// by the bounded, checkpointed legacy importer on first migration.
     func loadDefaultChatMessages() async {
         isLoading = true
         errorMessage = nil
         hasMoreMessages = false
 
-        let maxAttempts = 3
-        let delays: [UInt64] = [1_000_000_000, 2_000_000_000] // 1s, 2s
-        var lastError: Error?
-
-        for attempt in 1...maxAttempts {
-            do {
-                let persistedMessages = try await APIClient.shared.getMessages(
-                    appId: selectedAppId,
-                    limit: messagesPageSize
-                )
-                messages = persistedMessages.map(ChatMessage.init(from:))
-                    .sorted(by: { $0.createdAt < $1.createdAt })
-                await rehydrateMissingArtifactResourcesFromKernel()
-                messagesPaginationOffset = persistedMessages.count
-                hasMoreMessages = persistedMessages.count == messagesPageSize
-                sessionsLoadError = nil
-                log("ChatProvider loaded \(messages.count) default chat messages, hasMore: \(hasMoreMessages)")
-                isLoading = false
-                return
-            } catch {
-                lastError = error
-                logError("Failed to load default chat messages (attempt \(attempt)/\(maxAttempts))", error: error)
-                if attempt < maxAttempts {
-                    try? await Task.sleep(nanoseconds: delays[attempt - 1])
-                }
-            }
+        let surface = mainChatSurfaceReference()
+        guard await ensureBridgeStartedForKernel() else {
+            messages = []
+            resetMessagesPagination()
+            sessionsLoadError = "Failed to load messages. Check your connection and try again."
+            isLoading = false
+            return
         }
-
-        messages = []
-        resetMessagesPagination()
-        sessionsLoadError = lastError?.localizedDescription ?? "Failed to load messages. Check your connection and try again."
+        await importLegacyBackendMessagesIfNeeded(surface: surface, sessionId: nil)
+        await kernelTurnProjection.reload(surface: surface)
+        await rehydrateMissingArtifactResourcesFromKernel()
+        messagesPaginationOffset = messages.count
+        hasMoreMessages = false
+        sessionsLoadError = nil
+        log("ChatProvider loaded \(messages.count) default kernel journal messages")
         isLoading = false
     }
 
-    // MARK: - Cross-Platform Message Sync
-
-    /// Prevents overlapping fetches when activation + Cmd+R fire back-to-back.
-    private let pollGate = ReentrancyGate()
-
-    /// Defense-in-depth against the saveMessage / pollForNewMessages
-    /// race. `isSending` is released *before* the AI message save
-    /// completes (intentional — to unblock the next query), which opens a
-    /// window where the poll can observe the just-saved AI message and
-    /// treat it as new-from-another-platform. The existing 200-char
-    /// text-prefix merge at `pollForNewMessages` catches most of these,
-    /// but a counter-based suppression eliminates the race window
-    /// entirely instead of relying on text heuristics that fail on short
-    /// common replies ("Yes", "Got it"). Every saveMessage call site
-    /// begins/ends the counter; the poll skips when the counter is
-    /// active. Sites are documented inline at each `saveMessage(...)` call.
-    private let pendingSaves = PendingSaveCounter()
-
-    /// Set when a `pollForNewMessages` cycle bailed *because* a save was
-    /// in flight. `pollForNewMessages` is only triggered by activation /
-    /// Cmd+R (there is no periodic poll), so a dropped cycle would leave
-    /// messages from other platforms unfetched until the next activation.
-    /// `pendingSaves.onDrained` re-runs the poll once saves finish, but
-    /// only when this flag says one was actually deferred.
-    private var pollDeferredDuringSave = false
-
-    /// Fetch new messages from other platforms (e.g. mobile).
-    /// Merges new messages into the existing array without disrupting the UI.
-    private func pollForNewMessages() async {
-        // Prevent overlapping fetches from activation + Cmd+R firing together
-        guard pollGate.tryEnter() else { return }
-        defer { pollGate.exit() }
-        // Skip if user is signed out (tokens are cleared)
-        guard AuthState.shared.isSignedIn else { return }
-        // Skip if we're actively sending. Note: isSending is released *before* the AI
-        // message is saved to the backend (to unblock the next query). This means the
-        // poll can run while saveMessage() is still in-flight — see the race note below.
-        //
-        // `pendingSaves.isActive` closes the same race window from the save side
-        // — any in-flight saveMessage (user msg, AI msg, follow-up, partial-on-error,
-        // proactive notification) keeps the poll suppressed until it lands. This is
-        // defense-in-depth over the 200-char text-prefix merge below at lines ~2192.
-        guard !isSending, !isLoading, !isLoadingSessions else { return }
-        // A save in flight means a local message hasn't reconciled its
-        // server ID yet — defer rather than risk observing it as new.
-        // Mark the cycle deferred so `pendingSaves.onDrained` re-runs it.
-        guard !pendingSaves.isActive else { pollDeferredDuringSave = true; return }
-        // Skip if messages haven't been loaded yet (initial load not done)
-        guard !messages.isEmpty || sessionsLoadError != nil else { return }
-        // Skip if there's an active streaming message
-        guard !messages.contains(where: { $0.isStreaming }) else { return }
-
-        // Past all the deferral-relevant guards — this cycle is actually
-        // going to fetch, so any pending deferral is now being honored.
-        // Cleared HERE (not in onDrained) so a retry that bailed earlier
-        // on `isSending`/streaming keeps the flag set and gets retried by
-        // the next drain. The post-fetch recheck below re-sets it if a
-        // save sneaks in during getMessages.
-        pollDeferredDuringSave = false
-
+    /// One-release compatibility import. The checkpoint is written only after
+    /// every bounded row is idempotently accepted by the kernel; normal refresh
+    /// never reads backend history again.
+    private func importLegacyBackendMessagesIfNeeded(
+        surface: AgentSurfaceReference,
+        sessionId: String?
+    ) async {
+        guard let ownerId = runtimeOwnerId else { return }
+        let checkpointKey = "kernelJournal.legacyBackendImport.v1|\(ownerId)|\(surface.key)"
+        guard !UserDefaults.standard.bool(forKey: checkpointKey) else { return }
         do {
-            let persistedMessages: [ChatMessageDB]
-
-            if let session = currentSession {
-                // Multi-chat: fetch for current session
-                persistedMessages = try await APIClient.shared.getMessages(
-                    sessionId: session.id,
-                    limit: messagesPageSize
-                )
-            } else {
-                // Default chat
-                persistedMessages = try await APIClient.shared.getMessages(
-                    appId: selectedAppId,
-                    limit: messagesPageSize
-                )
-            }
-
-            // A save may have begun *while* getMessages was awaiting — e.g.
-            // a proactive assistant message appended via appendAssistantMessage
-            // (FloatingControlBarWindow) after this poll already passed the
-            // pendingSaves guard above. That message can be in the batch we
-            // just fetched, carrying a server ID the local copy hasn't adopted
-            // yet. Re-check here and bail this cycle; the next poll after the
-            // save lands reconciles it by ID. Without this, the post-guard
-            // window stays open for the proactive paths. Mark the cycle
-            // deferred so the drain handler re-runs it — otherwise the
-            // just-fetched batch (including any genuine new messages from
-            // other platforms) would be dropped until the next activation.
-            guard !pendingSaves.isActive else { pollDeferredDuringSave = true; return }
-
-            // Build a lookup of existing IDs for fast O(1) checks.
-            let existingIds = Set(messages.map(\.id))
-
-            var genuinelyNewMessages: [ChatMessage] = []
-
-            for dbMsg in persistedMessages {
-                // Fast path: already in memory by server ID — skip.
-                if existingIds.contains(dbMsg.id) { continue }
-
-                // Race-condition guard: isSending is released before the backend save
-                // completes (intentionally, to unblock the next query). If this poll
-                // fires between "isSending = false" and "messages[i].id = response.id",
-                // the backend message lands here with a server ID that doesn't match
-                // the local UUID still sitting in messages[]. Without this check we'd
-                // append a duplicate.
-                //
-                // Detection: find an in-memory message that (a) hasn't been synced yet
-                // (isSynced=false → still has a local UUID) and (b) has the same text.
-                // If found, this is the same message — just update its ID in-place
-                // instead of appending a copy.
-                let dbSender: ChatSender = dbMsg.sender == "human" ? .user : .ai
-                let dbPrefix = String(dbMsg.text.prefix(200))
-                if let localIndex = messages.firstIndex(where: {
-                    !$0.isSynced && $0.sender == dbSender && String($0.text.prefix(200)) == dbPrefix
-                }) {
-                    // Merge: adopt the server ID so future polls find it by ID.
-                    messages[localIndex].id = dbMsg.id
-                    messages[localIndex].isSynced = true
-                    if messages[localIndex].resources.isEmpty {
-                        let resources = ChatResource.decodeResourcesFromMessageMetadata(dbMsg.metadata)
-                        if !resources.isEmpty {
-                            messages[localIndex].resources = resources
-                        }
-                    }
-                    log("ChatProvider poll: merged backend ID \(dbMsg.id) into local message (was unsynced)")
-                    continue
+            let legacy: [ChatMessageDB]
+            if let sessionId {
+                legacy = try await ChatLegacyPageCollector.all { limit, offset in
+                    try await APIClient.shared.getMessages(
+                        sessionId: sessionId,
+                        limit: limit,
+                        offset: offset,
+                        expectedOwnerId: ownerId
+                    )
                 }
-
-                // Genuinely new message from another platform (phone, web, etc.)
-                genuinelyNewMessages.append(ChatMessage(from: dbMsg))
+            } else {
+                legacy = try await ChatLegacyPageCollector.all { [selectedAppId] limit, offset in
+                    try await APIClient.shared.getMessages(
+                        appId: selectedAppId,
+                        limit: limit,
+                        offset: offset,
+                        expectedOwnerId: ownerId
+                    )
+                }
             }
-
-            if !genuinelyNewMessages.isEmpty {
-                log("ChatProvider poll: found \(genuinelyNewMessages.count) new message(s) from other platforms")
-                messages.append(contentsOf: genuinelyNewMessages)
-                messages.sort(by: { $0.createdAt < $1.createdAt })
+            for row in legacy.sorted(by: { $0.createdAt < $1.createdAt }) {
+                let blocks = ChatContentBlockCodec.decodeFromMessageMetadata(row.metadata)
+                let resources = ChatResource.decodeResourcesFromMessageMetadata(row.metadata)
+                let accepted = await kernelTurnProjection.importRemoteTurn(
+                    surface: surface,
+                    turn: KernelJournalRemoteTurn(
+                        remoteId: row.id,
+                        canonicalTurnId: row.clientMessageId,
+                        role: row.sender == "human" ? "user" : "assistant",
+                        content: row.text,
+                        contentBlocksJSON: ChatContentBlockCodec.encode(blocks) ?? "[]",
+                        resourcesJSON: ChatResource.encodeResourcesForPersistence(resources) ?? "[]",
+                        metadataJSON: row.metadata ?? "{}",
+                        createdAtMs: Int(row.createdAt.timeIntervalSince1970 * 1_000)
+                    ),
+                    ownerID: ownerId
+                )
+                guard accepted else { return }
             }
+            UserDefaults.standard.set(true, forKey: checkpointKey)
         } catch {
-            // Benign sign-out race: the isSignedIn guard above passed, but the
-            // token was cleared by the time getMessages ran. Expected, not a bug
-            // — log quietly (breadcrumb only) instead of flooding Sentry.
-            if case AuthError.notSignedIn = error {
-                log("ChatProvider poll skipped: signed out mid-cycle")
-                return
-            }
-            // Silent failure — polling errors shouldn't disrupt the user
-            logError("ChatProvider poll failed", error: error)
+            log("ChatProvider: bounded legacy import deferred (code=legacy_backend_import_failed)")
         }
+    }
+
+    // MARK: - Kernel Journal Refresh
+
+    /// Activation/notification is only a wakeup. Ordered range replay in
+    /// KernelTurnProjection is the sole source of new or updated messages.
+    private func refreshJournalProjection() async {
+        guard await ensureBridgeStartedForKernel() else { return }
+        await kernelTurnProjection.refresh(surface: mainChatSurfaceReference())
     }
 
     // MARK: - Stop
@@ -3182,77 +2921,8 @@ private var activeBridgeSendGeneration: Int?
         return true
     }
 
-    @discardableResult
-    func appendAssistantMessage(
-        _ text: String,
-        clientTurnId: String? = nil,
-        notificationContext: String? = nil,
-        notificationScreenshot: Data? = nil,
-        resources: [ChatResource] = []
-    ) -> ChatMessage? {
-        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty || !resources.isEmpty else { return nil }
-
-        let messageText = trimmedText.isEmpty ? "Done." : trimmedText
-        // Proactive notifications and agent-pill summaries are main-destined by
-        // design (projected into kernel main_chat for cross-surface continuity).
-        let aiMessage = ChatMessage(
-            clientTurnId: clientTurnId,
-            text: messageText,
-            sender: .ai,
-            notificationContext: notificationContext,
-            notificationScreenshot: notificationScreenshot,
-            resources: resources,
-            turnOwner: .mainChat
-        )
-        let localId = aiMessage.id
-        let capturedSessionId = isInDefaultChat ? nil : currentSessionId
-        let capturedAppId = overrideAppId ?? selectedAppId
-
-        messages.append(aiMessage)
-
-        // saveMessage site 2 of 5: AI message synthesized from a
-        // proactive notification (no bridge query, no streaming).
-        // Fire-and-forget Task.
-        let capturedResources = resources
-        let capturedMetadata = ChatResource.mergeResourcesIntoMessageMetadata(nil, resources: capturedResources)
-        pendingSaves.begin()
-        Task { [weak self] in
-            do {
-                let response = try await APIClient.shared.saveMessage(
-                    text: messageText,
-                    sender: "ai",
-                    appId: capturedAppId,
-                    sessionId: capturedSessionId,
-                    metadata: capturedMetadata,
-                    clientMessageId: localId
-                )
-                await MainActor.run {
-                    if let index = self?.messages.firstIndex(where: { $0.id == localId }) {
-                        self?.messages[index].id = response.id
-                        self?.messages[index].isSynced = true
-                    }
-                    self?.pendingSaves.end()
-                }
-                log("Saved assistant message to backend: \(response.id)")
-            } catch {
-                await MainActor.run { self?.pendingSaves.end() }
-                logError("Failed to persist assistant message", error: error)
-            }
-        }
-
-        return aiMessage
-    }
-
-    private struct PendingSurfaceTurn {
-        let continuityKey: String
-        var userMessageId: String?
-        var assistantMessageId: String?
-        var origin: String
-    }
-
     /// Stage a turn in the UI immediately under a continuity key. Kernel
-    /// `turn_recorded` later promotes the same messages in place (no append).
+    /// Ordered journal replay later promotes the same messages in place (no append).
     @discardableResult
     func stageOptimisticTurn(
         continuityKey: String,
@@ -3269,31 +2939,6 @@ private var activeBridgeSendGeneration: Int?
         guard !key.isEmpty else { return (nil, nil) }
         guard !user.isEmpty || !assistant.isEmpty || !contentBlocks.isEmpty || !resources.isEmpty else {
             return (nil, nil)
-        }
-
-        if var pending = pendingSurfaceTurns[key] {
-            let userMessage = pending.userMessageId.flatMap { id in messages.first(where: { $0.id == id }) }
-            var assistantMessage = pending.assistantMessageId.flatMap { id in messages.first(where: { $0.id == id }) }
-            if var existing = assistantMessage {
-                assistantMessage = mergeOptimisticAssistantPayload(
-                    into: &existing,
-                    assistantText: assistant,
-                    contentBlocks: contentBlocks,
-                    resources: resources
-                )
-            } else if !assistant.isEmpty || !contentBlocks.isEmpty || !resources.isEmpty {
-                assistantMessage = appendOptimisticAssistantMessage(
-                    continuityKey: key,
-                    assistantText: assistant,
-                    origin: origin,
-                    turnOwner: turnOwner,
-                    contentBlocks: contentBlocks,
-                    resources: resources
-                )
-                pending.assistantMessageId = assistantMessage?.id
-                pendingSurfaceTurns[key] = pending
-            }
-            return (userMessage, assistantMessage)
         }
 
         let existingUser = messages.first { $0.clientTurnId == key && $0.sender == .user }
@@ -3316,23 +2961,14 @@ private var activeBridgeSendGeneration: Int?
                     resources: resources
                 )
             }
-            pendingSurfaceTurns[key] = PendingSurfaceTurn(
-                continuityKey: key,
-                userMessageId: existingUser?.id,
-                assistantMessageId: existingAssistant?.id,
-                origin: origin
-            )
             return (existingUser, existingAssistant)
         }
-
-        let capturedSessionId = isInDefaultChat ? nil : currentSessionId
-        let capturedAppId = overrideAppId ?? selectedAppId
-        let logLabel = origin
 
         var userMessage: ChatMessage?
         var aiMessage: ChatMessage?
         if !user.isEmpty {
             let m = ChatMessage(
+                id: KernelTurnProjection.stableTurnID(continuityKey: key, role: "user"),
                 clientTurnId: key,
                 text: user,
                 sender: .user,
@@ -3344,6 +2980,7 @@ private var activeBridgeSendGeneration: Int?
         if !assistant.isEmpty || !contentBlocks.isEmpty || !resources.isEmpty {
             let messageText = assistant.isEmpty && (!contentBlocks.isEmpty || !resources.isEmpty) ? "Done." : assistant
             let m = ChatMessage(
+                id: KernelTurnProjection.stableTurnID(continuityKey: key, role: "assistant"),
                 clientTurnId: key,
                 text: messageText,
                 sender: .ai,
@@ -3355,54 +2992,13 @@ private var activeBridgeSendGeneration: Int?
             aiMessage = m
         }
 
-        pendingSurfaceTurns[key] = PendingSurfaceTurn(
-            continuityKey: key,
-            userMessageId: userMessage?.id,
-            assistantMessageId: aiMessage?.id,
-            origin: origin
-        )
-
-        pendingSaves.begin()
-        Task { [weak self] in
-            if let userMessage {
-                await self?.persistRecordedTurnMessage(
-                    userMessage, text: user, sender: "human",
-                    appId: capturedAppId, sessionId: capturedSessionId, logLabel: logLabel, messageSource: origin)
-            }
-            if let aiMessage {
-                await self?.persistRecordedTurnMessage(
-                    aiMessage, text: aiMessage.text, sender: "ai",
-                    appId: capturedAppId, sessionId: capturedSessionId, logLabel: logLabel, messageSource: origin)
-            }
-            await MainActor.run { self?.pendingSaves.end() }
-        }
-
         return (userMessage, aiMessage)
-    }
-
-    func promoteOptimisticTurn(continuityKey: String, from turn: AgentRuntimeProcess.KernelTurnRecorded) {
-        let key = continuityKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty, let pending = pendingSurfaceTurns.removeValue(forKey: key) else { return }
-
-        let kernelUser = turn.userText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let kernelAssistant = turn.assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if let userId = pending.userMessageId,
-           let index = messages.firstIndex(where: { $0.id == userId }),
-           !kernelUser.isEmpty {
-            messages[index].text = kernelUser
-        }
-        if let assistantId = pending.assistantMessageId,
-           let index = messages.firstIndex(where: { $0.id == assistantId }),
-           !kernelAssistant.isEmpty {
-            messages[index].text = kernelAssistant
-        }
     }
 
     func hasOptimisticTurn(continuityKey: String) -> Bool {
         let key = continuityKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return false }
-        return pendingSurfaceTurns[key] != nil
+        return messages.contains { $0.clientTurnId == key && !$0.isSynced }
     }
 
     /// Create the assistant half of a staged turn when a later stage for the same
@@ -3415,13 +3011,12 @@ private var activeBridgeSendGeneration: Int?
         contentBlocks: [ChatContentBlock],
         resources: [ChatResource]
     ) -> ChatMessage {
-        let capturedSessionId = isInDefaultChat ? nil : currentSessionId
-        let capturedAppId = overrideAppId ?? selectedAppId
         let messageText =
             assistantText.isEmpty && (!contentBlocks.isEmpty || !resources.isEmpty)
             ? "Done."
             : assistantText
         let message = ChatMessage(
+            id: KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "assistant"),
             clientTurnId: continuityKey,
             text: messageText,
             sender: .ai,
@@ -3430,19 +3025,6 @@ private var activeBridgeSendGeneration: Int?
             turnOwner: turnOwner
         )
         messages.append(message)
-        pendingSaves.begin()
-        Task { [weak self] in
-            await self?.persistRecordedTurnMessage(
-                message,
-                text: message.text,
-                sender: "ai",
-                appId: capturedAppId,
-                sessionId: capturedSessionId,
-                logLabel: origin,
-                messageSource: origin
-            )
-            await MainActor.run { self?.pendingSaves.end() }
-        }
         return message
     }
 
@@ -3482,111 +3064,92 @@ private var activeBridgeSendGeneration: Int?
         return message
     }
 
-    /// Record a completed turn that did not stream through `sendMessage`.
-    /// Appends both messages to the in-memory provider session immediately, then
-    /// persists them sequentially in the background so later follow-ups retain context.
-    @discardableResult
-    func recordCompletedTurn(
-        userText: String,
-        assistantText: String,
-        logLabel: String = "completed",
-        messageSource: String = "desktop_chat",
-        continuityKey: String? = nil,
-        contentBlocks: [ChatContentBlock] = []
-    ) -> (
-        user: ChatMessage?, assistant: ChatMessage?
-    ) {
-        let user = userText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let assistant = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !user.isEmpty || !assistant.isEmpty || !contentBlocks.isEmpty else {
-            return (nil, nil)
-        }
-
-        let trimmedContinuityKey = continuityKey?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let clientTurnId = trimmedContinuityKey.isEmpty ? nil : trimmedContinuityKey
-
-        let capturedSessionId = isInDefaultChat ? nil : currentSessionId
-        let capturedAppId = overrideAppId ?? selectedAppId
-
-        var userMessage: ChatMessage?
-        var aiMessage: ChatMessage?
-        if !user.isEmpty {
-            let m = ChatMessage(clientTurnId: clientTurnId, text: user, sender: .user)
-            messages.append(m)
-            userMessage = m
-        }
-        if !assistant.isEmpty || !contentBlocks.isEmpty {
-            let messageText = assistant.isEmpty && !contentBlocks.isEmpty ? "Done." : assistant
-            let m = ChatMessage(
-                clientTurnId: clientTurnId,
-                text: messageText,
-                sender: .ai,
-                contentBlocks: contentBlocks
-            )
-            messages.append(m)
-            aiMessage = m
-        }
-
-        pendingSaves.begin()
-        Task { [weak self] in
-            if let userMessage {
-                await self?.persistRecordedTurnMessage(
-                    userMessage, text: user, sender: "human",
-                    appId: capturedAppId, sessionId: capturedSessionId, logLabel: logLabel, messageSource: messageSource)
-            }
-            if let aiMessage {
-                await self?.persistRecordedTurnMessage(
-                    aiMessage, text: assistant, sender: "ai",
-                    appId: capturedAppId, sessionId: capturedSessionId, logLabel: logLabel, messageSource: messageSource)
-            }
-            await MainActor.run { self?.pendingSaves.end() }
-        }
-
-        return (userMessage, aiMessage)
-    }
-
     func mainChatSurfaceReference() -> AgentSurfaceReference {
         .mainChat(chatId: mainChatRuntimeChatId(sessionId: isInDefaultChat ? nil : currentSessionId))
     }
 
-    /// Persist one recorded-turn message and sync its server ID back into `messages` so a
-    /// subsequent poll doesn't duplicate it. Failures leave the in-memory copy unsynced
-    /// (matches the existing saveMessage sites — no retry).
-    private func persistRecordedTurnMessage(
-        _ message: ChatMessage,
-        text: String,
-        sender: String,
-        appId: String?,
-        sessionId: String?,
-        logLabel: String,
-        messageSource: String
-    ) async {
-        do {
-            var metadata = ChatResource.mergeResourcesIntoMessageMetadata(nil, resources: message.resources)
-            metadata = ChatContentBlockCodec.mergeIntoMessageMetadata(
-                metadata,
-                contentBlocks: message.contentBlocks
+    /// Upsert by canonical turn ID only. Text equality is deliberately ignored:
+    /// two identical messages with distinct turn IDs are distinct journal rows.
+    func projectJournalTurn(_ turn: KernelJournalTurn) {
+        let expected = mainChatSurfaceReference()
+        guard turn.surfaceKind == expected.surfaceKind,
+              turn.externalRefKind == expected.externalRefKind,
+              turn.externalRefId == expected.externalRefId else { return }
+        let projected = turn.chatMessage()
+        for block in projected.contentBlocks {
+            guard case .agentSpawn(_, let projectedPillID, _, _, _, _) = block,
+                  let pillID = projectedPillID else { continue }
+            AgentPillsManager.shared.bindProducingJournalSurface(
+                pillID: pillID,
+                surface: expected
             )
-            let response = try await APIClient.shared.saveMessage(
-                text: text,
-                sender: sender,
-                appId: appId,
-                sessionId: sessionId,
-                metadata: metadata,
-                clientMessageId: message.id,
-                messageSource: messageSource
-            )
-            await MainActor.run {
-                if let index = self.messages.firstIndex(where: { $0.id == message.id }) {
-                    self.messages[index].id = response.id
-                    self.messages[index].isSynced = true
-                }
-            }
-            log("Saved \(logLabel) \(sender) message to backend: \(response.id)")
-        } catch {
-            logError("Failed to persist \(logLabel) \(sender) message", error: error)
         }
+        let isEmptyTerminalPlaceholder = turn.status == .failed
+            && projected.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && projected.contentBlocks.isEmpty
+            && projected.resources.isEmpty
+        if isEmptyTerminalPlaceholder {
+            messages.removeAll { $0.id == projected.id }
+            return
+        }
+        if let index = messages.firstIndex(where: { $0.id == projected.id }) {
+            let rating = messages[index].rating
+            messages[index] = projected
+            messages[index].rating = rating
+        } else if let continuityKey = projected.clientTurnId,
+                  let index = messages.firstIndex(where: {
+                      $0.clientTurnId == continuityKey && $0.sender == projected.sender
+                  }) {
+            let rating = messages[index].rating
+            messages[index] = projected
+            messages[index].rating = rating
+        } else {
+            messages.append(projected)
+        }
+        messages.sort {
+            if $0.createdAt == $1.createdAt { return $0.id < $1.id }
+            return $0.createdAt < $1.createdAt
+        }
+    }
+
+    func resetJournalProjection(surface: AgentSurfaceReference) {
+        guard surface == mainChatSurfaceReference() else { return }
+        messages = []
+        resetMessagesPagination()
+    }
+
+    private func scheduleJournalUpdate(
+        messageId: String,
+        status: KernelJournalTurnStatus? = nil,
+        surface: AgentSurfaceReference? = nil
+    ) {
+        guard let message = messages.first(where: { $0.id == messageId }) else { return }
+        let targetSurface = surface ?? mainChatSurfaceReference()
+        let previous = journalUpdateTasks[messageId]
+        let task = Task { @MainActor [weak self] in
+            _ = await previous?.value
+            guard let self else { return }
+            _ = await self.kernelTurnProjection.updateTurn(
+                surface: targetSurface,
+                message: message,
+                status: status
+            )
+        }
+        journalUpdateTasks[messageId] = task
+    }
+
+    private func finishJournalUpdate(
+        messageId: String,
+        status: KernelJournalTurnStatus,
+        surface: AgentSurfaceReference? = nil
+    ) async -> Bool {
+        _ = await journalUpdateTasks.removeValue(forKey: messageId)?.value
+        guard let message = messages.first(where: { $0.id == messageId }) else { return false }
+        return await kernelTurnProjection.updateTurn(
+            surface: surface ?? mainChatSurfaceReference(),
+            message: message,
+            status: status
+        ) != nil
     }
 
     // MARK: - Pending Attachments
@@ -3761,7 +3324,8 @@ private var activeBridgeSendGeneration: Int?
         imageData: Data? = nil,
         turnOwner: ChatTurnOwner = .mainChat,
         clientTurnId: String = UUID().uuidString,
-        onAccepted: (@MainActor () -> Void)? = nil
+        onAccepted: (@MainActor () -> Void)? = nil,
+        onJournalFinalized: (@MainActor (_ accepted: Bool) -> Void)? = nil
     ) async -> String? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return nil }
@@ -3774,21 +3338,7 @@ private var activeBridgeSendGeneration: Int?
             return nil
         }
 
-        // Monthly free-tier limit shared with the floating bar (30 messages/month).
-        // Block the send, surface the popup, and let the user upgrade.
         let usageLimiter = FloatingBarUsageLimiter.shared
-        if isUsingOmiAccountProvider {
-            if usageLimiter.isLimitReached {
-                log("ChatProvider: sendMessage blocked — free-tier monthly chat limit reached")
-                errorMessage = "You've reached \(usageLimiter.limitDescription). Upgrade to keep chatting."
-                NotificationCenter.default.post(
-                    name: .showUsageLimitPopup,
-                    object: nil,
-                    userInfo: ["reason": "chat"]
-                )
-                return nil
-            }
-        }
 
         // QueryTracer: picked up from the TaskLocal context established by the
         // floating-bar / PTT entry points (nil for non-traced call sites).
@@ -3851,13 +3401,6 @@ private var activeBridgeSendGeneration: Int?
         }
         tracer?.end("bridge_ensure", metadata: ["status": "ok"])
 
-        // Show upgrade prompt if over threshold but don't block the message.
-        // Never for paid/BYOK users — they aren't subject to the free Omi spend cap.
-        if isUsingOmiAccountProvider && omiAICumulativeCostUsd >= 50.0
-            && !isExemptFromOmiUpgradeNudge {
-            showOmiThresholdAlert = true
-        }
-
         // Determine session ID based on mode
         // In default chat mode (isInDefaultChat=true): no session ID (compatible with Flutter)
         // In session mode: require session ID
@@ -3890,6 +3433,51 @@ private var activeBridgeSendGeneration: Int?
             clearChatTelemetryState(for: sendGen)
             releaseSendLock(sendGeneration: sendGen)
             return nil
+        }
+
+        let resolvedSurface = querySurface(
+            surfaceRef: surfaceRef,
+            sessionId: sessionId,
+            systemPromptStyle: systemPromptStyle
+        )
+        let pinnedSession: AgentSurfaceSession
+        do {
+            pinnedSession = try await resolveKernelQuerySession(
+                surface: resolvedSurface,
+                requestedModelProfile: model
+            )
+        } catch {
+            errorMessage = "Could not prepare this chat session. Try again."
+            tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
+            releaseSendLock(sendGeneration: sendGen)
+            return nil
+        }
+        let accountingPolicy = ChatRunAccountingPolicy(
+            pinnedAdapterID: pinnedSession.profile.adapterId
+        )
+        let turnUsesOmiAccount = accountingPolicy.usesOmiAccountQuota
+        if turnUsesOmiAccount, usageLimiter.serverQuota == nil {
+            await usageLimiter.syncQuota()
+        }
+        guard sendGeneration == sendGen else {
+            tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
+            clearSendLockState()
+            return nil
+        }
+        if turnUsesOmiAccount, usageLimiter.isLimitReached {
+            log("ChatProvider: pinned Omi session blocked by free-tier monthly limit")
+            errorMessage = "You've reached \(usageLimiter.limitDescription). Upgrade to keep chatting."
+            NotificationCenter.default.post(
+                name: .showUsageLimitPopup,
+                object: nil,
+                userInfo: ["reason": "chat"]
+            )
+            releaseSendLock(sendGeneration: sendGen)
+            return nil
+        }
+        if turnUsesOmiAccount, omiAICumulativeCostUsd >= 50.0,
+           !isExemptFromOmiUpgradeNudge {
+            showOmiThresholdAlert = true
         }
 
         // Safety-net watchdog: if this specific send is still "in flight"
@@ -4021,72 +3609,21 @@ private var activeBridgeSendGeneration: Int?
             attachmentsForMessage = pendingAttachments
             pendingAttachments.removeAll()
         }
-        let attachmentMetadataJSON = attachmentsForMessage.isEmpty
-            ? nil
-            : encodeAttachmentsMetadata(attachmentsForMessage)
-
-        if isUsingOmiAccountProvider {
+        if turnUsesOmiAccount {
             usageLimiter.recordQuery()
         }
 
-        // Save user message to backend and add to UI.
-        // The save is fire-and-forget (unstructured Task) so it doesn't block
-        // the ACP query from starting. This is safe because isSending=true for
-        // the entire duration of the ACP query, so the poll timer is suppressed
-        // the whole time — by the time isSending is released the user message
-        // save has almost always already completed and its ID has been synced.
+        // Attempt-derived IDs are the canonical journal identities. Backend
+        // delivery preserves them through the outbox instead of minting a
+        // second writer identity.
         let turnMessageIds = Self.messageIds(forClientTurnId: clientTurnId)
         let userMessageId = turnMessageIds.user
         let isFirstMessage = messages.isEmpty
         let capturedSessionId = sessionId
         let capturedAppId = overrideAppId ?? selectedAppId
-        // Only the primary chat can turn the user's current message into a
-        // permission authorization. Child, floating, and lab surfaces never
-        // inherit this capability.
-        let isPrimaryChatPermissionSurface = systemPromptStyle == .main && !isOnboarding && surfaceRef == nil
-        let precedingAssistantMessage = messages.last.flatMap { message in
-            message.sender == .ai && !message.isStreaming ? message.copyableText : nil
-        }
-        let permissionAuthorization = isPrimaryChatPermissionSurface
-            ? PermissionRequestAuthorization.authorize(
-                userMessage: trimmedText,
-                precedingAssistantMessage: precedingAssistantMessage
-            )
-            : nil
-        // saveMessage site 3 of 5: user message at turn start.
-        // Fire-and-forget Task launched before the bridge query so
-        // it doesn't block streaming. `isSending` already gates the
-        // poll until the AI response lands, but `pendingSaves`
-        // provides defense-in-depth in case the save outlives the
-        // bridge query (slow backend, retry, etc.).
-        pendingSaves.begin()
-        Task { [weak self] in
-            do {
-                let response = try await APIClient.shared.saveMessage(
-                    text: trimmedText,
-                    sender: "human",
-                    appId: capturedAppId,
-                    sessionId: capturedSessionId,
-                    metadata: attachmentMetadataJSON,
-                    clientMessageId: userMessageId
-                )
-                // Adopt the server ID (local UUID → server ID) and mark synced.
-                // isSynced=true enables rating buttons on the message bubble.
-                await MainActor.run {
-                    if let index = self?.messages.firstIndex(where: { $0.id == userMessageId }) {
-                        self?.messages[index].id = response.id
-                        self?.messages[index].isSynced = true
-                    }
-                    self?.pendingSaves.end()
-                }
-                log("Saved user message to backend: \(response.id)")
-            } catch {
-                await MainActor.run { self?.pendingSaves.end() }
-                logError("Failed to persist user message", error: error)
-                // Non-critical - continue with chat
-            }
-        }
-
+        let journalOrigin = journalOrigin(for: resolvedSurface)
+        let journalDelivery: KernelJournalDelivery = ["task_chat", "workstream"].contains(resolvedSurface.surfaceKind)
+            ? .local : .backend
         let userMessage = ChatMessage(
             id: userMessageId,
             clientTurnId: clientTurnId,
@@ -4095,7 +3632,21 @@ private var activeBridgeSendGeneration: Int?
             attachments: attachmentsForMessage,
             turnOwner: turnOwner
         )
-        messages.append(userMessage)
+        guard await kernelTurnProjection.recordTurn(
+            surface: resolvedSurface,
+            message: userMessage,
+            origin: journalOrigin,
+            status: .completed,
+            delivery: journalDelivery,
+            continuityKey: clientTurnId,
+            appId: capturedAppId,
+            sessionId: capturedSessionId,
+            messageSource: journalOrigin
+        ) != nil else {
+            errorMessage = "Could not save this message. Try again."
+            releaseSendLock(sendGeneration: sendGen)
+            return nil
+        }
         // Signal to ChatMessagesView after the local user row exists so
         // it anchors the new turn, not the previous one.
         localSendToken = LocalSendToken(generation: sendGeneration)
@@ -4108,18 +3659,9 @@ private var activeBridgeSendGeneration: Int?
             )
         }
 
-        let resolvedSurface = querySurface(
-            surfaceRef: surfaceRef,
-            sessionId: sessionId,
-            systemPromptStyle: systemPromptStyle
-        )
-        await backfillConversationTurnsIfNeeded(for: resolvedSurface)
-
         // Create a placeholder AI message shown immediately in the UI while
-        // streaming. It starts with a local UUID (isSynced=false, no rating buttons).
-        // Lifecycle: local UUID → streaming text appended token by token →
-        // isStreaming=false → isSending=false → backend save → ID replaced with
-        // server ID, isSynced=true (rating buttons appear).
+        // streaming. Its journal identity is stable across projection, backend
+        // acknowledgement, restart, and reconciliation.
         let aiMessageId = turnMessageIds.assistant
         let aiMessage = ChatMessage(
             id: aiMessageId,
@@ -4129,7 +3671,21 @@ private var activeBridgeSendGeneration: Int?
             isStreaming: true,
             turnOwner: turnOwner
         )
-        messages.append(aiMessage)
+        guard await kernelTurnProjection.recordTurn(
+            surface: resolvedSurface,
+            message: aiMessage,
+            origin: journalOrigin,
+            status: .streaming,
+            delivery: journalDelivery,
+            continuityKey: clientTurnId,
+            appId: capturedAppId,
+            sessionId: capturedSessionId,
+            messageSource: journalOrigin
+        ) != nil else {
+            errorMessage = "Could not start this response. Try again."
+            releaseSendLock(sendGeneration: sendGen)
+            return nil
+        }
 
         // Analytics: track tool usage; the telemetry attempt owns wall-clock timing.
         var toolNames: [String] = []
@@ -4150,62 +3706,27 @@ private var activeBridgeSendGeneration: Int?
             startedAtMs: turnStartMs
         )
 
-        // Refresh memories each turn so <user_facts> stays current.
+        // Refresh data inputs each turn. The kernel renders these sources under
+        // its own pinned policy; Swift never supplies a system instruction.
         await refreshMemoriesForPrompt()
-        let promptContext = formatMemoriesSection()
         do {
-            // Use the system prompt built at warmup. The agent bridge applies it only
-            // at session/new; for the normal reused-session path it is ignored.
-            // Passing it here ensures it is applied if the session was invalidated
-            // (e.g. cwd change) and a new session/new is triggered mid-conversation.
-            var systemPrompt: String
-            if isOnboarding, let prefix = systemPromptPrefix, !prefix.isEmpty {
-                // Onboarding uses its own prompt exclusively — the main chat prompt
-                // contains rules like "don't ask follow-up questions" that conflict
-                // with the onboarding deep-dive step.
-                systemPrompt = prefix
-            } else {
-                if systemPromptStyle == .floating {
-                    if isFloatingPillSurface(resolvedSurface) {
-                        systemPrompt = buildFloatingBarSystemPrompt(
-                            contextString: promptContext,
-                            excludingToolNames: ["spawn_agent", "run_agent_and_wait"]
-                        )
-                    } else {
-                        systemPrompt = buildFloatingBarSystemPrompt(contextString: promptContext)
-                    }
-                } else {
-                    systemPrompt = buildSystemPrompt(contextString: promptContext, style: .main)
-                }
-                if let prefix = systemPromptPrefix, !prefix.isEmpty {
-                    systemPrompt = prefix + "\n\n" + systemPrompt
-                }
-            }
-            if let suffix = systemPromptSuffix, !suffix.isEmpty {
-                systemPrompt += "\n\n" + suffix
-            }
-            // Note: coordinator route and completion delta are assembled by the kernel.
-
-            // Auto-inject notification context: if the most recent AI message before
-            // the user's new message is a proactive notification, tell Claude about it
-            // so it can answer follow-up questions about the notification.
             // If the caller didn't provide explicit imageData (e.g. screen-capture
             // assistant), fall back to the first image attached by the user.
             var effectiveImageData = imageData
             if effectiveImageData == nil {
                 effectiveImageData = attachmentsForMessage.first(where: { $0.isImage })?.data
             }
+            var notificationContext: String?
             if systemPromptSuffix == nil {
-                // Find the last AI message before the user's current message
                 let aiMessages = messages.filter { $0.sender == .ai && !$0.isStreaming }
                 if let lastAI = aiMessages.last, let ctx = lastAI.notificationContext {
-                    systemPrompt += "\n\n" + ctx
-                    // Attach the notification screenshot if no other image is provided
+                    notificationContext = ctx
                     if effectiveImageData == nil, let screenshotData = lastAI.notificationScreenshot {
                         effectiveImageData = screenshotData
                     }
                 }
             }
+            var screenPayload: [String: Any]?
             if effectiveImageData == nil, let screenContextReason = ScreenContextAutoIncludePolicy.reason(
                 userText: trimmedText,
                 systemPromptStyle: systemPromptStyle,
@@ -4221,7 +3742,7 @@ private var activeBridgeSendGeneration: Int?
                     let screenContextPayload = screenContextReason.isExplicitScreenRequest
                         ? rawScreenContextPayload
                         : ScreenContextWorkContextBuilder.ambientPayload(from: rawScreenContextPayload)
-                    let screenContextEnvelope: [String: Any] = [
+                    screenPayload = [
                         "permission": [
                             "screen_recording": screenRecordingGranted ? "granted" : "not_granted"
                         ],
@@ -4229,44 +3750,34 @@ private var activeBridgeSendGeneration: Int?
                             ? "explicit_screen_request"
                             : "ambient_surface_context",
                         "context": screenContextPayload,
-                        "guidance": screenContextReason.isExplicitScreenRequest
-                            ? (screenRecordingGranted
-                                ? "Use this hidden screen context to answer the user's screen-related request. Request raw screenshot pixels only if this summary is insufficient."
-                                : "The user asked about their screen, but Omi does not currently have Screen Recording permission for live screen access. Tell the user plainly and ask whether they want to grant it. Call request_permission with type=screen_recording only after they explicitly request or affirm it.")
-                            : "Use this minimized ambient context only if it helps resolve a deictic or app-local reference. Do not mention screen access or request Screen Recording permission unless the user explicitly asks about the current screen.",
                     ]
-                    if let data = try? JSONSerialization.data(
-                        withJSONObject: screenContextEnvelope,
-                        options: [.prettyPrinted, .sortedKeys]
-                    ), let json = String(data: data, encoding: .utf8) {
-                        systemPrompt += "\n\n<auto_screen_context>\n\(json)\n</auto_screen_context>"
-                        responseMetrics.recordToolRequested(name: "get_work_context")
-                        if let contextData = try? JSONSerialization.data(
-                            withJSONObject: screenContextPayload,
-                            options: [.sortedKeys]
-                        ), let contextJSON = String(data: contextData, encoding: .utf8) {
-                            responseMetrics.recordToolResult(name: "get_work_context", result: contextJSON)
-                        }
+                    responseMetrics.recordToolRequested(name: "get_work_context")
+                    if let contextData = try? JSONSerialization.data(
+                        withJSONObject: screenContextPayload,
+                        options: [.sortedKeys]
+                    ), let contextJSON = String(data: contextData, encoding: .utf8) {
+                        responseMetrics.recordToolResult(name: "get_work_context", result: contextJSON)
                     }
                 }
             }
-
-            // Query the active bridge with streaming. Hermes and OpenClaw do not
-            // accept Omi's Claude model aliases, so leave model choice to the
-            // harness default when either native adapter is active.
-            let usesNativeModelChoice = activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw"
-            let effectiveRequestModel = usesNativeModelChoice ? nil : (model ?? modelOverride)
+            let kernelContext = try await prepareKernelQueryContext(
+                surface: resolvedSurface,
+                systemPromptStyle: systemPromptStyle,
+                systemPromptPrefix: systemPromptPrefix,
+                systemPromptSuffix: systemPromptSuffix,
+                notificationContext: notificationContext,
+                screenPayload: screenPayload,
+                requestedModelProfile: model,
+                pinnedSession: pinnedSession
+            )
+            await resolvedAgentClient().warmupSession(kernelContext.session)
+            let effectiveRequestModel = kernelContext.session.profile.modelProfile
 
             // Callbacks for agent bridge
             //
             // QueryTracer: responseMetrics marks TTFT on the very first output of
             // any kind (text delta OR tool_use start). It also brackets the
             // text-streaming window so the `generation` span excludes tool time.
-            let currentChatMode = chatMode
-            let currentIsOnboardingSurface = isOnboarding
-            let currentToolClientScope: String? = isFloatingPillSurface(resolvedSurface)
-                ? AgentClientScope.floatingPill
-                : nil
             // Kernel control tools (spawn_agent, list_agent_sessions, …) execute in
             // the Node runtime and only surface via tool_activity + tool_result_display.
             // Pair started input with completed output for QueryTracer.tool_executions.
@@ -4289,20 +3800,6 @@ private var activeBridgeSendGeneration: Int?
                     let transitions = await stallDetector.step(kind: .other, atMs: nowMs)
                     self.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
                 }
-            }
-            let toolCallHandler: AgentClient.ToolCallHandler = { callId, name, input in
-                responseMetrics.recordToolRequested(name: name)
-                let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
-                let result = await ChatToolExecutor.execute(
-                    toolCall,
-                    originatingChatMode: currentChatMode,
-                    originatingClientScope: currentToolClientScope,
-                    originatingSurfaceRef: resolvedSurface,
-                    permissionAuthorization: permissionAuthorization,
-                    isOnboardingSurface: currentIsOnboardingSurface)
-                log("OMI tool \(ChatTelemetryDimension.toolName(name)) executed for callId=\(callId)")
-                responseMetrics.recordToolResult(name: name, result: result)
-                return result
             }
             let toolActivityHandler: AgentClient.ToolActivityHandler = { [weak self] name, status, toolUseId, input in
                 let nowMs = ChatProvider.monotonicNowMs()
@@ -4468,13 +3965,12 @@ private var activeBridgeSendGeneration: Int?
             }
             defer { stallTickTask.cancel() }
 
-            // QueryTracer: snapshot the exact request (system prompt + recent
-            // message history) and open the request/TTFT spans. The clock starts
-            // here so ttft measures input → first streamed output.
+            // QueryTracer records the kernel snapshot identity, not a Swift-built
+            // policy string. The clock starts here so ttft measures input to first output.
             if let tracer {
                 let tracedModel = effectiveRequestModel ?? "unknown"
                 tracer.captureRequest(
-                    systemPrompt: systemPrompt,
+                    systemPrompt: "kernel-context:\(kernelContext.snapshot.version):\(kernelContext.snapshot.snapshotGeneration):\(kernelContext.snapshot.rendererPolicyVersion):\(kernelContext.snapshot.rendererFingerprint)",
                     messages: Array(messages.suffix(40)).map {
                         ["role": $0.sender == .user ? "user" : "assistant", "content": $0.text]
                     },
@@ -4510,15 +4006,13 @@ private var activeBridgeSendGeneration: Int?
             do {
                 queryResult = try await resolvedAgentClient().query(
                     prompt: trimmedText,
-                    systemPrompt: systemPrompt,
+                    session: kernelContext.session,
                     surface: resolvedSurface,
-                    cwd: effectiveAgentWorkingDirectory(),
                     mode: chatMode.rawValue,
-                    model: effectiveRequestModel,
                     imageData: effectiveImageData,
-                    attachmentMetadataJson: Self.attachmentContextPrompt(for: attachmentsForMessage),
+                    attachments: Self.queryAttachments(attachmentsForMessage),
+                    expectedContext: kernelContext.snapshot.freshness,
                     onTextDelta: textDeltaHandler,
-                    onToolCall: toolCallHandler,
                     onToolActivity: toolActivityHandler,
                     onThinkingDelta: thinkingDeltaHandler,
                     onToolResultDisplay: toolResultDisplayHandler,
@@ -4664,7 +4158,7 @@ private var activeBridgeSendGeneration: Int?
                     cacheReadTokens: queryResult.cacheReadTokens,
                     cacheWriteTokens: queryResult.cacheWriteTokens,
                     costUsd: queryResult.costUsd,
-                    systemPrompt: systemPrompt,
+                    systemPrompt: "kernel-context:\(kernelContext.snapshot.version):\(kernelContext.snapshot.snapshotGeneration)",
                     hasScreenshot: imageData != nil,
                     screenshotSizeBytes: imageData?.count,
                     toolNames: toolNames,
@@ -4714,66 +4208,16 @@ private var activeBridgeSendGeneration: Int?
             ))
             clearChatTelemetryState(for: sendGen)
 
-            // Release the sending lock as soon as the AI response is visible in the
-            // UI. Backend persistence is slow (can timeout at 30s+) and should not
-            // block the user from making new queries to Claude.
-            //
-            // IMPORTANT: releasing isSending here opens a race window with the poll
-            // timer. The poll can now fetch backend messages while saveMessage() is
-            // still in-flight. The AI message still has a local UUID at this point
-            // (isSynced=false). pollForNewMessages() handles this by merging the
-            // backend copy into the local message rather than appending a duplicate.
-            releaseSendLock(sendGeneration: sendGen)
+            let journalAccepted = await finishJournalUpdate(
+                messageId: aiMessageId,
+                status: .completed,
+                surface: resolvedSurface
+            )
+            onJournalFinalized?(journalAccepted)
 
-            // Save AI response to backend. aiMessageId is captured above so we can
-            // locate the right message even if the user has started a new query by
-            // the time this completes.
-            //
-            // After save: update the in-memory message's ID from local UUID to the
-            // server-assigned ID, and mark isSynced=true. This is the normal path
-            // (no race). The poll's merge logic handles the case where the poll fires
-            // before this update runs.
-            let textToSave = queryResult.text.isEmpty ? messageText : queryResult.text
-            if !textToSave.isEmpty {
-                // saveMessage site 4 of 5 (THE CRITICAL ONE): AI
-                // response on the success path. `isSending=false` was
-                // already released a few lines above to unblock the
-                // next query, so the poll could fire DURING this await
-                // and observe the just-saved AI message before the
-                // local UUID has been updated to the server ID below.
-                // The counter closes that window — `pendingSaves`
-                // stays active until the save lands AND the in-memory
-                // ID has been synced. The pre-existing 200-char
-                // text-prefix merge at `pollForNewMessages` stays as
-                // a secondary safety net.
-                // `defer` guarantees the counter is released on every exit
-                // path — success, throw, or any future early return added
-                // inside this block — so a missed `end()` can't permanently
-                // suppress the poll.
-                pendingSaves.begin()
-                defer { pendingSaves.end() }
-                do {
-                    let toolMetadata = serializeMessagePersistenceMetadata(messageId: aiMessageId)
-                    let response = try await APIClient.shared.saveMessage(
-                        text: textToSave,
-                        sender: "ai",
-                        appId: capturedAppId,
-                        sessionId: capturedSessionId,
-                        metadata: toolMetadata,
-                        clientMessageId: aiMessageId
-                    )
-                    // Adopt the server ID so future polls find this message by ID
-                    // (existingIds check in pollForNewMessages). isSynced=true enables
-                    // thumbs-up/down rating UI.
-                    if let syncIndex = messages.firstIndex(where: { $0.id == aiMessageId }) {
-                        messages[syncIndex].id = response.id
-                        messages[syncIndex].isSynced = true
-                    }
-                    log("Saved and synced AI response: \(response.id) (session=\(capturedSessionId ?? "nil"), tool_calls=\(toolMetadata != nil ? "yes" : "none"))")
-                } catch {
-                    logError("Failed to persist AI response", error: error)
-                }
-            }
+            // The kernel journal commit, not backend delivery, releases the turn.
+            // The durable outbox may retry independently after this point.
+            releaseSendLock(sendGeneration: sendGen)
 
             // Auto-generate title after first exchange (user message + AI response)
             if isFirstMessage, let sid = capturedSessionId {
@@ -4801,9 +4245,8 @@ private var activeBridgeSendGeneration: Int?
             // (Hermes/OpenClaw) skip telemetry entirely; use the actual harness, not
             // @AppStorage bridgeMode, because directed Hermes/OpenClaw pills can
             // override the harness without changing the user's global preference.
-            let effectiveHarness = activeBridgeHarness
-            let isPiMonoHarness = effectiveHarness == Self.harnessMode(for: .piMono)
-            let isUserClaudeHarness = effectiveHarness == Self.harnessMode(for: .userClaude)
+            let isPiMonoHarness = accountingPolicy.usesOmiAccountQuota
+            let isUserClaudeHarness = accountingPolicy.recordsPersonalProviderUsage
             if isUserClaudeHarness {
                 let r = queryResult
                 Task.detached(priority: .background) {
@@ -4889,7 +4332,13 @@ private var activeBridgeSendGeneration: Int?
             // If text was already streamed and visible, keep it and just stop streaming.
             if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
                 if messages[index].text.isEmpty && messages[index].contentBlocks.isEmpty {
-                    messages.remove(at: index)
+                    messages[index].isStreaming = false
+                    let journalAccepted = await finishJournalUpdate(
+                        messageId: aiMessageId,
+                        status: .failed,
+                        surface: resolvedSurface
+                    )
+                    onJournalFinalized?(journalAccepted)
                 } else {
                     messages[index].isStreaming = false
                     completeRemainingToolCalls(
@@ -4902,37 +4351,12 @@ private var activeBridgeSendGeneration: Int?
                         )
                     )
                     log("Bridge error after partial response — keeping \(messages[index].text.count) chars of streamed text")
-                    // Still try to persist the partial response.
-                    //
-                    // saveMessage site 5 of 5: partial AI
-                    // response after a bridge error. Fire-and-forget
-                    // Task; same counter pattern as the other sites.
-                    let partialText = messages[index].text
-                    let partialToolMetadata = self.serializeMessagePersistenceMetadata(messageId: aiMessageId)
-                    pendingSaves.begin()
-                    Task { [weak self] in
-                        do {
-                            let response = try await APIClient.shared.saveMessage(
-                                text: partialText,
-                                sender: "ai",
-                                appId: capturedAppId,
-                                sessionId: capturedSessionId,
-                                metadata: partialToolMetadata,
-                                clientMessageId: aiMessageId
-                            )
-                            await MainActor.run {
-                                if let syncIndex = self?.messages.firstIndex(where: { $0.id == aiMessageId }) {
-                                    self?.messages[syncIndex].id = response.id
-                                    self?.messages[syncIndex].isSynced = true
-                                }
-                                self?.pendingSaves.end()
-                            }
-                            log("Saved partial AI response to backend: \(response.id)")
-                        } catch {
-                            await MainActor.run { self?.pendingSaves.end() }
-                            logError("Failed to persist partial AI response", error: error)
-                        }
-                    }
+                    let journalAccepted = await finishJournalUpdate(
+                        messageId: aiMessageId,
+                        status: .failed,
+                        surface: resolvedSurface
+                    )
+                    onJournalFinalized?(journalAccepted)
                 }
             }
 
@@ -5222,6 +4646,9 @@ private var activeBridgeSendGeneration: Int?
             }
             return text
         }
+        for message in messages where message.isStreaming {
+            scheduleJournalUpdate(messageId: message.id, status: .streaming)
+        }
     }
 
     /// Add a tool call indicator to a streaming message
@@ -5231,6 +4658,7 @@ private var activeBridgeSendGeneration: Int?
         messages[index].contentBlocks.append(
             .discoveryCard(id: UUID().uuidString, title: title, summary: summary, fullText: fullText)
         )
+        scheduleJournalUpdate(messageId: messages[index].id)
     }
 
     private func addToolActivity(messageId: String, toolName: String, status: ToolCallStatus, toolUseId: String? = nil, input: [String: Any]? = nil) {
@@ -5256,6 +4684,7 @@ private var activeBridgeSendGeneration: Int?
                 extraTexts: []
             )
         }
+        scheduleJournalUpdate(messageId: messageId, status: .streaming)
     }
 
     /// Add tool result output to an existing tool call block
@@ -5284,6 +4713,7 @@ private var activeBridgeSendGeneration: Int?
             toolUseId: toolUseId,
             toolName: name
         )
+        scheduleJournalUpdate(messageId: messageId, status: .streaming)
     }
 
     /// When `spawn_agent` completes, append a structured `.agentSpawn` block so
@@ -5335,10 +4765,7 @@ private var activeBridgeSendGeneration: Int?
         }
         guard !alreadyPresent else { return }
 
-        let titleFromOutput = ChatContentBlock.labeledSpawnValue(
-            in: spawnSource,
-            keys: ["title"]
-        )
+        let titleFromOutput = spawnSource.spawnedAgentTitle
         let title = (titleFromOutput?.isEmpty == false)
             ? (titleFromOutput ?? "Background agent")
             : (input?.summary.isEmpty == false ? input!.summary : "Background agent")
@@ -5346,8 +4773,9 @@ private var activeBridgeSendGeneration: Int?
             ? (input?.details ?? "")
             : (input?.summary ?? "")
 
+        let stableSpawnIdentity = !runId.isEmpty ? runId : pillId.uuidString.lowercased()
         let spawnBlock = ChatContentBlock.agentSpawn(
-            id: UUID().uuidString,
+            id: "agent_spawn_\(stableSpawnIdentity)",
             pillId: pillId,
             sessionId: sessionId,
             runId: runId,
@@ -5508,6 +4936,7 @@ private var activeBridgeSendGeneration: Int?
             return text
             }
         )
+        scheduleJournalUpdate(messageId: messageId)
     }
 
     /// Monotonic millisecond timestamp for elapsed-time stall detection.
@@ -5606,59 +5035,7 @@ private var activeBridgeSendGeneration: Int?
                 }
             }
         }
-    }
-
-    /// Serialize tool calls, structured content blocks, and resource cards into
-    /// a JSON metadata string. Returns nil when there is nothing to persist.
-    private func serializeMessagePersistenceMetadata(messageId: String) -> String? {
-        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return nil }
-
-        var root: [String: Any] = [:]
-
-        var toolCalls: [[String: Any]] = []
-        for block in messages[index].contentBlocks {
-            if case .toolCall(_, let name, _, let toolUseId, let input, let output) = block {
-                var call: [String: Any] = ["name": name]
-                if let toolUseId = toolUseId { call["tool_use_id"] = toolUseId }
-                if let input = input {
-                    call["input_summary"] = input.summary
-                    if let details = input.details { call["input"] = details }
-                }
-                if let output = output {
-                    // Truncate large outputs to keep metadata reasonable
-                    call["output"] = output.count > 500 ? String(output.prefix(500)) + "… (truncated)" : output
-                }
-                toolCalls.append(call)
-            }
-        }
-        if !toolCalls.isEmpty {
-            root["tool_calls"] = toolCalls
-        }
-
-        let structuredBlocks = messages[index].contentBlocks.filter { block in
-            if case .toolCall = block { return false }
-            return true
-        }
-        if !structuredBlocks.isEmpty {
-            root[ChatContentBlockCodec.messageMetadataKey] =
-                ChatContentBlockCodec.encodeArray(structuredBlocks)
-        }
-
-        if let resourcesMetadata = ChatResource.mergeResourcesIntoMessageMetadata(
-            nil,
-            resources: messages[index].resources
-        ),
-           let data = resourcesMetadata.data(using: .utf8),
-           let resourcesRoot = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let resources = resourcesRoot[ChatResource.messageMetadataResourcesKey] {
-            root[ChatResource.messageMetadataResourcesKey] = resources
-        }
-
-        guard !root.isEmpty else { return nil }
-
-        guard let data = try? JSONSerialization.data(withJSONObject: root),
-              let json = String(data: data, encoding: .utf8) else { return nil }
-        return json
+        scheduleJournalUpdate(messageId: messageId, status: .streaming)
     }
 
     /// Re-resolve artifact cards whose persisted file paths are missing by asking the kernel.
@@ -5705,6 +5082,7 @@ private var activeBridgeSendGeneration: Int?
             }
             if changed {
                 messages[messageIndex].resources = updatedResources
+                scheduleJournalUpdate(messageId: messages[messageIndex].id)
             }
         }
     }
@@ -5824,34 +5202,40 @@ private var activeBridgeSendGeneration: Int?
 
     // MARK: - Clear Chat
 
+    /// Reset onboarding's legacy default backend stream through the same
+    /// generation-fenced journal deletion path as every other chat clear.
+    /// The app may restart before the physical DELETE returns; the daemon's
+    /// durable outbox resumes that exact operation on the next launch.
+    func clearDefaultJournalForOnboardingReset() async -> Bool {
+        let surface = AgentSurfaceReference.mainChat(chatId: "default")
+        AgentRuntimeStatusStore.shared.clear(surface: surface)
+        return await kernelTurnProjection.clear(surface: surface)
+    }
+
     /// Clear current session messages (delete and create new)
     func clearChat() async {
         isClearing = true
         defer { isClearing = false }
 
         if isInDefaultChat {
-            // Default chat mode: clear UI immediately, delete in background
             let runtimeChatId = mainChatRuntimeChatId(sessionId: nil)
             let surface = AgentSurfaceReference.mainChat(chatId: runtimeChatId)
-            messages = []
-            resetMessagesPagination()
             AgentRuntimeStatusStore.shared.clear(surface: surface)
-            await invalidateAgentSurface(surface: surface)
-            log("Cleared default chat messages")
-            Task {
-                do {
-                    _ = try await APIClient.shared.deleteMessages(appId: selectedAppId)
-                } catch {
-                    logError("Failed to clear default chat messages", error: error)
-                }
+            guard await kernelTurnProjection.clear(surface: surface) else {
+                errorMessage = "Failed to clear chat"
+                return
             }
+            log("Cleared default chat messages")
         } else {
             // Session mode: clear UI immediately, delete old session in background, create new
             let sessionToDelete = currentSession
             if let session = sessionToDelete {
                 let surface = AgentSurfaceReference.mainChat(chatId: session.id)
                 AgentRuntimeStatusStore.shared.clear(surface: surface)
-                await invalidateAgentSurface(surface: surface)
+                guard await kernelTurnProjection.clear(surface: surface) else {
+                    errorMessage = "Failed to clear chat"
+                    return
+                }
             }
 
             // Immediately clear UI state
@@ -5861,18 +5245,6 @@ private var activeBridgeSendGeneration: Int?
             currentSession = nil
             messages = []
             resetMessagesPagination()
-
-            // Delete old session in background (don't await — backend is slow)
-            if let session = sessionToDelete {
-                Task {
-                    do {
-                        try await APIClient.shared.deleteChatSession(sessionId: session.id)
-                        log("Background deleted chat session: \(session.id)")
-                    } catch {
-                        logError("Failed to background delete chat session", error: error)
-                    }
-                }
-            }
 
             // Create a fresh session immediately
             _ = await createNewSession()
@@ -5893,22 +5265,18 @@ private var activeBridgeSendGeneration: Int?
         if isInDefaultChat {
             let runtimeChatId = mainChatRuntimeChatId(sessionId: nil)
             let surface = AgentSurfaceReference.mainChat(chatId: runtimeChatId)
-            messages = []
-            resetMessagesPagination()
             AgentRuntimeStatusStore.shared.clear(surface: surface)
-            await invalidateAgentSurface(surface: surface)
-            do {
-                _ = try await APIClient.shared.deleteMessages(appId: selectedAppId)
-            } catch {
-                logError("Failed to clear default chat messages for harness reset", error: error)
-                return "failed to clear default chat messages: \(error.localizedDescription)"
+            guard await kernelTurnProjection.clear(surface: surface) else {
+                return "failed to clear default kernel journal"
             }
         } else {
             let sessionToDelete = currentSession
             if let session = sessionToDelete {
                 let surface = AgentSurfaceReference.mainChat(chatId: session.id)
                 AgentRuntimeStatusStore.shared.clear(surface: surface)
-                await invalidateAgentSurface(surface: surface)
+                guard await kernelTurnProjection.clear(surface: surface) else {
+                    return "failed to clear session kernel journal"
+                }
             }
             if let session = sessionToDelete {
                 sessions.removeAll { $0.id == session.id }
@@ -5916,14 +5284,6 @@ private var activeBridgeSendGeneration: Int?
             currentSession = nil
             messages = []
             resetMessagesPagination()
-            if let session = sessionToDelete {
-                do {
-                    try await APIClient.shared.deleteChatSession(sessionId: session.id)
-                } catch {
-                    logError("Failed to delete chat session for harness reset", error: error)
-                    return "failed to delete chat session: \(error.localizedDescription)"
-                }
-            }
             _ = await createNewSession()
         }
         return nil
@@ -6083,7 +5443,10 @@ private var activeBridgeSendGeneration: Int?
                 "id": message.id,
                 "role": message.sender == .user ? "user" : "assistant",
                 "text": message.copyableText,
+                "raw_text": message.text,
                 "streaming": message.isStreaming ? "true" : "false",
+                "content_blocks_json": ChatContentBlockCodec.encode(message.contentBlocks) ?? "[]",
+                "resources_json": ChatResource.encodeResourcesForPersistence(message.displayResources) ?? "[]",
             ]
         }
         let messagesJSON: String
@@ -6132,9 +5495,13 @@ private var activeBridgeSendGeneration: Int?
 
     /// Read-only kernel `main_chat` turn tail for continuity harness evidence.
     func automationKernelTurnTail(limit: Int = 8) async -> [String: String] {
-        let boundedLimit = max(1, limit)
+        let boundedLimit = max(1, min(limit, 100))
+        let surface = mainChatSurfaceReference()
         guard await ensureBridgeStartedForKernel(),
-              let tail = await kernelTurnProjection.fetchKernelTurnTail(limit: boundedLimit)
+              let tail = await kernelTurnProjection.fetchJournalTurnTail(
+                surface: surface,
+                limit: boundedLimit
+              )
         else {
             return ["error": "kernel turn tail unavailable"]
         }
@@ -6142,9 +5509,8 @@ private var activeBridgeSendGeneration: Int?
             [
                 "role": turn.role,
                 "content": turn.content,
-                "surface_kind": turn.surfaceKind,
-                "created_at_ms": "\(turn.createdAtMs)",
                 "origin": turn.origin,
+                "turn_seq": "\(turn.turnSeq)",
             ]
         }
         let turnsJSON: String

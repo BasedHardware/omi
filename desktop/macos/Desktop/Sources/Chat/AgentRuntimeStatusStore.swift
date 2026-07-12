@@ -17,6 +17,14 @@ struct AgentSurfaceReference: Hashable, Sendable {
     )
   }
 
+  static func realtimeVoice(chatId: String? = nil) -> AgentSurfaceReference {
+    AgentSurfaceReference(
+      surfaceKind: "realtime_voice",
+      externalRefKind: "chat",
+      externalRefId: chatId?.isEmpty == false ? chatId! : "default"
+    )
+  }
+
   static func taskChat(taskId: String) -> AgentSurfaceReference {
     AgentSurfaceReference(surfaceKind: "task_chat", externalRefKind: "task", externalRefId: taskId)
   }
@@ -300,7 +308,16 @@ final class AgentRuntimeStatusStore: ObservableObject {
         terminal: true,
         payload: message.payload
       )
-    case .initMessage, .toolUse, .authRequired, .authSuccess, .controlToolResult, .turnRecorded, .voiceSeedContext, .kernelTurnTail, .unknown:
+    case .initMessage, .toolUse, .authorizedToolExecution,
+      .authRequired, .authSuccess, .controlToolResult,
+      .journalOperationResult, .journalTurnChanged, .journalBackendSync, .journalBackendDelete,
+      .journalBackendReconcile,
+      .defaultExecutionProfileConfigured, .surfaceSessionResolved,
+      .sessionExecutionProfileMigrated, .contextSourceUpdated, .contextSnapshot,
+      .legacyMainChatSessionsImported,
+      .externalSurfaceRunBeginResult, .externalSurfaceToolResult,
+      .externalSurfaceRunCompleteResult,
+      .unknown:
       break
     }
   }

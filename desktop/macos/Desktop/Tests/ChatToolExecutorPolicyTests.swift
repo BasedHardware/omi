@@ -3,25 +3,15 @@ import XCTest
 @testable import Omi_Computer
 
 final class ChatToolExecutorPolicyTests: XCTestCase {
-  func testStructuredTaskMutationToolsReachTheirExecutors() {
-    let taskMutationTools = [
-      "complete_task",
-      "delete_task",
-      "create_action_item",
-      "update_action_item",
-    ]
+  private var previousAuthOwner: Any?
+  private var previousAutomationOwner: Any?
 
-    for toolName in taskMutationTools {
-      let decision = ChatToolExecutor.localPolicyDecision(
-        toolName: toolName,
-        arguments: [
-          "task_id": "backend-task-123",
-          "action_item_id": "backend-task-123",
-          "description": "Change a task",
-        ])
-
-      XCTAssertEqual(decision, .allow, "\(toolName) should not be blocked before its structured executor runs")
-    }
+  override func setUp() {
+    super.setUp()
+    previousAuthOwner = UserDefaults.standard.object(forKey: .authUserId)
+    previousAutomationOwner = UserDefaults.standard.object(forKey: .automationOwnerOverride)
+    UserDefaults.standard.set("chat-tool-policy-owner", forKey: .authUserId)
+    UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
   }
 
   @MainActor
@@ -33,36 +23,17 @@ final class ChatToolExecutorPolicyTests: XCTestCase {
           arguments: ["task_id": "backend-task-123"],
           thoughtSignature: nil))
 
-      XCTAssertFalse(result.hasPrefix("POLICY_DENIED:"), "\(toolName) returned: \(result)")
+      XCTAssertFalse(
+        result.hasPrefix("EXECUTION_PRECONDITION_FAILED:"),
+        "\(toolName) returned: \(result)")
       XCTAssertTrue(result.contains("task not found") || result.hasPrefix("Error:"), "\(toolName) returned: \(result)")
     }
   }
 
-  func testRawSensitiveSurfacesStillRequireApproval() {
-    for (toolName, arguments, capability) in [
-      ("execute_sql", ["query": "UPDATE action_items SET completed = 1 WHERE id = 42"], "desktop.context.local_write")
-    ] {
-      let decision = ChatToolExecutor.localPolicyDecision(toolName: toolName, arguments: arguments)
-      guard case .deny(let message) = decision else {
-        return XCTFail("\(toolName) should still require approval")
-      }
-      XCTAssertTrue(message.hasPrefix("POLICY_DENIED:"), "\(toolName) returned: \(message)")
-      XCTAssertTrue(message.contains("\"capability\":\"\(capability)\""), "\(toolName) returned: \(message)")
-    }
-  }
-
-  @MainActor
-  func testPermissionRequestNeedsCurrentTurnAuthorizationOutsideOnboarding() async {
-    let savedOnboardingAppState = ChatToolExecutor.onboardingAppState
-    defer { ChatToolExecutor.onboardingAppState = savedOnboardingAppState }
-    ChatToolExecutor.onboardingAppState = AppState()
-    let result = await ChatToolExecutor.execute(
-      ToolCall(name: "request_permission", arguments: ["type": "screen_recording"], thoughtSignature: nil),
-      isOnboardingSurface: false)
-
-    XCTAssertTrue(result.hasPrefix("POLICY_DENIED:"), "request_permission returned: \(result)")
-    XCTAssertTrue(result.contains("\"code\":\"explicit_user_permission_required\""), "request_permission returned: \(result)")
-    XCTAssertTrue(result.contains("\"capability\":\"desktop.permissions.request\""), "request_permission returned: \(result)")
+  func testSQLAuthorizationIsNotOwnedBySwiftPhysicalPreconditions() {
+    XCTAssertEqual(
+      ChatToolExecutor.physicalExecutionPrecondition(toolName: "execute_sql"),
+      .satisfied)
   }
 
   // MARK: - Chat screenshot sharing (regression: chat screen vision was hard-denied
@@ -72,6 +43,16 @@ final class ChatToolExecutorPolicyTests: XCTestCase {
 
   override func tearDown() {
     UserDefaults.standard.removeObject(forKey: screenshotKey)
+    if let previousAuthOwner {
+      UserDefaults.standard.set(previousAuthOwner, forKey: .authUserId)
+    } else {
+      UserDefaults.standard.removeObject(forKey: .authUserId)
+    }
+    if let previousAutomationOwner {
+      UserDefaults.standard.set(previousAutomationOwner, forKey: .automationOwnerOverride)
+    } else {
+      UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+    }
     super.tearDown()
   }
 
@@ -79,7 +60,7 @@ final class ChatToolExecutorPolicyTests: XCTestCase {
     UserDefaults.standard.removeObject(forKey: screenshotKey)
     for toolName in ["capture_screen", "get_screenshot"] {
       XCTAssertEqual(
-        ChatToolExecutor.localPolicyDecision(toolName: toolName, arguments: [:]), .allow,
+        ChatToolExecutor.physicalExecutionPrecondition(toolName: toolName), .satisfied,
         "\(toolName) must be allowed when the setting is unset (default on)")
     }
   }
@@ -87,22 +68,29 @@ final class ChatToolExecutorPolicyTests: XCTestCase {
   func testScreenshotToolsAllowedWhenSettingEnabled() {
     UserDefaults.standard.set(true, forKey: screenshotKey)
     XCTAssertEqual(
-      ChatToolExecutor.localPolicyDecision(toolName: "capture_screen", arguments: [:]), .allow)
+      ChatToolExecutor.physicalExecutionPrecondition(toolName: "capture_screen"),
+      .satisfied)
   }
 
   func testScreenshotToolsDeniedWhenSettingDisabled() {
     UserDefaults.standard.set(false, forKey: screenshotKey)
     for toolName in ["capture_screen", "get_screenshot"] {
       guard
-        case .deny(let message) = ChatToolExecutor.localPolicyDecision(
-          toolName: toolName, arguments: [:])
+        case .failed(let message) = ChatToolExecutor.physicalExecutionPrecondition(
+          toolName: toolName)
       else {
         return XCTFail("\(toolName) should be denied when Screen Sharing in Chat is off")
       }
-      XCTAssertTrue(message.hasPrefix("POLICY_DENIED:"), "\(toolName) returned: \(message)")
       XCTAssertTrue(
-        message.contains("\"capability\":\"desktop.context.screenshot_image\""),
+        message.hasPrefix("EXECUTION_PRECONDITION_FAILED:"),
         "\(toolName) returned: \(message)")
+      XCTAssertTrue(
+        message.contains("\"code\":\"execution_precondition_failed\""),
+        "\(toolName) returned: \(message)")
+      XCTAssertTrue(
+        message.contains("\"reason\":\"screenshot_sharing_disabled\""),
+        "\(toolName) returned: \(message)")
+      XCTAssertFalse(message.contains("capability"), "\(toolName) returned: \(message)")
       XCTAssertTrue(
         message.contains("Screen Sharing in Chat"),
         "deny message should point the user at the setting; returned: \(message)")

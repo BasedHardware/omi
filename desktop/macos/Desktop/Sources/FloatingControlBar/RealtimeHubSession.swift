@@ -137,8 +137,7 @@ final class RealtimeHubSession: NSObject {
   /// Screen frames awaiting an open socket (base64, mime) — flushed into the turn in
   /// markReady. A cold first turn would otherwise drop the frame before connect.
   private var pendingVideo: [(b64: String, mime: String)] = []
-  /// Hidden text inputs awaiting a provider-acceptable input window. Voice turn context
-  /// must survive the same cold-start/activity-window race as audio and screen frames.
+  /// Headless-test text awaiting a provider-acceptable input window.
   private var pendingTextInputs: [(text: String, logLabel: String)] = []
   private var pendingCommit = false
   /// OpenAI: call_id → function name, captured from response.output_item.added.
@@ -408,10 +407,6 @@ final class RealtimeHubSession: NSObject {
     await sendTextInput(text, logLabel: "test text input")
   }
 
-  func sendTurnContextText(_ text: String) async -> Bool {
-    await sendTextInput(text, logLabel: "turn context")
-  }
-
   private func sendTextInput(_ text: String, logLabel: String) async -> Bool {
     await withCheckedContinuation { continuation in
       q.async { [weak self] in
@@ -609,20 +604,24 @@ final class RealtimeHubSession: NSObject {
     }
   }
 
-  /// OpenAI screenshot path: add the captured image as a user message item so it's in
-  /// context for the next response. (Gemini sends the screen as an in-turn video frame at
-  /// turn start — see RealtimeHubController.beginTurn — not via this path.)
+  /// Attach fresh pixels captured by the kernel-authorized screenshot executor.
+  /// No ambient or speculative caller may invoke this path.
   func injectImage(_ image: Data) {
     let b64 = image.base64EncodedString()
     q.async { [weak self] in
-      guard let self, self.provider == .openai else { return }
-      self.send(json: [
-        "type": "conversation.item.create",
-        "item": [
-          "type": "message", "role": "user",
-          "content": [["type": "input_image", "image_url": "data:image/jpeg;base64,\(b64)"]],
-        ],
-      ])
+      guard let self else { return }
+      switch self.provider {
+      case .openai:
+        self.send(json: [
+          "type": "conversation.item.create",
+          "item": [
+            "type": "message", "role": "user",
+            "content": [["type": "input_image", "image_url": "data:image/jpeg;base64,\(b64)"]],
+          ],
+        ])
+      case .gemini:
+        self.send(json: ["realtimeInput": ["video": ["data": b64, "mimeType": "image/jpeg"]]])
+      }
     }
   }
 

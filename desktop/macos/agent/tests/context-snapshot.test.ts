@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   KERNEL_CONTEXT_RENDERER_POLICY_VERSION,
   buildContextSnapshot,
+  inheritContextSnapshotForSession,
   renderContextSnapshot,
   updateContextSource,
 } from "../src/runtime/context-snapshot.js";
@@ -147,6 +148,85 @@ describe("kernel ContextSnapshot", () => {
     });
     expect(voiceSnapshot.rendererFingerprint).not.toBe(mainSnapshot.rendererFingerprint);
     expect(voiceSnapshot.rendererPolicyVersion).toBe(mainSnapshot.rendererPolicyVersion);
+    store.close();
+  });
+
+  it("returns the kernel renderer verbatim for one logical snapshot across main, realtime, and leaf", () => {
+    const { store } = fixture();
+    const main = resolveSurfaceSession(store, {
+      ownerId: "render-owner",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "default" },
+      defaultAdapterId: "fake",
+    }, () => 1);
+    resolveSurfaceSession(store, {
+      ownerId: "render-owner",
+      surfaceRef: { surfaceKind: "realtime_voice", externalRefKind: "chat", externalRefId: "default" },
+      defaultAdapterId: "fake",
+    }, () => 2);
+    const leaf = store.insertSession({
+      ownerId: "render-owner",
+      surfaceKind: "delegated_agent",
+      externalRefKind: "agent",
+      externalRefId: "leaf",
+      defaultAdapterId: "fake",
+      executionRole: "leaf",
+    });
+    updateContextSource(store, {
+      ownerId: "render-owner",
+      sessionId: main.agentSessionId,
+      source: "identity",
+      sourceRevision: "identity-1",
+      outcome: "available",
+      capturedAtMs: 3,
+      payload: { name: "Ari", preference: "concise" },
+    }, 3);
+
+    const mainSnapshot = buildContextSnapshot(store, main.agentSessionId, "render-owner", 4, "main_chat");
+    const voiceSnapshot = buildContextSnapshot(store, main.agentSessionId, "render-owner", 4, "realtime_voice");
+    const leafSnapshot = inheritContextSnapshotForSession(store, mainSnapshot, leaf.sessionId, "render-owner", 4);
+
+    expect(new Set([mainSnapshot.version, voiceSnapshot.version, leafSnapshot.version]).size).toBe(1);
+    for (const [snapshot, surfaceKind, role] of [
+      [mainSnapshot, "main_chat", "coordinator"],
+      [voiceSnapshot, "realtime_voice", "coordinator"],
+      [leafSnapshot, "delegated_agent", "leaf"],
+    ] as const) {
+      expect(snapshot.renderedContext).toBe(renderContextSnapshot(snapshot, surfaceKind, role));
+      expect(snapshot.renderedContext).toContain('"sourceOutcomes"');
+      expect(snapshot.renderedContext).toContain('"name":"Ari"');
+      expect(snapshot.renderedContext).toContain('"capabilities"');
+    }
+    store.close();
+  });
+
+  it("keeps rendered freshness stable when only source transport metadata changes", () => {
+    const { store, session } = fixture("realtime_voice");
+    const first = updateContextSource(store, {
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      source: "screen",
+      sourceRevision: "screen-capture-1",
+      outcome: "available",
+      capturedAtMs: 1,
+      payload: { app: "Safari", summary: "Issue 9515" },
+    }, 1).snapshot;
+    const sameSemanticMaterial = updateContextSource(store, {
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      source: "screen",
+      sourceRevision: "screen-capture-2",
+      outcome: "available",
+      capturedAtMs: 2,
+      payload: { app: "Safari", summary: "Issue 9515" },
+    }, 2).snapshot;
+
+    expect(sameSemanticMaterial).toMatchObject({
+      version: first.version,
+      snapshotGeneration: first.snapshotGeneration,
+      rendererFingerprint: first.rendererFingerprint,
+      capabilityVersion: first.capabilityVersion,
+      renderedContext: first.renderedContext,
+    });
     store.close();
   });
 

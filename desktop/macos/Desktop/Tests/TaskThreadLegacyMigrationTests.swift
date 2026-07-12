@@ -1,4 +1,5 @@
 import XCTest
+import GRDB
 
 @testable import Omi_Computer
 
@@ -33,34 +34,56 @@ final class TaskThreadLegacyMigrationTests: XCTestCase {
     try await super.tearDown()
   }
 
-  func testLegacyTaskHistoriesCoalesceOnlyLatestHundredRowsAcrossWorkstream() async throws {
-    for index in 0..<120 {
-      let sourceTaskID = index < 70 ? "legacy-task-a" : "legacy-task-b"
-      _ = try await TaskChatMessageStorage.shared.insert(
-        TaskChatMessageRecord(
-          taskId: sourceTaskID,
-          messageId: "message-\(index)",
-          sender: index.isMultiple(of: 2) ? "user" : "ai",
-          messageText: "bounded message \(index)",
-          createdAt: Date(timeIntervalSince1970: TimeInterval(index)),
-          updatedAt: Date(timeIntervalSince1970: TimeInterval(index))
+  func testLegacyImportPagesAllImmutableRowsAndRemainsReadOnly() async throws {
+    let databaseQueue = await RewindDatabase.shared.getDatabaseQueue()
+    let db = try XCTUnwrap(databaseQueue)
+    try await db.write { database in
+      for index in 0..<235 {
+        let sourceTaskID = index < 130 ? "legacy-task-a" : "legacy-task-b"
+        try database.execute(
+          sql: """
+            INSERT INTO task_chat_messages (
+              taskId, messageId, sender, messageText, createdAt, updatedAt, backendSynced
+            ) VALUES (?, ?, ?, ?, ?, ?, 0)
+          """,
+          arguments: [
+            sourceTaskID,
+            "message-\(index)",
+            index.isMultiple(of: 2) ? "user" : "ai",
+            "bounded message \(index)",
+            Date(timeIntervalSince1970: TimeInterval(index)),
+            Date(timeIntervalSince1970: TimeInterval(index)),
+          ]
         )
-      )
+      }
     }
 
-    let moved = try await TaskChatMessageStorage.shared.migrateLegacyMessages(
-      fromTaskIds: ["legacy-task-a", "legacy-task-b"],
-      toWorkstreamId: "workstream-1"
-    )
-    let migrated = try await TaskChatMessageStorage.shared.getMessages(forWorkstreamId: "workstream-1")
+    var cursor: TaskChatLegacyMessageCursor?
+    var pageSizes: [Int] = []
+    var imported: [TaskChatMessageRecord] = []
+    while true {
+      let page = try await TaskChatMessageStorage.shared.legacyMessagePage(
+        fromTaskIds: ["legacy-task-a", "legacy-task-b"],
+        workstreamId: "workstream-1",
+        after: cursor
+      )
+      pageSizes.append(page.rows.count)
+      imported.append(contentsOf: page.rows)
+      guard page.rows.count == TaskChatLegacyCompatibilityMetadata.pageSize,
+            let nextCursor = page.nextCursor else { break }
+      cursor = nextCursor
+    }
     let legacyA = try await TaskChatMessageStorage.shared.getMessages(forTaskId: "legacy-task-a")
     let legacyB = try await TaskChatMessageStorage.shared.getMessages(forTaskId: "legacy-task-b")
+    let workstream = try await TaskChatMessageStorage.shared.getMessages(forWorkstreamId: "workstream-1")
 
-    XCTAssertEqual(moved, 100)
-    XCTAssertEqual(migrated.count, 100)
-    XCTAssertEqual(migrated.first?.messageId, "message-20")
-    XCTAssertEqual(migrated.last?.messageId, "message-119")
-    XCTAssertEqual(legacyA.map(\.messageId), (0..<20).map { "message-\($0)" })
-    XCTAssertTrue(legacyB.isEmpty)
+    XCTAssertEqual(pageSizes, [100, 100, 35])
+    XCTAssertEqual(imported.map(\.messageId), (0..<235).map { "message-\($0)" })
+    XCTAssertEqual(legacyA.map(\.messageId), (0..<130).map { "message-\($0)" })
+    XCTAssertEqual(legacyB.map(\.messageId), (130..<235).map { "message-\($0)" })
+    XCTAssertTrue(workstream.isEmpty, "compatibility import must not re-key or mutate legacy rows")
+    XCTAssertEqual(TaskChatLegacyCompatibilityMetadata.owner, "desktop-task-chat")
+    XCTAssertFalse(TaskChatLegacyCompatibilityMetadata.removalCondition.isEmpty)
+    XCTAssertEqual(TaskChatLegacyCompatibilityMetadata.removeBy, "2026-10-01")
   }
 }

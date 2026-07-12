@@ -97,12 +97,6 @@ actor AgentRuntimeProcess {
       || lower.contains("failed to reserve virtual memory")
   }
 
-  struct WarmupSessionConfig {
-    let key: String
-    let model: String?
-    let systemPrompt: String?
-  }
-
   struct RuntimeMessage {
     struct RequestKey: Hashable, Equatable {
       let clientId: String
@@ -114,6 +108,7 @@ actor AgentRuntimeProcess {
       case textDelta
       case thinkingDelta
       case toolUse
+      case authorizedToolExecution
       case toolActivity
       case toolResultDisplay
       case result
@@ -122,9 +117,20 @@ actor AgentRuntimeProcess {
       case authSuccess
       case cancelAck
       case controlToolResult
-      case turnRecorded
-      case voiceSeedContext
-      case kernelTurnTail
+      case journalOperationResult
+      case journalTurnChanged
+      case journalBackendSync
+      case journalBackendDelete
+      case journalBackendReconcile
+      case defaultExecutionProfileConfigured
+      case surfaceSessionResolved
+      case sessionExecutionProfileMigrated
+      case contextSourceUpdated
+      case contextSnapshot
+      case legacyMainChatSessionsImported
+      case externalSurfaceRunBeginResult
+      case externalSurfaceToolResult
+      case externalSurfaceRunCompleteResult
       case unknown(String)
     }
 
@@ -161,6 +167,7 @@ actor AgentRuntimeProcess {
       case "text_delta": return .textDelta
       case "thinking_delta": return .thinkingDelta
       case "tool_use": return .toolUse
+      case "authorized_tool_execution": return .authorizedToolExecution
       case "tool_activity": return .toolActivity
       case "tool_result_display": return .toolResultDisplay
       case "result": return .result
@@ -169,9 +176,20 @@ actor AgentRuntimeProcess {
       case "auth_success": return .authSuccess
       case "cancel_ack": return .cancelAck
       case "control_tool_result": return .controlToolResult
-      case "turn_recorded": return .turnRecorded
-      case "voice_seed_context": return .voiceSeedContext
-      case "kernel_turn_tail": return .kernelTurnTail
+      case "journal_operation_result": return .journalOperationResult
+      case "journal_turn_changed": return .journalTurnChanged
+      case "journal_backend_sync": return .journalBackendSync
+      case "journal_backend_delete": return .journalBackendDelete
+      case "journal_backend_reconcile": return .journalBackendReconcile
+      case "default_execution_profile_configured": return .defaultExecutionProfileConfigured
+      case "surface_session_resolved": return .surfaceSessionResolved
+      case "session_execution_profile_migrated": return .sessionExecutionProfileMigrated
+      case "context_source_updated": return .contextSourceUpdated
+      case "context_snapshot": return .contextSnapshot
+      case "legacy_main_chat_sessions_imported": return .legacyMainChatSessionsImported
+      case "external_surface_run_begin_result": return .externalSurfaceRunBeginResult
+      case "external_surface_tool_result": return .externalSurfaceToolResult
+      case "external_surface_run_complete_result": return .externalSurfaceRunCompleteResult
       default: return .unknown(type)
       }
     }
@@ -189,7 +207,6 @@ actor AgentRuntimeProcess {
     let surfaceRef: AgentSurfaceReference?
     let originatingUserText: String?
     let onTextDelta: AgentBridge.TextDeltaHandler
-    let onToolCall: AgentBridge.ToolCallHandler
     let onToolActivity: AgentBridge.ToolActivityHandler
     let onThinkingDelta: AgentBridge.ThinkingDeltaHandler
     let onToolResultDisplay: AgentBridge.ToolResultDisplayHandler
@@ -206,59 +223,33 @@ actor AgentRuntimeProcess {
     let continuation: CheckedContinuation<String, Error>
   }
 
-  private struct ActiveVoiceSeedRequest {
+  private struct ActiveJournalRequest {
     let clientId: String
     let requestId: String
-    let continuation: CheckedContinuation<VoiceSeedContextResult, Error>
+    let continuation: CheckedContinuation<JournalOperationResult, Error>
   }
 
-  private struct ActiveSurfaceTurnRequest {
+  private struct ActiveKernelContractRequest {
     let clientId: String
     let requestId: String
-    let continuation: CheckedContinuation<Bool, Error>
+    let expectedKind: RuntimeMessage.Kind
+    let continuation: CheckedContinuation<[String: Any], Error>
   }
 
-  struct KernelTurnTailTurn: Sendable {
-    let role: String
-    let content: String
-    let surfaceKind: String
-    let createdAtMs: Int
-    let metadataJson: String
-    let origin: String
-  }
-
-  struct VoiceSeedContextResult: Sendable {
+  struct JournalOperationResult: Sendable {
+    let operation: String
     let conversationId: String
-    let context: String
-    let idempotencyKeys: [String]
+    let turn: KernelJournalTurn?
+    let turns: [KernelJournalTurn]
+    let clearedCount: Int
+    let highWaterTurnSeq: Int
+    let conversationGeneration: Int
+    let generationBaseTurnSeq: Int
   }
 
-  struct KernelTurnTailResult: Sendable {
-    let conversationId: String
-    let turns: [KernelTurnTailTurn]
-  }
-
-  private struct ActiveKernelTurnTailRequest {
-    let clientId: String
-    let requestId: String
-    let continuation: CheckedContinuation<KernelTurnTailResult, Error>
-  }
-
-  struct KernelTurnRecorded: Sendable {
-    let conversationId: String
-    let surfaceKind: String
-    let externalRefKind: String
-    let externalRefId: String
-    let userText: String
-    let assistantText: String
-    let origin: String
-    let interrupted: Bool
-    let idempotencyKey: String?
-    let userTurnId: String?
-    let assistantTurnId: String?
-  }
-
-  typealias TurnRecordedHandler = @Sendable (KernelTurnRecorded) -> Void
+  typealias JournalTurnChangedHandler = @Sendable (KernelJournalTurn) -> Void
+  typealias AuthorizedRealtimeToolHandler =
+    @Sendable (AuthorizedToolExecution) async -> AuthorizedRealtimeToolExecutionResult
 
   private var process: Process?
   private var stdinPipe: Pipe?
@@ -275,12 +266,10 @@ actor AgentRuntimeProcess {
   private var clients: [String: ClientRegistration] = [:]
   private var activeRequests: [RuntimeMessage.RequestKey: ActiveRequest] = [:]
   private var activeControlRequests: [RuntimeMessage.RequestKey: ActiveControlRequest] = [:]
-  private var activeVoiceSeedRequests: [RuntimeMessage.RequestKey: ActiveVoiceSeedRequest] = [:]
-  private var activeSurfaceTurnRequests: [RuntimeMessage.RequestKey: ActiveSurfaceTurnRequest] = [:]
-  private var activeKernelTurnTailRequests: [RuntimeMessage.RequestKey: ActiveKernelTurnTailRequest] = [:]
-  /// Single UI apply gate for kernel `turn_recorded` (INV-6). Replace-only —
-  /// never append; a second ChatProvider attach must not fan out duplicates.
-  private var turnRecordedHandler: TurnRecordedHandler?
+  private var activeJournalRequests: [RuntimeMessage.RequestKey: ActiveJournalRequest] = [:]
+  private var activeKernelContractRequests: [RuntimeMessage.RequestKey: ActiveKernelContractRequest] = [:]
+  private var journalTurnChangedHandler: JournalTurnChangedHandler?
+  private var authorizedRealtimeToolHandler: AuthorizedRealtimeToolHandler?
   private var initContinuations: [CheckedContinuation<Void, Error>] = []
   private let oomDiagnosticLatch = AgentRuntimeOOMDiagnosticLatch()
   private var receivedInit = false
@@ -338,16 +327,12 @@ actor AgentRuntimeProcess {
       activeControlRequests.removeValue(forKey: requestKey)
       request.continuation.resume(throwing: BridgeError.stopped)
     }
-    for (requestKey, request) in activeVoiceSeedRequests where request.clientId == clientId {
-      activeVoiceSeedRequests.removeValue(forKey: requestKey)
+    for (requestKey, request) in activeJournalRequests where request.clientId == clientId {
+      activeJournalRequests.removeValue(forKey: requestKey)
       request.continuation.resume(throwing: BridgeError.stopped)
     }
-    for (requestKey, request) in activeSurfaceTurnRequests where request.clientId == clientId {
-      activeSurfaceTurnRequests.removeValue(forKey: requestKey)
-      request.continuation.resume(throwing: BridgeError.stopped)
-    }
-    for (requestKey, request) in activeKernelTurnTailRequests where request.clientId == clientId {
-      activeKernelTurnTailRequests.removeValue(forKey: requestKey)
+    for (requestKey, request) in activeKernelContractRequests where request.clientId == clientId {
+      activeKernelContractRequests.removeValue(forKey: requestKey)
       request.continuation.resume(throwing: BridgeError.stopped)
     }
 
@@ -387,30 +372,584 @@ actor AgentRuntimeProcess {
     ])
   }
 
-  func warmupSession(clientId: String, cwd: String? = nil, sessions: [WarmupSessionConfig]) {
-    var dict: [String: Any] = [
-      "type": "warmup",
+  func warmupSession(clientId: String, sessionId: String, profileGeneration: Int) {
+    sendJson(Self.warmupWireMessage(
+      clientId: clientId,
+      requestId: UUID().uuidString,
+      ownerId: currentOwnerId(),
+      sessionId: sessionId,
+      profileGeneration: profileGeneration
+    ))
+  }
+
+  func configureDefaultExecutionProfile(
+    clientId: String,
+    adapterId: String,
+    modelProfile: String?,
+    workingDirectory: String,
+    expectedPreferenceGeneration: Int?
+  ) async throws -> AgentDefaultExecutionProfile {
+    let payload = Self.configureDefaultExecutionProfileWireMessage(
+      clientId: clientId,
+      requestId: UUID().uuidString,
+      ownerId: currentOwnerId(),
+      adapterId: adapterId,
+      modelProfile: modelProfile,
+      workingDirectory: workingDirectory,
+      expectedPreferenceGeneration: expectedPreferenceGeneration
+    )
+    let result = try await kernelContractRequest(
+      payload: payload,
+      expectedKind: .defaultExecutionProfileConfigured
+    )
+    guard let profile = AgentDefaultExecutionProfile(dictionary: result) else {
+      throw BridgeError.agentError("Kernel returned an invalid default execution profile")
+    }
+    return profile
+  }
+
+  func resolveSurfaceSession(
+    clientId: String,
+    surface: AgentSurfaceReference,
+    title: String?,
+    creationProfile: AgentSessionCreationProfile?
+  ) async throws -> AgentSurfaceSession {
+    let payload = Self.resolveSurfaceSessionWireMessage(
+      clientId: clientId,
+      requestId: UUID().uuidString,
+      ownerId: currentOwnerId(),
+      surface: surface,
+      title: title,
+      creationProfile: creationProfile
+    )
+    let result = try await kernelContractRequest(payload: payload, expectedKind: .surfaceSessionResolved)
+    guard let session = AgentSurfaceSession(dictionary: result) else {
+      throw BridgeError.agentError("Kernel returned an invalid surface session")
+    }
+    return session
+  }
+
+  func migrateSessionExecutionProfile(
+    clientId: String,
+    sessionId: String,
+    expectedProfileGeneration: Int,
+    adapterId: String,
+    modelProfile: String?,
+    workingDirectory: String
+  ) async throws -> AgentSessionProfileMigration {
+    let payload = Self.migrateSessionExecutionProfileWireMessage(
+      clientId: clientId,
+      requestId: UUID().uuidString,
+      ownerId: currentOwnerId(),
+      sessionId: sessionId,
+      expectedProfileGeneration: expectedProfileGeneration,
+      adapterId: adapterId,
+      modelProfile: modelProfile,
+      workingDirectory: workingDirectory
+    )
+    let result = try await kernelContractRequest(
+      payload: payload,
+      expectedKind: .sessionExecutionProfileMigrated
+    )
+    guard let migration = AgentSessionProfileMigration(dictionary: result) else {
+      throw BridgeError.agentError("Kernel returned an invalid session execution profile migration")
+    }
+    return migration
+  }
+
+  func updateContextSource(
+    clientId: String,
+    sessionId: String,
+    surfaceKind: String,
+    source: AgentContextSource,
+    sourceRevision: String,
+    outcome: AgentContextSourceOutcome,
+    capturedAtMs: Int,
+    expiresAtMs: Int?,
+    payload: [String: Any]
+  ) async throws -> AgentContextSourceUpdateReceipt {
+    let message = Self.contextSourceUpdateWireMessage(
+      clientId: clientId,
+      requestId: UUID().uuidString,
+      ownerId: currentOwnerId(),
+      sessionId: sessionId,
+      surfaceKind: surfaceKind,
+      source: source,
+      sourceRevision: sourceRevision,
+      outcome: outcome,
+      capturedAtMs: capturedAtMs,
+      expiresAtMs: expiresAtMs,
+      payload: payload
+    )
+    let result = try await kernelContractRequest(payload: message, expectedKind: .contextSourceUpdated)
+    guard let receipt = AgentContextSourceUpdateReceipt(dictionary: result) else {
+      throw BridgeError.agentError("Kernel returned an invalid context source receipt")
+    }
+    return receipt
+  }
+
+  func getContextSnapshot(
+    clientId: String,
+    sessionId: String,
+    surfaceKind: String
+  ) async throws -> AgentContextSnapshot {
+    let message = Self.getContextSnapshotWireMessage(
+      clientId: clientId,
+      requestId: UUID().uuidString,
+      ownerId: currentOwnerId(),
+      sessionId: sessionId,
+      surfaceKind: surfaceKind
+    )
+    let result = try await kernelContractRequest(payload: message, expectedKind: .contextSnapshot)
+    guard
+      let dictionary = result["snapshot"] as? [String: Any],
+      let snapshot = AgentContextSnapshot(dictionary: dictionary)
+    else {
+      throw BridgeError.agentError("Kernel returned an invalid context snapshot")
+    }
+    return snapshot
+  }
+
+  func setAuthorizedRealtimeToolHandler(_ handler: AuthorizedRealtimeToolHandler?) {
+    authorizedRealtimeToolHandler = handler
+  }
+
+  func beginExternalSurfaceRun(
+    clientId: String,
+    harnessMode: String,
+    ownerID: String,
+    sessionID: String,
+    turnID: String,
+    prompt: String,
+    mode: ExternalSurfaceRunMode
+  ) async throws -> ExternalSurfaceRunBinding {
+    try assertCurrentExternalOwner(ownerID)
+    try await registerClient(clientId: clientId, harnessMode: harnessMode)
+    let requestId = UUID().uuidString
+    let result = try await kernelContractRequest(
+      payload: Self.externalSurfaceRunBeginWireMessage(
+        clientId: clientId,
+        requestId: requestId,
+        ownerId: ownerID,
+        sessionId: sessionID,
+        turnId: turnID,
+        prompt: prompt,
+        mode: mode
+      ),
+      expectedKind: .externalSurfaceRunBeginResult,
+      timeoutNanoseconds: 10_000_000_000
+    )
+    guard result["ok"] as? Bool == true else {
+      throw ExternalSurfaceAuthorityError.from(
+        result, fallback: "external_surface_begin_failed")
+    }
+    guard
+      result["ownerId"] as? String == ownerID,
+      result["sessionId"] as? String == sessionID,
+      result["turnId"] as? String == turnID,
+      let runID = result["runId"] as? String,
+      !runID.isEmpty,
+      let attemptID = result["attemptId"] as? String,
+      !attemptID.isEmpty
+    else {
+      throw ExternalSurfaceAuthorityError(code: "malformed_external_surface_begin_result")
+    }
+    return ExternalSurfaceRunBinding(
+      ownerID: ownerID,
+      sessionID: sessionID,
+      turnID: turnID,
+      runID: runID,
+      attemptID: attemptID,
+      duplicate: result["duplicate"] as? Bool ?? false
+    )
+  }
+
+  func invokeExternalSurfaceTool(
+    clientId: String,
+    harnessMode: String,
+    binding: ExternalSurfaceRunBinding,
+    invocationID: String,
+    toolName: String,
+    input: [String: Any]
+  ) async throws -> String {
+    try assertCurrentExternalOwner(binding.ownerID)
+    try await registerClient(clientId: clientId, harnessMode: harnessMode)
+    let requestId = UUID().uuidString
+    let result = try await kernelContractRequest(
+      payload: Self.externalSurfaceToolInvokeWireMessage(
+        clientId: clientId,
+        requestId: requestId,
+        binding: binding,
+        invocationId: invocationID,
+        toolName: toolName,
+        input: input
+      ),
+      expectedKind: .externalSurfaceToolResult,
+      timeoutNanoseconds: 180_000_000_000
+    )
+    guard result["ok"] as? Bool == true else {
+      throw ExternalSurfaceAuthorityError.from(
+        result, fallback: "external_surface_tool_failed")
+    }
+    guard
+      result["ownerId"] as? String == binding.ownerID,
+      result["sessionId"] as? String == binding.sessionID,
+      result["runId"] as? String == binding.runID,
+      result["attemptId"] as? String == binding.attemptID,
+      result["invocationId"] as? String == invocationID,
+      let output = result["result"] as? String
+    else {
+      throw ExternalSurfaceAuthorityError(code: "malformed_external_surface_tool_result")
+    }
+    return output
+  }
+
+  func completeExternalSurfaceRun(
+    clientId: String,
+    harnessMode: String,
+    binding: ExternalSurfaceRunBinding,
+    terminalStatus: ExternalSurfaceRunTerminalStatus,
+    errorCode: String? = nil
+  ) async throws -> ExternalSurfaceRunCompletion {
+    try assertCurrentExternalOwner(binding.ownerID)
+    try await registerClient(clientId: clientId, harnessMode: harnessMode)
+    let requestId = UUID().uuidString
+    let result = try await kernelContractRequest(
+      payload: Self.externalSurfaceRunCompleteWireMessage(
+        clientId: clientId,
+        requestId: requestId,
+        binding: binding,
+        terminalStatus: terminalStatus,
+        errorCode: errorCode
+      ),
+      expectedKind: .externalSurfaceRunCompleteResult,
+      timeoutNanoseconds: 10_000_000_000
+    )
+    guard result["ok"] as? Bool == true else {
+      throw ExternalSurfaceAuthorityError.from(
+        result, fallback: "external_surface_complete_failed")
+    }
+    guard
+      result["ownerId"] as? String == binding.ownerID,
+      result["sessionId"] as? String == binding.sessionID,
+      result["runId"] as? String == binding.runID,
+      result["attemptId"] as? String == binding.attemptID,
+      let rawTerminalStatus = result["terminalStatus"] as? String,
+      let confirmedStatus = ExternalSurfaceRunTerminalStatus(rawValue: rawTerminalStatus),
+      confirmedStatus == terminalStatus
+    else {
+      throw ExternalSurfaceAuthorityError(code: "malformed_external_surface_complete_result")
+    }
+    return ExternalSurfaceRunCompletion(
+      runID: binding.runID,
+      attemptID: binding.attemptID,
+      terminalStatus: confirmedStatus,
+      duplicate: result["duplicate"] as? Bool ?? false
+    )
+  }
+
+  private func assertCurrentExternalOwner(_ ownerID: String) throws {
+    guard !ownerID.isEmpty, currentOwnerId() == ownerID else {
+      throw ExternalSurfaceAuthorityError(code: "external_surface_owner_changed")
+    }
+  }
+
+  static func warmupWireMessage(
+    clientId: String,
+    requestId: String,
+    ownerId: String?,
+    sessionId: String,
+    profileGeneration: Int
+  ) -> [String: Any] {
+    var message = protocolEnvelope(
+      type: "warmup",
+      clientId: clientId,
+      requestId: requestId,
+      ownerId: ownerId
+    )
+    message["sessionId"] = sessionId
+    message["profileGeneration"] = profileGeneration
+    return message
+  }
+
+  static func configureDefaultExecutionProfileWireMessage(
+    clientId: String,
+    requestId: String,
+    ownerId: String?,
+    adapterId: String,
+    modelProfile: String?,
+    workingDirectory: String,
+    expectedPreferenceGeneration: Int?
+  ) -> [String: Any] {
+    var message = protocolEnvelope(
+      type: "configure_default_execution_profile",
+      clientId: clientId,
+      requestId: requestId,
+      ownerId: ownerId
+    )
+    message["adapterId"] = adapterId
+    message["modelProfile"] = modelProfile ?? NSNull()
+    message["workingDirectory"] = workingDirectory
+    if let expectedPreferenceGeneration {
+      message["expectedPreferenceGeneration"] = expectedPreferenceGeneration
+    }
+    return message
+  }
+
+  static func resolveSurfaceSessionWireMessage(
+    clientId: String,
+    requestId: String,
+    ownerId: String?,
+    surface: AgentSurfaceReference,
+    title: String?,
+    creationProfile: AgentSessionCreationProfile? = nil
+  ) -> [String: Any] {
+    var message = protocolEnvelope(
+      type: "resolve_surface_session",
+      clientId: clientId,
+      requestId: requestId,
+      ownerId: ownerId
+    )
+    message["surfaceKind"] = surface.surfaceKind
+    message["externalRefKind"] = surface.externalRefKind
+    message["externalRefId"] = surface.externalRefId
+    if let title { message["title"] = title }
+    if let creationProfile { message["creationProfile"] = creationProfile.dictionary }
+    return message
+  }
+
+  static func migrateSessionExecutionProfileWireMessage(
+    clientId: String,
+    requestId: String,
+    ownerId: String?,
+    sessionId: String,
+    expectedProfileGeneration: Int,
+    adapterId: String,
+    modelProfile: String?,
+    workingDirectory: String
+  ) -> [String: Any] {
+    var message = protocolEnvelope(
+      type: "migrate_session_execution_profile",
+      clientId: clientId,
+      requestId: requestId,
+      ownerId: ownerId
+    )
+    message["sessionId"] = sessionId
+    message["expectedProfileGeneration"] = expectedProfileGeneration
+    message["adapterId"] = adapterId
+    message["modelProfile"] = modelProfile ?? NSNull()
+    message["workingDirectory"] = workingDirectory
+    message["reason"] = "user_requested"
+    return message
+  }
+
+  static func contextSourceUpdateWireMessage(
+    clientId: String,
+    requestId: String,
+    ownerId: String?,
+    sessionId: String,
+    surfaceKind: String,
+    source: AgentContextSource,
+    sourceRevision: String,
+    outcome: AgentContextSourceOutcome,
+    capturedAtMs: Int,
+    expiresAtMs: Int?,
+    payload: [String: Any]
+  ) -> [String: Any] {
+    var message = protocolEnvelope(
+      type: "context_source_update",
+      clientId: clientId,
+      requestId: requestId,
+      ownerId: ownerId
+    )
+    message["sessionId"] = sessionId
+    message["surfaceKind"] = surfaceKind
+    message["source"] = source.rawValue
+    message["sourceRevision"] = sourceRevision
+    message["outcome"] = outcome.rawValue
+    message["capturedAtMs"] = capturedAtMs
+    if let expiresAtMs { message["expiresAtMs"] = expiresAtMs }
+    message["payload"] = payload
+    return message
+  }
+
+  static func getContextSnapshotWireMessage(
+    clientId: String,
+    requestId: String,
+    ownerId: String?,
+    sessionId: String,
+    surfaceKind: String
+  ) -> [String: Any] {
+    var message = protocolEnvelope(
+      type: "get_context_snapshot",
+      clientId: clientId,
+      requestId: requestId,
+      ownerId: ownerId
+    )
+    message["sessionId"] = sessionId
+    message["surfaceKind"] = surfaceKind
+    return message
+  }
+
+  static func importLegacyMainChatSessionsWireMessage(
+    clientId: String,
+    requestId: String,
+    ownerId: String,
+    entries: [LegacyMainChatSessionAliasEntry]
+  ) -> [String: Any] {
+    var message = protocolEnvelope(
+      type: "import_legacy_main_chat_sessions",
+      clientId: clientId,
+      requestId: requestId,
+      ownerId: ownerId
+    )
+    message["entries"] = entries.map(\.dictionary)
+    return message
+  }
+
+  static func externalSurfaceRunBeginWireMessage(
+    clientId: String,
+    requestId: String,
+    ownerId: String,
+    sessionId: String,
+    turnId: String,
+    prompt: String,
+    mode: ExternalSurfaceRunMode
+  ) -> [String: Any] {
+    var message = protocolEnvelope(
+      type: "external_surface_run_begin",
+      clientId: clientId,
+      requestId: requestId,
+      ownerId: ownerId
+    )
+    message["sessionId"] = sessionId
+    message["turnId"] = turnId
+    message["prompt"] = prompt
+    message["mode"] = mode.rawValue
+    return message
+  }
+
+  static func externalSurfaceToolInvokeWireMessage(
+    clientId: String,
+    requestId: String,
+    binding: ExternalSurfaceRunBinding,
+    invocationId: String,
+    toolName: String,
+    input: [String: Any]
+  ) -> [String: Any] {
+    var message = protocolEnvelope(
+      type: "external_surface_tool_invoke",
+      clientId: clientId,
+      requestId: requestId,
+      ownerId: binding.ownerID
+    )
+    message["sessionId"] = binding.sessionID
+    message["runId"] = binding.runID
+    message["attemptId"] = binding.attemptID
+    message["invocationId"] = invocationId
+    message["toolName"] = toolName
+    message["input"] = input
+    return message
+  }
+
+  static func externalSurfaceRunCompleteWireMessage(
+    clientId: String,
+    requestId: String,
+    binding: ExternalSurfaceRunBinding,
+    terminalStatus: ExternalSurfaceRunTerminalStatus,
+    errorCode: String?
+  ) -> [String: Any] {
+    var message = protocolEnvelope(
+      type: "external_surface_run_complete",
+      clientId: clientId,
+      requestId: requestId,
+      ownerId: binding.ownerID
+    )
+    message["sessionId"] = binding.sessionID
+    message["runId"] = binding.runID
+    message["attemptId"] = binding.attemptID
+    message["terminalStatus"] = terminalStatus.rawValue
+    if let errorCode, !errorCode.isEmpty { message["errorCode"] = errorCode }
+    return message
+  }
+
+  static func queryWireMessage(
+    clientId: String,
+    requestId: String,
+    ownerId: String?,
+    sessionId: String,
+    prompt: String,
+    mode: String?,
+    imageData: Data?,
+    attachments: [AgentQueryAttachment],
+    expectedContext: AgentContextFreshness?
+  ) -> [String: Any] {
+    var message = protocolEnvelope(
+      type: "query",
+      clientId: clientId,
+      requestId: requestId,
+      ownerId: ownerId
+    )
+    message["sessionId"] = sessionId
+    message["prompt"] = prompt
+    if let mode { message["mode"] = mode }
+    if let imageData { message["imageBase64"] = imageData.base64EncodedString() }
+    if !attachments.isEmpty { message["attachments"] = attachments.map(\.dictionary) }
+    if let expectedContext {
+      message["expectedContextSnapshotVersion"] = expectedContext.version
+      message["expectedContextSnapshotGeneration"] = expectedContext.generation
+    }
+    return message
+  }
+
+  private static func protocolEnvelope(
+    type: String,
+    clientId: String,
+    requestId: String,
+    ownerId: String?
+  ) -> [String: Any] {
+    var message: [String: Any] = [
+      "type": type,
       "protocolVersion": 2,
-      "requestId": UUID().uuidString,
+      "requestId": requestId,
       "clientId": clientId,
     ]
-    if let ownerId = currentOwnerId() {
-      dict["ownerId"] = ownerId
+    if let ownerId { message["ownerId"] = ownerId }
+    return message
+  }
+
+  private func kernelContractRequest(
+    payload: [String: Any],
+    expectedKind: RuntimeMessage.Kind,
+    timeoutNanoseconds: UInt64 = 5_000_000_000
+  ) async throws -> [String: Any] {
+    guard isRunning else { throw BridgeError.stopped }
+    guard
+      let clientId = payload["clientId"] as? String,
+      let requestId = payload["requestId"] as? String
+    else {
+      throw BridgeError.agentError("Kernel contract request is missing tracing identity")
     }
-    if let cwd { dict["cwd"] = cwd }
-    dict["sessions"] = sessions.map { session -> [String: Any] in
-      var entry: [String: Any] = [
-        "key": session.key,
-      ]
-      if let model = session.model {
-        entry["model"] = model
+    let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
+    return try await withCheckedThrowingContinuation { continuation in
+      activeKernelContractRequests[requestKey] = ActiveKernelContractRequest(
+        clientId: clientId,
+        requestId: requestId,
+        expectedKind: expectedKind,
+        continuation: continuation
+      )
+      guard sendJson(payload) else {
+        activeKernelContractRequests.removeValue(forKey: requestKey)?.continuation.resume(
+          throwing: BridgeError.processExited
+        )
+        return
       }
-      if let systemPrompt = session.systemPrompt {
-        entry["systemPrompt"] = systemPrompt
+      Task {
+        try? await Task.sleep(nanoseconds: timeoutNanoseconds)
+        guard let request = self.activeKernelContractRequests.removeValue(forKey: requestKey) else { return }
+        request.continuation.resume(throwing: BridgeError.timeout)
       }
-      return entry
     }
-    sendJson(dict)
   }
 
   func invalidateSurface(clientId: String, surface: AgentSurfaceReference) {
@@ -442,225 +981,189 @@ actor AgentRuntimeProcess {
     sendJson(dict)
   }
 
-  func clearOwnerSurfaceState(clientId: String, chatId: String = "default") {
-    var dict: [String: Any] = [
-      "type": "clear_owner_surface_state",
-      "protocolVersion": 2,
-      "requestId": UUID().uuidString,
-      "clientId": clientId,
-      "chatId": chatId,
-    ]
-    if let ownerId = currentOwnerId() {
-      dict["ownerId"] = ownerId
+  // Startup-only reader for pre-kernel session aliases; it never writes turns or
+  // participates in runtime routing after canonical surface identity exists.
+  func importLegacyMainChatSessions(
+    clientId: String,
+    entries: [LegacyMainChatSessionAliasEntry]
+  ) async throws -> LegacyMainChatSessionImportReceipt {
+    guard let ownerId = currentOwnerId(), !ownerId.isEmpty else {
+      throw BridgeError.authMissing
     }
-    sendJson(dict)
-  }
-
-  // TODO(desktop-agent-platonic-gap-closure G6): delete importer two desktop releases after platonic ships.
-  func importLegacyMainChatSessions(clientId: String, entries: [[String: String]]) {
-    var dict: [String: Any] = [
-      "type": "import_legacy_main_chat_sessions",
-      "protocolVersion": 2,
-      "requestId": UUID().uuidString,
-      "clientId": clientId,
-      "entries": entries,
-    ]
-    if let ownerId = currentOwnerId() {
-      dict["ownerId"] = ownerId
+    let payload = Self.importLegacyMainChatSessionsWireMessage(
+      clientId: clientId,
+      requestId: UUID().uuidString,
+      ownerId: ownerId,
+      entries: entries
+    )
+    let result = try await kernelContractRequest(
+      payload: payload,
+      expectedKind: .legacyMainChatSessionsImported
+    )
+    guard
+      let receipt = LegacyMainChatSessionImportReceipt(dictionary: result),
+      receipt.ownerId == ownerId,
+      receipt.acceptedEntries == entries
+    else {
+      throw BridgeError.agentError("Kernel returned an invalid legacy main-chat alias receipt")
     }
-    sendJson(dict)
+    return receipt
   }
 
-  func mergeFloatingChatIntoMainChat(clientId: String, chatId: String = "default") {
-    var dict: [String: Any] = [
-      "type": "merge_floating_chat_into_main_chat",
-      "protocolVersion": 2,
-      "requestId": UUID().uuidString,
-      "clientId": clientId,
-      "chatId": chatId,
-    ]
-    if let ownerId = currentOwnerId() {
-      dict["ownerId"] = ownerId
-    }
-    sendJson(dict)
+  func setJournalTurnChangedHandler(_ handler: JournalTurnChangedHandler?) {
+    journalTurnChangedHandler = handler
   }
 
-  func importConversationTurns(clientId: String, surface: AgentSurfaceReference, turns: [[String: Any]]) {
-    var dict: [String: Any] = [
-      "type": "import_conversation_turns",
-      "protocolVersion": 2,
-      "requestId": UUID().uuidString,
-      "clientId": clientId,
-      "surfaceKind": surface.surfaceKind,
-      "externalRefKind": surface.externalRefKind,
-      "externalRefId": surface.externalRefId,
-      "turns": turns,
-    ]
-    if let ownerId = currentOwnerId() {
-      dict["ownerId"] = ownerId
-    }
-    sendJson(dict)
+  func journalTurnChangedHandlerCount() -> Int {
+    journalTurnChangedHandler == nil ? 0 : 1
   }
 
-  func setTurnRecordedHandler(_ handler: TurnRecordedHandler?) {
-    turnRecordedHandler = handler
+  /// Test-only projection seam; production events arrive from omi-agentd.
+  func dispatchJournalTurnChangedForTesting(_ turn: KernelJournalTurn) {
+    journalTurnChangedHandler?(turn)
   }
 
-  func turnRecordedHandlerCount() -> Int {
-    turnRecordedHandler == nil ? 0 : 1
-  }
-
-  /// Test-only: fire the single turn_recorded apply gate without a live node runtime.
-  func dispatchTurnRecordedForTesting(_ turn: KernelTurnRecorded) {
-    turnRecordedHandler?(turn)
-  }
-
-  func recordSurfaceTurn(
+  func recordJournalTurn(
     clientId: String,
     surface: AgentSurfaceReference,
     ownerID: String? = nil,
-    userText: String,
-    assistantText: String,
-    origin: String,
-    interrupted: Bool = false,
-    idempotencyKey: String? = nil
-  ) async throws -> Bool {
+    turn: KernelJournalTurnWrite
+  ) async throws -> KernelJournalTurn {
+    let result = try await journalOperation(
+      type: "journal_record_turn",
+      operation: "record",
+      clientId: clientId,
+      surface: surface,
+      ownerID: ownerID,
+      payload: ["turn": turn.dictionary]
+    )
+    guard let recorded = result.turn else {
+      throw BridgeError.agentError("Kernel journal record returned no turn")
+    }
+    return recorded
+  }
+
+  func updateJournalTurn(
+    clientId: String,
+    surface: AgentSurfaceReference,
+    ownerID: String? = nil,
+    update: KernelJournalTurnUpdate
+  ) async throws -> KernelJournalTurn {
+    let result = try await journalOperation(
+      type: "journal_update_turn",
+      operation: "update",
+      clientId: clientId,
+      surface: surface,
+      ownerID: ownerID,
+      payload: ["update": update.dictionary]
+    )
+    guard let updated = result.turn else {
+      throw BridgeError.agentError("Kernel journal update returned no turn")
+    }
+    return updated
+  }
+
+  func listJournalTurns(
+    clientId: String,
+    surface: AgentSurfaceReference,
+    ownerID: String? = nil,
+    afterTurnSeq: Int = 0,
+    limit: Int = 100
+  ) async throws -> JournalOperationResult {
+    return try await journalOperation(
+      type: "journal_list_turns",
+      operation: "list",
+      clientId: clientId,
+      surface: surface,
+      ownerID: ownerID,
+      payload: [
+        "afterTurnSeq": max(0, afterTurnSeq),
+        "limit": max(1, min(limit, 100)),
+      ]
+    )
+  }
+
+  func importRemoteJournalTurn(
+    clientId: String,
+    surface: AgentSurfaceReference,
+    ownerID: String? = nil,
+    turn: KernelJournalRemoteTurn
+  ) async throws -> KernelJournalTurn {
+    let result = try await journalOperation(
+      type: "journal_import_remote_turn",
+      operation: "import_remote",
+      clientId: clientId,
+      surface: surface,
+      ownerID: ownerID,
+      payload: ["turn": turn.dictionary]
+    )
+    guard let imported = result.turn else {
+      throw BridgeError.agentError("Kernel journal import returned no turn")
+    }
+    return imported
+  }
+
+  func clearJournalTurns(
+    clientId: String,
+    surface: AgentSurfaceReference,
+    ownerID: String? = nil,
+    expectedGeneration: Int? = nil
+  ) async throws -> Int {
+    var payload: [String: Any] = [:]
+    if let expectedGeneration { payload["expectedGeneration"] = expectedGeneration }
+    return try await journalOperation(
+      type: "journal_clear_turns",
+      operation: "clear",
+      clientId: clientId,
+      surface: surface,
+      ownerID: ownerID,
+      payload: payload
+    ).clearedCount
+  }
+
+  private func journalOperation(
+    type: String,
+    operation: String,
+    clientId: String,
+    surface: AgentSurfaceReference,
+    ownerID: String?,
+    payload: [String: Any]
+  ) async throws -> JournalOperationResult {
     guard isRunning else { throw BridgeError.stopped }
     let requestId = UUID().uuidString
     let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
-    var dict: [String: Any] = [
-      "type": "record_surface_turn",
+    var dictionary: [String: Any] = [
+      "type": type,
+      "operation": operation,
       "protocolVersion": 2,
       "requestId": requestId,
       "clientId": clientId,
       "surfaceKind": surface.surfaceKind,
       "externalRefKind": surface.externalRefKind,
       "externalRefId": surface.externalRefId,
-      "userText": userText,
-      "assistantText": assistantText,
-      "origin": origin,
-      "interrupted": interrupted,
     ]
-    if let idempotencyKey, !idempotencyKey.isEmpty {
-      dict["idempotencyKey"] = idempotencyKey
-    }
-    if let ownerId = ownerID ?? currentOwnerId() {
-      dict["ownerId"] = ownerId
-    }
+    if let ownerId = ownerID ?? currentOwnerId() { dictionary["ownerId"] = ownerId }
+    for (key, value) in payload { dictionary[key] = value }
     return try await withCheckedThrowingContinuation { continuation in
-      activeSurfaceTurnRequests[requestKey] = ActiveSurfaceTurnRequest(
+      activeJournalRequests[requestKey] = ActiveJournalRequest(
         clientId: clientId,
         requestId: requestId,
         continuation: continuation
       )
-      guard sendJson(dict) else {
-        activeSurfaceTurnRequests.removeValue(forKey: requestKey)?.continuation.resume(
+      guard sendJson(dictionary) else {
+        activeJournalRequests.removeValue(forKey: requestKey)?.continuation.resume(
           throwing: BridgeError.processExited
         )
         return
       }
       Task {
         try? await Task.sleep(nanoseconds: 5_000_000_000)
-        guard let request = self.activeSurfaceTurnRequests.removeValue(forKey: requestKey) else { return }
+        guard let request = self.activeJournalRequests.removeValue(forKey: requestKey) else { return }
         request.continuation.resume(throwing: BridgeError.timeout)
       }
     }
   }
 
-  func getVoiceSeedContext(
-    clientId: String,
-    harnessMode: String,
-    surface: AgentSurfaceReference
-  ) async throws -> VoiceSeedContextResult {
-    try await registerClient(clientId: clientId, harnessMode: harnessMode)
-    let requestId = UUID().uuidString
-    let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
-    return try await withCheckedThrowingContinuation { continuation in
-      activeVoiceSeedRequests[requestKey] = ActiveVoiceSeedRequest(
-        clientId: clientId,
-        requestId: requestId,
-        continuation: continuation
-      )
-      var dict: [String: Any] = [
-        "type": "get_voice_seed_context",
-        "protocolVersion": 2,
-        "requestId": requestId,
-        "clientId": clientId,
-        "surfaceKind": surface.surfaceKind,
-        "externalRefKind": surface.externalRefKind,
-        "externalRefId": surface.externalRefId,
-      ]
-      if let ownerId = currentOwnerId() {
-        dict["ownerId"] = ownerId
-      }
-      let sent = sendJson(dict)
-      if !sent, let request = activeVoiceSeedRequests.removeValue(forKey: requestKey) {
-        request.continuation.resume(throwing: BridgeError.agentError("Failed to send voice seed request"))
-      }
-    }
-  }
-
-  func getKernelTurnTail(
-    clientId: String,
-    harnessMode: String,
-    limit: Int = 8,
-    chatId: String = "default"
-  ) async throws -> KernelTurnTailResult {
-    try await registerClient(clientId: clientId, harnessMode: harnessMode)
-    let requestId = UUID().uuidString
-    let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
-    return try await withCheckedThrowingContinuation { continuation in
-      activeKernelTurnTailRequests[requestKey] = ActiveKernelTurnTailRequest(
-        clientId: clientId,
-        requestId: requestId,
-        continuation: continuation
-      )
-      var dict: [String: Any] = [
-        "type": "get_kernel_turn_tail",
-        "protocolVersion": 2,
-        "requestId": requestId,
-        "clientId": clientId,
-        "limit": limit,
-        "chatId": chatId,
-      ]
-      if let ownerId = currentOwnerId() {
-        dict["ownerId"] = ownerId
-      }
-      let sent = sendJson(dict)
-      if !sent, let request = activeKernelTurnTailRequests.removeValue(forKey: requestKey) {
-        request.continuation.resume(throwing: BridgeError.agentError("Failed to send kernel turn tail request"))
-      }
-    }
-  }
-
-  func projectCrossSurfaceTurn(
-    clientId: String,
-    surface: AgentSurfaceReference,
-    userText: String,
-    assistantText: String,
-    origin: String,
-    idempotencyKey: String? = nil
-  ) {
-    var dict: [String: Any] = [
-      "type": "project_cross_surface_turn",
-      "protocolVersion": 2,
-      "requestId": UUID().uuidString,
-      "clientId": clientId,
-      "surfaceKind": surface.surfaceKind,
-      "externalRefKind": surface.externalRefKind,
-      "externalRefId": surface.externalRefId,
-      "userText": userText,
-      "assistantText": assistantText,
-      "origin": origin,
-    ]
-    if let idempotencyKey, !idempotencyKey.isEmpty {
-      dict["idempotencyKey"] = idempotencyKey
-    }
-    if let ownerId = currentOwnerId() {
-      dict["ownerId"] = ownerId
-    }
-    sendJson(dict)
-  }
 
   func refreshAuthToken(_ token: String) {
     var dict: [String: Any] = [
@@ -827,28 +1330,21 @@ actor AgentRuntimeProcess {
   func query(
     clientId: String,
     requestId: String,
-    harnessMode: String,
+    sessionId: String,
     prompt: String,
-    systemPrompt: String,
     surface: AgentSurfaceReference,
-    cwd: String?,
     mode: String?,
-    model: String?,
     imageData: Data?,
-    attachmentMetadataJson: String?,
-    surfaceContextJson: String?,
+    attachments: [AgentQueryAttachment],
+    expectedContext: AgentContextFreshness?,
     onTextDelta: @escaping AgentBridge.TextDeltaHandler,
-    onToolCall: @escaping AgentBridge.ToolCallHandler,
     onToolActivity: @escaping AgentBridge.ToolActivityHandler,
     onThinkingDelta: @escaping AgentBridge.ThinkingDeltaHandler,
     onToolResultDisplay: @escaping AgentBridge.ToolResultDisplayHandler,
     onAuthRequired: @escaping AgentBridge.AuthRequiredHandler,
     onAuthSuccess: @escaping AgentBridge.AuthSuccessHandler
   ) async throws -> AgentBridge.QueryResult {
-    try await registerClient(clientId: clientId, harnessMode: harnessMode)
-    guard let adapterId = Self.adapterId(forHarnessMode: harnessMode) else {
-      throw BridgeError.agentError("Unknown AI runtime mode: \(harnessMode)")
-    }
+    guard isRunning else { throw BridgeError.stopped }
 
     return try await withCheckedThrowingContinuation { continuation in
       let surfaceRef = surface
@@ -858,7 +1354,6 @@ actor AgentRuntimeProcess {
         surfaceRef: surfaceRef,
         originatingUserText: prompt.trimmingCharacters(in: .whitespacesAndNewlines),
         onTextDelta: onTextDelta,
-        onToolCall: onToolCall,
         onToolActivity: onToolActivity,
         onThinkingDelta: onThinkingDelta,
         onToolResultDisplay: onToolResultDisplay,
@@ -871,34 +1366,17 @@ actor AgentRuntimeProcess {
         AgentRuntimeStatusStore.shared.beginRequest(surface: surfaceRef)
       }
 
-      var queryDict: [String: Any] = [
-        "type": "query",
-        "protocolVersion": 2,
-        "id": requestId,
-        "requestId": requestId,
-        "clientId": clientId,
-        "prompt": prompt,
-        "systemPrompt": systemPrompt,
-        "adapterId": adapterId,
-        "surfaceKind": surface.surfaceKind,
-        "externalRefKind": surface.externalRefKind,
-        "externalRefId": surface.externalRefId,
-      ]
-      if let cwd { queryDict["cwd"] = cwd }
-      if let mode { queryDict["mode"] = mode }
-      if let model { queryDict["model"] = model }
-      if let imageData {
-        queryDict["imageBase64"] = imageData.base64EncodedString()
-      }
-      if let attachmentMetadataJson, !attachmentMetadataJson.isEmpty {
-        queryDict["attachmentMetadataJson"] = attachmentMetadataJson
-      }
-      if let surfaceContextJson, !surfaceContextJson.isEmpty {
-        queryDict["surfaceContextJson"] = surfaceContextJson
-      }
-      if let ownerId = currentOwnerId() {
-        queryDict["ownerId"] = ownerId
-      }
+      let queryDict = Self.queryWireMessage(
+        clientId: clientId,
+        requestId: requestId,
+        ownerId: currentOwnerId(),
+        sessionId: sessionId,
+        prompt: prompt,
+        mode: mode,
+        imageData: imageData,
+        attachments: attachments,
+        expectedContext: expectedContext
+      )
       sendJson(queryDict)
     }
   }
@@ -1364,7 +1842,12 @@ actor AgentRuntimeProcess {
       )
 
     case .toolUse:
-      handleToolUse(message)
+      // Adapter-facing tool lifecycle is projected through tool_activity. A
+      // raw tool_use event has no physical execution authority in Swift.
+      break
+
+    case .authorizedToolExecution:
+      handleAuthorizedToolExecution(message)
 
     case .cancelAck:
       if let requestKey = message.requestKey, var request = activeRequests[requestKey] {
@@ -1375,21 +1858,29 @@ actor AgentRuntimeProcess {
     case .controlToolResult:
       completeControlRequest(message)
 
-    case .voiceSeedContext:
-      completeVoiceSeedRequest(message)
+    case .journalOperationResult:
+      completeJournalRequest(message)
 
-    case .kernelTurnTail:
-      completeKernelTurnTailRequest(message)
-
-    case .turnRecorded:
-      if let recorded = kernelTurnRecorded(from: message) {
-        if let requestKey = message.requestKey,
-          let request = activeSurfaceTurnRequests.removeValue(forKey: requestKey)
-        {
-          request.continuation.resume(returning: true)
-        }
-        turnRecordedHandler?(recorded)
+    case .journalTurnChanged:
+      if let turn = journalTurn(from: message) {
+        journalTurnChangedHandler?(turn)
       }
+
+    case .journalBackendSync:
+      handleJournalBackendSync(message)
+
+    case .journalBackendDelete:
+      handleJournalBackendDelete(message)
+
+    case .journalBackendReconcile:
+      handleJournalBackendReconcile(message)
+
+    case .defaultExecutionProfileConfigured, .surfaceSessionResolved,
+      .sessionExecutionProfileMigrated, .contextSourceUpdated, .contextSnapshot,
+      .legacyMainChatSessionsImported,
+      .externalSurfaceRunBeginResult, .externalSurfaceToolResult,
+      .externalSurfaceRunCompleteResult:
+      completeKernelContractRequest(message)
 
     case .result:
       completeRequest(message)
@@ -1409,58 +1900,183 @@ actor AgentRuntimeProcess {
     return nil
   }
 
-  private func handleToolUse(_ message: RuntimeMessage) {
-    let callId = message.payload["callId"] as? String ?? ""
-    let name = message.payload["name"] as? String ?? ""
-    guard let request = routedRequest(for: message) else {
-      log("AgentRuntimeProcess: rejecting unrouted tool call \(name)")
-      completeToolCall(
-        callId: callId,
-        result: Self.unroutedToolCallError(toolName: name),
-        requestId: message.requestId,
-        clientId: message.clientId
+  private func completeKernelContractRequest(_ message: RuntimeMessage) {
+    guard let requestKey = message.requestKey,
+      let request = activeKernelContractRequests.removeValue(forKey: requestKey)
+    else {
+      log("AgentRuntimeProcess: dropping unroutable kernel contract response")
+      return
+    }
+    guard request.expectedKind == message.kind else {
+      request.continuation.resume(
+        throwing: BridgeError.agentError("Kernel contract response type did not match its request")
       )
       return
     }
-    if request.isInterrupted {
-      log("AgentRuntimeProcess: skipping tool call after interrupt")
+    request.continuation.resume(returning: message.payload)
+  }
+
+  private func handleAuthorizedToolExecution(_ message: RuntimeMessage) {
+    let command: AuthorizedToolExecution
+    do {
+      command = try AuthorizedToolExecution.parse(
+        message.payload,
+        currentOwnerID: currentOwnerId())
+    } catch let rejection as AuthorizedToolExecution.Rejection {
+      log("AgentRuntimeProcess: rejecting physical tool command (\(rejection.code))")
+      completeAuthorizedToolExecution(
+        payload: message.payload,
+        outcome: "failed",
+        result: Self.authorizedToolExecutionError(rejection))
+      return
+    } catch {
+      log("AgentRuntimeProcess: rejecting physical tool command (malformed_authorized_execution)")
+      completeAuthorizedToolExecution(
+        payload: message.payload,
+        outcome: "failed",
+        result: Self.authorizedToolExecutionError(.malformed))
       return
     }
-    let input = message.payload["input"] as? [String: Any] ?? [:]
+
     Task {
-      let result = await ChatToolExecutor.withOriginatingUserText(request.originatingUserText) {
-        await request.onToolCall(callId, name, input)
+      let executionResult: AuthorizedRealtimeToolExecutionResult
+      switch command.executor {
+      case .chatToolExecutor:
+        let surface = AgentSurfaceReference(
+          surfaceKind: command.surfaceKind,
+          externalRefKind: command.externalRefKind ?? "session",
+          externalRefId: command.externalRefID ?? command.sessionID)
+        let toolCall = ToolCall(
+          name: command.canonicalToolName,
+          arguments: command.input,
+          thoughtSignature: nil)
+        let result = await ChatToolExecutor.execute(
+          toolCall,
+          originatingChatMode: ChatMode(rawValue: command.runMode),
+          originatingClientScope: command.surfaceKind == "floating_bar"
+            && command.externalRefKind == "pill"
+            ? AgentClientScope.floatingPill
+            : nil,
+          originatingSurfaceRef: surface,
+          originatingRunId: command.runID,
+          originatingUserText: command.originatingUserText,
+          isOnboardingSurface: command.surfaceKind == "onboarding",
+          expectedOwnerID: command.ownerID)
+        if AuthorizedToolExecution.isOwnerCurrent(command.ownerID) {
+          executionResult = .succeeded(result)
+        } else {
+          executionResult = .failed(
+            Self.authorizedToolExecutionError(.ownerChangedDuringExecution))
+        }
+      case .realtimeHub:
+        guard let handler = authorizedRealtimeToolHandler else {
+          completeAuthorizedToolExecution(
+            command: command,
+            executionResult: .failed(
+              Self.authorizedToolExecutionError(.unsupportedExecutor)))
+          return
+        }
+        executionResult = await handler(command)
       }
-      completeToolCall(callId: callId, result: result, requestId: request.requestId, clientId: request.clientId)
+      guard AuthorizedToolExecution.isOwnerCurrent(command.ownerID) else {
+        completeAuthorizedToolExecution(
+          command: command,
+          executionResult: .failed(
+            Self.authorizedToolExecutionError(.ownerChangedDuringExecution)))
+        return
+      }
+      if command.policyRecovery == .permissionDelegationToNative,
+        case .succeeded = executionResult
+      {
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "other",
+          from: "spawn_agent",
+          to: command.canonicalToolName,
+          reason: "other",
+          outcome: .recovered)
+      }
+      completeAuthorizedToolExecution(
+        command: command,
+        executionResult: executionResult)
     }
   }
 
-  private static func unroutedToolCallError(toolName: String) -> String {
+  private static func authorizedToolExecutionError(
+    _ rejection: AuthorizedToolExecution.Rejection
+  ) -> String {
     let payload: [String: Any] = [
       "ok": false,
       "error": [
-        "code": "unrouted_tool_call",
-        "message": "Tool call '\(toolName)' was rejected because it was not attached to an active trusted request.",
+        "code": rejection.code,
+        "message": "The authorized physical tool command was rejected.",
       ],
     ]
     guard
       let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
       let text = String(data: data, encoding: .utf8)
     else {
-      return #"{"ok":false,"error":{"code":"unrouted_tool_call"}}"#
+      return #"{"ok":false,"error":{"code":"malformed_authorized_execution"}}"#
     }
     return text
   }
 
-  private func completeToolCall(callId: String, result: String, requestId: String? = nil, clientId: String? = nil) {
-    var payload: [String: Any] = [
-      "type": "tool_result",
-      "callId": callId,
-      "result": result,
+  private func completeAuthorizedToolExecution(
+    command: AuthorizedToolExecution,
+    executionResult: AuthorizedRealtimeToolExecutionResult
+  ) {
+    sendJson(Self.authorizedToolExecutionResultWireMessage(
+      command: command,
+      executionResult: executionResult))
+  }
+
+  static func authorizedToolExecutionResultWireMessage(
+    command: AuthorizedToolExecution,
+    executionResult: AuthorizedRealtimeToolExecutionResult
+  ) -> [String: Any] {
+    [
+      "type": "authorized_tool_execution_result",
+      "protocolVersion": 2,
+      "invocationId": command.invocationID,
+      "ownerId": command.ownerID,
+      "sessionId": command.sessionID,
+      "runId": command.runID,
+      "attemptId": command.attemptID,
+      "profileGeneration": command.profileGeneration,
+      "manifestVersion": command.manifestVersion,
+      "manifestDigest": command.manifestDigest,
+      "daemonBootEpoch": command.daemonBootEpoch,
+      "executionGeneration": command.executionGeneration,
+      "inputHash": command.inputHash,
+      "outcome": executionResult.wireOutcome,
+      "result": executionResult.wireResult,
     ]
-    if let requestId { payload["requestId"] = requestId }
-    if let clientId { payload["clientId"] = clientId }
-    sendJson(payload)
+  }
+
+  /// Best-effort failure result for malformed envelopes. Node only accepts it
+  /// when every echoed ledger identity matches, otherwise the dispatched row
+  /// safely reconciles to outcome_unknown on timeout/restart.
+  private func completeAuthorizedToolExecution(
+    payload: [String: Any],
+    outcome: String,
+    result: String
+  ) {
+    sendJson([
+      "type": "authorized_tool_execution_result",
+      "protocolVersion": 2,
+      "invocationId": payload["invocationId"] as? String ?? "",
+      "ownerId": payload["ownerId"] as? String ?? "",
+      "sessionId": payload["sessionId"] as? String ?? "",
+      "runId": payload["runId"] as? String ?? "",
+      "attemptId": payload["attemptId"] as? String ?? "",
+      "profileGeneration": payload["profileGeneration"] as? Int ?? 0,
+      "manifestVersion": payload["manifestVersion"] as? Int ?? 0,
+      "manifestDigest": payload["manifestDigest"] as? String ?? "",
+      "daemonBootEpoch": payload["daemonBootEpoch"] as? String ?? "",
+      "executionGeneration": payload["executionGeneration"] as? Int ?? 0,
+      "inputHash": payload["inputHash"] as? String ?? "",
+      "outcome": outcome,
+      "result": result,
+    ])
   }
 
   private func completeRequest(_ message: RuntimeMessage) {
@@ -1501,61 +2117,315 @@ actor AgentRuntimeProcess {
     request.continuation.resume(returning: message.payload["result"] as? String ?? "")
   }
 
-  private func completeVoiceSeedRequest(_ message: RuntimeMessage) {
+  private func completeJournalRequest(_ message: RuntimeMessage) {
     guard let requestKey = message.requestKey,
-      let request = activeVoiceSeedRequests.removeValue(forKey: requestKey)
+      let request = activeJournalRequests.removeValue(forKey: requestKey)
     else {
-      log("AgentRuntimeProcess: dropping unroutable voice seed context")
+      log("AgentRuntimeProcess: dropping unroutable journal result")
       return
     }
-    let conversationId = message.payload["conversationId"] as? String ?? ""
-    let context = message.payload["context"] as? String ?? ""
-    let idempotencyKeys = message.payload["idempotencyKeys"] as? [String] ?? []
-    request.continuation.resume(
-      returning: VoiceSeedContextResult(
-        conversationId: conversationId,
-        context: context,
-        idempotencyKeys: idempotencyKeys))
-  }
-
-  private func completeKernelTurnTailRequest(_ message: RuntimeMessage) {
-    guard let requestKey = message.requestKey,
-      let request = activeKernelTurnTailRequests.removeValue(forKey: requestKey)
-    else {
-      log("AgentRuntimeProcess: dropping unroutable kernel turn tail")
+    guard message.payload["ok"] as? Bool != false else {
+      let code = message.payload["errorCode"] as? String ?? "journal_operation_failed"
+      request.continuation.resume(throwing: BridgeError.agentError(code))
       return
     }
-    let conversationId = message.payload["conversationId"] as? String ?? ""
-    let rawTurns = message.payload["turns"] as? [[String: Any]] ?? []
-    let turns = rawTurns.map { row in
-      KernelTurnTailTurn(
-        role: row["role"] as? String ?? "",
-        content: row["content"] as? String ?? "",
-        surfaceKind: row["surfaceKind"] as? String ?? "",
-        createdAtMs: row["createdAtMs"] as? Int ?? 0,
-        metadataJson: row["metadataJson"] as? String ?? "{}",
-        origin: row["origin"] as? String ?? ""
+    let surface = AgentSurfaceReference(
+      surfaceKind: message.payload["surfaceKind"] as? String ?? "",
+      externalRefKind: message.payload["externalRefKind"] as? String ?? "",
+      externalRefId: message.payload["externalRefId"] as? String ?? ""
+    )
+    let conversationGeneration = message.payload["conversationGeneration"] as? Int ?? 1
+    let wrapperGenerationBase = message.payload["generationBaseTurnSeq"] as? Int ?? 0
+    let turn = (message.payload["turn"] as? [String: Any]).flatMap {
+      KernelJournalTurn(
+        dictionary: $0,
+        surfaceFallback: surface,
+        conversationGenerationFallback: conversationGeneration,
+        generationBaseTurnSeqFallback: wrapperGenerationBase
       )
     }
-    request.continuation.resume(returning: KernelTurnTailResult(conversationId: conversationId, turns: turns))
+    let turns = (message.payload["turns"] as? [[String: Any]] ?? []).compactMap {
+      KernelJournalTurn(
+        dictionary: $0,
+        surfaceFallback: surface,
+        conversationGenerationFallback: conversationGeneration,
+        generationBaseTurnSeqFallback: wrapperGenerationBase
+      )
+    }
+    let highWaterTurnSeq = message.payload["highWaterTurnSeq"] as? Int ?? 0
+    let generationBaseTurnSeq = message.payload["generationBaseTurnSeq"] as? Int
+      ?? turns.map(\.turnSeq).min().map { max(0, $0 - 1) }
+      ?? (conversationGeneration > 1 ? highWaterTurnSeq : 0)
+    request.continuation.resume(returning: JournalOperationResult(
+      operation: message.payload["operation"] as? String ?? "",
+      conversationId: message.payload["conversationId"] as? String ?? turn?.conversationId ?? turns.first?.conversationId ?? "",
+      turn: turn,
+      turns: turns,
+      clearedCount: message.payload["clearedCount"] as? Int ?? 0,
+      highWaterTurnSeq: highWaterTurnSeq,
+      conversationGeneration: conversationGeneration,
+      generationBaseTurnSeq: generationBaseTurnSeq
+    ))
   }
 
-  private func kernelTurnRecorded(from message: RuntimeMessage) -> KernelTurnRecorded? {
-    let payload = message.payload
-    guard let conversationId = payload["conversationId"] as? String else { return nil }
-    return KernelTurnRecorded(
-      conversationId: conversationId,
-      surfaceKind: payload["surfaceKind"] as? String ?? "",
-      externalRefKind: payload["externalRefKind"] as? String ?? "",
-      externalRefId: payload["externalRefId"] as? String ?? "",
-      userText: payload["userText"] as? String ?? "",
-      assistantText: payload["assistantText"] as? String ?? "",
-      origin: payload["origin"] as? String ?? "",
-      interrupted: payload["interrupted"] as? Bool ?? false,
-      idempotencyKey: payload["idempotencyKey"] as? String,
-      userTurnId: payload["userTurnId"] as? String,
-      assistantTurnId: payload["assistantTurnId"] as? String
+  private func journalTurn(from message: RuntimeMessage) -> KernelJournalTurn? {
+    guard let dictionary = message.payload["turn"] as? [String: Any] else { return nil }
+    let surface = AgentSurfaceReference(
+      surfaceKind: message.payload["surfaceKind"] as? String ?? "",
+      externalRefKind: message.payload["externalRefKind"] as? String ?? "",
+      externalRefId: message.payload["externalRefId"] as? String ?? ""
     )
+    return KernelJournalTurn(
+      dictionary: dictionary,
+      surfaceFallback: surface,
+      conversationGenerationFallback: message.payload["conversationGeneration"] as? Int ?? 1,
+      generationBaseTurnSeqFallback: message.payload["generationBaseTurnSeq"] as? Int ?? 0
+    )
+  }
+
+  private func handleJournalBackendSync(_ message: RuntimeMessage) {
+    guard let request = KernelJournalBackendSyncDriver.Request(payload: message.payload) else {
+      sendJournalBackendSyncResult(
+        requestId: message.requestId,
+        clientId: message.clientId,
+        ownerId: message.payload["ownerId"] as? String,
+        turnId: message.payload["turnId"] as? String ?? "",
+        conversationId: message.payload["conversationId"] as? String,
+        conversationGeneration: message.payload["conversationGeneration"] as? Int,
+        attemptCount: message.payload["attemptCount"] as? Int,
+        deliveryGeneration: message.payload["deliveryGeneration"] as? Int,
+        payloadHash: message.payload["payloadHash"] as? String,
+        remoteId: nil,
+        errorCode: "malformed_backend_sync_request"
+      )
+      return
+    }
+    Task { [weak self] in
+      do {
+        let receipt = try await KernelJournalBackendSyncDriver.shared.sync(request)
+        await self?.sendJournalBackendSyncResult(
+          requestId: message.requestId,
+          clientId: message.clientId,
+          ownerId: request.ownerId,
+          turnId: receipt.turnId,
+          conversationId: request.conversationId,
+          conversationGeneration: request.conversationGeneration,
+          attemptCount: request.attemptCount,
+          deliveryGeneration: request.deliveryGeneration,
+          payloadHash: request.payloadHash,
+          remoteId: receipt.remoteId,
+          errorCode: nil
+        )
+      } catch {
+        await self?.sendJournalBackendSyncResult(
+          requestId: message.requestId,
+          clientId: message.clientId,
+          ownerId: request.ownerId,
+          turnId: request.turnId,
+          conversationId: request.conversationId,
+          conversationGeneration: request.conversationGeneration,
+          attemptCount: request.attemptCount,
+          deliveryGeneration: request.deliveryGeneration,
+          payloadHash: request.payloadHash,
+          remoteId: nil,
+          errorCode: KernelJournalBackendSyncDriver.boundedErrorCode(for: error)
+        )
+      }
+    }
+  }
+
+  private func sendJournalBackendSyncResult(
+    requestId: String?,
+    clientId: String?,
+    ownerId: String?,
+    turnId: String,
+    conversationId: String?,
+    conversationGeneration: Int?,
+    attemptCount: Int?,
+    deliveryGeneration: Int?,
+    payloadHash: String?,
+    remoteId: String?,
+    errorCode: String?
+  ) {
+    var payload: [String: Any] = [
+      "type": "journal_backend_sync_result",
+      "protocolVersion": 2,
+      "turnId": turnId,
+      "ok": remoteId != nil,
+    ]
+    if let requestId { payload["requestId"] = requestId }
+    if let clientId { payload["clientId"] = clientId }
+    if let ownerId { payload["ownerId"] = ownerId }
+    if let conversationId { payload["conversationId"] = conversationId }
+    if let conversationGeneration { payload["conversationGeneration"] = conversationGeneration }
+    if let attemptCount { payload["attemptCount"] = attemptCount }
+    if let deliveryGeneration { payload["deliveryGeneration"] = deliveryGeneration }
+    if let payloadHash { payload["payloadHash"] = payloadHash }
+    if let remoteId { payload["remoteId"] = remoteId }
+    if let errorCode { payload["errorCode"] = errorCode }
+    sendJson(payload)
+  }
+
+  private func handleJournalBackendDelete(_ message: RuntimeMessage) {
+    guard let request = KernelJournalBackendSyncDriver.DeleteRequest(payload: message.payload) else {
+      sendJournalBackendDeleteResult(
+        requestId: message.requestId,
+        clientId: message.clientId,
+        ownerId: message.payload["ownerId"] as? String,
+        operationId: message.payload["operationId"] as? String ?? "",
+        conversationId: message.payload["conversationId"] as? String,
+        conversationGeneration: message.payload["conversationGeneration"] as? Int,
+        attemptCount: message.payload["attemptCount"] as? Int,
+        deliveryGeneration: message.payload["deliveryGeneration"] as? Int,
+        payloadHash: message.payload["payloadHash"] as? String,
+        ok: false,
+        errorCode: "malformed_backend_delete_request"
+      )
+      return
+    }
+
+    Task { [weak self] in
+      do {
+        try await KernelJournalBackendSyncDriver.shared.delete(request)
+        await self?.sendJournalBackendDeleteResult(
+          requestId: message.requestId,
+          clientId: message.clientId,
+          ownerId: request.ownerId,
+          operationId: request.operationId,
+          conversationId: request.conversationId,
+          conversationGeneration: request.conversationGeneration,
+          attemptCount: request.attemptCount,
+          deliveryGeneration: request.deliveryGeneration,
+          payloadHash: request.payloadHash,
+          ok: true,
+          errorCode: nil
+        )
+      } catch {
+        await self?.sendJournalBackendDeleteResult(
+          requestId: message.requestId,
+          clientId: message.clientId,
+          ownerId: request.ownerId,
+          operationId: request.operationId,
+          conversationId: request.conversationId,
+          conversationGeneration: request.conversationGeneration,
+          attemptCount: request.attemptCount,
+          deliveryGeneration: request.deliveryGeneration,
+          payloadHash: request.payloadHash,
+          ok: false,
+          errorCode: KernelJournalBackendSyncDriver.boundedDeleteErrorCode(for: error)
+        )
+      }
+    }
+  }
+
+  private func sendJournalBackendDeleteResult(
+    requestId: String?,
+    clientId: String?,
+    ownerId: String?,
+    operationId: String,
+    conversationId: String?,
+    conversationGeneration: Int?,
+    attemptCount: Int?,
+    deliveryGeneration: Int?,
+    payloadHash: String?,
+    ok: Bool,
+    errorCode: String?
+  ) {
+    var payload: [String: Any] = [
+      "type": "journal_backend_delete_result",
+      "protocolVersion": 2,
+      "operationId": operationId,
+      "ok": ok,
+    ]
+    if let requestId { payload["requestId"] = requestId }
+    if let clientId { payload["clientId"] = clientId }
+    if let ownerId { payload["ownerId"] = ownerId }
+    if let conversationId { payload["conversationId"] = conversationId }
+    if let conversationGeneration { payload["conversationGeneration"] = conversationGeneration }
+    if let attemptCount { payload["attemptCount"] = attemptCount }
+    if let deliveryGeneration { payload["deliveryGeneration"] = deliveryGeneration }
+    if let payloadHash { payload["payloadHash"] = payloadHash }
+    if let errorCode { payload["errorCode"] = errorCode }
+    sendJson(payload)
+  }
+
+  private func handleJournalBackendReconcile(_ message: RuntimeMessage) {
+    guard let request = KernelJournalBackendSyncDriver.ReconcileRequest(payload: message.payload) else {
+      sendJournalBackendReconcileResult(
+        requestId: message.requestId,
+        clientId: message.clientId,
+        ownerId: message.payload["ownerId"] as? String,
+        reconcileId: message.payload["reconcileId"] as? String ?? "",
+        conversationId: message.payload["conversationId"] as? String,
+        pageCursor: message.payload["pageCursor"] as? String,
+        nextCursor: nil,
+        turns: nil,
+        hasMore: nil,
+        errorCode: "malformed_backend_reconcile_request"
+      )
+      return
+    }
+
+    Task { [weak self] in
+      do {
+        let page = try await KernelJournalBackendSyncDriver.shared.reconcile(request)
+        await self?.sendJournalBackendReconcileResult(
+          requestId: message.requestId,
+          clientId: message.clientId,
+          ownerId: request.ownerId,
+          reconcileId: request.reconcileId,
+          conversationId: request.conversationId,
+          pageCursor: request.pageCursor,
+          nextCursor: page.nextCursor,
+          turns: page.turns.map(\.dictionary),
+          hasMore: page.hasMore,
+          errorCode: nil
+        )
+      } catch {
+        await self?.sendJournalBackendReconcileResult(
+          requestId: message.requestId,
+          clientId: message.clientId,
+          ownerId: request.ownerId,
+          reconcileId: request.reconcileId,
+          conversationId: request.conversationId,
+          pageCursor: request.pageCursor,
+          nextCursor: nil,
+          turns: nil,
+          hasMore: nil,
+          errorCode: KernelJournalBackendSyncDriver.boundedReconcileErrorCode(for: error)
+        )
+      }
+    }
+  }
+
+  private func sendJournalBackendReconcileResult(
+    requestId: String?,
+    clientId: String?,
+    ownerId: String?,
+    reconcileId: String,
+    conversationId: String?,
+    pageCursor: String?,
+    nextCursor: String?,
+    turns: [[String: Any]]?,
+    hasMore: Bool?,
+    errorCode: String?
+  ) {
+    var payload: [String: Any] = [
+      "type": "journal_backend_reconcile_result",
+      "protocolVersion": 2,
+      "reconcileId": reconcileId,
+      "ok": errorCode == nil,
+      "pageCursor": pageCursor ?? NSNull(),
+    ]
+    if let requestId { payload["requestId"] = requestId }
+    if let clientId { payload["clientId"] = clientId }
+    if let ownerId { payload["ownerId"] = ownerId }
+    if let conversationId { payload["conversationId"] = conversationId }
+    if errorCode == nil { payload["nextCursor"] = nextCursor ?? NSNull() }
+    if let turns { payload["turns"] = turns }
+    if let hasMore { payload["hasMore"] = hasMore }
+    if let errorCode { payload["errorCode"] = errorCode }
+    sendJson(payload)
   }
 
   private func failRequest(_ message: RuntimeMessage) {
@@ -1569,10 +2439,19 @@ actor AgentRuntimeProcess {
       return
     }
     if let requestKey = message.requestKey,
-      let surfaceRequest = activeSurfaceTurnRequests.removeValue(forKey: requestKey)
+      let journalRequest = activeJournalRequests.removeValue(forKey: requestKey)
     {
-      log("AgentRuntimeProcess: surface turn error (raw): \(raw)")
-      surfaceRequest.continuation.resume(
+      log("AgentRuntimeProcess: journal operation failed (code-only)")
+      journalRequest.continuation.resume(
+        throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw)
+      )
+      return
+    }
+    if let requestKey = message.requestKey,
+      let contractRequest = activeKernelContractRequests.removeValue(forKey: requestKey)
+    {
+      log("AgentRuntimeProcess: kernel contract request failed (code-only)")
+      contractRequest.continuation.resume(
         throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw)
       )
       return
@@ -1683,19 +2562,14 @@ actor AgentRuntimeProcess {
     for request in controlRequests {
       request.continuation.resume(throwing: error)
     }
-    let seedRequests = activeVoiceSeedRequests.values
-    activeVoiceSeedRequests.removeAll()
-    for request in seedRequests {
+    let journalRequests = activeJournalRequests.values
+    activeJournalRequests.removeAll()
+    for request in journalRequests {
       request.continuation.resume(throwing: error)
     }
-    let surfaceRequests = activeSurfaceTurnRequests.values
-    activeSurfaceTurnRequests.removeAll()
-    for request in surfaceRequests {
-      request.continuation.resume(throwing: error)
-    }
-    let tailRequests = activeKernelTurnTailRequests.values
-    activeKernelTurnTailRequests.removeAll()
-    for request in tailRequests {
+    let contractRequests = activeKernelContractRequests.values
+    activeKernelContractRequests.removeAll()
+    for request in contractRequests {
       request.continuation.resume(throwing: error)
     }
   }

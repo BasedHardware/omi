@@ -1,7 +1,9 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
+import { migrateSessionExecutionProfile } from "../src/runtime/session-execution-profile.js";
 import { probeNodeSqliteRuntime, SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 
 const createdDirs: string[] = [];
@@ -1298,6 +1300,130 @@ describe("SqliteAgentStore", () => {
     store.close();
   });
 
+  it("repairs old-writer profile references by the immutable profile active at each row timestamp", () => {
+    const databasePath = newDatabasePath();
+    let store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false, nowMs: () => 100 });
+    const session = store.insertSession({
+      sessionId: "ses_profile_downgrade",
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "acp",
+      providerBoundary: "local_user:acp",
+      createdAtMs: 100,
+      updatedAtMs: 100,
+      lastActivityAtMs: 100,
+    });
+    store.insertRun({
+      runId: "run_genuine_gen1",
+      sessionId: session.sessionId,
+      clientId: "legacy",
+      requestId: "genuine-gen1",
+      status: "succeeded",
+      mode: "ask",
+      profileGeneration: 1,
+      createdAtMs: 150,
+      completedAtMs: 150,
+      updatedAtMs: 150,
+    });
+    store.insertAttempt({
+      attemptId: "att_genuine_gen1",
+      runId: "run_genuine_gen1",
+      attemptNo: 1,
+      status: "succeeded",
+      adapterId: "acp",
+      adapterInstanceId: "",
+      profileGeneration: 1,
+      createdAtMs: 151,
+      completedAtMs: 151,
+      updatedAtMs: 151,
+    });
+    store.insertAdapterBinding({
+      bindingId: "bind_genuine_gen1",
+      sessionId: session.sessionId,
+      adapterId: "acp",
+      bindingGeneration: 1,
+      profileGeneration: 1,
+      resumeFidelity: "none",
+      status: "closed",
+      createdAtMs: 152,
+      updatedAtMs: 152,
+    });
+    migrateSessionExecutionProfile(store, {
+      sessionId: session.sessionId,
+      ownerId: "owner",
+      expectedProfileGeneration: 1,
+      adapterId: "pi-mono",
+      reason: "generation_two",
+    }, 200);
+    store.close();
+
+    insertRowsAsDowngradedWriter(databasePath, {
+      sessionId: session.sessionId,
+      suffix: "gen2",
+      adapterId: "pi-mono",
+      bindingGeneration: 2,
+      createdAtMs: 250,
+    });
+    store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false, nowMs: () => 275 });
+    expect(store.reconcileStartup()).toMatchObject({
+      repairedRunProfileReferenceIds: ["run_gen2"],
+      repairedAttemptProfileReferenceIds: ["att_gen2"],
+      repairedBindingProfileReferenceIds: ["bind_gen2"],
+    });
+    expect(profileReferences(store)).toMatchObject({
+      run_genuine_gen1: 1,
+      att_genuine_gen1: 1,
+      bind_genuine_gen1: 1,
+      run_gen2: 2,
+      att_gen2: 2,
+      bind_gen2: 2,
+    });
+    migrateSessionExecutionProfile(store, {
+      sessionId: session.sessionId,
+      ownerId: "owner",
+      expectedProfileGeneration: 2,
+      adapterId: "acp",
+      reason: "generation_three",
+    }, 300);
+    store.close();
+
+    insertRowsAsDowngradedWriter(databasePath, {
+      sessionId: session.sessionId,
+      suffix: "gen3",
+      adapterId: "acp",
+      bindingGeneration: 3,
+      createdAtMs: 300,
+    });
+    store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false, nowMs: () => 400 });
+    expect(store.reconcileStartup()).toMatchObject({
+      repairedRunProfileReferenceIds: ["run_gen3"],
+      repairedAttemptProfileReferenceIds: ["att_gen3"],
+      repairedBindingProfileReferenceIds: ["bind_gen3"],
+    });
+    const repaired = profileReferences(store);
+    expect(repaired).toEqual({
+      att_gen2: 2,
+      att_gen3: 3,
+      att_genuine_gen1: 1,
+      bind_gen2: 2,
+      bind_gen3: 3,
+      bind_genuine_gen1: 1,
+      run_gen2: 2,
+      run_gen3: 3,
+      run_genuine_gen1: 1,
+    });
+    store.close();
+
+    store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false, nowMs: () => 500 });
+    expect(store.reconcileStartup()).toMatchObject({
+      repairedRunProfileReferenceIds: [],
+      repairedAttemptProfileReferenceIds: [],
+      repairedBindingProfileReferenceIds: [],
+    });
+    expect(profileReferences(store)).toEqual(repaired);
+    store.close();
+  });
+
   it("terminalizes orphaned nonterminal journal rows once without a backend empty placeholder", () => {
     const store = new SqliteAgentStore({ databasePath: newDatabasePath(), reconcileOnOpen: false, nowMs: () => 500 });
     const session = store.insertSession({
@@ -1360,6 +1486,73 @@ function newDatabasePath(): string {
   const dir = mkdtempSync(join(tmpdir(), "omi-agent-store-"));
   createdDirs.push(dir);
   return join(dir, "omi-agentd.sqlite3");
+}
+
+function insertRowsAsDowngradedWriter(
+  databasePath: string,
+  input: {
+    sessionId: string;
+    suffix: string;
+    adapterId: string;
+    bindingGeneration: number;
+    createdAtMs: number;
+  },
+): void {
+  const db = new DatabaseSync(databasePath);
+  db.exec("PRAGMA foreign_keys = ON");
+  db.prepare(
+    `INSERT INTO runs(
+       run_id, session_id, client_id, request_id, status, mode, input_json,
+       created_at_ms, completed_at_ms, updated_at_ms
+     ) VALUES (?, ?, 'old-writer', ?, 'succeeded', 'ask', '{}', ?, ?, ?)`,
+  ).run(
+    `run_${input.suffix}`,
+    input.sessionId,
+    input.suffix,
+    input.createdAtMs,
+    input.createdAtMs,
+    input.createdAtMs,
+  );
+  db.prepare(
+    `INSERT INTO run_attempts(
+       attempt_id, run_id, attempt_no, status, adapter_id, adapter_instance_id,
+       created_at_ms, completed_at_ms, updated_at_ms
+     ) VALUES (?, ?, 1, 'succeeded', ?, '', ?, ?, ?)`,
+  ).run(
+    `att_${input.suffix}`,
+    `run_${input.suffix}`,
+    input.adapterId,
+    input.createdAtMs,
+    input.createdAtMs,
+    input.createdAtMs,
+  );
+  db.prepare(
+    `INSERT INTO adapter_bindings(
+       binding_id, session_id, adapter_id, binding_generation, resume_fidelity,
+       status, created_at_ms, updated_at_ms
+     ) VALUES (?, ?, ?, ?, 'none', 'closed', ?, ?)`,
+  ).run(
+    `bind_${input.suffix}`,
+    input.sessionId,
+    input.adapterId,
+    input.bindingGeneration,
+    input.createdAtMs,
+    input.createdAtMs,
+  );
+  db.close();
+}
+
+function profileReferences(store: SqliteAgentStore): Record<string, number> {
+  const references: Record<string, number> = {};
+  for (const row of store.allRows(
+    `SELECT run_id AS id, profile_generation FROM runs
+     UNION ALL SELECT attempt_id AS id, profile_generation FROM run_attempts
+     UNION ALL SELECT binding_id AS id, profile_generation FROM adapter_bindings
+     ORDER BY id ASC`,
+  )) {
+    references[String(row.id)] = Number(row.profile_generation);
+  }
+  return references;
 }
 
 function tableNames(store: SqliteAgentStore): string[] {

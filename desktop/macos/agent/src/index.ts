@@ -48,6 +48,7 @@ import type {
   ResolveSurfaceSessionMessage,
   MigrateSessionExecutionProfileMessage,
   ContextSourceUpdateMessage,
+  ImportLegacyMainChatSessionsMessage,
   JournalRecordTurnMessage,
   JournalUpdateTurnMessage,
   JournalListTurnsMessage,
@@ -2284,13 +2285,41 @@ async function main(): Promise<void> {
       case "import_legacy_main_chat_sessions": {
         // Compatibility contract is owner-scoped and removal-bounded in
         // LEGACY_MAIN_CHAT_SESSION_COMPATIBILITY; this handler owns no fallback authority.
-        const ownerId = resolveActiveOwner(msg.ownerId);
-        const entries = Array.isArray(msg.entries) ? msg.entries : [];
-        const imported = kernel.importLegacyMainChatSessions({ ownerId, entries });
-        logErr(
-          `Imported ${imported} main-chat surface session(s) for ${ownerId} `
-          + `(compat-owner=${LEGACY_MAIN_CHAT_SESSION_COMPATIBILITY.owner})`,
-        );
+        const request = msg as ImportLegacyMainChatSessionsMessage;
+        try {
+          if (!request.requestId?.trim() || !request.clientId?.trim()) {
+            throw new Error("legacy_main_chat_session_import_requires_correlation");
+          }
+          if (!Array.isArray(request.entries) || request.entries.length === 0) {
+            throw new Error("legacy_main_chat_session_import_requires_entries");
+          }
+          const ownerId = resolveActiveOwner(request.ownerId);
+          const receipt = kernel.importLegacyMainChatSessions({ ownerId, entries: request.entries });
+          send({
+            type: "legacy_main_chat_sessions_imported",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            ownerId,
+            acceptedEntries: receipt.acceptedEntries,
+            acceptedCount: receipt.acceptedEntries.length,
+            importedCount: receipt.importedCount,
+          });
+          logErr(
+            `Accepted ${receipt.acceptedEntries.length} legacy main-chat alias(es); `
+            + `imported ${receipt.importedCount} (compat-owner=${LEGACY_MAIN_CHAT_SESSION_COMPATIBILITY.owner})`,
+          );
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            message: envelope.message,
+            failure: envelope.failure,
+          });
+        }
         break;
       }
 

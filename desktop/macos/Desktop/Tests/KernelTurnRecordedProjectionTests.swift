@@ -4,859 +4,589 @@ import XCTest
 
 @MainActor
 final class KernelTurnRecordedProjectionTests: XCTestCase {
-
-  func testCanonicalCompletedRunFixtureUsesProductionPillProjectionBoundary() throws {
-    struct Fixture: Decodable {
-      let runId: String
-      let pillId: UUID
-      let prompt: String
-      let finalText: String
-    }
-    let fixtureURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("agent/tests/fixtures/completed-agent-recall.json")
-    let fixture = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: fixtureURL))
-
-    let completion = try XCTUnwrap(
-      PillTerminalCompletionProjection.make(
-        pillID: fixture.pillId,
-        runId: fixture.runId,
-        userText: fixture.prompt,
-        assistantText: fixture.finalText
-      ))
-
-    XCTAssertEqual(completion.idempotencyKey, "pill_completion:\(fixture.runId)")
-    XCTAssertEqual(completion.assistantText, fixture.finalText)
-    XCTAssertEqual(completion.requestSnippet, fixture.prompt)
-    XCTAssertEqual(
-      completion.summary,
-      "[Background agent id=\(fixture.pillId.uuidString) — \(fixture.prompt)] \(fixture.finalText)"
-    )
+  func testRealtimeVoiceUsesDedicatedKernelSessionSurface() {
+    let surface = AgentSurfaceReference.realtimeVoice()
+    XCTAssertEqual(surface.surfaceKind, "realtime_voice")
+    XCTAssertEqual(surface.externalRefKind, "chat")
+    XCTAssertEqual(surface.externalRefId, "default")
   }
 
-  func testTerminalPillCallerRemainsBoundToProjectionAndKernelWrite() throws {
-    let sourceURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources/FloatingControlBar/FloatingControlBarWindow.swift")
-    let source = try String(contentsOf: sourceURL, encoding: .utf8)
-    let start = try XCTUnwrap(
-      source.range(of: "func recordPillTerminalCompletion("),
-      "terminal pill projection entrypoint must exist")
-    let end = try XCTUnwrap(
-      source.range(
-        of: "private func observeAgentCompletionContext(",
-        range: start.upperBound..<source.endIndex),
-      "terminal pill projection boundary must remain isolated")
-    let body = String(source[start.lowerBound..<end.lowerBound])
-
-    XCTAssertTrue(body.contains("PillTerminalCompletionProjection.make("))
-    XCTAssertTrue(body.contains("provider.kernelTurnProjection.projectCrossSurfaceTurn("))
-    XCTAssertTrue(body.contains("assistantText: completion.summary"))
-    XCTAssertTrue(body.contains("origin: \"pill_completion\""))
-    XCTAssertTrue(body.contains("idempotencyKey: completion.idempotencyKey"))
-  }
-
-  func testApplyKernelTurnRecordedAppendsMainChatMessages() {
+  func testSpawnProjectionPinsItsProducingSurfaceAcrossLaterCompletion() throws {
     let provider = ChatProvider()
-    let projection = provider.kernelTurnProjection
     let surface = provider.mainChatSurfaceReference()
-    projection.apply(
-      .init(
-        conversationId: "conv-1",
-        surfaceKind: surface.surfaceKind,
-        externalRefKind: surface.externalRefKind,
-        externalRefId: surface.externalRefId,
-        userText: "PTT question",
-        assistantText: "PTT answer",
-        origin: "realtime_voice",
-        interrupted: false,
-        idempotencyKey: "turn-1",
-        userTurnId: "user-turn-1",
-        assistantTurnId: "assistant-turn-1"
-      )
+    let pillID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000043"))
+    let spawn = ChatContentBlock.agentSpawn(
+      id: KernelAgentLifecycleMutation.stableSpawnBlockID(pillID: pillID),
+      pillId: pillID,
+      sessionId: "session-pinned",
+      runId: "run-pinned",
+      title: "Pinned agent",
+      objective: "Finish after the user changes chats"
     )
 
-    XCTAssertEqual(provider.messages.filter { $0.sender == .user }.map(\.text), ["PTT question"])
-    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.map(\.text), ["PTT answer"])
-    XCTAssertEqual(
-      provider.messages.filter { $0.sender == .user }.compactMap(\.clientTurnId),
-      ["turn-1"]
-    )
-  }
-
-  func testApplyKernelTurnRecordedDedupesByIdempotencyKey() {
-    let provider = ChatProvider()
-    let projection = provider.kernelTurnProjection
-    let surface = provider.mainChatSurfaceReference()
-    let turn = AgentRuntimeProcess.KernelTurnRecorded(
-      conversationId: "conv-1",
-      surfaceKind: surface.surfaceKind,
-      externalRefKind: surface.externalRefKind,
-      externalRefId: surface.externalRefId,
-      userText: "Once",
-      assistantText: "Twice",
-      origin: "realtime_voice",
-      interrupted: false,
-      idempotencyKey: "dup-key",
-      userTurnId: nil,
-      assistantTurnId: nil
-    )
-    projection.apply(turn)
-    projection.apply(turn)
-
-    XCTAssertEqual(provider.messages.filter { $0.sender == .user }.count, 1)
-    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 1)
-  }
-
-  /// Regression: the applied-key cache evicted an ARBITRARY 32 keys (hash-ordered
-  /// `suffix(32)` over an unordered Set), so after the cache exceeded its cap a
-  /// re-delivered turn_recorded whose key was randomly dropped could double-append.
-  /// Eviction now drops OLDEST-first, so keys that are still among the most-recent
-  /// survivors keep deduping. This applies enough distinct turns to force an
-  /// eviction, then re-delivers a band of keys the oldest-first policy guarantees
-  /// are retained — asserting zero duplicate appends.
-  func testDedupSurvivesEvictionOfMostRecentKeys() {
-    let provider = ChatProvider()
-    let projection = provider.kernelTurnProjection
-    let surface = provider.mainChatSurfaceReference()
-
-    func makeTurn(_ index: Int) -> AgentRuntimeProcess.KernelTurnRecorded {
-      .init(
-        conversationId: "conv-evict",
-        surfaceKind: surface.surfaceKind,
-        externalRefKind: surface.externalRefKind,
-        externalRefId: surface.externalRefId,
-        userText: "user-\(index)",
-        assistantText: "reply-\(index)",
-        origin: "realtime_voice",
-        interrupted: false,
-        idempotencyKey: "evict-key-\(index)",
-        userTurnId: nil,
-        assistantTurnId: nil
-      )
-    }
-
-    // 96 distinct turns exceeds the 64 cap → at least one eviction fires (trim to
-    // the most-recent 32). Under oldest-first eviction, keys 33..95 all remain
-    // tracked afterward.
-    let total = 96
-    for i in 0..<total {
-      projection.apply(makeTurn(i))
-    }
-    XCTAssertEqual(provider.messages.filter { $0.sender == .user }.count, total)
-
-    // Re-deliver keys 33..64 — the band that straddles the trim boundary and that
-    // the hash-ordered `suffix(32)` could have evicted, but oldest-first keeps.
-    for i in 33...64 {
-      projection.apply(makeTurn(i))
-    }
+    provider.projectJournalTurn(try turn(
+      surface: surface,
+      turnId: "assistant-pinned-spawn",
+      turnSeq: 1,
+      content: "I started a background agent.",
+      blocks: [spawn]
+    ))
 
     XCTAssertEqual(
-      provider.messages.filter { $0.sender == .user }.count, total,
-      "re-delivered turns whose keys are still tracked must not double-append")
-    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, total)
-  }
-
-  func testRapidPTTRoleProjectionsShowEveryUserTurnBeforeFinalReply() {
-    let provider = ChatProvider()
-    let projection = provider.kernelTurnProjection
-    let surface = provider.mainChatSurfaceReference()
-
-    for (index, text) in ["one two three", "A B C", "R G B"].enumerated() {
-      projection.apply(
-        .init(
-          conversationId: "conv-rapid-ptt",
-          surfaceKind: surface.surfaceKind,
-          externalRefKind: surface.externalRefKind,
-          externalRefId: surface.externalRefId,
-          userText: text,
-          assistantText: index == 2 ? "Red, green, blue." : "",
-          origin: "realtime_voice",
-          interrupted: index < 2,
-          idempotencyKey: "realtime_voice:turn-\(index):user",
-          userTurnId: "user-turn-\(index)",
-          assistantTurnId: nil
-        )
-      )
-    }
-
-    XCTAssertEqual(provider.messages.map(\.sender), [.user, .user, .user, .ai])
-    XCTAssertEqual(
-      provider.messages.map(\.text),
-      ["one two three", "A B C", "R G B", "Red, green, blue."]
+      AgentPillsManager.shared.producingJournalSurface(for: pillID),
+      surface
     )
   }
 
-  /// INV-6: one turn_recorded UI apply gate. Warm/restart re-attach replaces the
-  /// single handler slot; one dispatched turn_recorded yields one message pair.
-  func testTurnRecordedHandlerReplacePreventsWarmDuplicateFanout() async {
-    final class FanoutBox: @unchecked Sendable {
+  func testAgentCompletionEnrichesProducingSpawnTurnIdempotently() throws {
+    let surface = AgentSurfaceReference.mainChat(chatId: "default")
+    let pillID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000042"))
+    let spawn = ChatContentBlock.agentSpawn(
+      id: KernelAgentLifecycleMutation.stableSpawnBlockID(pillID: pillID),
+      pillId: pillID,
+      sessionId: "session-1",
+      runId: "run-1",
+      title: "Research",
+      objective: "Find the answer"
+    )
+    let originalResource = ChatResource.localGeneratedFile(
+      id: "artifact-original",
+      title: "original.md",
+      subtitle: "text/markdown",
+      mimeType: "text/markdown",
+      uri: "file:///tmp/original.md"
+    )
+    let producedResource = ChatResource.localGeneratedFile(
+      id: "artifact-result",
+      title: "result.md",
+      subtitle: "text/markdown",
+      mimeType: "text/markdown",
+      uri: "file:///tmp/result.md"
+    )
+    let producingTurn = try turn(
+      surface: surface,
+      turnId: "assistant-producing-spawn",
+      turnSeq: 1,
+      content: "I started a background agent.",
+      blocks: [spawn],
+      resources: [originalResource]
+    )
+
+    let first = try XCTUnwrap(KernelAgentLifecycleMutation.completion(
+      in: [producingTurn],
+      pillID: pillID,
+      sessionID: "session-1",
+      runID: "run-1",
+      title: "Research",
+      promptSnippet: "Find the answer",
+      output: "The answer is 42.",
+      status: "completed",
+      resources: [producedResource]
+    ))
+    XCTAssertEqual(first.message.id, "assistant-producing-spawn")
+    XCTAssertEqual(first.message.text, "I started a background agent.")
+    XCTAssertEqual(first.message.resources.map(\.id), ["artifact-original", "artifact-result"])
+    XCTAssertEqual(first.message.contentBlocks.count, 2)
+    let atomicUpdate = KernelAgentLifecycleMutation.atomicAppendUpdate(first).dictionary
+    XCTAssertNotNil(atomicUpdate["appendContentBlocks"])
+    XCTAssertNotNil(atomicUpdate["appendResources"])
+    XCTAssertNil(atomicUpdate["replaceContentBlocks"])
+    XCTAssertNil(atomicUpdate["replaceResources"])
+    XCTAssertNil(atomicUpdate["status"])
+    XCTAssertNil(atomicUpdate["producingRunId"])
+
+    let revisedTurn = try turn(
+      surface: surface,
+      turnId: first.message.id,
+      turnSeq: 2,
+      content: first.message.text,
+      blocks: first.message.contentBlocks,
+      resources: first.message.resources
+    )
+    let repeated = try XCTUnwrap(KernelAgentLifecycleMutation.completion(
+      in: [producingTurn, revisedTurn],
+      pillID: pillID,
+      sessionID: "session-1",
+      runID: "run-1",
+      title: "Research",
+      promptSnippet: "Find the answer",
+      output: "The answer is 42.",
+      status: "completed",
+      resources: [producedResource]
+    ))
+    XCTAssertEqual(repeated.message.id, producingTurn.turnId)
+    XCTAssertEqual(repeated.message.contentBlocks.filter {
+      if case .agentCompletion = $0 { return true }
+      return false
+    }.count, 1)
+    XCTAssertEqual(repeated.message.resources.map(\.id), ["artifact-original", "artifact-result"])
+  }
+
+  func testAgentCompletionRequiresPersistedProducingSpawn() throws {
+    let surface = AgentSurfaceReference.mainChat(chatId: "default")
+    let ordinary = try turn(
+      surface: surface,
+      turnId: "assistant-without-spawn",
+      turnSeq: 1,
+      content: "No child was started"
+    )
+    XCTAssertNil(KernelAgentLifecycleMutation.completion(
+      in: [ordinary],
+      pillID: UUID(),
+      sessionID: nil,
+      runID: nil,
+      title: "Agent",
+      promptSnippet: "Task",
+      output: "Done",
+      status: "completed",
+      resources: []
+    ))
+  }
+
+  func testLegacyBackendCollectorReadsEveryBoundedPageBeforeCheckpoint() async throws {
+    var requested: [(limit: Int, offset: Int)] = []
+    let rows = try await ChatLegacyPageCollector.all { limit, offset in
+      requested.append((limit, offset))
+      let end = min(offset + limit, 235)
+      return offset < end ? Array(offset..<end) : []
+    }
+
+    XCTAssertEqual(rows, Array(0..<235))
+    XCTAssertEqual(requested.map(\.limit), [100, 100, 100])
+    XCTAssertEqual(requested.map(\.offset), [0, 100, 200])
+    XCTAssertEqual(ChatLegacyCompatibilityMetadata.owner, "desktop-main-chat")
+    XCTAssertFalse(ChatLegacyCompatibilityMetadata.removalCondition.isEmpty)
+    XCTAssertEqual(ChatLegacyCompatibilityMetadata.removeBy, "2026-10-01")
+  }
+
+  func testJournalProjectionUpsertsMutationByCanonicalTurnID() throws {
+    let provider = ChatProvider()
+    let surface = provider.mainChatSurfaceReference()
+    provider.projectJournalTurn(try turn(
+      surface: surface,
+      turnId: "assistant-1",
+      turnSeq: 1,
+      content: "Part",
+      status: .streaming
+    ))
+    provider.projectJournalTurn(try turn(
+      surface: surface,
+      turnId: "assistant-1",
+      turnSeq: 2,
+      content: "Part complete",
+      status: .completed
+    ))
+
+    XCTAssertEqual(provider.messages.count, 1)
+    XCTAssertEqual(provider.messages[0].id, "assistant-1")
+    XCTAssertEqual(provider.messages[0].text, "Part complete")
+    XCTAssertFalse(provider.messages[0].isStreaming)
+  }
+
+  func testOptimisticTurnKeepsIdentityThroughJournalAcknowledgementAndReplay() throws {
+    let provider = ChatProvider()
+    let surface = provider.mainChatSurfaceReference()
+    let continuityKey = "typed-chat:request-9515"
+    let staged = provider.stageOptimisticTurn(
+      continuityKey: continuityKey,
+      userText: "Find one surprising memory insight",
+      assistantText: "I started an agent.",
+      origin: "typed_chat"
+    )
+    let expectedUserID = KernelTurnProjection.stableTurnID(
+      continuityKey: continuityKey,
+      role: "user"
+    )
+    let expectedAssistantID = KernelTurnProjection.stableTurnID(
+      continuityKey: continuityKey,
+      role: "assistant"
+    )
+    XCTAssertEqual(staged.user?.id, expectedUserID)
+    XCTAssertEqual(staged.assistant?.id, expectedAssistantID)
+
+    let userAck = try turn(
+      surface: surface,
+      turnId: expectedUserID,
+      turnSeq: 1,
+      role: "user",
+      content: "Find one surprising memory insight"
+    )
+    let assistantAck = try turn(
+      surface: surface,
+      turnId: expectedAssistantID,
+      turnSeq: 2,
+      content: "I started an agent."
+    )
+    provider.projectJournalTurn(userAck)
+    provider.projectJournalTurn(assistantAck)
+    // A restart/replay of the same revisions is also replace-only.
+    provider.projectJournalTurn(userAck)
+    provider.projectJournalTurn(assistantAck)
+
+    XCTAssertEqual(provider.messages.count, 2)
+    XCTAssertEqual(provider.messages.map(\.id), [expectedUserID, expectedAssistantID])
+    XCTAssertEqual(provider.messages.map(\.sender), [.user, .ai])
+  }
+
+  func testIdenticalTextWithDistinctTurnIDsRemainsDistinct() throws {
+    let provider = ChatProvider()
+    let surface = provider.mainChatSurfaceReference()
+    provider.projectJournalTurn(try turn(
+      surface: surface,
+      turnId: "user-1",
+      turnSeq: 1,
+      role: "user",
+      content: "Same text"
+    ))
+    provider.projectJournalTurn(try turn(
+      surface: surface,
+      turnId: "user-2",
+      turnSeq: 2,
+      role: "user",
+      content: "Same text"
+    ))
+
+    XCTAssertEqual(provider.messages.map(\.id), ["user-1", "user-2"])
+    XCTAssertEqual(provider.messages.map(\.text), ["Same text", "Same text"])
+  }
+
+  func testStructuredBlocksResourcesAndContinuityMetadataSurviveProjection() throws {
+    let provider = ChatProvider()
+    let surface = provider.mainChatSurfaceReference()
+    let blocks: [ChatContentBlock] = [
+      .agentCompletion(
+        id: "completion-1",
+        pillId: UUID(uuidString: "00000000-0000-0000-0000-000000000001"),
+        sessionId: "session-1",
+        runId: "run-1",
+        title: "Research complete",
+        promptSnippet: "Find the answer",
+        output: "42",
+        status: "completed"
+      ),
+    ]
+    let resources = [
+      ChatResource(
+        id: "artifact:answer",
+        origin: .generatedArtifact,
+        title: "answer.md",
+        subtitle: "text/markdown",
+        mimeType: "text/markdown",
+        thumbnailURL: nil,
+        imageData: nil,
+        uri: "omi-artifact://answer",
+        artifactId: "answer",
+        sessionId: "session-1",
+        runId: "run-1",
+        state: .ready
+      ),
+    ]
+    provider.projectJournalTurn(try turn(
+      surface: surface,
+      turnId: "assistant-structured",
+      turnSeq: 1,
+      content: "Finished",
+      blocks: blocks,
+      resources: resources,
+      metadata: #"{"continuityKey":"continuity-1","notificationContext":"context"}"#
+    ))
+
+    let projected = try XCTUnwrap(provider.messages.first)
+    XCTAssertEqual(projected.clientTurnId, "continuity-1")
+    XCTAssertEqual(projected.notificationContext, "context")
+    XCTAssertEqual(projected.resources.map(\.id), ["artifact:answer"])
+    let journalTurn = try turn(
+      surface: surface,
+      turnId: "identity-check",
+      turnSeq: 2,
+      content: "identity"
+    )
+    XCTAssertEqual(journalTurn.producerId, "producer:identity-check")
+    XCTAssertEqual(journalTurn.payloadHash, "sha256:identity-check")
+    guard let firstBlock = projected.contentBlocks.first,
+          case .agentCompletion(
+      "completion-1", _, "session-1", "run-1", "Research complete", "Find the answer", "42", "completed"
+    ) = firstBlock else {
+      return XCTFail("Expected structured completion block to round-trip through the journal codec")
+    }
+
+    let automation = provider.automationMainChatSnapshot(limit: 10)
+    let rowsData = try XCTUnwrap(automation["messages_json"]?.data(using: .utf8))
+    let rows = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: rowsData) as? [[String: String]])
+    let assistantRow = try XCTUnwrap(rows.first { $0["id"] == "assistant-structured" })
+    let encodedBlocks = try XCTUnwrap(assistantRow["content_blocks_json"])
+    let encodedResources = try XCTUnwrap(assistantRow["resources_json"])
+    XCTAssertEqual(ChatContentBlockCodec.decode(encodedBlocks)?.count, 1)
+    XCTAssertEqual(ChatResource.decodeResourcesFromPersistence(encodedResources).map(\.id), ["artifact:answer"])
+  }
+
+  func testFailedEmptyPlaceholderIsRemovedFromProjection() throws {
+    let provider = ChatProvider()
+    let surface = provider.mainChatSurfaceReference()
+    provider.projectJournalTurn(try turn(
+      surface: surface,
+      turnId: "assistant-empty",
+      turnSeq: 1,
+      content: "",
+      status: .streaming
+    ))
+    XCTAssertEqual(provider.messages.count, 1)
+
+    provider.projectJournalTurn(try turn(
+      surface: surface,
+      turnId: "assistant-empty",
+      turnSeq: 2,
+      content: "",
+      status: .failed
+    ))
+    XCTAssertTrue(provider.messages.isEmpty)
+  }
+
+  func testProjectionRejectsAnotherSurface() throws {
+    let provider = ChatProvider()
+    provider.projectJournalTurn(try turn(
+      surface: .workstream(workstreamId: "workstream-1"),
+      turnId: "wrong-surface",
+      turnSeq: 1,
+      content: "Do not project"
+    ))
+    XCTAssertTrue(provider.messages.isEmpty)
+  }
+
+  func testReplayStopsAtGapAndAcceptsOutOfOrderCompleteRange() throws {
+    let surface = AgentSurfaceReference.mainChat(chatId: "default")
+    let first = try turn(surface: surface, turnId: "turn-1", turnSeq: 1, content: "one")
+    let second = try turn(surface: surface, turnId: "turn-2", turnSeq: 2, content: "two")
+    let third = try turn(surface: surface, turnId: "turn-1", turnSeq: 3, content: "one revised")
+
+    XCTAssertEqual(
+      KernelJournalReplay.contiguousTurns(from: [third, first], after: 0).map(\.turnSeq),
+      [1]
+    )
+    XCTAssertEqual(
+      KernelJournalReplay.contiguousTurns(from: [third, first, second], after: 0).map(\.turnSeq),
+      [1, 2, 3]
+    )
+    let postClear = try turn(
+      surface: surface,
+      turnId: "turn-after-clear",
+      turnSeq: 7,
+      content: "new generation"
+    )
+    XCTAssertEqual(
+      KernelJournalReplay.contiguousTurns(from: [postClear], after: 6).map(\.turnSeq),
+      [7]
+    )
+  }
+
+  func testJournalChangedHandlerIsReplaceOnly() async throws {
+    final class Counter: @unchecked Sendable {
       private let lock = NSLock()
-      private var turns: [AgentRuntimeProcess.KernelTurnRecorded] = []
-
-      func note(_ turn: AgentRuntimeProcess.KernelTurnRecorded) {
-        lock.lock()
-        turns.append(turn)
-        lock.unlock()
-      }
-
-      var count: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return turns.count
-      }
-
-      var last: AgentRuntimeProcess.KernelTurnRecorded? {
-        lock.lock()
-        defer { lock.unlock() }
-        return turns.last
-      }
+      private var value = 0
+      func increment() { lock.withLock { value += 1 } }
+      var count: Int { lock.withLock { value } }
     }
 
     let runtime = AgentRuntimeProcess()
     let bridge = AgentBridge(runtime: runtime)
-    let main = ChatProvider()
-    ChatProvider.mainInstance = main
-    defer { ChatProvider.mainInstance = nil }
-    let fanout = FanoutBox()
-
-    let surface = main.mainChatSurfaceReference()
-    let turn = AgentRuntimeProcess.KernelTurnRecorded(
-      conversationId: "conv-warm",
-      surfaceKind: surface.surfaceKind,
-      externalRefKind: surface.externalRefKind,
-      externalRefId: surface.externalRefId,
-      userText: "PTT after warm",
-      assistantText: "Single answer",
-      origin: "realtime_voice",
-      interrupted: false,
-      idempotencyKey: "warm-dup-key",
-      userTurnId: "u1",
-      assistantTurnId: "a1"
+    let counter = Counter()
+    let changed = try turn(
+      surface: .mainChat(chatId: "default"),
+      turnId: "turn-1",
+      turnSeq: 1,
+      content: "hello"
     )
+    await bridge.setJournalTurnChangedHandler { _ in counter.increment() }
+    await bridge.setJournalTurnChangedHandler { _ in counter.increment() }
 
-    // Main attach, then speculative-warm re-attach on the same mainInstance.
-    // Pre-fix append API would leave two handlers; replace keeps one slot.
-    await bridge.setTurnRecordedHandler { fanout.note($0) }
-    await bridge.setTurnRecordedHandler { fanout.note($0) }
-    let handlerCount = await runtime.turnRecordedHandlerCount()
+    let handlerCount = await runtime.journalTurnChangedHandlerCount()
     XCTAssertEqual(handlerCount, 1)
-
-    await runtime.dispatchTurnRecordedForTesting(turn)
-    XCTAssertEqual(fanout.count, 1, "single handler slot must not fan out twice")
-    guard let delivered = fanout.last else {
-      return XCTFail("expected one delivered turn_recorded")
-    }
-    main.kernelTurnProjection.apply(delivered)
-    XCTAssertEqual(main.messages.filter { $0.sender == .user }.count, 1)
-    XCTAssertEqual(main.messages.filter { $0.sender == .ai }.count, 1)
-    XCTAssertEqual(main.messages.filter { $0.sender == .user }.map(\.text), ["PTT after warm"])
-    XCTAssertEqual(main.messages.filter { $0.sender == .ai }.map(\.text), ["Single answer"])
-
-    // Same key through the single gate again must not append a second pair.
-    await runtime.dispatchTurnRecordedForTesting(turn)
-    XCTAssertEqual(fanout.count, 2)
-    if let again = fanout.last {
-      main.kernelTurnProjection.apply(again)
-    }
-    XCTAssertEqual(main.messages.filter { $0.sender == .user }.count, 1)
-    XCTAssertEqual(main.messages.filter { $0.sender == .ai }.count, 1)
+    await runtime.dispatchJournalTurnChangedForTesting(changed)
+    XCTAssertEqual(counter.count, 1)
   }
 
-  func testApplyKernelTurnRecordedIgnoresOtherSurfaces() {
-    let provider = ChatProvider()
-    provider.kernelTurnProjection.apply(
-      .init(
-        conversationId: "conv-1",
-        surfaceKind: "floating_chat",
-        externalRefKind: "chat",
-        externalRefId: "default",
-        userText: "wrong surface",
-        assistantText: "ignored",
-        origin: "realtime_voice",
-        interrupted: false,
-        idempotencyKey: nil,
-        userTurnId: nil,
-        assistantTurnId: nil
-      )
-    )
-
-    XCTAssertTrue(provider.messages.isEmpty)
-  }
-
-  func testStageOptimisticThenApplyPromotesInPlaceWithoutDuplicate() {
-    let provider = ChatProvider()
-    let projection = provider.kernelTurnProjection
-    let surface = provider.mainChatSurfaceReference()
-    let key = "floating_resolver:exchange-1:spawn"
-    let blocks: [ChatContentBlock] = [
-      .text(id: "block-1", text: "spawned"),
+  func testBackendSyncRejectsClientMessageIDDifferentFromTurnID() {
+    let valid: [String: Any] = [
+      "ownerId": "owner-1",
+      "turnId": "turn-1",
+      "conversationId": "conversation-1",
+      "clientMessageId": "turn-1",
+      "conversationGeneration": 3,
+      "attemptCount": 2,
+      "deliveryGeneration": 4,
+      "payloadHash": "sha256:payload",
+      "text": "hello",
+      "sender": "human",
+      "messageSource": "desktop_chat",
     ]
+    XCTAssertEqual(KernelJournalBackendSyncDriver.Request(payload: valid)?.turnId, "turn-1")
+    XCTAssertEqual(KernelJournalBackendSyncDriver.Request(payload: valid)?.ownerId, "owner-1")
 
-    let staged = provider.stageOptimisticTurn(
-      continuityKey: key,
-      userText: "Start a background agent",
-      assistantText: "On it — spawning now.",
-      origin: "floating_resolver",
-      turnOwner: .floatingDefault,
-      contentBlocks: blocks
-    )
-    XCTAssertNotNil(staged.user)
-    XCTAssertNotNil(staged.assistant)
-    XCTAssertEqual(staged.assistant?.contentBlocks.count, 1)
-    XCTAssertTrue(provider.hasOptimisticTurn(continuityKey: key))
+    var invalid = valid
+    invalid["clientMessageId"] = "another-id"
+    XCTAssertNil(KernelJournalBackendSyncDriver.Request(payload: invalid))
 
-    projection.apply(
-      .init(
-        conversationId: "conv-1",
-        surfaceKind: surface.surfaceKind,
-        externalRefKind: surface.externalRefKind,
-        externalRefId: surface.externalRefId,
-        userText: "Start a background agent",
-        assistantText: "On it — spawning now.",
-        origin: "floating_resolver",
-        interrupted: false,
-        idempotencyKey: key,
-        userTurnId: nil,
-        assistantTurnId: nil
-      )
-    )
+    invalid = valid
+    invalid.removeValue(forKey: "payloadHash")
+    XCTAssertNil(KernelJournalBackendSyncDriver.Request(payload: invalid))
 
-    XCTAssertEqual(provider.messages.filter { $0.sender == .user }.count, 1)
-    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 1)
-    XCTAssertEqual(
-      provider.messages.filter { $0.sender == .user }.map(\.text),
-      ["Start a background agent"]
-    )
-    XCTAssertEqual(
-      provider.messages.filter { $0.sender == .ai }.map(\.text),
-      ["On it — spawning now."]
-    )
-    XCTAssertEqual(provider.messages.first(where: { $0.sender == .ai })?.contentBlocks.count, 1)
-    XCTAssertFalse(provider.hasOptimisticTurn(continuityKey: key))
-
-    // Second apply of the same committed key must not append again.
-    projection.apply(
-      .init(
-        conversationId: "conv-1",
-        surfaceKind: surface.surfaceKind,
-        externalRefKind: surface.externalRefKind,
-        externalRefId: surface.externalRefId,
-        userText: "Start a background agent",
-        assistantText: "On it — spawning now.",
-        origin: "floating_resolver",
-        interrupted: false,
-        idempotencyKey: key,
-        userTurnId: nil,
-        assistantTurnId: nil
-      )
-    )
-    XCTAssertEqual(provider.messages.filter { $0.sender == .user }.count, 1)
-    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 1)
+    invalid = valid
+    invalid.removeValue(forKey: "ownerId")
+    XCTAssertNil(KernelJournalBackendSyncDriver.Request(payload: invalid))
   }
 
-  func testPillCompletionKeyCoalescesSecondStageWithoutDuplicate() {
-    let provider = ChatProvider()
-    let projection = provider.kernelTurnProjection
-    let surface = provider.mainChatSurfaceReference()
-    let key = "pill_completion:run-42"
-    let pillID = UUID()
-    let summary = "[Background agent id=\(pillID.uuidString) — sleep] Done."
-    let resource = ChatResource.localGeneratedFile(
-      id: "res-1",
-      title: "out.txt",
-      subtitle: "text/plain",
-      mimeType: "text/plain",
-      uri: "file:///tmp/out.txt"
-    )
-    let lateResource = ChatResource.localGeneratedFile(
-      id: "res-2",
-      title: "late.txt",
-      subtitle: "text/plain",
-      mimeType: "text/plain",
-      uri: "file:///tmp/late.txt"
-    )
-    let completionBlock = ChatContentBlock.agentCompletion(
-      id: "completion-block",
-      pillId: pillID,
-      sessionId: "sess-42",
-      runId: "run-42",
-      title: "Background agent",
-      promptSnippet: "sleep",
-      output: "Done.",
-      status: "completed"
-    )
+  func testBackendSyncRejectsOwnerChangeBeforeHTTP() async throws {
+    let request = try XCTUnwrap(KernelJournalBackendSyncDriver.Request(payload: [
+      "ownerId": "impossible-owner-\(UUID().uuidString)",
+      "turnId": "turn-1",
+      "conversationId": "conversation-1",
+      "clientMessageId": "turn-1",
+      "conversationGeneration": 3,
+      "attemptCount": 2,
+      "deliveryGeneration": 4,
+      "payloadHash": "sha256:payload",
+      "text": "hello",
+      "sender": "human",
+      "messageSource": "desktop_chat",
+    ]))
 
-    let first = provider.stageOptimisticTurn(
-      continuityKey: key,
-      userText: "",
-      assistantText: summary,
-      origin: "pill_completion",
-      turnOwner: .mainChat,
-      contentBlocks: [completionBlock],
-      resources: [resource]
-    )
-    XCTAssertNotNil(first.assistant)
-    XCTAssertEqual(first.assistant?.resources.count, 1)
-    XCTAssertEqual(first.assistant?.contentBlocks.count, 1)
-    guard case .agentCompletion(_, let stagedPill, let stagedSession, let stagedRun, _, _, _, _) =
-      first.assistant?.contentBlocks.first
-    else {
-      return XCTFail("expected staged agentCompletion block")
+    do {
+      _ = try await KernelJournalBackendSyncDriver.shared.sync(request)
+      XCTFail("owner mismatch must fail before backend POST")
+    } catch {
+      XCTAssertEqual(
+        KernelJournalBackendSyncDriver.boundedErrorCode(for: error),
+        "backend_sync_owner_changed"
+      )
     }
-    XCTAssertEqual(stagedPill, pillID)
-    XCTAssertEqual(stagedSession, "sess-42")
-    XCTAssertEqual(stagedRun, "run-42")
+  }
 
-    // Terminal / late-artifact path reuses the same key and merges onto the
-    // producing message (no second assistant turn).
-    let second = provider.stageOptimisticTurn(
-      continuityKey: key,
-      userText: "",
-      assistantText: summary,
-      origin: "pill_completion",
-      turnOwner: .mainChat,
-      resources: [lateResource]
-    )
-    XCTAssertEqual(second.assistant?.id, first.assistant?.id)
-    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 1)
+  func testBackendSyncUsesBoundedPermanentAndTransientErrorCodes() {
     XCTAssertEqual(
-      Set(provider.messages.first(where: { $0.sender == .ai })?.resources.map(\.id) ?? []),
-      Set(["res-1", "res-2"])
+      KernelJournalBackendSyncDriver.boundedErrorCode(
+        for: APIError.httpError(statusCode: 422, detail: "payload rejected")
+      ),
+      "backend_sync_http_4xx"
     )
-
-    projection.apply(
-      .init(
-        conversationId: "conv-1",
-        surfaceKind: surface.surfaceKind,
-        externalRefKind: surface.externalRefKind,
-        externalRefId: surface.externalRefId,
-        userText: "",
-        assistantText: summary,
-        origin: "pill_completion",
-        interrupted: false,
-        idempotencyKey: key,
-        userTurnId: nil,
-        assistantTurnId: nil
-      )
-    )
-    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 1)
-    let promoted = provider.messages.first(where: { $0.sender == .ai })
-    XCTAssertEqual(Set(promoted?.resources.map(\.id) ?? []), Set(["res-1", "res-2"]))
-    XCTAssertEqual(promoted?.contentBlocks.count, 1)
-    guard case .agentCompletion(_, let promotedPill, _, let promotedRun, _, _, _, _) =
-      promoted?.contentBlocks.first
-    else {
-      return XCTFail("promote must keep agentCompletion block")
-    }
-    XCTAssertEqual(promotedPill, pillID)
-    XCTAssertEqual(promotedRun, "run-42")
-    XCTAssertFalse(provider.hasOptimisticTurn(continuityKey: key))
-  }
-
-  func testKernelOnlyPillCompletionMaterializesAgentCompletionBlock() {
-    let provider = ChatProvider()
-    let projection = provider.kernelTurnProjection
-    let surface = provider.mainChatSurfaceReference()
-    let pillID = UUID()
-    let key = "pill_completion:run-kernel-only"
-    let summary = "[Background agent id=\(pillID.uuidString) — research] Finished."
-
-    projection.apply(
-      .init(
-        conversationId: "conv-1",
-        surfaceKind: surface.surfaceKind,
-        externalRefKind: surface.externalRefKind,
-        externalRefId: surface.externalRefId,
-        userText: "",
-        assistantText: summary,
-        origin: "pill_completion",
-        interrupted: false,
-        idempotencyKey: key,
-        userTurnId: nil,
-        assistantTurnId: nil
-      )
-    )
-
-    let assistant = provider.messages.first(where: { $0.sender == .ai })
-    XCTAssertEqual(assistant?.text, summary)
-    XCTAssertEqual(assistant?.contentBlocks.count, 1)
-    guard case .agentCompletion(_, let blockPill, _, let runId, _, let prompt, let output, let status) =
-      assistant?.contentBlocks.first
-    else {
-      return XCTFail("kernel-only pill_completion must attach agentCompletion")
-    }
-    XCTAssertEqual(blockPill, pillID)
-    XCTAssertEqual(runId, "run-kernel-only")
-    XCTAssertEqual(prompt, "research")
-    XCTAssertEqual(output, "Finished.")
-    XCTAssertEqual(status, "completed")
-  }
-
-  func testApplyWithoutOptimisticStillAppendsVoicePath() {
-    let provider = ChatProvider()
-    let projection = provider.kernelTurnProjection
-    let surface = provider.mainChatSurfaceReference()
-
-    projection.apply(
-      .init(
-        conversationId: "conv-1",
-        surfaceKind: surface.surfaceKind,
-        externalRefKind: surface.externalRefKind,
-        externalRefId: surface.externalRefId,
-        userText: "voice question",
-        assistantText: "voice answer",
-        origin: "realtime_voice",
-        interrupted: false,
-        idempotencyKey: "voice-turn-1",
-        userTurnId: nil,
-        assistantTurnId: nil
-      )
-    )
-
-    XCTAssertEqual(provider.messages.filter { $0.sender == .user }.map(\.text), ["voice question"])
-    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.map(\.text), ["voice answer"])
     XCTAssertEqual(
-      provider.messages.compactMap(\.clientTurnId),
-      ["voice-turn-1", "voice-turn-1"]
+      KernelJournalBackendSyncDriver.boundedErrorCode(
+        for: APIError.httpError(statusCode: 503, detail: "unavailable")
+      ),
+      "backend_sync_failed"
     )
-  }
-
-  /// Proactive notifications stage under `notification:<uuid>` (same stage/promote
-  /// path as other surface turns) — not a separate appendAssistantMessage writer.
-  func testNotificationContinuityKeyStagesAndPromotesWithoutDoubleAppend() {
-    let provider = ChatProvider()
-    let projection = provider.kernelTurnProjection
-    let surface = provider.mainChatSurfaceReference()
-    let notificationId = UUID()
-    let key = "notification:\(notificationId.uuidString)"
-    let text = "Heads up: calendar conflict"
-
-    let staged = provider.stageOptimisticTurn(
-      continuityKey: key,
-      userText: "",
-      assistantText: text,
-      origin: "proactive_notification",
-      turnOwner: .mainChat
-    )
-    XCTAssertNotNil(staged.assistant)
-    XCTAssertNil(staged.user)
-    XCTAssertTrue(provider.hasOptimisticTurn(continuityKey: key))
-    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 1)
-    XCTAssertEqual(provider.messages.first?.clientTurnId, key)
-
-    projection.apply(
-      .init(
-        conversationId: "conv-1",
-        surfaceKind: surface.surfaceKind,
-        externalRefKind: surface.externalRefKind,
-        externalRefId: surface.externalRefId,
-        userText: "",
-        assistantText: text,
-        origin: "proactive_notification",
-        interrupted: false,
-        idempotencyKey: key,
-        userTurnId: nil,
-        assistantTurnId: "assistant-notif-1"
+    for statusCode in [408, 425, 429] {
+      XCTAssertEqual(
+        KernelJournalBackendSyncDriver.boundedErrorCode(
+          for: APIError.httpError(statusCode: statusCode, detail: "retry")
+        ),
+        "backend_sync_http_retryable"
       )
-    )
-
-    XCTAssertFalse(provider.hasOptimisticTurn(continuityKey: key))
-    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 1)
-    XCTAssertEqual(provider.messages.first?.id, staged.assistant?.id)
-    XCTAssertEqual(provider.messages.first?.text, text)
-  }
-
-  /// INV-6: never dedupe by text — identical user+assistant copy with different
-  /// continuity keys must produce two distinct pairs on the timeline.
-  func testSameTextDifferentContinuityKeysKeepsTwoPairs() {
-    let provider = ChatProvider()
-    let projection = provider.kernelTurnProjection
-    let surface = provider.mainChatSurfaceReference()
-    let userText = "same question"
-    let assistantText = "same answer"
-
-    let first = provider.stageOptimisticTurn(
-      continuityKey: "key-a",
-      userText: userText,
-      assistantText: assistantText,
-      origin: "realtime_voice",
-      turnOwner: .mainChat
-    )
-    let second = provider.stageOptimisticTurn(
-      continuityKey: "key-b",
-      userText: userText,
-      assistantText: assistantText,
-      origin: "realtime_voice",
-      turnOwner: .mainChat
-    )
-    XCTAssertNotEqual(first.user?.id, second.user?.id)
-    XCTAssertNotEqual(first.assistant?.id, second.assistant?.id)
-    XCTAssertEqual(provider.messages.filter { $0.sender == .user }.count, 2)
-    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 2)
-
-    projection.apply(
-      .init(
-        conversationId: "conv-1",
-        surfaceKind: surface.surfaceKind,
-        externalRefKind: surface.externalRefKind,
-        externalRefId: surface.externalRefId,
-        userText: userText,
-        assistantText: assistantText,
-        origin: "realtime_voice",
-        interrupted: false,
-        idempotencyKey: "key-a",
-        userTurnId: nil,
-        assistantTurnId: nil
-      )
-    )
-    projection.apply(
-      .init(
-        conversationId: "conv-1",
-        surfaceKind: surface.surfaceKind,
-        externalRefKind: surface.externalRefKind,
-        externalRefId: surface.externalRefId,
-        userText: userText,
-        assistantText: assistantText,
-        origin: "realtime_voice",
-        interrupted: false,
-        idempotencyKey: "key-b",
-        userTurnId: nil,
-        assistantTurnId: nil
-      )
-    )
-
-    let users = provider.messages.filter { $0.sender == .user }
-    let assistants = provider.messages.filter { $0.sender == .ai }
-    XCTAssertEqual(users.count, 2)
-    XCTAssertEqual(assistants.count, 2)
-    XCTAssertEqual(users.map(\.text), [userText, userText])
-    XCTAssertEqual(assistants.map(\.text), [assistantText, assistantText])
-    XCTAssertEqual(Set(users.compactMap(\.clientTurnId)), Set(["key-a", "key-b"]))
-    XCTAssertEqual(Set(assistants.compactMap(\.clientTurnId)), Set(["key-a", "key-b"]))
-  }
-
-  /// P1: user-only first stage must still accept a later assistant payload for the
-  /// same continuity key (create the missing assistant message instead of dropping it).
-  func testRestageCreatesMissingAssistantAfterUserOnlyStage() {
-    let provider = ChatProvider()
-    let key = "voice-user-first"
-
-    let first = provider.stageOptimisticTurn(
-      continuityKey: key,
-      userText: "user only first",
-      assistantText: "",
-      origin: "realtime_voice",
-      turnOwner: .mainChat
-    )
-    XCTAssertNotNil(first.user)
-    XCTAssertNil(first.assistant)
-    XCTAssertEqual(provider.messages.filter { $0.sender == .user }.count, 1)
-    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 0)
-
-    let second = provider.stageOptimisticTurn(
-      continuityKey: key,
-      userText: "user only first",
-      assistantText: "assistant arrives later",
-      origin: "realtime_voice",
-      turnOwner: .mainChat
-    )
-    XCTAssertEqual(first.user?.id, second.user?.id)
-    XCTAssertNotNil(second.assistant)
-    XCTAssertEqual(second.assistant?.text, "assistant arrives later")
-    XCTAssertEqual(provider.messages.filter { $0.sender == .user }.count, 1)
-    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 1)
-    XCTAssertEqual(provider.messages.first(where: { $0.sender == .ai })?.clientTurnId, key)
-  }
-
-  func testEmptyIdempotencyKeyStillAppends() {
-    let provider = ChatProvider()
-    let projection = provider.kernelTurnProjection
-    let surface = provider.mainChatSurfaceReference()
-
-    projection.apply(
-      .init(
-        conversationId: "conv-1",
-        surfaceKind: surface.surfaceKind,
-        externalRefKind: surface.externalRefKind,
-        externalRefId: surface.externalRefId,
-        userText: "empty key turn",
-        assistantText: "should append",
-        origin: "realtime_voice",
-        interrupted: false,
-        idempotencyKey: nil,
-        userTurnId: nil,
-        assistantTurnId: nil
-      )
-    )
-
-    XCTAssertEqual(provider.messages.filter { $0.sender == .user }.map(\.text), ["empty key turn"])
-    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.map(\.text), ["should append"])
-  }
-
-  func testMainAndFloatingAutomationSnapshotsAliasSameTimeline() throws {
-    let provider = ChatProvider()
-    _ = provider.recordCompletedTurn(
-      userText: "main question",
-      assistantText: "main answer",
-      logLabel: "main"
-    )
-    _ = provider.recordCompletedTurn(
-      userText: "notch question",
-      assistantText: "notch answer",
-      logLabel: "floating"
-    )
-
-    let main = provider.automationMainChatSnapshot(limit: 20)
-    let floating = provider.automationFloatingChatSnapshot(limit: 20)
-
-    XCTAssertEqual(main["message_count"], "4")
-    XCTAssertEqual(main["message_count"], floating["message_count"])
-    XCTAssertEqual(main["is_sending"], floating["is_sending"])
-    XCTAssertEqual(main["runtime_chat_id"], floating["runtime_chat_id"])
-
-    let mainRows = try Self.decodeSnapshotRows(main["messages_json"])
-    let floatingRows = try Self.decodeSnapshotRows(floating["messages_json"])
-    XCTAssertEqual(mainRows, floatingRows)
-    XCTAssertEqual(mainRows.map { $0["text"] }, [
-      "main question", "main answer", "notch question", "notch answer",
-    ])
-  }
-
-  /// INV-6: restaging the same pill_completion key must merge resources onto the
-  /// producing assistant message — never invent a second artifact-only turn.
-  func testRestagingSameContinuityKeyMergesResourcesOntoProducingMessage() {
-    let provider = ChatProvider()
-    let key = "pill_completion:run-merge"
-    let completionBlock = ChatContentBlock.agentCompletion(
-      id: "completion-merge",
-      pillId: UUID(),
-      sessionId: "sess-merge",
-      runId: "run-merge",
-      title: "Draft Example AGENTS.md",
-      promptSnippet: "Draft Example AGENTS.md",
-      output: "Done.",
-      status: "completed"
-    )
-    let first = provider.stageOptimisticTurn(
-      continuityKey: key,
-      userText: "",
-      assistantText: "[Background agent — Draft Example AGENTS.md] Done.",
-      origin: "pill_completion",
-      turnOwner: .mainChat,
-      contentBlocks: [completionBlock]
-    )
-    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 1)
-    XCTAssertTrue(first.assistant?.resources.isEmpty ?? false)
-
-    let resource = ChatResource.localGeneratedFile(
-      id: "agents-md",
-      title: "AGENTS.md",
-      subtitle: "text/markdown",
-      mimeType: "text/markdown",
-      uri: "file:///tmp/AGENTS.md"
-    )
-    let second = provider.stageOptimisticTurn(
-      continuityKey: key,
-      userText: "",
-      assistantText: "[Background agent — Draft Example AGENTS.md] Done.",
-      origin: "pill_completion",
-      turnOwner: .mainChat,
-      contentBlocks: [completionBlock],
-      resources: [resource]
-    )
-
-    let assistants = provider.messages.filter { $0.sender == .ai }
-    XCTAssertEqual(assistants.count, 1)
-    XCTAssertEqual(second.assistant?.id, first.assistant?.id)
-    XCTAssertEqual(assistants.first?.resources.map(\.id), ["agents-md"])
-    XCTAssertEqual(assistants.first?.contentBlocks.count, 1)
-  }
-
-  /// INV-6: resources stay on the producing assistant message through stage+promote;
-  /// do not invent a second artifact-only turn for the same pill_completion key.
-  func testResourcesStayOnProducingMessageThroughStageAndPromote() {
-    let provider = ChatProvider()
-    let projection = provider.kernelTurnProjection
-    let surface = provider.mainChatSurfaceReference()
-    let key = "pill_completion:run-resources"
-    let resource = ChatResource.localGeneratedFile(
-      id: "artifact-owned",
-      title: "report.md",
-      subtitle: "text/markdown",
-      mimeType: "text/markdown",
-      uri: "file:///tmp/report.md"
-    )
-    let completionBlock = ChatContentBlock.agentCompletion(
-      id: "completion-res",
-      pillId: UUID(),
-      sessionId: "sess-res",
-      runId: "run-resources",
-      title: "Background agent",
-      promptSnippet: "write report",
-      output: "Done.",
-      status: "completed"
-    )
-
-    let staged = provider.stageOptimisticTurn(
-      continuityKey: key,
-      userText: "",
-      assistantText: "[Background agent — write report] Done.",
-      origin: "pill_completion",
-      turnOwner: .mainChat,
-      contentBlocks: [completionBlock],
-      resources: [resource]
-    )
-    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 1)
-    XCTAssertEqual(staged.assistant?.resources.map(\.id), ["artifact-owned"])
+    }
     XCTAssertEqual(
-      ChatContinuityInvariants.resourcesBelongingToMessages(
-        messages: provider.messages,
-        messageIds: Set(provider.messages.map(\.id))
-      ).map(\.id),
-      ["artifact-owned"]
-    )
-
-    projection.apply(
-      .init(
-        conversationId: "conv-1",
-        surfaceKind: surface.surfaceKind,
-        externalRefKind: surface.externalRefKind,
-        externalRefId: surface.externalRefId,
-        userText: "",
-        assistantText: "[Background agent — write report] Done.",
-        origin: "pill_completion",
-        interrupted: false,
-        idempotencyKey: key,
-        userTurnId: nil,
-        assistantTurnId: nil
-      )
-    )
-
-    let assistants = provider.messages.filter { $0.sender == .ai }
-    XCTAssertEqual(assistants.count, 1)
-    XCTAssertEqual(assistants.first?.id, staged.assistant?.id)
-    XCTAssertEqual(assistants.first?.resources.map(\.id), ["artifact-owned"])
-    // Orphan filter: resources for a non-viewport / unknown id must be empty.
-    XCTAssertTrue(
-      ChatContinuityInvariants.resourcesBelongingToMessages(
-        messages: provider.messages,
-        messageIds: ["not-a-message"]
-      ).isEmpty
+      KernelJournalBackendSyncDriver.boundedErrorCode(
+        for: URLError(.networkConnectionLost)
+      ),
+      "backend_sync_failed"
     )
   }
 
-  private static func decodeSnapshotRows(_ json: String?) throws -> [[String: String]] {
-    guard let json, let data = json.data(using: .utf8) else {
-      throw NSError(domain: "KernelTurnRecordedProjectionTests", code: 1)
+  /// Static architecture tripwire; behavioral journal coverage lives above.
+  func testKernelJournalIsOnlyDurableDesktopChatWriter() throws {
+    let provider = try sourceFile("Providers/ChatProvider.swift")
+    let taskState = try sourceFile(
+      "ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
+    let taskStorage = try sourceFile("Rewind/Core/TaskChatMessageStorage.swift")
+    let realtime = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
+    let runtime = try sourceFile("Chat/AgentRuntimeProcess.swift")
+
+    XCTAssertFalse(provider.contains("APIClient.shared.saveMessage("))
+    XCTAssertFalse(provider.contains("messages.append(greetingMessage)"))
+    XCTAssertFalse(provider.contains("func recordCompletedTurn("))
+    XCTAssertTrue(provider.contains("remoteId: response.messageId"))
+    XCTAssertTrue(provider.contains("canonicalTurnId: response.messageId"))
+    XCTAssertTrue(provider.contains("await kernelTurnProjection.refresh(surface: surface)"))
+    let greetingStart = try XCTUnwrap(provider.range(of: "private func fetchInitialMessage("))
+    let greetingSource = provider[greetingStart.lowerBound...]
+    let admission = try XCTUnwrap(greetingSource.range(of: "guard accepted else"))
+    let preview = try XCTUnwrap(greetingSource.range(of: "sessions[index].preview = response.message"))
+    let analytics = try XCTUnwrap(greetingSource.range(of: "initialMessageGenerated("))
+    XCTAssertLessThan(admission.lowerBound, preview.lowerBound)
+    XCTAssertLessThan(preview.lowerBound, analytics.lowerBound)
+    XCTAssertEqual(provider.components(separatedBy: "APIClient.shared.getMessages(").count - 1, 2)
+    XCTAssertEqual(provider.components(separatedBy: "expectedOwnerId: ownerId").count - 1, 3)
+    XCTAssertFalse(taskState.contains("persistMessage("))
+    XCTAssertFalse(taskStorage.contains("PersistableRecord"))
+    XCTAssertFalse(taskStorage.contains("func insert("))
+    XCTAssertFalse(taskStorage.contains("func save("))
+    XCTAssertFalse(realtime.contains("RealtimeVoiceTurnOutbox"))
+    XCTAssertFalse(runtime.contains("import_conversation_turns"))
+    XCTAssertFalse(runtime.contains("record_surface_turn"))
+    XCTAssertFalse(runtime.contains("project_cross_surface_turn"))
+    XCTAssertFalse(runtime.contains("turn_recorded"))
+    let projection = try sourceFile("Chat/KernelTurnProjection.swift")
+    let floating = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
+    let pills = try sourceFile("FloatingControlBar/AgentPill.swift")
+    XCTAssertTrue(provider.contains("AgentPillsManager.shared.bindProducingJournalSurface("))
+    XCTAssertTrue(floating.contains("producingJournalSurface(for: pillID)"))
+    XCTAssertTrue(pills.contains("producingSurface: pill.producingJournalSurface"))
+    for source in [projection, floating, pills] {
+      XCTAssertFalse(source.contains("recordSurfaceTurn"))
+      XCTAssertFalse(source.contains("projectCrossSurfaceTurn"))
+      XCTAssertFalse(source.contains("pill_completion"))
+      XCTAssertFalse(source.contains("[Background agent id="))
     }
-    let rows = try JSONSerialization.jsonObject(with: data) as? [[String: String]]
-    guard let rows else {
-      throw NSError(domain: "KernelTurnRecordedProjectionTests", code: 2)
-    }
-    return rows
+  }
+
+  private func turn(
+    surface: AgentSurfaceReference,
+    turnId: String,
+    turnSeq: Int,
+    role: String = "assistant",
+    content: String,
+    status: KernelJournalTurnStatus = .completed,
+    blocks: [ChatContentBlock] = [],
+    resources: [ChatResource] = [],
+    metadata: String = "{}"
+  ) throws -> KernelJournalTurn {
+    let contentBlocks = ChatContentBlockCodec.encode(blocks)
+      .flatMap(Self.jsonArray) ?? []
+    let encodedResources = ChatResource.encodeResourcesForPersistence(resources)
+      .flatMap(Self.jsonArray) ?? []
+    return try XCTUnwrap(KernelJournalTurn(dictionary: [
+      "conversationId": "conversation-1",
+      "turnId": turnId,
+      "turnSeq": turnSeq,
+      "conversationGeneration": 1,
+      "generationBaseTurnSeq": 0,
+      "producerId": "producer:\(turnId)",
+      "payloadHash": "sha256:\(turnId)",
+      "role": role,
+      "surfaceKind": surface.surfaceKind,
+      "externalRefKind": surface.externalRefKind,
+      "externalRefId": surface.externalRefId,
+      "content": content,
+      "origin": "test",
+      "status": status.rawValue,
+      "contentBlocks": contentBlocks,
+      "resources": encodedResources,
+      "metadataJson": metadata,
+      "createdAtMs": 1_700_000_000_000 + turnSeq,
+      "updatedAtMs": 1_700_000_000_000 + turnSeq,
+    ]))
+  }
+
+  private static func jsonArray(_ raw: String) -> [Any]? {
+    guard let data = raw.data(using: .utf8) else { return nil }
+    return try? JSONSerialization.jsonObject(with: data) as? [Any]
+  }
+
+  private func sourceFile(_ relativePath: String) throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources", isDirectory: true)
+      .appendingPathComponent(relativePath)
+    return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 }

@@ -535,6 +535,7 @@ export class SqliteAgentStore implements AgentStore {
     return this.withTransaction(() => {
       const now = this.nowMs();
       const repairedSessionProfileIds = repairMissingSessionExecutionProfiles(this.db, now);
+      const repairedProfileReferences = repairDowngradeWindowExecutionProfileReferences(this.db);
       const repairedLegacyJournalTurnIds = repairDowngradeWindowJournalRows(this.db, now);
       const activeAttempts = this.allRows(
         `SELECT attempt_id, run_id FROM run_attempts WHERE status IN (${placeholders(ACTIVE_ATTEMPT_STATUSES.length)})`,
@@ -809,6 +810,9 @@ export class SqliteAgentStore implements AgentStore {
         failedPreparedToolInvocationIds,
         outcomeUnknownToolInvocationIds,
         repairedSessionProfileIds,
+        repairedRunProfileReferenceIds: repairedProfileReferences.runIds,
+        repairedAttemptProfileReferenceIds: repairedProfileReferences.attemptIds,
+        repairedBindingProfileReferenceIds: repairedProfileReferences.bindingIds,
         repairedLegacyJournalTurnIds,
         reconciledJournalTurnIds: reconciledJournalTurns.map((repair) => repair.turnId),
         recoveryDispatchIds,
@@ -1667,6 +1671,92 @@ function repairMissingSessionExecutionProfiles(
     );
   }
   return rows.map((row) => text(row.session_id));
+}
+
+function repairDowngradeWindowExecutionProfileReferences(
+  db: Pick<DatabaseSync, "prepare">,
+): { runIds: string[]; attemptIds: string[]; bindingIds: string[] } {
+  const runRows = db.prepare(
+    `SELECT r.run_id,
+            (SELECT p.generation
+             FROM session_execution_profiles p
+             WHERE p.session_id = r.session_id
+               AND p.created_at_ms <= r.created_at_ms
+             ORDER BY p.created_at_ms DESC, p.generation DESC
+             LIMIT 1) AS expected_profile_generation
+     FROM runs r
+     WHERE r.profile_generation != COALESCE((
+       SELECT p.generation
+       FROM session_execution_profiles p
+       WHERE p.session_id = r.session_id
+         AND p.created_at_ms <= r.created_at_ms
+       ORDER BY p.created_at_ms DESC, p.generation DESC
+       LIMIT 1
+     ), r.profile_generation)
+     ORDER BY r.created_at_ms ASC, r.run_id ASC`,
+  ).all() as Row[];
+  const attemptRows = db.prepare(
+    `SELECT a.attempt_id,
+            (SELECT p.generation
+             FROM runs r
+             JOIN session_execution_profiles p ON p.session_id = r.session_id
+             WHERE r.run_id = a.run_id
+               AND p.created_at_ms <= a.created_at_ms
+             ORDER BY p.created_at_ms DESC, p.generation DESC
+             LIMIT 1) AS expected_profile_generation
+     FROM run_attempts a
+     WHERE a.profile_generation != COALESCE((
+       SELECT p.generation
+       FROM runs r
+       JOIN session_execution_profiles p ON p.session_id = r.session_id
+       WHERE r.run_id = a.run_id
+         AND p.created_at_ms <= a.created_at_ms
+       ORDER BY p.created_at_ms DESC, p.generation DESC
+       LIMIT 1
+     ), a.profile_generation)
+     ORDER BY a.created_at_ms ASC, a.attempt_id ASC`,
+  ).all() as Row[];
+  const bindingRows = db.prepare(
+    `SELECT b.binding_id,
+            (SELECT p.generation
+             FROM session_execution_profiles p
+             WHERE p.session_id = b.session_id
+               AND p.created_at_ms <= b.created_at_ms
+             ORDER BY p.created_at_ms DESC, p.generation DESC
+             LIMIT 1) AS expected_profile_generation
+     FROM adapter_bindings b
+     WHERE b.profile_generation != COALESCE((
+       SELECT p.generation
+       FROM session_execution_profiles p
+       WHERE p.session_id = b.session_id
+         AND p.created_at_ms <= b.created_at_ms
+       ORDER BY p.created_at_ms DESC, p.generation DESC
+       LIMIT 1
+     ), b.profile_generation)
+     ORDER BY b.created_at_ms ASC, b.binding_id ASC`,
+  ).all() as Row[];
+
+  const updateRun = db.prepare("UPDATE runs SET profile_generation = ? WHERE run_id = ? AND profile_generation != ?");
+  for (const row of runRows) {
+    updateRun.run(row.expected_profile_generation, row.run_id, row.expected_profile_generation);
+  }
+  const updateAttempt = db.prepare(
+    "UPDATE run_attempts SET profile_generation = ? WHERE attempt_id = ? AND profile_generation != ?",
+  );
+  for (const row of attemptRows) {
+    updateAttempt.run(row.expected_profile_generation, row.attempt_id, row.expected_profile_generation);
+  }
+  const updateBinding = db.prepare(
+    "UPDATE adapter_bindings SET profile_generation = ? WHERE binding_id = ? AND profile_generation != ?",
+  );
+  for (const row of bindingRows) {
+    updateBinding.run(row.expected_profile_generation, row.binding_id, row.expected_profile_generation);
+  }
+  return {
+    runIds: runRows.map((row) => text(row.run_id)),
+    attemptIds: attemptRows.map((row) => text(row.attempt_id)),
+    bindingIds: bindingRows.map((row) => text(row.binding_id)),
+  };
 }
 
 function repairDowngradeWindowJournalRows(

@@ -501,8 +501,8 @@ final class StartupWarmupPolicyTests: XCTestCase {
             "ChatProvider auth reset must release the memories-loaded guard"
         )
         XCTAssertTrue(
-            source.contains("cachedMainSystemPrompt = \"\""),
-            "ChatProvider auth reset must drop cached system prompts built for the previous user"
+            source.contains("await self.resolvedAgentClient().clearOwnerState()"),
+            "Sign-out must clear the previous owner's kernel sessions and context snapshots"
         )
     }
 }

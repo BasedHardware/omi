@@ -9,7 +9,6 @@ enum AgentClient {
   typealias ToolResultDisplayHandler = AgentBridge.ToolResultDisplayHandler
   typealias AuthRequiredHandler = AgentBridge.AuthRequiredHandler
   typealias AuthSuccessHandler = AgentBridge.AuthSuccessHandler
-  typealias WarmupSessionConfig = AgentBridge.WarmupSessionConfig
 
   struct QueryResult: Sendable {
     let text: String
@@ -53,12 +52,6 @@ enum AgentClient {
       self.bridge = AgentBridge(harnessMode: harnessMode)
     }
 
-    func replaceHarness(_ harnessMode: String) async {
-      await bridge.stop()
-      self.harnessMode = harnessMode
-      self.bridge = AgentBridge(harnessMode: harnessMode)
-    }
-
     var isAlive: Bool {
       get async { await bridge.isAlive }
     }
@@ -87,10 +80,6 @@ enum AgentClient {
       await bridge.clearOwnerState()
     }
 
-    func clearOwnerSurfaceState(chatId: String = "default") async {
-      await bridge.clearOwnerSurfaceState(chatId: chatId)
-    }
-
     func invalidateSurface(_ surface: AgentSurfaceReference) async {
       await bridge.invalidateSurface(surface)
     }
@@ -102,62 +91,131 @@ enum AgentClient {
       await bridge.setGlobalAuthHandlers(onAuthRequired: onAuthRequired, onAuthSuccess: onAuthSuccess)
     }
 
-    func setTurnRecordedHandler(_ handler: @escaping AgentRuntimeProcess.TurnRecordedHandler) async {
-      await bridge.setTurnRecordedHandler(handler)
-    }
-
-    func warmupSession(cwd: String? = nil, sessions: [WarmupSessionConfig]) async {
-      await bridge.warmupSession(cwd: cwd, sessions: sessions)
-    }
-
-    func importConversationTurns(
-      surface: AgentSurfaceReference,
-      turns: [(role: String, content: String, createdAtMs: Int?)]
+    func setJournalTurnChangedHandler(
+      _ handler: @escaping AgentRuntimeProcess.JournalTurnChangedHandler
     ) async {
-      await bridge.importConversationTurns(surface: surface, turns: turns)
+      await bridge.setJournalTurnChangedHandler(handler)
     }
 
-    func recordSurfaceTurn(
-      surface: AgentSurfaceReference,
-      ownerID: String? = nil,
-      userText: String,
-      assistantText: String,
-      origin: String,
-      interrupted: Bool = false,
-      idempotencyKey: String? = nil
-    ) async throws -> Bool {
-      try await bridge.recordSurfaceTurn(
-        surface: surface,
-        ownerID: ownerID,
-        userText: userText,
-        assistantText: assistantText,
-        origin: origin,
-        interrupted: interrupted,
-        idempotencyKey: idempotencyKey
+    func configureDefaultExecutionProfile(
+      adapterId: String,
+      modelProfile: String?,
+      workingDirectory: String,
+      expectedPreferenceGeneration: Int? = nil
+    ) async throws -> AgentDefaultExecutionProfile {
+      try await bridge.configureDefaultExecutionProfile(
+        adapterId: adapterId,
+        modelProfile: modelProfile,
+        workingDirectory: workingDirectory,
+        expectedPreferenceGeneration: expectedPreferenceGeneration
       )
     }
 
-    func getVoiceSeedContext(surface: AgentSurfaceReference) async throws -> AgentRuntimeProcess.VoiceSeedContextResult {
-      try await bridge.getVoiceSeedContext(surface: surface)
+    func resolveSurfaceSession(
+      _ surface: AgentSurfaceReference,
+      title: String? = nil,
+      creationProfile: AgentSessionCreationProfile? = nil
+    ) async throws -> AgentSurfaceSession {
+      try await bridge.resolveSurfaceSession(
+        surface,
+        title: title,
+        creationProfile: creationProfile
+      )
     }
 
-    func getKernelTurnTail(limit: Int = 8, chatId: String = "default") async throws -> AgentRuntimeProcess.KernelTurnTailResult {
-      try await bridge.getKernelTurnTail(limit: limit, chatId: chatId)
+    func migrateSessionExecutionProfile(
+      sessionId: String,
+      expectedProfileGeneration: Int,
+      adapterId: String,
+      modelProfile: String?,
+      workingDirectory: String
+    ) async throws -> AgentSessionProfileMigration {
+      try await bridge.migrateSessionExecutionProfile(
+        sessionId: sessionId,
+        expectedProfileGeneration: expectedProfileGeneration,
+        adapterId: adapterId,
+        modelProfile: modelProfile,
+        workingDirectory: workingDirectory
+      )
     }
 
-    func projectCrossSurfaceTurn(
+    func warmupSession(_ session: AgentSurfaceSession) async {
+      await bridge.warmupSession(session)
+    }
+
+    func updateContextSource(
+      sessionId: String,
+      surfaceKind: String,
+      source: AgentContextSource,
+      sourceRevision: String,
+      outcome: AgentContextSourceOutcome,
+      capturedAtMs: Int,
+      expiresAtMs: Int? = nil,
+      payload: [String: Any]
+    ) async throws -> AgentContextSourceUpdateReceipt {
+      try await bridge.updateContextSource(
+        sessionId: sessionId,
+        surfaceKind: surfaceKind,
+        source: source,
+        sourceRevision: sourceRevision,
+        outcome: outcome,
+        capturedAtMs: capturedAtMs,
+        expiresAtMs: expiresAtMs,
+        payload: payload
+      )
+    }
+
+    func getContextSnapshot(sessionId: String, surfaceKind: String) async throws -> AgentContextSnapshot {
+      try await bridge.getContextSnapshot(sessionId: sessionId, surfaceKind: surfaceKind)
+    }
+
+    func recordJournalTurn(
       surface: AgentSurfaceReference,
-      userText: String,
-      assistantText: String,
-      origin: String,
-      idempotencyKey: String? = nil
-    ) async {
-      await bridge.projectCrossSurfaceTurn(
+      ownerID: String? = nil,
+      turn: KernelJournalTurnWrite
+    ) async throws -> KernelJournalTurn {
+      try await bridge.recordJournalTurn(surface: surface, ownerID: ownerID, turn: turn)
+    }
+
+    func updateJournalTurn(
+      surface: AgentSurfaceReference,
+      ownerID: String? = nil,
+      update: KernelJournalTurnUpdate
+    ) async throws -> KernelJournalTurn {
+      try await bridge.updateJournalTurn(surface: surface, ownerID: ownerID, update: update)
+    }
+
+    func listJournalTurns(
+      surface: AgentSurfaceReference,
+      ownerID: String? = nil,
+      afterTurnSeq: Int = 0,
+      limit: Int = 100
+    ) async throws -> AgentRuntimeProcess.JournalOperationResult {
+      try await bridge.listJournalTurns(
         surface: surface,
-        userText: userText,
-        assistantText: assistantText,
-        origin: origin,
-        idempotencyKey: idempotencyKey
+        ownerID: ownerID,
+        afterTurnSeq: afterTurnSeq,
+        limit: limit
+      )
+    }
+
+    func importRemoteJournalTurn(
+      surface: AgentSurfaceReference,
+      ownerID: String? = nil,
+      turn: KernelJournalRemoteTurn
+    ) async throws -> KernelJournalTurn {
+      try await bridge.importRemoteJournalTurn(surface: surface, ownerID: ownerID, turn: turn)
+    }
+
+    func clearJournalTurns(
+      surface: AgentSurfaceReference,
+      ownerID: String? = nil,
+      expectedGeneration: Int? = nil
+    ) async throws -> Int {
+      try await bridge.clearJournalTurns(
+        surface: surface,
+        ownerID: ownerID,
+        expectedGeneration: expectedGeneration
       )
     }
 
@@ -171,16 +229,12 @@ enum AgentClient {
 
     func query(
       prompt: String,
-      systemPrompt: String,
       surface: AgentSurfaceReference,
-      cwd: String? = nil,
       mode: String? = nil,
-      model: String? = nil,
       imageData: Data? = nil,
-      attachmentMetadataJson: String? = nil,
-      surfaceContextJson: String? = nil,
+      attachments: [AgentQueryAttachment] = [],
+      expectedContext: AgentContextFreshness? = nil,
       onTextDelta: @escaping TextDeltaHandler,
-      onToolCall: @escaping ToolCallHandler,
       onToolActivity: @escaping ToolActivityHandler,
       onThinkingDelta: @escaping ThinkingDeltaHandler = { _ in },
       onToolResultDisplay: @escaping ToolResultDisplayHandler = { _, _, _ in },
@@ -189,16 +243,12 @@ enum AgentClient {
     ) async throws -> QueryResult {
       let result = try await bridge.query(
         prompt: prompt,
-        systemPrompt: systemPrompt,
         surface: surface,
-        cwd: cwd,
         mode: mode,
-        model: model,
         imageData: imageData,
-        attachmentMetadataJson: attachmentMetadataJson,
-        surfaceContextJson: surfaceContextJson,
+        attachments: attachments,
+        expectedContext: expectedContext,
         onTextDelta: onTextDelta,
-        onToolCall: onToolCall,
         onToolActivity: onToolActivity,
         onThinkingDelta: onThinkingDelta,
         onToolResultDisplay: onToolResultDisplay,
@@ -206,6 +256,38 @@ enum AgentClient {
         onAuthSuccess: onAuthSuccess
       )
       return QueryResult(result)
+    }
+
+    func query(
+      prompt: String,
+      session: AgentSurfaceSession,
+      surface: AgentSurfaceReference,
+      mode: String? = nil,
+      imageData: Data? = nil,
+      attachments: [AgentQueryAttachment] = [],
+      expectedContext: AgentContextFreshness? = nil,
+      onTextDelta: @escaping TextDeltaHandler,
+      onToolActivity: @escaping ToolActivityHandler,
+      onThinkingDelta: @escaping ThinkingDeltaHandler = { _ in },
+      onToolResultDisplay: @escaping ToolResultDisplayHandler = { _, _, _ in },
+      onAuthRequired: @escaping AuthRequiredHandler = { _, _ in },
+      onAuthSuccess: @escaping AuthSuccessHandler = {}
+    ) async throws -> QueryResult {
+      QueryResult(try await bridge.query(
+        prompt: prompt,
+        session: session,
+        surface: surface,
+        mode: mode,
+        imageData: imageData,
+        attachments: attachments,
+        expectedContext: expectedContext,
+        onTextDelta: onTextDelta,
+        onToolActivity: onToolActivity,
+        onThinkingDelta: onThinkingDelta,
+        onToolResultDisplay: onToolResultDisplay,
+        onAuthRequired: onAuthRequired,
+        onAuthSuccess: onAuthSuccess
+      ))
     }
   }
 
@@ -226,7 +308,7 @@ enum AgentClient {
     mode: String? = nil,
     cwd: String? = nil,
     onTextDelta: @escaping TextDeltaHandler = { _ in },
-    onToolCall: @escaping ToolCallHandler = { _, _, _ in "" },
+    onToolCall _: @escaping ToolCallHandler = { _, _, _ in "" },
     onToolActivity: @escaping ToolActivityHandler = { _, _, _, _ in },
     onThinkingDelta: @escaping ThinkingDeltaHandler = { _ in },
     onToolResultDisplay: @escaping ToolResultDisplayHandler = { _, _, _ in },
@@ -237,15 +319,59 @@ enum AgentClient {
     try await bridge.start()
     defer { Task { await bridge.stop() } }
 
+    guard let requestedAdapter = AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) else {
+      throw BridgeError.agentError("Unknown AI runtime mode: \(harnessMode)")
+    }
+    let usesNativeModelChoice = ["hermes", "openclaw"].contains(harnessMode)
+    let creationProfile = AgentSessionCreationProfile(
+      adapterId: requestedAdapter,
+      modelProfile: model ?? (usesNativeModelChoice ? nil : ModelQoS.Claude.chat),
+      workingDirectory: cwd?.isEmpty == false ? cwd! : AgentRuntimeProcess.defaultArtifactsDirectory()
+    )
+    let session = try await bridge.resolveSurfaceSession(
+      surface,
+      creationProfile: creationProfile
+    )
+    var snapshot = try await bridge.getContextSnapshot(
+      sessionId: session.sessionId,
+      surfaceKind: surface.surfaceKind)
+    let contextInputs: [(AgentContextSource, AgentContextSourceOutcome, [String: Any])] = [
+      (
+        .surface,
+        systemPrompt.isEmpty ? .empty : .available,
+        systemPrompt.isEmpty ? [:] : ["experienceContext": systemPrompt]
+      ),
+      (
+        .workspace,
+        cwd?.isEmpty == false ? .available : .empty,
+        cwd?.isEmpty == false ? ["workingDirectory": cwd!] : [:]
+      ),
+    ]
+    for (source, outcome, payload) in contextInputs {
+      let revision = try AgentContextRevision.make(source: source, payload: payload, outcome: outcome)
+      guard snapshot.sourceRevision(for: source) != revision else { continue }
+      _ = try await bridge.updateContextSource(
+        sessionId: session.sessionId,
+        surfaceKind: surface.surfaceKind,
+        source: source,
+        sourceRevision: revision,
+        outcome: outcome,
+        capturedAtMs: Int(Date().timeIntervalSince1970 * 1_000),
+        payload: payload
+      )
+      snapshot = try await bridge.getContextSnapshot(
+        sessionId: session.sessionId,
+        surfaceKind: surface.surfaceKind)
+    }
+    await bridge.warmupSession(session)
+
     let result = try await bridge.query(
       prompt: prompt,
-      systemPrompt: systemPrompt,
+      session: session,
       surface: surface,
-      cwd: cwd,
       mode: mode,
-      model: model,
+      expectedContext: snapshot.freshness,
       onTextDelta: onTextDelta,
-      onToolCall: onToolCall,
       onToolActivity: onToolActivity,
       onThinkingDelta: onThinkingDelta,
       onToolResultDisplay: onToolResultDisplay,

@@ -651,6 +651,9 @@ export interface StartupReconciliationResult {
   failedPreparedToolInvocationIds: string[];
   outcomeUnknownToolInvocationIds: string[];
   repairedSessionProfileIds: string[];
+  repairedRunProfileReferenceIds: string[];
+  repairedAttemptProfileReferenceIds: string[];
+  repairedBindingProfileReferenceIds: string[];
   repairedLegacyJournalTurnIds: string[];
   reconciledJournalTurnIds: string[];
   recoveryDispatchIds: string[];

@@ -136,8 +136,8 @@ enum OnboardingFlow {
 
   static func shouldUnlockVoiceShortcutContinue(
     observedShortcutPress: Bool,
-    pttState: PushToTalkManager.PTTState
+    voiceTurnPhase: VoiceTurnPhase?
   ) -> Bool {
-    observedShortcutPress && pttState == .idle
+    observedShortcutPress && (voiceTurnPhase == nil || voiceTurnPhase?.isTerminal == true)
   }
 }

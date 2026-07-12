@@ -579,6 +579,8 @@ export interface ContextSnapshotProjection {
   rendererFingerprint: string;
   rendererPolicyVersion: string;
   capabilityVersion: string;
+  /** Canonical, surface-specific context material rendered by the kernel. */
+  renderedContext: string;
   ownerId: string;
   sessionId: string;
   conversationId: string;
@@ -624,6 +626,14 @@ export interface ContextSourceUpdatedMessage extends OutboundEnvelope {
 export interface ContextSnapshotMessage extends OutboundEnvelope {
   type: "context_snapshot";
   snapshot: ContextSnapshotProjection;
+}
+
+export interface LegacyMainChatSessionsImportedMessage extends OutboundEnvelope {
+  type: "legacy_main_chat_sessions_imported";
+  ownerId: string;
+  acceptedEntries: Array<{ chatId: string; agentSessionId: string }>;
+  acceptedCount: number;
+  importedCount: number;
 }
 
 export interface JournalTurnProjection {
@@ -751,6 +761,7 @@ export type OutboundMessage =
   | SessionExecutionProfileMigratedMessage
   | ContextSourceUpdatedMessage
   | ContextSnapshotMessage
+  | LegacyMainChatSessionsImportedMessage
   | JournalOperationResultMessage
   | AgentSpawnJournalEnsuredMessage
   | JournalTurnChangedMessage
@@ -785,6 +796,7 @@ export type OutboundMessageDraft =
   | DraftEnvelope<SessionExecutionProfileMigratedMessage>
   | DraftEnvelope<ContextSourceUpdatedMessage>
   | DraftEnvelope<ContextSnapshotMessage>
+  | DraftEnvelope<LegacyMainChatSessionsImportedMessage>
   | DraftEnvelope<JournalOperationResultMessage>
   | DraftEnvelope<AgentSpawnJournalEnsuredMessage>
   | DraftEnvelope<JournalTurnChangedMessage>

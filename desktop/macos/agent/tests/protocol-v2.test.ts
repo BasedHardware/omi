@@ -16,6 +16,8 @@ import type {
   ExternalSurfaceToolResultMessage,
   ExternalSurfaceRunCompleteMessage,
   ExternalSurfaceRunCompleteResultMessage,
+  ImportLegacyMainChatSessionsMessage,
+  LegacyMainChatSessionsImportedMessage,
 } from "../src/protocol.js";
 import { PROTOCOL_VERSION } from "../src/protocol.js";
 import {
@@ -85,6 +87,30 @@ describe("protocol v2", () => {
       input: { limit: 10 },
     };
     expect(message.type).toBe("direct_control_tool");
+  });
+
+  it("acknowledges legacy main-chat aliases only with correlated owner-scoped acceptance", () => {
+    const request: ImportLegacyMainChatSessionsMessage = {
+      type: "import_legacy_main_chat_sessions",
+      protocolVersion: PROTOCOL_VERSION,
+      requestId: "legacy-import",
+      clientId: "bridge-client",
+      ownerId: "owner-1",
+      entries: [{ chatId: "default", agentSessionId: "ses_legacy" }],
+    };
+    const receipt: LegacyMainChatSessionsImportedMessage = {
+      type: "legacy_main_chat_sessions_imported",
+      protocolVersion: PROTOCOL_VERSION,
+      requestId: request.requestId,
+      clientId: request.clientId,
+      ownerId: "owner-1",
+      acceptedEntries: request.entries,
+      acceptedCount: 1,
+      importedCount: 1,
+    };
+
+    expect((request as InboundMessage).ownerId).toBe(receipt.ownerId);
+    expect((receipt as OutboundMessage).acceptedEntries).toEqual(request.entries);
   });
 
   it("binds every physical command/result to the exact manifest and ledger tuple", () => {

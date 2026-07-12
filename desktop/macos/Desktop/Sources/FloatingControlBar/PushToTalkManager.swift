@@ -33,24 +33,29 @@ extension Notification.Name {
   static let coreAudioCaptureRecoveryRequested = Notification.Name("coreAudioCaptureRecoveryRequested")
 }
 
-/// Consumes the one transition that hands a buffered PTT turn from a warming
-/// realtime hub to an active hub. Recording the new route before returning is
-/// critical: beginning the hub turn can synchronously publish another voice-turn
-/// snapshot, which must not resolve the same warm wait again.
-struct RealtimeHubWarmWaitResolutionGate {
-  private(set) var route: VoiceTurnRoute?
+/// One delegate instance belongs to one reducer-issued transcription effect.
+/// Retiring the proxy when its physical service stops prevents a late callback
+/// from service A from reading service B's current turn identity.
+@MainActor
+private final class VoiceTurnOmniDelegateProxy: RealtimeOmniServiceDelegate {
+  weak var owner: PushToTalkManager?
+  let identity: VoiceEffectIdentity
 
-  mutating func observe(_ nextRoute: VoiceTurnRoute?) -> Bool {
-    let wasWaitingForHub = route == .hubWarmWait
-    route = nextRoute
-    guard wasWaitingForHub else { return false }
-    if case .hub = nextRoute { return true }
-    return false
+  init(owner: PushToTalkManager, identity: VoiceEffectIdentity) {
+    self.owner = owner
+    self.identity = identity
   }
 
-  var isWaitingForHub: Bool {
-    route == .hubWarmWait
+  func omniDidConnect() { owner?.omniDidConnect(identity: identity) }
+  func omniDidReceiveInputTranscript(_ text: String, isFinal: Bool, itemID: String?) {
+    owner?.omniDidReceiveInputTranscript(
+      text, isFinal: isFinal, itemID: itemID, identity: identity)
   }
+  func omniDidReceiveAudio(_ pcm24k: Data) {
+    owner?.omniDidReceiveAudio(pcm24k, identity: identity)
+  }
+  func omniDidFinishTurn() { owner?.omniDidFinishTurn(identity: identity) }
+  func omniDidError(_ message: String) { owner?.omniDidError(message, identity: identity) }
 }
 
 /// Push-to-talk manager for voice input via the Option (⌥) key.
@@ -63,21 +68,14 @@ struct RealtimeHubWarmWaitResolutionGate {
 class PushToTalkManager: ObservableObject {
   static let shared = PushToTalkManager()
 
-  // MARK: - State
-
-  enum PTTState {
-    case idle
-    case listening
-    case pendingLockDecision
-    case lockedListening
-    case finalizing
-  }
-
-  @Published private(set) var state: PTTState = .idle
   private let voiceTurnCoordinator = VoiceTurnCoordinator.shared
-  private var currentVoiceTurnID: VoiceTurnID?
-  private var finalizationTurnID: VoiceTurnID?
-  private var hubWarmWaitResolutionGate = RealtimeHubWarmWaitResolutionGate()
+  private var voiceTurnSnapshotObservation: VoiceTurnSnapshotObservation?
+
+  /// A projection of the authoritative reducer. This manager owns microphone and
+  /// provider I/O only; it never stores a second logical lifecycle state.
+  var phase: VoiceTurnPhase? { voiceTurnCoordinator.activeTurn?.phase }
+  private var currentVoiceTurnID: VoiceTurnID? { voiceTurnCoordinator.activeTurnID }
+  private var isIdle: Bool { currentVoiceTurnID == nil }
 
   // MARK: - Private Properties
 
@@ -97,7 +95,7 @@ class PushToTalkManager: ObservableObject {
   private var transcriptionService: TranscriptionService?
   // Realtime omni STT (replaces Deepgram). Connects through the omi backend relay.
   private var realtimeOmniService: RealtimeOmniService?
-  private var omniTurnID: VoiceTurnID?
+  private var omniDelegateProxy: VoiceTurnOmniDelegateProxy?
   // Realtime-as-hub (Phase 1): when active, the realtime model is THE hub — it does
   // in-session STT + reasoning + routing (tool choice) + speaks the reply. Mic PCM is
   // streamed to RealtimeHubController; there is no transcript→router→ChatProvider hop.
@@ -110,8 +108,6 @@ class PushToTalkManager: ObservableObject {
   private var omniPreconnectBuffer: [Data] = []
   // True once the omni model returned any transcript this turn — gates the
   // Batch-STT fallback so a benign trailing socket error doesn't trigger it.
-  private var omniReceivedTranscript = false
-  private var omniTurnSent = false  // dedup: send/fallback the omni turn at most once
   private var audioCaptureService: AudioCaptureService?
   private var micCaptureStartInFlight = false
   private var silentMicRecoveryPolicy = PTTSilentMicRecoveryPolicy()
@@ -139,8 +135,6 @@ class PushToTalkManager: ObservableObject {
   /// Set once per turn when the buffer hits the cap, so the warning fires once.
   private var batchAudioOverflowSignaled = false
 
-  // Live mode: timeout for waiting on final transcript after CloseStream
-  private var liveFinalizationTimeout: DispatchWorkItem?
   private static let hubWarmGraceSeconds: TimeInterval = 1.0
 
   private var activeVoiceRoute: VoiceTurnRoute? {
@@ -184,8 +178,9 @@ class PushToTalkManager: ObservableObject {
     voiceTurnCoordinator.setEffectHandler { [weak self] effect in
       self?.handleVoiceTurnEffect(effect)
     }
-    voiceTurnCoordinator.setSnapshotHandler { [weak self] model in
-      self?.handleVoiceTurnSnapshot(model)
+    voiceTurnSnapshotObservation?.cancel()
+    voiceTurnSnapshotObservation = voiceTurnCoordinator.observeSnapshots { [weak self] _ in
+      self?.objectWillChange.send()
     }
   }
 
@@ -235,42 +230,34 @@ class PushToTalkManager: ObservableObject {
     }
   }
 
-  private func handleVoiceTurnSnapshot(_ model: VoiceTurnModel) {
-    let nextState = Self.legacyState(for: model.turn?.phase)
-    if state != nextState {
-      state = nextState
-    }
-
-    if hubWarmWaitResolutionGate.observe(model.turn?.route) {
-      resolveRealtimeHubWarmWait(ready: true, consumedReadyTransition: true)
-    }
-  }
-
-  nonisolated static func legacyState(for phase: VoiceTurnPhase?) -> PTTState {
-    switch phase {
-    case .recording:
-      return .listening
-    case .lockedRecording:
-      return .lockedListening
-    case .pendingLockDecision:
-      return .pendingLockDecision
-    case .finalizing:
-      return .finalizing
-    case .idle, .awaitingResponse, .awaitingTools, .playing, .terminal, .none:
-      return .idle
-    }
-  }
-
   private func handleVoiceTurnEffect(_ effect: VoiceTurnEffect) {
     switch effect {
     case .stopCapture(let turnID, let captureID):
       _ = stopMicCapture(captureID: captureID)
-      guard voiceTurnCoordinator.activeTurnID == turnID,
-        voiceTurnCoordinator.activeTurn?.phase == .finalizing,
-        finalizationTurnID != turnID
-      else { return }
-      finalizationTurnID = turnID
+      _ = turnID
+    case .finalizeCapturedInput(let turnID):
+      guard voiceTurnCoordinator.activeTurnID == turnID else { return }
       continueFinalization()
+    case .activateHub(let turnID, _):
+      guard voiceTurnCoordinator.activeTurnID == turnID else { return }
+      resolveRealtimeHubWarmWait(ready: true)
+    case .transcriptionFinalizationTimedOut(let turnID, let mode):
+      guard voiceTurnCoordinator.activeTurnID == turnID,
+        voiceTurnCoordinator.activeTurn?.phase == .finalizing
+      else { return }
+      switch mode {
+      case .omni:
+        log("PushToTalkManager: omni finalization timeout — falling back to backend batch STT")
+        fallBackToBatchTranscription(reason: "timeout")
+      case .live:
+        log("PushToTalkManager: live finalization timeout — sending transcript")
+        sendTranscript(turnID: turnID)
+      }
+    case .finalizeJournal(let turnID, let identity):
+      guard voiceTurnCoordinator.activeTurnID == turnID else { return }
+      if Self.isHubRoute(voiceTurnCoordinator.activeTurn?.route ?? .undecided) {
+        RealtimeHubController.shared.finalizeJournal(turnID: turnID, identity: identity)
+      }
     case .cancelHub(let turnID, let route):
       if Self.isHubRoute(route) {
         _ = RealtimeHubController.shared.cancelTurn(turnID: turnID)
@@ -278,10 +265,13 @@ class PushToTalkManager: ObservableObject {
     case .fallbackToTranscription(let turnID, _):
       guard voiceTurnCoordinator.activeTurnID == turnID else { return }
       resolveRealtimeHubWarmWait(ready: false)
-    case .stopPlayback(_, let leaseID):
-      _ = FloatingBarVoicePlaybackService.shared.interruptCurrentResponse(leaseID: leaseID)
+    case .stopPlayback(let lease):
+      if lease.lane == .nativeRealtime {
+        _ = RealtimeHubController.shared.stopNativePlayback(lease: lease)
+      } else {
+        _ = FloatingBarVoicePlaybackService.shared.interruptCurrentResponse(leaseID: lease.id)
+      }
     case .terminal(let record):
-      _ = VoiceOutputCoordinator.shared.endTurn(record.turnID)
       RealtimeHubController.shared.voiceTurnDidTerminate(turnID: record.turnID)
       performTerminalCleanup()
     case .scheduleDeadline, .cancelDeadline, .cancelAllDeadlines,
@@ -343,8 +333,8 @@ class PushToTalkManager: ObservableObject {
   private func handleShortcutDown() {
     let now = ProcessInfo.processInfo.systemUptime
 
-    switch state {
-    case .idle:
+    switch phase {
+    case .idle, .awaitingResponse, .awaitingTools, .awaitingJournal, .playing, .terminal, .none:
       // Check for double-tap: if last Option-up was recent, enter locked mode
       if ShortcutSettings.shared.doubleTapForLock && (now - lastOptionUpTime) < doubleTapThreshold {
         lastOptionUpTime = 0
@@ -354,7 +344,7 @@ class PushToTalkManager: ObservableObject {
         startListening()
       }
 
-    case .listening:
+    case .recording:
       // Already listening (hold mode), ignore repeated flagsChanged
       break
 
@@ -362,7 +352,7 @@ class PushToTalkManager: ObservableObject {
       stopListening()
       enterLockedListening()
 
-    case .lockedListening:
+    case .lockedRecording:
       // Tap while locked → finalize
       finalize()
 
@@ -374,8 +364,8 @@ class PushToTalkManager: ObservableObject {
   private func handleShortcutUp() {
     let now = ProcessInfo.processInfo.systemUptime
 
-    switch state {
-    case .listening:
+    switch phase {
+    case .recording:
       let holdDuration = now - lastOptionDownTime
 
       if ShortcutSettings.shared.doubleTapForLock && holdDuration < tapToLockMaxHoldDuration {
@@ -390,11 +380,12 @@ class PushToTalkManager: ObservableObject {
     case .pendingLockDecision:
       break
 
-    case .lockedListening:
+    case .lockedRecording:
       // In locked mode, Option-up is ignored (we finalize on next Option-down)
       break
 
-    case .idle, .finalizing:
+    case .idle, .finalizing, .awaitingResponse, .awaitingTools, .awaitingJournal, .playing,
+      .terminal, .none:
       break
     }
   }
@@ -415,17 +406,13 @@ class PushToTalkManager: ObservableObject {
   }
 
   private func startListening() {
-    guard state == .idle || state == .pendingLockDecision else {
-      log("PushToTalkManager: startListening ignored — state=\(state)")
+    guard isIdle || phase == .pendingLockDecision else {
+      log("PushToTalkManager: startListening ignored — phase=\(String(describing: phase))")
       return
     }
     if isBlockedByUsageLimit() { return }
-    finalizationTurnID = nil
-    let turnID = voiceTurnCoordinator.begin(intent: .hold)
-    currentVoiceTurnID = turnID
-    _ = VoiceOutputCoordinator.shared.beginTurn(id: turnID)
-    RealtimeHubController.shared.prefetchVoiceSeedContextIfNeeded()
-    RealtimeHubController.shared.prefetchVoiceTurnScreenContextIfNeeded()
+    _ = voiceTurnCoordinator.begin(intent: followUpPill == nil ? .hold : .agentFollowUp)
+    RealtimeHubController.shared.prefetchVoiceContextSnapshotIfNeeded()
     // Reset the overflow flag under the buffer lock so it's atomic w.r.t. the
     // audio thread's appendBatchAudioBounded (fresh turn → allow the warning again).
     batchAudioLock.lock()
@@ -464,8 +451,7 @@ class PushToTalkManager: ObservableObject {
 
   private func enterLockedListening() {
     if isBlockedByUsageLimit() { return }
-    RealtimeHubController.shared.prefetchVoiceSeedContextIfNeeded()
-    RealtimeHubController.shared.prefetchVoiceTurnScreenContextIfNeeded()
+    RealtimeHubController.shared.prefetchVoiceContextSnapshotIfNeeded()
     FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
     if ShortcutSettings.shared.pttMuteSystemAudio {
       SystemAudioMuteController.shared.muteForListening()
@@ -475,10 +461,7 @@ class PushToTalkManager: ObservableObject {
     {
       voiceTurnCoordinator.send(.lock(turnID: turnID))
     } else {
-      finalizationTurnID = nil
-      let turnID = voiceTurnCoordinator.begin(intent: .locked)
-      currentVoiceTurnID = turnID
-      _ = VoiceOutputCoordinator.shared.beginTurn(id: turnID)
+      _ = voiceTurnCoordinator.begin(intent: .locked)
     }
     isCurrentSessionFollowUp = barState?.showingAIResponse == true
 
@@ -513,7 +496,7 @@ class PushToTalkManager: ObservableObject {
   }
 
   private func enterPendingLockDecision() {
-    guard state == .listening else { return }
+    guard phase == .recording else { return }
     guard let turnID = currentVoiceTurnID else { return }
     voiceTurnCoordinator.send(.openLockWindow(turnID: turnID))
     stopMicCapture()
@@ -533,8 +516,6 @@ class PushToTalkManager: ObservableObject {
   private func performTerminalCleanup() {
     // Always restore audio on teardown (cancel, error, cleanup) so we never leave it muted.
     SystemAudioMuteController.shared.restore()
-    liveFinalizationTimeout?.cancel()
-    liveFinalizationTimeout = nil
     contextCaptureTask?.cancel()
     contextCaptureTask = nil
     micCaptureStartInFlight = false
@@ -554,14 +535,12 @@ class PushToTalkManager: ObservableObject {
     // Abandoned session (cancel / silent turn) — drop its tracer unsent so it
     // doesn't leak into the next PTT turn. No trace is written for these.
     activeTracer = nil
-    currentVoiceTurnID = nil
-    finalizationTurnID = nil
     automationCaptureBypass = false
   }
 
   /// Cancel PTT without sending — used when conversation is closed mid-PTT.
   func cancelListening() {
-    guard state != .idle else { return }
+    guard !isIdle else { return }
     log("PushToTalkManager: cancelling listening")
     stopListening()
   }
@@ -572,8 +551,8 @@ class PushToTalkManager: ObservableObject {
   /// the realtime omni STT capture; the transcript routes to the agent's session via
   /// AgentPillsManager.continueAgent (not the floating bar / hub model).
   func startPillFollowUp(for pill: AgentPill) {
-    guard state == .idle else {
-      log("PushToTalkManager: follow-up ignored — PTT busy (state=\(state))")
+    guard isIdle else {
+      log("PushToTalkManager: follow-up ignored — PTT busy (phase=\(String(describing: phase)))")
       AgentPillsManager.shared.recordingPillID = nil
       return
     }
@@ -584,7 +563,7 @@ class PushToTalkManager: ObservableObject {
 
   /// End the in-progress voice follow-up (second mic tap) and send it to the agent.
   func endPillFollowUp() {
-    guard followUpPill != nil, state != .idle else { return }
+    guard followUpPill != nil, !isIdle else { return }
     log("PushToTalkManager: voice follow-up END — finalizing")
     finalize()
   }
@@ -615,7 +594,7 @@ class PushToTalkManager: ObservableObject {
     startListening()
     let isRecording = voiceTurnCoordinator.activeTurn?.phase.isRecording == true
     if !isRecording { automationCaptureBypass = false }
-    return ["state": "\(state)", "listening": isRecording ? "true" : "false"]
+    return ["state": VoiceTurnCoordinator.phaseLabel(phase ?? .idle), "listening": isRecording ? "true" : "false"]
   }
 
   /// Release an in-progress push-to-talk capture the same way a long-hold key-up does
@@ -627,13 +606,13 @@ class PushToTalkManager: ObservableObject {
   func endPushToTalkForAutomation() -> [String: String] {
     let wasActive = voiceTurnCoordinator.activeTurn?.phase.isRecording == true
     if wasActive { finalize() }
-    return ["state": "\(state)", "finalized": wasActive ? "true" : "false"]
+    return ["state": VoiceTurnCoordinator.phaseLabel(phase ?? .idle), "finalized": wasActive ? "true" : "false"]
   }
 
   private var finalizedMode: String = "hold"
 
   private func currentPTTMode() -> String {
-    let baseMode = state == .lockedListening ? "locked" : "hold"
+    let baseMode = phase == .lockedRecording ? "locked" : "hold"
     return isCurrentSessionFollowUp ? "follow_up_\(baseMode)" : baseMode
   }
 
@@ -823,7 +802,7 @@ class PushToTalkManager: ObservableObject {
   }
 
   private func finalize() {
-    guard state == .listening || state == .lockedListening || state == .pendingLockDecision else { return }
+    guard phase?.isRecording == true else { return }
     guard let turnID = currentVoiceTurnID else { return }
     voiceTurnCoordinator.send(.finalize(turnID: turnID))
   }
@@ -989,21 +968,8 @@ class PushToTalkManager: ObservableObject {
         "omni_transcribe", metadata: ["provider": RealtimeOmniSettings.shared.effectiveProvider.displayName])
       realtimeOmniService?.commitInputTurn()
       log("PushToTalkManager: finalizing (omni STT) — waiting for final transcript")
-      let timeout = DispatchWorkItem { [weak self] in
-        Task { @MainActor in
-          guard let self, self.state == .finalizing else { return }
-          // No clean final transcript from the relay in time — don't ship the garbage
-          // interim it may have left behind; fall back to routed batch STT on the full buffered
-          // turn audio. fallBackToBatchTranscription() no-ops if the turn was already sent.
-          log("PushToTalkManager: omni finalization timeout — falling back to backend batch STT")
-          self.fallBackToBatchTranscription(reason: "timeout")
-        }
-      }
-      liveFinalizationTimeout = timeout
-      // Safety net only — the real send happens the instant the omni model
-      // returns its final transcript (omniDidReceiveInputTranscript isFinal /
-      // omniDidFinishTurn). Generous so the relay round-trip can complete.
-      DispatchQueue.main.asyncAfter(deadline: .now() + 8.0, execute: timeout)
+      voiceTurnCoordinator.send(
+        .transcriptionFinalizationStarted(turnID: turnID, mode: .omni))
       return
     }
 
@@ -1078,19 +1044,8 @@ class PushToTalkManager: ObservableObject {
       // Live mode: flush remaining audio and wait for final transcript from Deepgram
       transcriptionService?.finishStream()
       log("PushToTalkManager: finalizing (live) — mic stopped, waiting for final transcript")
-
-      // Safety timeout: if Deepgram doesn't send a final segment within 3s, send what we have
-      let timeout = DispatchWorkItem { [weak self] in
-        Task { @MainActor in
-          guard let self, self.state == .finalizing,
-            self.voiceTurnCoordinator.activeTurnID == turnID
-          else { return }
-          log("PushToTalkManager: live finalization timeout — sending transcript")
-          self.sendTranscript(turnID: turnID)
-        }
-      }
-      liveFinalizationTimeout = timeout
-      DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: timeout)
+      voiceTurnCoordinator.send(
+        .transcriptionFinalizationStarted(turnID: turnID, mode: .live))
     }
   }
 
@@ -1152,6 +1107,13 @@ class PushToTalkManager: ObservableObject {
       log("PushToTalkManager: dropping stale transcript completion turn=\(turnID)")
       return
     }
+    guard voiceTurnCoordinator.requireCurrentOwner(for: turnID) != nil else {
+      log("PushToTalkManager: dropping transcript after authenticated owner changed")
+      return
+    }
+    if voiceTurnCoordinator.activeTurn?.transcriptionFinalizationMode != nil {
+      voiceTurnCoordinator.send(.transcriptionFinalizationCompleted(turnID: turnID))
+    }
     // QueryTracer: close the omni finalization span opened in finalize() (no-op on
     // the batch/live fallback paths, which never opened it).
     activeTracer?.end("omni_transcribe")
@@ -1199,10 +1161,14 @@ class PushToTalkManager: ObservableObject {
     // (PTTTranscriptContextualCorrector), and Claude tolerates minor ASR typos.
     // Send straight through (sendTranscript already runs on the main actor).
     activeTracer?.mark("transcript_cleanup")
-    sendQuery(query, wasFollowUp: wasFollowUp)
+    sendQuery(query, wasFollowUp: wasFollowUp, turnID: turnID)
   }
 
-  private func sendQuery(_ query: String, wasFollowUp: Bool) {
+  private func sendQuery(_ query: String, wasFollowUp: Bool, turnID: VoiceTurnID) {
+    guard voiceTurnCoordinator.requireCurrentOwner(for: turnID) != nil else {
+      log("PushToTalkManager: refusing provider dispatch after authenticated owner changed")
+      return
+    }
     // Voice follow-up to an agent pill: route the transcript into THAT agent's session
     // (RealtimeHub pipeline) instead of the floating bar.
     if let pill = followUpPill {
@@ -1213,11 +1179,21 @@ class PushToTalkManager: ObservableObject {
       if q.isEmpty {
         log("PushToTalkManager: voice follow-up empty — not sending")
       } else {
+        guard voiceTurnCoordinator.requireCurrentOwner(for: turnID) != nil else { return }
         log("PushToTalkManager: routing voice follow-up → agent (\(q.count) chars)")
-        AgentPillsManager.shared.continueAgent(from: pill, text: q)
-      }
-      if let turnID = currentVoiceTurnID {
-        voiceTurnCoordinator.send(.finish(turnID: turnID, reason: .success))
+        let completionToken = currentVoiceTurnID.flatMap {
+          voiceTurnCoordinator.nonHubCompletionToken(for: $0)
+        }
+        AgentPillsManager.shared.continueAgent(from: pill, text: q) { outcome in
+          guard let completionToken else { return }
+          VoiceTurnCoordinator.shared.completeNonHubProvider(
+            completionToken,
+            outcome: outcome)
+        }
+        if completionToken == nil, let turnID = currentVoiceTurnID {
+          log("PushToTalkManager: agent follow-up missing provider completion identity")
+          voiceTurnCoordinator.send(.finish(turnID: turnID, reason: .providerFailed))
+        }
       }
       return
     }
@@ -1230,10 +1206,16 @@ class PushToTalkManager: ObservableObject {
     let dispatch = {
       if wasFollowUp {
         log("PushToTalkManager: sending follow-up query (\(query.count) chars)")
-        FloatingControlBarManager.shared.sendFollowUpQuery(query, fromVoice: true)
+        FloatingControlBarManager.shared.sendFollowUpQuery(
+          query,
+          fromVoice: true,
+          voiceTurnID: turnID)
       } else {
         log("PushToTalkManager: sending query (\(query.count) chars)")
-        FloatingControlBarManager.shared.openAIInputWithQuery(query, fromVoice: true)
+        FloatingControlBarManager.shared.openAIInputWithQuery(
+          query,
+          fromVoice: true,
+          voiceTurnID: turnID)
       }
     }
     if let tracer {
@@ -1249,7 +1231,7 @@ class PushToTalkManager: ObservableObject {
   // MARK: - Audio Transcription (Dedicated Session)
 
   private func captureContextAndStartAudio(preOverlayImage: CGImage? = nil) {
-    let turnID = currentVoiceTurnID
+    guard let turnID = currentVoiceTurnID else { return }
     contextCaptureTask?.cancel()
     // QueryTracer: audio capture runs until finalize; context OCR runs in
     // parallel (the `parallel_with` marker + overlapping start/end windows make
@@ -1265,8 +1247,12 @@ class PushToTalkManager: ObservableObject {
         guard self.currentVoiceTurnID == turnID,
           self.voiceTurnCoordinator.activeTurnID == turnID
         else { return }
-        guard self.state == .listening || self.state == .lockedListening || self.state == .finalizing else { return }
+        guard self.phase?.isRecording == true || self.phase == .finalizing else { return }
         self.currentContextSnapshot = snapshot
+        let version = VoiceContextSnapshotVersion(
+          "\(Int64(snapshot.capturedAt.timeIntervalSince1970 * 1_000)):\(snapshot.sourceCount)")
+        self.voiceTurnCoordinator.send(
+          .contextResolved(turnID: turnID, outcome: .captured(version)))
         self.activeTracer?.end("context_ocr")
       }
     }
@@ -1379,20 +1365,19 @@ class PushToTalkManager: ObservableObject {
     // with a typed session ID; expiry emits fallbackToTranscription.
   }
 
-  private func resolveRealtimeHubWarmWait(ready: Bool, consumedReadyTransition: Bool = false) {
-    guard consumedReadyTransition || hubWarmWaitResolutionGate.isWaitingForHub else { return }
-    guard state == .listening || state == .lockedListening || state == .pendingLockDecision || state == .finalizing else {
+  private func resolveRealtimeHubWarmWait(ready: Bool) {
+    guard phase?.isRecording == true || phase == .finalizing else {
       return
     }
     if ready {
       startRealtimeHubCapture(bufferWhileWarming: true)
-      if state == .finalizing {
+      if phase == .finalizing {
         commitBufferedRealtimeHubTurn()
       }
       return
     }
 
-    if state == .finalizing {
+    if phase == .finalizing {
       log("PushToTalkManager: realtime hub warm wait timed out after release — transcribing buffered audio")
       transcribeBufferedWarmWaitAudio()
     } else {
@@ -1649,7 +1634,7 @@ class PushToTalkManager: ObservableObject {
   /// so rebuild the whole capture stack instead.
   @MainActor
   private func handleSilentMicDetection(_ detection: AudioCaptureService.SilentMicDetection, batchMode: Bool) {
-    guard state == .listening || state == .lockedListening || state == .pendingLockDecision else {
+    guard phase?.isRecording == true else {
       return
     }
     if detection.suggestedAction == .fallbackToBuiltIn,
@@ -1711,7 +1696,7 @@ class PushToTalkManager: ObservableObject {
   }
 
   private var shouldKeepMicCaptureAlive: Bool {
-    state == .listening || state == .lockedListening
+    phase == .recording || phase == .lockedRecording
   }
 
   @discardableResult
@@ -1735,14 +1720,13 @@ class PushToTalkManager: ObservableObject {
     transcriptionService = nil
     realtimeOmniService?.stop()
     realtimeOmniService = nil
-    omniTurnID = nil
+    omniDelegateProxy = nil
     omniPreconnectBuffer.removeAll()
   }
 
   private func handleTranscriptSegments(_ segments: [TranscriptionService.BackendSegment]) {
     guard
-      state == .listening || state == .lockedListening || state == .pendingLockDecision
-        || state == .finalizing
+      phase?.isRecording == true || phase == .finalizing
     else { return }
 
     for segment in segments {
@@ -1751,10 +1735,8 @@ class PushToTalkManager: ObservableObject {
     lastInterimText = ""
 
     // In finalizing state, segments mean backend is done — send immediately
-    if state == .finalizing {
+    if phase == .finalizing {
       log("PushToTalkManager: received transcript during finalization — sending now")
-      liveFinalizationTimeout?.cancel()
-      liveFinalizationTimeout = nil
       if let turnID = currentVoiceTurnID {
         sendTranscript(turnID: turnID)
       }
@@ -1775,22 +1757,27 @@ class PushToTalkManager: ObservableObject {
 // GPT Realtime 2) transcribes the PTT turn instead of Deepgram. The final
 // transcript flows through the unchanged sendTranscript() → ChatProvider path,
 // so agents, tools, memory, vision, and the text input all keep working.
-extension PushToTalkManager: RealtimeOmniServiceDelegate {
+extension PushToTalkManager {
 
   /// Starts realtime omni STT via the omi backend relay. Always returns true
   /// (omni is the floating bar's STT); on auth failure it stops the turn.
   @discardableResult
   fileprivate func startOmniTranscription(captureAlreadyRunning: Bool = false) -> Bool {
     guard let startingTurnID = currentVoiceTurnID else { return false }
-    omniTurnID = startingTurnID
+    guard let identity = voiceTurnCoordinator.reserveEffectIdentity() else { return false }
+    voiceTurnCoordinator.send(
+      .transcriptionProviderStartedScoped(turnID: startingTurnID, identity: identity))
+    guard voiceTurnCoordinator.activeTurn?.transcriptionEffectIdentity == identity else {
+      return false
+    }
+    let delegateProxy = VoiceTurnOmniDelegateProxy(owner: self, identity: identity)
+    omniDelegateProxy = delegateProxy
     let provider = RealtimeOmniSettings.shared.effectiveProvider
     if let turnID = currentVoiceTurnID,
       voiceTurnCoordinator.activeTurn?.route != .agentFollowUp
     {
       voiceTurnCoordinator.send(.selectRoute(turnID: turnID, route: .omniSTT))
     }
-    omniReceivedTranscript = false
-    omniTurnSent = false
     if captureAlreadyRunning {
       batchAudioLock.lock()
       let bufferedAudio = batchAudioBuffer
@@ -1809,16 +1796,19 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
     Task { @MainActor [weak self] in
       guard let self, self.isOmniSTT,
         self.voiceTurnCoordinator.activeTurnID == startingTurnID,
-        self.omniTurnID == startingTurnID
+        self.voiceTurnCoordinator.activeTurn?.transcriptionEffectIdentity == identity,
+        self.omniDelegateProxy === delegateProxy
       else { return }
       do {
         let authHeader = try await AuthService.shared.getAuthHeader()
         guard self.voiceTurnCoordinator.activeTurnID == startingTurnID,
-          self.omniTurnID == startingTurnID
+          self.voiceTurnCoordinator.activeTurn?.transcriptionEffectIdentity == identity,
+          self.omniDelegateProxy === delegateProxy
         else { return }
         let base = DesktopBackendEnvironment.pythonBaseURL()
         let service = RealtimeOmniService(
-          provider: provider, relayBaseURL: base, authHeader: authHeader, sttOnly: true, delegate: self)
+          provider: provider, relayBaseURL: base, authHeader: authHeader, sttOnly: true,
+          delegate: delegateProxy)
         self.realtimeOmniService = service
         // Flush anything captured while we were fetching auth.
         for raw in self.omniPreconnectBuffer { service.sendAudio(self.resampleForOmni(raw)) }
@@ -1827,7 +1817,10 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
         log("PushToTalkManager: started omni STT (\(provider.displayName)) via backend relay")
       } catch {
         logError("PushToTalkManager: omni auth failed", error: error)
-        guard self.voiceTurnCoordinator.activeTurnID == startingTurnID else { return }
+        guard self.voiceTurnCoordinator.activeTurnID == startingTurnID,
+          self.voiceTurnCoordinator.activeTurn?.transcriptionEffectIdentity == identity,
+          self.omniDelegateProxy === delegateProxy
+        else { return }
         self.voiceTurnCoordinator.send(
           .transcriptionFailed(turnID: startingTurnID, message: error.localizedDescription))
       }
@@ -1874,17 +1867,19 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
 
   // MARK: RealtimeOmniServiceDelegate
 
-  func omniDidConnect() {
+  fileprivate func omniDidConnect(identity: VoiceEffectIdentity) {
+    guard ownsOmniEffect(identity) else { return }
     log("PushToTalkManager: omni STT connected")
   }
 
-  func omniDidReceiveInputTranscript(_ text: String, isFinal: Bool, itemID: String?) {
-    guard let turnID = omniTurnID,
-      voiceTurnCoordinator.activeTurnID == turnID
-    else { return }
-    guard state == .listening || state == .lockedListening
-            || state == .pendingLockDecision || state == .finalizing else { return }
-    if !text.isEmpty { omniReceivedTranscript = true }
+  fileprivate func omniDidReceiveInputTranscript(
+    _ text: String,
+    isFinal: Bool,
+    itemID: String?,
+    identity: VoiceEffectIdentity
+  ) {
+    guard ownsOmniEffect(identity), let turnID = currentVoiceTurnID else { return }
+    guard phase?.isRecording == true || phase == .finalizing else { return }
     if isFinal {
       let finalText = text.isEmpty ? lastInterimText : text
       let trimmed = finalText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1903,11 +1898,8 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
         }
       }
       lastInterimText = ""
-      if state == .finalizing {
-        liveFinalizationTimeout?.cancel()
-        liveFinalizationTimeout = nil
-        guard !omniTurnSent else { return }
-        omniTurnSent = true
+      if phase == .finalizing {
+        guard claimOmniCompletion(identity) else { return }
         sendTranscript(turnID: turnID)
       }
     } else {
@@ -1916,32 +1908,31 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
     }
   }
 
-  func omniDidReceiveAudio(_ pcm24k: Data) {
+  fileprivate func omniDidReceiveAudio(_ pcm24k: Data, identity: VoiceEffectIdentity) {
+    guard ownsOmniEffect(identity) else { return }
     // STT-only: the omni model's own voice is unused; Claude's reply is spoken
     // by the existing FloatingBarVoicePlaybackService.
   }
 
-  func omniDidFinishTurn() {
-    if state == .finalizing, let turnID = omniTurnID,
-      voiceTurnCoordinator.activeTurnID == turnID
+  fileprivate func omniDidFinishTurn(identity: VoiceEffectIdentity) {
+    if phase == .finalizing, let turnID = currentVoiceTurnID,
+      ownsOmniEffect(identity)
     {
-      liveFinalizationTimeout?.cancel()
-      liveFinalizationTimeout = nil
-      guard !omniTurnSent else { return }
-      omniTurnSent = true
+      guard claimOmniCompletion(identity) else { return }
       sendTranscript(turnID: turnID)
     }
   }
 
-  func omniDidError(_ message: String) {
+  fileprivate func omniDidError(_ message: String, identity: VoiceEffectIdentity) {
+    guard ownsOmniEffect(identity),
+      voiceTurnCoordinator.activeTurn?.transcriptionCompletionClaimed == false
+    else { return }
     logError("PushToTalkManager: omni STT error: \(message)")
     // Benign ONLY if the turn already completed (final transcript sent). A mid-turn relay
     // death — even after a spurious interim like "Olha olha" that set omniReceivedTranscript
     // — must NOT be ignored, or the turn is lost (garbage/no reply). The full turn audio is
     // always buffered in batchAudioBuffer, so we re-transcribe it through routed batch STT.
-    guard !omniTurnSent,
-          state == .listening || state == .lockedListening
-            || state == .pendingLockDecision || state == .finalizing
+    guard phase?.isRecording == true || phase == .finalizing
     else { return }
     // Kill the dead relay so finalize() doesn't wait on it; the mic keeps buffering.
     realtimeOmniService?.stop()
@@ -1949,24 +1940,28 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
     // If the user already released, transcribe the buffered turn now. If they're still
     // holding, keep capturing — finalize()'s dead-relay branch falls back to batch STT with
     // the full turn audio (avoids cutting them off mid-sentence).
-    if state == .finalizing {
+    if phase == .finalizing {
       fallBackToBatchTranscription(reason: "other")
     }
   }
 
   /// Transcribe the buffered turn audio through the backend's selected batch-STT provider.
   fileprivate func fallBackToBatchTranscription(reason: String = "other") {
-    guard !omniTurnSent else { return }
-    omniTurnSent = true
+    guard let identity = voiceTurnCoordinator.activeTurn?.transcriptionEffectIdentity,
+      claimOmniCompletion(identity)
+    else { return }
     log("PushToTalkManager: omni unavailable — falling back to backend batch STT for this turn")
     realtimeOmniService?.stop()
     realtimeOmniService = nil
     batchAudioLock.lock()
     let audio = batchAudioBuffer
     batchAudioLock.unlock()
-    guard let turnID = omniTurnID ?? currentVoiceTurnID,
+    guard let turnID = currentVoiceTurnID,
       voiceTurnCoordinator.activeTurnID == turnID
     else { return }
+    if voiceTurnCoordinator.activeTurn?.transcriptionFinalizationMode != nil {
+      voiceTurnCoordinator.send(.transcriptionFinalizationCompleted(turnID: turnID))
+    }
     guard !audio.isEmpty else {
       sendTranscript(turnID: turnID)
       return
@@ -2006,9 +2001,25 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
           .transcriptionFailed(turnID: turnID, message: error.localizedDescription))
         return
       }
-      self.liveFinalizationTimeout?.cancel()
-      self.liveFinalizationTimeout = nil
       self.sendTranscript(turnID: turnID)
     }
+  }
+
+  private func ownsOmniEffect(_ identity: VoiceEffectIdentity) -> Bool {
+    guard let turn = voiceTurnCoordinator.activeTurn else { return false }
+    return turn.id.rawValue == identity.generation
+      && turn.transcriptionEffectIdentity == identity
+      && omniDelegateProxy?.identity == identity
+  }
+
+  private func claimOmniCompletion(_ identity: VoiceEffectIdentity) -> Bool {
+    guard ownsOmniEffect(identity),
+      voiceTurnCoordinator.activeTurn?.transcriptionCompletionClaimed == false,
+      let turnID = currentVoiceTurnID
+    else { return false }
+    voiceTurnCoordinator.send(
+      .transcriptionCompletionClaimedScoped(turnID: turnID, identity: identity))
+    return voiceTurnCoordinator.activeTurn?.transcriptionEffectIdentity == identity
+      && voiceTurnCoordinator.activeTurn?.transcriptionCompletionClaimed == true
   }
 }

@@ -12,7 +12,9 @@
 #   1. typed main-chat turn
 #   2. PTT hub turn (ptt_test_turn + forced transcript)
 #   3. typed follow-up that must see the PTT turn
-#   4. background agent spawn (spawn_agent)
+#   4a. exact #9515 PTT request → one child → successful get_memories;
+#       continue that same child session and require get_memories to succeed again
+#   4b. background agent spawn (spawn_agent)
 #   5. status query about that spawned agent
 #   7. floating pill spawn → cross-surface blind recall (PTT + typed)
 #   R. optional resilience suite: startup/bad-state bridge + R3 race + R4 subagent
@@ -22,7 +24,8 @@
 #
 # Evidence bundle (timestamped under desktop/macos/.harness/agent-continuity-gauntlet/):
 #   per-step user/assistant text, QueryTracer excerpts, runtime sqlite path+hash,
-#   app log excerpt, automation snapshots, optional agent-swift screenshot.
+#   owner-scoped run/tool-ledger inspections, zero-legacy/JSONL scan, app log
+#   excerpt, automation snapshots, optional agent-swift screenshot.
 #
 # Prerequisites (full E2E):
 #   - macOS with a running named test bundle, e.g.:
@@ -36,6 +39,7 @@
 #   ./scripts/agent-continuity-gauntlet.sh --self-check          # validate hooks only
 #   ./scripts/agent-continuity-gauntlet.sh --suite prompts       # fast typed-only prompt probes (P1-P3)
 #   ./scripts/agent-continuity-gauntlet.sh --suite continuity    # steps 1-3 only (includes PTT)
+#   ./scripts/agent-continuity-gauntlet.sh --suite agents        # exact voice-memory authority + agent probes
 #   ./scripts/agent-continuity-gauntlet.sh --suite resilience    # startup/resilience probes (R1-R4)
 #   ./scripts/agent-continuity-gauntlet.sh --suite all           # core + prompt + resilience probes
 #   OMI_AUTOMATION_PORT=47778 ./scripts/agent-continuity-gauntlet.sh --bundle-id com.omi.omi-gauntlet

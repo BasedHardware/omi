@@ -358,6 +358,21 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     )
   }
 
+  func testDebugBarStateUsesReducerScopedPresentationEvent() throws {
+    let body = try actionBody(named: "debug_bar_state", in: bridgeSource())
+
+    XCTAssertTrue(body.contains("VoiceTurnDebugPresentationState(rawValue: s)"))
+    XCTAssertTrue(body.contains("VoiceTurnCoordinator.shared.applyDebugPresentationState"))
+    for forbidden in [
+      "debugSetVoiceResponseActive",
+      "bar.isVoiceListening =",
+      "bar.isThinking =",
+      "bar.voiceProjection =",
+    ] {
+      XCTAssertFalse(body.contains(forbidden), "debug automation bypasses reducer: \(forbidden)")
+    }
+  }
+
   private func bridgeSource() throws -> String {
     let url = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()

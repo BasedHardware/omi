@@ -57,6 +57,34 @@ RESILIENCE_GENERIC_CHAT_PATTERNS = {
     "requestAlreadyActive",
     "response_already_running",
 }
+EXACT_VOICE_AGENT_MEMORY_REQUEST = (
+    "Have an agent look through my memories today and surface one surprising insight."
+)
+EXACT_VOICE_AGENT_MEMORY_FOLLOWUP = (
+    "Continue in this same agent session. Call get_memories again for today, then "
+    "return one additional surprising insight. Do not spawn another agent."
+)
+TERMINAL_RUN_STATUSES = {"succeeded", "failed", "cancelled", "orphaned"}
+AGENT_CHILD_SURFACES = {
+    "background_agent",
+    "delegated_agent",
+    "floating_bar",
+    "floating_pill",
+}
+CONVERGENCE_FORBIDDEN_EVIDENCE_PATTERNS = {
+    "unrouted_tool_call",
+    "malformed jsonl",
+    "malformed_jsonl",
+    "invalid json:",
+    "malformed_external_surface",
+    "malformed_authorized_execution",
+    "legacy_tool_authorization",
+    "legacy_path_invoked",
+    "legacy-path invoked",
+    "legacy path invoked",
+    "agentdelegationresolver",
+    "agentpillsmanager.classify",
+}
 
 
 def now_iso() -> str:
@@ -80,7 +108,14 @@ def bridge_action_timeout_sec(
         wait_ms = int(params.get("timeoutMs", "2000"))
         if wait_ms >= 30_000:
             return max(turn_sec, (wait_ms / 1000.0) + 10.0)
-    if name in {"ask_main_chat", "swap_test_owner", "kernel_turn_tail"}:
+    if name in {
+        "ask_main_chat",
+        "coordinator_continue_agent",
+        "coordinator_inspect_run",
+        "quit_and_reopen",
+        "swap_test_owner",
+        "kernel_turn_tail",
+    }:
         return turn_sec
     return 60.0
 
@@ -263,6 +298,20 @@ def git_sha() -> str:
         return "unknown"
 
 
+def automation_listener_pid(port: int) -> str:
+    try:
+        result = subprocess.run(
+            ["lsof", f"-tiTCP:{port}", "-sTCP:LISTEN"],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+    except FileNotFoundError:
+        return ""
+    return next((line.strip() for line in result.stdout.splitlines() if line.strip()), "")
+
+
 def sine_pcm16k(seconds: float = 0.75, frequency: float = 220.0, amplitude: float = 3500.0) -> bytes:
     sample_rate = 16_000
     sample_count = int(sample_rate * seconds)
@@ -312,6 +361,251 @@ def read_all_traces() -> list[dict[str, Any]]:
             except json.JSONDecodeError:
                 continue
     return traces
+
+
+def read_new_trace_diagnostics(
+    since_line: int,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Return new QueryTracer rows plus any malformed JSONL evidence.
+
+    The general-purpose trace reader intentionally tolerates a damaged historical
+    line. The convergence acceptance step cannot: malformed frames are one of its
+    explicit zero-count gates, so it records line numbers and a bounded preview.
+    """
+    if not TRACE_LOG.exists():
+        return [], []
+    traces: list[dict[str, Any]] = []
+    malformed: list[dict[str, Any]] = []
+    with TRACE_LOG.open("r", encoding="utf-8", errors="replace") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if line_number <= since_line:
+                continue
+            raw = line.strip()
+            if not raw:
+                continue
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                malformed.append(
+                    {
+                        "line": line_number,
+                        "error": exc.msg,
+                        "preview": raw[:400],
+                    }
+                )
+                continue
+            if not isinstance(parsed, dict):
+                malformed.append(
+                    {
+                        "line": line_number,
+                        "error": "top-level JSONL value is not an object",
+                        "preview": raw[:400],
+                    }
+                )
+                continue
+            traces.append(parsed)
+    return traces, malformed
+
+
+def embedded_coordinator_payload(
+    action_response: dict[str, Any],
+    detail_key: str,
+) -> dict[str, Any]:
+    """Decode a runtime-control JSON string returned through the Swift bridge."""
+    if action_response.get("ok") is False:
+        raise ValueError(str(action_response.get("error") or action_response))
+    detail = action_response.get("result", {}).get("detail", {})
+    if not isinstance(detail, dict):
+        raise ValueError("automation action detail is not an object")
+    raw = detail.get(detail_key)
+    if isinstance(raw, dict):
+        payload = raw
+    elif isinstance(raw, str) and raw.strip():
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"{detail_key} contains malformed coordinator JSON: {exc.msg}"
+            ) from exc
+    else:
+        raise ValueError(f"automation action omitted {detail_key}")
+    if not isinstance(payload, dict):
+        raise ValueError(f"{detail_key} coordinator payload is not an object")
+    if payload.get("ok") is False:
+        raise ValueError(str(payload.get("error") or payload))
+    return payload
+
+
+def coordinator_awareness_payload(action_response: dict[str, Any]) -> dict[str, Any]:
+    payload = embedded_coordinator_payload(action_response, "snapshot")
+    snapshot = payload.get("snapshot", payload)
+    if not isinstance(snapshot, dict):
+        raise ValueError("coordinator awareness snapshot is not an object")
+    if not isinstance(snapshot.get("ownerId"), str) or not snapshot.get("ownerId"):
+        raise ValueError("coordinator awareness snapshot omitted ownerId")
+    if not isinstance(snapshot.get("sessions"), list):
+        raise ValueError("coordinator awareness snapshot omitted sessions")
+    if not isinstance(snapshot.get("runs"), list):
+        raise ValueError("coordinator awareness snapshot omitted runs")
+    return snapshot
+
+
+def coordinator_run_payload(action_response: dict[str, Any]) -> dict[str, Any]:
+    payload = embedded_coordinator_payload(action_response, "run")
+    if not isinstance(payload.get("session"), dict):
+        raise ValueError("run inspection omitted session")
+    if not isinstance(payload.get("run"), dict):
+        raise ValueError("run inspection omitted run")
+    if not isinstance(payload.get("attempts"), list):
+        raise ValueError("run inspection omitted attempts")
+    if not isinstance(payload.get("toolInvocations"), list):
+        raise ValueError("run inspection omitted toolInvocations")
+    return payload
+
+
+def awareness_session_parts(
+    summary: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    session = summary.get("session")
+    if not isinstance(session, dict):
+        return {}, {}
+    active_run = summary.get("activeRun")
+    latest_run = summary.get("latestRun")
+    selected_run = active_run if isinstance(active_run, dict) else latest_run
+    return session, selected_run if isinstance(selected_run, dict) else {}
+
+
+def awareness_session_ids(snapshot: dict[str, Any]) -> set[str]:
+    result: set[str] = set()
+    for summary in snapshot.get("sessions", []):
+        if not isinstance(summary, dict):
+            continue
+        session, _ = awareness_session_parts(summary)
+        session_id = session.get("sessionId")
+        if isinstance(session_id, str) and session_id:
+            result.add(session_id)
+    return result
+
+
+def awareness_run_ids(snapshot: dict[str, Any]) -> set[str]:
+    return {
+        run.get("runId")
+        for run in snapshot.get("runs", [])
+        if isinstance(run, dict) and isinstance(run.get("runId"), str) and run.get("runId")
+    }
+
+
+def new_leaf_session_summaries(
+    snapshot: dict[str, Any],
+    baseline_session_ids: set[str],
+) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for summary in snapshot.get("sessions", []):
+        if not isinstance(summary, dict):
+            continue
+        session, _ = awareness_session_parts(summary)
+        session_id = session.get("sessionId")
+        surface_kind = session.get("surfaceKind")
+        execution_role = session.get("executionRole")
+        if not isinstance(session_id, str) or not session_id or session_id in baseline_session_ids:
+            continue
+        if execution_role == "leaf" or surface_kind in AGENT_CHILD_SURFACES:
+            result.append(summary)
+    return result
+
+
+def exact_external_parent_run_ids(snapshot: dict[str, Any]) -> list[str]:
+    result: list[str] = []
+    for run in snapshot.get("runs", []):
+        if not isinstance(run, dict):
+            continue
+        run_input = run.get("input")
+        if not isinstance(run_input, dict) or run_input.get("prompt") != EXACT_VOICE_AGENT_MEMORY_REQUEST:
+            continue
+        metadata = run_input.get("metadata")
+        external = metadata.get("externalSurface") if isinstance(metadata, dict) else None
+        if not isinstance(external, dict) or external.get("authority") != "swift_realtime":
+            continue
+        run_id = run.get("runId")
+        if isinstance(run_id, str) and run_id:
+            result.append(run_id)
+    return sorted(set(result))
+
+
+def tool_invocation_contract_errors(
+    payload: dict[str, Any],
+    expected_run_id: str,
+) -> list[str]:
+    """Validate the bounded get_agent_run invocation summaries (no raw inputs/results)."""
+    required_fields = {
+        "invocationId",
+        "runId",
+        "attemptId",
+        "toolName",
+        "status",
+        "errorCode",
+        "preparedAtMs",
+        "dispatchedAtMs",
+        "completedAtMs",
+        "updatedAtMs",
+    }
+    forbidden_fields = {
+        "arguments",
+        "argumentsJSON",
+        "input",
+        "inputHash",
+        "output",
+        "result",
+        "toolInput",
+    }
+    allowed_statuses = {"prepared", "dispatched", "succeeded", "failed", "outcome_unknown"}
+    attempt_ids = {
+        attempt.get("attemptId")
+        for attempt in payload.get("attempts", [])
+        if isinstance(attempt, dict) and isinstance(attempt.get("attemptId"), str)
+    }
+    errors: list[str] = []
+    for index, invocation in enumerate(payload.get("toolInvocations", [])):
+        if not isinstance(invocation, dict):
+            errors.append(f"toolInvocations[{index}] is not an object")
+            continue
+        missing = sorted(required_fields - set(invocation))
+        leaked = sorted(forbidden_fields & set(invocation))
+        if missing:
+            errors.append(f"toolInvocations[{index}] missing {missing}")
+        if leaked:
+            errors.append(f"toolInvocations[{index}] leaked unbounded fields {leaked}")
+        if invocation.get("runId") != expected_run_id:
+            errors.append(f"toolInvocations[{index}] runId does not match inspected run")
+        if invocation.get("attemptId") not in attempt_ids:
+            errors.append(f"toolInvocations[{index}] attemptId is not an inspected attempt")
+        if invocation.get("status") not in allowed_statuses:
+            errors.append(f"toolInvocations[{index}] has invalid status {invocation.get('status')!r}")
+        for field in ("preparedAtMs", "updatedAtMs"):
+            if not isinstance(invocation.get(field), int):
+                errors.append(f"toolInvocations[{index}] {field} is not an integer")
+        for field in ("dispatchedAtMs", "completedAtMs"):
+            if invocation.get(field) is not None and not isinstance(invocation.get(field), int):
+                errors.append(f"toolInvocations[{index}] {field} is not integer/null")
+    return errors
+
+
+def tool_invocations_named(payload: dict[str, Any], tool_name: str) -> list[dict[str, Any]]:
+    return [
+        invocation
+        for invocation in payload.get("toolInvocations", [])
+        if isinstance(invocation, dict) and invocation.get("toolName") == tool_name
+    ]
+
+
+def run_terminal_event_count(payload: dict[str, Any], run_id: str, status: str) -> int:
+    return sum(
+        1
+        for event in payload.get("events", [])
+        if isinstance(event, dict)
+        and event.get("runId") == run_id
+        and event.get("type") == f"run.{status}"
+    )
 
 
 def wait_for_new_traces(
@@ -435,6 +729,100 @@ def current_turn_assistant_text(snapshot_detail: dict[str, str], query_text: str
             if text:
                 return text
     return ""
+
+
+def exact_voice_agent_turn_signature(
+    snapshot_detail: dict[str, Any],
+    *,
+    child_session_id: str,
+    child_run_id: str,
+) -> dict[str, Any]:
+    """Validate the one canonical producing turn for the exact #9515 voice request."""
+    try:
+        messages = json.loads(str(snapshot_detail.get("messages_json", "[]")))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"main chat snapshot contains malformed messages JSON: {exc.msg}") from exc
+    if not isinstance(messages, list):
+        raise ValueError("main chat snapshot messages are not an array")
+
+    user_indexes = [
+        index
+        for index, message in enumerate(messages)
+        if isinstance(message, dict)
+        and message.get("role") == "user"
+        and str(message.get("raw_text") or message.get("text") or "").strip()
+        == EXACT_VOICE_AGENT_MEMORY_REQUEST
+    ]
+    if len(user_indexes) != 1:
+        raise ValueError(f"expected one exact voice user turn, found {len(user_indexes)}")
+    start = user_indexes[0] + 1
+    end = next(
+        (
+            index
+            for index in range(start, len(messages))
+            if isinstance(messages[index], dict) and messages[index].get("role") == "user"
+        ),
+        len(messages),
+    )
+    assistants = [
+        message
+        for message in messages[start:end]
+        if isinstance(message, dict) and message.get("role") == "assistant"
+    ]
+    if len(assistants) != 1:
+        raise ValueError(f"expected one producing assistant turn, found {len(assistants)}")
+    assistant = assistants[0]
+    assistant_raw_text = str(assistant.get("raw_text") or assistant.get("text") or "").strip()
+    if assistant_raw_text != "I started a background agent for that.":
+        raise ValueError(f"producing assistant used noncanonical acknowledgement: {assistant_raw_text!r}")
+
+    try:
+        blocks = json.loads(str(assistant.get("content_blocks_json", "[]")))
+        resources = json.loads(str(assistant.get("resources_json", "[]")))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"producing turn structured payload is malformed: {exc.msg}") from exc
+    if not isinstance(blocks, list) or not isinstance(resources, list):
+        raise ValueError("producing turn blocks/resources are not arrays")
+    spawns = [block for block in blocks if isinstance(block, dict) and block.get("type") == "agentSpawn"]
+    completions = [
+        block for block in blocks if isinstance(block, dict) and block.get("type") == "agentCompletion"
+    ]
+    if len(spawns) != 1 or len(completions) != 1:
+        raise ValueError(
+            "expected one agentSpawn and one agentCompletion on the producing turn "
+            f"(spawn={len(spawns)}, completion={len(completions)})"
+        )
+    spawn = spawns[0]
+    completion = completions[0]
+    for label, block in (("spawn", spawn), ("completion", completion)):
+        if block.get("sessionId") != child_session_id or block.get("runId") != child_run_id:
+            raise ValueError(
+                f"{label} block identity does not match accepted child "
+                f"(session={block.get('sessionId')!r}, run={block.get('runId')!r})"
+            )
+    if spawn.get("pillId") != completion.get("pillId"):
+        raise ValueError("spawn/completion pill identity changed")
+    if completion.get("status") != "completed":
+        raise ValueError(f"agentCompletion is not terminal-success: {completion.get('status')!r}")
+    for resource in resources:
+        if not isinstance(resource, dict):
+            raise ValueError("producing turn resource is not an object")
+        resource_run = resource.get("runId")
+        if resource_run not in {None, "", child_run_id}:
+            raise ValueError(f"producing turn contains an orphan resource for run {resource_run!r}")
+    return {
+        "messageId": assistant.get("id"),
+        "spawnBlockId": spawn.get("id"),
+        "completionBlockId": completion.get("id"),
+        "pillId": spawn.get("pillId"),
+        "sessionId": spawn.get("sessionId"),
+        "runId": spawn.get("runId"),
+        "resourceIds": sorted(
+            str(resource.get("id"))
+            for resource in resources
+            if isinstance(resource, dict) and resource.get("id")
+        ),
+    }
 
 
 def kernel_surface_identity(database_path: str, owner_id: str) -> dict[str, str] | None:
@@ -775,6 +1163,451 @@ class GauntletRunner:
             return ""
         return detail.get("turns_json", "[]")
 
+    def coordinator_awareness(
+        self,
+        *,
+        label: str,
+        record_failure: bool = True,
+    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
+        action = self.bridge_act("coordinator_awareness_snapshot", {"limit": "200"})
+        try:
+            return action, coordinator_awareness_payload(action)
+        except ValueError as exc:
+            if record_failure:
+                self.fail(f"{label}: owner-scoped coordinator awareness failed: {exc}")
+            return action, None
+
+    def wait_for_exact_voice_producing_turn(
+        self,
+        *,
+        child_session_id: str,
+        child_run_id: str,
+        step_dir: Path,
+        artifact_stem: str,
+        timeout_sec: float = 45,
+    ) -> tuple[dict[str, Any], dict[str, Any]] | None:
+        deadline = time.monotonic() + timeout_sec
+        poll_path = step_dir / f"{artifact_stem}-journal-polls.jsonl"
+        last_error = "journal projection unavailable"
+        while time.monotonic() < deadline:
+            action = self.bridge_act("main_chat_snapshot", {"limit": "100"})
+            detail = action.get("result", {}).get("detail", {})
+            if not isinstance(detail, dict):
+                detail = {}
+            try:
+                signature = exact_voice_agent_turn_signature(
+                    detail,
+                    child_session_id=child_session_id,
+                    child_run_id=child_run_id,
+                )
+            except ValueError as exc:
+                last_error = str(exc)
+                append_text(
+                    poll_path,
+                    json.dumps({"action": action, "error": last_error}, sort_keys=True, default=str) + "\n",
+                )
+                time.sleep(0.25)
+                continue
+            write_json(step_dir / f"{artifact_stem}-journal-action.json", action)
+            write_json(step_dir / f"{artifact_stem}-journal-signature.json", signature)
+            return action, signature
+        self.fail(f"exact voice producing journal turn never converged: {last_error}")
+        return None
+
+    def restart_named_bundle_and_wait(self, step_dir: Path) -> bool:
+        before_pid = automation_listener_pid(self.port)
+        before_state = bridge_state(self.port)
+        write_json(step_dir / "pre-restart-state.json", before_state)
+        before_result = before_state.get("result", {})
+        if not before_pid or not isinstance(before_result, dict):
+            self.fail("cannot prove named-bundle restart without the original listener/state")
+            return False
+        restart = self.bridge_act("quit_and_reopen")
+        write_json(step_dir / "quit-and-reopen-action.json", restart)
+        detail = restart.get("result", {}).get("detail", {})
+        if restart.get("ok") is False or not isinstance(detail, dict) or detail.get("error"):
+            self.fail(f"named-bundle quit-and-reopen failed: {detail.get('error', restart)}")
+            return False
+        deadline = time.monotonic() + 90
+        while time.monotonic() < deadline:
+            current_pid = automation_listener_pid(self.port)
+            if current_pid and current_pid != before_pid:
+                state = bridge_state(self.port)
+                result = state.get("result", {})
+                if state.get("ok") is not False and isinstance(result, dict):
+                    if result.get("bundleIdentifier") != before_result.get("bundleIdentifier"):
+                        self.fail("quit-and-reopen relaunched a different bundle identifier")
+                        return False
+                    if result.get("isSignedIn") is not True or result.get("hasCompletedOnboarding") is not True:
+                        self.fail("quit-and-reopen did not preserve signed-in/onboarded state")
+                        return False
+                    if str(result.get("bridgePort") or "") != str(self.port):
+                        self.fail("quit-and-reopen did not rebind the same automation port")
+                        return False
+                    write_json(
+                        step_dir / "post-restart-state.json",
+                        {"beforeListenerPID": before_pid, "afterListenerPID": current_pid, "state": state},
+                    )
+                    return True
+            time.sleep(0.5)
+        self.fail(
+            "named bundle did not replace its automation listener after quit-and-reopen "
+            f"(before={before_pid!r}, current={automation_listener_pid(self.port)!r})"
+        )
+        return False
+
+    def wait_for_exact_voice_spawn(
+        self,
+        baseline: dict[str, Any],
+        step_dir: Path,
+    ) -> tuple[dict[str, Any], dict[str, Any], list[str]] | None:
+        """Wait for one new leaf session and the exact realtime parent run.
+
+        A provider reconnect may redrive a transport turn before any tool effect.
+        Parent run cardinality can therefore exceed one, but the later ledger gate
+        still requires exactly one successful spawn invocation across those runs.
+        """
+        baseline_session_ids = awareness_session_ids(baseline)
+        baseline_run_ids = awareness_run_ids(baseline)
+        baseline_owner_id = str(baseline.get("ownerId") or "")
+        deadline = time.monotonic() + (self.args.turn_timeout_ms / 1000.0)
+        stable_signature: tuple[tuple[str, ...], tuple[str, ...]] | None = None
+        stable_polls = 0
+        latest_action: dict[str, Any] = {}
+        latest_snapshot: dict[str, Any] | None = None
+        latest_children: list[dict[str, Any]] = []
+        latest_parent_ids: list[str] = []
+        poll_path = step_dir / "post-voice-awareness-polls.jsonl"
+
+        while time.monotonic() < deadline:
+            latest_action, snapshot = self.coordinator_awareness(
+                label="exact voice spawn poll",
+                record_failure=False,
+            )
+            if snapshot is None:
+                append_text(
+                    poll_path,
+                    json.dumps(
+                        {
+                            "at": datetime.now(timezone.utc).isoformat(),
+                            "error": latest_action.get("error", latest_action),
+                        },
+                        sort_keys=True,
+                        default=str,
+                    )
+                    + "\n",
+                )
+                time.sleep(0.5)
+                continue
+
+            latest_snapshot = snapshot
+            if snapshot.get("ownerId") != baseline_owner_id:
+                self.fail(
+                    "exact voice spawn: coordinator awareness owner changed "
+                    f"(baseline={baseline_owner_id!r}, current={snapshot.get('ownerId')!r})"
+                )
+                break
+            latest_children = new_leaf_session_summaries(snapshot, baseline_session_ids)
+            latest_parent_ids = sorted(
+                set(exact_external_parent_run_ids(snapshot)) - baseline_run_ids
+            )
+            child_ids = sorted(
+                str(awareness_session_parts(summary)[0].get("sessionId") or "")
+                for summary in latest_children
+            )
+            signature = (tuple(child_ids), tuple(latest_parent_ids))
+            stable_polls = stable_polls + 1 if signature == stable_signature else 1
+            stable_signature = signature
+            append_text(
+                poll_path,
+                json.dumps(
+                    {
+                        "at": datetime.now(timezone.utc).isoformat(),
+                        "ownerId": snapshot.get("ownerId"),
+                        "newLeafSessionIds": child_ids,
+                        "exactExternalParentRunIds": latest_parent_ids,
+                        "stablePolls": stable_polls,
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+            )
+
+            if len(latest_children) > 1:
+                self.fail(
+                    "exact voice spawn created more than one new leaf session "
+                    f"({child_ids})"
+                )
+                break
+            if len(latest_children) == 1 and latest_parent_ids and stable_polls >= 4:
+                break
+            time.sleep(0.5)
+
+        write_json(step_dir / "post-voice-awareness-action.json", latest_action)
+        if latest_snapshot is not None:
+            write_json(step_dir / "post-voice-awareness.json", latest_snapshot)
+        if latest_snapshot is None:
+            self.fail("exact voice spawn: coordinator awareness never returned valid JSON")
+            return None
+        if len(latest_children) != 1:
+            self.fail(
+                "exact voice spawn did not produce exactly one new owner-scoped leaf session "
+                f"(count={len(latest_children)})"
+            )
+            return None
+        if not latest_parent_ids:
+            self.fail("exact voice spawn did not expose an exact-prompt realtime parent run")
+            return None
+
+        child_summary = latest_children[0]
+        child_session, child_run = awareness_session_parts(child_summary)
+        if not child_session.get("sessionId") or not child_run.get("runId"):
+            self.fail("exact voice spawn child omitted canonical sessionId/runId")
+            return None
+        return child_session, child_run, latest_parent_ids
+
+    def wait_for_run_success(
+        self,
+        *,
+        run_id: str,
+        expected_session_id: str,
+        expected_owner_id: str,
+        required_tool: str,
+        label: str,
+        artifact_stem: str,
+        step_dir: Path,
+    ) -> dict[str, Any]:
+        deadline = time.monotonic() + (self.args.turn_timeout_ms / 1000.0)
+        poll_path = step_dir / f"{artifact_stem}-inspection-polls.jsonl"
+        final_action: dict[str, Any] = {}
+        final_payload: dict[str, Any] = {}
+        last_error = "no inspection response"
+
+        while time.monotonic() < deadline:
+            action = self.bridge_act("coordinator_inspect_run", {"runId": run_id})
+            final_action = action
+            try:
+                payload = coordinator_run_payload(action)
+            except ValueError as exc:
+                last_error = str(exc)
+                append_text(
+                    poll_path,
+                    json.dumps(
+                        {
+                            "at": datetime.now(timezone.utc).isoformat(),
+                            "error": last_error,
+                        },
+                        sort_keys=True,
+                    )
+                    + "\n",
+                )
+                time.sleep(0.5)
+                continue
+
+            final_payload = payload
+            run = payload.get("run", {})
+            session = payload.get("session", {})
+            status = str(run.get("status") or "unknown")
+            invocations = payload.get("toolInvocations", [])
+            append_text(
+                poll_path,
+                json.dumps(
+                    {
+                        "at": datetime.now(timezone.utc).isoformat(),
+                        "status": status,
+                        "attemptCount": len(payload.get("attempts", [])),
+                        "toolInvocations": [
+                            {
+                                "invocationId": invocation.get("invocationId"),
+                                "toolName": invocation.get("toolName"),
+                                "status": invocation.get("status"),
+                                "errorCode": invocation.get("errorCode"),
+                            }
+                            for invocation in invocations
+                            if isinstance(invocation, dict)
+                        ],
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+            )
+
+            identity_errors: list[str] = []
+            if run.get("runId") != run_id:
+                identity_errors.append(f"runId={run.get('runId')!r}")
+            if run.get("sessionId") != expected_session_id:
+                identity_errors.append(f"run.sessionId={run.get('sessionId')!r}")
+            if session.get("sessionId") != expected_session_id:
+                identity_errors.append(f"session.sessionId={session.get('sessionId')!r}")
+            if session.get("ownerId") != expected_owner_id:
+                identity_errors.append(f"session.ownerId={session.get('ownerId')!r}")
+            if identity_errors:
+                self.fail(f"{label}: owner/run identity mismatch ({', '.join(identity_errors)})")
+                break
+
+            if status not in TERMINAL_RUN_STATUSES:
+                time.sleep(0.5)
+                continue
+            if status != "succeeded":
+                self.fail(
+                    f"{label}: run terminated as {status} "
+                    f"({run.get('errorCode') or run.get('errorMessage') or 'no error detail'})"
+                )
+                break
+
+            contract_errors = tool_invocation_contract_errors(payload, run_id)
+            if contract_errors:
+                self.fail(f"{label}: invalid bounded tool ledger: {contract_errors}")
+            attempts = [
+                attempt
+                for attempt in payload.get("attempts", [])
+                if isinstance(attempt, dict)
+            ]
+            if not attempts or attempts[-1].get("status") != "succeeded":
+                self.fail(f"{label}: latest attempt is not terminal succeeded")
+            pending = [
+                invocation
+                for invocation in invocations
+                if isinstance(invocation, dict)
+                and invocation.get("status") in {"prepared", "dispatched"}
+            ]
+            if pending:
+                self.fail(f"{label}: terminal run retained pending tool invocations")
+            required = tool_invocations_named(payload, required_tool)
+            if not required:
+                self.fail(f"{label}: terminal run never invoked {required_tool}")
+            rejected = [
+                invocation
+                for invocation in required
+                if invocation.get("status") != "succeeded"
+                or invocation.get("errorCode") not in {None, ""}
+                or not isinstance(invocation.get("completedAtMs"), int)
+            ]
+            if rejected:
+                self.fail(
+                    f"{label}: {required_tool} did not complete successfully: {rejected}"
+                )
+            completion_count = run_terminal_event_count(payload, run_id, "succeeded")
+            if completion_count != 1:
+                self.fail(
+                    f"{label}: expected one canonical run.succeeded completion event, "
+                    f"found {completion_count}"
+                )
+            break
+        else:
+            self.fail(f"{label}: timed out waiting for terminal success ({last_error})")
+
+        write_json(step_dir / f"{artifact_stem}-inspection-action.json", final_action)
+        write_json(step_dir / f"{artifact_stem}-run.json", final_payload)
+        return final_payload
+
+    def wait_for_single_parent_spawn_invocation(
+        self,
+        *,
+        parent_run_ids: list[str],
+        expected_owner_id: str,
+        step_dir: Path,
+    ) -> tuple[str, dict[str, Any], dict[str, Any]] | None:
+        """Prove one (and only one) spawn effect across provider redrives."""
+        deadline = time.monotonic() + min(30.0, self.args.turn_timeout_ms / 1000.0)
+        poll_path = step_dir / "voice-parent-inspection-polls.jsonl"
+        final_actions: dict[str, Any] = {}
+        final_payloads: dict[str, Any] = {}
+        selected: tuple[str, dict[str, Any], dict[str, Any]] | None = None
+
+        while time.monotonic() < deadline:
+            spawn_rows: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
+            statuses: dict[str, str] = {}
+            for run_id in parent_run_ids:
+                action = self.bridge_act("coordinator_inspect_run", {"runId": run_id})
+                final_actions[run_id] = action
+                try:
+                    payload = coordinator_run_payload(action)
+                except ValueError as exc:
+                    statuses[run_id] = f"inspection_error:{exc}"
+                    continue
+                final_payloads[run_id] = payload
+                run = payload.get("run", {})
+                session = payload.get("session", {})
+                statuses[run_id] = str(run.get("status") or "unknown")
+                if session.get("ownerId") != expected_owner_id:
+                    self.fail(
+                        "exact voice parent inspection escaped the baseline owner "
+                        f"(run={run_id}, owner={session.get('ownerId')!r})"
+                    )
+                    return None
+                contract_errors = tool_invocation_contract_errors(payload, run_id)
+                if contract_errors:
+                    self.fail(
+                        f"exact voice parent {run_id} has invalid bounded tool ledger: "
+                        f"{contract_errors}"
+                    )
+                    return None
+                for invocation in tool_invocations_named(payload, "spawn_agent"):
+                    spawn_rows.append((run_id, payload, invocation))
+
+            append_text(
+                poll_path,
+                json.dumps(
+                    {
+                        "at": datetime.now(timezone.utc).isoformat(),
+                        "parentStatuses": statuses,
+                        "spawnInvocations": [
+                            {
+                                "runId": run_id,
+                                "invocationId": invocation.get("invocationId"),
+                                "status": invocation.get("status"),
+                                "errorCode": invocation.get("errorCode"),
+                            }
+                            for run_id, _, invocation in spawn_rows
+                        ],
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+            )
+            if len(spawn_rows) > 1:
+                self.fail(
+                    "exact voice request authorized more than one spawn_agent invocation "
+                    f"({[(row[0], row[2].get('invocationId')) for row in spawn_rows]})"
+                )
+                break
+            if len(spawn_rows) == 1:
+                run_id, payload, invocation = spawn_rows[0]
+                run = payload.get("run", {})
+                if run.get("status") == "succeeded" and invocation.get("status") == "succeeded":
+                    selected = (run_id, payload, invocation)
+                    break
+                if run.get("status") in TERMINAL_RUN_STATUSES:
+                    self.fail(
+                        "exact voice spawn authority terminated unsuccessfully "
+                        f"(run={run.get('status')}, invocation={invocation.get('status')}, "
+                        f"error={invocation.get('errorCode')})"
+                    )
+                    break
+            time.sleep(0.5)
+
+        write_json(step_dir / "voice-parent-inspection-actions.json", final_actions)
+        write_json(step_dir / "voice-parent-runs.json", final_payloads)
+        if selected is None:
+            self.fail("exact voice request did not yield one successful spawn_agent ledger row")
+            return None
+
+        run_id, payload, invocation = selected
+        if invocation.get("errorCode") not in {None, ""}:
+            self.fail(
+                f"exact voice spawn invocation retained errorCode={invocation.get('errorCode')!r}"
+            )
+        if not isinstance(invocation.get("completedAtMs"), int):
+            self.fail("exact voice spawn invocation omitted completedAtMs")
+        completion_count = run_terminal_event_count(payload, run_id, "succeeded")
+        if completion_count != 1:
+            self.fail(
+                "exact voice parent expected one canonical run.succeeded event, "
+                f"found {completion_count}"
+            )
+        return selected
+
     def send_and_wait(self, query: str, timeout_ms: int) -> tuple[dict[str, Any], dict[str, str], list[dict[str, Any]]]:
         trace_start = trace_line_count()
         send = self.bridge_act( "ask_main_chat", {"query": query})
@@ -1038,7 +1871,309 @@ class GauntletRunner:
             extra={"continuity_checks": continuity_checks},
         )
 
+    def run_exact_voice_memory_agent_step(self) -> None:
+        """Live regression for #9515: realtime spawn + run-scoped memory tools.
+
+        This intentionally starts at the provider PTT seam rather than invoking
+        spawn_agent directly. The durable run ledger, not assistant wording or a
+        trace heuristic, proves one spawn and two authorized get_memories effects.
+        """
+        step_id = "04-exact-voice-memory-agent"
+        step_dir = self.run_dir / step_id
+        step_dir.mkdir(parents=True, exist_ok=True)
+
+        baseline_action, baseline = self.coordinator_awareness(
+            label="exact voice baseline",
+        )
+        write_json(step_dir / "baseline-awareness-action.json", baseline_action)
+        if baseline is None:
+            return
+        write_json(step_dir / "baseline-awareness.json", baseline)
+        baseline_owner_id = str(baseline.get("ownerId") or "")
+        baseline_session_ids = awareness_session_ids(baseline)
+
+        step_log_offset = self.log_path.stat().st_size if self.log_path.exists() else 0
+        trace_start = trace_line_count()
+        ptt = self.bridge_act(
+            "ptt_test_turn",
+            {
+                "pcm": str(self.pcm_path),
+                "timeout": str(max(30, self.args.turn_timeout_ms // 1000)),
+                "force_transcript": EXACT_VOICE_AGENT_MEMORY_REQUEST,
+                "text_only": "1",
+            },
+        )
+        write_json(step_dir / "ptt-action-response.json", ptt)
+        ptt_detail = ptt.get("result", {}).get("detail", {})
+        if not isinstance(ptt_detail, dict):
+            ptt_detail = {}
+        write_json(step_dir / "ptt-diagnostics.json", ptt_detail)
+        if ptt.get("ok") is False or ptt_detail.get("error"):
+            self.fail(
+                "exact voice PTT provider path failed: "
+                f"{ptt_detail.get('error', ptt.get('error', ptt))}"
+            )
+            return
+        saved_user_text = str(
+            ptt_detail.get("saved_user_text")
+            or ptt_detail.get("provider_transcript")
+            or ""
+        ).strip()
+        if saved_user_text != EXACT_VOICE_AGENT_MEMORY_REQUEST:
+            self.fail(
+                "exact voice PTT did not persist the exact acceptance request "
+                f"(saved={saved_user_text!r})"
+            )
+        if not str(ptt_detail.get("provider") or "").strip():
+            self.fail("exact voice PTT diagnostics omitted the realtime provider")
+        if not str(ptt_detail.get("assistant_reply") or "").strip():
+            self.fail("exact voice PTT provider returned no acknowledgement")
+
+        spawned = self.wait_for_exact_voice_spawn(baseline, step_dir)
+        if spawned is None:
+            return
+        child_session, child_run, parent_run_ids = spawned
+        child_session_id = str(child_session["sessionId"])
+        initial_child_run_id = str(child_run["runId"])
+
+        parent_authority = self.wait_for_single_parent_spawn_invocation(
+            parent_run_ids=parent_run_ids,
+            expected_owner_id=baseline_owner_id,
+            step_dir=step_dir,
+        )
+        initial_child = self.wait_for_run_success(
+            run_id=initial_child_run_id,
+            expected_session_id=child_session_id,
+            expected_owner_id=baseline_owner_id,
+            required_tool="get_memories",
+            label="exact voice child",
+            artifact_stem="initial-child",
+            step_dir=step_dir,
+        )
+        initial_memory_calls = tool_invocations_named(initial_child, "get_memories")
+        producing_before_restart = self.wait_for_exact_voice_producing_turn(
+            child_session_id=child_session_id,
+            child_run_id=initial_child_run_id,
+            step_dir=step_dir,
+            artifact_stem="before-restart",
+        )
+
+        continuation = self.bridge_act(
+            "coordinator_continue_agent",
+            {
+                "sessionId": child_session_id,
+                "prompt": EXACT_VOICE_AGENT_MEMORY_FOLLOWUP,
+                "surfaceKind": "realtime",
+            },
+        )
+        write_json(step_dir / "continuation-action-response.json", continuation)
+        continuation_detail = continuation.get("result", {}).get("detail", {})
+        if not isinstance(continuation_detail, dict):
+            continuation_detail = {}
+        continuation_error = str(
+            continuation_detail.get("error") or continuation.get("error") or ""
+        ).strip()
+        continuation_session_id = str(continuation_detail.get("session_id") or "")
+        continuation_run_id = str(continuation_detail.get("run_id") or "")
+        if continuation.get("ok") is False or continuation_error:
+            self.fail(f"same-child continuation failed: {continuation_error or continuation}")
+        if continuation_session_id != child_session_id:
+            self.fail(
+                "same-child continuation changed canonical session "
+                f"(expected={child_session_id}, actual={continuation_session_id!r})"
+            )
+        if not continuation_run_id or continuation_run_id == initial_child_run_id:
+            self.fail(
+                "same-child continuation did not create one distinct follow-up run "
+                f"(initial={initial_child_run_id}, followup={continuation_run_id!r})"
+            )
+
+        followup_child: dict[str, Any] = {}
+        if continuation_run_id:
+            followup_child = self.wait_for_run_success(
+                run_id=continuation_run_id,
+                expected_session_id=child_session_id,
+                expected_owner_id=baseline_owner_id,
+                required_tool="get_memories",
+                label="same-child memory follow-up",
+                artifact_stem="followup-child",
+                step_dir=step_dir,
+            )
+        followup_memory_calls = tool_invocations_named(followup_child, "get_memories")
+        successful_memory_invocation_ids = {
+            str(invocation.get("invocationId"))
+            for invocation in initial_memory_calls + followup_memory_calls
+            if invocation.get("status") == "succeeded"
+            and invocation.get("errorCode") in {None, ""}
+            and invocation.get("invocationId")
+        }
+        if len(successful_memory_invocation_ids) < 2:
+            self.fail(
+                "exact voice child authority produced fewer than two distinct successful "
+                f"get_memories invocations ({sorted(successful_memory_invocation_ids)})"
+            )
+
+        producing_after_restart: tuple[dict[str, Any], dict[str, Any]] | None = None
+        if producing_before_restart is not None and self.restart_named_bundle_and_wait(step_dir):
+            producing_after_restart = self.wait_for_exact_voice_producing_turn(
+                child_session_id=child_session_id,
+                child_run_id=initial_child_run_id,
+                step_dir=step_dir,
+                artifact_stem="after-restart",
+                timeout_sec=60,
+            )
+            if (
+                producing_after_restart is not None
+                and producing_after_restart[1] != producing_before_restart[1]
+            ):
+                self.fail(
+                    "exact voice producing turn identity/blocks/resources changed across restart "
+                    f"(before={producing_before_restart[1]}, after={producing_after_restart[1]})"
+                )
+
+        final_awareness_action, final_awareness = self.coordinator_awareness(
+            label="exact voice final awareness",
+        )
+        write_json(step_dir / "final-awareness-action.json", final_awareness_action)
+        if final_awareness is not None:
+            write_json(step_dir / "final-awareness.json", final_awareness)
+            final_leaf_summaries = new_leaf_session_summaries(
+                final_awareness,
+                baseline_session_ids,
+            )
+            final_leaf_ids = {
+                str(awareness_session_parts(summary)[0].get("sessionId") or "")
+                for summary in final_leaf_summaries
+            }
+            if final_leaf_ids != {child_session_id}:
+                self.fail(
+                    "exact voice flow did not preserve exactly one new child session "
+                    f"(expected={child_session_id}, actual={sorted(final_leaf_ids)})"
+                )
+
+        traces, malformed_traces = read_new_trace_diagnostics(trace_start)
+        write_json(step_dir / "query-traces.json", traces)
+        write_json(step_dir / "malformed-query-trace-jsonl.json", malformed_traces)
+        if malformed_traces:
+            self.fail(
+                "exact voice flow emitted malformed QueryTracer JSONL rows "
+                f"({len(malformed_traces)})"
+            )
+
+        log_text = ""
+        if self.log_path.exists():
+            log_text = self.log_path.read_bytes()[step_log_offset:].decode(
+                "utf-8",
+                errors="replace",
+            )
+        (step_dir / "acceptance-app-log-excerpt.txt").write_text(log_text, encoding="utf-8")
+        structured_evidence = json.dumps(
+            {
+                "ptt": ptt,
+                "parentAuthority": parent_authority,
+                "initialChild": initial_child,
+                "continuation": continuation,
+                "followupChild": followup_child,
+                "finalAwareness": final_awareness,
+                "producingTurnBeforeRestart": (
+                    producing_before_restart[1] if producing_before_restart is not None else None
+                ),
+                "producingTurnAfterRestart": (
+                    producing_after_restart[1] if producing_after_restart is not None else None
+                ),
+            },
+            sort_keys=True,
+            default=str,
+        )
+        searchable_evidence = f"{log_text}\n{structured_evidence}".lower()
+        forbidden_hits: dict[str, list[str]] = {}
+        for pattern in sorted(CONVERGENCE_FORBIDDEN_EVIDENCE_PATTERNS):
+            snippets: list[str] = []
+            for match in re.finditer(re.escape(pattern), searchable_evidence):
+                start = max(0, match.start() - 120)
+                end = min(len(searchable_evidence), match.end() + 240)
+                snippets.append(searchable_evidence[start:end].replace("\n", " "))
+                if len(snippets) >= 5:
+                    break
+            if snippets:
+                forbidden_hits[pattern] = snippets
+        write_json(
+            step_dir / "zero-legacy-jsonl-tool-routing-evidence.json",
+            {
+                "forbiddenPatterns": sorted(CONVERGENCE_FORBIDDEN_EVIDENCE_PATTERNS),
+                "hits": forbidden_hits,
+                "malformedQueryTraceRows": malformed_traces,
+                "appLogBytesInspected": len(log_text.encode("utf-8")),
+                "coordinatorPayloadsDecoded": 5 + len(parent_run_ids),
+            },
+        )
+        if forbidden_hits:
+            self.fail(
+                "exact voice convergence evidence contains forbidden legacy/routing/JSONL "
+                f"signals: {sorted(forbidden_hits)}"
+            )
+
+        parent_run_id = parent_authority[0] if parent_authority is not None else ""
+        parent_invocation_id = (
+            str(parent_authority[2].get("invocationId") or "")
+            if parent_authority is not None
+            else ""
+        )
+        summary = {
+            "ownerId": baseline_owner_id,
+            "exactVoiceRequest": EXACT_VOICE_AGENT_MEMORY_REQUEST,
+            "parentRunIdsObserved": parent_run_ids,
+            "authoritativeParentRunId": parent_run_id,
+            "spawnInvocationId": parent_invocation_id,
+            "newChildSessionCount": 1,
+            "childSessionId": child_session_id,
+            "initialChildRunId": initial_child_run_id,
+            "followupChildRunId": continuation_run_id,
+            "followupReusedChildSession": continuation_session_id == child_session_id,
+            "initialCompletionEvents": run_terminal_event_count(
+                initial_child,
+                initial_child_run_id,
+                "succeeded",
+            ),
+            "followupCompletionEvents": run_terminal_event_count(
+                followup_child,
+                continuation_run_id,
+                "succeeded",
+            ),
+            "successfulGetMemoriesInvocationIds": sorted(successful_memory_invocation_ids),
+            "producingTurnBeforeRestart": (
+                producing_before_restart[1] if producing_before_restart is not None else None
+            ),
+            "producingTurnAfterRestart": (
+                producing_after_restart[1] if producing_after_restart is not None else None
+            ),
+            "producingTurnSurvivedRestart": (
+                producing_before_restart is not None
+                and producing_after_restart is not None
+                and producing_before_restart[1] == producing_after_restart[1]
+            ),
+            "forbiddenEvidenceHits": forbidden_hits,
+            "malformedQueryTraceRows": len(malformed_traces),
+        }
+        write_json(step_dir / "acceptance-summary.json", summary)
+
+        snapshot_action = self.bridge_act("main_chat_snapshot", {"limit": "80"})
+        snapshot_detail = snapshot_action.get("result", {}).get("detail", {})
+        if not isinstance(snapshot_detail, dict):
+            snapshot_detail = {}
+        self.record_step(
+            step_id,
+            "exact PTT agent memory authority and same-child follow-up",
+            user_text=EXACT_VOICE_AGENT_MEMORY_REQUEST,
+            action_response=ptt,
+            snapshot_detail=snapshot_detail,
+            traces=traces,
+            extra={"acceptance_summary": summary},
+        )
+
     def run_agents_suite(self) -> None:
+        self.run_exact_voice_memory_agent_step()
+
         # Step 4 — background agent spawn
         spawn_query = (
             f"Use spawn_agent now to start a visible background agent. "
@@ -2040,6 +3175,9 @@ def self_check() -> int:
         "wait_main_chat_idle",
         "agent_runtime_evidence",
         "coordinator_awareness_snapshot",
+        "coordinator_continue_agent",
+        "coordinator_inspect_run",
+        "quit_and_reopen",
         "swap_test_owner",
         "restore_test_owner",
         "clear_owner_surface_state",
@@ -2071,6 +3209,14 @@ def self_check() -> int:
     if missing_driver_checks:
         print(f"self-check failed: resilience suite wiring missing {missing_driver_checks}", file=sys.stderr)
         return 1
+    missing_exact_voice_checks = exact_voice_acceptance_self_check_failures(driver_source)
+    if missing_exact_voice_checks:
+        print(
+            "self-check failed: exact voice acceptance wiring missing "
+            f"{missing_exact_voice_checks}",
+            file=sys.stderr,
+        )
+        return 1
     missing_contract_checks = continuity_contract_self_check_failures()
     if missing_contract_checks:
         print(
@@ -2084,7 +3230,8 @@ def self_check() -> int:
         return 1
     print(
         "self-check passed "
-        "(R3 race actions + resilience wiring + INV-6 hermetic contract gates + owner-switch)"
+        "(R3 race actions + resilience wiring + exact voice authority + "
+        "INV-6 hermetic contract gates + owner-switch)"
     )
     return 0
 
@@ -2112,13 +3259,12 @@ def continuity_contract_self_check_failures() -> list[str]:
 
     projection = (tests_dir / "KernelTurnRecordedProjectionTests.swift").read_text(encoding="utf-8")
     for needle in (
-        "func testStageOptimisticThenApplyPromotesInPlaceWithoutDuplicate(",
-        "func testApplyKernelTurnRecordedDedupesByIdempotencyKey(",
-        "func testMainAndFloatingAutomationSnapshotsAliasSameTimeline(",
-        "func testTurnRecordedHandlerReplacePreventsWarmDuplicateFanout(",
-        "func testPillCompletionKeyCoalescesSecondStageWithoutDuplicate(",
-        "func testSameTextDifferentContinuityKeysKeepsTwoPairs(",
-        "func testResourcesStayOnProducingMessageThroughStageAndPromote(",
+        "func testOptimisticTurnKeepsIdentityThroughJournalAcknowledgementAndReplay(",
+        "func testJournalProjectionUpsertsMutationByCanonicalTurnID(",
+        "func testJournalChangedHandlerIsReplaceOnly(",
+        "func testAgentCompletionEnrichesProducingSpawnTurnIdempotently(",
+        "func testIdenticalTextWithDistinctTurnIDsRemainsDistinct(",
+        "func testStructuredBlocksResourcesAndContinuityMetadataSurviveProjection(",
     ):
         if needle not in projection:
             failures.append(f"KernelTurnRecordedProjectionTests.{needle.split('(')[0].removeprefix('func ')}")
@@ -2159,13 +3305,170 @@ def continuity_contract_self_check_failures() -> list[str]:
     # Forbidden-pattern tripwires must stay present in hermetic coverage.
     if "suppressNextRecordedTurn" not in timeline:
         failures.append("ChatTimelineContinuityTests forbids suppressNextRecordedTurn")
-    if "addTurnRecordedHandler" not in timeline:
-        failures.append("ChatTimelineContinuityTests forbids addTurnRecordedHandler")
+    if "setTurnRecordedHandler" not in timeline:
+        failures.append("ChatTimelineContinuityTests forbids setTurnRecordedHandler")
     if "@Published var chatHistory" not in timeline:
         failures.append("ChatTimelineContinuityTests forbids @Published var chatHistory")
 
     return failures
 
+
+def exact_voice_acceptance_self_check_failures(driver_source: str) -> list[str]:
+    """Static wiring plus a hermetic parser/ledger fixture for the live #9515 gate."""
+    failures: list[str] = []
+    tree = ast.parse(driver_source)
+    runner = next(
+        (
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "GauntletRunner"
+        ),
+        None,
+    )
+    methods = {
+        node.name: node
+        for node in (runner.body if runner is not None else [])
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    exact = methods.get("run_exact_voice_memory_agent_step")
+    agents = methods.get("run_agents_suite")
+    for method_name in (
+        "run_exact_voice_memory_agent_step",
+        "wait_for_exact_voice_spawn",
+        "wait_for_run_success",
+        "wait_for_single_parent_spawn_invocation",
+        "wait_for_exact_voice_producing_turn",
+        "restart_named_bundle_and_wait",
+    ):
+        if method_name not in methods:
+            failures.append(f"GauntletRunner.{method_name}")
+    if not method_calls(agents, "run_exact_voice_memory_agent_step"):
+        failures.append("agents suite dispatches exact voice acceptance")
+    for literal in (
+        "ptt_test_turn",
+        "coordinator_awareness_snapshot",
+        "coordinator_continue_agent",
+        "get_memories",
+        "zero-legacy-jsonl-tool-routing-evidence.json",
+        "coordinator_inspect_run",
+        "quit_and_reopen",
+        "spawn_agent",
+        "run.succeeded",
+        "unrouted_tool_call",
+        "malformed jsonl",
+        "legacy_path_invoked",
+        "agentSpawn",
+        "agentCompletion",
+        "producingTurnSurvivedRestart",
+    ):
+        if literal not in driver_source:
+            failures.append(f"exact voice acceptance gates {literal}")
+    if exact is None:
+        failures.append("exact voice acceptance method parses")
+    if EXACT_VOICE_AGENT_MEMORY_REQUEST not in driver_source:
+        failures.append("exact issue #9515 voice request")
+
+    sample_snapshot = {
+        "messages_json": json.dumps(
+            [
+                {
+                    "id": "user-1",
+                    "role": "user",
+                    "text": EXACT_VOICE_AGENT_MEMORY_REQUEST,
+                    "raw_text": EXACT_VOICE_AGENT_MEMORY_REQUEST,
+                },
+                {
+                    "id": "assistant-1",
+                    "role": "assistant",
+                    "text": "I started a background agent for that.",
+                    "raw_text": "I started a background agent for that.",
+                    "content_blocks_json": json.dumps(
+                        [
+                            {
+                                "type": "agentSpawn",
+                                "id": "spawn-1",
+                                "pillId": "00000000-0000-0000-0000-000000000951",
+                                "sessionId": "child-session",
+                                "runId": "child-run",
+                            },
+                            {
+                                "type": "agentCompletion",
+                                "id": "completion-1",
+                                "pillId": "00000000-0000-0000-0000-000000000951",
+                                "sessionId": "child-session",
+                                "runId": "child-run",
+                                "status": "completed",
+                            },
+                        ]
+                    ),
+                    "resources_json": "[]",
+                },
+            ]
+        )
+    }
+    try:
+        sample_signature = exact_voice_agent_turn_signature(
+            sample_snapshot,
+            child_session_id="child-session",
+            child_run_id="child-run",
+        )
+    except ValueError as exc:
+        failures.append(f"exact voice journal fixture: {exc}")
+    else:
+        if sample_signature.get("messageId") != "assistant-1":
+            failures.append("exact voice journal fixture preserves producing message identity")
+
+    sample_awareness = {
+        "ok": True,
+        "result": {
+            "detail": {
+                "snapshot": json.dumps(
+                    {
+                        "ok": True,
+                        "snapshot": {
+                            "ownerId": "owner-a",
+                            "sessions": [],
+                            "runs": [],
+                        },
+                    }
+                )
+            }
+        },
+    }
+    try:
+        parsed_awareness = coordinator_awareness_payload(sample_awareness)
+    except ValueError as exc:
+        failures.append(f"awareness embedded JSON parser: {exc}")
+    else:
+        if parsed_awareness.get("ownerId") != "owner-a":
+            failures.append("awareness embedded JSON parser preserves owner")
+
+    sample_invocation = {
+        "invocationId": "inv-1",
+        "runId": "run-1",
+        "attemptId": "attempt-1",
+        "toolName": "get_memories",
+        "status": "succeeded",
+        "errorCode": None,
+        "preparedAtMs": 1,
+        "dispatchedAtMs": 2,
+        "completedAtMs": 3,
+        "updatedAtMs": 3,
+    }
+    sample_run = {
+        "attempts": [{"attemptId": "attempt-1", "status": "succeeded"}],
+        "toolInvocations": [sample_invocation],
+    }
+    contract_errors = tool_invocation_contract_errors(sample_run, "run-1")
+    if contract_errors:
+        failures.append(f"bounded invocation parser fixture: {contract_errors}")
+    leaked_run = {
+        **sample_run,
+        "toolInvocations": [{**sample_invocation, "result": "private memory output"}],
+    }
+    if not tool_invocation_contract_errors(leaked_run, "run-1"):
+        failures.append("bounded invocation parser rejects raw tool results")
+    return failures
 
 
 def bridge_auth_self_check_failures(driver_source: str) -> list[str]:
@@ -2390,7 +3693,8 @@ def parse_args() -> argparse.Namespace:
         "--suite",
         default="core",
         help=(
-            "Comma-separated suites: continuity (steps 1-3, includes PTT), agents (4-5), "
+            "Comma-separated suites: continuity (steps 1-3, includes PTT), agents "
+            "(exact #9515 voice-memory authority plus steps 4-5), "
             "owner (6), prompts (fast typed-only prompt-regression probes), "
             "resilience (startup/bad-state bridge + subagent probes), "
             "core (default: continuity+agents+owner), all (core+prompts+resilience). "

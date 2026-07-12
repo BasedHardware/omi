@@ -126,15 +126,15 @@ struct OnboardingVoiceDemoView: View {
         .task {
             await pollOutputReadiness()
         }
-        .onChange(of: pttManager.state) { _, newState in
+        .onChange(of: pttManager.phase) { _, newPhase in
             refreshOutputReadiness()
             guard !outputReadiness.shouldAskUserToTurnUpVolume else { return }
-            if newState != .idle {
+            if newPhase != nil, newPhase?.isTerminal != true {
                 observedShortcutPress = true
             }
             if OnboardingFlow.shouldUnlockVoiceShortcutContinue(
                 observedShortcutPress: observedShortcutPress,
-                pttState: newState
+                voiceTurnPhase: newPhase
             ), !waitingForResponse {
                 waitingForResponse = true
                 Task { await waitForResponse() }
@@ -226,8 +226,6 @@ struct OnboardingVoiceDemoView: View {
         barState.showingAIResponse = false
         barState.aiInputText = ""
         barState.clearViewport()
-        barState.isVoiceFollowUp = false
-        barState.voiceFollowUpTranscript = ""
     }
 
     private func refreshOutputReadiness() {

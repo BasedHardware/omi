@@ -42,27 +42,39 @@ final class ChatToolExecutorSQLTests: XCTestCase {
         )
     }
 
-    func testReadOnlySQLPolicyAllowsLocalReads() {
-        let decision = ChatToolExecutor.localPolicyDecision(
-            toolName: "execute_sql",
-            arguments: ["query": "SELECT appName FROM screenshots LIMIT 1"]
+    func testSQLAuthorizationIsOutsideSwiftPhysicalPreconditions() {
+        XCTAssertEqual(
+            ChatToolExecutor.physicalExecutionPrecondition(toolName: "execute_sql"),
+            .satisfied
         )
-
-        XCTAssertEqual(decision, .allow)
     }
 
-    func testWriteSQLPolicyDeniesLocalMutationByDefault() {
-        let decision = ChatToolExecutor.localPolicyDecision(
-            toolName: "execute_sql",
-            arguments: ["query": "UPDATE action_items SET completed = 1 WHERE id = 42"]
+    @MainActor
+    func testKernelStampedReadOnlySQLRejectsPhysicalMutationInput() async {
+        let previousOwner = UserDefaults.standard.object(forKey: DefaultsKey.authUserId.rawValue)
+        defer {
+            if let previousOwner {
+                UserDefaults.standard.set(previousOwner, forKey: DefaultsKey.authUserId.rawValue)
+            } else {
+                UserDefaults.standard.removeObject(forKey: DefaultsKey.authUserId.rawValue)
+            }
+        }
+        UserDefaults.standard.set("sql-owner", forKey: DefaultsKey.authUserId.rawValue)
+        let result = await ChatToolExecutor.execute(
+            ToolCall(
+                name: "execute_sql",
+                arguments: [
+                    "query": "UPDATE action_items SET completed = 1 WHERE id = 42",
+                    "read_only": true,
+                ],
+                thoughtSignature: nil
+            ),
+            expectedOwnerID: "sql-owner"
         )
 
-        guard case .deny(let message) = decision else {
-            return XCTFail("Expected write SQL to be denied")
-        }
-        XCTAssertTrue(message.hasPrefix("POLICY_DENIED:"))
-        XCTAssertTrue(message.contains("\"capability\":\"desktop.context.local_write\""))
-        XCTAssertTrue(message.contains("SQL writes require explicit approval"))
-        XCTAssertFalse(message.contains("UPDATE action_items"))
+        XCTAssertEqual(
+            result,
+            "Error: this SQL surface is read-only. Use SELECT or read-only WITH queries."
+        )
     }
 }

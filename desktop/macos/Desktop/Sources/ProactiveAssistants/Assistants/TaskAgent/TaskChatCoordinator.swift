@@ -278,18 +278,32 @@ final class TaskChatCoordinator: ObservableObject {
           ? FileManager.default.homeDirectoryForCurrentUser.path
           : configuredPath
 
-        _ = try await TaskChatMessageStorage.shared.migrateLegacyMessages(
-          fromTaskIds: detail.tasks.map(\.id) + [task.id],
-          toWorkstreamId: workstreamId
-        )
+        let ownerId = RuntimeOwnerIdentity.currentOwnerId() ?? "local"
+        let legacyImportCheckpoint =
+          "kernelJournal.legacyTaskImport.v1|\(ownerId)|\(workstreamId)"
+        if !UserDefaults.standard.bool(forKey: legacyImportCheckpoint) {
+          var cursor: TaskChatLegacyMessageCursor?
+          while true {
+            let page = try await TaskChatMessageStorage.shared.legacyMessagePage(
+              fromTaskIds: detail.tasks.map(\.id) + [task.id],
+              workstreamId: workstreamId,
+              after: cursor
+            )
+            try await TaskChatRuntime.importLegacyMessages(
+              workstreamId: workstreamId,
+              messages: page.rows.map { $0.toChatMessage() }
+            )
+            guard page.rows.count == TaskChatLegacyCompatibilityMetadata.pageSize,
+                  let nextCursor = page.nextCursor else { break }
+            cursor = nextCursor
+          }
+          UserDefaults.standard.set(true, forKey: legacyImportCheckpoint)
+        }
         let created = TaskChatState(
           taskId: task.id,
           workstreamId: workstreamId,
           workspacePath: workspace
         )
-        created.systemPromptBuilder = { [weak self] in
-          self?.chatProvider.buildTaskChatSystemPrompt() ?? ""
-        }
         created.onQueryCompleted = { [weak self] result, chatMessageId in
           await self?.consumeCompletedQuery(
             result,
@@ -298,10 +312,6 @@ final class TaskChatCoordinator: ObservableObject {
           )
         }
         await created.loadPersistedMessages()
-        try await TaskChatRuntime.importLegacyHistory(
-          workstreamId: workstreamId,
-          messages: created.messages
-        )
         workstreamStates[workstreamId] = created
         state = created
       }

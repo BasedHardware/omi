@@ -32,7 +32,7 @@ final class PTTAudioCaptureRaceTests: XCTestCase {
   func testHintUsesPTTHintTextAndKeepsBarVoiceSized() throws {
     let reducer = VoiceTurnReducer()
     let turnID = VoiceTurnID()
-    let started = reducer.reduce(.idle, .start(turnID: turnID, intent: .hold)).model
+    let started = reducer.reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
 
     let finished = reducer.reduce(started, .finish(turnID: turnID, reason: .tooShort))
 
@@ -49,10 +49,10 @@ final class PTTAudioCaptureRaceTests: XCTestCase {
   func testHintPathResetsStateAndTagsHint() throws {
     let reducer = VoiceTurnReducer()
     let turnID = VoiceTurnID()
-    var model = reducer.reduce(.idle, .start(turnID: turnID, intent: .hold)).model
+    var model = reducer.reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
     model = reducer.reduce(model, .finish(turnID: turnID, reason: .tooShort)).model
 
-    XCTAssertEqual(PushToTalkManager.legacyState(for: model.turn?.phase), .idle)
+    XCTAssertTrue(model.turn?.phase.isTerminal == true)
 
     let cleared = reducer.reduce(
       model,
@@ -89,7 +89,8 @@ final class PTTAudioCaptureRaceTests: XCTestCase {
     XCTAssertTrue(window.contains("pttHintRowHeight"))
     // ...and a dedicated observer resizes when the hint appears/clears (no
     // isVoiceListening transition fires on its own to trigger a resize).
-    XCTAssertTrue(window.contains("state.$pttHintText"))
+    XCTAssertTrue(window.contains("state.$voiceProjection"))
+    XCTAssertTrue(window.contains("$0.hint.isEmpty"))
   }
 
   private func managerSource() throws -> String {

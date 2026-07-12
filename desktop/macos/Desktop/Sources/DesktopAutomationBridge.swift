@@ -1479,12 +1479,15 @@ final class DesktopAutomationActionRegistry {
       params: ["state"]
     ) { params in
       let s = (params["state"] ?? "thinking").lowercased()
+      guard let debugState = VoiceTurnDebugPresentationState(rawValue: s) else {
+        return ["error": "state must be idle, listening, thinking, or answering"]
+      }
       let mgr = FloatingControlBarManager.shared
       guard let bar = mgr.barState else { return ["error": "no bar state"] }
       if s != "idle", !mgr.isVisible { mgr.show() }
-      bar.isVoiceResponseActive = (s == "answering")
-      bar.isVoiceListening = (s == "listening")
-      bar.isThinking = (s == "thinking")
+      guard VoiceTurnCoordinator.shared.applyDebugPresentationState(debugState) else {
+        return ["error": "a non-debug voice turn is active"]
+      }
       return ["state": s, "usesNotchIsland": bar.usesNotchIsland ? "true" : "false"]
     }
 
@@ -2105,10 +2108,57 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "coordinator_awareness_snapshot",
-      summary: "Read the Swift coordinator awareness projection for Agents & Attention debugging"
-    ) { _ in
-      let snapshot = try await DesktopCoordinatorService.shared.awarenessSnapshotJSON()
+      summary: "Read the Swift coordinator awareness projection for Agents & Attention debugging",
+      params: ["limit"]
+    ) { params in
+      let limit = max(1, min(200, intParam(params["limit"], default: 50)))
+      let snapshot = try await DesktopCoordinatorService.shared.awarenessSnapshotJSON(limit: limit)
       return ["snapshot": snapshot]
+    }
+
+    register(
+      name: "coordinator_inspect_run",
+      summary: "Inspect one owner-scoped kernel run and its bounded tool-invocation ledger",
+      params: ["runId"]
+    ) { params in
+      guard let runId = params["runId"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !runId.isEmpty
+      else {
+        throw DesktopAutomationActionError.invalidParams("missing runId")
+      }
+      let run = try await DesktopCoordinatorService.shared.inspectRun(runId: runId)
+      return ["run": run]
+    }
+
+    register(
+      name: "coordinator_continue_agent",
+      summary: "Continue one owner-scoped canonical agent session and return its new run handles",
+      params: ["sessionId", "prompt", "surfaceKind"]
+    ) { params in
+      guard let sessionId = params["sessionId"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !sessionId.isEmpty
+      else {
+        throw DesktopAutomationActionError.invalidParams("missing sessionId")
+      }
+      guard let prompt = params["prompt"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !prompt.isEmpty
+      else {
+        throw DesktopAutomationActionError.invalidParams("missing prompt")
+      }
+      let inspection = try await DesktopCoordinatorService.shared.continueAgent(
+        sessionId: sessionId,
+        prompt: prompt,
+        originSurface: DesktopCoordinatorOriginSurface(surfaceKind: params["surfaceKind"]),
+        model: nil,
+        cwd: nil
+      )
+      return [
+        "session_id": inspection.sessionId ?? "",
+        "run_id": inspection.runId ?? "",
+        "attempt_id": inspection.attemptId ?? "",
+        "status": inspection.status,
+        "error": inspection.errorMessage ?? "",
+      ]
     }
 
     register(
@@ -2131,13 +2181,33 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "coordinator_route_intent",
-      summary: "Route an intent through deterministic coordinator projection rules",
-      params: ["intent", "surfaceKind", "taskId"]
+      summary: "Route a structured proposal through the canonical agent kernel",
+      params: [
+        "intent", "surfaceKind", "taskId", "proposal", "snapshotVersion",
+        "sessionId", "runId", "parentRunId", "provider", "agentCount",
+      ]
     ) { params in
+      let proposal: DesktopCoordinatorIntentProposal
+      switch params["proposal"] {
+      case "spawn_agent": proposal = .spawnAgent
+      case "continue_run": proposal = .continueRun
+      case "clarify": proposal = .clarify(missing: ["automation_input"])
+      default: proposal = .answerInline
+      }
+      let syntaxFacts = DesktopCoordinatorIntentSyntaxFacts(
+        delegationNegated: nil,
+        explicitSessionId: params["sessionId"],
+        explicitRunId: params["runId"],
+        parentRunId: params["parentRunId"],
+        explicitProvider: params["provider"],
+        requestedAgentCount: params["agentCount"].flatMap(Int.init))
       let decision = try await DesktopCoordinatorService.shared.routeIntentJSON(
         intent: params["intent"] ?? "",
         surfaceKind: params["surfaceKind"],
-        taskId: params["taskId"]
+        taskId: params["taskId"],
+        snapshotVersion: params["snapshotVersion"],
+        proposal: proposal,
+        syntaxFacts: syntaxFacts
       )
       return ["decision": decision]
     }

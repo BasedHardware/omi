@@ -99,7 +99,7 @@ final class TranscriptionTransportTests: XCTestCase {
 
     let reducer = VoiceTurnReducer()
     let turnID = VoiceTurnID()
-    var model = reducer.reduce(.idle, .start(turnID: turnID, intent: .hold)).model
+    var model = reducer.reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
     model = reducer.reduce(
       model,
       .hintChanged(turnID: turnID, text: "Recording too long — keep it under 5 min")

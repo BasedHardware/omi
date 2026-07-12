@@ -2,6 +2,31 @@ import XCTest
 @testable import Omi_Computer
 
 final class CreateCalendarEventToolTests: XCTestCase {
+    private var previousAuthOwner: Any?
+    private var previousAutomationOwner: Any?
+
+    override func setUp() {
+        super.setUp()
+        previousAuthOwner = UserDefaults.standard.object(forKey: .authUserId)
+        previousAutomationOwner = UserDefaults.standard.object(forKey: .automationOwnerOverride)
+        UserDefaults.standard.set("calendar-tool-test-owner", forKey: .authUserId)
+        UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+    }
+
+    override func tearDown() {
+        if let previousAuthOwner {
+            UserDefaults.standard.set(previousAuthOwner, forKey: .authUserId)
+        } else {
+            UserDefaults.standard.removeObject(forKey: .authUserId)
+        }
+        if let previousAutomationOwner {
+            UserDefaults.standard.set(previousAutomationOwner, forKey: .automationOwnerOverride)
+        } else {
+            UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+        }
+        super.tearDown()
+    }
+
     func testCreateCalendarEventIsHandledByExecutor() async {
         let toolCall = ToolCall(
             name: "create_calendar_event",

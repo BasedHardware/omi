@@ -144,7 +144,8 @@ class TasksStore: ObservableObject {
     @Published var tasksWithoutDueDate: [TaskActionItem] = []
 
     /// Load dashboard task lists directly from SQLite (avoids pagination issues)
-    func loadDashboardTasks() async {
+    func loadDashboardTasks(expectedOwnerID: String? = nil) async {
+        guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
         let calendar = Calendar.current
         let startOfToday = calendar.startOfDay(for: Date())
         let endOfToday = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
@@ -171,6 +172,7 @@ class TasksStore: ObservableObject {
             )
 
             let (overdue, today, noDueDate) = try await (overdueResult, todayResult, noDueDateResult)
+            guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
             let sortedOverdue = overdue.sorted(by: Self.sortByDueDateThenSource)
             let sortedToday = today.sorted(by: Self.sortByDueDateThenSource)
             let sortedNoDueDate = noDueDate.sorted(by: Self.sortByDueDateThenSource)
@@ -465,7 +467,8 @@ class TasksStore: ObservableObject {
 
     /// Reload tasks from SQLite without hitting the API.
     /// Call this when the local database has been modified externally (e.g., by an AI tool call).
-    func reloadFromLocalCache() async {
+    func reloadFromLocalCache(expectedOwnerID: String? = nil) async {
+        guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
         guard hasLoadedIncomplete else { return }
 
         do {
@@ -475,6 +478,7 @@ class TasksStore: ObservableObject {
                 offset: 0,
                 completed: false
             )
+            guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
             if cachedTasks != incompleteTasks {
                 incompleteTasks = cachedTasks
                 incompleteOffset = cachedTasks.count
@@ -492,6 +496,7 @@ class TasksStore: ObservableObject {
                     offset: 0,
                     completed: true
                 )
+                guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
                 if cachedCompleted != completedTasks {
                     completedTasks = cachedCompleted
                     completedOffset = cachedCompleted.count
@@ -978,7 +983,11 @@ class TasksStore: ObservableObject {
     /// Retry syncing locally-created tasks that failed to push to the backend.
     /// These are records with backendSynced=false and no backendId — the API call
     /// failed during extraction and there was no retry mechanism.
-    func retryUnsyncedItems(includeRecent: Bool = false) async {
+    func retryUnsyncedItems(
+        includeRecent: Bool = false,
+        expectedOwnerID: String? = nil
+    ) async {
+        guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
         guard !isRetryingUnsynced else {
             log("TasksStore: Skipping retryUnsyncedItems (already in progress)")
             return
@@ -993,12 +1002,14 @@ class TasksStore: ObservableObject {
             logError("TasksStore: Failed to fetch unsynced items", error: error)
             return
         }
+        guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
 
         guard !items.isEmpty else { return }
         log("TasksStore: Retrying sync for \(items.count) unsynced items")
 
         var synced = 0
         for item in items {
+            guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
             guard let localId = item.id else { continue }
 
             // Re-check: the normal sync path may have synced this item while we were iterating
@@ -1006,6 +1017,7 @@ class TasksStore: ObservableObject {
                current.backendSynced || (current.backendId != nil && !current.backendId!.isEmpty) {
                 continue
             }
+            guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
 
             // Parse metadata back from JSON
             var metadata: [String: Any]?
@@ -1021,9 +1033,12 @@ class TasksStore: ObservableObject {
                     priority: item.priority,
                     category: item.category,
                     metadata: metadata,
-                    relevanceScore: item.relevanceScore
+                    relevanceScore: item.relevanceScore,
+                    expectedOwnerId: expectedOwnerID
                 )
+                guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
                 try await ActionItemStorage.shared.markSynced(id: localId, backendId: response.id)
+                guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
                 synced += 1
             } catch {
                 // Skip this item, will retry next launch
@@ -1183,7 +1198,13 @@ class TasksStore: ObservableObject {
 
     // MARK: - Task Actions
 
-    func toggleTask(_ task: TaskActionItem) async {
+    private nonisolated static func isExpectedOwnerCurrent(_ expectedOwnerID: String?) -> Bool {
+        guard let expectedOwnerID else { return true }
+        return AuthorizedToolExecution.isOwnerCurrent(expectedOwnerID)
+    }
+
+    func toggleTask(_ task: TaskActionItem, expectedOwnerID: String? = nil) async {
+        guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
         let newCompleted = !task.completed
 
         // 1. Local-first: update SQLite immediately so auto-refresh reads correct state
@@ -1192,16 +1213,19 @@ class TasksStore: ObservableObject {
                 backendId: task.id, completed: newCompleted
             )
         } catch {
+            guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
             logError("TasksStore: Failed to update task locally", error: error)
             self.error = error.localizedDescription
             return
         }
+        guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
 
         // 2. Read back from SQLite to get a TaskActionItem with the new completed value
         guard let updatedTask = try? await ActionItemStorage.shared.getLocalActionItem(byBackendId: task.id) else {
             logError("TasksStore: Failed to read back toggled task", error: nil)
             return
         }
+        guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
 
         // 3. Track completion analytics
         if newCompleted {
@@ -1216,11 +1240,14 @@ class TasksStore: ObservableObject {
             // Compact relevance scores to fill the gap
             if let score = task.relevanceScore {
                 try? await ActionItemStorage.shared.compactScoresAfterRemoval(removedScore: score)
-                Task { await self.syncScoresToBackend() }
+                guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
+                if expectedOwnerID == nil {
+                    Task { await self.syncScoresToBackend() }
+                }
             }
 
             // Promote a staged task to fill the vacated slot
-            if task.source?.contains("screenshot") == true {
+            if expectedOwnerID == nil, task.source?.contains("screenshot") == true {
                 Task {
                     let promoted = await TaskPromotionService.shared.promoteIfNeeded()
                     if !promoted.isEmpty {
@@ -1235,16 +1262,21 @@ class TasksStore: ObservableObject {
         }
 
         // 5. Refresh dashboard arrays immediately (SQLite was already updated in step 1)
+        guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
         await loadDashboardTasks()
+        guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
 
         // 6. Call API in background, revert on failure
         do {
             let apiResult = try await APIClient.shared.updateActionItem(
                 id: task.id,
-                completed: newCompleted
+                completed: newCompleted,
+                expectedOwnerId: expectedOwnerID
             )
+            guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
             // Sync API result to store server-side timestamps
             try await ActionItemStorage.shared.syncTaskActionItems([apiResult])
+            guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
 
             // Spawn next recurring instance when completing a recurring task
             if newCompleted, let rule = task.recurrenceRule, !rule.isEmpty {
@@ -1258,9 +1290,12 @@ class TasksStore: ObservableObject {
                         priority: task.priority,
                         category: task.category,
                         recurrenceRule: rule,
-                        recurrenceParentId: parentId
+                        recurrenceParentId: parentId,
+                        expectedOwnerId: expectedOwnerID
                     ) {
+                        guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
                         try? await ActionItemStorage.shared.syncTaskActionItems([spawned])
+                        guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
                         incompleteTasks.insert(spawned, at: 0)
                         log("TasksStore: Spawned recurring task \(spawned.id) due \(nextDue)")
                     }
@@ -1269,6 +1304,7 @@ class TasksStore: ObservableObject {
 
             await loadDashboardTasks()
         } catch {
+            guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
             logError("TasksStore: Failed to toggle task on backend, reverting", error: error)
             // Revert SQLite
             try? await ActionItemStorage.shared.updateCompletionStatus(
@@ -1380,13 +1416,16 @@ class TasksStore: ObservableObject {
         }
     }
 
-    func deleteTask(_ task: TaskActionItem) async {
+    func deleteTask(_ task: TaskActionItem, expectedOwnerID: String? = nil) async {
+        guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
         // Local-first: soft-delete in SQLite immediately for instant UI update
         do {
             try await ActionItemStorage.shared.deleteActionItemByBackendId(task.id, deletedBy: "user")
         } catch {
+            guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
             logError("TasksStore: Failed to soft-delete task locally", error: error)
         }
+        guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
 
         // Track deletion analytics
         AnalyticsManager.shared.taskDeleted(source: task.source)
@@ -1401,11 +1440,14 @@ class TasksStore: ObservableObject {
         // Compact relevance scores to fill the gap
         if let score = task.relevanceScore {
             try? await ActionItemStorage.shared.compactScoresAfterRemoval(removedScore: score)
-            Task { await self.syncScoresToBackend() }
+            guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
+            if expectedOwnerID == nil {
+                Task { await self.syncScoresToBackend() }
+            }
         }
 
         // Promote a staged task to fill the vacated slot
-        if task.source?.contains("screenshot") == true {
+        if expectedOwnerID == nil, task.source?.contains("screenshot") == true {
             Task {
                 let promoted = await TaskPromotionService.shared.promoteIfNeeded()
                 if !promoted.isEmpty {
@@ -1417,8 +1459,12 @@ class TasksStore: ObservableObject {
 
         // Hard-delete on backend in background
         do {
-            try await APIClient.shared.deleteActionItem(id: task.id)
+            try await APIClient.shared.deleteActionItem(
+                id: task.id,
+                expectedOwnerId: expectedOwnerID
+            )
         } catch {
+            guard Self.isExpectedOwnerCurrent(expectedOwnerID) else { return }
             logError("TasksStore: Failed to hard-delete task on backend (local delete preserved)", error: error)
         }
     }

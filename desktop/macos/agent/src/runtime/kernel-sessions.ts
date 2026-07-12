@@ -13,6 +13,7 @@ import {
   importLegacyMainChatSessions,
   resolveSurfaceSession,
   type LegacyMainChatSessionEntry,
+  type LegacyMainChatSessionImportReceipt,
   type ResolveSurfaceSessionInput,
   type ResolveSurfaceSessionResult,
 } from "./surface-session.js";
@@ -283,7 +284,9 @@ export class KernelSessions extends KernelArtifacts {
     return resolveSurfaceSession(this.store, input, () => Date.now());
   }
 
-  importLegacyMainChatSessions(input: { ownerId: string; entries: LegacyMainChatSessionEntry[] }): number {
+  importLegacyMainChatSessions(
+    input: { ownerId: string; entries: LegacyMainChatSessionEntry[] },
+  ): LegacyMainChatSessionImportReceipt {
     return importLegacyMainChatSessions(this.store, input, () => Date.now());
   }
 

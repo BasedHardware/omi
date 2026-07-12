@@ -32,16 +32,23 @@ final class TaskChatKernelIdentityTests: XCTestCase {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
 
     XCTAssertTrue(source.contains("Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: error.localizedDescription)"))
-    XCTAssertTrue(source.contains("persistMessage(messages[index])"))
+    XCTAssertTrue(source.contains("await finishJournalUpdate("))
+    XCTAssertFalse(source.contains("persistMessage("))
     XCTAssertTrue(source.contains("observeRuntimeProjectionFailures()"))
     XCTAssertTrue(source.contains("surfaceRuntimeFailure(projection)"))
   }
 
   func testTaskChatSendsRawPromptAndSurfaceContextToKernel() throws {
+    // omi-test-quality: source-inspection -- static contract: task chat cannot reintroduce deprecated query authority fields
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
+    let runtime = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatRuntime.swift")
 
     XCTAssertTrue(source.contains("prompt: trimmedText"))
-    XCTAssertTrue(source.contains("surfaceContextJson: taskContext"))
+    XCTAssertTrue(source.contains("taskContext: taskContext"))
+    XCTAssertTrue(runtime.contains("source: source"))
+    XCTAssertTrue(runtime.contains("expectedContext: snapshot.freshness"))
+    XCTAssertFalse(runtime.contains("surfaceContextJson"))
+    XCTAssertFalse(runtime.contains("systemPrompt:"))
     XCTAssertFalse(source.contains("buildContextPacketSummary("))
     XCTAssertFalse(source.contains("build_desktop_context_packet"))
   }
@@ -121,10 +128,10 @@ final class TaskChatKernelIdentityTests: XCTestCase {
     XCTAssertFalse(source.contains("isFollowUp"))
     XCTAssertFalse(source.contains("sendFollowUp"))
     guard let tokenRange = source.range(of: "localSendToken = LocalSendToken"),
-          let appendRange = source.range(of: "messages.append(userMessage)") else {
-      return XCTFail("Expected task chat sends to signal local send and append a user row")
+          let recordRange = source.range(of: "TaskChatRuntime.recordJournalMessage(") else {
+      return XCTFail("Expected task chat sends to signal local send before recording the canonical user row")
     }
-    XCTAssertLessThan(tokenRange.lowerBound, appendRange.lowerBound)
+    XCTAssertLessThan(tokenRange.lowerBound, recordRange.lowerBound)
   }
 
   func testFailureTranscriptFormatterUsesStructuredProjectionFailure() {
@@ -199,9 +206,8 @@ final class TaskChatKernelIdentityTests: XCTestCase {
     let branch = String(rest[..<elseRange.lowerBound])
 
     XCTAssertTrue(branch.contains("surfaceCurrentRuntimeFailureIfNeeded(fallbackMessage: \"Agent failed\")"))
-    XCTAssertTrue(branch.contains("let shouldPersistPartial"))
-    XCTAssertTrue(branch.contains("if shouldPersistPartial"))
-    XCTAssertFalse(branch.contains("persistMessage(messages[index])"))
+    XCTAssertTrue(branch.contains("await finishJournalUpdate(messageId: aiMessageId, status: .failed)"))
+    XCTAssertFalse(branch.contains("persistMessage("))
   }
 
   func testTerminalFailureMarksRemainingToolCallsFailed() throws {

@@ -85,6 +85,35 @@ final class VoiceTurnCoordinatorTests: XCTestCase {
     XCTAssertEqual(barState.pttHintText, "Couldn't transcribe that — try again")
   }
 
+  func testAwaitingResponseRemainsThinkingUntilReducerAdvances() throws {
+    let scheduler = ManualVoiceTurnScheduler()
+    let coordinator = VoiceTurnCoordinator(scheduler: scheduler)
+    let barState = FloatingControlBarState()
+    coordinator.configure(barState: barState)
+    let turnID = coordinator.begin(intent: .hold)
+    coordinator.send(.selectRoute(turnID: turnID, route: .deepgramBatch))
+    coordinator.send(.finalize(turnID: turnID))
+    coordinator.send(.transcriptionFinal(turnID: turnID, text: "find today's memories"))
+
+    XCTAssertEqual(coordinator.activeTurn?.phase, .awaitingResponse)
+    XCTAssertTrue(coordinator.projection.isThinking)
+    XCTAssertTrue(barState.isThinking)
+
+    coordinator.refreshPresentation()
+    XCTAssertTrue(barState.isThinking)
+
+    let identity = try XCTUnwrap(coordinator.activeTurn?.providerEffectIdentity)
+    coordinator.send(
+      .providerResponseStartedScoped(
+        turnID: turnID,
+        identity: identity,
+        sessionID: nil,
+        responseID: nil))
+
+    XCTAssertFalse(coordinator.projection.isThinking)
+    XCTAssertFalse(barState.isThinking)
+  }
+
   func testTerminalEffectAndCleanupAreExactlyOnce() {
     let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
     var terminals: [VoiceTurnTerminalRecord] = []
@@ -117,7 +146,15 @@ final class VoiceTurnCoordinatorTests: XCTestCase {
     coordinator.send(.finalize(turnID: turnID))
     coordinator.send(.transcriptionStarted(turnID: turnID))
     coordinator.send(.transcriptionFinal(turnID: turnID, text: "hello"))
-    coordinator.send(.providerResponseStarted(turnID: turnID, sessionID: nil, responseID: nil))
+    guard let providerIdentity = coordinator.activeTurn?.providerEffectIdentity else {
+      return XCTFail("transcription final must mint a provider identity")
+    }
+    coordinator.send(
+      .providerResponseStartedScoped(
+        turnID: turnID,
+        identity: providerIdentity,
+        sessionID: nil,
+        responseID: nil))
     XCTAssertTrue(barState.isVoiceResponseActive)
 
     coordinator.setUnscopedResponseActive(false)
@@ -141,10 +178,11 @@ final class VoiceTurnCoordinatorTests: XCTestCase {
   func testHubReadyTransitionIsConsumedBeforeReentrantSnapshot() {
     let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
     let sessionID = VoiceSessionID()
-    var gate = RealtimeHubWarmWaitResolutionGate()
     var resolutions = 0
+    var didReenter = false
     coordinator.setSnapshotHandler { model in
-      guard gate.observe(model.turn?.route) else { return }
+      guard model.turn?.route == .hub(sessionID: sessionID), !didReenter else { return }
+      didReenter = true
       resolutions += 1
       guard let turnID = coordinator.activeTurnID else {
         XCTFail("hub-ready transition must retain its active turn")
@@ -161,7 +199,10 @@ final class VoiceTurnCoordinatorTests: XCTestCase {
     coordinator.send(.hubReady(turnID: turnID, sessionID: sessionID))
 
     XCTAssertEqual(resolutions, 1)
-    XCTAssertEqual(gate.route, .hub(sessionID: sessionID))
+    XCTAssertEqual(coordinator.model.turn?.route, .hub(sessionID: sessionID))
+    XCTAssertEqual(
+      coordinator.timelineSnapshot().filter { $0.event == "hub_ready" }.count,
+      1)
   }
 
   func testSnapshotReentrantEventsDrainFIFOWithoutRecursiveCallbacks() {
@@ -322,12 +363,91 @@ final class VoiceTurnCoordinatorTests: XCTestCase {
     let marker = "secret-timeline-marker-442"
     let turnID = coordinator.begin(intent: .hold)
     coordinator.send(.transcriptChanged(turnID: turnID, text: marker))
-    coordinator.send(.playbackFailed(turnID: VoiceTurnID(), leaseID: nil, message: marker))
+    let staleID = VoiceTurnID()
+    coordinator.send(
+      .playbackFailedScoped(
+        turnID: staleID,
+        identity: VoiceEffectIdentity(turnID: staleID, effectID: 1),
+        leaseID: nil,
+        message: marker))
 
     let events = coordinator.timelineSnapshot().map(\.event)
     XCTAssertTrue(events.contains("transcript_changed"))
-    XCTAssertTrue(events.contains("playback_failed"))
+    XCTAssertTrue(events.contains("playback_failed_scoped"))
     XCTAssertFalse(events.joined().contains(marker))
+  }
+
+  func testNonHubJournalAcceptanceWaitsForIndependentPlaybackFence() throws {
+    let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
+    let turnID = coordinator.begin(intent: .hold)
+    coordinator.send(.selectRoute(turnID: turnID, route: .deepgramBatch))
+    coordinator.send(.finalize(turnID: turnID))
+    coordinator.send(.transcriptionStarted(turnID: turnID))
+    coordinator.send(.transcriptionFinal(turnID: turnID, text: "hello"))
+    let providerIdentity = try XCTUnwrap(coordinator.activeTurn?.providerEffectIdentity)
+    coordinator.send(
+      .providerResponseStartedScoped(
+        turnID: turnID,
+        identity: providerIdentity,
+        sessionID: nil,
+        responseID: nil))
+    guard case .acquired(let lease) = coordinator.acquireOutput(
+      .selectedVoiceFallback, turnID: turnID)
+    else { return XCTFail("expected output lease") }
+    let token = try XCTUnwrap(coordinator.nonHubCompletionToken(for: turnID))
+
+    XCTAssertTrue(coordinator.completeNonHubProvider(token, outcome: .journalAccepted))
+    XCTAssertEqual(coordinator.activeTurn?.phase, .playing(.selectedVoiceFallback))
+    XCTAssertTrue(coordinator.activeTurn?.providerFinished == true)
+    guard case .accepted = coordinator.activeTurn?.journalFinalization else {
+      return XCTFail("canonical journal acceptance must be retained while playback drains")
+    }
+
+    XCTAssertTrue(coordinator.releaseOutput(lease))
+    XCTAssertEqual(coordinator.model.lastTerminal?.turnID, turnID)
+    XCTAssertEqual(coordinator.model.lastTerminal?.reason, .success)
+  }
+
+  func testNonHubCompletionTokenCannotCloseReplacementTurn() throws {
+    let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
+    let oldTurnID = coordinator.begin(intent: .hold)
+    coordinator.send(.selectRoute(turnID: oldTurnID, route: .deepgramBatch))
+    coordinator.send(.finalize(turnID: oldTurnID))
+    coordinator.send(.transcriptionStarted(turnID: oldTurnID))
+    coordinator.send(.transcriptionFinal(turnID: oldTurnID, text: "old"))
+    let staleToken = try XCTUnwrap(coordinator.nonHubCompletionToken(for: oldTurnID))
+
+    let newTurnID = coordinator.begin(intent: .hold)
+    XCTAssertFalse(coordinator.completeNonHubProvider(staleToken, outcome: .journalAccepted))
+    XCTAssertEqual(coordinator.activeTurnID, newTurnID)
+    XCTAssertEqual(coordinator.activeTurn?.phase, .recording)
+  }
+
+  func testLateOldTurnGlowClearCannotMutateReplacementResponse() throws {
+    let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
+    let barState = FloatingControlBarState()
+    coordinator.configure(barState: barState)
+    let oldTurnID = coordinator.begin(intent: .hold)
+
+    let replacementTurnID = coordinator.begin(intent: .hold)
+    coordinator.send(.selectRoute(turnID: replacementTurnID, route: .deepgramBatch))
+    coordinator.send(.finalize(turnID: replacementTurnID))
+    coordinator.send(.transcriptionStarted(turnID: replacementTurnID))
+    coordinator.send(.transcriptionFinal(turnID: replacementTurnID, text: "replacement"))
+    let providerIdentity = try XCTUnwrap(coordinator.activeTurn?.providerEffectIdentity)
+    coordinator.send(
+      .providerResponseStartedScoped(
+        turnID: replacementTurnID,
+        identity: providerIdentity,
+        sessionID: nil,
+        responseID: nil))
+    XCTAssertTrue(barState.isVoiceResponseActive)
+
+    coordinator.send(.responseActiveChanged(turnID: oldTurnID, active: false))
+
+    XCTAssertEqual(coordinator.activeTurnID, replacementTurnID)
+    XCTAssertTrue(barState.isVoiceResponseActive)
+    XCTAssertEqual(coordinator.model.staleEventCount, 1)
   }
 }
 

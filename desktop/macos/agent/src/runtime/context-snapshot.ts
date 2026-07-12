@@ -370,7 +370,7 @@ function projectContextSnapshot(
       [input.sessionId, input.snapshotGeneration, input.version, rendererFingerprint, input.nowMs],
     );
   }
-  return {
+  const projection = {
     snapshotId: input.version,
     version: input.version,
     snapshotGeneration: input.snapshotGeneration,
@@ -382,6 +382,10 @@ function projectContextSnapshot(
     conversationId: input.conversationId,
     ...input.baseMaterial,
     capabilities,
+  };
+  return {
+    ...projection,
+    renderedContext: renderContextSnapshot(projection, input.surfaceKind, profile.executionRole),
   };
 }
 
@@ -403,7 +407,10 @@ export function kernelSystemPolicy(
 
 /** Pure dynamic renderer. It has no clocks, I/O, routing, or source selection. */
 export function renderContextSnapshot(
-  snapshot: ContextSnapshotProjection,
+  snapshot: Pick<
+    ContextSnapshotProjection,
+    "version" | "snapshotGeneration" | "recentTurns" | "sourceOutcomes" | "activeRuns" | "capabilities"
+  >,
   surfaceKind: string,
   executionRole: AgentExecutionRole,
 ): string {

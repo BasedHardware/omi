@@ -1489,6 +1489,7 @@ class AuthService {
         case .keychainTokenStorageUnavailable: return "keychain_token_storage_unavailable"
         case .cancelled: return "cancelled"
         case .invalidConfiguration: return "invalid_configuration"
+        case .userChangedDuringRequest: return "user_changed_during_request"
         }
     }
 
@@ -1816,11 +1817,21 @@ class AuthService {
 
     /// Update the user's given name (stores locally, updates Firebase Auth, and syncs to backend profile)
     @MainActor
-    func updateGivenName(_ fullName: String) async {
+    func updateGivenName(_ fullName: String, expectedOwnerID: String? = nil) async {
         let trimmedName = fullName.trimmingCharacters(in: .whitespaces)
         let nameParts = trimmedName.split(separator: " ", maxSplits: 1)
         let newGivenName = nameParts.first.map(String.init) ?? trimmedName
         let newFamilyName = nameParts.count > 1 ? String(nameParts[1]) : ""
+
+        if let expectedOwnerID {
+            await updateGivenNameOwnerBound(
+                trimmedName: trimmedName,
+                newGivenName: newGivenName,
+                newFamilyName: newFamilyName,
+                expectedOwnerID: expectedOwnerID
+            )
+            return
+        }
 
         // Save locally
         givenName = newGivenName
@@ -1852,6 +1863,54 @@ class AuthService {
                 NSLog("OMI AUTH: Failed to update backend profile name (non-fatal): %@", error.localizedDescription)
             }
         }
+    }
+
+    private func updateGivenNameOwnerBound(
+        trimmedName: String,
+        newGivenName: String,
+        newFamilyName: String,
+        expectedOwnerID: String
+    ) async {
+        guard isCurrentOwner(expectedOwnerID) else { return }
+        let isImpersonating = UserDefaults.standard.bool(forKey: .authIsImpersonating)
+
+        if !isImpersonating, let user = Auth.auth().currentUser {
+            guard user.uid == expectedOwnerID else { return }
+            do {
+                let changeRequest = user.createProfileChangeRequest()
+                changeRequest.displayName = trimmedName
+                try await changeRequest.commitChanges()
+            } catch {
+                NSLog(
+                    "OMI AUTH: Failed to update Firebase displayName (non-fatal): %@",
+                    error.localizedDescription
+                )
+            }
+            guard isCurrentOwner(expectedOwnerID) else { return }
+        }
+
+        if !isImpersonating {
+            do {
+                try await APIClient.shared.updateUserProfile(
+                    name: trimmedName,
+                    expectedOwnerId: expectedOwnerID
+                )
+            } catch {
+                NSLog(
+                    "OMI AUTH: Failed to update backend profile name (non-fatal): %@",
+                    error.localizedDescription
+                )
+            }
+            guard isCurrentOwner(expectedOwnerID) else { return }
+        }
+
+        givenName = newGivenName
+        familyName = newFamilyName
+        NSLog("OMI AUTH: Updated owner-bound name locally - given: %@, family: %@", newGivenName, newFamilyName)
+    }
+
+    private nonisolated func isCurrentOwner(_ expectedOwnerID: String) -> Bool {
+        AuthorizedToolExecution.isOwnerCurrent(expectedOwnerID)
     }
 
     /// Try to get name from Firebase user (after OAuth sign-in)
@@ -2388,6 +2447,55 @@ class AuthService {
         return "Bearer \(token)"
     }
 
+    /// Returns an authorization header whose token subject is bound to the
+    /// durable operation owner. This is intentionally stricter than the
+    /// general request path: a sign-out/account switch must make an outbox
+    /// delivery retry rather than send it with the next user's credentials.
+    func getAuthHeader(
+        forceRefresh: Bool = false,
+        expectedUserId: String
+    ) async throws -> String {
+        let expected = expectedUserId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !expected.isEmpty,
+              UserDefaults.standard.string(forKey: .authUserId)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) == expected
+        else {
+            throw AuthError.userChangedDuringRequest
+        }
+
+        let token = try await getIdToken(forceRefresh: forceRefresh)
+        guard UserDefaults.standard.string(forKey: .authUserId)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) == expected,
+              Self.tokenOwnerId(from: token) == expected
+        else {
+            throw AuthError.userChangedDuringRequest
+        }
+        return "Bearer \(token)"
+    }
+
+    nonisolated static func tokenOwnerId(from token: String) -> String? {
+        let parts = token.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 3 else { return nil }
+        var payload = String(parts[1])
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        let remainder = payload.count % 4
+        if remainder != 0 {
+            payload.append(String(repeating: "=", count: 4 - remainder))
+        }
+        guard let data = Data(base64Encoded: payload),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        for claim in ["user_id", "sub"] {
+            if let value = json[claim] as? String,
+               !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            {
+                return value
+            }
+        }
+        return nil
+    }
+
     // MARK: - Fetch User Conversations
 
     /// Fetches and logs user conversations (called after sign-in or on startup)
@@ -2757,6 +2865,7 @@ enum AuthError: LocalizedError {
     case keychainTokenStorageUnavailable
     case cancelled
     case invalidConfiguration
+    case userChangedDuringRequest
 
     var errorDescription: String? {
         switch self {
@@ -2794,6 +2903,8 @@ enum AuthError: LocalizedError {
             return "Sign in cancelled"
         case .invalidConfiguration:
             return "Local harness auth is misconfigured (Firebase auth emulator host missing)"
+        case .userChangedDuringRequest:
+            return "The signed-in account changed while the request was being prepared"
         }
     }
 }

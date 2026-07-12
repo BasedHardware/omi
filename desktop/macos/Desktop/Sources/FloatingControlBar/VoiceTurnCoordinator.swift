@@ -3,6 +3,21 @@ import Foundation
 typealias VoiceTurnDeadlineCancellation = DelayedActionCancellation
 
 @MainActor
+final class VoiceTurnSnapshotObservation {
+  private var cancelAction: (() -> Void)?
+
+  init(cancel: @escaping () -> Void) {
+    cancelAction = cancel
+  }
+
+  func cancel() {
+    cancelAction?()
+    cancelAction = nil
+  }
+
+}
+
+@MainActor
 protocol VoiceTurnDeadlineScheduling {
   func schedule(
     deadline: VoiceTurnDeadline,
@@ -44,51 +59,22 @@ struct VoiceTurnTimelineEntry: Equatable, Sendable {
   let invalidTransitionCount: Int
 }
 
-@MainActor
-final class PTTBarPresenter {
-  private weak var barState: FloatingControlBarState?
-  private var previousProjection = VoiceTurnUIProjection.idle
+struct VoiceNonHubCompletionToken: Equatable, Sendable {
+  let turnID: VoiceTurnID
+  let providerIdentity: VoiceEffectIdentity
+}
 
-  init(barState: FloatingControlBarState) {
-    self.barState = barState
-  }
-
-  func apply(_ projection: VoiceTurnUIProjection) {
-    guard let barState else { return }
-    let wasExpandedForVoice = previousProjection.isListening || !previousProjection.hint.isEmpty
-    let shouldExpandForVoice = projection.isListening || !projection.hint.isEmpty
-
-    barState.isVoiceListening = shouldExpandForVoice
-    barState.isVoiceLocked = projection.isLocked
-    barState.isVoiceFollowUp = projection.isFollowUp && shouldExpandForVoice
-    barState.voiceTranscript = projection.transcript
-    if !projection.isFollowUp {
-      barState.voiceFollowUpTranscript = ""
-    }
-    barState.pttHintText = projection.hint
-    barState.isThinking = projection.isThinking
-    if projection.isResponseActive {
-      barState.isVoiceResponseActive = true
-    } else if projection.isResponseWaiting {
-      barState.beginVoiceResponseWaiting()
-    } else if previousProjection.isResponseActive || previousProjection.isResponseWaiting {
-      barState.clearVoiceResponseState()
-    }
-
-    if shouldExpandForVoice != wasExpandedForVoice,
-      !barState.isVoiceFollowUp,
-      !barState.showingAIConversation,
-      UserDefaults.standard.bool(forKey: .hasCompletedOnboarding)
-    {
-      FloatingControlBarManager.shared.resizeForPTT(expanded: shouldExpandForVoice)
-    }
-    previousProjection = projection
-  }
+enum VoiceNonHubCompletionOutcome: Equatable, Sendable {
+  case journalAccepted
+  case journalFailed
+  case providerFailed
 }
 
 @MainActor
 final class VoiceTurnCoordinator {
-  static let shared = VoiceTurnCoordinator()
+  static let shared = VoiceTurnCoordinator(
+    requiresAuthenticatedOwner: true,
+    ownerIDProvider: { RuntimeOwnerIdentity.currentOwnerId() })
 
   typealias EffectHandler = @MainActor (VoiceTurnEffect) -> Void
   typealias SnapshotHandler = @MainActor (VoiceTurnModel) -> Void
@@ -100,10 +86,14 @@ final class VoiceTurnCoordinator {
 
   private let reducer: VoiceTurnReducer
   private let scheduler: VoiceTurnDeadlineScheduling
+  private let ownerIDProvider: @MainActor () -> String?
+  private let ownerIsCurrent: @MainActor (String) -> Bool
+  private let requiresAuthenticatedOwner: Bool
   private var deadlineCancellations: [DeadlineKey: VoiceTurnDeadlineCancellation] = [:]
-  private var presenter: PTTBarPresenter?
+  private var presenter: FloatingControlBarState.PTTBarPresenter?
   private var effectHandler: EffectHandler?
   private var snapshotHandler: SnapshotHandler?
+  private var snapshotObservers: [UUID: SnapshotHandler] = [:]
   private var timeline: [VoiceTurnTimelineEntry] = []
   private let timelineLimit: Int
   private var timelineSequence: UInt64 = 0
@@ -116,20 +106,161 @@ final class VoiceTurnCoordinator {
     model: VoiceTurnModel = .idle,
     reducer: VoiceTurnReducer = VoiceTurnReducer(),
     scheduler: VoiceTurnDeadlineScheduling? = nil,
-    timelineLimit: Int = 256
+    timelineLimit: Int = 256,
+    requiresAuthenticatedOwner: Bool = false,
+    ownerIDProvider: @escaping @MainActor () -> String? = { nil },
+    ownerIsCurrent: @escaping @MainActor (String) -> Bool = {
+      AuthorizedToolExecution.isOwnerCurrent($0)
+    }
   ) {
     self.model = model
     self.reducer = reducer
     self.scheduler = scheduler ?? TaskVoiceTurnDeadlineScheduler()
     self.timelineLimit = max(1, timelineLimit)
+    self.requiresAuthenticatedOwner = requiresAuthenticatedOwner
+    self.ownerIDProvider = ownerIDProvider
+    self.ownerIsCurrent = ownerIsCurrent
   }
 
   var activeTurnID: VoiceTurnID? { model.turn?.phase.isTerminal == false ? model.turn?.id : nil }
   var activeTurn: VoiceTurn? { model.turn?.phase.isTerminal == false ? model.turn : nil }
   var projection: VoiceTurnUIProjection { model.turn?.projection ?? .idle }
+  var outputSnapshot: VoiceOutputSnapshot {
+    VoiceOutputSnapshot(
+      turnID: activeTurnID,
+      activeLease: activeTurn?.activeLease,
+      providerOutputSuppressed: activeTurn?.providerOutputSuppressed ?? false)
+  }
+
+  /// Reserves an identity from the authoritative turn generation for an async
+  /// physical-driver operation. A callback must return this exact identity.
+  func reserveEffectIdentity() -> VoiceEffectIdentity? {
+    guard let turn = activeTurn else { return nil }
+    let identity = VoiceEffectIdentity(turnID: turn.id, effectID: turn.nextEffectID)
+    send(.effectIdentityReserved(turnID: turn.id))
+    guard activeTurn?.nextEffectID == (turn.nextEffectID &+ 1) else { return nil }
+    return identity
+  }
+
+  /// Captures the exact non-hub provider generation before an asynchronous chat
+  /// request starts. Completion must return this token; reading the current turn
+  /// only when a callback arrives can otherwise attribute A's callback to B.
+  func nonHubCompletionToken(for turnID: VoiceTurnID? = nil) -> VoiceNonHubCompletionToken? {
+    guard let turn = activeTurn,
+      turnID == nil || turn.id == turnID,
+      !Self.isHubRoute(turn.route),
+      let providerIdentity = turn.providerEffectIdentity
+    else { return nil }
+    return VoiceNonHubCompletionToken(turnID: turn.id, providerIdentity: providerIdentity)
+  }
+
+  /// Closes a non-hub provider only after its canonical kernel journal operation
+  /// has returned. Playback is an independent fence and may drain before or after
+  /// this call without claiming provider completion.
+  @discardableResult
+  func completeNonHubProvider(
+    _ token: VoiceNonHubCompletionToken,
+    outcome: VoiceNonHubCompletionOutcome
+  ) -> Bool {
+    guard requireCurrentOwner(for: token.turnID) != nil else { return false }
+    guard activeTurn?.id == token.turnID,
+      activeTurn?.providerEffectIdentity == token.providerIdentity,
+      activeTurn.map({ !Self.isHubRoute($0.route) }) == true
+    else { return false }
+
+    if outcome == .providerFailed {
+      send(.finish(turnID: token.turnID, reason: .providerFailed))
+      return model.lastTerminal?.turnID == token.turnID
+        && model.lastTerminal?.reason == .providerFailed
+    }
+
+    send(
+      .providerTurnFinishedScoped(
+        turnID: token.turnID,
+        identity: token.providerIdentity,
+        sessionID: nil,
+        responseID: nil))
+    guard activeTurn?.id == token.turnID,
+      let journalFinalization = activeTurn?.journalFinalization,
+      case .writing(let journalIdentity) = journalFinalization
+    else { return false }
+    switch outcome {
+    case .journalAccepted:
+      send(.journalAccepted(turnID: token.turnID, identity: journalIdentity))
+    case .journalFailed:
+      send(
+        .journalFailed(
+          turnID: token.turnID,
+          identity: journalIdentity,
+          message: "kernel journal did not acknowledge the non-hub voice turn"))
+    case .providerFailed:
+      break
+    }
+    return true
+  }
+
+  func isToolEffectActive(
+    turnID: VoiceTurnID,
+    callID: VoiceToolCallID,
+    identity: VoiceEffectIdentity
+  ) -> Bool {
+    activeTurn?.id == turnID && activeTurn?.toolEffectIdentities[callID] == identity
+  }
+
+  func isProviderConnectionReady(
+    turnID: VoiceTurnID,
+    sessionID: VoiceSessionID,
+    responseID: VoiceResponseID? = nil
+  ) -> Bool {
+    guard let turn = activeTurn, turn.id == turnID,
+      turn.providerConnection == .ready,
+      turn.sessionID == sessionID
+    else { return false }
+    return responseID == nil || turn.responseID == responseID
+  }
+
+  func canCommitHubTurn(_ turnID: VoiceTurnID) -> Bool {
+    guard let turn = activeTurn, turn.id == turnID,
+      Self.isHubRoute(turn.route)
+    else { return false }
+    return turn.phase == .finalizing && !turn.hubCommitPending
+  }
+
+  func acquireOutput(
+    _ lane: VoiceOutputLane,
+    turnID: VoiceTurnID,
+    leaseID: VoiceLeaseID = VoiceLeaseID()
+  ) -> VoiceOutputDecision {
+    guard activeTurnID == turnID else { return .staleTurn }
+    if let activeLease = activeTurn?.activeLease {
+      if activeLease.turnID == turnID, activeLease.lane == lane {
+        return .acquired(activeLease)
+      }
+      return .denied(active: activeLease)
+    }
+    guard let identity = reserveEffectIdentity() else { return .staleTurn }
+    let lease = VoiceOutputLease(
+      id: leaseID,
+      turnID: turnID,
+      lane: lane,
+      identity: identity)
+    send(.playbackStartedScoped(turnID: turnID, lease: lease))
+    return activeTurn?.activeLease == lease ? .acquired(lease) : .staleTurn
+  }
+
+  @discardableResult
+  func releaseOutput(_ lease: VoiceOutputLease) -> Bool {
+    guard activeTurn?.activeLease == lease else { return false }
+    send(
+      .playbackDrainedScoped(
+        turnID: lease.turnID,
+        identity: lease.identity,
+        leaseID: lease.id))
+    return true
+  }
 
   func configure(barState: FloatingControlBarState) {
-    presenter = PTTBarPresenter(barState: barState)
+    presenter = FloatingControlBarState.PTTBarPresenter(barState: barState)
     presenter?.apply(projection)
   }
 
@@ -142,13 +273,45 @@ final class VoiceTurnCoordinator {
     handler?(model)
   }
 
+  func observeSnapshots(_ handler: @escaping SnapshotHandler) -> VoiceTurnSnapshotObservation {
+    let id = UUID()
+    snapshotObservers[id] = handler
+    handler(model)
+    return VoiceTurnSnapshotObservation { [weak self] in
+      self?.snapshotObservers.removeValue(forKey: id)
+    }
+  }
+
   @discardableResult
-  func begin(intent: VoiceTurnIntent, id: VoiceTurnID = VoiceTurnID()) -> VoiceTurnID {
+  func begin(
+    intent: VoiceTurnIntent,
+    id: VoiceTurnID = VoiceTurnID(),
+    ownerID: String? = nil
+  ) -> VoiceTurnID {
     if model.turn?.phase.isTerminal == true {
       send(.reset)
     }
-    send(.start(turnID: id, intent: intent))
+    send(.start(turnID: id, ownerID: ownerID ?? ownerIDProvider(), intent: intent))
     return id
+  }
+
+  /// Returns the immutable owner captured at turn start only while that owner
+  /// remains the authenticated runtime owner. A mismatch terminalizes the turn
+  /// before any new provider, tool, or journal effect can be dispatched.
+  @discardableResult
+  func requireCurrentOwner(for turnID: VoiceTurnID) -> String? {
+    guard let turn = activeTurn, turn.id == turnID else { return nil }
+    if turn.ownerID == nil, !requiresAuthenticatedOwner {
+      return "unowned-test-turn"
+    }
+    guard let ownerID = turn.ownerID, ownerIsCurrent(ownerID) else {
+      if activeTurnID == turnID {
+        log("VoiceTurnCoordinator: cancelling turn after authenticated owner changed")
+        send(.cancel(turnID: turnID, reason: .cancelled))
+      }
+      return nil
+    }
+    return ownerID
   }
 
   func send(_ event: VoiceTurnEvent) {
@@ -183,6 +346,9 @@ final class VoiceTurnCoordinator {
     process(reduction.effects)
     presenter?.apply(projection)
     snapshotHandler?(model)
+    for observer in snapshotObservers.values {
+      observer(model)
+    }
   }
 
   func timelineSnapshot() -> [VoiceTurnTimelineEntry] {
@@ -191,6 +357,21 @@ final class VoiceTurnCoordinator {
 
   func refreshPresentation() {
     presenter?.apply(projection)
+  }
+
+  /// Non-production visual harness. Debug presentation still enters through a
+  /// turn-scoped reducer event, so it cannot overwrite a real voice turn or
+  /// mutate floating-bar state independently.
+  @discardableResult
+  func applyDebugPresentationState(_ state: VoiceTurnDebugPresentationState) -> Bool {
+    guard AppBuild.isNonProduction else { return false }
+    if let activeTurn, activeTurn.intent != .automation { return false }
+    let turnID = activeTurnID ?? begin(intent: .automation)
+    send(.debugPresentationChanged(turnID: turnID, state: state))
+    if state == .idle {
+      return activeTurnID == nil && projection == .idle
+    }
+    return activeTurn?.intent == .automation && projection == state.projection
   }
 
   /// Non-PTT chat playback shares the floating pill, but it must not bypass the
@@ -218,6 +399,11 @@ final class VoiceTurnCoordinator {
 
   private func process(_ effects: [VoiceTurnEffect]) {
     for effect in effects {
+      if let turnID = Self.ownerFencedTurnID(for: effect),
+        requireCurrentOwner(for: turnID) == nil
+      {
+        continue
+      }
       switch effect {
       case .scheduleDeadline(let turnID, let deadline, let interval):
         schedule(turnID: turnID, deadline: deadline, interval: interval)
@@ -253,6 +439,21 @@ final class VoiceTurnCoordinator {
       default:
         effectHandler?(effect)
       }
+    }
+  }
+
+  /// Effects that may start a new provider/query/tool/journal operation require
+  /// the turn's pinned owner. Cleanup effects still run after an account change
+  /// so capture/playback cannot be left active.
+  private static func ownerFencedTurnID(for effect: VoiceTurnEffect) -> VoiceTurnID? {
+    switch effect {
+    case .finalizeCapturedInput(let turnID), .activateHub(let turnID, _),
+      .finalizeJournal(let turnID, _), .fallbackToTranscription(let turnID, _):
+      return turnID
+    case .scheduleDeadline, .cancelDeadline, .cancelAllDeadlines, .stopCapture,
+      .transcriptionFinalizationTimedOut, .cancelHub, .stopPlayback, .terminal,
+      .staleEventDropped, .invalidTransition:
+      return nil
     }
   }
 
@@ -315,6 +516,7 @@ final class VoiceTurnCoordinator {
     case .finalizing: return "finalizing"
     case .awaitingResponse: return "awaiting_response"
     case .awaitingTools: return "awaiting_tools"
+    case .awaitingJournal: return "awaiting_journal"
     case .playing(let lane): return "playing_\(lane.rawValue)"
     case .terminal(let reason): return "terminal_\(reason.rawValue)"
     }
@@ -330,5 +532,10 @@ final class VoiceTurnCoordinator {
     case .deepgramLive: return "deepgram_live"
     case .agentFollowUp: return "agent_follow_up"
     }
+  }
+
+  private static func isHubRoute(_ route: VoiceTurnRoute) -> Bool {
+    if case .hub = route { return true }
+    return route == .hubWarmWait
   }
 }
