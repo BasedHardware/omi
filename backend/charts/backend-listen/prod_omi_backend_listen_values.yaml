@@ -82,6 +82,10 @@ ingress:
   #      - chart-example.local
 
 env:
+  - name: DESKTOP_UPDATE_POINTERS_MODE
+    value: "primary"
+  - name: DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE
+    value: "0.01"
   - name: USE_VERTEX_AI
     value: "true"
   - name: GEMINI_API_KEY
@@ -295,6 +299,10 @@ env:
         key: STT_PRERECORDED_MODEL
   - name: HOSTED_PARAKEET_API_URL
     value: "http://prod-omi-parakeet.prod-omi-backend.svc.cluster.local:8080"
+  - name: HOSTED_TRANSLATION_API_URL
+    value: "http://prod-omi-nllb-translation.prod-omi-backend.svc.cluster.local:8080"
+  - name: TRANSLATION_SERVICE_MODELS
+    value: "nllb,google"
   - name: ENCRYPTION_SECRET
     valueFrom:
       secretKeyRef:
@@ -433,6 +441,26 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: MCP_OAUTH_PUBLIC_REDIRECT_URIS
+  - name: MCP_OAUTH_CLAUDE_CLIENT_ID
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MCP_OAUTH_CLAUDE_CLIENT_ID
+  - name: MCP_OAUTH_CLAUDE_CLIENT_NAME
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MCP_OAUTH_CLAUDE_CLIENT_NAME
+  - name: MCP_OAUTH_CLAUDE_REDIRECT_URIS
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MCP_OAUTH_CLAUDE_REDIRECT_URIS
+  - name: MCP_OAUTH_CLIENTS_JSON
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MCP_OAUTH_CLIENTS_JSON
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious

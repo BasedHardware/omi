@@ -39,6 +39,8 @@ def users_db():
 
     google_exceptions_stub.NotFound = NotFound
 
+    firestore_stub.transactional = lambda func: func
+
     fv1_stub = ModuleType("google.cloud.firestore_v1")
     fv1_stub.FieldFilter = MagicMock()
     fv1_stub.transactional = lambda func: func

@@ -43,14 +43,34 @@ def test_chat_completions_success_uses_lane_model_and_hides_route_metadata(monke
     assert 'selected_provider' not in body
     assert 'selected_route_artifact_id' not in body
     # The checked-in active route is in shadow rollout (percent 0), so live
-    # traffic is served by the last-known-good route. The LKG primary matches
-    # the legacy `chat_extraction` model (gpt-4.1-mini) so enabling the pilot
-    # is a no-user-visible behavior match while shadow-only.
-    assert provider.calls[0].model == 'gpt-4.1-mini'
-    assert provider.calls[0].request['model'] == 'gpt-4.1-mini'
+    # traffic is served by the last-known-good route. The LKG primary uses the
+    # gateway-only chat_extraction policy (gpt-5.4-nano), leaving the legacy
+    # product route unchanged while shadow-only.
+    assert provider.calls[0].model == 'gpt-5.4-nano'
+    assert provider.calls[0].request['model'] == 'gpt-5.4-nano'
     assert provider.calls[0].request['temperature'] == 0
     assert provider.calls[0].request['max_completion_tokens'] == 64
     assert 'metadata' not in provider.calls[0].request
+
+
+def test_chat_completions_uses_forwarded_byok_credentials(monkeypatch):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    provider = FakeChatCompletionProvider()
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    try:
+        response = TestClient(app).post(
+            '/v1/chat/completions',
+            json=valid_request(),
+            headers={
+                **auth_headers(),
+                'X-Omi-Byok-OpenAI-Key': 'sk-user-byok',
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert provider.calls[0].credential_mode == 'byok'
 
 
 def test_chat_completions_forwards_action_item_extraction_strict_schema(monkeypatch):
@@ -72,7 +92,17 @@ def test_chat_completions_forwards_action_item_extraction_strict_schema(monkeypa
     assert forwarded_schema['required'] == ['action_items']
     action_item_schema = forwarded_schema['$defs']['ExtractedActionItem']
     assert action_item_schema['additionalProperties'] is False
-    assert action_item_schema['required'] == ['description', 'due_at']
+    assert action_item_schema['required'] == [
+        'description',
+        'due_at',
+        'capture_kind',
+        'capture_confidence',
+        'ownership_confidence',
+        'capture_owner',
+        'concrete_deliverable',
+        'candidate_action',
+        'target_task_id',
+    ]
     assert 'default' not in action_item_schema['properties']['due_at']
 
 

@@ -20,10 +20,14 @@ def _load_playback(request):
     cloud_tasks_module.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
     storage_module = ModuleType("utils.other.storage")
     for name in (
+        "compute_audio_files_fingerprint",
         "download_audio_chunks_and_merge",
         "download_legacy_merged_wav",
         "download_playback_artifact",
+        "enqueue_conversation_artifact_build",
         "enqueue_conversation_audio_merge",
+        "get_conversation_playback_signed_url",
+        "get_conversation_playback_unavailable_fingerprint",
         "get_merged_audio_signed_url",
         "get_or_create_merged_audio",
         "get_playback_artifact_signed_url",
@@ -96,6 +100,16 @@ def test_artifact_urls_shapes_and_enqueue(monkeypatch):
         'enqueue_conversation_audio_merge',
         lambda uid, conversation_id, audio_files, caller: enqueues.append((uid, conversation_id, audio_files, caller)),
     )
+    conversation_enqueues = []
+    monkeypatch.setattr(playback, 'compute_audio_files_fingerprint', lambda audio_files: 'fp1')
+    monkeypatch.setattr(playback, 'get_conversation_playback_unavailable_fingerprint', lambda uid, cid: None)
+    monkeypatch.setattr(
+        playback,
+        'enqueue_conversation_artifact_build',
+        lambda uid, conversation_id, fingerprint, caller: conversation_enqueues.append(
+            (uid, conversation_id, fingerprint, caller)
+        ),
+    )
 
     result = playback.get_audio_signed_urls(
         'u',
@@ -127,9 +141,11 @@ def test_artifact_urls_shapes_and_enqueue(monkeypatch):
             {"id": "gone", "status": "unavailable", "signed_url": None, "duration": 3},
             {"id": "pending", "status": "pending", "signed_url": None, "duration": 4},
         ],
+        "conversation_audio": {"status": "pending", "signed_url": None, "spans": []},
         "poll_after_ms": playback.AUDIO_URLS_POLL_AFTER_MS,
     }
     assert enqueues == [('u', 'c', [{'id': 'pending', 'duration': 4}], 'sync_urls')]
+    assert conversation_enqueues == [('u', 'c', 'fp1', 'sync_urls')]
 
 
 def test_inline_urls_first_sync_remaining_background_and_no_content_type(monkeypatch):

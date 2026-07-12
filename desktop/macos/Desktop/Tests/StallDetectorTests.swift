@@ -31,6 +31,16 @@ final class StallDetectorTests: XCTestCase {
     XCTAssertEqual(transitions, [.interEvent(from: .running, to: .slow)])
   }
 
+  func testGapWellBeyondStalledStaysStalled() async {
+    // A persistent stall (e.g. the full 180s until ChatProvider's send watchdog
+    // fires, CHAT-02) must remain .stalled, not decay back to running.
+    let detector = StallDetector(thresholds: thresholds, startedAtMs: 0)
+    _ = await detector.tick(atMs: thresholds.stalledGapMs)
+    _ = await detector.tick(atMs: 185_000)
+    let state = await detector.interEventState
+    XCTAssertEqual(state, .stalled)
+  }
+
   func testGapAtStalledThresholdPromotesToStalled() async {
     let detector = StallDetector(thresholds: thresholds, startedAtMs: 0)
     let transitions = await detector.tick(atMs: thresholds.stalledGapMs)
@@ -160,6 +170,20 @@ final class StallDetectorTests: XCTestCase {
       transitions.contains(.tool(id: "t1", from: .running, to: .slow)),
       "duplicate starts should not reset the original per-tool timer"
     )
+  }
+
+  func testToolIdsExceedingReportsOnlyOverdueInFlightTools() async {
+    let detector = StallDetector(thresholds: thresholds, startedAtMs: 0)
+    _ = await detector.step(kind: .toolStarted(id: "slow"), atMs: 0)
+    _ = await detector.step(kind: .toolStarted(id: "fresh"), atMs: 50_000)
+
+    let firstOverdue = await detector.toolIdsExceeding(durationMs: 90_000, atMs: 90_000)
+    XCTAssertEqual(firstOverdue, ["slow"])
+
+    _ = await detector.step(kind: .toolCompleted(id: "slow"), atMs: 90_001)
+    let remainingOverdue = await detector.toolIdsExceeding(durationMs: 90_000, atMs: 200_000)
+    XCTAssertTrue(remainingOverdue.contains("fresh"))
+    XCTAssertFalse(remainingOverdue.contains("slow"))
   }
 
   // MARK: - Threshold guard

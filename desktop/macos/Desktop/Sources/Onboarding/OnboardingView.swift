@@ -29,6 +29,7 @@ struct OnboardingView: View {
   @AppStorage("onboardingNotificationPermissionStepRemoved") private
     var hasRemovedNotificationPermissionStep = false
   @AppStorage("onboardingBYOKStepInserted") private var hasInsertedBYOKStep = false
+  @AppStorage("onboardingBYOKStepRemoved") private var hasRemovedBYOKStep = false
   @StateObject private var introCoordinator = OnboardingPagedIntroCoordinator()
   @StateObject private var graphViewModel = MemoryGraphViewModel()
 
@@ -81,11 +82,10 @@ struct OnboardingView: View {
           hasInsertedExportsStep: hasInsertedExportsStep,
           hasInsertedSecondBrainStep: hasInsertedSecondBrainStep,
           hasRemovedResearchStep: hasRemovedResearchStep,
-          hasInsertedBYOKStep: hasInsertedBYOKStep
+          hasInsertedBYOKStep: hasInsertedBYOKStep,
+          hasRemovedBYOKStep: hasRemovedBYOKStep,
+          hasRemovedNotificationPermissionStep: hasRemovedNotificationPermissionStep
         )
-        if !hasRemovedNotificationPermissionStep, currentStep >= 8 {
-          currentStep -= 1
-        }
       }
       hasMigratedPagedIntro = true
       hasMigratedOnboardingSteps = true
@@ -101,6 +101,7 @@ struct OnboardingView: View {
       hasRemovedResearchStep = true
       hasRemovedNotificationPermissionStep = true
       hasInsertedBYOKStep = true
+      hasRemovedBYOKStep = true
       introCoordinator.prepare(appState: appState)
     }
     .task {
@@ -440,27 +441,14 @@ struct OnboardingView: View {
           },
           onForceComplete: handleOnboardingComplete
         )
-      } else if currentStep == 17 {
-        OnboardingBYOKStepView(
-          graphViewModel: graphViewModel,
-          stepIndex: 17,
-          totalSteps: OnboardingFlow.introStepCount,
-          onContinue: {
-            currentStep = 18
-          },
-          onSkip: {
-            currentStep = 18
-          },
-          onForceComplete: handleOnboardingComplete
-        )
       } else {
         OnboardingTasksStepView(
           onComplete: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 18, stepName: "Tasks")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 17, stepName: "Tasks")
             handleOnboardingComplete()
           },
           onSkip: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 18, stepName: "Tasks_Skipped")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 17, stepName: "Tasks_Skipped")
             handleOnboardingComplete()
           },
           onForceComplete: handleOnboardingComplete
@@ -487,7 +475,11 @@ struct OnboardingView: View {
 
     // Clean up onboarding state and persisted chat data
     chatProvider.isOnboarding = false
+    ChatToolExecutor.onboardingAppState = nil
     OnboardingChatPersistence.clear()
+    ChatDraftStore.shared.clear(.onboardingMain)
+    ChatDraftStore.shared.clear(.onboardingFloating)
+    FloatingControlBarManager.shared.barState?.switchAIDraft(to: .floatingMain)
 
     if let onComplete = onComplete {
       onComplete()

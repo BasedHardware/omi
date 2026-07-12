@@ -97,6 +97,15 @@ actor StallDetector {
     toolStates
   }
 
+  /// IDs of tools that have exceeded a hard execution budget.  The caller owns
+  /// the recovery action (for example, interrupting the bridge); the detector
+  /// remains pure and does not perform side effects itself.
+  func toolIdsExceeding(durationMs: Int, atMs: Int) -> [String] {
+    toolStartedAtMs.compactMap { id, startedAt in
+      atMs - startedAt >= durationMs ? id : nil
+    }
+  }
+
   // MARK: - Observation
 
   /// Record an event at simulated time `atMs` and return any state

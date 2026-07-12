@@ -114,8 +114,10 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["focus", "distraction", "notify focus"], section: .notifications, icon: "bell",
       settingId: "notifications.focus"),
     SettingsSearchItem(
-      name: "Task Notifications", subtitle: "Show notification when a task is extracted",
-      keywords: ["task", "action item", "notify task"], section: .notifications, icon: "bell",
+      name: "Task Notifications",
+      subtitle: "Allow interruptions when a task needs attention",
+      keywords: ["task", "action item", "notify task", "interruption", "proactive"],
+      section: .notifications, icon: "bell",
       settingId: "notifications.task"),
     SettingsSearchItem(
       name: "Insight Notifications", subtitle: "Show notification when an insight is generated",
@@ -266,6 +268,11 @@ struct SettingsSearchItem: Identifiable {
       name: "Typed Questions", subtitle: "Speak replies aloud for typed floating-bar questions",
       keywords: ["typed", "text", "speech", "tts", "audio answers"], section: .floatingBar,
       icon: "sparkles", settingId: "floatingbar.typedvoiceanswers"),
+    SettingsSearchItem(
+      name: "Screen Sharing in Chat",
+      subtitle: "Let Ask Omi capture your screen when you ask about it",
+      keywords: ["screenshot", "screen", "capture", "share screen", "vision", "see my screen"],
+      section: .floatingBar, icon: "camera.viewfinder", settingId: "floatingbar.screenshare"),
     SettingsSearchItem(
       name: "Voice Speed", subtitle: "Adjust the playback speed for voice replies",
       keywords: ["voice speed", "speech speed", "playback speed", "tts speed"],

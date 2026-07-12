@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/geolocation.dart';
+import 'package:omi/utils/audio/audio_timeline_mapper.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
@@ -50,6 +51,7 @@ enum ConversationSource {
   phone,
   desktop,
   limitless,
+  rayban_meta,
 }
 
 class ConversationExternalData {
@@ -271,6 +273,33 @@ TranscriptSegment _transcriptSegmentFromGenerated(wire.GeneratedTranscriptSegmen
   return TranscriptSegment.fromGenerated(generated);
 }
 
+/// Conversation-level dense playback artifact stamp: one MP3 per conversation
+/// (inter-part gaps collapsed) + the spans manifest for wall-clock mapping.
+class ConversationAudioInfo {
+  final double duration; // wall-clock seconds
+  final double capturedDuration; // seconds of actual audio
+  final List<ConversationAudioSpan> spans;
+
+  ConversationAudioInfo({required this.duration, required this.capturedDuration, this.spans = const []});
+
+  factory ConversationAudioInfo.fromGenerated(wire.GeneratedConversationAudio generated) {
+    return ConversationAudioInfo(
+      duration: generated.duration,
+      capturedDuration: generated.capturedDuration,
+      spans: generated.spans
+          .map(
+            (s) => ConversationAudioSpan(
+              fileId: s.fileId,
+              wallOffset: s.wallOffset,
+              artifactOffset: s.artifactOffset,
+              len: s.len,
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
 class ServerConversation {
   final String id;
   final DateTime createdAt;
@@ -282,6 +311,7 @@ class ServerConversation {
   final Geolocation? geolocation;
   final List<ConversationPhoto> photos;
   final List<AudioFile> audioFiles;
+  final ConversationAudioInfo? conversationAudio;
 
   final List<AppResponse> appResults;
   final List<String> suggestedSummarizationApps;
@@ -316,6 +346,7 @@ class ServerConversation {
     this.geolocation,
     this.photos = const [],
     this.audioFiles = const [],
+    this.conversationAudio,
     this.discarded = false,
     this.deleted = false,
     this.source,
@@ -363,6 +394,9 @@ class ServerConversation {
           geolocation ?? (generated.geolocation == null ? null : Geolocation.fromGenerated(generated.geolocation!)),
       photos: generated.photos.map(ConversationPhoto.fromGenerated).toList(),
       audioFiles: generated.audioFiles.map(AudioFile.fromGenerated).toList(),
+      conversationAudio: generated.conversationAudio == null
+          ? null
+          : ConversationAudioInfo.fromGenerated(generated.conversationAudio!),
       discarded: generated.discarded,
       source:
           generated.source != null ? ConversationSource.values.asNameMap()[generated.source] : ConversationSource.omi,
@@ -460,6 +494,7 @@ class ServerConversation {
   String getTag() {
     if (source == ConversationSource.screenpipe) return 'Screenpipe';
     if (source == ConversationSource.openglass) return 'OmiGlass';
+    if (source == ConversationSource.rayban_meta) return 'Ray-Ban Meta';
     if (source == ConversationSource.sdcard) return 'SD Card';
     if (discarded) return 'Discarded';
     if (structured.category.isEmpty) return 'Other';
@@ -595,6 +630,9 @@ class SyncJobStatusResponse {
   final int failedSegments;
   final SyncLocalFilesResponse? result;
   final String? error;
+  final String? lane;
+  final String? reasonCode;
+  final int? retryAfter;
 
   SyncJobStatusResponse({
     required this.jobId,
@@ -605,6 +643,9 @@ class SyncJobStatusResponse {
     this.failedSegments = 0,
     this.result,
     this.error,
+    this.lane,
+    this.reasonCode,
+    this.retryAfter,
   });
 
   bool get isTerminal => status == 'completed' || status == 'partial_failure' || status == 'failed';
@@ -612,7 +653,20 @@ class SyncJobStatusResponse {
   bool get isPartialFailure => status == 'partial_failure';
 
   factory SyncJobStatusResponse.fromJson(Map<String, dynamic> json) {
-    return SyncJobStatusResponse.fromGenerated(wire.GeneratedSyncJobStatusResponse.fromJson(json));
+    final generated = wire.GeneratedSyncJobStatusResponse.fromJson(json);
+    return SyncJobStatusResponse(
+      jobId: generated.jobId,
+      status: generated.status,
+      totalSegments: generated.totalSegments,
+      processedSegments: generated.processedSegments,
+      successfulSegments: generated.successfulSegments,
+      failedSegments: generated.failedSegments,
+      result: generated.result == null ? null : SyncLocalFilesResponse.fromGenerated(generated.result!),
+      error: generated.error,
+      lane: json['lane'] as String?,
+      reasonCode: json['reason_code'] as String?,
+      retryAfter: (json['retry_after'] as num?)?.toInt(),
+    );
   }
 
   factory SyncJobStatusResponse.fromGenerated(wire.GeneratedSyncJobStatusResponse generated) {

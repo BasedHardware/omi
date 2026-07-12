@@ -273,9 +273,11 @@ class AudioCaptureService: @unchecked Sendable {
         // fall back to the system default instead of pinning capture to a stale device.
         let inputDeviceID = try resolveInputDeviceID()
         self.deviceID = inputDeviceID
+        registerActiveCapture(deviceID: inputDeviceID)
 
         // 2. Get device stream format
         guard let streamFormat = getStreamFormat(for: deviceID) else {
+            unregisterActiveCapture()
             throw AudioCaptureError.noInputAvailable
         }
 
@@ -289,12 +291,14 @@ class AudioCaptureService: @unchecked Sendable {
             channels: 1,
             interleaved: false
         ) else {
+            unregisterActiveCapture()
             throw AudioCaptureError.converterCreationFailed
         }
         self.inputFormat = inputFmt
 
         // 4. Create target format: Float32 at 16kHz mono
         guard let targetFmt = AVAudioFormat(standardFormatWithSampleRate: targetSampleRate, channels: 1) else {
+            unregisterActiveCapture()
             throw AudioCaptureError.converterCreationFailed
         }
         self.targetFormat = targetFmt
@@ -303,6 +307,7 @@ class AudioCaptureService: @unchecked Sendable {
 
         // 5. Create audio converter for resampling
         guard let converter = AVAudioConverter(from: inputFmt, to: targetFmt) else {
+            unregisterActiveCapture()
             throw AudioCaptureError.converterCreationFailed
         }
         self.audioConverter = converter
@@ -315,6 +320,7 @@ class AudioCaptureService: @unchecked Sendable {
         }
 
         guard ioProcStatus == noErr, let validProcID = procID else {
+            unregisterActiveCapture()
             throw AudioCaptureError.engineStartFailed(
                 NSError(domain: "AudioCapture", code: Int(ioProcStatus),
                         userInfo: [NSLocalizedDescriptionKey: "Failed to create IOProc: \(ioProcStatus)"])
@@ -327,6 +333,7 @@ class AudioCaptureService: @unchecked Sendable {
         guard startStatus == noErr else {
             AudioDeviceDestroyIOProcID(deviceID, validProcID)
             self.ioProcID = nil
+            unregisterActiveCapture()
             throw AudioCaptureError.engineStartFailed(
                 NSError(domain: "AudioCapture", code: Int(startStatus),
                         userInfo: [NSLocalizedDescriptionKey: "Failed to start device: \(startStatus)"])
@@ -334,7 +341,6 @@ class AudioCaptureService: @unchecked Sendable {
         }
 
         isCapturing = true
-        registerActiveCapture(deviceID: deviceID)
         log("AudioCapture: Started capturing")
 
         // 8. Install property listeners for device changes
@@ -911,6 +917,12 @@ class AudioCaptureService: @unchecked Sendable {
     private static let maxRetries = 3
 
     private func reconfigureAfterChange(retryCount: Int) {
+        guard isCapturing else {
+            isReconfiguring = false
+            unregisterActiveCapture()
+            return
+        }
+
         let newDeviceID: AudioDeviceID
         do {
             newDeviceID = try resolveInputDeviceID()
@@ -921,6 +933,7 @@ class AudioCaptureService: @unchecked Sendable {
         }
 
         self.deviceID = newDeviceID
+        registerActiveCapture(deviceID: newDeviceID)
 
         // Get new format
         guard let streamFormat = getStreamFormat(for: deviceID) else {
@@ -985,7 +998,6 @@ class AudioCaptureService: @unchecked Sendable {
 
         updateDefaultDeviceListener()
         installDeviceFormatListener()
-        registerActiveCapture(deviceID: deviceID)
 
         log("AudioCapture: Restarted with new configuration")
         isReconfiguring = false
@@ -1001,6 +1013,8 @@ class AudioCaptureService: @unchecked Sendable {
         } else {
             logError("AudioCapture: Giving up after \(retryCount + 1) attempts")
             isReconfiguring = false
+            isCapturing = false
+            unregisterActiveCapture()
         }
     }
 

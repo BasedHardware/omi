@@ -1,4 +1,5 @@
 import datetime
+import hashlib
 import io
 import json
 import os
@@ -1218,6 +1219,108 @@ def enqueue_conversation_audio_merge(
             )
         except Exception as e:
             logger.error(f'audio_merge: enqueue failed conv={conversation_id} file={audio_file_id}: {e}')
+
+
+# ----------------------------------------------------------------------------
+# Conversation-level playback artifact: ONE dense MP3 per conversation
+# (playback/{uid}/{conversation_id}/conversation.mp3) with only captured audio;
+# inter-part gaps collapsed. The spans manifest + audio_files fingerprint are
+# stamped on the conversation doc (conversation_audio). Same 30-day lifecycle.
+# 'conversation' cannot collide with per-part names: audio_file ids are UUIDv4.
+# ----------------------------------------------------------------------------
+
+CONVERSATION_ARTIFACT_NAME = 'conversation'
+
+
+def compute_audio_files_fingerprint(audio_files: List[Dict[str, Any]]) -> str:
+    """Content fingerprint of a conversation's audio_files (id + chunk count +
+    last chunk timestamp per part, order-insensitive). Stamped on the doc at
+    build time; a mismatch with the current audio_files means the artifact is
+    stale. Also embedded in the Cloud Tasks task name so rebuilds after late
+    chunks aren't swallowed by named-task dedup."""
+    parts = sorted(
+        [
+            [af['id'], len(af['chunk_timestamps']), round(sorted(af['chunk_timestamps'])[-1], 3)]
+            for af in audio_files
+            if af.get('id') and af.get('chunk_timestamps')
+        ],
+        key=lambda p: p[0],
+    )
+    return hashlib.sha1(json.dumps(parts).encode()).hexdigest()[:12]
+
+
+def maybe_invalidate_conversation_playback(
+    uid: str,
+    conversation_id: str,
+    conversation: Optional[Dict[str, Any]],
+    audio_files: List[Dict[str, Any]],
+    caller: str,
+) -> None:
+    """Re-enqueue the conversation artifact build if a stamped artifact went
+    stale (audio_files changed). No stamp -> no-op, so live-conversation batch
+    flushes never churn rebuilds; the first build happens at completion."""
+    stamp = (conversation or {}).get('conversation_audio') or {}
+    stamped = stamp.get('audio_files_fingerprint')
+    if not stamped:
+        return
+    fingerprint = compute_audio_files_fingerprint(audio_files)
+    if fingerprint != stamped:
+        enqueue_conversation_artifact_build(uid, conversation_id, fingerprint, caller)
+
+
+def _conversation_playback_blob(uid: str, conversation_id: str):
+    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+    return bucket.blob(f'{PLAYBACK_ARTIFACT_PREFIX}/{uid}/{conversation_id}/{CONVERSATION_ARTIFACT_NAME}.mp3')
+
+
+def get_conversation_playback_signed_url(uid: str, conversation_id: str):
+    blob = _conversation_playback_blob(uid, conversation_id)
+    if not blob.exists():
+        return None
+    return _get_signed_url(blob, 60)
+
+
+def upload_conversation_playback_artifact(uid: str, conversation_id: str, mp3_data: bytes) -> None:
+    blob = _conversation_playback_blob(uid, conversation_id)
+    blob.upload_from_string(mp3_data, content_type='audio/mpeg')
+
+
+def _conversation_playback_unavailable_blob(uid: str, conversation_id: str):
+    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+    return bucket.blob(f'{PLAYBACK_ARTIFACT_PREFIX}/{uid}/{conversation_id}/{CONVERSATION_ARTIFACT_NAME}.unavailable')
+
+
+def mark_conversation_playback_unavailable(uid: str, conversation_id: str, fingerprint: str, reason: str) -> None:
+    """Marker content carries the fingerprint it was written for: a marker for a
+    stale fingerprint is ignored on read (late chunks may fix a chunks_missing verdict)."""
+    blob = _conversation_playback_unavailable_blob(uid, conversation_id)
+    blob.upload_from_string(f'{fingerprint}:{reason}', content_type='text/plain')
+
+
+def get_conversation_playback_unavailable_fingerprint(uid: str, conversation_id: str) -> Optional[str]:
+    blob = _conversation_playback_unavailable_blob(uid, conversation_id)
+    try:
+        content = blob.download_as_bytes().decode()
+    except BlobNotFound:
+        return None
+    return content.split(':', 1)[0] if content else None
+
+
+def enqueue_conversation_artifact_build(uid: str, conversation_id: str, fingerprint: str, caller: str) -> None:
+    """Enqueue the conversation-level artifact build (named-task deduped on the
+    fingerprint). Failures are swallowed: the next /urls poll re-enqueues."""
+    try:
+        enqueue_audio_merge_job(
+            {
+                'schema_version': 2,
+                'uid': uid,
+                'conversation_id': conversation_id,
+                'fingerprint': fingerprint,
+                'caller': caller,
+            }
+        )
+    except Exception as e:
+        logger.error(f'audio_merge: conversation enqueue failed conv={conversation_id}: {e}')
 
 
 def download_legacy_merged_wav(uid: str, conversation_id: str, audio_file_id: str):

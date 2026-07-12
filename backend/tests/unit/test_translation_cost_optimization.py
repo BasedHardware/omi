@@ -1100,3 +1100,47 @@ class TestTranslationCoordinatorExtended:
         # Should have gone through classification (not mono_gate_skips)
         # This may still get mono_gate_skips=0 and classify_skips=1 if probe triggered
         assert total_classified > 0 or coord.metrics['mono_gate_skips'] > 0
+
+    @pytest.mark.asyncio
+    async def test_flush_batch_passes_source_language(self):
+        """_flush_batch should pass source_language to translate_units_batch."""
+        cb = AsyncMock()
+        svc = MagicMock(spec=TranslationService)
+        svc.translate_units_batch.return_value = [("seg1", "Hola", "en")]
+        coord = TranslationCoordinator(
+            target_language='es',
+            translation_service=svc,
+            on_translation_ready=cb,
+            source_language='en',
+        )
+
+        state = SegmentState(segment_id="seg1")
+        state.version = 1
+        state.latest_text = "Hello"
+        coord._segment_states["seg1"] = state
+        coord._batch_buffer.append(("seg1", "Hello", "conv1", 1))
+
+        with patch.object(_coord_mod, 'should_persist_translation', return_value=True):
+            await coord._flush_batch()
+
+        call_kwargs = svc.translate_units_batch.call_args
+        assert call_kwargs[1]['source_language'] == 'en'
+
+    @pytest.mark.asyncio
+    async def test_flush_batch_default_source_language_empty(self):
+        """Default coordinator should pass source_language='' to translate_units_batch."""
+        cb = AsyncMock()
+        coord, svc, _ = self._make_coordinator(target='es', callback=cb)
+        svc.translate_units_batch.return_value = [("seg1", "Hola", "en")]
+
+        state = SegmentState(segment_id="seg1")
+        state.version = 1
+        state.latest_text = "Hello"
+        coord._segment_states["seg1"] = state
+        coord._batch_buffer.append(("seg1", "Hello", "conv1", 1))
+
+        with patch.object(_coord_mod, 'should_persist_translation', return_value=True):
+            await coord._flush_batch()
+
+        call_kwargs = svc.translate_units_batch.call_args
+        assert call_kwargs[1]['source_language'] == ''

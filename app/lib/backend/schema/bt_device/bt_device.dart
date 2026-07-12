@@ -184,7 +184,7 @@ int mapCodecToBitDepth(BleAudioCodec codec) {
   }
 }
 
-enum DeviceType { omi, openglass, appleWatch, plaud, bee, fieldy, friendPendant, limitless }
+enum DeviceType { omi, openglass, appleWatch, plaud, bee, fieldy, friendPendant, limitless, raybanMeta }
 
 // Legacy index order (before Frame was removed) — keep for backward-compatible deserialization.
 const List<String> _legacyDeviceTypeNames = [
@@ -197,6 +197,7 @@ const List<String> _legacyDeviceTypeNames = [
   'fieldy',
   'friendPendant',
   'limitless',
+  'raybanMeta',
 ];
 
 DeviceType _deviceTypeFromJson(dynamic raw) {
@@ -351,9 +352,23 @@ class BtDevice {
       return await _getDeviceInfoFromOmi(conn);
     } else if (type == DeviceType.appleWatch) {
       return await _getDeviceInfoFromAppleWatch(conn as AppleWatchDeviceConnection);
+    } else if (type == DeviceType.raybanMeta) {
+      return _getDeviceInfoFromRayBanMeta();
     } else {
       return await _getDeviceInfoFromOmi(conn);
     }
+  }
+
+  // The Meta Wearables toolkit doesn't expose firmware/hardware revisions, so
+  // static identity fields are all we can report.
+  BtDevice _getDeviceInfoFromRayBanMeta() {
+    return copyWith(
+      modelNumber: 'Ray-Ban Meta',
+      firmwareRevision: 'Unknown',
+      hardwareRevision: 'Unknown',
+      manufacturerName: 'Meta',
+      type: DeviceType.raybanMeta,
+    );
   }
 
   Future _getDeviceInfoFromOmi(DeviceConnection conn) async {
@@ -595,6 +610,7 @@ class BtDevice {
       case DeviceType.omi:
       case DeviceType.openglass:
       case DeviceType.appleWatch:
+      case DeviceType.raybanMeta:
         return ''; // No warning needed
     }
   }
@@ -632,23 +648,28 @@ class BtDevice {
       case DeviceType.omi:
       case DeviceType.openglass:
       case DeviceType.appleWatch:
+      case DeviceType.raybanMeta:
         return ''; // No warning needed
     }
   }
 
   // from json
   static fromJson(Map<String, dynamic> json) {
+    // Persisted values may be missing or mistyped (e.g. rssi stored as a
+    // String by an older app version) — never throw during deserialization.
+    final rawRssi = json['rssi'];
+    final rssi = rawRssi is int ? rawRssi : (rawRssi is num ? rawRssi.toInt() : int.tryParse('$rawRssi') ?? 0);
     return BtDevice(
-      name: json['name'],
-      id: json['id'],
+      name: json['name'] is String ? json['name'] : '',
+      id: json['id'] is String ? json['id'] : '',
       type: _deviceTypeFromJson(json['type']),
-      rssi: json['rssi'],
-      locator: json['locator'] != null ? DeviceLocator.fromJson(json['locator']) : null,
-      modelNumber: json['modelNumber'],
-      firmwareRevision: json['firmwareRevision'],
-      hardwareRevision: json['hardwareRevision'],
-      manufacturerName: json['manufacturerName'],
-      serialNumber: json['serialNumber'],
+      rssi: rssi,
+      locator: json['locator'] is Map<String, dynamic> ? DeviceLocator.fromJson(json['locator']) : null,
+      modelNumber: json['modelNumber'] is String ? json['modelNumber'] : null,
+      firmwareRevision: json['firmwareRevision'] is String ? json['firmwareRevision'] : null,
+      hardwareRevision: json['hardwareRevision'] is String ? json['hardwareRevision'] : null,
+      manufacturerName: json['manufacturerName'] is String ? json['manufacturerName'] : null,
+      serialNumber: json['serialNumber'] is String ? json['serialNumber'] : null,
     );
   }
 

@@ -50,6 +50,11 @@ struct SelectableMarkdown: View {
                 }
             }
         }
+        // Selection belongs on message bodies only. Applying `.textSelection(.enabled)`
+        // higher in the chat stack wraps every chrome `Text` (card headers, timestamps,
+        // tool summaries) in SwiftUI's SelectionOverlay and can infinite-loop layout
+        // via setFont → invalidateIntrinsicContentSize → GraphHost updates.
+        .textSelection(.enabled)
         .onChange(of: text) { _, newText in
             cachedSegments = Self.splitSegments(newText)
             attrCache.removeAll()

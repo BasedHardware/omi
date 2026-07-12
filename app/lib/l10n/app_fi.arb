@@ -1,5 +1,6 @@
 {
     "@@locale": "fi",
+    "sessionExpiredSignInAgain": "Istunto on vanhentunut — kirjaudu uudelleen.",
     "appTitle": "Omi",
     "conversationTab": "Keskustelu",
     "transcriptTab": "Litterointi",
@@ -3116,5 +3117,31 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "Riipuksen tallennustila on lähes täynnä — pidä sovellus auki synkronointia varten."
+    "pendantStorageAlmostFull": "Riipuksen tallennustila on lähes täynnä — pidä sovellus auki synkronointia varten.",
+    "connectRayBanMeta": "Yhdistä Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Käytä Ray-Ban Meta -laseja Omi-tallennuslaitteena keskusteluihin ja visuaaliseen kontekstiin. Omi avaa Meta AI -sovelluksen lasien yhdistämistä varten.",
+    "raybanMetaOpenMetaAI": "Yhdistä Meta AI:n kautta",
+    "raybanMetaWaitingForMetaAI": "Viimeistele yhdistäminen Meta AI -sovelluksessa ja palaa sitten tänne.",
+    "raybanMetaCheckAgain": "Tarkista uudelleen",
+    "raybanMetaAllowCamera": "Salli lasien kamera",
+    "raybanMetaCameraExplanation": "Omi käyttää lasiesi kameraa lisätäkseen valokuvia keskusteluihisi. Voit ohittaa tämän ja käyttää vain ääntä.",
+    "raybanMetaSkipForNow": "Ohita toistaiseksi",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Metan vain ääni -tila",
+    "raybanMetaAudioOnlyExplanation": "Tämä Omi-versio voi käyttää lasiesi mikrofonia Bluetoothin kautta. Valokuvien ottaminen vaatii Omin Meta-kehittäjäversion.",
+    "raybanMetaMusicPauseNote": "Puhelimesi musiikki keskeytyy, kun lasien mikrofoni on käytössä.",
+    "raybanMetaContinue": "Jatka",
+    "raybanMetaCapturePhoto": "Ota valokuva",
+    "raybanMetaPhotoRequested": "Valokuvaa pyydetty — se näkyy keskustelussasi.",
+    "raybanMetaMicrophoneReady": "Mikrofoni valmis",
+    "raybanMetaImageCaptureReady": "Kuvan kaappaus valmis",
+    "raybanMetaImageCaptureUnavailable": "Ei käytettävissä vain ääni -tilassa",
+    "raybanMetaCamera": "Kamera",
+    "errorConnectingRayBanMeta": "Virhe yhdistettäessä Ray-Ban Metaan: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

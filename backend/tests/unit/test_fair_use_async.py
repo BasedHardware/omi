@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import routers.fair_use_admin as fair_use_admin_mod
 import utils.fair_use as fair_use_mod
 from models.fair_use import SoftCapTrigger
 
@@ -245,6 +246,63 @@ class TestHardRestrictBoundary:
         assert fair_use_mod.is_hard_restricted('user1') is False
 
 
+class TestFairUseStatusRestrictionExpiry:
+    def setup_method(self):
+        _reset()
+        _fair_use_db.get_fair_use_state.reset_mock()
+        _fair_use_db.update_fair_use_state.reset_mock()
+
+    @staticmethod
+    def _dg_budget():
+        return {
+            'daily_limit_ms': 0,
+            'used_ms': 0,
+            'remaining_ms': 0,
+            'exhausted': False,
+            'resets_at': None,
+        }
+
+    def test_status_normalizes_naturally_expired_restriction_with_one_state_read(self):
+        _fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'restrict',
+            'restrict_until': datetime.utcnow() - timedelta(seconds=1),
+            'last_case_ref': 'FU-EXPIRED',
+        }
+
+        with patch.object(fair_use_admin_mod, 'fair_use_db', _fair_use_db), patch.object(
+            fair_use_admin_mod,
+            'get_rolling_speech_ms',
+            return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0},
+        ), patch.object(fair_use_admin_mod, 'get_dg_budget_status', return_value=self._dg_budget()):
+            result = fair_use_admin_mod.get_my_fair_use_status('user1')
+
+        assert result['stage'] == 'throttle'
+        assert 'temporarily reduced' in result['message']
+        _fair_use_db.get_fair_use_state.assert_called_once_with('user1')
+        _fair_use_db.update_fair_use_state.assert_called_once_with(
+            'user1', {'stage': 'throttle', 'restrict_until': None}
+        )
+
+    def test_status_preserves_active_restriction_with_one_state_read(self):
+        _fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'restrict',
+            'restrict_until': datetime.utcnow() + timedelta(days=1),
+            'last_case_ref': 'FU-ACTIVE',
+        }
+
+        with patch.object(fair_use_admin_mod, 'fair_use_db', _fair_use_db), patch.object(
+            fair_use_admin_mod,
+            'get_rolling_speech_ms',
+            return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0},
+        ), patch.object(fair_use_admin_mod, 'get_dg_budget_status', return_value=self._dg_budget()):
+            result = fair_use_admin_mod.get_my_fair_use_status('user1')
+
+        assert result['stage'] == 'restrict'
+        assert 'temporarily limited' in result['message']
+        _fair_use_db.get_fair_use_state.assert_called_once_with('user1')
+        _fair_use_db.update_fair_use_state.assert_not_called()
+
+
 class TestOverflowAndInvalidData:
     """Test handling of unexpected Redis data."""
 
@@ -259,7 +317,7 @@ class TestOverflowAndInvalidData:
         now = int(time.time())
         bucket = str((now - 3600) // 60)
 
-        _redis().zrangebyscore.return_value = [bucket.encode()]
+        _redis().zrangebyscore.side_effect = [[bucket.encode()], [], []]
         _redis().hmget.return_value = [None]
 
         result = fair_use_mod.get_rolling_speech_ms('user1')
@@ -282,7 +340,7 @@ class TestOverflowAndInvalidData:
         now = int(time.time())
         bucket = str((now - 60) // 60)
 
-        _redis().zrangebyscore.return_value = [bucket.encode()]
+        _redis().zrangebyscore.side_effect = [[bucket.encode()], [], []]
         _redis().hmget.return_value = [b'999999999999']  # ~277 hours
 
         result = fair_use_mod.get_rolling_speech_ms('user1')

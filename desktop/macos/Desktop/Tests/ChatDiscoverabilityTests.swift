@@ -101,6 +101,15 @@ final class ChatDiscoverabilityTests: XCTestCase {
         XCTAssertFalse(prompt.contains("You have \(DesktopCapabilityRegistry.desktopToolNames.count) Omi tools"))
     }
 
+    func testDesktopPromptDistinguishesPublicWebFromPrivateOmiRetrieval() {
+        let prompt = ChatPrompts.desktopChat
+        XCTAssertTrue(prompt.contains("Public internet, external companies/products/people"))
+        XCTAssertTrue(prompt.contains("use web_search"))
+        XCTAssertTrue(prompt.contains("private history, conversations, memories"))
+        XCTAssertTrue(prompt.contains("For short follow-ups such as \"look it up,\""))
+        XCTAssertTrue(prompt.contains("Never claim that public information is unavailable"))
+    }
+
     func testToolPromptListsSearchTasksInWhenToUse() {
         let prompt = ChatPrompts.desktopChat
         XCTAssertTrue(prompt.contains("find tasks about shopping"))
@@ -111,6 +120,18 @@ final class ChatDiscoverabilityTests: XCTestCase {
         for toolName in DesktopCapabilityRegistry.desktopToolNames {
             XCTAssertTrue(prompt.contains("**\(toolName)**"), "Missing desktop capability \(toolName)")
         }
+    }
+
+    func testMainChatKeepsDirectPermissionTools() {
+        let names = Set(DesktopCapabilityRegistry.desktopToolNames)
+        XCTAssertTrue(names.contains("check_permission_status"))
+        XCTAssertTrue(names.contains("request_permission"))
+        XCTAssertTrue(
+            DesktopCapabilityRegistry.desktopToolPrompt.contains(
+                "User explicitly asks to grant/check app permissions"))
+        XCTAssertTrue(
+            DesktopCapabilityRegistry.desktopToolPrompt.contains(
+                "only after explicit current-turn consent"))
     }
 
     func testDesktopPromptMentionsListAgentSessionsForSubagents() {
@@ -173,7 +194,7 @@ final class ChatDiscoverabilityTests: XCTestCase {
                 declaredTools.insert(name)
             }
         }
-        let localApiOnlyTools: Set<String> = ["get_local_status", "get_screenshot", "get_work_context"]
+        let localApiOnlyTools: Set<String> = ["get_local_status", "get_screenshot"]
 
         for toolName in DesktopCapabilityRegistry.desktopToolNames where !localApiOnlyTools.contains(toolName) {
             XCTAssertTrue(declaredTools.contains(toolName), "Missing agent tool declaration for \(toolName)")

@@ -203,6 +203,7 @@ from utils.llm.clients import (
     get_model,
     get_provider,
     get_qos_info,
+    supports_cache_retention,
     supports_prompt_cache,
 )
 
@@ -437,7 +438,9 @@ class TestGetOrCreateLlmBehavioral:
             _llm_cache.clear()
             _llm_cache.update(saved)
 
-    def test_gpt51_constructor_receives_extra_body(self):
+    @pytest.mark.parametrize('model_name', ['gpt-5.1', 'gpt-4.1-mini'])
+    def test_openai_constructor_applies_cache_retention_by_capability(self, model_name):
+        """The production constructor receives retention only for supported model families."""
         from unittest.mock import patch as _patch
 
         saved = dict(_llm_cache)
@@ -454,34 +457,13 @@ class TestGetOrCreateLlmBehavioral:
                 original_init(self, **kwargs)
 
             with _patch.object(RealChatOpenAI, '__init__', capturing_init):
-                _get_or_create_openai_llm('gpt-5.1')
+                _get_or_create_openai_llm(model_name)
 
-            assert 'extra_body' in captured_kwargs, "gpt-5.1 must receive extra_body kwarg"
-            assert captured_kwargs['extra_body'] == {"prompt_cache_retention": "24h"}
-        finally:
-            _llm_cache.clear()
-            _llm_cache.update(saved)
-
-    def test_non_gpt51_constructor_no_extra_body(self):
-        from unittest.mock import patch as _patch
-
-        saved = dict(_llm_cache)
-        _llm_cache.clear()
-        captured_kwargs = {}
-
-        try:
-            from langchain_openai import ChatOpenAI as RealChatOpenAI
-
-            original_init = RealChatOpenAI.__init__
-
-            def capturing_init(self, **kwargs):
-                captured_kwargs.update(kwargs)
-                original_init(self, **kwargs)
-
-            with _patch.object(RealChatOpenAI, '__init__', capturing_init):
-                _get_or_create_openai_llm('gpt-4.1-mini')
-
-            assert 'extra_body' not in captured_kwargs
+            if supports_cache_retention(model_name):
+                assert captured_kwargs['extra_body'] == {"prompt_cache_retention": "24h"}
+            else:
+                assert 'extra_body' not in captured_kwargs
+            assert 'prompt_cache_key' not in captured_kwargs.get('model_kwargs', {})
         finally:
             _llm_cache.clear()
             _llm_cache.update(saved)
@@ -1089,7 +1071,14 @@ class TestStructuredOutputFeatureTracking:
     """Verify structured output feature set matches actual usage."""
 
     def test_expected_features_tracked(self):
-        expected = {'chat_extraction', 'proactive_notification', 'conv_app_select', 'external_structure', 'trends'}
+        expected = {
+            'chat_extraction',
+            'proactive_notification',
+            'conv_app_select',
+            'external_structure',
+            'trends',
+            'what_matters_now',
+        }
         assert _STRUCTURED_OUTPUT_FEATURES == expected
 
     def test_tracked_features_exist_in_all_profiles(self):

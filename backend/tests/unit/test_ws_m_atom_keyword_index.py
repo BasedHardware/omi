@@ -94,6 +94,7 @@ from utils.memory.canonical_memory_adapter import (
     retract_conversation_sourced_memories,
     search_canonical_memories,
 )
+from utils.memory.canonical_vector_sync import sync_canonical_memory_vector
 from utils.memory.memory_system import MemorySystem
 
 CANONICAL_UID = "uid-canonical-ws-m"
@@ -150,6 +151,13 @@ def _data_protection_db(level: str = "enhanced") -> MagicMock:
     db_client = MagicMock()
     db_client.document.return_value = MagicMock(get=lambda: user_doc)
     return db_client
+
+
+def test_user_rejected_long_term_item_is_not_rebuild_or_vector_eligible():
+    rejected = _long_term_item().model_copy(update={"promotion": {"user_review": False}})
+
+    assert is_indexable_long_term_atom(rejected) is False
+    assert sync_canonical_memory_vector(rejected) is False
 
 
 @pytest.fixture(autouse=True)

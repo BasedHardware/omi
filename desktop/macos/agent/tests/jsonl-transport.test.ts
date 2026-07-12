@@ -331,6 +331,7 @@ describe("JsonlTransport", () => {
       requestId: "shared-request",
       clientId: "client-hermes",
       externalRefId: "task-hermes",
+      prompt: "hermes correlation",
     });
     const openclawRun = kernel.executeRun({
       ...baseRunInput,
@@ -339,6 +340,7 @@ describe("JsonlTransport", () => {
       requestId: "shared-request",
       clientId: "client-openclaw",
       externalRefId: "task-openclaw",
+      prompt: "openclaw correlation",
     });
     await waitUntil(() => hermes.executed.length === 1 && openclaw.executed.length === 1);
 
@@ -436,6 +438,7 @@ describe("JsonlTransport", () => {
       protocolVersion: 2,
       sessionId: "session-mcp",
       adapterId: "fake",
+      executionRole: "coordinator",
     });
     store.close();
   });
@@ -1093,6 +1096,7 @@ describe("JsonlTransport", () => {
         requestId: "request-acp",
         clientId: "client-acp",
         adapterId: "acp",
+        externalRefId: "task-acp",
       }),
       facade.handleQuery({
         ...v2Query({ prompt: "use pi" }),
@@ -1100,6 +1104,7 @@ describe("JsonlTransport", () => {
         requestId: "request-pi",
         clientId: "client-pi",
         adapterId: "pi-mono",
+        externalRefId: "task-pi",
       }),
     ]);
 
@@ -1353,6 +1358,33 @@ describe("JsonlTransport", () => {
       expect.objectContaining({ attempt_no: 1, status: "failed" }),
       expect.objectContaining({ attempt_no: 2, retry_reason: "recoverable_error", status: "succeeded" }),
     ]);
+    store.close();
+  });
+
+  it("passes the selected adapter to auth recovery without conflating providers", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    const seen: string[] = [];
+    const authError = Object.assign(new Error("auth required during prompt"), { code: -32000 });
+    adapter.failNextExecutionError = authError;
+    const facade = new JsonlTransport({
+      kernel,
+      send: () => {},
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+      isRecoverableError: (error, adapterId) => {
+        seen.push(`predicate:${adapterId}`);
+        return error === authError && adapterId === "fake";
+      },
+      onRecoverableError: async (_error, adapterId) => {
+        seen.push(`handler:${adapterId}`);
+      },
+      maxRecoverableRetries: 2,
+    });
+
+    await facade.handleQuery(v2Query({ requestId: "request-auth-adapter-scope" }));
+
+    expect(seen).toEqual(["predicate:fake", "handler:fake"]);
+    expect(adapter.executed).toHaveLength(2);
     store.close();
   });
 

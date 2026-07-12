@@ -9,6 +9,24 @@ import 'package:omi/backend/schema/conversation.dart';
 /// and a minimal abstraction that mirrors the production sync flow.
 
 void main() {
+  test('sync job status preserves backfill pacing metadata', () {
+    final status = SyncJobStatusResponse.fromJson({
+      'job_id': 'job-backfill',
+      'status': 'failed',
+      'total_segments': 4,
+      'processed_segments': 0,
+      'successful_segments': 0,
+      'failed_segments': 0,
+      'lane': 'backfill',
+      'reason_code': 'backfill_paced',
+      'retry_after': 3600,
+    });
+
+    expect(status.lane, 'backfill');
+    expect(status.reasonCode, 'backfill_paced');
+    expect(status.retryAfter, 3600);
+  });
+
   group('SyncLocalFilesResponse parsing', () {
     test('parses HTTP 200 success response (no partial failure fields)', () {
       final json = {
@@ -60,10 +78,7 @@ void main() {
     });
 
     test('handles missing optional fields gracefully', () {
-      final json = {
-        'new_memories': [],
-        'updated_memories': [],
-      };
+      final json = {'new_memories': [], 'updated_memories': []};
 
       final response = SyncLocalFilesResponse.fromJson(json);
       expect(response.failedSegments, 0);

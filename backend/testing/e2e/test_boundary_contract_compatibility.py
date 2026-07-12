@@ -12,6 +12,7 @@ from pathlib import Path
 
 from fakes.storage import list_storage_files
 from listen_test_helpers import is_ready_event, receive_until, seed_listen_user
+from testing.e2e.sync_helpers import patch_fresh_sync_lane
 
 
 def _fake_png_file():
@@ -65,7 +66,8 @@ def test_real_routes_reject_invalid_boundary_query_values_without_500(client, au
         assert "detail" in response.json()
 
 
-def test_v2_sync_rejects_invalid_upload_timestamps_before_creating_job(client, auth_headers):
+def test_v2_sync_rejects_invalid_upload_timestamps_before_creating_job(client, auth_headers, monkeypatch):
+    patch_fresh_sync_lane(monkeypatch)
     sync_dir = Path("syncing/123")
     for filename in [
         "audio_0.bin",

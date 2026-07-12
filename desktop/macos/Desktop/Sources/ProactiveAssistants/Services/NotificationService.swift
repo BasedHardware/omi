@@ -107,6 +107,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     /// frequency throttle as a global rate limit.
     private var lastNotificationAtGlobal: Date?
 
+    private let proactiveTaskGate = ProactiveTaskInterruptionGate()
+
     private override init() {
         super.init()
         // Set ourselves as the delegate to show notifications even when app is in foreground
@@ -251,6 +253,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         assistantId: String = "default",
         sound: NotificationSound = .default,
         context: FloatingBarNotificationContext? = nil,
+        action: FloatingBarNotificationAction? = nil,
         screenshotData: Data? = nil,
         deliverSystemBanner: Bool = false,
         respectFrequency: Bool = true
@@ -260,12 +263,18 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         // re-fires this on every session (soft-recovery + app restart), which buried
         // users in duplicate banners when a stale TCC csreq from an auto-update made
         // the capture path unrecoverable without a manual toggle in System Settings.
-        if title == Self.screenCaptureResetTitle {
-            if UserDefaults.standard.bool(forKey: Self.screenCaptureResetShownKey) {
-                log("NotificationService: suppressing duplicate screen capture reset notification")
-                return
-            }
-            UserDefaults.standard.set(true, forKey: Self.screenCaptureResetShownKey)
+        // NOTE: only READ the "already shown" flag here. The flag is SET at actual
+        // delivery time (just before showNotification below), NOT here — setting it
+        // before the snooze/enabled/frequency gates meant that if any gate suppressed
+        // this delivery (e.g. the user is snoozed when capture breaks), the flag was
+        // still persisted, and since it is only cleared on capture RECOVERY — which
+        // never happens while capture stays broken — every later retry hit this early
+        // return and the "screen recording needs reset" notice was never delivered.
+        if title == Self.screenCaptureResetTitle
+            && UserDefaults.standard.bool(forKey: Self.screenCaptureResetShownKey)
+        {
+            log("NotificationService: suppressing duplicate screen capture reset notification")
+            return
         }
 
         // Honor the floating-bar snooze for both the in-bar preview and the native
@@ -293,12 +302,20 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             return
         }
 
+        // Mark the screen-capture reset notice as shown only now that it has passed
+        // every suppression gate and is actually being delivered — so a snoozed (or
+        // otherwise gated) attempt does not permanently suppress it for the episode.
+        if title == Self.screenCaptureResetTitle {
+            UserDefaults.standard.set(true, forKey: Self.screenCaptureResetShownKey)
+        }
+
         FloatingControlBarManager.shared.showNotification(
             title: title,
             message: message,
             assistantId: assistantId,
             sound: sound,
             context: context,
+            action: action,
             screenshotData: screenshotData
         )
 
@@ -333,6 +350,61 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
                 self?.deliverNotification(title: title, message: message, assistantId: assistantId, sound: sound)
             }
         }
+    }
+
+    /// The only delivery path for contextual task interruptions. Unlike the
+    /// generic functional-notification API, this path exposes no bypass flag.
+    @discardableResult
+    func sendContextualTaskInterruption(
+        _ candidate: TaskInterruptionCandidate,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> TaskInterruptionGateTrace {
+        let configuration = ProactiveTaskInterruptionSettings.load()
+        let environment = TaskInterruptionEnvironment(
+            cohort: ProactiveTaskCohort.current,
+            masterNotificationsEnabled: Self.areNotificationsEnabled(),
+            frequencyEnabled: Self.currentFrequencyLevel() > 0,
+            ambientFrequencyEligible: isProactiveNotificationEligible(assistantId: "task", now: now),
+            taskNotificationsEnabled: TaskAssistantSettings.shared.notificationsEnabled,
+            focusSuppressed: FocusStorage.shared.currentStatus == .focused
+                || ProactiveTaskInterruptionSettings.isFocusSuppressed,
+            snoozed: FloatingControlBarManager.shared.isSnoozed,
+            now: now,
+            calendar: calendar
+        )
+        let trace = proactiveTaskGate.evaluate(
+            candidate: candidate,
+            configuration: configuration,
+            environment: environment
+        )
+        AnalyticsManager.shared.proactiveTaskGateEvaluated(trace)
+        guard trace.reason == .allowed else {
+            log(
+                "TaskInterruptionGate: suppressed recommendation=\(candidate.recommendationID) "
+                    + "reason=\(trace.reason.rawValue) cohort=\(trace.cohort.rawValue)"
+            )
+            return trace
+        }
+
+        let context = FloatingBarNotificationContext(
+            sourceTitle: candidate.headline,
+            assistantId: "task",
+            sourceApp: nil,
+            windowTitle: nil,
+            contextSummary: candidate.whyNow,
+            currentActivity: nil,
+            reasoning: candidate.whyNow,
+            detail: "recommendation_id=\(candidate.recommendationID)"
+        )
+        sendNotification(
+            title: candidate.headline,
+            message: "\(candidate.whyNow) · \(candidate.recommendedAction)",
+            assistantId: "task",
+            context: context,
+            action: .openWhatMattersNow(recommendationID: candidate.recommendationID)
+        )
+        return trace
     }
 
     private func deliverNotification(title: String, message: String, assistantId: String, sound: NotificationSound) {
@@ -447,6 +519,14 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     /// suppressed. Per-assistant + global limits combine so a chatty assistant cannot
     /// starve another.
     private func shouldAllowProactiveNotification(assistantId: String) -> Bool {
+        let now = Date()
+        guard isProactiveNotificationEligible(assistantId: assistantId, now: now) else { return false }
+        lastNotificationAt[assistantId] = now
+        lastNotificationAtGlobal = now
+        return true
+    }
+
+    private func isProactiveNotificationEligible(assistantId: String, now: Date) -> Bool {
         let level = Self.currentFrequencyLevel()
         guard let interval = Self.minInterval(forLevel: level) else {
             return true  // Maximum
@@ -454,15 +534,12 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         if interval == .infinity {
             return false  // Off
         }
-        let now = Date()
         if let last = lastNotificationAtGlobal, now.timeIntervalSince(last) < interval {
             return false
         }
         if let last = lastNotificationAt[assistantId], now.timeIntervalSince(last) < interval {
             return false
         }
-        lastNotificationAt[assistantId] = now
-        lastNotificationAtGlobal = now
         return true
     }
 }

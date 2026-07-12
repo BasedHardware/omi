@@ -1,0 +1,59 @@
+version: 2
+name: ptt-lifecycle
+tier: 2
+description: Real push-to-talk start/release lifecycle through the automation bridge
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/DefaultsKey.swift
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
+  - desktop/macos/Desktop/Sources/RealtimeOmni/RealtimeOmniService.swift
+  - desktop/macos/Desktop/Sources/RealtimeOmni/RealtimeOmniTestHarness.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSettings.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeVoiceTurnOutbox.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnCoordinator.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnStateMachine.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Start PTT through the real shortcut lifecycle
+    bridge.action:
+      name: ptt_start
+    expect:
+      result.detail.listening: "true"
+
+  - id: S2
+    name: Assert typed turn is recording without anomalies
+    bridge.action:
+      name: ptt_turn_snapshot
+    expect:
+      result.detail.phase: recording
+      result.detail.stale_event_count: "0"
+      result.detail.invalid_transition_count: "0"
+
+  - id: S3
+    name: Release PTT through the real finalization lifecycle
+    bridge.action:
+      name: ptt_stop
+    expect:
+      result.detail.finalized: "true"
+
+  - id: S4
+    name: Assert empty capture terminated with the actionable too-short result
+    bridge.action:
+      name: ptt_turn_snapshot
+    expect:
+      result.detail.phase: terminal_too_short
+      result.detail.terminal_reason: too_short
+      result.detail.stale_event_count: "0"
+      result.detail.invalid_transition_count: "0"
+
+  - id: S5
+    name: Logs contain no bridge failures or invalid voice transitions
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"
+        - "VoiceTurnCoordinator: invalid transition"

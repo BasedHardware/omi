@@ -8,13 +8,18 @@ actor TaskAssistant: ProactiveAssistant {
     nonisolated let identifier = "task-extraction"
     nonisolated let displayName = "Task Extractor"
 
+    nonisolated static func discoveryEnabled(settingsEnabled: Bool, notificationsEnabled: Bool) -> Bool {
+        settingsEnabled
+    }
+
     var isEnabled: Bool {
         get async {
             await MainActor.run {
-                // Gate the Gemini screen analysis on notifications (off by default) — no
-                // notification, no Gemini call. Re-enabling notifications resumes analysis.
-                TaskAssistantSettings.shared.isEnabled
-                    && TaskAssistantSettings.shared.notificationsEnabled
+                // Attention settings never gate quiet discovery.
+                Self.discoveryEnabled(
+                    settingsEnabled: TaskAssistantSettings.shared.isEnabled,
+                    notificationsEnabled: TaskAssistantSettings.shared.notificationsEnabled
+                )
             }
         }
     }
@@ -194,7 +199,54 @@ actor TaskAssistant: ProactiveAssistant {
     private func startProcessing() {
         isRunning = true
         processingTask = Task {
+            await retryCanonicalOutbox()
             await processLoop()
+        }
+    }
+
+    private func retryCanonicalOutbox() async {
+        let records: [StagedTaskRecord]
+        do {
+            records = try await StagedTaskStorage.shared.getUnsyncedCanonicalOutbox()
+        } catch {
+            logError("Task: Failed to load canonical capture outbox", error: error)
+            return
+        }
+        for record in records {
+            let metadata = record.metadata ?? [:]
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            let task = ExtractedTask(
+                title: record.description,
+                description: metadata["reasoning"] as? String,
+                priority: TaskPriority(rawValue: record.priority ?? "medium") ?? .medium,
+                sourceApp: record.sourceApp ?? "Unknown",
+                inferredDeadline: record.dueAt.map { formatter.string(from: $0) },
+                confidence: record.confidence ?? 0.5,
+                tags: record.tags,
+                sourceCategory: metadata["source_category"] as? String ?? "other",
+                sourceSubcategory: metadata["source_subcategory"] as? String ?? "other",
+                captureKind: metadata["capture_kind"] as? String,
+                owner: metadata["owner"] as? String,
+                concreteDeliverable: metadata["concrete_deliverable"] as? Bool,
+                publicBroadcast: metadata["public_broadcast"] as? Bool,
+                directMention: metadata["direct_mention"] as? Bool,
+                alreadyDone: metadata["already_done"] as? Bool,
+                duplicateOf: metadata["duplicate_of"] as? String,
+                refinesTask: metadata["refines_task"] as? String,
+                ownershipConfidence: metadata["ownership_confidence"] as? Double
+            )
+            await syncTaskToBackend(
+                task: task,
+                taskResult: TaskExtractionResult(
+                    hasNewTask: true,
+                    task: task,
+                    contextSummary: record.contextSummary ?? "",
+                    currentActivity: record.currentActivity ?? ""
+                ),
+                localRecord: record,
+                windowTitle: record.windowTitle
+            )
         }
     }
 
@@ -367,7 +419,7 @@ actor TaskAssistant: ProactiveAssistant {
             previousTasks.removeLast()
         }
 
-        // Save to staged_tasks SQLite + generate embedding
+        // Persist a hidden outbox row before any backend work.
         let extractionRecord = await saveTaskToSQLite(
             task: task,
             screenshotId: screenshotId,
@@ -375,23 +427,12 @@ actor TaskAssistant: ProactiveAssistant {
             windowTitle: windowTitle
         )
 
-        // Generate embedding for new staged task in background
-        if let recordId = extractionRecord?.id {
-            Task {
-                await self.generateEmbeddingForTask(id: recordId, text: task.title)
-            }
-        }
-
-        // Sync to backend (staged_tasks)
-        if let backendId = await syncTaskToBackend(task: task, taskResult: taskResult, windowTitle: windowTitle) {
-            if let recordId = extractionRecord?.id {
-                do {
-                    try await StagedTaskStorage.shared.markSynced(id: recordId, backendId: backendId)
-                } catch {
-                    logError("Task: Failed to update sync status", error: error)
-                }
-            }
-        }
+        await syncTaskToBackend(
+            task: task,
+            taskResult: taskResult,
+            localRecord: extractionRecord,
+            windowTitle: windowTitle
+        )
 
         await MainActor.run {
             AnalyticsManager.shared.taskExtracted(taskCount: 1)
@@ -410,7 +451,7 @@ actor TaskAssistant: ProactiveAssistant {
             let embedding = try await EmbeddingService.shared.embed(text: text)
             let data = await EmbeddingService.shared.floatsToData(embedding)
             try await StagedTaskStorage.shared.updateEmbedding(id: id, embedding: data)
-            await EmbeddingService.shared.addToIndex(id: id, embedding: embedding)
+            await EmbeddingService.shared.addToIndex(source: .staged, id: id, embedding: embedding)
             log("Task: Generated embedding for staged task \(id)")
         } catch {
             logError("Task: Failed to generate embedding for staged task \(id)", error: error)
@@ -428,8 +469,17 @@ actor TaskAssistant: ProactiveAssistant {
             "tags": task.tags,
             "context_summary": contextSummary,
             "source_category": task.sourceCategory,
-            "source_subcategory": task.sourceSubcategory
+            "source_subcategory": task.sourceSubcategory,
+            "capture_kind": task.captureKind ?? "direct_request",
+            "owner": task.owner ?? "unknown",
+            "concrete_deliverable": task.concreteDeliverable ?? false,
+            "public_broadcast": task.publicBroadcast ?? false,
+            "direct_mention": task.directMention ?? false,
+            "already_done": task.alreadyDone ?? false,
+            "ownership_confidence": task.ownershipConfidence ?? 0.5
         ]
+        if let duplicateOf = task.duplicateOf { metadata["duplicate_of"] = duplicateOf }
+        if let refinesTask = task.refinesTask { metadata["refines_task"] = refinesTask }
         if let primaryTag = task.primaryTag {
             metadata["category"] = primaryTag
         }
@@ -461,7 +511,10 @@ actor TaskAssistant: ProactiveAssistant {
         let record = StagedTaskRecord(
             backendSynced: false,
             description: task.title,
-            source: "screenshot",
+            // The row is born hidden and retryable. Mode resolution may later
+            // convert it to legacy staging, but a crash can never expose a local
+            // Candidate that canonical authority has not received.
+            source: "candidate_outbox",
             priority: task.priority.rawValue,
             category: task.primaryTag,
             tagsJson: tagsJson,
@@ -472,18 +525,13 @@ actor TaskAssistant: ProactiveAssistant {
             windowTitle: windowTitle,
             contextSummary: contextSummary,
             metadataJson: metadataJson,
-            relevanceScore: task.relevanceScore,
-            scoredAt: task.relevanceScore != nil ? Date() : nil
+            relevanceScore: nil,
+            scoredAt: nil
         )
 
         do {
-            let inserted: StagedTaskRecord
-            if task.relevanceScore != nil {
-                inserted = try await StagedTaskStorage.shared.insertWithScoreShift(record)
-            } else {
-                inserted = try await StagedTaskStorage.shared.insertLocalStagedTask(record)
-            }
-            log("Task: Saved to staged_tasks (id: \(inserted.id ?? -1), score: \(task.relevanceScore.map { String($0) } ?? "nil"))")
+            let inserted = try await StagedTaskStorage.shared.insertLocalStagedTask(record)
+            log("Task: Saved retryable capture outbox row (id: \(inserted.id ?? -1))")
             return inserted
         } catch {
             logError("Task: Failed to save to staged_tasks", error: error)
@@ -491,9 +539,116 @@ actor TaskAssistant: ProactiveAssistant {
         }
     }
 
-    /// Sync task to backend API, returns backend ID if successful
-    private func syncTaskToBackend(task: ExtractedTask, taskResult: TaskExtractionResult, windowTitle: String? = nil) async -> String? {
+    /// Deliver the local outbox row through the mode-owned backend authority.
+    private func syncTaskToBackend(
+        task: ExtractedTask,
+        taskResult: TaskExtractionResult,
+        localRecord: StagedTaskRecord?,
+        windowTitle: String? = nil
+    ) async {
+        guard let localRecord, let localID = localRecord.id else {
+            log("Task: Capture outbox persistence failed; refusing an untracked backend write")
+            return
+        }
         do {
+            // Hide the row before mode resolution. A transient backend failure must
+            // leave retry state, never an independently actionable local Candidate.
+            let control = try await APIClient.shared.getCandidateWorkflowControl()
+            guard let mode = control.workflowMode else {
+                log("Task: Workflow control omitted mode; capture remains retryable")
+                return
+            }
+
+            if mode == .read {
+                guard let generation = control.accountGeneration else {
+                    log("Task: Workflow control omitted generation; capture remains retryable")
+                    return
+                }
+                let decision = ScreenCandidateAdapter.adapt(
+                    task: task,
+                    dueAt: parseDueDate(from: task.inferredDeadline),
+                    localEvidenceID: "screen-\(localRecord.screenshotId ?? localID)",
+                    deviceID: ClientDeviceService.shared.clientDeviceId
+                )
+                guard decision.candidate != nil else {
+                    try await StagedTaskStorage.shared.discardCanonicalOutbox(id: localID)
+                    return
+                }
+                let delivery = CanonicalScreenCandidateDelivery(
+                    client: APICanonicalScreenCandidateClient()
+                )
+                guard let canonicalState = try await delivery.deliver(
+                    decision,
+                    localID: localID,
+                    deviceID: ClientDeviceService.shared.deviceIdHash,
+                    accountGeneration: generation
+                ) else { return }
+                let canonicalStatus = canonicalState.status
+                let canonicalTaskID = canonicalState.taskID
+                try await StagedTaskStorage.shared.markCanonicalReceipt(
+                    id: localID,
+                    candidateID: canonicalState.candidateID,
+                    status: canonicalStatus.rawValue,
+                    taskID: canonicalTaskID
+                )
+                let confidenceBand = TaskIntelligenceConfidenceBand.forCapture(
+                    confidence: task.confidence,
+                    explicit: task.captureKind == "explicit_command"
+                )
+                let capturedAttribution = TaskIntelligenceAttributionEvent.candidateCaptured(
+                    candidateID: canonicalState.candidateID,
+                    confidenceBand: confidenceBand
+                )
+                let resolvedAttribution: TaskIntelligenceAttributionEvent? = {
+                    if canonicalStatus == .accepted, let canonicalTaskID {
+                        return .candidateResolved(
+                            candidateID: canonicalState.candidateID,
+                            taskID: canonicalTaskID,
+                            resolutionCode: .accepted
+                        )
+                    }
+                    if canonicalStatus == .rejected {
+                        return .candidateResolved(
+                            candidateID: canonicalState.candidateID,
+                            taskID: nil,
+                            resolutionCode: .rejected
+                        )
+                    }
+                    if canonicalStatus == .expired {
+                        return .candidateResolved(
+                            candidateID: canonicalState.candidateID,
+                            taskID: nil,
+                            resolutionCode: .expired
+                        )
+                    }
+                    return nil
+                }()
+                await MainActor.run {
+                    AnalyticsManager.shared.taskIntelligenceAttribution(capturedAttribution)
+                    if let resolvedAttribution {
+                        AnalyticsManager.shared.taskIntelligenceAttribution(resolvedAttribution)
+                    }
+                }
+                log("Task: Canonical capture reconciled candidate=\(canonicalState.candidateID) outcome=\(decision.outcome.rawValue)")
+                return
+            }
+
+            guard TaskCaptureModePolicy.usesLegacyStaging(mode) else {
+                DesktopDiagnosticsManager.shared.recordFallback(
+                    area: "other",
+                    from: "workflow_control",
+                    to: "capture_deferred",
+                    reason: "other",
+                    outcome: .degraded
+                )
+                log("Task: Unknown workflow mode; capture remains retryable")
+                return
+            }
+
+            let shadowOutcome = ScreenCapturePolicy.evaluate(ScreenCandidateAdapter.facts(for: task))
+            if mode == .shadow {
+                log("Task: Shadow capture outcome=\(shadowOutcome.rawValue)")
+            }
             var metadata: [String: Any] = [
                 "source_app": task.sourceApp,
                 "confidence": task.confidence,
@@ -525,23 +680,23 @@ actor TaskAssistant: ProactiveAssistant {
                 priority: task.priority.rawValue,
                 category: task.primaryTag,
                 metadata: metadata,
-                relevanceScore: task.relevanceScore
+                relevanceScore: nil
             )
 
             log("Task: Synced to staged_tasks backend (id: \(response.id))")
-
-            // Fast-path promotion: don't wait up to 5 min for the safety-net timer to
-            // promote this new task into action_items + fire a notification. Kicking off
-            // the promote loop immediately means the user sees the notification within
-            // seconds of the task being saved, not minutes later.
+            try await StagedTaskStorage.shared.markSynced(
+                id: localID,
+                backendId: response.id,
+                source: "screenshot"
+            )
+            Task {
+                await self.generateEmbeddingForTask(id: localID, text: task.title)
+            }
             Task {
                 await TaskPromotionService.shared.promoteIfNeeded()
             }
-
-            return response.id
         } catch {
-            logError("Task: Failed to sync to backend", error: error)
-            return nil
+            logError("Task: Candidate outbox delivery failed; will retry", error: error)
         }
     }
 
@@ -747,16 +902,10 @@ actor TaskAssistant: ProactiveAssistant {
         }
 
         if !context.activeTasks.isEmpty {
-            // Get score range for context
-            let scoreRange = try? await ActionItemStorage.shared.getRelevanceScoreRange()
-            let rangeStr = scoreRange.map { "Score range: \($0.min)–\($0.max). " } ?? ""
-
-            prompt += "ACTIVE TASKS (user is already tracking these — each has a relevance_score where 1 = most important, higher numbers = less important):\n"
-            prompt += "\(rangeStr)Use these scores to place any new task appropriately.\n"
+            prompt += "ACTIVE TASKS (use only for semantic duplicate/refinement evidence; never globally rank new captures):\n"
             for (i, task) in context.activeTasks.enumerated() {
                 let pri = task.priority.map { " [\($0)]" } ?? ""
-                let score = task.relevanceScore.map { " [score:\($0)]" } ?? ""
-                prompt += "\(i + 1).\(score) \(task.description)\(pri)\n"
+                prompt += "\(i + 1). [id:\(task.id)] \(task.description)\(pri)\n"
             }
             prompt += "\n"
         }
@@ -792,6 +941,13 @@ actor TaskAssistant: ProactiveAssistant {
         prompt += """
         Analyze this screenshot. If you see a potential request, search for duplicates first.
         If there is clearly no request on screen (~90% of screenshots), call no_task_found immediately.
+
+        CANONICAL CAPTURE POLICY (overrides older/custom duplicate instructions):
+        - A matching active task is evidence, not a reason to discard the observation.
+        - Exact duplicate with useful new evidence: call extract_task with duplicate_of set to its task id.
+        - A follow-up that changes an active task: call extract_task with refines_task set to its task id.
+        - Evidence that an active task was completed: call extract_task with capture_kind already_done and refines_task set to its task id.
+        - Use reject_task only for a previously rejected/deleted item or a true no-op with no useful new evidence.
         """
 
         // 3. Define 5 tools
@@ -832,7 +988,7 @@ actor TaskAssistant: ProactiveAssistant {
             ),
             GeminiTool.FunctionDeclaration(
                 name: "extract_task",
-                description: "Extract a new task that is not already tracked. Call ONLY after searching for duplicates. All fields are required.",
+                description: "Emit canonical capture facts for a new task, enrichment, update, or completion. Call ONLY after searching. All fields are required.",
                 parameters: GeminiTool.FunctionDeclaration.Parameters(
                     type: "object",
                     properties: [
@@ -847,14 +1003,21 @@ actor TaskAssistant: ProactiveAssistant {
                         "current_activity": .init(type: "string", description: "What the user is actively doing"),
                         "source_category": .init(type: "string", description: "Where the task originated", enumValues: ["direct_request", "self_generated", "calendar_driven", "reactive", "external_system", "other"]),
                         "source_subcategory": .init(type: "string", description: "Specific origin within category", enumValues: ["message", "meeting", "mention", "commitment", "idea", "reminder", "goal_subtask", "event_prep", "recurring", "deadline", "error", "notification", "observation", "project_tool", "alert", "documentation", "other"]),
-                        "relevance_score": .init(type: "integer", description: "Where this task ranks relative to existing tasks. Look at the relevance_score values of existing active tasks and assign a score that places this task appropriately. 1 = most important/urgent, higher numbers = less important. Must be a positive integer.")
+                        "capture_kind": .init(type: "string", description: "Shared capture-policy fact", enumValues: ["explicit_command", "clear_commitment", "direct_request", "inferred_next_step", "already_done"]),
+                        "owner": .init(type: "string", description: "Who owns the action", enumValues: ["user", "other", "unknown"]),
+                        "concrete_deliverable": .init(type: "boolean", description: "Whether the action has a concrete deliverable"),
+                        "public_broadcast": .init(type: "boolean", description: "True for an unowned public-channel request"),
+                        "direct_mention": .init(type: "boolean", description: "True when the user was directly mentioned"),
+                        "duplicate_of": .init(type: "string", description: "Existing canonical task id when duplicate; empty otherwise"),
+                        "refines_task": .init(type: "string", description: "Existing canonical task id when this refines it; empty otherwise"),
+                        "ownership_confidence": .init(type: "number", description: "Owner confidence 0.0-1.0")
                     ],
-                    required: ["title", "description", "priority", "tags", "source_app", "inferred_deadline", "confidence", "context_summary", "current_activity", "source_category", "source_subcategory", "relevance_score"]
+                    required: ["title", "description", "priority", "tags", "source_app", "inferred_deadline", "confidence", "context_summary", "current_activity", "source_category", "source_subcategory", "capture_kind", "owner", "concrete_deliverable", "public_broadcast", "direct_mention", "duplicate_of", "refines_task", "ownership_confidence"]
                 )
             ),
             GeminiTool.FunctionDeclaration(
                 name: "reject_task",
-                description: "Reject task extraction — the potential task is a duplicate, already completed, or was previously rejected by the user. Call after searching confirms this.",
+                description: "Reject only a previously rejected/deleted item or a no-op with no useful new evidence. Active duplicates, refinements, and newly observed completion must use extract_task.",
                 parameters: GeminiTool.FunctionDeclaration.Parameters(
                     type: "object",
                     properties: [
@@ -893,7 +1056,7 @@ actor TaskAssistant: ProactiveAssistant {
         var lastContextSummary = ""
         var lastCurrentActivity = ""
 
-        for iteration in 0..<8 {
+        toolLoop: for iteration in 0..<8 {
             let result = try await geminiClient.sendImageToolLoop(
                 contents: contents,
                 systemPrompt: currentSystemPrompt,
@@ -978,14 +1141,15 @@ actor TaskAssistant: ProactiveAssistant {
                 }
                 let sourceCategory = toolCall.arguments["source_category"] as? String ?? "other"
                 let sourceSubcategory = toolCall.arguments["source_subcategory"] as? String ?? "other"
-                let relevanceScore: Int?
-                if let scoreValue = toolCall.arguments["relevance_score"] as? Int {
-                    relevanceScore = scoreValue
-                } else if let scoreDouble = toolCall.arguments["relevance_score"] as? Double {
-                    relevanceScore = Int(scoreDouble)
-                } else {
-                    relevanceScore = nil
-                }
+                let captureKind = toolCall.arguments["capture_kind"] as? String
+                let owner = toolCall.arguments["owner"] as? String
+                let concreteDeliverable = toolCall.arguments["concrete_deliverable"] as? Bool
+                let publicBroadcast = toolCall.arguments["public_broadcast"] as? Bool
+                let directMention = toolCall.arguments["direct_mention"] as? Bool
+                let duplicateOf = (toolCall.arguments["duplicate_of"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+                let refinesTask = (toolCall.arguments["refines_task"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+                let ownershipConfidence = (toolCall.arguments["ownership_confidence"] as? Double)
+                    ?? (toolCall.arguments["ownership_confidence"] as? Int).map(Double.init)
 
                 let task = ExtractedTask(
                     title: title,
@@ -997,10 +1161,18 @@ actor TaskAssistant: ProactiveAssistant {
                     tags: tags,
                     sourceCategory: sourceCategory,
                     sourceSubcategory: sourceSubcategory,
-                    relevanceScore: relevanceScore
+                    captureKind: captureKind,
+                    owner: owner,
+                    concreteDeliverable: concreteDeliverable,
+                    publicBroadcast: publicBroadcast,
+                    directMention: directMention,
+                    alreadyDone: captureKind == "already_done",
+                    duplicateOf: duplicateOf,
+                    refinesTask: refinesTask,
+                    ownershipConfidence: ownershipConfidence
                 )
 
-                log("Task: extract_task — \"\(title)\" (confidence: \(confidence), priority: \(priorityStr), score: \(relevanceScore.map { String($0) } ?? "nil"))")
+                log("Task: extract_task — \"\(title)\" (confidence: \(confidence), priority: \(priorityStr), capture: \(captureKind ?? "unknown"))")
                 extractedResults.append(TaskExtractionResult(
                     hasNewTask: true,
                     task: task,
@@ -1128,8 +1300,11 @@ actor TaskAssistant: ProactiveAssistant {
                 continue
 
             default:
+                // `break` alone only exits the switch, so the loop re-sent the
+                // identical request up to 7 more times (cost + latency) on an
+                // unknown tool call. Break the labeled loop to actually abort.
                 log("Task: Unknown tool call: \(toolCall.name), breaking")
-                break
+                break toolLoop
             }
         }
 
@@ -1269,35 +1444,42 @@ actor TaskAssistant: ProactiveAssistant {
             let vectorResults = await EmbeddingService.shared.searchSimilar(query: queryEmbedding, topK: 10)
 
             for result in vectorResults where result.similarity > 0.3 {
-                if let record = try await ActionItemStorage.shared.getActionItem(id: result.id) {
-                    let status: String
-                    if record.deleted { status = "deleted" }
-                    else if record.completed { status = "completed" }
-                    else { status = "active" }
+                // Resolve against the exact table the embedding came from — the
+                // index key now carries its source, so no more guessing/fallback
+                // that returned an unrelated task on a rowid collision.
+                switch result.source {
+                case .actionItem:
+                    if let record = try await ActionItemStorage.shared.getActionItem(id: result.id) {
+                        let status: String
+                        if record.deleted { status = "deleted" }
+                        else if record.completed { status = "completed" }
+                        else { status = "active" }
 
-                    results.append(TaskSearchResult(
-                        id: result.id,
-                        description: record.description,
-                        status: status,
-                        similarity: Double(result.similarity),
-                        matchType: "vector",
-                        relevanceScore: record.relevanceScore
-                    ))
-                } else if let staged = try await StagedTaskStorage.shared.getStagedTask(id: result.id) {
-                    // Fallback: ID belongs to a staged task (shared embedding index)
-                    let status: String
-                    if staged.deleted { status = "deleted" }
-                    else if staged.completed { status = "completed" }
-                    else { status = "active" }
+                        results.append(TaskSearchResult(
+                            id: result.id,
+                            description: record.description,
+                            status: status,
+                            similarity: Double(result.similarity),
+                            matchType: "vector",
+                            relevanceScore: record.relevanceScore
+                        ))
+                    }
+                case .staged:
+                    if let staged = try await StagedTaskStorage.shared.getStagedTask(id: result.id) {
+                        let status: String
+                        if staged.deleted { status = "deleted" }
+                        else if staged.completed { status = "completed" }
+                        else { status = "active" }
 
-                    results.append(TaskSearchResult(
-                        id: result.id,
-                        description: staged.description,
-                        status: status,
-                        similarity: Double(result.similarity),
-                        matchType: "vector",
-                        relevanceScore: staged.relevanceScore
-                    ))
+                        results.append(TaskSearchResult(
+                            id: result.id,
+                            description: staged.description,
+                            status: status,
+                            similarity: Double(result.similarity),
+                            matchType: "vector",
+                            relevanceScore: staged.relevanceScore
+                        ))
+                    }
                 }
             }
         } catch {

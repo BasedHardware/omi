@@ -121,6 +121,7 @@ struct DesktopCoordinatorSpawnedAgent: Codable {
 struct DesktopCoordinatorAgentRunInspection: Codable {
   let sessionId: String?
   let runId: String?
+  let attemptId: String?
   let status: String
   let finalText: String?
   let errorMessage: String?
@@ -853,17 +854,19 @@ final class DesktopCoordinatorService {
 
   private func parseInspectedRun(from raw: String) -> DesktopCoordinatorAgentRunInspection {
     guard let object = jsonObject(from: raw) else {
-      return DesktopCoordinatorAgentRunInspection(sessionId: nil, runId: nil, status: "failed", finalText: nil, errorMessage: "Unable to inspect agent run: invalid runtime response", artifacts: [])
+      return DesktopCoordinatorAgentRunInspection(sessionId: nil, runId: nil, attemptId: nil, status: "failed", finalText: nil, errorMessage: "Unable to inspect agent run: invalid runtime response", artifacts: [])
     }
     if object["ok"] as? Bool == false {
-      return DesktopCoordinatorAgentRunInspection(sessionId: nil, runId: nil, status: "failed", finalText: nil, errorMessage: runtimeErrorMessage(from: object) ?? "Unable to inspect agent run", artifacts: [])
+      return DesktopCoordinatorAgentRunInspection(sessionId: nil, runId: nil, attemptId: nil, status: "failed", finalText: nil, errorMessage: runtimeErrorMessage(from: object) ?? "Unable to inspect agent run", artifacts: [])
     }
     let session = object["session"] as? [String: Any] ?? [:]
     let run = object["run"] as? [String: Any] ?? [:]
     let result = run["result"] as? [String: Any] ?? [:]
+    let attempt = object["attempt"] as? [String: Any] ?? [:]
     return DesktopCoordinatorAgentRunInspection(
       sessionId: stringValue(session["sessionId"]),
       runId: stringValue(run["runId"]),
+      attemptId: stringValue(attempt["attemptId"]) ?? stringValue(run["attemptId"]) ?? stringValue(object["attemptId"]),
       status: stringValue(run["status"]) ?? stringValue(object["terminalStatus"]) ?? "unknown",
       finalText: stringValue(run["finalText"]) ?? stringValue(result["text"]) ?? stringValue(object["text"]),
       errorMessage: stringValue(run["errorMessage"]) ?? runtimeErrorMessage(from: object),

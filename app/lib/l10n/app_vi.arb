@@ -1,5 +1,6 @@
 {
     "@@locale": "vi",
+    "sessionExpiredSignInAgain": "Phiên đã hết hạn — hãy đăng nhập lại.",
     "appTitle": "Omi",
     "conversationTab": "Cuộc trò chuyện",
     "transcriptTab": "Bản ghi",
@@ -3121,5 +3122,31 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "Bộ nhớ của mặt dây chuyền sắp đầy — hãy giữ ứng dụng mở để đồng bộ."
+    "pendantStorageAlmostFull": "Bộ nhớ của mặt dây chuyền sắp đầy — hãy giữ ứng dụng mở để đồng bộ.",
+    "connectRayBanMeta": "Kết nối Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Sử dụng kính Ray-Ban Meta của bạn làm thiết bị ghi của Omi cho các cuộc trò chuyện và ngữ cảnh hình ảnh. Omi sẽ mở ứng dụng Meta AI để liên kết kính của bạn.",
+    "raybanMetaOpenMetaAI": "Kết nối qua Meta AI",
+    "raybanMetaWaitingForMetaAI": "Hoàn tất kết nối trong ứng dụng Meta AI, sau đó quay lại đây.",
+    "raybanMetaCheckAgain": "Kiểm tra lại",
+    "raybanMetaAllowCamera": "Cho phép camera trên kính",
+    "raybanMetaCameraExplanation": "Omi sử dụng camera của kính để thêm ảnh vào các cuộc trò chuyện của bạn. Bạn có thể bỏ qua bước này và chỉ sử dụng âm thanh.",
+    "raybanMetaSkipForNow": "Bỏ qua ngay bây giờ",
+    "raybanMetaAudioOnlyTitle": "Chế độ chỉ âm thanh của Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "Phiên bản Omi này có thể sử dụng micrô của kính qua Bluetooth. Chụp ảnh cần bản dựng dành cho nhà phát triển Meta của Omi.",
+    "raybanMetaMusicPauseNote": "Nhạc trên điện thoại của bạn sẽ tạm dừng khi micrô của kính đang được sử dụng.",
+    "raybanMetaContinue": "Tiếp tục",
+    "raybanMetaCapturePhoto": "Chụp ảnh",
+    "raybanMetaPhotoRequested": "Đã yêu cầu ảnh — ảnh sẽ xuất hiện trong cuộc trò chuyện của bạn.",
+    "raybanMetaMicrophoneReady": "Micrô đã sẵn sàng",
+    "raybanMetaImageCaptureReady": "Đã sẵn sàng chụp ảnh",
+    "raybanMetaImageCaptureUnavailable": "Không khả dụng ở chế độ chỉ âm thanh",
+    "raybanMetaCamera": "Camera",
+    "errorConnectingRayBanMeta": "Lỗi khi kết nối với Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

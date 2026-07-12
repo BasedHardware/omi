@@ -66,18 +66,93 @@ class GeneratedAudioFileUrlInfo {
   }
 }
 
+class GeneratedConversationAudioSpanInfo {
+  final double artifactOffset;
+  final String fileId;
+  final double len;
+  final double wallOffset;
+
+  const GeneratedConversationAudioSpanInfo({
+    required this.artifactOffset,
+    required this.fileId,
+    required this.len,
+    required this.wallOffset,
+  });
+
+  factory GeneratedConversationAudioSpanInfo.fromJson(Map<String, dynamic> json) {
+    return GeneratedConversationAudioSpanInfo(
+      artifactOffset: _required(_readFieldValue<double>(_readField(json, const ["artifact_offset"]), "artifact_offset", _readDouble, requiredField: true, nullable: false), "artifact_offset"),
+      fileId: _required(_readFieldValue<String>(_readField(json, const ["file_id"]), "file_id", _readString, requiredField: true, nullable: false), "file_id"),
+      len: _required(_readFieldValue<double>(_readField(json, const ["len"]), "len", _readDouble, requiredField: true, nullable: false), "len"),
+      wallOffset: _required(_readFieldValue<double>(_readField(json, const ["wall_offset"]), "wall_offset", _readDouble, requiredField: true, nullable: false), "wall_offset"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'artifact_offset': artifactOffset,
+      'file_id': fileId,
+      'len': len,
+      'wall_offset': wallOffset,
+    };
+  }
+}
+
+class GeneratedConversationAudioUrlInfo {
+  final double? capturedDuration;
+  final String? contentType;
+  final double? duration;
+  final String? signedUrl;
+  final List<GeneratedConversationAudioSpanInfo> spans;
+  final String status;
+
+  const GeneratedConversationAudioUrlInfo({
+    this.capturedDuration,
+    this.contentType,
+    this.duration,
+    this.signedUrl,
+    this.spans = const [],
+    required this.status,
+  });
+
+  factory GeneratedConversationAudioUrlInfo.fromJson(Map<String, dynamic> json) {
+    return GeneratedConversationAudioUrlInfo(
+      capturedDuration: _readFieldValue<double>(_readField(json, const ["captured_duration"]), "captured_duration", _readDouble, requiredField: false, nullable: true),
+      contentType: _readFieldValue<String>(_readField(json, const ["content_type"]), "content_type", _readString, requiredField: false, nullable: true),
+      duration: _readFieldValue<double>(_readField(json, const ["duration"]), "duration", _readDouble, requiredField: false, nullable: true),
+      signedUrl: _readFieldValue<String>(_readField(json, const ["signed_url"]), "signed_url", _readString, requiredField: false, nullable: true),
+      spans: _required(_readFieldValue<List<GeneratedConversationAudioSpanInfo>>(_readField(json, const ["spans"]), "spans", (value) => _readObjectList(value, GeneratedConversationAudioSpanInfo.fromJson), requiredField: false, nullable: false, defaultValue: const []), "spans"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'captured_duration': capturedDuration,
+      'content_type': contentType,
+      'duration': duration,
+      'signed_url': signedUrl,
+      'spans': spans.map((value) => value.toJson()).toList(),
+      'status': status,
+    };
+  }
+}
+
 class GeneratedAudioUrlsResponse {
   final List<GeneratedAudioFileUrlInfo> audioFiles;
+  final GeneratedConversationAudioUrlInfo? conversationAudio;
   final int? pollAfterMs;
 
   const GeneratedAudioUrlsResponse({
     required this.audioFiles,
+    this.conversationAudio,
     this.pollAfterMs,
   });
 
   factory GeneratedAudioUrlsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAudioUrlsResponse(
       audioFiles: _required(_readFieldValue<List<GeneratedAudioFileUrlInfo>>(_readField(json, const ["audio_files"]), "audio_files", (value) => _readObjectList(value, GeneratedAudioFileUrlInfo.fromJson), requiredField: true, nullable: false), "audio_files"),
+      conversationAudio: _readFieldValue<GeneratedConversationAudioUrlInfo>(_readField(json, const ["conversation_audio"]), "conversation_audio", (value) => _readObject(value, GeneratedConversationAudioUrlInfo.fromJson), requiredField: false, nullable: true),
       pollAfterMs: _readFieldValue<int>(_readField(json, const ["poll_after_ms"]), "poll_after_ms", _readInt, requiredField: false, nullable: true),
     );
   }
@@ -85,6 +160,7 @@ class GeneratedAudioUrlsResponse {
   Map<String, dynamic> toJson() {
     return {
       'audio_files': audioFiles.map((value) => value.toJson()).toList(),
+      'conversation_audio': conversationAudio?.toJson(),
       'poll_after_ms': pollAfterMs,
     };
   }

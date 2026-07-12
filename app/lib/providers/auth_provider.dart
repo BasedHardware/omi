@@ -1,6 +1,5 @@
+import 'dart:async';
 import 'dart:io';
-
-import 'package:flutter/material.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -11,7 +10,9 @@ import 'package:omi/env/env.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/utils/auth/clear_user_state.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -24,11 +25,18 @@ class AuthenticationProvider extends BaseProvider {
   User? user;
   String? authToken;
   bool _loading = false;
+  bool _requiresReauthentication = false;
+  int _sessionExpirationGeneration = 0;
+  StreamSubscription<User?>? _authStateSubscription;
+  StreamSubscription<User?>? _idTokenSubscription;
+  StreamSubscription<AuthSessionExpiredEvent>? _sessionExpiredSubscription;
   @override
   bool get loading => _loading;
+  bool get requiresReauthentication => _requiresReauthentication;
+  int get sessionExpirationGeneration => _sessionExpirationGeneration;
 
-  AuthenticationProvider() {
-    _initializeAuthListeners();
+  AuthenticationProvider({bool initializeListeners = true}) {
+    if (initializeListeners) _initializeAuthListeners();
   }
 
   void _initializeAuthListeners() {
@@ -38,7 +46,8 @@ class AuthenticationProvider extends BaseProvider {
     );
 
     Future.microtask(() {
-      _auth.authStateChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) {
+      _authStateSubscription = _auth.authStateChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) {
+        AuthService.instance.handleAuthUserChanged(user?.uid);
         Logger.debug(
           'DEBUG AuthProvider: authStateChanges fired - user=${user?.uid}, isAnonymous=${user?.isAnonymous}',
         );
@@ -50,8 +59,10 @@ class AuthenticationProvider extends BaseProvider {
           SharedPreferencesUtil().email = user.email ?? '';
           SharedPreferencesUtil().givenName = user.displayName?.split(' ')[0] ?? '';
         }
+        notifyListeners();
       });
-      _auth.idTokenChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) async {
+      _idTokenSubscription = _auth.idTokenChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) async {
+        AuthService.instance.handleAuthUserChanged(user?.uid);
         if (user == null) {
           Logger.debug('User is currently signed out or the token has been revoked!');
           SharedPreferencesUtil().authToken = '';
@@ -60,9 +71,13 @@ class AuthenticationProvider extends BaseProvider {
         } else {
           Logger.debug('User is signed in at ${DateTime.now()} with user ${user.uid}');
           try {
-            if (SharedPreferencesUtil().authToken.isEmpty ||
+            if (_requiresReauthentication ||
+                SharedPreferencesUtil().authToken.isEmpty ||
                 DateTime.now().millisecondsSinceEpoch > SharedPreferencesUtil().tokenExpirationTime) {
               authToken = await AuthService.instance.getIdToken();
+            }
+            if (authToken != null && authToken!.isNotEmpty) {
+              _requiresReauthentication = false;
             }
           } catch (e) {
             authToken = null;
@@ -71,11 +86,32 @@ class AuthenticationProvider extends BaseProvider {
         }
         notifyListeners();
       });
+      _sessionExpiredSubscription = AuthService.instance.sessionExpiredEvents.listen((event) {
+        _requiresReauthentication = true;
+        _sessionExpirationGeneration++;
+        user = null;
+        authToken = null;
+        final rootContext = globalNavigatorKey.currentContext;
+        if (rootContext != null && rootContext.mounted) {
+          clearAllUserState(rootContext);
+        }
+        notifyListeners();
+      });
     });
   }
 
   bool isSignedIn() {
-    return _auth.currentUser != null && !_auth.currentUser!.isAnonymous;
+    return !_requiresReauthentication && _auth.currentUser != null && !_auth.currentUser!.isAnonymous;
+  }
+
+  bool get _hasFirebaseUser => _auth.currentUser != null && !_auth.currentUser!.isAnonymous;
+
+  @override
+  void dispose() {
+    _authStateSubscription?.cancel();
+    _idTokenSubscription?.cancel();
+    _sessionExpiredSubscription?.cancel();
+    super.dispose();
   }
 
   void setLoading(bool value) {
@@ -94,8 +130,8 @@ class AuthenticationProvider extends BaseProvider {
         } else {
           credential = await AuthService.instance.authenticateWithProvider('google');
         }
-        if (credential != null && isSignedIn()) {
-          _signIn(onSignIn);
+        if (credential != null && _hasFirebaseUser) {
+          await _signIn(onSignIn);
         } else {
           AppSnackbar.showSnackbarError(
             globalNavigatorKey.currentContext?.l10n.authFailedToSignInWithGoogle ??
@@ -123,8 +159,8 @@ class AuthenticationProvider extends BaseProvider {
         } else {
           credential = await AuthService.instance.authenticateWithProvider('apple');
         }
-        if (credential != null && isSignedIn()) {
-          _signIn(onSignIn);
+        if (credential != null && _hasFirebaseUser) {
+          await _signIn(onSignIn);
         } else {
           AppSnackbar.showSnackbarError(
             globalNavigatorKey.currentContext?.l10n.authFailedToSignInWithApple ??
@@ -146,7 +182,7 @@ class AuthenticationProvider extends BaseProvider {
       final token = await AuthService.instance.getIdToken();
       NotificationService.instance.saveNotificationToken();
 
-      Logger.debug('Token: $token');
+      Logger.debug('Firebase token retrieved successfully');
       return token;
     } catch (e, stackTrace) {
       AppSnackbar.showSnackbarError(
@@ -159,13 +195,13 @@ class AuthenticationProvider extends BaseProvider {
     }
   }
 
-  void _signIn(Function() onSignIn) async {
-    String? token = await _getIdToken();
+  Future<void> _signIn(Function() onSignIn) async {
+    final token = await _getIdToken();
 
     if (token != null) {
-      User user;
+      User currentUser;
       try {
-        user = FirebaseAuth.instance.currentUser!;
+        currentUser = FirebaseAuth.instance.currentUser!;
       } catch (e, stackTrace) {
         AppSnackbar.showSnackbarError(
           globalNavigatorKey.currentContext?.l10n.authUnexpectedErrorFirebase ??
@@ -175,9 +211,13 @@ class AuthenticationProvider extends BaseProvider {
         PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
         return;
       }
-      String newUid = user.uid;
+      final newUid = currentUser.uid;
       SharedPreferencesUtil().uid = newUid;
+      user = currentUser;
+      authToken = token;
+      _requiresReauthentication = false;
       PlatformManager.instance.analytics.identify();
+      notifyListeners();
       onSignIn();
     } else {
       AppSnackbar.showSnackbarError(
@@ -246,11 +286,13 @@ class AuthenticationProvider extends BaseProvider {
           final oldUserId = FirebaseAuth.instance.currentUser?.uid;
 
           // Sign out current anonymous user
+          AuthService.instance.handleAuthUserChanged(null);
           await FirebaseAuth.instance.signOut();
 
           // Sign in with existing account
           await FirebaseAuth.instance.signInWithCredential(existingCred!);
           final newUserId = FirebaseAuth.instance.currentUser?.uid;
+          if (newUserId != null) AuthService.instance.markAuthenticatedUser(newUserId);
           await AuthService.instance.getIdToken();
 
           SharedPreferencesUtil().onboardingCompleted = false;

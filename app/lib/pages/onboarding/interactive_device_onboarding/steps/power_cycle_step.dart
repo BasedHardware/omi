@@ -41,8 +41,7 @@ class _PowerCycleStepState extends State<PowerCycleStep> {
           });
         }
 
-        final isOff =
-            provider.powerCycleState == PowerCycleSubState.deviceOff ||
+        final isOff = provider.powerCycleState == PowerCycleSubState.deviceOff ||
             provider.powerCycleState == PowerCycleSubState.waitingForReconnect;
         final isReconnected = provider.powerCycleState == PowerCycleSubState.reconnected;
 

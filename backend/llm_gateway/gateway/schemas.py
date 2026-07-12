@@ -83,6 +83,14 @@ class ProviderRef(StrictBaseModel):
     model: str = Field(min_length=1)
 
 
+class GeneratedRouteOverride(StrictBaseModel):
+    """Gateway-only route selection for a lane generated from the legacy profile."""
+
+    feature: str = Field(min_length=1)
+    primary: ProviderRef
+    provider_options: dict[str, Any] = Field(default_factory=dict)
+
+
 class TimeoutPolicy(StrictBaseModel):
     request_ms: int = Field(gt=0)
 
@@ -209,4 +217,9 @@ def compute_route_artifact_digest(artifact: RouteArtifact | dict[str, Any]) -> s
     return f'sha256:{hashlib.sha256(canonical.encode("utf-8")).hexdigest()}'
 
 
-ConfigFileName = Literal['lanes.yaml', 'route_artifacts.yaml', 'feature_bundles.yaml']
+ConfigFileName = Literal[
+    'lanes.yaml',
+    'route_artifacts.yaml',
+    'feature_bundles.yaml',
+    'generated_route_overrides.yaml',
+]

@@ -10,7 +10,6 @@ enum HubTool: String {
   case inspectAgentArtifacts = "inspect_agent_artifacts"
   case updateAgentArtifactLifecycle = "update_agent_artifact_lifecycle"
   case spawnAgent = "spawn_agent"
-  case runAgentAndWait = "run_agent_and_wait"
   case setDesktopAttentionOverride = "set_desktop_attention_override"
   case getConversations = "get_conversations"
   case searchConversations = "search_conversations"
@@ -19,6 +18,8 @@ enum HubTool: String {
   case getActionItems = "get_action_items"
   case createActionItem = "create_action_item"
   case updateActionItem = "update_action_item"
+  case checkPermissionStatus = "check_permission_status"
+  case requestPermission = "request_permission"
   case getTasks = "get_tasks"
   case createCalendarEvent = "create_calendar_event"
   case askHigherModel = "ask_higher_model"
@@ -292,76 +293,6 @@ enum GeneratedRealtimeTools {
   },
   {
     "type": "function",
-    "name": "run_agent_and_wait",
-    "description": "Run a parent-linked child agent synchronously and return its structured result.",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "objective": {
-          "type": "string",
-          "description": "Delegated objective for the child agent."
-        },
-        "parentRunId": {
-          "type": "string",
-          "description": "Canonical parent Omi run_id."
-        },
-        "context": {
-          "type": "string",
-          "description": "Optional concise context, not a full transcript."
-        },
-        "ownerId": {
-          "type": "string",
-          "description": "Optional owner guard for the parent run."
-        },
-        "adapterId": {
-          "type": "string",
-          "description": "Optional adapter override."
-        },
-        "cwd": {
-          "type": "string",
-          "description": "Optional working directory."
-        },
-        "model": {
-          "type": "string",
-          "description": "Optional model override."
-        },
-        "runMode": {
-          "type": "string",
-          "description": "Child run mode. Default ask.",
-          "enum": [
-            "ask",
-            "act"
-          ]
-        },
-        "requestId": {
-          "type": "string",
-          "description": "Optional caller-provided request correlation id."
-        },
-        "clientId": {
-          "type": "string",
-          "description": "Logical caller id. Defaults to omi-control-tools."
-        },
-        "maxDepth": {
-          "type": "number",
-          "description": "Maximum delegation depth for this call. Default 3, hard max 5."
-        },
-        "maxBudgetUsd": {
-          "type": "number",
-          "description": "Per-delegation budget guard. Default 5, hard max 10."
-        },
-        "metadata": {
-          "type": "object",
-          "description": "Small structured metadata for the child run."
-        }
-      },
-      "required": [
-        "objective",
-        "parentRunId"
-      ]
-    }
-  },
-  {
-    "type": "function",
     "name": "set_desktop_attention_override",
     "description": "Dismiss or hide a kernel-derived attention subject such as a floating-bar run.\\n\\nPill dismissal writes here; it never deletes canonical run state.",
     "parameters": {
@@ -586,6 +517,54 @@ enum GeneratedRealtimeTools {
       },
       "required": [
         "id"
+      ]
+    }
+  },
+  {
+    "type": "function",
+    "name": "check_permission_status",
+    "description": "Check whether Omi has the requested macOS permission. This is a fast local action; use it directly when the user asks to check permissions, never by spawning an agent.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "screen_recording",
+            "microphone",
+            "notifications",
+            "accessibility",
+            "automation",
+            "full_disk_access"
+          ],
+          "description": "Optional permission type. Omit to return all supported permissions."
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "type": "function",
+    "name": "request_permission",
+    "description": "Request Omi's macOS permission directly by opening the native prompt or the relevant System Settings pane. Use for Screen Recording, microphone, notifications, Accessibility, Automation, or Full Disk Access. Never use spawn_agent for a permission request.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "screen_recording",
+            "microphone",
+            "notifications",
+            "accessibility",
+            "automation",
+            "full_disk_access"
+          ],
+          "description": "Permission type: screen_recording, microphone, notifications, accessibility, automation, or full_disk_access"
+        }
+      },
+      "required": [
+        "type"
       ]
     }
   },

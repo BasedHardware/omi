@@ -482,10 +482,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     if (device.type != DeviceType.omi) return;
     if (!mounted) return;
 
-    // Onboarding targets the consumer pendant; DevKit boards also enumerate as
-    // DeviceType.omi, so skip them. pairedDevice has the GATT model by now.
+    // Onboarding is the CV1 consumer-pendant button tutorial. DevKit/Glass/Neo/
+    // Friend all also enumerate as DeviceType.omi, so only proceed for a positively
+    // identified CV1. pairedDevice has the GATT model by now.
     final pairedModel = Provider.of<DeviceProvider>(context, listen: false).pairedDevice?.modelNumber;
-    if (DeviceUtils.isOmiDevKit(modelNumber: pairedModel, deviceName: device.name)) return;
+    if (!DeviceUtils.isOmiCv1(modelNumber: pairedModel, deviceName: device.name)) return;
 
     if (_deviceOnboardingShown) return;
     if (SharedPreferencesUtil().deviceOnboardingCompleted) return;
@@ -854,8 +855,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurple.withValues(alpha: 0.2)
                               : hasPendingOnDevice
-                              ? Colors.orange.withValues(alpha: 0.15)
-                              : const Color(0xFF1F1F25),
+                                  ? Colors.orange.withValues(alpha: 0.15)
+                                  : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -864,8 +865,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurpleAccent
                               : hasPendingOnDevice
-                              ? Colors.orangeAccent
-                              : Colors.white70,
+                                  ? Colors.orangeAccent
+                                  : Colors.white70,
                         ),
                       ),
                     );

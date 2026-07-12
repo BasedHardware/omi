@@ -1,5 +1,6 @@
 {
     "@@locale": "tr",
+    "sessionExpiredSignInAgain": "Oturumun süresi doldu — tekrar giriş yapın.",
     "appTitle": "Omi",
     "conversationTab": "Konuşma",
     "transcriptTab": "Transkript",
@@ -3151,5 +3152,31 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "Pendant'ın depolama alanı neredeyse dolu — eşitleme için uygulamayı açık tut."
+    "pendantStorageAlmostFull": "Pendant'ın depolama alanı neredeyse dolu — eşitleme için uygulamayı açık tut.",
+    "connectRayBanMeta": "Ray-Ban Meta'yı Bağla",
+    "raybanMetaSetupDescription": "Ray-Ban Meta gözlüğünüzü konuşmalar ve görsel bağlam için Omi kayıt cihazınız olarak kullanın. Omi, gözlüğünüzü bağlamak için Meta AI uygulamasını açacaktır.",
+    "raybanMetaOpenMetaAI": "Meta AI ile bağlan",
+    "raybanMetaWaitingForMetaAI": "Bağlantıyı Meta AI uygulamasında tamamlayın, ardından buraya geri dönün.",
+    "raybanMetaCheckAgain": "Tekrar Kontrol Et",
+    "raybanMetaAllowCamera": "Gözlükte Kameraya İzin Ver",
+    "raybanMetaCameraExplanation": "Omi, konuşmalarınıza fotoğraf eklemek için gözlüğünüzün kamerasını kullanır. Bunu atlayıp yalnızca sesi kullanabilirsiniz.",
+    "raybanMetaSkipForNow": "Şimdilik Atla",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta yalnızca ses modu",
+    "raybanMetaAudioOnlyExplanation": "Omi'nin bu sürümü gözlüğünüzün mikrofonunu Bluetooth üzerinden kullanabilir. Fotoğraf çekimi için Omi'nin Meta geliştirici sürümü gerekir.",
+    "raybanMetaMusicPauseNote": "Gözlüğün mikrofonu kullanılırken telefonunuzdaki müzik duraklatılır.",
+    "raybanMetaContinue": "Devam Et",
+    "raybanMetaCapturePhoto": "Fotoğraf Çek",
+    "raybanMetaPhotoRequested": "Fotoğraf istendi — konuşmanızda görünecektir.",
+    "raybanMetaMicrophoneReady": "Mikrofon hazır",
+    "raybanMetaImageCaptureReady": "Görüntü yakalama hazır",
+    "raybanMetaImageCaptureUnavailable": "Yalnızca ses modunda kullanılamaz",
+    "raybanMetaCamera": "Kamera",
+    "errorConnectingRayBanMeta": "Ray-Ban Meta'ya bağlanırken hata: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

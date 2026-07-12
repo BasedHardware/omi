@@ -26,6 +26,7 @@ import 'package:omi/pages/onboarding/user_review_page.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -33,7 +34,9 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/device_widget.dart';
 
 class OnboardingWrapper extends StatefulWidget {
-  const OnboardingWrapper({super.key});
+  const OnboardingWrapper({super.key, this.forceAuthPage = false});
+
+  final bool forceAuthPage;
 
   @override
   State<OnboardingWrapper> createState() => _OnboardingWrapperState();
@@ -67,7 +70,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   @override
   void initState() {
-    _speechProfileProvider = SpeechProfileProvider();
+    if (!widget.forceAuthPage) {
+      _speechProfileProvider = SpeechProfileProvider();
+    }
     _controller = TabController(
       length: 12,
       vsync: this,
@@ -101,7 +106,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       //   context.read<OnboardingProvider>().updatePermissions();
       // }
 
-      if (AuthService.instance.isSignedIn()) {
+      if (!widget.forceAuthPage && AuthService.instance.isSignedIn()) {
         // && !SharedPreferencesUtil().onboardingCompleted
         if (mounted) {
           context.read<HomeProvider>().setupHasSpeakerProfile();
@@ -271,6 +276,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           if (!mounted) return;
           PlatformManager.instance.analytics.onboardingStepCompleted('Auth');
           context.read<HomeProvider>().setupHasSpeakerProfile();
+          // Refresh subscription on sign-in: AppShell only fetches it on mount,
+          // so an in-session re-login would otherwise leave it null until the
+          // Plan & Usage page is opened (missing Pro badge).
+          context.read<UsageProvider>().fetchSubscription();
           IntercomManager.instance.loginIdentifiedUser(SharedPreferencesUtil().uid);
           // Consent is checked first regardless of server-side onboarding
           // state so a returning user signing in on a fresh install still
@@ -338,19 +347,21 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       // Placeholder pages - not used in new flow but kept for index consistency
       Container(), // WelcomePage placeholder
       Container(), // FindDevicesPage placeholder
-      ChangeNotifierProvider.value(
-        value: _speechProfileProvider!,
-        child: SpeechProfileWidget(
-          goNext: () {
-            PlatformManager.instance.analytics.onboardingStepCompleted('Speech Profile');
-            _controller!.animateTo(kKnowledgeGraphPage);
-          },
-          onSkip: () {
-            PlatformManager.instance.analytics.onboardingStepCompleted('Speech Profile Skipped');
-            _controller!.animateTo(kKnowledgeGraphPage);
-          },
-        ),
-      ),
+      widget.forceAuthPage
+          ? const SizedBox.shrink()
+          : ChangeNotifierProvider.value(
+              value: _speechProfileProvider!,
+              child: SpeechProfileWidget(
+                goNext: () {
+                  PlatformManager.instance.analytics.onboardingStepCompleted('Speech Profile');
+                  _controller!.animateTo(kKnowledgeGraphPage);
+                },
+                onSkip: () {
+                  PlatformManager.instance.analytics.onboardingStepCompleted('Speech Profile Skipped');
+                  _controller!.animateTo(kKnowledgeGraphPage);
+                },
+              ),
+            ),
       OnboardingKnowledgeGraphStep(
         onContinue: () {
           PlatformManager.instance.analytics.onboardingStepCompleted('Knowledge Graph');

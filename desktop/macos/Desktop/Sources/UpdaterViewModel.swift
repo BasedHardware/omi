@@ -522,16 +522,19 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     let itemAnalytics = UpdateItemAnalytics.from(item: item)
     logSync("Sparkle: Installing update v\(version)")
     let restoreMainWindow = AppDelegate.shouldRestoreMainWindowAfterUpdateRelaunch()
-    UpdateRelaunchWindowPolicy.markPendingRelaunch(restoreMainWindow: restoreMainWindow)
+    let attempt = UpdateRelaunchWindowPolicy.markPendingRelaunch(
+      restoreMainWindow: restoreMainWindow,
+      sourceVersion: context.sourceAppVersion,
+      sourceBuild: context.sourceAppBuild,
+      targetVersion: itemAnalytics.targetVersion,
+      targetBuild: itemAnalytics.targetBuild,
+      channel: context.updateChannel
+    )
     logSync(
       "Sparkle: Next launch will \(restoreMainWindow ? "restore" : "suppress") the main window after update"
     )
     Task { @MainActor in
-      AnalyticsManager.shared.updateInstalled(
-        version: version,
-        context: context,
-        item: itemAnalytics
-      )
+      AnalyticsManager.shared.updateInstallStarted(attempt: attempt)
       self.viewModel?.updateAvailable = false
     }
   }

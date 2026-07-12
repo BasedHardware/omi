@@ -56,6 +56,7 @@ from utils.chat import (
 )
 from utils.sync.files import retrieve_file_paths, decode_files_to_wav
 from utils.stt.streaming import process_audio_dg, get_stt_service_for_language
+from utils.stt.pre_recorded import PrerecordedSTTConfigurationError, get_prerecorded_service
 from utils.llm.goals import extract_and_update_goal_progress
 from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit, store_chat_share, get_chat_share
 from database.users import set_chat_message_rating_score
@@ -92,6 +93,24 @@ _MAX_PCM_BODY_BYTES = 200_000_000
 class VoiceMessageTranscriptionResponse(BaseModel):
     transcript: str
     language: Optional[str] = None
+    stt_provider: Optional[str] = None
+    stt_model: Optional[str] = None
+
+
+def _stt_provider_configuration_error(error: PrerecordedSTTConfigurationError) -> HTTPException:
+    logger.error(
+        'PCM transcription provider configuration is incomplete: provider=%s missing=%s',
+        error.provider,
+        error.missing_env,
+    )
+    return HTTPException(
+        status_code=503,
+        detail={
+            'error': 'stt_provider_configuration_error',
+            'provider': error.provider,
+            'missing': error.missing_env,
+        },
+    )
 
 
 class MessageReportResponse(BaseModel):
@@ -411,9 +430,10 @@ def send_message(
 
 @router.post('/v2/messages/{message_id}/report', tags=['chat'], response_model=MessageReportResponse)
 def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    message, msg_doc_id = chat_db.get_message(uid, message_id)
-    if message is None:
+    result = chat_db.get_message(uid, message_id)
+    if result is None:
         raise HTTPException(status_code=404, detail='Message not found')
+    message, msg_doc_id = result
     if message.sender != 'ai':
         raise HTTPException(status_code=400, detail='Only AI messages can be reported')
     if message.reported:
@@ -613,6 +633,7 @@ async def transcribe_voice_message(
             raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
 
         resolved_language = resolve_voice_message_language(uid, language)
+        stt_provider, _, stt_model = get_prerecorded_service(resolved_language)
         try:
             transcript, detected_language = await run_blocking(
                 sync_executor,
@@ -625,13 +646,15 @@ async def transcribe_voice_message(
                 channels=channels,
                 keywords=context_keywords,
             )
+        except PrerecordedSTTConfigurationError as e:
+            raise _stt_provider_configuration_error(e)
         except RuntimeError as e:
             logger.error(f'PCM transcription failed: {e}')
             raise HTTPException(status_code=500, detail=f'Transcription failed: {str(e)}')
         finally:
             del audio_bytes
 
-        response = {"transcript": transcript or ""}
+        response = {"transcript": transcript or "", "stt_provider": stt_provider, "stt_model": stt_model}
         if detected_language:
             response["language"] = detected_language
         return response
@@ -705,6 +728,14 @@ async def transcribe_voice_message(
                 transcripts.append(transcript)
             if is_multi and detected_language:
                 detected_languages.append(detected_language)
+        except PrerecordedSTTConfigurationError as e:
+            for p in wav_paths:
+                if p.startswith(f"/tmp/{uid}_"):
+                    try:
+                        Path(p).unlink()
+                    except Exception:
+                        pass
+            raise _stt_provider_configuration_error(e)
         except Exception as e:
             logger.error(f"Error transcribing {wav_path}: {e}")
             # Cleanup all remaining temp files before raising
@@ -1130,9 +1161,10 @@ def upload_file_chat(
 
 @router.post('/v1/messages/{message_id}/report', tags=['chat'], response_model=dict)
 def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    message, msg_doc_id = chat_db.get_message(uid, message_id)
-    if message is None:
+    result = chat_db.get_message(uid, message_id)
+    if result is None:
         raise HTTPException(status_code=404, detail='Message not found')
+    message, msg_doc_id = result
     if message.sender != 'ai':
         raise HTTPException(status_code=400, detail='Only AI messages can be reported')
     if message.reported:

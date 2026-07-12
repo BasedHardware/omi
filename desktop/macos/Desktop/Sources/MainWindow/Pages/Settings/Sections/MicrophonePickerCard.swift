@@ -1,5 +1,72 @@
+import CoreAudio
 import OmiTheme
 import SwiftUI
+
+@MainActor
+private final class AudioInputDeviceListObserver: ObservableObject {
+  @Published private(set) var revision = 0
+
+  private var isObserving = false
+  private var listenerBlock: AudioObjectPropertyListenerBlock?
+
+  func start() {
+    guard !isObserving else { return }
+
+    var address = Self.devicesPropertyAddress
+    let listener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+      Task { @MainActor in
+        self?.revision &+= 1
+      }
+    }
+
+    let status = AudioObjectAddPropertyListenerBlock(
+      AudioObjectID(kAudioObjectSystemObject),
+      &address,
+      DispatchQueue.main,
+      listener
+    )
+    guard status == noErr else {
+      revision &+= 1
+      return
+    }
+
+    listenerBlock = listener
+    isObserving = true
+    revision &+= 1
+  }
+
+  func stop() {
+    guard isObserving, let listenerBlock else { return }
+    var address = Self.devicesPropertyAddress
+    AudioObjectRemovePropertyListenerBlock(
+      AudioObjectID(kAudioObjectSystemObject),
+      &address,
+      DispatchQueue.main,
+      listenerBlock
+    )
+    self.listenerBlock = nil
+    isObserving = false
+  }
+
+  deinit {
+    guard isObserving, let listenerBlock else { return }
+    var address = Self.devicesPropertyAddress
+    AudioObjectRemovePropertyListenerBlock(
+      AudioObjectID(kAudioObjectSystemObject),
+      &address,
+      DispatchQueue.main,
+      listenerBlock
+    )
+  }
+
+  nonisolated private static var devicesPropertyAddress: AudioObjectPropertyAddress {
+    AudioObjectPropertyAddress(
+      mSelector: kAudioHardwarePropertyDevices,
+      mScope: kAudioObjectPropertyScopeGlobal,
+      mElement: kAudioObjectPropertyElementMain
+    )
+  }
+}
 
 /// Microphone selection for transcription capture. "System Default" follows
 /// macOS; an explicit device (e.g. Ray-Ban Meta glasses paired over Bluetooth)
@@ -8,6 +75,7 @@ import SwiftUI
 struct MicrophonePickerCard: View {
   @AppStorage(AudioCaptureService.preferredInputUIDDefaultsKey) private var preferredUID: String =
     ""
+  @StateObject private var deviceListObserver = AudioInputDeviceListObserver()
   @State private var devices: [AudioCaptureService.InputDeviceInfo] = []
   let onChanged: () -> Void
 
@@ -48,17 +116,9 @@ struct MicrophonePickerCard: View {
         }
       }
     }
-    .task { await refreshDevicesPeriodically() }
-  }
-
-  @MainActor
-  private func refreshDevicesPeriodically() async {
-    await refreshDevices()
-    while !Task.isCancelled {
-      try? await Task.sleep(nanoseconds: 3_000_000_000)
-      guard !Task.isCancelled else { return }
-      await refreshDevices()
-    }
+    .onAppear { deviceListObserver.start() }
+    .onDisappear { deviceListObserver.stop() }
+    .task(id: deviceListObserver.revision) { await refreshDevices() }
   }
 
   @MainActor

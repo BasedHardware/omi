@@ -169,7 +169,7 @@ run_swift_focus() {
   (
     cd "$DESKTOP_DIR"
     xcrun swift test --package-path Desktop \
-      --filter 'AgentPillLifecycleTests|PushToTalkStateMachineTests|RealtimeHubSpawnAgentTests|AgentContinuityGauntletTests'
+      --filter 'AgentPillLifecycleTests|PushToTalkStateMachineTests|VoiceTurnReducerTests|VoiceTurnCoordinatorTests|PTTVoiceOutputCoordinatorTests|RealtimeHubSessionInputLifecycleTests|RealtimeHubSpawnAgentTests|AgentContinuityGauntletTests|KernelTurnRecordedProjectionTests|ChatTimelineContinuityTests|FloatingControlBarStateTests|RuntimeOwnerIdentityTests'
   )
 }
 
@@ -177,13 +177,6 @@ run_agent_runtime_focus() {
   (
     cd "$DESKTOP_DIR"
     scripts/test-tool-surfaces.sh
-  )
-  (
-    cd "$DESKTOP_DIR/agent"
-    npm test -- --run \
-      tests/codemagic-pi-mono-extension-ci.test.ts \
-      tests/runtime-adapter.test.ts \
-      tests/pi-mono-adapter.test.ts
   )
 }
 

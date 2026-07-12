@@ -147,10 +147,9 @@ class MemoriesViewModel: ObservableObject {
   }
 
   /// Whether the backend supports device_scope filtering for this user.
-  /// Canonical memory users support it; legacy users get a 400. When a 400 is
-  /// received we clear this so subsequent fetches omit device_scope and fall
-  /// back to client-side filtering (ClientDeviceService.memoryMatchesThisDevice)
-  /// applied in recomputeFilteredMemories.
+  /// Canonical memory users support it; legacy users get a 400. Legacy rows
+  /// have no capture provenance, so after that fallback we preserve the
+  /// unscoped list rather than falsely filtering every row out locally.
   private var deviceScopeSupported = true
 
   @Published var selectedTags: Set<MemoryTag> = [] {
@@ -513,8 +512,6 @@ class MemoriesViewModel: ObservableObject {
     refreshInvocations += 1
     // Skip if user is signed out (tokens are cleared)
     guard AuthState.shared.isSignedIn else { return }
-    // Skip if in auth backoff period (recent 401 errors)
-    guard !AuthBackoffTracker.shared.shouldSkipRequest() else { return }
     // Skip if page is not visible
     guard isActive else { return }
 
@@ -550,11 +547,7 @@ class MemoriesViewModel: ObservableObject {
       currentOffset = mergedMemories.count
       rawBackendOffset = apiMemories.count
       hasMoreMemories = mergedMemories.count >= reloadLimit
-      AuthBackoffTracker.shared.reportSuccess()
     } catch {
-      if case APIError.unauthorized = error {
-        AuthBackoffTracker.shared.reportAuthFailure()
-      }
       // Silently ignore errors during auto-refresh
       logError("MemoriesViewModel: Auto-refresh failed", error: error)
     }
@@ -685,7 +678,11 @@ class MemoriesViewModel: ObservableObject {
       result = result.filter { allowedTiers.contains($0.tier) }
     }
 
-    if filterThisDeviceOnly {
+    // A canonical response has already been filtered server-side and its
+    // provenance is authoritative. Legacy rows cannot identify their capture
+    // device, so keeping them visible is the only honest fallback; filtering
+    // them client-side would turn the list into a misleading empty state.
+    if filterThisDeviceOnly && deviceScopeSupported {
       result = result.filter { ClientDeviceService.shared.memoryMatchesThisDevice($0) }
     }
 
@@ -756,8 +753,9 @@ class MemoriesViewModel: ObservableObject {
   /// Fetch memories from the API, honoring the device-scope filter only when
   /// the backend supports it for this user. Legacy (non-canonical) memory users
   /// get a 400 from device_scope=current; on that we retry without the scope
-  /// and return the capability update to the guarded page commit. Client-side device
-  /// filtering (recomputeFilteredMemories) preserves the "This Mac" UX.
+  /// and return the capability update to the guarded page commit. Legacy rows
+  /// lack capture provenance, so recomputeFilteredMemories keeps that fallback
+  /// list visible.
   private func fetchMemoriesPageDeviceScopeAware(limit: Int, offset: Int) async throws -> MemoryPageFetchResult {
     let scope = (filterThisDeviceOnly && deviceScopeSupported) ? "current" : nil
     do {
@@ -766,6 +764,14 @@ class MemoriesViewModel: ObservableObject {
     } catch APIError.httpError(let statusCode, _) where statusCode == 400 && scope != nil {
       // Backend rejected device_scope for a non-canonical user — retry unscoped.
       log("MemoriesViewModel: device_scope unsupported by backend, retrying unscoped")
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "other",
+        from: "device_scoped",
+        to: "unscoped",
+        reason: "capability_mismatch",
+        outcome: .degraded,
+        extra: ["user_visible": false]
+      )
       let page = try await APIClient.shared.getMemoriesPage(limit: limit, offset: offset, deviceScope: nil)
       return MemoryPageFetchResult(page: page, deviceScopeSupportedOverride: false)
     }
@@ -902,7 +908,7 @@ class MemoriesViewModel: ObservableObject {
     } catch {
       // Only show error if we don't have cached data
       if memories.isEmpty {
-        errorMessage = error.localizedDescription
+        errorMessage = UserFacingErrorPresentation.message(for: error, while: .memories)
       }
       logError("Failed to load memories from API", error: error)
     }
@@ -1077,8 +1083,18 @@ class MemoriesViewModel: ObservableObject {
       if !moreFromCache.isEmpty {
         let visibleMemories = displayCacheMemories(moreFromCache, for: token)
         memories.append(contentsOf: visibleMemories)
-        currentOffset += visibleMemories.count
-        hasMoreMemories = visibleMemories.count >= pageSize
+        // Advance the SQLite paging cursor by the RAW row count returned by the
+        // query, not the tier-filtered visible count. getLocalMemories(offset:)
+        // pages over raw rows, so advancing by the smaller filtered count makes the
+        // next page re-fetch the filtered-out rows — duplicate/stuck paging once
+        // hasMoreMemories (below) correctly stays true on a filtered page.
+        currentOffset += moreFromCache.count
+        // Derive hasMoreMemories from the RAW cache count, not the tier-filtered
+        // visible count. A full raw page whose visible subset is < pageSize still
+        // has more cached rows to page; using the filtered count here disabled
+        // scrolling and permanently hid those memories (the initial-load path
+        // already documents this exact raw-vs-filtered pagination rule).
+        hasMoreMemories = moreFromCache.count >= pageSize
         log(
           "MemoriesViewModel: Loaded \(visibleMemories.count) more from local cache (total: \(memories.count))"
         )
@@ -1163,6 +1179,16 @@ class MemoriesViewModel: ObservableObject {
       undoTimeRemaining = 4
     }
 
+    // The soft-delete above immediately drops this row from getLocalMemories(), so
+    // the SQLite paging cursor is now one position too high — the next loadMore()
+    // would skip the item that shifted into the old cursor slot. Back the
+    // visible/cache cursor off by one. (rawBackendOffset is adjusted separately in
+    // performActualDelete, only after the backend row is actually removed, because
+    // the backend still holds the row during the undo window.) Undo and
+    // delete-failure both call reloadForCurrentLayerFilter(), which recomputes
+    // currentOffset from offset 0, so this decrement safely unwinds.
+    currentOffset = max(0, currentOffset - 1)
+
     // Start countdown timer
     deleteTask = Task {
       // Update countdown every 100ms
@@ -1226,6 +1252,12 @@ class MemoriesViewModel: ObservableObject {
     do {
       try await APIClient.shared.deleteMemory(id: memory.id)
       AnalyticsManager.shared.memoryDeleted(conversationId: memory.id)
+      // The backend row is now gone, so the raw backend paging cursor is one
+      // position too high — decrement it so the next API-backed loadMore() doesn't
+      // skip the item that shifted into the old cursor slot. Done here rather than
+      // in the optimistic block because the backend still holds the row during the
+      // undo window; decrementing earlier would re-fetch and duplicate it.
+      rawBackendOffset = max(0, rawBackendOffset - 1)
     } catch {
       logError("Failed to delete memory", error: error)
       do {
@@ -1268,6 +1300,13 @@ class MemoriesViewModel: ObservableObject {
       if let index = memories.firstIndex(where: { $0.id == memory.id }) {
         memories[index].visibility = newVisibility
       }
+      if let index = searchResults.firstIndex(where: { $0.id == memory.id }) {
+        searchResults[index].visibility = newVisibility
+      }
+      if let index = filteredFromDatabase.firstIndex(where: { $0.id == memory.id }) {
+        filteredFromDatabase[index].visibility = newVisibility
+      }
+      recomputeFilteredMemories()
       // Update selectedMemory if it's the same memory (reassign to trigger SwiftUI update)
       if var selected = selectedMemory, selected.id == memory.id {
         selected.visibility = newVisibility
@@ -1292,7 +1331,7 @@ class MemoriesViewModel: ObservableObject {
       try await MemoryStorage.shared.updateVisibility(scope: scope, visibility: "private")
       await reloadForCurrentLayerFilter()
     } catch {
-      errorMessage = error.localizedDescription
+      errorMessage = UserFacingErrorPresentation.message(for: error, while: .memoryVisibility)
       logError("Bulk make private disabled or failed", error: error)
     }
   }
@@ -1306,7 +1345,7 @@ class MemoriesViewModel: ObservableObject {
       try await MemoryStorage.shared.updateVisibility(scope: scope, visibility: "public")
       await reloadForCurrentLayerFilter()
     } catch {
-      errorMessage = error.localizedDescription
+      errorMessage = UserFacingErrorPresentation.message(for: error, while: .memoryVisibility)
       logError("Bulk make public disabled or failed", error: error)
     }
   }
@@ -1330,8 +1369,120 @@ class MemoriesViewModel: ObservableObject {
       try await MemoryStorage.shared.deleteAllMemories(scope: scope)
       await reloadForCurrentLayerFilter()
     } catch {
-      errorMessage = error.localizedDescription
+      errorMessage = UserFacingErrorPresentation.message(for: error, while: .memoryDeletion)
       logError("Bulk delete disabled or failed", error: error)
+    }
+  }
+
+  // MARK: - Automation (headless memory search/filter/visibility for desktop bridge)
+
+  private var didRegisterAutomationActions = false
+
+  func registerAutomationActions() {
+    guard !didRegisterAutomationActions else { return }
+    didRegisterAutomationActions = true
+    let registry = DesktopAutomationActionRegistry.shared
+
+    registry.register(
+      name: "memories_search",
+      summary: "Set memories search query and return filtered result count",
+      params: ["query"]
+    ) { [weak self] params in
+      guard let self else { return ["error": "memories view model deallocated"] }
+      let query = params["query"] ?? ""
+      self.searchText = query
+      let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+      if !trimmed.isEmpty {
+        let startDeadline = Date().addingTimeInterval(2)
+        while !self.isSearching, Date() < startDeadline {
+          try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+      }
+      let deadline = Date().addingTimeInterval(10)
+      while self.isSearching, Date() < deadline {
+        try? await Task.sleep(nanoseconds: 50_000_000)
+      }
+      return [
+        "query": query,
+        "result_count": "\(self.filteredMemories.count)",
+        "search_active": query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "false" : "true",
+        "is_searching": self.isSearching ? "true" : "false",
+      ]
+    }
+
+    registry.register(
+      name: "memories_set_tag_filter",
+      summary: "Set memory tag/category filters and return filtered count",
+      params: ["tags"]
+    ) { [weak self] params in
+      guard let self else { return ["error": "memories view model deallocated"] }
+      let raw = params["tags"] ?? ""
+      let tags: Set<MemoryTag>
+      if raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        tags = []
+      } else {
+        let parsed = raw.split(separator: ",")
+          .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+          .compactMap { MemoryTag(rawValue: $0) }
+        tags = Set(parsed)
+      }
+      self.selectedTags = tags
+      if !tags.isEmpty {
+        let startDeadline = Date().addingTimeInterval(2)
+        while !self.isLoadingFiltered, Date() < startDeadline {
+          try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+      }
+      let deadline = Date().addingTimeInterval(10)
+      while self.isLoadingFiltered, Date() < deadline {
+        try? await Task.sleep(nanoseconds: 50_000_000)
+      }
+      let tagList = tags.map(\.rawValue).sorted().joined(separator: ",")
+      return [
+        "tags": tagList.isEmpty ? "none" : tagList,
+        "filtered_count": "\(self.filteredMemories.count)",
+        "tag_filter_active": tags.isEmpty ? "false" : "true",
+      ]
+    }
+
+    registry.register(
+      name: "toggle_memory_visibility",
+      summary: "Toggle a memory's public/private visibility via the real API path",
+      params: ["id", "marker"]
+    ) { [weak self] params in
+      guard let self else { return ["error": "memories view model deallocated"] }
+      if self.memories.isEmpty {
+        await self.loadMemories()
+      }
+      let memory: ServerMemory?
+      if let id = params["id"]?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty {
+        memory = self.memories.first(where: { $0.id == id })
+          ?? self.searchResults.first(where: { $0.id == id })
+          ?? self.filteredFromDatabase.first(where: { $0.id == id })
+      } else if let marker = params["marker"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !marker.isEmpty
+      {
+        memory = self.memories.first(where: { $0.content.contains(marker) })
+          ?? self.searchResults.first(where: { $0.content.contains(marker) })
+          ?? self.filteredFromDatabase.first(where: { $0.content.contains(marker) })
+      } else {
+        memory = nil
+      }
+      guard let memory else {
+        return ["error": "missing id or marker match"]
+      }
+      let priorVisibility = memory.visibility
+      await self.toggleVisibility(memory)
+      let updated = self.memories.first(where: { $0.id == memory.id })
+        ?? self.searchResults.first(where: { $0.id == memory.id })
+        ?? self.filteredFromDatabase.first(where: { $0.id == memory.id })
+      let newVisibility = updated?.visibility ?? (priorVisibility == "public" ? "private" : "public")
+      return [
+        "memory_id": memory.id,
+        "prior_visibility": priorVisibility,
+        "visibility": newVisibility,
+        "toggled": priorVisibility == newVisibility ? "false" : "true",
+      ]
     }
   }
 
@@ -1356,6 +1507,7 @@ class MemoriesViewModel: ObservableObject {
 
 struct MemoriesPage: View {
   @ObservedObject var viewModel: MemoriesViewModel
+  let graphViewModel: MemoryGraphViewModel
   @State private var showCategoryFilter = false
   @State private var categorySearchText = ""
   @State private var pendingSelectedTags: Set<MemoryTag> = []
@@ -1954,7 +2106,7 @@ struct MemoriesPage: View {
   private var memoryList: some View {
     ScrollView {
       LazyVStack(alignment: .leading, spacing: 14) {
-        MemoryGraphInlineCard()
+        MemoryGraphInlineCard(viewModel: graphViewModel)
 
         LazyVStack(spacing: 10) {
           ForEach(viewModel.filteredMemories) { memory in
@@ -2146,7 +2298,7 @@ struct MemoriesPage: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
-  private func errorView(_ message: String) -> some View {
+  private func errorView(_: String) -> some View {
     VStack(spacing: 16) {
       Image(systemName: "exclamationmark.triangle")
         .scaledFont(size: 36)
@@ -2156,7 +2308,7 @@ struct MemoriesPage: View {
         .scaledFont(size: 18, weight: .semibold)
         .foregroundColor(OmiColors.textPrimary)
 
-      Text(message)
+      Text("Check your connection and try again.")
         .scaledFont(size: 14)
         .foregroundColor(OmiColors.textTertiary)
 

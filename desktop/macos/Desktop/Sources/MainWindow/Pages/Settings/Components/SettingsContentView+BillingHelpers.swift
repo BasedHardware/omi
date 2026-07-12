@@ -537,7 +537,7 @@ extension SettingsContentView {
     if enabled && !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
       permissionError = "Screen recording permission required"
       isMonitoring = false
-      ProactiveAssistantsPlugin.shared.openScreenRecordingPreferences()
+      ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
       return
     }
 
@@ -724,6 +724,8 @@ extension SettingsContentView {
     transcriptionLanguage = AssistantSettings.shared.transcriptionLanguage
     transcriptionAutoDetect = AssistantSettings.shared.transcriptionAutoDetect
     vocabularyList = AssistantSettings.shared.transcriptionVocabulary
+    let transcriptionVocabularyRevisionAtLoadStart =
+      AssistantSettings.shared.transcriptionVocabularyRevision
     vadGateEnabled = AssistantSettings.shared.vadGateEnabled
     systemAudioCaptureMode = AssistantSettings.shared.systemAudioCaptureMode
 
@@ -764,9 +766,16 @@ extension SettingsContentView {
           recordingPermissionEnabled = recording.enabled
           privateCloudSyncEnabled = cloudSync.enabled
           singleLanguageMode = transcription.singleLanguageMode
-          vocabularyList = transcription.vocabulary
-          // Sync backend vocabulary to local settings
-          AssistantSettings.shared.transcriptionVocabulary = transcription.vocabulary
+          // Do not let a GET that began before a local/PATCH mutation overwrite
+          // the newer vocabulary when it finally completes.
+          if AssistantSettings.shared.shouldApplyTranscriptionVocabularyHydration(
+            startedAtRevision: transcriptionVocabularyRevisionAtLoadStart
+          ) {
+            vocabularyList = transcription.vocabulary
+            AssistantSettings.shared.transcriptionVocabulary = transcription.vocabulary
+          } else {
+            vocabularyList = AssistantSettings.shared.transcriptionVocabulary
+          }
 
           // Sync backend language to local if different (backend is source of truth for language)
           let normalizedLanguage = AssistantSettings.normalizeTranscriptionLanguageCode(language.language)

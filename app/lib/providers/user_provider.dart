@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
-import 'package:geolocator/geolocator.dart';
 
 import 'package:omi/backend/http/api/privacy.dart';
-import 'package:omi/backend/http/api/users.dart' as users_api;
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/geolocation.dart';
@@ -15,6 +13,13 @@ import 'package:omi/utils/logger.dart';
 
 class UserProvider with ChangeNotifier {
   static const int _migrationNotificationId = 1337;
+
+  /// Fetches the server's private-cloud-sync flag. Returns `null` on a failed
+  /// fetch so the loader can preserve the last known state. Injectable for tests.
+  final Future<bool?> Function() _privateCloudSyncFetcher;
+
+  UserProvider({Future<bool?> Function()? privateCloudSyncFetcher})
+      : _privateCloudSyncFetcher = privateCloudSyncFetcher ?? getPrivateCloudSyncEnabled;
 
   String _dataProtectionLevel = 'standard';
   bool _isLoading = false;
@@ -42,6 +47,7 @@ class UserProvider with ChangeNotifier {
   // Loading states for transcription settings
   bool _isUpdatingSingleLanguageMode = false;
   bool _isUpdatingVocabulary = false;
+  int _sessionGeneration = 0;
 
   // Transcription preferences getters
   bool get singleLanguageMode => _singleLanguageMode;
@@ -61,6 +67,29 @@ class UserProvider with ChangeNotifier {
   String get migrationMessage => _migrationMessage;
   String get sourceLevel => _sourceLevel;
   String get targetLevel => _targetLevel;
+
+  void clearUserData() {
+    _sessionGeneration++;
+    _dataProtectionLevel = 'standard';
+    _isLoading = false;
+    _privateCloudSyncEnabled = false;
+    _trainingDataOptedIn = false;
+    _trainingDataStatus = null;
+    _isMigrating = false;
+    _migrationFailed = false;
+    _migrationQueue = [];
+    _processedCount = 0;
+    _migrationMessage = '';
+    _sourceLevel = '';
+    _targetLevel = '';
+    _startTime = null;
+    _lastKnownLocation = null;
+    _singleLanguageMode = false;
+    _transcriptionVocabulary = [];
+    _isUpdatingSingleLanguageMode = false;
+    _isUpdatingVocabulary = false;
+    notifyListeners();
+  }
 
   String get migrationETA {
     final ctx = globalNavigatorKey.currentContext;
@@ -102,6 +131,7 @@ class UserProvider with ChangeNotifier {
   }
 
   Future<void> initialize() async {
+    final generation = _sessionGeneration;
     _isLoading = true;
 
     // Preload from SharedPreferences for instant UI
@@ -110,29 +140,37 @@ class UserProvider with ChangeNotifier {
 
     try {
       final userProfile = await PrivacyApi.getUserProfile();
+      if (generation != _sessionGeneration) return;
       _dataProtectionLevel = userProfile['data_protection_level'] ?? 'standard';
 
       // Load private cloud sync status
-      await _loadPrivateCloudSyncStatus();
+      await _loadPrivateCloudSyncStatus(generation);
+      if (generation != _sessionGeneration) return;
 
       // Load training data opt-in status
-      await _loadTrainingDataOptIn();
+      await _loadTrainingDataOptIn(generation);
+      if (generation != _sessionGeneration) return;
 
       // Load transcription preferences (will sync with API and update cache)
-      await _loadTranscriptionPreferences();
+      await _loadTranscriptionPreferences(generation);
+      if (generation != _sessionGeneration) return;
 
       final migrationStatus = userProfile['migration_status'];
       if (migrationStatus != null && migrationStatus['status'] == 'in_progress') {
         final targetLevel = migrationStatus['target_level'];
         if (targetLevel != null) {
-          Future.microtask(() => updateDataProtectionLevel(targetLevel));
+          Future.microtask(() {
+            if (generation == _sessionGeneration) updateDataProtectionLevel(targetLevel);
+          });
         }
       }
     } catch (e, stackTrace) {
       Logger.error('Failed to initialize UserProvider: $e\n$stackTrace');
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (generation == _sessionGeneration) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -148,18 +186,30 @@ class UserProvider with ChangeNotifier {
     prefs.cachedTranscriptionVocabulary = _transcriptionVocabulary;
   }
 
-  Future<void> _loadPrivateCloudSyncStatus() async {
+  @visibleForTesting
+  Future<void> loadPrivateCloudSyncStatus() => _loadPrivateCloudSyncStatus(_sessionGeneration);
+
+  Future<void> _loadPrivateCloudSyncStatus(int generation) async {
     try {
-      _privateCloudSyncEnabled = await getPrivateCloudSyncEnabled();
+      final enabled = await _privateCloudSyncFetcher();
+      if (generation != _sessionGeneration) return;
+      // A failed fetch returns null — keep the last known state instead of
+      // flipping the toggle off, which would misreport cloud sync as disabled
+      // (and lose recordings the user meant to keep) on a transient error.
+      if (enabled != null) {
+        _privateCloudSyncEnabled = enabled;
+      }
     } catch (e) {
+      if (generation != _sessionGeneration) return;
       Logger.error('Failed to load private cloud sync status: $e');
-      _privateCloudSyncEnabled = false;
+      // Keep the cached value on error, don't reset.
     }
   }
 
-  Future<void> _loadTranscriptionPreferences() async {
+  Future<void> _loadTranscriptionPreferences(int generation) async {
     try {
       final prefs = await getTranscriptionPreferences();
+      if (generation != _sessionGeneration) return;
       if (prefs != null) {
         _singleLanguageMode = prefs['single_language_mode'] ?? false;
         _transcriptionVocabulary = List<String>.from(prefs['vocabulary'] ?? []);
@@ -167,17 +217,20 @@ class UserProvider with ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
+      if (generation != _sessionGeneration) return;
       Logger.error('Failed to load transcription preferences: $e');
       // Keep cached values on error, don't reset
     }
   }
 
-  Future<void> _loadTrainingDataOptIn() async {
+  Future<void> _loadTrainingDataOptIn(int generation) async {
     try {
       final data = await getTrainingDataOptIn();
+      if (generation != _sessionGeneration) return;
       _trainingDataOptedIn = data['opted_in'] ?? false;
       _trainingDataStatus = data['status'];
     } catch (e) {
+      if (generation != _sessionGeneration) return;
       Logger.error('Failed to load training data opt-in status: $e');
       _trainingDataOptedIn = false;
       _trainingDataStatus = null;

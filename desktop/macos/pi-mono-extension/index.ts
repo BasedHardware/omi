@@ -26,8 +26,8 @@ import {
   type ToolCallEvent,
   type ToolCallEventResult,
   type ToolResultEvent,
-} from "@mariozechner/pi-coding-agent";
-import { Type } from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-coding-agent";
+import { Type } from "@earendil-works/pi-ai";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createConnection, type Socket } from "node:net";
@@ -690,9 +690,16 @@ function loadSkillTool() {
   });
 }
 
-export const OMI_TOOLS = toolsForAdapter("pi-mono").map((tool) => (
-  tool.executor.kind === "nodeTool" ? loadSkillTool() : omiManifestTool(tool)
-));
+const executionRole = process.env.OMI_EXECUTION_ROLE === "leaf" ? "leaf" : "coordinator";
+const projectionContext = { executionRole } as const;
+
+export function omiToolsForExecutionRole(role: "coordinator" | "leaf") {
+  return toolsForAdapter("pi-mono", { executionRole: role }).map((tool) => (
+    tool.executor.kind === "nodeTool" ? loadSkillTool() : omiManifestTool(tool)
+  ));
+}
+
+export const OMI_TOOLS = omiToolsForExecutionRole(executionRole);
 
 async function registerOmiTools(pi: ExtensionAPI): Promise<void> {
   const pipePath = process.env.OMI_BRIDGE_PIPE;
@@ -709,7 +716,7 @@ async function registerOmiTools(pi: ExtensionAPI): Promise<void> {
   for (const tool of OMI_TOOLS) {
     pi.registerTool(tool);
   }
-  const snapshot = buildToolAvailabilitySnapshot("pi-mono");
+  const snapshot = buildToolAvailabilitySnapshot("pi-mono", projectionContext);
   if (process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH) {
     try {
       await writeFile(process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH, `${JSON.stringify(snapshot, null, 2)}\n`);

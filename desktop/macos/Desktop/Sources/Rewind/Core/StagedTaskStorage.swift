@@ -1,12 +1,19 @@
 import Foundation
 import GRDB
 
+struct CanonicalCaptureReceipt: Equatable {
+    let candidateID: String
+    let status: String
+    let taskID: String?
+}
+
 /// Actor-based storage manager for staged tasks awaiting promotion to action_items.
 /// Mirrors a subset of ActionItemStorage methods but operates on the staged_tasks table.
 actor StagedTaskStorage {
     static let shared = StagedTaskStorage()
 
     private var _dbQueue: DatabasePool?
+    private var _dbGeneration = -1
     private var isInitialized = false
 
     private init() {}
@@ -17,7 +24,7 @@ actor StagedTaskStorage {
     }
 
     private func ensureInitialized() async throws -> DatabasePool {
-        if let db = _dbQueue {
+        if let db = _dbQueue, await RewindDatabase.shared.poolGeneration() == _dbGeneration {
             return db
         }
 
@@ -28,11 +35,13 @@ actor StagedTaskStorage {
             throw error
         }
 
-        guard let db = await RewindDatabase.shared.getDatabaseQueue() else {
+        let (queue, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+        guard let db = queue else {
             throw ActionItemStorageError.databaseNotInitialized
         }
 
         _dbQueue = db
+        _dbGeneration = generation
         isInitialized = true
         return db
     }
@@ -81,7 +90,7 @@ actor StagedTaskStorage {
 
     // MARK: - Sync
 
-    func markSynced(id: Int64, backendId: String) async throws {
+    func markSynced(id: Int64, backendId: String, source: String? = nil) async throws {
         let db = try await ensureInitialized()
 
         enum MarkSyncedResult {
@@ -119,6 +128,7 @@ actor StagedTaskStorage {
 
             record.backendId = backendId
             record.backendSynced = true
+            if let source { record.source = source }
             record.updatedAt = Date()
             do {
                 try record.update(database)
@@ -155,9 +165,71 @@ actor StagedTaskStorage {
             try StagedTaskRecord
                 .filter(Column("backendSynced") == false)
                 .filter(Column("deleted") == false)
+                .filter(Column("source") == nil || Column("source") != "candidate_outbox")
                 .order(Column("createdAt").desc)
                 .limit(limit)
                 .fetchAll(database)
+        }
+    }
+
+    func markCanonicalReceipt(id: Int64, candidateID: String, status: String, taskID: String?) async throws {
+        let db = try await ensureInitialized()
+        try await db.write { database in
+            guard var record = try StagedTaskRecord.fetchOne(database, key: id) else {
+                throw ActionItemStorageError.recordNotFound
+            }
+            var metadata = record.metadata ?? [:]
+            metadata["canonical_candidate_id"] = candidateID
+            metadata["canonical_candidate_status"] = status
+            if let taskID { metadata["canonical_task_id"] = taskID }
+            record.setMetadata(metadata)
+            record.backendId = candidateID
+            record.backendSynced = true
+            record.completed = true
+            record.source = "candidate_outbox"
+            record.updatedAt = Date()
+            try record.update(database)
+        }
+    }
+
+    func discardCanonicalOutbox(id: Int64) async throws {
+        let db = try await ensureInitialized()
+        try await db.write { database in
+            try database.execute(
+                sql: "UPDATE staged_tasks SET completed = 1, deleted = 1, updatedAt = ? WHERE id = ?",
+                arguments: [Date(), id]
+            )
+        }
+    }
+
+    func getUnsyncedCanonicalOutbox(limit: Int = 50) async throws -> [StagedTaskRecord] {
+        let db = try await ensureInitialized()
+        return try await db.read { database in
+            try StagedTaskRecord
+                .filter(Column("backendSynced") == false)
+                .filter(Column("deleted") == false)
+                .filter(Column("source") == "candidate_outbox")
+                .order(Column("createdAt").asc)
+                .limit(limit)
+                .fetchAll(database)
+        }
+    }
+
+    func getCanonicalCaptureReceipt(id: Int64) async throws -> CanonicalCaptureReceipt? {
+        let db = try await ensureInitialized()
+        return try await db.read { database in
+            guard let record = try StagedTaskRecord.fetchOne(database, key: id),
+                  record.source == "candidate_outbox",
+                  record.backendSynced,
+                  let metadata = record.metadata,
+                  let candidateID = metadata["canonical_candidate_id"] as? String,
+                  let status = metadata["canonical_candidate_status"] as? String
+            else { return nil }
+            return CanonicalCaptureReceipt(
+                candidateID: candidateID,
+                status: status,
+                taskID: metadata["canonical_task_id"] as? String
+            )
         }
     }
 
@@ -171,6 +243,7 @@ actor StagedTaskStorage {
             let records = try StagedTaskRecord
                 .filter(Column("deleted") == false)
                 .filter(Column("completed") == false)
+                .filter(Column("source") == nil || Column("source") != "candidate_outbox")
                 .order(Column("createdAt").desc)
                 .limit(limit)
                 .fetchAll(database)
@@ -187,6 +260,7 @@ actor StagedTaskStorage {
             let records = try StagedTaskRecord
                 .filter(Column("deleted") == false)
                 .filter(Column("completed") == false)
+                .filter(Column("source") == nil || Column("source") != "candidate_outbox")
                 .order(sql: "COALESCE(relevanceScore, 999999) ASC")
                 .limit(limit)
                 .fetchAll(database)
@@ -297,6 +371,8 @@ actor StagedTaskStorage {
             try Row.fetchAll(database, sql: """
                 SELECT id, embedding FROM staged_tasks
                 WHERE embedding IS NOT NULL
+                  AND completed = 0 AND deleted = 0
+                  AND (source IS NULL OR source != 'candidate_outbox')
             """).compactMap { row in
                 guard let id: Int64 = row["id"],
                       let embedding: Data = row["embedding"] else { return nil }
@@ -345,7 +421,11 @@ actor StagedTaskStorage {
         let db = try await ensureInitialized()
 
         return try await db.read { database in
-            guard let record = try StagedTaskRecord.fetchOne(database, key: id) else {
+            guard let record = try StagedTaskRecord.fetchOne(database, key: id),
+                  !record.completed,
+                  !record.deleted,
+                  record.source != "candidate_outbox"
+            else {
                 return nil
             }
             return (id: record.id ?? id, description: record.description, relevanceScore: record.relevanceScore, completed: record.completed, deleted: record.deleted)
@@ -361,7 +441,8 @@ actor StagedTaskStorage {
         return try await db.read { database in
             try Row.fetchAll(database, sql: """
                 SELECT id, description FROM staged_tasks
-                WHERE embedding IS NULL AND deleted = 0
+                WHERE embedding IS NULL AND completed = 0 AND deleted = 0
+                  AND (source IS NULL OR source != 'candidate_outbox')
                 ORDER BY createdAt DESC LIMIT ?
             """, arguments: [limit]).map { row in
                 (
@@ -379,7 +460,9 @@ actor StagedTaskStorage {
 
         return try await db.read { database in
             try Int.fetchOne(database, sql: """
-                SELECT COUNT(*) FROM staged_tasks WHERE completed = 0 AND deleted = 0
+                SELECT COUNT(*) FROM staged_tasks
+                WHERE completed = 0 AND deleted = 0
+                  AND (source IS NULL OR source != 'candidate_outbox')
             """) ?? 0
         }
     }

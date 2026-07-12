@@ -21,6 +21,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 
+use crate::fallback::{record_fallback, FallbackOutcome};
 use crate::services::RedisService;
 
 // Daily soft/hard limits are tier-aware — see crate::llm::model_qos.
@@ -142,6 +143,13 @@ impl GeminiRateLimiter {
     ) -> RateDecision {
         // Phase 1: No Redis → unmetered (skip cache entirely)
         let Some(redis) = redis else {
+            record_fallback(
+                "redis_ratelimit",
+                "enforced",
+                "unmetered",
+                "config_incomplete",
+                FallbackOutcome::Degraded,
+            );
             tracing::warn!(
                 "{} rate limit: Redis not configured, request unmetered",
                 self.redis_ns
@@ -150,19 +158,23 @@ impl GeminiRateLimiter {
         };
 
         let now = Instant::now();
-        let burst_cutoff = now - Duration::from_secs(BURST_WINDOW_SECS);
+        // `Instant - Duration` panics ("overflow when subtracting duration from
+        // instant") if the monotonic clock base is younger than the window — a
+        // latent panic on a freshly started process. `checked_sub` -> None means
+        // nothing can be older than the cutoff, so there is nothing to prune.
+        let burst_cutoff = now.checked_sub(Duration::from_secs(BURST_WINDOW_SECS));
 
         // Phase 2: Fast-path local checks (conservative rejections only)
         {
             let mut cache = self.cache.lock().await;
             if let Some(entry) = cache.get_mut(uid) {
                 // Prune stale burst entries
-                while entry
-                    .local_burst
-                    .front()
-                    .map_or(false, |&t| t < burst_cutoff)
-                {
-                    entry.local_burst.pop_front();
+                while let Some(cutoff) = burst_cutoff {
+                    if entry.local_burst.front().map_or(false, |&t| t < cutoff) {
+                        entry.local_burst.pop_front();
+                    } else {
+                        break;
+                    }
                 }
 
                 // Fast reject on local burst (this instance alone has seen >= cap)
@@ -207,18 +219,25 @@ impl GeminiRateLimiter {
                 }
 
                 // Track burst locally
-                while entry
-                    .local_burst
-                    .front()
-                    .map_or(false, |&t| t < burst_cutoff)
-                {
-                    entry.local_burst.pop_front();
+                while let Some(cutoff) = burst_cutoff {
+                    if entry.local_burst.front().map_or(false, |&t| t < cutoff) {
+                        entry.local_burst.pop_front();
+                    } else {
+                        break;
+                    }
                 }
                 entry.local_burst.push_back(now);
 
                 decision
             }
             Err(e) => {
+                record_fallback(
+                    "redis_ratelimit",
+                    "enforced",
+                    "unmetered",
+                    "other",
+                    FallbackOutcome::Degraded,
+                );
                 tracing::error!(
                     "{} rate limit: Redis error, request unmetered: {}",
                     self.redis_ns,
@@ -233,8 +252,12 @@ impl GeminiRateLimiter {
     pub async fn evict_stale(&self) {
         let now = Instant::now();
         let mut cache = self.cache.lock().await;
-        // Remove entries whose cache expired more than 5 minutes ago
-        let stale_cutoff = now - Duration::from_secs(300);
+        // Remove entries whose cache expired more than 5 minutes ago. `checked_sub`
+        // guards against an `Instant - Duration` panic when the process has been up
+        // less than the window; None means nothing is stale enough to evict yet.
+        let Some(stale_cutoff) = now.checked_sub(Duration::from_secs(300)) else {
+            return;
+        };
         cache.retain(|_, entry| entry.expires_at > stale_cutoff);
     }
 }

@@ -159,17 +159,16 @@ enum ViewExporter {
     ("06-disk-access", 5),
     ("07-file-scan", 6),
     ("08-microphone", 7),
-    ("09-notifications", 8),
-    ("10-accessibility", 9),
-    ("11-automation", 10),
-    ("12-floating-bar-shortcut", 11),
-    ("13-floating-bar", 12),
-    ("14-voice-shortcut", 13),
-    ("15-voice-demo", 14),
-    ("16-data-sources", 15),
-    ("17-exports", 16),
-    ("18-goal", 17),
-    ("19-tasks", 18),
+    ("09-accessibility", 8),
+    ("10-automation", 9),
+    ("11-floating-bar-shortcut", 10),
+    ("12-floating-bar", 11),
+    ("13-voice-shortcut", 12),
+    ("14-voice-demo", 13),
+    ("15-data-sources", 14),
+    ("16-exports", 15),
+    ("17-goal", 16),
+    ("18-tasks", 17),
   ]
 
   static func onboardingViewAt(_ index: Int) -> (String, AnyView, CGSize)? {
@@ -290,7 +289,7 @@ enum ViewExporter {
         "full-ai-chat", 2,
         { AnyView(ChatPage(appProvider: AppProvider(), chatProvider: previewChatProvider())) }
       ),
-      ("full-memories", 3, { AnyView(MemoriesPage(viewModel: previewMemoriesViewModel())) }),
+      ("full-memories", 3, { AnyView(MemoriesPage(viewModel: previewMemoriesViewModel(), graphViewModel: MemoryGraphViewModel())) }),
       (
         "full-tasks", 4,
         {
@@ -636,33 +635,33 @@ enum ViewExporter {
     hostingView.layoutSubtreeIfNeeded()
 
     var success = false
-    do {
-      try ObjCExceptionCatcher.catching {
-        // Export PNG
-        guard let bitmapRep = hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds)
-        else {
-          NSLog("ViewExporter: SKIP \(name) - no bitmap")
-          return
-        }
-        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmapRep)
-
-        if let pngData = bitmapRep.representation(using: .png, properties: [:]) {
-          let pngPath = "\(dir)/\(name).png"
-          try? pngData.write(to: URL(fileURLWithPath: pngPath))
-          let kb = pngData.count / 1024
-          NSLog("ViewExporter: \(name).png (\(Int(size.width))x\(Int(size.height))) \(kb)KB")
-        }
-
-        // Export PDF (vector data preserved for SVG conversion)
-        let pdfData = hostingView.dataWithPDF(inside: hostingView.bounds)
-        let pdfPath = "\(dir)/\(name).pdf"
-        try? pdfData.write(to: URL(fileURLWithPath: pdfPath))
-        NSLog("ViewExporter: \(name).pdf (\(pdfData.count / 1024)KB)")
-
-        success = true
+    let exception = ObjCExceptionCatcher.catching {
+      // Export PNG
+      guard let bitmapRep = hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds)
+      else {
+        NSLog("ViewExporter: SKIP \(name) - no bitmap")
+        return
       }
-    } catch {
-      NSLog("ViewExporter: SKIP \(name) - \(error.localizedDescription)")
+      hostingView.cacheDisplay(in: hostingView.bounds, to: bitmapRep)
+
+      if let pngData = bitmapRep.representation(using: .png, properties: [:]) {
+        let pngPath = "\(dir)/\(name).png"
+        try? pngData.write(to: URL(fileURLWithPath: pngPath))
+        let kb = pngData.count / 1024
+        NSLog("ViewExporter: \(name).png (\(Int(size.width))x\(Int(size.height))) \(kb)KB")
+      }
+
+      // Export PDF (vector data preserved for SVG conversion)
+      let pdfData = hostingView.dataWithPDF(inside: hostingView.bounds)
+      let pdfPath = "\(dir)/\(name).pdf"
+      try? pdfData.write(to: URL(fileURLWithPath: pdfPath))
+      NSLog("ViewExporter: \(name).pdf (\(pdfData.count / 1024)KB)")
+
+      success = true
+    }
+    if let exception {
+      NSLog("ViewExporter: SKIP \(name) - \(exception.name.rawValue): \(exception.reason ?? "unknown")")
+      success = false
     }
 
     window.orderOut(nil)

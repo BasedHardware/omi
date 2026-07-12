@@ -1,8 +1,11 @@
 import { describe, expect, it, afterEach } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
+import { AdapterRegistry } from "../src/runtime/adapter-registry.js";
+import { AgentRuntimeKernel } from "../src/runtime/kernel.js";
 import {
   appendConversationTurn,
   advanceBindingTurnDelivery,
@@ -14,13 +17,26 @@ import {
   assembleTurnContext,
   bindingCarriesNativeHistory,
   getVoiceSeedContext,
+  getVoiceSeedSnapshot,
   isExplicitAgentControlToolTurn,
+  isLeafWorkerSurface,
+  leafWorkerExecutionBoundary,
   shouldInjectCoordinatorRoute,
   shouldInjectCompletedAgentDelta,
   turnSourceAttribution,
   VOICE_SEED_MAX_CHARACTERS,
 } from "../src/runtime/turn-context.js";
 import { resolveSurfaceSession } from "../src/runtime/surface-session.js";
+
+const completedAgentRecallFixture = JSON.parse(
+  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "fixtures", "completed-agent-recall.json"), "utf8"),
+) as {
+  ownerId: string;
+  runId: string;
+  pillId: string;
+  prompt: string;
+  finalText: string;
+};
 
 function newStore(): { store: SqliteAgentStore; stateDir: string } {
   const stateDir = mkdtempSync(join(tmpdir(), "omi-turn-context-"));
@@ -38,6 +54,18 @@ describe("turn-context", () => {
       rmSync(cleanupDir, { recursive: true, force: true });
       cleanupDir = undefined;
     }
+  });
+
+  it("gives floating-pill workers a leaf-only execution boundary", () => {
+    const surfaceRef = { surfaceKind: "floating_bar", externalRefKind: "pill", externalRefId: "pill-1" };
+    expect(isLeafWorkerSurface(surfaceRef)).toBe(true);
+    expect(leafWorkerExecutionBoundary(surfaceRef)).toContain("cannot create more agents");
+  });
+
+  it("keeps main-chat coordinators able to create background work", () => {
+    const surfaceRef = { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "chat-1" };
+    expect(isLeafWorkerSurface(surfaceRef)).toBe(false);
+    expect(leafWorkerExecutionBoundary(surfaceRef)).toBeNull();
   });
 
   it("does not inject undelivered transcript delta when native binding has seen all turns", () => {
@@ -296,6 +324,70 @@ describe("turn-context", () => {
     expect(occurrences).toBe(1);
   });
 
+  it("persists minimized workstream context under workstream session identity", () => {
+    const { store, stateDir } = newStore();
+    cleanupDir = stateDir;
+    store.migrate();
+    const ownerId = "owner-workstream";
+    const surfaceRef = {
+      surfaceKind: "workstream",
+      externalRefKind: "workstream",
+      externalRefId: "ws-1",
+    };
+    const resolved = resolveSurfaceSession(store, { ownerId, surfaceRef }, () => 1_700_000_000_000);
+    let persistedInput: Record<string, any> | undefined;
+
+    const assembled = assembleTurnContext({
+      store,
+      services: {
+        persistDesktopContextPacket: (input) => {
+          persistedInput = input as unknown as Record<string, any>;
+          return {
+            packet: {
+              packetId: "ctx_workstream",
+              redactedPreviewJson: { objective: input.objective, snippetCount: input.snippets.length },
+            },
+          };
+        },
+        routeDesktopIntent: () => ({ intent: "new_run", explanation: "test" }),
+        listSessions: () => [],
+        inspectArtifacts: () => [],
+      },
+      ownerId,
+      sessionId: resolved.agentSessionId,
+      conversationId: resolved.conversationId,
+      surfaceRef,
+      userText: "Update the draft",
+      surfaceContextJson: JSON.stringify({
+        schema_version: 1,
+        workstream: { id: "ws-1", current_summary: "Pricing changed" },
+        current_task: { id: "task-2", status: "active" },
+        artifact_heads: [{ id: "artifact-v1", version: 1 }],
+      }),
+      imagePresent: false,
+      bindingCarriesNativeHistory: false,
+      nowMs: 1_700_000_000_100,
+    });
+
+    expect(assembled.prompt).toContain("ctx_workstream");
+    expect(persistedInput?.surfaceKind).toBe("workstream");
+    expect(persistedInput?.selectedToolBundles).toEqual([
+      "desktop.context.local_read",
+      "desktop.tasks.readwrite",
+    ]);
+    expect(persistedInput?.snippets).toHaveLength(1);
+    expect(persistedInput?.snippets[0]).toMatchObject({
+      snippetId: "workstream_context",
+      sourceKind: "chat_surface",
+      operation: "selected_workstream_context",
+      provenance: { workstreamId: "ws-1" },
+    });
+    expect(String(persistedInput?.snippets[0].content)).toContain("artifact-v1");
+    expect(String(persistedInput?.snippets[0].redactedContent)).not.toContain("Pricing changed");
+    expect(String(persistedInput?.snippets[0].redactedContent)).not.toContain("artifact-v1");
+    expect(String(persistedInput?.snippets[0].redactedContent)).toContain('"workstream_id":"ws-1"');
+  });
+
   it("labels voice turns with live:voice attribution", () => {
     const turn = {
       conversationId: "conv-1",
@@ -312,6 +404,73 @@ describe("turn-context", () => {
   it("matches completion follow-up heuristics", () => {
     expect(shouldInjectCompletedAgentDelta("is the agent done yet?")).toBe(true);
     expect(shouldInjectCompletedAgentDelta("ask an agent to build a file")).toBe(false);
+  });
+
+  it("recalls exact canonical completed-agent output in main-chat follow-up context", () => {
+    const { store, stateDir } = newStore();
+    cleanupDir = stateDir;
+    store.migrate();
+    const ownerId = completedAgentRecallFixture.ownerId;
+    const completedAtMs = 1_700_000_000_050;
+    const exactFinalText = completedAgentRecallFixture.finalText;
+    const mainSurfaceRef = {
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+    };
+    const mainSession = resolveSurfaceSession(store, { ownerId, surfaceRef: mainSurfaceRef }, () => 1_700_000_000_000);
+    const workerSession = store.insertSession({
+      ownerId,
+      title: completedAgentRecallFixture.prompt,
+      surfaceKind: "workstream",
+      executionRole: "leaf",
+      defaultAdapterId: "pi-mono",
+      createdAtMs: 1_700_000_000_010,
+      updatedAtMs: completedAtMs,
+      lastActivityAtMs: completedAtMs,
+    });
+    store.insertRun({
+      runId: completedAgentRecallFixture.runId,
+      sessionId: workerSession.sessionId,
+      clientId: "main-chat",
+      requestId: "prepare-release-checklist",
+      status: "succeeded",
+      mode: "act",
+      finalText: exactFinalText,
+      createdAtMs: 1_700_000_000_020,
+      startedAtMs: 1_700_000_000_030,
+      completedAtMs,
+      updatedAtMs: completedAtMs,
+    });
+    const kernel = new AgentRuntimeKernel({ store, registry: new AdapterRegistry() });
+
+    const assembled = assembleTurnContext({
+      store,
+      services: {
+        persistDesktopContextPacket: (input) => ({
+          packet: {
+            packetId: "ctx_completed_agent_recall",
+            redactedPreviewJson: { objective: input.objective },
+          },
+        }),
+        routeDesktopIntent: () => ({ intent: "inspect", explanation: "completion follow-up" }),
+        listSessions: (input) => kernel.listSessions(input),
+        inspectArtifacts: (input) => kernel.inspectArtifacts(input),
+      },
+      ownerId,
+      sessionId: mainSession.agentSessionId,
+      conversationId: mainSession.conversationId,
+      surfaceRef: mainSurfaceRef,
+      userText: "Is the agent done? Show me its output.",
+      imagePresent: false,
+      bindingCarriesNativeHistory: false,
+      nowMs: completedAtMs + 10,
+    });
+
+    expect(assembled.prompt).toContain("[Desktop Completed Agent Delta]");
+    expect(assembled.prompt).toContain(`finalOutput=${exactFinalText}`);
+    expect(assembled.prompt).not.toContain("finished with status succeeded");
+    expect(assembled.acknowledgedCompletionDeltaIds).toHaveLength(1);
   });
 
   it("skips coordinator route when the user explicitly names spawn_agent", () => {
@@ -445,6 +604,56 @@ describe("turn-context", () => {
     expect(seed.length).toBeLessThanOrEqual(VOICE_SEED_MAX_CHARACTERS + 64);
   });
 
+  it("carries an assistant-only terminal pill completion into the canonical realtime voice seed", () => {
+    const { store, stateDir } = newStore();
+    cleanupDir = stateDir;
+    store.migrate();
+    const ownerId = completedAgentRecallFixture.ownerId;
+    const runId = completedAgentRecallFixture.runId;
+    const idempotencyKey = `pill_completion:${runId}`;
+    const exactFinalText = completedAgentRecallFixture.finalText;
+    const mainSurfaceRef = {
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+    };
+    const resolved = resolveSurfaceSession(
+      store,
+      { ownerId, surfaceRef: mainSurfaceRef },
+      () => 1_700_000_000_000,
+    );
+
+    const projection = recordSurfaceTurn(store, {
+      ownerId,
+      surfaceRef: mainSurfaceRef,
+      userText: "",
+      assistantText:
+        `[Background agent id=${completedAgentRecallFixture.pillId} — ${completedAgentRecallFixture.prompt}] ${exactFinalText}`,
+      origin: "pill_completion",
+      idempotencyKey,
+      nowMs: 1_700_000_000_010,
+    });
+
+    expect(projection.conversationId).toBe(resolved.conversationId);
+    expect(projection.recorded).toBe(true);
+    expect(projection.userTurn).toBeUndefined();
+    expect(projection.assistantTurn?.content).toContain(exactFinalText);
+    expect(JSON.parse(projection.assistantTurn?.metadataJson ?? "{}")).toMatchObject({
+      origin: "pill_completion",
+      idempotencyKey,
+      role: "assistant",
+    });
+
+    const snapshot = getVoiceSeedSnapshot(store, resolved.conversationId);
+    expect(snapshot.context).toContain(exactFinalText);
+    expect(snapshot.context).toContain(exactFinalText);
+    expect(snapshot.context).not.toMatch(/unavailable|finished with status|generic fallback/i);
+    // Snapshot keys acknowledge fully represented user+assistant voice exchanges.
+    // This projection is intentionally assistant-only, so its durable metadata
+    // carries the key while the voice reconciliation list does not claim a user row.
+    expect(snapshot.idempotencyKeys).not.toContain(idempotencyKey);
+  });
+
   it("dedupes voice surface turns by idempotency key", () => {
     const { store, stateDir } = newStore();
     cleanupDir = stateDir;
@@ -480,6 +689,120 @@ describe("turn-context", () => {
     const turns = listRecentConversationTurns(store, first.conversationId, 10);
     expect(turns.filter((turn) => turn.role === "user")).toHaveLength(1);
     expect(turns.filter((turn) => turn.role === "assistant")).toHaveLength(1);
+  });
+
+  it("projects every rapid PTT user turn before the final assistant reply", () => {
+    const { store, stateDir } = newStore();
+    cleanupDir = stateDir;
+    store.migrate();
+    const ownerId = "owner-rapid-ptt";
+    const surfaceRef = {
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+    };
+    const resolved = resolveSurfaceSession(store, { ownerId, surfaceRef }, () => 1_700_000_000_000);
+
+    for (const [index, text] of ["one two three", "A B C", "R G B"].entries()) {
+      recordSurfaceTurn(store, {
+        ownerId,
+        surfaceRef,
+        userText: text,
+        assistantText: index === 2 ? "Red, green, blue." : "",
+        origin: "realtime_voice",
+        interrupted: index < 2,
+        idempotencyKey: `realtime_voice:turn-${index}:user`,
+        nowMs: 1_700_000_000_000 + index,
+      });
+    }
+    const duplicate = recordSurfaceTurn(store, {
+      ownerId,
+      surfaceRef,
+      userText: "A B C",
+      assistantText: "",
+      origin: "realtime_voice",
+      idempotencyKey: "realtime_voice:turn-1:user",
+      nowMs: 1_700_000_000_020,
+    });
+
+    expect(duplicate.duplicate).toBe(true);
+    const turns = listRecentConversationTurns(store, resolved.conversationId, 10);
+    expect(turns.map((turn) => [turn.role, turn.content])).toEqual([
+      ["user", "one two three"],
+      ["user", "A B C"],
+      ["user", "R G B"],
+      ["assistant", "Red, green, blue."],
+    ]);
+    const seed = getVoiceSeedContext(store, resolved.conversationId);
+    expect(seed).toContain("User: one two three");
+    expect(seed).toContain("User: A B C");
+    expect(seed).toContain("User: R G B");
+    expect(seed).toContain("Omi: Red, green, blue.");
+  });
+
+  it("keeps the full retained rapid PTT burst in the Gemini replacement seed", () => {
+    const { store, stateDir } = newStore();
+    cleanupDir = stateDir;
+    store.migrate();
+    const ownerId = "owner-long-rapid-ptt";
+    const surfaceRef = {
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+    };
+    const resolved = resolveSurfaceSession(store, { ownerId, surfaceRef }, () => 1_700_000_000_000);
+
+    for (let index = 0; index < 32; index += 1) {
+      recordSurfaceTurn(store, {
+        ownerId,
+        surfaceRef,
+        userText: `rapid transcript ${index}`,
+        assistantText: index < 31 ? `partial reply ${index}` : "final reply",
+        origin: "realtime_voice",
+        interrupted: index < 31,
+        idempotencyKey: `rapid-${index}`,
+        nowMs: 1_700_000_000_000 + index * 2,
+      });
+    }
+
+    const seed = getVoiceSeedContext(store, resolved.conversationId);
+    expect(seed).toContain("User: rapid transcript 0");
+    expect(seed).toContain("Omi (interrupted): partial reply 0");
+    expect(seed).toContain("User: rapid transcript 31");
+    expect(seed).toContain("Omi: final reply");
+    expect(seed.length).toBeLessThanOrEqual(VOICE_SEED_MAX_CHARACTERS + 64);
+  });
+
+  it("spends an over-budget voice seed on the newest turns", () => {
+    const { store, stateDir } = newStore();
+    cleanupDir = stateDir;
+    store.migrate();
+    const ownerId = "owner-over-budget-voice-seed";
+    const surfaceRef = {
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+    };
+    const resolved = resolveSurfaceSession(store, { ownerId, surfaceRef }, () => 1_700_000_000_000);
+
+    for (const [index, marker] of ["OLDEST-DROP-ME", "middle-one", "middle-two", "NEWEST-KEEP-ME"].entries()) {
+      recordSurfaceTurn(store, {
+        ownerId,
+        surfaceRef,
+        userText: `${marker} ${"x".repeat(100)}`,
+        assistantText: "",
+        origin: "realtime_voice",
+        idempotencyKey: `budget-${index}`,
+        nowMs: 1_700_000_000_000 + index,
+      });
+    }
+
+    const seed = getVoiceSeedContext(store, resolved.conversationId, {
+      maxTurns: 64,
+      maxCharacters: 180,
+    });
+    expect(seed).toContain("NEWEST-KEEP-ME");
+    expect(seed).not.toContain("OLDEST-DROP-ME");
   });
 
   it("includes floating spawn handoff in voice seed and dedupes by idempotency key", () => {
@@ -521,5 +844,45 @@ describe("turn-context", () => {
     const seed = getVoiceSeedContext(store, resolved.conversationId);
     expect(seed).toContain("User: Build me a Penguin Facts HTML page");
     expect(seed).toContain('Omi: I started a background agent titled "Penguin Facts Page" for that.');
+    const snapshot = getVoiceSeedSnapshot(store, resolved.conversationId);
+    expect(snapshot.context).toBe(seed);
+    expect(snapshot.idempotencyKeys).toEqual(["floating_spawn:pill-abc"]);
+  });
+
+  it("does not reconcile an idempotency key when its user row is truncated", () => {
+    const { store, stateDir } = newStore();
+    cleanupDir = stateDir;
+    store.migrate();
+    const surfaceRef = {
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+    };
+    const resolved = resolveSurfaceSession(
+      store,
+      { ownerId: "owner-truncated-seed", surfaceRef },
+      () => 1_700_000_000_000,
+    );
+    recordSurfaceTurn(store, {
+      ownerId: "owner-truncated-seed",
+      surfaceRef,
+      userText: "the user transcription must survive",
+      assistantText: "assistant ".repeat(30),
+      origin: "realtime_voice",
+      idempotencyKey: "partial-turn",
+      nowMs: 1_700_000_000_000,
+    });
+
+    const truncated = getVoiceSeedSnapshot(store, resolved.conversationId, {
+      maxTurns: 64,
+      maxCharacters: 80,
+    });
+    expect(truncated.context).toContain("Omi:");
+    expect(truncated.context).not.toContain("the user transcription must survive");
+    expect(truncated.idempotencyKeys).not.toContain("partial-turn");
+
+    const complete = getVoiceSeedSnapshot(store, resolved.conversationId);
+    expect(complete.context).toContain("the user transcription must survive");
+    expect(complete.idempotencyKeys).toContain("partial-turn");
   });
 });

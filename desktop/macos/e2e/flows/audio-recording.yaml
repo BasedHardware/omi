@@ -4,10 +4,18 @@ tier: manual
 description: Audio recording flow — verify microphone permission, Start Recording button, transcription state, and stop recording
 app: com.omi.computer-macos
 covers:
-  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
-  - desktop/macos/Desktop/Sources/AudioCaptureService.swift
-  - desktop/macos/Desktop/Sources/AppState.swift
+  - desktop/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
+  - desktop/Desktop/Sources/AudioCaptureService.swift
+  - desktop/Desktop/Sources/Audio/AudioSourceManager.swift
+  - desktop/Desktop/Sources/AppState.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift
+  - desktop/macos/Desktop/Sources/AudioCaptureService.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarUsageLimiter.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Transports/BleTransport.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Connections/BeeDeviceConnection.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Connections/PlaudDeviceConnection.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Connections/LimitlessDeviceConnection.swift
+  - desktop/macos/Desktop/Sources/SystemAudioCaptureService.swift
 preconditions:
   - auth_ready
 

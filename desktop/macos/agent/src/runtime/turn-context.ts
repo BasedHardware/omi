@@ -9,12 +9,16 @@ import {
   listUndeliveredConversationTurns,
 } from "./conversation-turns.js";
 
-export const VOICE_SEED_MAX_TURNS = 8;
-export const VOICE_SEED_MAX_CHARACTERS = 3_500;
+// Retains a long rapid-PTT burst, including an optional assistant row per turn,
+// while staying comfortably inside provider context budgets (~6k tokens at the
+// character cap).
+export const VOICE_SEED_MAX_TURNS = 64;
+export const VOICE_SEED_MAX_CHARACTERS = 24_000;
 import type { AgentArtifact, AgentStore, ConversationTurn } from "./types.js";
 import type { SurfaceRef } from "./surface-session.js";
 import { surfaceRefKey as surfaceKeyFor } from "./surface-session.js";
 import type { KernelSessionSummary } from "./kernel.js";
+import type { AgentExecutionRole } from "./execution-policy.js";
 
 const COMPLETION_DELTA_MAX_AGE_MS = 30 * 60 * 1_000;
 
@@ -55,6 +59,7 @@ export interface AssembleTurnContextInput {
   sessionId: string;
   conversationId: string | null;
   surfaceRef: SurfaceRef;
+  executionRole?: AgentExecutionRole;
   userText: string;
   attachmentMetadataJson?: string | null;
   surfaceContextJson?: string | null;
@@ -63,6 +68,22 @@ export interface AssembleTurnContextInput {
   lastDeliveredTurnCreatedAtMs?: number;
   runId?: string | null;
   nowMs?: number;
+}
+
+export function isLeafWorkerSurface(surfaceRef: SurfaceRef): boolean {
+  return surfaceRef.surfaceKind === "delegated_agent"
+    || surfaceRef.surfaceKind === "background_agent"
+    || (surfaceRef.surfaceKind === "floating_bar" && surfaceRef.externalRefKind === "pill");
+}
+
+export function leafWorkerExecutionBoundary(
+  surfaceRef: SurfaceRef,
+  executionRole: AgentExecutionRole = isLeafWorkerSurface(surfaceRef) ? "leaf" : "coordinator",
+): string | null {
+  if (executionRole !== "leaf") return null;
+  return `# Execution Boundary
+
+You are a leaf background worker. Complete the assigned objective yourself and report the result to your parent. Do not call spawn_agent, spawn_background_agent, or run_agent_and_wait; background agents cannot create more agents.`;
 }
 
 export interface AssembledTurnContext {
@@ -151,7 +172,10 @@ export function assembleTurnContext(input: AssembleTurnContextInput): AssembledT
       : buildContextPacketSection(input);
   if (contextPacketSection) {
     sections.push(contextPacketSection);
-  } else if (input.surfaceContextJson?.trim() && input.surfaceRef.surfaceKind === "task_chat") {
+  } else if (
+    input.surfaceContextJson?.trim()
+    && (input.surfaceRef.surfaceKind === "task_chat" || input.surfaceRef.surfaceKind === "workstream")
+  ) {
     sections.push(`# Task Context\n\n${input.surfaceContextJson.trim()}`);
   }
 
@@ -176,6 +200,11 @@ export function assembleTurnContext(input: AssembleTurnContextInput): AssembledT
         sections.push(transcript);
       }
     }
+  }
+
+  const leafWorkerBoundary = leafWorkerExecutionBoundary(input.surfaceRef, input.executionRole);
+  if (leafWorkerBoundary) {
+    sections.push(leafWorkerBoundary);
   }
 
   sections.push(`# User Message\n\n${input.userText}`);
@@ -360,9 +389,14 @@ function buildCompletionDeltaItems(sessions: KernelSessionSummary[]): Completion
 
 function buildContextPacketSection(input: AssembleTurnContextInput): string | null {
   if (!input.conversationId) return null;
-  if (input.surfaceRef.surfaceKind !== "main_chat" && input.surfaceRef.surfaceKind !== "task_chat") {
+  if (
+    input.surfaceRef.surfaceKind !== "main_chat"
+    && input.surfaceRef.surfaceKind !== "task_chat"
+    && input.surfaceRef.surfaceKind !== "workstream"
+  ) {
     return null;
   }
+  const taskWorkSurface = input.surfaceRef.surfaceKind === "task_chat" || input.surfaceRef.surfaceKind === "workstream";
 
   // Policy/tools only — conversation transcript is injected separately (tail or delta).
   const snippets: DesktopContextSnippetInput[] = [];
@@ -378,6 +412,21 @@ function buildContextPacketSection(input: AssembleTurnContextInput): string | nu
       sensitivityTier: "local_private",
     });
   }
+  if (input.surfaceRef.surfaceKind === "workstream" && input.surfaceContextJson?.trim()) {
+    const redactedContext = redactedWorkstreamContextPreview(
+      input.surfaceContextJson,
+      input.surfaceRef.externalRefId,
+    );
+    snippets.unshift({
+      snippetId: "workstream_context",
+      sourceKind: "chat_surface",
+      operation: "selected_workstream_context",
+      provenance: { workstreamId: input.surfaceRef.externalRefId },
+      content: input.surfaceContextJson,
+      redactedContent: redactedContext,
+      sensitivityTier: "local_private",
+    });
+  }
 
   const built = input.services.persistDesktopContextPacket({
     ownerId: input.ownerId,
@@ -387,19 +436,19 @@ function buildContextPacketSection(input: AssembleTurnContextInput): string | nu
     objective: input.userText,
     snippets,
     selectedToolBundles:
-      input.surfaceRef.surfaceKind === "task_chat"
+      taskWorkSurface
         ? ["desktop.context.local_read", "desktop.tasks.readwrite"]
         : ["desktop.context.local_read", "desktop.context.screen_summary"],
     constraints:
-      input.surfaceRef.surfaceKind === "task_chat"
-        ? ["Use the persisted context packet and the model-visible task context; cite task evidence before claiming completion."]
+      taskWorkSurface
+        ? ["Use the persisted context packet and model-visible ongoing-work context; cite task or artifact evidence before claiming completion."]
         : ["Use the persisted context packet; request dispatch before broad screen image access or mutation."],
     evidenceRequired:
-      input.surfaceRef.surfaceKind === "task_chat"
+      taskWorkSurface
         ? ["Cite task state or artifact evidence before claiming completion."]
         : ["Cite local context, task, memory, run, or artifact evidence before claiming completion."],
     boundaryPolicy:
-      input.surfaceRef.surfaceKind === "task_chat"
+      taskWorkSurface
         ? { taskMutations: "candidate_or_dispatch" }
         : {
             taskMutations: "candidate_or_dispatch",
@@ -415,7 +464,31 @@ function buildContextPacketSection(input: AssembleTurnContextInput): string | nu
 
 Use persisted DesktopContextPacket \`${built.packet.packetId}\` as the scoped ${input.surfaceRef.surfaceKind.replaceAll("_", "-")} context. Redacted preview:
 
-${previewText}`;
+  ${previewText}`;
+}
+
+function redactedWorkstreamContextPreview(raw: string, workstreamId: string): string {
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const currentTask = parsed.current_task && typeof parsed.current_task === "object"
+      ? parsed.current_task as Record<string, unknown>
+      : null;
+    const tasks = Array.isArray(parsed.scoped_tasks) ? parsed.scoped_tasks : [];
+    const events = Array.isArray(parsed.recent_events) ? parsed.recent_events : [];
+    const artifacts = Array.isArray(parsed.artifact_heads) ? parsed.artifact_heads : [];
+    return JSON.stringify({
+      schema_version: parsed.schema_version ?? 1,
+      workstream_id: workstreamId,
+      current_task: currentTask
+        ? { id: currentTask.id ?? null, status: currentTask.status ?? null }
+        : null,
+      scoped_task_count: tasks.length,
+      recent_event_count: events.length,
+      artifact_head_count: artifacts.length,
+    });
+  } catch {
+    return JSON.stringify({ schema_version: 1, workstream_id: workstreamId, context: "available" });
+  }
 }
 
 export function sanitizeVoiceSeedText(text: string, maxLength = 2_000): string {
@@ -426,19 +499,25 @@ export function sanitizeVoiceSeedText(text: string, maxLength = 2_000): string {
     .slice(0, maxLength);
 }
 
-export function getVoiceSeedContext(
+export interface VoiceSeedSnapshot {
+  context: string;
+  idempotencyKeys: string[];
+}
+
+export function getVoiceSeedSnapshot(
   store: AgentStore,
   conversationId: string,
   options?: { maxTurns?: number; maxCharacters?: number },
-): string {
+): VoiceSeedSnapshot {
   const maxTurns = options?.maxTurns ?? VOICE_SEED_MAX_TURNS;
   const maxCharacters = options?.maxCharacters ?? VOICE_SEED_MAX_CHARACTERS;
   const recent = listRecentConversationTurns(store, conversationId, maxTurns);
-  if (recent.length === 0) return "";
+  if (recent.length === 0) return { context: "", idempotencyKeys: [] };
 
-  const lines: string[] = [];
+  const newestFirstLines: string[] = [];
+  const includedKeyState = new Map<string, { hasUser: boolean; allRowsComplete: boolean }>();
   let remaining = maxCharacters;
-  for (const turn of recent) {
+  for (const turn of [...recent].reverse()) {
     if (remaining <= 0) break;
     const content = sanitizeVoiceSeedText(turn.content);
     if (!content) continue;
@@ -458,13 +537,35 @@ export function getVoiceSeedContext(
           : "Omi";
     const prefix = `${attribution} ${role}: `;
     const contentBudget = Math.max(0, remaining - prefix.length);
+    if (contentBudget <= 0) break;
     const line = `${prefix}${content.slice(0, contentBudget)}`;
     if (!line.trim()) continue;
-    lines.push(line);
+    newestFirstLines.push(line);
+    if (typeof metadata.idempotencyKey === "string" && metadata.idempotencyKey.trim()) {
+      const key = metadata.idempotencyKey.trim();
+      const prior = includedKeyState.get(key) ?? { hasUser: false, allRowsComplete: true };
+      includedKeyState.set(key, {
+        hasUser: prior.hasUser || turn.role === "user",
+        allRowsComplete: prior.allRowsComplete && content.length <= contentBudget,
+      });
+    }
     remaining -= line.length + 1;
   }
 
-  return lines.join("\n");
+  return {
+    context: newestFirstLines.reverse().join("\n"),
+    idempotencyKeys: [...includedKeyState.entries()]
+      .filter(([, state]) => state.hasUser && state.allRowsComplete)
+      .map(([key]) => key),
+  };
+}
+
+export function getVoiceSeedContext(
+  store: AgentStore,
+  conversationId: string,
+  options?: { maxTurns?: number; maxCharacters?: number },
+): string {
+  return getVoiceSeedSnapshot(store, conversationId, options).context;
 }
 
 export function turnSourceAttribution(turn: ConversationTurn): string {

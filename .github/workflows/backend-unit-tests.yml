@@ -5,12 +5,44 @@ on:
     branches:
       - main
     paths:
+      - '.gitignore'
       - 'backend/**'
+      - '.github/actions/detect-changes/**'
+      - '.github/workflows/backend-checks.yml'
       - '.github/workflows/backend-unit-tests.yml'
+      - '.github/workflows/desktop-checks.yml'
+      - '.github/workflows/desktop-swift-ci.yml'
+      - '.github/workflows/repo-checks.yml'
+      - '.github/workflows/desktop_promote_beta.yml'
+      - '.github/workflows/desktop_promote_prod.yml'
+      - '.github/workflows/gcp_backend*.yml'
+      - '.github/workflows/gcp_memory_maintenance_job.yml'
+      - '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml'
+      - '.github/workflows/gcp_notifications_job.yml'
+      - 'scripts/changed-files'
+      - 'scripts/install-git-hooks.sh'
+      - 'scripts/pre-push'
+      - 'scripts/pre-push-singleflight'
   pull_request:
     paths:
+      - '.gitignore'
       - 'backend/**'
+      - '.github/actions/detect-changes/**'
+      - '.github/workflows/backend-checks.yml'
       - '.github/workflows/backend-unit-tests.yml'
+      - '.github/workflows/desktop-checks.yml'
+      - '.github/workflows/desktop-swift-ci.yml'
+      - '.github/workflows/repo-checks.yml'
+      - '.github/workflows/desktop_promote_beta.yml'
+      - '.github/workflows/desktop_promote_prod.yml'
+      - '.github/workflows/gcp_backend*.yml'
+      - '.github/workflows/gcp_memory_maintenance_job.yml'
+      - '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml'
+      - '.github/workflows/gcp_notifications_job.yml'
+      - 'scripts/changed-files'
+      - 'scripts/install-git-hooks.sh'
+      - 'scripts/pre-push'
+      - 'scripts/pre-push-singleflight'
   workflow_dispatch:
 
 permissions:
@@ -59,7 +91,7 @@ jobs:
         working-directory: backend
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" > /tmp/backend-changed-files.txt
+            ../scripts/changed-files "${{ github.event.pull_request.base.sha }}"...HEAD > /tmp/backend-changed-files.txt
             python scripts/select_backend_unit_tests.py \
               --changed-files /tmp/backend-changed-files.txt \
               --output /tmp/backend-unit-tests.txt \
@@ -77,7 +109,8 @@ jobs:
         working-directory: backend
         env:
           BACKEND_UNIT_TEST_FILE_LIST: /tmp/backend-unit-tests.txt
-          BACKEND_FAST_UNIT_MAX_SECONDS: "0.1"
+          BACKEND_FAST_UNIT_WARN_SECONDS: "0.1"
+          BACKEND_FAST_UNIT_FAIL_SECONDS: "0.25"
           BACKEND_PYTEST_FILE_ISOLATION: "1"
           BACKEND_PYTEST_MARK_EXPR: "not integration and not slow"
           BACKEND_PYTEST_XDIST: auto

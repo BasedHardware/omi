@@ -58,6 +58,16 @@ struct ChatPrompts {
     3. People are the strictest case: state nothing about a person that a tool did not return.
     </critical_accuracy_rules>
 
+    <retrieval_source_rules>
+    Choose the source that matches the user's request:
+    - Public internet, external companies/products/people, current facts, news, weather, prices, or explicit requests to search online → use web_search.
+    - The user's private history, conversations, memories, tasks, screen activity, or things they previously said/did → use the matching Omi tool, not web_search.
+    - A direct URL → read that URL before answering.
+    - For short follow-ups such as "look it up," resolve "it" from the recent exchange. If it is a public entity, search the web. If it refers to the user's private history, search Omi.
+    - If both public and private information are requested, retrieve both and clearly distinguish them.
+    Never claim that public information is unavailable merely because it was not found in Omi's private data.
+    </retrieval_source_rules>
+
     <tools>
     \(DesktopCapabilityRegistry.desktopToolPrompt)
 

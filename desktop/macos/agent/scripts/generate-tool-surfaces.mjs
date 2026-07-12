@@ -17,6 +17,7 @@ const GENERATED_DIR = join(MACOS_DIR, "Desktop", "Sources", "Generated");
 const FIXTURE_PATH = join(AGENT_DIR, "tests", "fixtures", "tool-manifest.json");
 
 const VALID_SURFACES = new Set(["desktop_chat", "realtime_voice", "onboarding", "task_chat"]);
+const PROVIDER_TOP_LEVEL_COMPOSITE_SCHEMA_KEYS = ["anyOf", "oneOf", "allOf"];
 const CHECK_MODE = process.argv.includes("--check");
 
 const OUTPUTS = [
@@ -73,6 +74,23 @@ function surfaceSet(surfaces) {
   return `Set([${unique.map(surfaceEnum).join(", ")}])`;
 }
 
+function assertFlatProviderInputSchema(schema, label) {
+  if (!schema || typeof schema !== "object" || Array.isArray(schema)) {
+    throw new Error(`${label} provider input schema must be an object`);
+  }
+  if (schema.type !== "object") {
+    throw new Error(`${label} provider input schema must have top-level type=object`);
+  }
+  if (!schema.properties || typeof schema.properties !== "object" || Array.isArray(schema.properties)) {
+    throw new Error(`${label} provider input schema must have top-level properties`);
+  }
+  for (const key of PROVIDER_TOP_LEVEL_COMPOSITE_SCHEMA_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(schema, key)) {
+      throw new Error(`${label} provider input schema must not use top-level ${key}`);
+    }
+  }
+}
+
 function validateManifest() {
   const names = new Set();
   const aliases = new Map();
@@ -91,6 +109,10 @@ function validateManifest() {
     }
     if (!tool.executor?.kind) {
       throw new Error(`Tool ${tool.name} is missing executor.kind`);
+    }
+    assertFlatProviderInputSchema(tool.inputSchema, `${tool.name} manifest`);
+    if (tool.mcpInputSchema) {
+      assertFlatProviderInputSchema(tool.mcpInputSchema, `${tool.name} MCP`);
     }
     if (tool.executor.kind === "swiftTool" && !tool.executor.executorName) {
       tool.executor.executorName = "chatToolExecutor";
@@ -172,7 +194,6 @@ function realtimeTools() {
     "inspect_agent_artifacts",
     "update_agent_artifact_lifecycle",
     "spawn_agent",
-    "run_agent_and_wait",
     "set_desktop_attention_override",
   ]);
 
@@ -189,7 +210,7 @@ function realtimeTools() {
     if (tool.voice?.realtimeExpose === false) return false;
     if (tool.voice?.realtimeExpose === true) return true;
     if (tool.executor.kind === "runtimeControl") {
-      return REALTIME_CONTROL_TOOLS.has(tool.name);
+      return REALTIME_CONTROL_TOOLS.has(tool.name) && hasRealtimeVoiceSurface(tool);
     }
     return hasRealtimeVoiceSurface(tool);
   };
@@ -383,6 +404,9 @@ ${entries}
 
 function generateRealtimeToolsSwift(realtimeEntries) {
   const baseTools = realtimeEntries.map((entry) => openAIToolDefinition(entry));
+  for (const tool of baseTools) {
+    assertFlatProviderInputSchema(tool.parameters, `${tool.name} realtime`);
+  }
   // Double backslashes so Swift multiline strings preserve JSON escapes (e.g. \n).
   const json = JSON.stringify(baseTools, null, 2).replace(/\\/g, "\\\\");
 
@@ -569,7 +593,7 @@ function schemaPropertyToSwift(name, schema) {
 }
 
 function generateLocalApiSwift() {
-  const localTools = omiToolManifest.filter((tool) => tool.executor.kind === "localApiOnly");
+  const localTools = omiToolManifest.filter((tool) => tool.adapters["local-agent-api"]?.advertised === true);
 
   const entries = localTools
     .map((tool) => {

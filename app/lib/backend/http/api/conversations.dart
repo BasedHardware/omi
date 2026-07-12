@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/shared.dart';
@@ -13,6 +14,16 @@ import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
+/// Whether a non-200 response from POST /v1/conversations (process in-progress
+/// conversation) is a benign race rather than a failure worth crash-reporting.
+///
+/// The backend returns 404 when there is no in-progress conversation to
+/// process — which happens when the WS auto-finalize path already consumed the
+/// in-progress conversation and cleared its Redis pointer before this
+/// client-initiated create ran. Nothing to recover; the conversation is
+/// already finalized. Reporting it floods crash reporting with noise.
+bool isBenignInProgressConversationCreateStatus(int statusCode) => statusCode == 404;
+
 Future<CreateConversationResponse?> processInProgressConversation() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations',
@@ -24,8 +35,9 @@ Future<CreateConversationResponse?> processInProgressConversation() async {
   Logger.debug('createConversationServer: ${response.body}');
   if (response.statusCode == 200) {
     return CreateConversationResponse.fromGeneratedWireJson(jsonDecode(response.body) as Map<String, dynamic>);
+  } else if (isBenignInProgressConversationCreateStatus(response.statusCode)) {
+    Logger.debug('processInProgressConversation: no in-progress conversation (already finalized), skipping');
   } else {
-    // TODO: Server returns 304 doesn't recover
     PlatformManager.instance.crashReporter.reportCrash(
       Exception('Failed to create conversation'),
       StackTrace.current,
@@ -433,14 +445,52 @@ class UploadFilesResult {
   bool get isQueued => jobId != null;
 }
 
-/// Thrown when an upload is rejected by fair-use throttling (HTTP 429).
+/// Server-provided classification for a sync upload HTTP 429.
+///
+/// Fair use is deliberately opt-in: an unknown, proxy-generated, or platform
+/// 429 is backend capacity unless the response carries Omi's explicit reason.
+enum SyncRateLimitKind { fairUse, backfillPaced, backendCapacity }
+
+enum SyncUploadLane { fresh, backfill }
+
+@visibleForTesting
+bool shouldRequestSyncCaptureManifest(String? conversationId, SyncUploadLane syncLane) =>
+    conversationId != null && syncLane == SyncUploadLane.fresh;
+
+Future<String?> _createSyncCaptureManifest(List<File> files, String conversationId) async {
+  final claims = <Map<String, String>>[];
+  for (final file in files) {
+    final digest = await sha256.bind(file.openRead()).first;
+    claims.add({'name': file.uri.pathSegments.last, 'sha256': digest.toString()});
+  }
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v2/sync-capture-manifest',
+    headers: const {},
+    body: jsonEncode(
+      wire.GeneratedSyncCaptureManifestRequest(
+        conversationId: conversationId,
+        files: [
+          for (final claim in claims)
+            wire.GeneratedSyncCaptureManifestFile(name: claim['name']!, sha256: claim['sha256']!),
+        ],
+      ).toJson(),
+    ),
+    method: 'POST',
+  );
+  if (response?.statusCode != 200) return null;
+  final body = wire.GeneratedSyncCaptureManifestResponse.fromJson(jsonDecode(response!.body) as Map<String, dynamic>);
+  return body.manifest;
+}
+
+/// Thrown when a sync upload is rate-limited (HTTP 429).
 /// [retryAfterSeconds] is the server's Retry-After when provided.
 class SyncRateLimitedException implements Exception {
+  final SyncRateLimitKind kind;
   final int? retryAfterSeconds;
-  SyncRateLimitedException([this.retryAfterSeconds]);
+  SyncRateLimitedException({required this.kind, this.retryAfterSeconds});
 
   @override
-  String toString() => 'SyncRateLimitedException(retryAfter=$retryAfterSeconds)';
+  String toString() => 'SyncRateLimitedException(kind=$kind, retryAfter=$retryAfterSeconds)';
 }
 
 /// Parse a Retry-After header expressed in delta-seconds. Returns null for an
@@ -449,6 +499,21 @@ int? _parseRetryAfterSeconds(http.Response response) {
   final raw = response.headers['retry-after'];
   if (raw == null) return null;
   return int.tryParse(raw.trim());
+}
+
+/// Classifies a sync 429 without relying on human-readable error text.
+///
+/// The application-generated restriction response carries this bounded header.
+/// Everything else remains a generic backend-capacity limit.
+SyncRateLimitKind syncRateLimitKindForResponse(http.Response response) {
+  final reason = response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase();
+  if (reason == 'fair_use') {
+    return SyncRateLimitKind.fairUse;
+  }
+  if (reason == 'backfill_paced' || reason == 'backfill_capacity') {
+    return SyncRateLimitKind.backfillPaced;
+  }
+  return SyncRateLimitKind.backendCapacity;
 }
 
 /// Upload-only: POST files and return as soon as the server acknowledges
@@ -461,12 +526,28 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   List<File> files, {
   UploadProgressCallback? onUploadProgress,
   String? conversationId,
+  SyncUploadLane syncLane = SyncUploadLane.fresh,
 }) async {
+  String? captureManifest;
+  if (shouldRequestSyncCaptureManifest(conversationId, syncLane)) {
+    captureManifest = await _createSyncCaptureManifest(files, conversationId!);
+    if (captureManifest == null) {
+      throw SyncRateLimitedException(kind: SyncRateLimitKind.backfillPaced, retryAfterSeconds: 30);
+    }
+  }
   var url = '${Env.apiBaseUrl}v2/sync-local-files';
   if (conversationId != null) {
     url += '?conversation_id=${Uri.encodeQueryComponent(conversationId)}';
   }
-  var response = await makeMultipartApiCall(url: url, files: files, onUploadProgress: onUploadProgress);
+  var response = await makeMultipartApiCall(
+    url: url,
+    files: files,
+    headers: {
+      'X-Omi-Sync-Lane-Hint': syncLane.name,
+      if (captureManifest != null) 'X-Omi-Sync-Capture-Manifest': captureManifest,
+    },
+    onUploadProgress: onUploadProgress,
+  );
 
   if (response.statusCode == 200) {
     // Fast-path: server processed synchronously and returned the result.
@@ -489,10 +570,13 @@ Future<UploadFilesResult> uploadLocalFilesV2(
     throw Exception('Audio file could not be processed by server');
   } else if (response.statusCode == 413) {
     throw Exception('Audio file is too large to upload');
-  } else if (response.statusCode == 429) {
-    // Fair-use throttle, not a content failure. Surface it typed so callers
-    // can back off (honoring Retry-After) instead of burning the retry budget.
-    throw SyncRateLimitedException(_parseRetryAfterSeconds(response));
+  } else if (response.statusCode == 429 ||
+      (response.statusCode == 503 &&
+          response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase() == 'backfill_capacity')) {
+    throw SyncRateLimitedException(
+      kind: syncRateLimitKindForResponse(response),
+      retryAfterSeconds: _parseRetryAfterSeconds(response),
+    );
   } else if (response.statusCode >= 500) {
     throw Exception('Server is temporarily unavailable');
   }
@@ -543,9 +627,7 @@ Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
   try {
     return SyncJobFetch(
       SyncJobFetchOutcome.ok,
-      SyncJobStatusResponse.fromGenerated(
-        wire.GeneratedSyncJobStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
-      ),
+      SyncJobStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
     );
   } catch (e) {
     Logger.debug('fetchSyncJobStatus parse error: $e');

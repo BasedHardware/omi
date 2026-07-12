@@ -1,0 +1,37 @@
+version: 2
+name: onboarding-flow
+tier: manual
+description: >
+  Onboarding orchestration after BYOK removal. Reset into onboarding, walk Goal → Tasks,
+  and confirm there is no Bring Your Own Keys step and the 2nd-brain label has no background.
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingFlow.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingStepScaffold.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingView.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingExportsStepView.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Reset into onboarding
+    do: "Run bridge action reset_onboarding, wait for the app to restart, then reconnect the automation bridge."
+    expect:
+      text_visible:
+        - "What's your name"
+
+  - id: S2
+    name: Advance to Goal
+    do: "Skip or complete earlier steps until the Goal screen. Confirm progress reaches Goal without a Bring Your Own Keys / API keys page."
+
+  - id: S3
+    name: Goal continues to Tasks
+    do: "Continue or Skip on Goal. The next screen must be Tasks (not Bring your own keys)."
+    expect:
+      text_visible:
+        - "Take me to Omi"
+
+  - id: S4
+    name: 2nd brain label has no background
+    do: "On any split onboarding step with the graph pane, confirm 'This is your 2nd brain' has no pill fill and no bottom gradient behind the label."

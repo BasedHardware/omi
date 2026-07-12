@@ -66,6 +66,18 @@ final class BYOKPaywallTests: XCTestCase {
         }
     }
 
+    func testLowLevelTransportDefaultsToExcludingByokKeys() async throws {
+        setAllBYOKKeys()
+
+        var transport = OmiHTTPTransport()
+        transport.testAuthHeader = "Bearer test-token"
+        let headers = try await transport.buildHeaders()
+
+        for provider in BYOKProvider.allCases {
+            XCTAssertNil(headers[provider.headerName])
+        }
+    }
+
     func testBuildHeadersSuppressesOnlyInvalidByokHeader() async throws {
         setAllBYOKKeys()
         let openAIKey = try XCTUnwrap(APIKeyService.byokKey(.openai))

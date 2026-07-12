@@ -92,6 +92,7 @@ struct OnboardingChatView: View {
   var onSkip: () -> Void
 
   @State private var inputText: String = ""
+  @State private var inputRevision: UInt64 = 0
   @State private var hasStarted: Bool = false
   @State private var onboardingCompleted: Bool = false
   @State private var quickReplyOptions: [String] = []
@@ -425,7 +426,12 @@ struct OnboardingChatView: View {
       .padding(.vertical, 16)
     }
     .onAppear {
+      inputText = ChatDraftStore.shared.text(for: .onboardingMain)
       startChat()
+    }
+    .onChange(of: inputText) { _, text in
+      inputRevision &+= 1
+      ChatDraftStore.shared.setText(text, for: .onboardingMain)
     }
     .onReceive(permissionCheckTimer) { _ in
       appState.checkScreenRecordingPermission()
@@ -572,6 +578,7 @@ struct OnboardingChatView: View {
 
     // Set up floating bar so permission help notifications can be shown
     FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
+    FloatingControlBarManager.shared.barState?.switchAIDraft(to: .onboardingFloating)
     FloatingControlBarManager.shared.showTemporarily()
 
     // Wire up onboarding tools
@@ -756,9 +763,10 @@ struct OnboardingChatView: View {
   private func sendMessage() {
     guard canSend else { return }
 
-    let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let draft = inputText
+    let submittedRevision = inputRevision
+    let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else { return }
-    inputText = ""
 
     // Clear quick replies and unblock any pending ask_followup
     quickReplyOptions = []
@@ -774,7 +782,11 @@ struct OnboardingChatView: View {
         await maybeCreateTask(from: text, source: "typed")
         awaitingDailyTaskInput = false
       }
-      await chatProvider.sendMessage(text)
+      await chatProvider.sendMessage(text, onAccepted: {
+        if inputRevision == submittedRevision, inputText == draft {
+          inputText = ""
+        }
+      })
     }
   }
 
@@ -826,7 +838,8 @@ struct OnboardingChatView: View {
       isGrantingPermission = true
       Task {
         let result = await ChatToolExecutor.execute(
-          ToolCall(name: "request_permission", arguments: ["type": permType], thoughtSignature: nil)
+          ToolCall(name: "request_permission", arguments: ["type": permType], thoughtSignature: nil),
+          isOnboardingSurface: true
         )
         isGrantingPermission = false
 
@@ -1131,7 +1144,7 @@ struct OnboardingChatView: View {
         targetValue: config.targetValue,
         currentValue: 0,
         unit: config.unit,
-        source: "onboarding_\(source)"
+        source: "user"
       )
       _ = try? await GoalStorage.shared.syncServerGoal(goal)
       createdGoalTitles.insert(dedupeKey)
@@ -1377,7 +1390,7 @@ struct OnboardingChatView: View {
           },
           onToolCall: { @Sendable _, name, input in
             let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
-            let result = await ChatToolExecutor.execute(toolCall)
+            let result = await ChatToolExecutor.execute(toolCall, isOnboardingSurface: true)
             log("OnboardingChat: Exploration tool \(name) executed")
             return result
           },
@@ -1850,6 +1863,8 @@ struct OnboardingChatBubble: View {
       case .thinking:
         return false
       case .discoveryCard:
+        return true
+      case .agentSpawn, .agentCompletion:
         return true
       }
     }

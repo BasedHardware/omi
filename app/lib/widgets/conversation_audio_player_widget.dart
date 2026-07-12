@@ -6,8 +6,60 @@ import 'package:just_audio/just_audio.dart';
 
 import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/utils/audio/audio_timeline_mapper.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
+
+/// Rounded slider track that shades the collapsed capture gaps of the wall
+/// timeline (fractions of the track width).
+class _GapAwareTrackShape extends RoundedRectSliderTrackShape {
+  final List<(double, double)> gapFractions;
+
+  const _GapAwareTrackShape(this.gapFractions);
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset offset, {
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required Animation<double> enableAnimation,
+    required TextDirection textDirection,
+    required Offset thumbCenter,
+    Offset? secondaryOffset,
+    bool isDiscrete = false,
+    bool isEnabled = false,
+    double additionalActiveTrackHeight = 2,
+  }) {
+    super.paint(
+      context,
+      offset,
+      parentBox: parentBox,
+      sliderTheme: sliderTheme,
+      enableAnimation: enableAnimation,
+      textDirection: textDirection,
+      thumbCenter: thumbCenter,
+      secondaryOffset: secondaryOffset,
+      isDiscrete: isDiscrete,
+      isEnabled: isEnabled,
+      additionalActiveTrackHeight: additionalActiveTrackHeight,
+    );
+    if (gapFractions.isEmpty) return;
+    final trackRect = getPreferredRect(
+      parentBox: parentBox,
+      offset: offset,
+      sliderTheme: sliderTheme,
+      isEnabled: isEnabled,
+      isDiscrete: isDiscrete,
+    );
+    final paint = Paint()..color = Colors.black.withValues(alpha: 0.45);
+    for (final gap in gapFractions) {
+      final left = trackRect.left + gap.$1 * trackRect.width;
+      final right = trackRect.left + gap.$2 * trackRect.width;
+      context.canvas.drawRect(Rect.fromLTRB(left, trackRect.top, right, trackRect.bottom), paint);
+    }
+  }
+}
 
 class ConversationAudioPlayerWidget extends StatefulWidget {
   final ServerConversation conversation;
@@ -41,6 +93,11 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
   // Cumulative durations for each track (used to calculate combined position)
   List<Duration> _trackStartOffsets = [];
 
+  // Single conversation-level artifact mode (dense MP3 + spans manifest);
+  // positions/seeks are on the wall timeline mapped through the spans.
+  bool _singleArtifact = false;
+  AudioTimelineMapper? _timelineMapper;
+
   StreamSubscription<SequenceState?>? _sequenceSubscription;
   StreamSubscription<Object>? _errorSubscription;
 
@@ -62,6 +119,12 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
 
   /// Calculate total duration from audio file metadata
   void _calculateTotalDuration() {
+    final stamp = widget.conversation.conversationAudio;
+    if (stamp != null && stamp.spans.isNotEmpty) {
+      // Wall-clock timeline (collapsed gaps are shaded on the slider).
+      _totalDuration = Duration(milliseconds: (stamp.duration * 1000).toInt());
+      return;
+    }
     double totalSeconds = 0;
     _trackStartOffsets = [];
 
@@ -77,10 +140,47 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
 
   /// Get combined position across all tracks
   Duration _getCombinedPosition(int? currentIndex, Duration trackPosition) {
+    if (_singleArtifact) {
+      final wall = _timelineMapper!.artifactToWall(trackPosition.inMilliseconds / 1000.0);
+      return Duration(milliseconds: (wall * 1000).toInt());
+    }
     if (currentIndex == null || currentIndex >= _trackStartOffsets.length) {
       return trackPosition;
     }
     return _trackStartOffsets[currentIndex] + trackPosition;
+  }
+
+  Future<AudioSource?> _buildAudioSource() async {
+    // Prefer the conversation-level dense MP3 (signed GCS URL, no auth headers,
+    // exact wall-clock seek via the spans manifest).
+    final urlsResponse = await getConversationAudioSignedUrls(widget.conversation.id);
+    if (_disposed) return null;
+    final conversationAudio = urlsResponse.conversationAudio;
+    if (conversationAudio != null && conversationAudio.isCached && conversationAudio.spans.isNotEmpty) {
+      _timelineMapper = AudioTimelineMapper(conversationAudio.spans);
+      _singleArtifact = true;
+      _totalDuration = Duration(milliseconds: (_timelineMapper!.wallDuration * 1000).toInt());
+      return AudioSource.uri(Uri.parse(conversationAudio.signedUrl!));
+    }
+
+    // Fallback: per-part WAV streaming playlist through the backend.
+    final headers = await getAudioHeaders();
+    if (_disposed) return null;
+
+    final audioFileIds = widget.conversation.audioFiles.map((af) => af.id).toList();
+    final urls = getConversationAudioUrls(
+      conversationId: widget.conversation.id,
+      audioFileIds: audioFileIds,
+      format: 'wav',
+    );
+
+    // Create concatenating audio source for gapless playback
+    return ConcatenatingAudioSource(
+      useLazyPreparation: true,
+      children: urls.map((url) {
+        return AudioSource.uri(Uri.parse(url), headers: headers);
+      }).toList(),
+    );
   }
 
   Future<void> _setupAudioPlayer() async {
@@ -92,23 +192,8 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
     });
 
     try {
-      final headers = await getAudioHeaders();
-      if (_disposed) return;
-
-      final audioFileIds = widget.conversation.audioFiles.map((af) => af.id).toList();
-      final urls = getConversationAudioUrls(
-        conversationId: widget.conversation.id,
-        audioFileIds: audioFileIds,
-        format: 'wav',
-      );
-
-      // Create concatenating audio source for gapless playback
-      final playlist = ConcatenatingAudioSource(
-        useLazyPreparation: true,
-        children: urls.map((url) {
-          return AudioSource.uri(Uri.parse(url), headers: headers);
-        }).toList(),
-      );
+      final playlist = await _buildAudioSource();
+      if (_disposed || playlist == null) return;
 
       // Listen for playback errors
       _errorSubscription?.cancel();
@@ -187,6 +272,13 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
 
   /// Seek to a combined position across all tracks
   Future<void> _seekToCombinedPosition(Duration targetPosition) async {
+    if (_singleArtifact) {
+      // Wall timeline -> dense MP3 position; gap seeks snap to the next span.
+      final artifactSeconds = _timelineMapper!.wallToArtifact(targetPosition.inMilliseconds / 1000.0);
+      await _audioPlayer.seek(Duration(milliseconds: (artifactSeconds * 1000).toInt()));
+      return;
+    }
+
     // Find which track this position falls into
     int targetIndex = 0;
     Duration positionInTrack = targetPosition;
@@ -301,6 +393,18 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
                                 trackHeight: 4,
                                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
                                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                                trackShape: _GapAwareTrackShape(
+                                  _singleArtifact && _timelineMapper!.wallDuration > 0
+                                      ? _timelineMapper!.gapRangesWall
+                                          .map(
+                                            (gap) => (
+                                              gap.$1 / _timelineMapper!.wallDuration,
+                                              gap.$2 / _timelineMapper!.wallDuration,
+                                            ),
+                                          )
+                                          .toList()
+                                      : const [],
+                                ),
                               ),
                               child: Slider(
                                 value: combinedPosition.inMilliseconds.toDouble().clamp(

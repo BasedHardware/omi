@@ -26,9 +26,35 @@ enum DefaultsKey: String {
     case authTokenExpiry = "auth_tokenExpiry"
     case authTokenUserId = "auth_tokenUserId"  // User ID that owns the stored token
     case authIsImpersonating = "auth_isImpersonating"
+    /// Non-prod gauntlet owner swap: synthetic kernel owner that must NOT replace
+    /// `auth_userId` (that mismatch triggers AuthService.clearTokens()).
+    case automationOwnerOverride = "automation_owner_override"
+    /// Legacy/heal backup of the real Firebase uid when an older swap overwrote
+    /// `auth_userId` with a synthetic owner.
+    case automationOwnerABackup = "automation_swap_owner_a_backup"
     case chatBridgeMode = "chatBridgeMode"
     case preferredMicrophoneDeviceUID = "preferredMicrophoneDeviceUID"
+    case multiChatEnabled = "multiChatEnabled"
+    case aiChatWorkingDirectory = "aiChatWorkingDirectory"
+    case hasCompletedOnboarding = "hasCompletedOnboarding"
     case onboardingStep = "onboardingStep"
+    case onboardingMemoryImportOwnerUserId = "onboardingMemoryImportOwnerUserID"
+    case homeOmiDeviceAccountHistory = "home-omi-device-account-history"
+    case chatScreenshotSharingEnabled = "chatScreenshotSharingEnabled"
+    /// Test hook: forces TTS playback start to report failure (non-prod gauntlets).
+    case forceTTSPlaybackStartFalse = "forceTTSPlaybackStartFalse"
+    case desktopIsPaywalled = "desktop_isPaywalled"
+    case rewindDisableContentCache = "rewindDisableContentCache"
+}
+
+/// Compile-checked owner-scoped defaults keys whose final storage key is
+/// derived at runtime.
+struct ScopedDefaultsKey {
+    fileprivate let rawValue: String
+
+    static func taskContextSubjectMatches(ownerHash: String) -> Self {
+        Self(rawValue: "taskContextSubjectMatches.v1.\(ownerHash)")
+    }
 }
 
 /// Typed accessors that take a `DefaultsKey` instead of a `String`.
@@ -42,7 +68,10 @@ extension UserDefaults {
     func bool(forKey key: DefaultsKey) -> Bool { bool(forKey: key.rawValue) }
     func integer(forKey key: DefaultsKey) -> Int { integer(forKey: key.rawValue) }
     func double(forKey key: DefaultsKey) -> Double { double(forKey: key.rawValue) }
+    func data(forKey key: ScopedDefaultsKey) -> Data? { data(forKey: key.rawValue) }
+    func object(forKey key: DefaultsKey) -> Any? { object(forKey: key.rawValue) }
 
     func set(_ value: Any?, forKey key: DefaultsKey) { set(value, forKey: key.rawValue) }
+    func set(_ value: Any?, forKey key: ScopedDefaultsKey) { set(value, forKey: key.rawValue) }
     func removeObject(forKey key: DefaultsKey) { removeObject(forKey: key.rawValue) }
 }

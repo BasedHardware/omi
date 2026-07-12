@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import OmiSupport
 
 enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
   case notion
@@ -484,11 +485,6 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
         ("auth_url", Self.mcpAuthorizeURL),
         ("token_url", Self.mcpTokenURL),
       ])
-    } else if !usesPublicCloudOAuthClient {
-      nativeToolArgs.append(contentsOf: [
-        ("oauth_client_id", "omi"),
-        ("oauth_client_secret", key),
-      ])
     }
     let nativeToolJSON =
       "{"
@@ -823,7 +819,7 @@ actor MemoryExportService {
   func allStatuses() -> [MemoryExportDestination: MemoryExportStatus] {
     let localConnections = MemoryExportConnectionDetector.scanLocalMCPConnections(matchingKey: storedMCPKey())
     return Dictionary(
-      uniqueKeysWithValues: MemoryExportDestination.allCases.map { destination in
+      lastWriteWins: MemoryExportDestination.allCases.map { destination in
         (destination, status(for: destination, localMCPConnections: localConnections))
       })
   }

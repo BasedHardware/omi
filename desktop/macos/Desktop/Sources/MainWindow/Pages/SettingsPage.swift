@@ -132,6 +132,11 @@ struct SettingsContentView: View {
   // Ask Omi floating bar state
   @State var showAskOmiBar: Bool = false
 
+  // Grant for chat screenshot tools (capture_screen / get_screenshot);
+  // read by ChatToolExecutor.localPolicyDecision. Default on.
+  @AppStorage(DefaultsKey.chatScreenshotSharingEnabled.rawValue)
+  var chatScreenshotSharingEnabled: Bool = true
+
   // Transcription state
   @State var isTranscribing: Bool
   @State var isTogglingTranscription: Bool = false
@@ -520,7 +525,7 @@ struct SettingsContentView: View {
       .animation(.easeInOut(duration: 0.15), value: selectedSection)
     }
     .onAppear {
-      if selectedSection == .aiChat {
+      if AppBuild.isProductionBundle && selectedSection == .aiChat {
         selectedSection = .advanced
       }
       loadBackendSettings()
@@ -545,7 +550,7 @@ struct SettingsContentView: View {
       isTranscribing = newValue
     }
     .onChange(of: selectedSection) { _, newValue in
-      if newValue == .aiChat {
+      if AppBuild.isProductionBundle && newValue == .aiChat {
         selectedSection = .advanced
         return
       }

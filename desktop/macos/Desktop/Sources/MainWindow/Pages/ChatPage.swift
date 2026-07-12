@@ -382,6 +382,12 @@ struct ChatPage: View {
       onRetry: { Task { await chatProvider.retryLoad() } },
       localSendToken: chatProvider.localSendToken,
       onCancelTurn: { [weak chatProvider] in chatProvider?.stopAgent(owner: .mainChat) },
+      onOpenAgent: { agentID, completion in
+        FloatingControlBarManager.shared.openAgentChatFromTimeline(agentID: agentID, completion: completion)
+      },
+      onOpenAgentRef: { ref, completion in
+        FloatingControlBarManager.shared.openAgentChatFromTimeline(ref: ref, completion: completion)
+      },
       welcomeContent: { welcomeMessage }
     )
   }
@@ -450,8 +456,8 @@ struct ChatPage: View {
     ChatInputView(
       onSend: { text in
         AnalyticsManager.shared.chatMessageSent(
-          messageLength: text.count, hasContext: selectedApp != nil, source: "main_chat")
-        Task { await chatProvider.sendMessage(text) }
+          messageLength: text.count, hasSelectedAppContext: selectedApp != nil, source: "main_chat")
+        Task { await chatProvider.sendMainDraft(text) }
       },
       onStop: {
         chatProvider.stopAgent(owner: .mainChat)

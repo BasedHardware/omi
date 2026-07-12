@@ -32,7 +32,7 @@ import 'package:omi/utils/waveform_utils.dart';
 /// `completed` (never fire-and-forget).
 /// Result of a user-triggered [LocalRecordingsProvider.upload], so the UI can
 /// react (fair-use message, generic error, or navigate away) instead of guessing.
-enum LocalUploadOutcome { started, rateLimited, failed, busy }
+enum LocalUploadOutcome { started, fairUseLimited, backendBusy, failed, busy }
 
 class LocalRecordingsProvider extends ChangeNotifier {
   final AudioPlayerUtils _audio = AudioPlayerUtils.instance;
@@ -184,11 +184,6 @@ class LocalRecordingsProvider extends ChangeNotifier {
   /// 202 queued: persist the jobId and let the reconciler finish it.
   Future<LocalUploadOutcome> upload(LocalRecording rec) async {
     if (_isUploading || rec.isBusy) return LocalUploadOutcome.busy;
-    if (SyncRateLimiter.instance.isLimited) {
-      notifyListeners();
-      return LocalUploadOutcome.rateLimited;
-    }
-
     _isUploading = true;
     _uploadingName = rec.fileName;
     _failedName = null;
@@ -202,8 +197,12 @@ class LocalRecordingsProvider extends ChangeNotifier {
         _failedName = rec.fileName;
         outcome = LocalUploadOutcome.failed;
       } else {
-        final result = await uploadLocalFilesV2([file]);
-        SyncRateLimiter.instance.clear();
+        final lane = syncUploadLaneForTimestamp(
+          rec.timerStart,
+          DateTime.now().millisecondsSinceEpoch ~/ 1000,
+          hasServerCaptureProof: false,
+        );
+        final result = await SyncUploadGate.instance.upload([file], lane: lane);
 
         if (result.completed != null) {
           await _deleteFileOnly(rec.fileName);
@@ -215,8 +214,8 @@ class LocalRecordingsProvider extends ChangeNotifier {
         }
       }
     } on SyncRateLimitedException catch (e) {
-      SyncRateLimiter.instance.markLimited(retryAfterSeconds: e.retryAfterSeconds);
-      outcome = LocalUploadOutcome.rateLimited;
+      outcome =
+          e.kind == SyncRateLimitKind.fairUse ? LocalUploadOutcome.fairUseLimited : LocalUploadOutcome.backendBusy;
     } catch (e) {
       _failedName = rec.fileName;
       Logger.error('LocalRecordings: upload failed for ${rec.fileName}: $e');

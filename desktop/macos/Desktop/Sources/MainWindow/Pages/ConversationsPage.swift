@@ -352,12 +352,12 @@ struct ConversationsPage: View {
             .foregroundColor(OmiColors.textTertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-      } else if let error = searchError {
+      } else if searchError != nil {
         VStack(spacing: 12) {
           Image(systemName: "exclamationmark.triangle")
             .scaledFont(size: 32)
             .foregroundColor(OmiColors.textTertiary)
-          Text(error)
+          Text("Couldn't search conversations. Check your connection and try again.")
             .scaledFont(size: 13)
             .foregroundColor(OmiColors.textTertiary)
             .multilineTextAlignment(.center)
@@ -435,8 +435,10 @@ struct ConversationsPage: View {
 
   private func performSearch(query: String) {
     guard !query.isEmpty else {
+      appState.cancelConversationSearch()
       searchResults = []
       searchError = nil
+      isSearching = false
       return
     }
 
@@ -447,18 +449,15 @@ struct ConversationsPage: View {
 
     Task {
       do {
-        let result = try await APIClient.shared.searchConversations(
-          query: query,
-          page: 1,
-          perPage: 50,
-          includeDiscarded: false
-        )
-        log("Search: Found \(result.items.count) results")
-        searchResults = result.items
+        let result = try await appState.searchConversations(query)
+        log("Search: Found \(result.count) results")
+        searchResults = result
         isSearching = false
+      } catch is CancellationError {
+        // A newer query owns the search UI now.
       } catch {
         logError("Search: Failed", error: error)
-        searchError = error.localizedDescription
+        searchError = UserFacingErrorPresentation.message(for: error, while: .conversationSearch)
         searchResults = []
         isSearching = false
       }
@@ -726,7 +725,7 @@ struct ConversationsPage: View {
       }
     } catch {
       logError("Merge failed", error: error)
-      mergeError = error.localizedDescription
+      mergeError = UserFacingErrorPresentation.message(for: error, while: .conversationMerge)
     }
 
     isMerging = false

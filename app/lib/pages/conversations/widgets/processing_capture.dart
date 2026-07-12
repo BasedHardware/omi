@@ -453,7 +453,9 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                     recordingType: isDeviceRecording ? 'device' : 'phone_mic',
                   );
                 }
-                _toggleRecording(context, provider);
+                if (mounted) {
+                  _toggleRecording(context, provider);
+                }
               },
               child: Container(
                 width: 28,

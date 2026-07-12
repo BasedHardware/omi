@@ -6,9 +6,9 @@ import 'package:omi/utils/l10n_extensions.dart';
 
 class OnboardingIntroScreen extends StatefulWidget {
   final VoidCallback onStart;
-  final bool allowExit;
+  final VoidCallback? onSkip;
 
-  const OnboardingIntroScreen({super.key, required this.onStart, this.allowExit = false});
+  const OnboardingIntroScreen({super.key, required this.onStart, this.onSkip});
 
   @override
   State<OnboardingIntroScreen> createState() => _OnboardingIntroScreenState();
@@ -43,15 +43,13 @@ class _OnboardingIntroScreenState extends State<OnboardingIntroScreen> with Sing
             children: [
               SizedBox(
                 height: 48,
-                child: widget.allowExit
-                    ? Align(
-                        alignment: Alignment.centerLeft,
-                        child: IconButton(
-                          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
-                          onPressed: () => Navigator.of(context).maybePop(),
-                        ),
-                      )
-                    : null,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: IconButton(
+                    icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+                    onPressed: widget.onSkip ?? () => Navigator.of(context).maybePop(),
+                  ),
+                ),
               ),
               const Spacer(flex: 2),
               SizedBox(
@@ -104,7 +102,13 @@ class _OnboardingIntroScreenState extends State<OnboardingIntroScreen> with Sing
               ),
               const Spacer(flex: 3),
               OnboardingContinueButton(label: context.l10n.getStarted, onPressed: widget.onStart),
-              const SizedBox(height: 24),
+              const SizedBox(height: 8),
+              TextButton(
+                key: const Key('device_onboarding_skip_button'),
+                onPressed: widget.onSkip ?? () => Navigator.of(context).maybePop(),
+                child: Text(context.l10n.skipForNow, style: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 15)),
+              ),
+              const SizedBox(height: 8),
             ],
           ),
         ),

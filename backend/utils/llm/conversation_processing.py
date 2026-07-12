@@ -625,6 +625,7 @@ def extract_action_items(
     existing_action_items: Optional[List[Dict[str, Any]]] = None,
     calendar_meeting_context: Optional['CalendarMeetingContext'] = None,
     output_language_code: Optional[str] = None,
+    task_intelligence_capture: bool = False,
 ) -> List[ActionItem]:
     """
     Dedicated function to extract action items from conversation content.
@@ -659,13 +660,94 @@ def extract_action_items(
             desc = item.get('description', '')
             due = item.get('due_at')
             due_str = due.strftime('%Y-%m-%d %H:%M UTC') if due else 'No due date'
-            items_list.append(f"  • {desc} (Due: {due_str})")
+            task_id = item.get('id')
+            id_prefix = f"ID {task_id}: " if task_id else ''
+            items_list.append(f"  • {id_prefix}{desc} (Due: {due_str})")
 
         if items_list:
             existing_items_context = (
                 f"\n\nPOTENTIALLY RELATED OPEN TASKS — recently active, semantically similar ({len(items_list)} items):\n"
                 + "\n".join(items_list)
             )
+
+    commitment_capture_rules = (
+        '''COMMITMENT CAPTURE (canonical task-intelligence mode):
+    • Extract a concrete future commitment even when phrased as "I will" or "I'll do it".
+    • Skip only work demonstrably completed in the current moment; an immediate but still-open commitment is capturable.
+    • For every item set capture_kind to exactly one of explicit_command, clear_commitment, direct_request, inferred_next_step.
+    • Set capture_owner to user, other, or unknown and emit capture_confidence and ownership_confidence from 0 to 1.
+    • Set concrete_deliverable true only when the commitment names a specific deliverable or outcome; vague "I'll handle it" is false.'''
+        if task_intelligence_capture
+        else '''LEGACY COMMITMENT FILTER:
+    • Skip if the user is currently doing it, about to do it, or handling it in this conversation.
+    • "I'm going to X", "I'll do X for you", and "Let me X" are immediate responses and should be skipped.
+    • "Today I will X" is skipped unless there is a specific time or deadline.'''
+    )
+    workflow_filter_rules = (
+        '''3. THIRD: Select only concrete, useful actions:
+       - Extract explicit commands, direct requests, and clear future commitments even when work is about to start.
+       - Do not skip solely because the user says "I'll", "let me", or is beginning the work now.
+       - Skip work only when the transcript demonstrates it is already complete.
+       - NEVER extract multiple items about the same topic from a single conversation.'''
+        if task_intelligence_capture
+        else '''3. THIRD: Default to extracting NOTHING. Filter aggressively:
+       - Is the user ALREADY doing this or about to do it? SKIP IT
+       - Is this being handled in real-time between the participants? SKIP IT
+       - Would a busy person genuinely forget this without a reminder? If not OBVIOUS, SKIP IT
+       - NEVER extract multiple items about the same topic from a single conversation
+       - When in doubt, extract 0 items. One missed marginal task is far better than multiple garbage tasks.'''
+    )
+    live_work_exclusion_rules = (
+        '''• Work demonstrably completed in the transcript (ongoing or about-to-start work remains eligible)
+    • Past actions being discussed without an open follow-up'''
+        if task_intelligence_capture
+        else '''• Things user is ALREADY doing or actively working on
+    • Past actions being discussed
+    • Conversations where the action is being completed in real-time between the participants
+    • Back-and-forth clarification or decision-making about something happening right now
+    • Requests and responses between people who are together and handling the matter on the spot
+    • If the entire conversation is a brief in-person exchange that will be resolved within minutes, extract 0 items'''
+    )
+    completion_targeting_rule = (
+        '''• If the user says an existing supplied task is done, emit candidate_action=complete with that exact
+      target_task_id. Do not create a new item for completed work.'''
+        if task_intelligence_capture
+        else '''• If user says "I did X" / "I just X'd" / "X is done" / "X is taken care of": DO NOT extract a
+      new item AND do not modify the existing one — just leave it.'''
+    )
+    quality_threshold_rules = (
+        '''• Always extract concrete explicit commands, direct requests, and clear commitments; Candidate policy
+      decides whether they become tasks or quiet suggestions.
+    • Be conservative only with model-inferred next steps.'''
+        if task_intelligence_capture
+        else '''• Only extract action items that are truly important and need tracking
+    • When in doubt, DON'T extract - be conservative and selective'''
+    )
+    strict_filter_intro = (
+        'STRICT FILTERING RULES - ownership and a concrete action are required; timing and importance are signals:'
+        if task_intelligence_capture
+        else 'STRICT FILTERING RULES - Include ONLY tasks that meet ALL these criteria:'
+    )
+    timing_importance_rules = (
+        '''3. **Timing Signal**: Capture timing when present, but do not require a deadline for a concrete explicit
+       command, direct request, or clear commitment.
+
+    4. **Importance Signal**: Consequences increase confidence, but a concrete direct request remains eligible
+       without high stakes. Use importance to filter only inferred or vague next steps.'''
+        if task_intelligence_capture
+        else '''3. **Timing Signal**: The task includes a timing cue:
+       - Explicit dates or times
+       - Relative timing ("tomorrow", "next week", "by Friday", "this month")
+       - Urgency markers ("urgent", "ASAP", "high priority")
+
+    4. **Real Importance**: The task has genuine consequences if missed:
+       - Financial impact (bills, payments, purchases, invoices)
+       - Health/safety concerns (appointments, medications, safety checks)
+       - Hard deadlines (submissions, filings, registrations)
+       - Explicit stress if missed (stated by speakers)
+       - Critical dependencies (primary user blocked without it)
+       - Commitments to other people (meetings, deliverables, promises)'''
+    )
 
     # First system message: task-specific instructions (static prefix enables cross-conversation caching)
     # NOTE: {language_code} is in the context message, not here, to keep this prefix fully static across all languages.
@@ -687,7 +769,7 @@ def extract_action_items(
       - Re-occurrence cues: "again", "another", "still need to", "I forgot to", "more", "one more"
       - Different person, scope, or deadline ("Submit report by March 1" vs "Submit report by April 15" — different deadlines, both valid)
       - Existing item describes a one-off task that's already in progress; user is starting a new instance
-    • If user says "I did X" / "I just X'd" / "X is done" / "X is taken care of": DO NOT extract a new item AND do not modify the existing one — just leave it (auto-completion of existing tasks is out of scope here).
+    {completion_targeting_rule}
     • Examples of true DUPLICATES (suppress):
       - "Call John" said today, existing open "Call John" from this morning, no new context → DUPLICATE
       - "Email Sarah about meeting" said today, existing "Email Sarah about meeting" still open → DUPLICATE (same intent re-mentioned)
@@ -701,12 +783,7 @@ def extract_action_items(
     WORKFLOW:
     1. FIRST: Read the ENTIRE conversation carefully to understand the full context
     2. SECOND: Identify all topics, people, places, or things being discussed
-    3. THIRD: Default to extracting NOTHING. Filter aggressively:
-       - Is the user ALREADY doing this or about to do it? SKIP IT
-       - Is this being handled in real-time between the participants? SKIP IT
-       - Would a busy person genuinely forget this without a reminder? If not OBVIOUS, SKIP IT
-       - NEVER extract multiple items about the same topic from a single conversation
-       - When in doubt, extract 0 items. One missed marginal task is far better than multiple garbage tasks.
+    {workflow_filter_rules}
     4. FOURTH: Extract ONLY action items that passed step 3, using specific names/details
     5. FIFTH: Extract timing information separately and put it in the due_at field
     6. SIXTH: Clean the description - remove ALL time references and vague words
@@ -723,11 +800,10 @@ def extract_action_items(
 
     QUALITY OVER QUANTITY:
     • Better to have 0 action items than to flood the user with unnecessary ones
-    • Only extract action items that are truly important and need tracking
-    • When in doubt, DON'T extract - be conservative and selective
+    {quality_threshold_rules}
     • Think: "Would a busy person want to be reminded of this?"
 
-    STRICT FILTERING RULES - Include ONLY tasks that meet ALL these criteria:
+    {strict_filter_intro}
 
     1. **Clear Ownership & Relevance to Primary User**:
        - Identify which speaker is the primary user based on conversational context
@@ -744,48 +820,25 @@ def extract_action_items(
 
     2. **Concrete Action**: The task describes a specific, actionable next step (not vague intentions)
 
-    3. **Timing Signal**: The task includes a timing cue:
-       - Explicit dates or times
-       - Relative timing ("tomorrow", "next week", "by Friday", "this month")
-       - Urgency markers ("urgent", "ASAP", "high priority")
+    {timing_importance_rules}
 
-    4. **Real Importance**: The task has genuine consequences if missed:
-       - Financial impact (bills, payments, purchases, invoices)
-       - Health/safety concerns (appointments, medications, safety checks)
-       - Hard deadlines (submissions, filings, registrations)
-       - Explicit stress if missed (stated by speakers)
-       - Critical dependencies (primary user blocked without it)
-       - Commitments to other people (meetings, deliverables, promises)
-
-    5. **NOT Already Being Done or About to Do Immediately**:
-       - Skip if user is currently doing it, about to do it, or handling it in this conversation
-       - "I'm going to X" → SKIP (about to do it right now)
-       - "I'll do X for you" → SKIP (immediate response to a request)
-       - "Let me X" → SKIP (taking action now)
-       - "Today I will X" → SKIP unless there's a specific time/deadline attached
+    5. **Commitment state**:
+       {commitment_capture_rules}
        - "I want to X" → SKIP unless paired with a concrete deadline
-       - Only EXTRACT if there's a real future deadline that could be forgotten:
-         * "I need to submit the report by Friday" → EXTRACT (forgettable deadline)
-         * "Call the dentist tomorrow" → EXTRACT (future deadline)
-         * "Don't forget to pay rent by the 1st" → EXTRACT (financial deadline)
+       - Always extract a real future deadline that could be forgotten.
 
     EXCLUDE these types of items (be aggressive about exclusion):
-    • Things user is ALREADY doing or actively working on
+    {live_work_exclusion_rules}
     • Casual mentions or updates ("I'm working on X", "currently doing Y")
     • Vague suggestions without commitment ("we should grab coffee sometime", "let's meet up soon")
     • Casual mentions without commitment ("maybe I'll check that out")
     • General goals without specific next steps ("I need to exercise more")
-    • Past actions being discussed
     • Hypothetical scenarios ("if we do X, then Y")
     • Trivial tasks with no real consequences
     • Tasks assigned to others that don't impact the primary user
     • Routine daily activities the user already knows about
     • Things that are obvious or don't need a reminder
     • Updates or status reports about ongoing work
-    • Conversations where the action is being completed in real-time between the participants
-    • Back-and-forth clarification or decision-making about something happening right now
-    • Requests and responses between people who are together and handling the matter on the spot
-    • If the entire conversation is a brief in-person exchange that will be resolved within minutes, extract 0 items
 
     FORMAT REQUIREMENTS:
     • Keep each action item SHORT and concise (maximum 15 words, strict limit)
@@ -825,6 +878,11 @@ def extract_action_items(
     • Remove filler words and unnecessary context
     • Merge duplicates
     • Order by: due date → urgency → alphabetical
+
+    CANONICAL TARGETING (only when canonical task-intelligence mode is active):
+    • Set candidate_action to create, update, or complete.
+    • For update/complete, target_task_id MUST exactly match an ID shown in POTENTIALLY RELATED OPEN TASKS.
+    • Never invent a task ID. If no supplied ID is an exact target, use candidate_action=create and omit target_task_id.
 
     DUE DATE EXTRACTION:
     Resolve each due date in the user's LOCAL time. NEVER produce a past date.
@@ -877,6 +935,13 @@ def extract_action_items(
         'current_time_local': current_time_local.replace(tzinfo=None).isoformat(),
         'tz': tz or 'UTC',
         'existing_items_context': existing_items_context,
+        'commitment_capture_rules': commitment_capture_rules,
+        'workflow_filter_rules': workflow_filter_rules,
+        'live_work_exclusion_rules': live_work_exclusion_rules,
+        'completion_targeting_rule': completion_targeting_rule,
+        'quality_threshold_rules': quality_threshold_rules,
+        'strict_filter_intro': strict_filter_intro,
+        'timing_importance_rules': timing_importance_rules,
     }
 
     try:

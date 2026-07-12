@@ -10,7 +10,7 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertFalse(instr.contains("Always reply in English"))             // old rule gone
         XCTAssertTrue(instr.contains("spawn_agent"))
         XCTAssertTrue(instr.contains("list_agent_sessions"))
-        XCTAssertTrue(instr.contains("run_agent_and_wait"))
+        XCTAssertFalse(instr.contains("run_agent_and_wait"))
         XCTAssertTrue(instr.contains("set_desktop_attention_override"))
         XCTAssertTrue(instr.contains("get_agent_run"))
         XCTAssertTrue(instr.contains("cancel_agent_run"))
@@ -23,6 +23,129 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertTrue(instr.contains("Current timezone:"))
         XCTAssertTrue(instr.contains("Resolve relative dates"))
         XCTAssertTrue(instr.contains("ANSWER YOURSELF"))
+    }
+
+    func testInstructionRequiresTryingContextBeforeAsking() {
+        let instr = RealtimeHubTools.systemInstruction(aboutUser: "")
+        XCTAssertTrue(instr.contains("Try before asking"))
+        XCTAssertTrue(instr.contains("use the relevant read tools before asking the user"))
+        XCTAssertTrue(instr.contains("Missing or incomplete context is"))
+        XCTAssertTrue(instr.contains("not a reason to ask first"))
+        XCTAssertTrue(instr.contains("give the best answer you can with a confidence caveat"))
+    }
+
+    func testInstructionDelegatesLargerVoiceWork() {
+        let instr = RealtimeHubTools.systemInstruction(aboutUser: "")
+        XCTAssertTrue(instr.contains("Larger work"))
+        XCTAssertTrue(instr.contains("PTT is the fast front door"))
+        XCTAssertTrue(instr.contains("call spawn_agent with a clear objective and title"))
+        XCTAssertTrue(instr.contains("Do not ask permission to delegate when the user's intent is clear"))
+        XCTAssertTrue(instr.contains("work product, investigation, or"))
+    }
+
+    func testInstructionKeepsPermissionsAsDirectVoiceActions() {
+        let instr = RealtimeHubTools.systemInstruction(aboutUser: "")
+        XCTAssertTrue(instr.contains("check_permission_status"))
+        XCTAssertTrue(instr.contains("request_permission"))
+        XCTAssertTrue(instr.contains("NEVER use spawn_agent for a permission request"))
+    }
+
+    func testDelegatedPermissionRequestIsRedirectedToDirectTool() {
+        XCTAssertEqual(
+            RealtimeHubTools.directPermissionRedirect(
+                forDelegationBrief: "Request Screen Recording permission for Omi in Mac System Settings."
+            ),
+            .init(tool: .requestPermission, type: "screen_recording", recoveredFromDelegation: true)
+        )
+        XCTAssertNil(
+            RealtimeHubTools.directPermissionRedirect(
+                forDelegationBrief: "Research whether screen recording APIs support WebP."
+            )
+        )
+        XCTAssertNil(
+            RealtimeHubTools.directPermissionRedirect(
+                forDelegationBrief: "Research how our Chrome extension should request Screen Recording permission."
+            )
+        )
+    }
+
+    func testDelegatedPermissionStatusIsCheckedWithoutOpeningSettings() {
+        XCTAssertEqual(
+            RealtimeHubTools.directPermissionRedirect(
+                forDelegationBrief: "Check whether Omi has Screen Recording permission granted."
+            ),
+            .init(tool: .checkPermissionStatus, type: "screen_recording", recoveredFromDelegation: true)
+        )
+        XCTAssertNil(
+            RealtimeHubTools.directPermissionRedirect(
+                forDelegationBrief: "Check whether Chrome has Screen Recording permission granted."
+            )
+        )
+    }
+
+    func testRealtimePermissionRedirectUsesCanonicalChatRoutingContract() {
+        let cases: [(String, HubTool, String)] = [
+            ("Request microphone permission for Omi.", .requestPermission, "microphone"),
+            ("Enable Omi notifications.", .requestPermission, "notifications"),
+            ("Check whether Omi has Accessibility permission granted.", .checkPermissionStatus, "accessibility"),
+            ("Check whether Omi has Automation permission granted.", .checkPermissionStatus, "automation"),
+            ("Request Full Disk Access for this app.", .requestPermission, "full_disk_access"),
+        ]
+
+        for (brief, tool, type) in cases {
+            let chatRoute = ChatToolExecutor.permissionExecutionRoute(
+                toolName: HubTool.spawnAgent.rawValue,
+                arguments: ["brief": brief]
+            )
+            XCTAssertEqual(
+                chatRoute,
+                .directNative(toolName: tool.rawValue, type: type, recoveredFromDelegation: true)
+            )
+            XCTAssertEqual(
+                RealtimeHubTools.directPermissionRedirect(forDelegationBrief: brief),
+                .init(tool: tool, type: type, recoveredFromDelegation: true)
+            )
+        }
+    }
+
+    func testRealtimeExplicitOtherAppAndAmbiguousPermissionRequestsNeverRedirect() {
+        for brief in [
+            "Request Screen Recording permission for Chrome.",
+            "Check whether Zoom has microphone permission granted.",
+            "Request Screen Recording permission for Chromium.",
+            "Check Google Chrome Screen Recording permission.",
+            "Allow Microsoft Teams to use microphone access.",
+            "Request Screen Recording permission.",
+            "Check microphone permission status.",
+        ] {
+            XCTAssertNil(RealtimeHubTools.directPermissionRedirect(forDelegationBrief: brief), brief)
+        }
+    }
+
+    func testRealtimePermissionExecutorRoutesBothToolsToCanonicalChatExecutor() {
+        XCTAssertEqual(
+            RealtimeHubTools.permissionExecutorRoute(
+                for: .checkPermissionStatus, arguments: ["type": "microphone"]),
+            .init(toolName: "check_permission_status", type: "microphone")
+        )
+        XCTAssertEqual(
+            RealtimeHubTools.permissionExecutorRoute(
+                for: .requestPermission, arguments: ["permission": "screen_recording"]),
+            .init(toolName: "request_permission", type: "screen_recording")
+        )
+        XCTAssertNil(
+            RealtimeHubTools.permissionExecutorRoute(
+                for: .spawnAgent, arguments: ["type": "screen_recording"])
+        )
+    }
+
+    func testRealtimeRedirectTrustsUserTurnOverMalformedBrief() {
+        XCTAssertNil(
+            RealtimeHubTools.directPermissionRedirect(
+                forDelegationBrief: "Request Screen Recording permission for Omi.",
+                originatingUserText: "Request Screen Recording permission for Chromium."
+            )
+        )
     }
 
     func testRealtimeToolSurfaceMatchesCapabilityRegistry() {
@@ -80,6 +203,19 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertEqual(parameters?["required"] as? [String], ["title", "start_time", "end_time"])
     }
 
+    func testRealtimePermissionToolsAreExposedForDirectHandling() {
+        let tools = RealtimeHubTools.openAITools
+        let names = Set(tools.compactMap { $0["name"] as? String })
+        XCTAssertTrue(names.contains(HubTool.checkPermissionStatus.rawValue))
+        XCTAssertTrue(names.contains(HubTool.requestPermission.rawValue))
+
+        let request = tools.first { ($0["name"] as? String) == HubTool.requestPermission.rawValue }
+        let parameters = request?["parameters"] as? [String: Any]
+        let properties = parameters?["properties"] as? [String: Any]
+        XCTAssertNotNil(properties?["type"])
+        XCTAssertTrue((request?["description"] as? String ?? "").contains("Never use spawn_agent"))
+    }
+
     func testGeminiRealtimeToolSchemasOmitUnsupportedJsonSchemaKeys() {
         let declarations = RealtimeHubTools.geminiFunctionDeclarations
         XCTAssertFalse(declarations.isEmpty)
@@ -123,6 +259,7 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertTrue(toolNames.contains(HubTool.cancelAgentRun.rawValue))
         XCTAssertTrue(toolNames.contains(HubTool.inspectAgentArtifacts.rawValue))
         XCTAssertTrue(toolNames.contains(HubTool.updateAgentArtifactLifecycle.rawValue))
+        XCTAssertFalse(toolNames.contains("run_agent_and_wait"))
 
         let cancelTool = tools.first { ($0["name"] as? String) == HubTool.cancelAgentRun.rawValue }
         XCTAssertTrue((cancelTool?["description"] as? String ?? "").contains("canonical"))

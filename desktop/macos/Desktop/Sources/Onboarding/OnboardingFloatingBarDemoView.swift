@@ -115,6 +115,7 @@ struct OnboardingFloatingBarDemoView: View {
         .onAppear {
             // Set up the real floating bar (creates the window if needed)
             FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
+            FloatingControlBarManager.shared.barState?.switchAIDraft(to: .onboardingFloating)
             // Use the same global shortcut flow as the normal app so onboarding
             // behaves like production when the user presses Cmd+Enter.
             GlobalShortcutManager.shared.registerShortcuts()
@@ -149,7 +150,7 @@ struct OnboardingFloatingBarDemoView: View {
         for _ in 0..<120 {
             try? await Task.sleep(nanoseconds: 500_000_000)
             if barState.showingAIResponse,
-               let msg = barState.currentAIMessage,
+               let msg = barState.currentAIMessage(from: FloatingControlBarManager.shared.sharedFloatingProvider),
                !msg.isStreaming {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     showContinue = true

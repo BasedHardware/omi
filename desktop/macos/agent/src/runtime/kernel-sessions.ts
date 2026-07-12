@@ -34,6 +34,7 @@ import {
   assembleTurnContext,
   bindingCarriesNativeHistory,
   getVoiceSeedContext,
+  getVoiceSeedSnapshot,
 } from "./turn-context.js";
 import type {
   AdapterBinding,
@@ -143,6 +144,28 @@ import { StaleAdapterBindingError } from "./kernel-types.js";
 import { KernelArtifacts } from "./kernel-artifacts.js";
 
 export class KernelSessions extends KernelArtifacts {
+  executionPolicyForSession(sessionId: string): Pick<AgentSession, "executionRole" | "providerBoundary" | "defaultAdapterId"> {
+    const session = this.readSession(sessionId);
+    return {
+      executionRole: session.executionRole,
+      providerBoundary: session.providerBoundary,
+      defaultAdapterId: session.defaultAdapterId,
+    };
+  }
+
+  executionPolicyForOwnedSession(
+    sessionId: string,
+    ownerId: string,
+  ): Pick<AgentSession, "executionRole" | "providerBoundary" | "defaultAdapterId"> {
+    const session = this.readSession(sessionId);
+    this.assertSessionOwner(session, ownerId);
+    return {
+      executionRole: session.executionRole,
+      providerBoundary: session.providerBoundary,
+      defaultAdapterId: session.defaultAdapterId,
+    };
+  }
+
   listSessions(input: ListSessionsInput = {}): KernelSessionSummary[] {
     const where: string[] = [];
     const values: unknown[] = [];
@@ -229,14 +252,24 @@ export class KernelSessions extends KernelArtifacts {
     return getVoiceSeedContext(this.store, input.conversationId);
   }
 
+  getVoiceSeedSnapshot(input: { conversationId: string }): {
+    context: string;
+    idempotencyKeys: string[];
+  } {
+    return getVoiceSeedSnapshot(this.store, input.conversationId);
+  }
+
   getVoiceSeedContextForSurface(input: { ownerId: string; surfaceRef: SurfaceRef }): {
     conversationId: string;
     context: string;
+    idempotencyKeys: string[];
   } {
     const resolved = resolveSurfaceSession(this.store, input, () => Date.now());
+    const snapshot = getVoiceSeedSnapshot(this.store, resolved.conversationId);
     return {
       conversationId: resolved.conversationId,
-      context: getVoiceSeedContext(this.store, resolved.conversationId),
+      context: snapshot.context,
+      idempotencyKeys: snapshot.idempotencyKeys,
     };
   }
 
