@@ -208,7 +208,7 @@
             "groupBys": [
               "metric.label.response_code_class"
             ],
-            "perSeriesAligner": "ALIGN_SUM",
+            "perSeriesAligner": "ALIGN_NONE",
             "preprocessor": "rate",
             "projectName": "based-hardware",
             "view": "FULL"
