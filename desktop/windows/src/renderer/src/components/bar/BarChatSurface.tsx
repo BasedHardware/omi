@@ -135,7 +135,9 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
 
   if (view === 'list') {
     return (
-      <div className="flex flex-col gap-1 px-3 pb-3 pt-1">
+      // key={view} remounts on every list⇄conversation switch so bar-view-enter
+      // replays — the swap morphs in place instead of popping a new sheet.
+      <div key="list" className="bar-view-enter flex flex-col gap-1 px-3 pb-3 pt-1">
         {/* Omi Chat — always present (INV-CHAT-1: the one shared thread). Its
             dot pulses while Omi is thinking/speaking, matching the agent rows so
             every title shares one left margin. */}
@@ -177,7 +179,7 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
   }
 
   return (
-    <div className="flex flex-col">
+    <div key="conversation" className="bar-view-enter flex flex-col">
       <div className="flex items-center gap-1.5 px-2 pb-1 pt-1">
         <button
           type="button"

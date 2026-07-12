@@ -58,7 +58,14 @@ body.bar-body {
     border-radius 240ms cubic-bezier(0.3, 0.8, 0.3, 1);
 }
 
-/* Content layers cross-dissolve INSIDE the single morphing surface. */
+/* Content layers cross-dissolve INSIDE the single morphing surface — but they
+   also INFLATE with it. Anchored at top-center (the pill's seat), the inactive
+   layer is a scaled-down copy that grows to full as it activates, so an expand
+   reads as the pill GROWING into the panel (content and all), not a curtain
+   lifting over pre-placed rows. A pure scale (no translate — a translate reads
+   as a slide, the very thing we're removing) keeps the top edge pinned to the
+   screen while the body unfolds downward. transform + opacity only (GPU-cheap);
+   the surface box still owns the width/height/radius size morph. */
 .bar-content {
   position: absolute;
   top: 0;
@@ -66,12 +73,56 @@ body.bar-body {
   right: 0;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 140ms ease;
+  transform-origin: top center;
+  transform: scale(0.85);
+  transition:
+    opacity 130ms ease,
+    transform 220ms cubic-bezier(0.3, 0.8, 0.3, 1);
 }
 .bar-content.bar-content-active {
   opacity: 1;
   pointer-events: auto;
-  transition: opacity 160ms ease 90ms;
+  transform: none;
+  /* Content settles in just behind the box's leading edge (small opacity delay)
+     so the panel inflates first and the body grows into it. */
+  transition:
+    opacity 170ms ease 60ms,
+    transform 260ms cubic-bezier(0.3, 0.8, 0.3, 1);
+}
+
+/* Inner view swap (chat list ⇄ inline conversation) morphs in place — a gentle
+   grow-and-fade seated at the top, never a fresh sheet sliding down from the
+   edge. Keyed remount in BarChatSurface replays this on every view change. */
+.bar-view-enter {
+  animation: bar-view-enter 200ms cubic-bezier(0.3, 0.8, 0.3, 1);
+  transform-origin: top center;
+}
+@keyframes bar-view-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Respect reduced-motion: swap instantly, no morph, no inflate. */
+@media (prefers-reduced-motion: reduce) {
+  .bar-slide,
+  .bar-surface,
+  .bar-surface.bar-surface-expanded,
+  .bar-content,
+  .bar-content.bar-content-active {
+    transition: none;
+  }
+  .bar-content {
+    transform: none;
+  }
+  .bar-view-enter {
+    animation: none;
+  }
 }
 
 /* Collapsed pill row. */
