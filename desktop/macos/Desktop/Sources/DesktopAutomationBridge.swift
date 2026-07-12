@@ -3295,7 +3295,7 @@ final class DesktopAutomationBridge {
     }
   }
 
-  private func parseRequest(from data: Data) -> HTTPRequest? {
+  private func parseRequest(from data: Data) -> DesktopAutomationHTTPRequest? {
     guard let headerRange = data.range(of: Data("\r\n\r\n".utf8)) else {
       return nil
     }
@@ -3341,7 +3341,7 @@ final class DesktopAutomationBridge {
     }
 
     let body = Data(data[bodyStart..<data.index(bodyStart, offsetBy: contentLength)])
-    return HTTPRequest(method: method, path: path, headers: headers, body: body)
+    return DesktopAutomationHTTPRequest(method: method, path: path, headers: headers, body: body)
   }
 
   /// Parse a `POST /action` body: `{ "name": "...", "params": { "k": "v", ... } }`.
@@ -3373,9 +3373,9 @@ final class DesktopAutomationBridge {
     return (name, params)
   }
 
-  private func route(request: HTTPRequest) async -> HTTPResponse {
+  private func route(request: DesktopAutomationHTTPRequest) async -> DesktopAutomationHTTPResponse {
     let started = DispatchTime.now().uptimeNanoseconds
-    let response = await routeUntimed(request: request)
+    let response = await self.response(for: request)
     let elapsedMs = Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000
     await DesktopAutomationTraceStore.shared.record(
       method: request.method,
@@ -3386,7 +3386,10 @@ final class DesktopAutomationBridge {
     return response
   }
 
-  private func routeUntimed(request: HTTPRequest) async -> HTTPResponse {
+  /// Internal executable route seam used by both the loopback listener and
+  /// behavioral tests. Keeping auth, dispatch, and JSON encoding on this path
+  /// prevents tests from validating a parallel fake router.
+  func response(for request: DesktopAutomationHTTPRequest) async -> DesktopAutomationHTTPResponse {
     guard acceptsLoopbackHostAndOrigin(request.headers) else {
       return jsonResponse(
         DesktopAutomationResponse<DesktopAutomationSnapshot>(
@@ -3499,8 +3502,7 @@ final class DesktopAutomationBridge {
           "POST /conversation/open",
           "POST /action",
           "POST /visual/export",
-          "POST /open-import",
-        ],
+        ] + DesktopAutomationPresentationRoute.allCases.map(\.capability),
         lanes: ["bridge", "visual", "ui"],
         waits: ["state", "log", "trace"],
         assertions: ["state", "log", "trace", "ax"],
@@ -3544,75 +3546,75 @@ final class DesktopAutomationBridge {
           statusCode: 500
         )
       }
-    case ("POST", "/open-export"):
-      struct OpenResult: Codable { let destination: String }
-      do {
-        let payload = try JSONDecoder().decode(
-          DesktopAutomationExecuteExportRequest.self, from: request.body)
-        guard MemoryExportDestination(rawValue: payload.destination) != nil else {
-          return jsonResponse(
-            DesktopAutomationResponse<OpenResult>(
-              ok: false, result: nil, error: "unknown destination: \(payload.destination)"),
-            statusCode: 400)
-        }
-        await MainActor.run {
-          NSApp.activate()
-          if let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") }) {
-            window.makeKeyAndOrderFront(nil)
-          }
-          NotificationCenter.default.post(
-            name: .desktopAutomationOpenExportRequested, object: nil,
-            userInfo: ["destination": payload.destination])
-        }
-        try await Task.sleep(for: .milliseconds(300))
-        return jsonResponse(
-          DesktopAutomationResponse(
-            ok: true, result: OpenResult(destination: payload.destination), error: nil))
-      } catch {
-        return jsonResponse(
-          DesktopAutomationResponse<OpenResult>(
-            ok: false, result: nil, error: error.localizedDescription),
-          statusCode: 500)
+    case ("POST", let path) where path == DesktopAutomationPresentationRoute.openExport.rawValue:
+      struct OpenResult: Codable {
+        let destination: String
+        let generation: UInt64
       }
-    case ("POST", "/open-import"):
-      struct OpenResult: Codable { let connector: String }
-      let payload: DesktopAutomationOpenImportRequest
-      do {
-        payload = try JSONDecoder().decode(
-          DesktopAutomationOpenImportRequest.self, from: request.body)
-      } catch {
+      guard let payload = try? JSONDecoder().decode(
+        DesktopAutomationExecuteExportRequest.self, from: request.body)
+      else {
         return jsonResponse(
           DesktopAutomationResponse<OpenResult>(
-            ok: false, result: nil, error: error.localizedDescription),
+            ok: false, result: nil, error: "invalid_request"),
+          statusCode: 400)
+      }
+      let gate = await currentAutomationPresentationGate()
+      let outcome = await DesktopAutomationPresentationRequestHandler.shared.openExport(
+        identifier: payload.destination,
+        knownIdentifiers: Set(MemoryExportDestination.allCases.map(\.rawValue)),
+        gate: gate
+      )
+      guard let command = outcome.command else {
+        return jsonResponse(
+          DesktopAutomationResponse<OpenResult>(
+            ok: false, result: nil, error: outcome.errorCode),
+          statusCode: outcome.statusCode)
+      }
+      return jsonResponse(
+        DesktopAutomationResponse(
+          ok: true,
+          result: OpenResult(
+            destination: payload.destination,
+            generation: command.generation
+          ),
+          error: nil
+        ))
+    case ("POST", let path) where path == DesktopAutomationPresentationRoute.openImport.rawValue:
+      struct OpenResult: Codable {
+        let connector: String
+        let generation: UInt64
+      }
+      guard let payload = try? JSONDecoder().decode(
+        DesktopAutomationOpenImportRequest.self, from: request.body)
+      else {
+        return jsonResponse(
+          DesktopAutomationResponse<OpenResult>(
+            ok: false, result: nil, error: "invalid_request"),
           statusCode: 400)
       }
       let knownIDs = await MainActor.run { ImportConnector.all.map(\.id) }
-      guard knownIDs.contains(payload.connector) else {
+      let gate = await currentAutomationPresentationGate()
+      let outcome = await DesktopAutomationPresentationRequestHandler.shared.openImport(
+        identifier: payload.connector,
+        knownIdentifiers: Set(knownIDs),
+        gate: gate
+      )
+      guard let command = outcome.command else {
         return jsonResponse(
           DesktopAutomationResponse<OpenResult>(
-            ok: false, result: nil, error: "unknown connector: \(payload.connector)"),
-          statusCode: 400)
+            ok: false, result: nil, error: outcome.errorCode),
+          statusCode: outcome.statusCode)
       }
-      do {
-        await MainActor.run {
-          NSApp.activate()
-          if let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") }) {
-            window.makeKeyAndOrderFront(nil)
-          }
-          NotificationCenter.default.post(
-            name: .desktopAutomationOpenImportRequested, object: nil,
-            userInfo: ["connector": payload.connector])
-        }
-        try await Task.sleep(for: .milliseconds(300))
-        return jsonResponse(
-          DesktopAutomationResponse(
-            ok: true, result: OpenResult(connector: payload.connector), error: nil))
-      } catch {
-        return jsonResponse(
-          DesktopAutomationResponse<OpenResult>(
-            ok: false, result: nil, error: error.localizedDescription),
-          statusCode: 500)
-      }
+      return jsonResponse(
+        DesktopAutomationResponse(
+          ok: true,
+          result: OpenResult(
+            connector: payload.connector,
+            generation: command.generation
+          ),
+          error: nil
+        ))
     case ("POST", "/gmail-read"):
       struct RemovedRoute: Codable {
         let message: String
@@ -3654,6 +3656,21 @@ final class DesktopAutomationBridge {
         ]
       )
     }
+  }
+
+  @MainActor
+  private func currentAutomationPresentationGate() -> DesktopAutomationPresentationGate {
+    let authState = AuthState.shared
+    if authState.isRestoringAuth {
+      return .presentationUnavailable
+    }
+    guard authState.isSignedIn else {
+      return .signedOut
+    }
+    guard let appState = AppState.current else {
+      return .presentationUnavailable
+    }
+    return appState.hasCompletedOnboarding ? .ready : .onboardingIncomplete
   }
 
   private func dispatchOpenConversation(_ payload: DesktopAutomationOpenConversationRequest) async throws {
@@ -3813,17 +3830,20 @@ final class DesktopAutomationBridge {
     return diff == 0
   }
 
-  private func jsonResponse<T: Codable>(_ payload: T, statusCode: Int = 200) -> HTTPResponse {
+  private func jsonResponse<T: Codable>(
+    _ payload: T,
+    statusCode: Int = 200
+  ) -> DesktopAutomationHTTPResponse {
     do {
       let body = try JSONEncoder.pretty.encode(payload)
-      return HTTPResponse(
+      return DesktopAutomationHTTPResponse(
         statusCode: statusCode,
         headers: ["Content-Type": "application/json"],
         body: body
       )
     } catch {
       let fallback = Data("{\"ok\":false,\"error\":\"encode_failed\"}".utf8)
-      return HTTPResponse(
+      return DesktopAutomationHTTPResponse(
         statusCode: 500,
         headers: ["Content-Type": "application/json"],
         body: fallback
@@ -3839,50 +3859,59 @@ final class DesktopAutomationBridge {
     send(response, on: connection)
   }
 
-  private func send(_ response: HTTPResponse, on connection: NWConnection) {
-    let statusText: String
-    switch response.statusCode {
-    case 200: statusText = "OK"
-    case 400: statusText = "Bad Request"
-    case 401: statusText = "Unauthorized"
-    case 403: statusText = "Forbidden"
-    case 404: statusText = "Not Found"
-    default: statusText = "Internal Server Error"
-    }
-
-    var headerLines = [
-      "HTTP/1.1 \(response.statusCode) \(statusText)",
-      "Content-Length: \(response.body.count)",
-      "Connection: close",
-    ]
-    for (key, value) in response.headers {
-      headerLines.append("\(key): \(value)")
-    }
-    headerLines.append("")
-    headerLines.append("")
-
-    var data = Data(headerLines.joined(separator: "\r\n").utf8)
-    data.append(response.body)
-
+  private func send(_ response: DesktopAutomationHTTPResponse, on connection: NWConnection) {
     connection.send(
-      content: data,
+      content: response.serializedHTTP1Data(),
       completion: .contentProcessed { _ in
         connection.cancel()
       })
   }
 }
 
-private struct HTTPRequest {
+struct DesktopAutomationHTTPRequest {
   let method: String
   let path: String
   let headers: [String: String]
   let body: Data
 }
 
-private struct HTTPResponse {
+struct DesktopAutomationHTTPResponse {
   let statusCode: Int
   let headers: [String: String]
   let body: Data
+
+  func serializedHTTP1Data() -> Data {
+    var headerLines = [
+      "HTTP/1.1 \(statusCode) \(Self.reasonPhrase(for: statusCode))",
+      "Content-Length: \(body.count)",
+      "Connection: close",
+    ]
+    for (key, value) in headers {
+      headerLines.append("\(key): \(value)")
+    }
+    headerLines.append("")
+    headerLines.append("")
+
+    var data = Data(headerLines.joined(separator: "\r\n").utf8)
+    data.append(body)
+    return data
+  }
+
+  private static func reasonPhrase(for statusCode: Int) -> String {
+    switch statusCode {
+    case 200: return "OK"
+    case 400: return "Bad Request"
+    case 401: return "Unauthorized"
+    case 403: return "Forbidden"
+    case 404: return "Not Found"
+    case 409: return "Conflict"
+    case 410: return "Gone"
+    case 500: return "Internal Server Error"
+    case 503: return "Service Unavailable"
+    case 504: return "Gateway Timeout"
+    default: return "Unknown Status"
+    }
+  }
 }
 
 extension JSONEncoder {

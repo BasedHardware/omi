@@ -1,13 +1,13 @@
 import inspect
 
-from utils.memory.v3_cursor import V3CursorContext, V3Keyset, create_v3_cursor
-from utils.memory.v3_memory_read_service import (
+from utils.memory.v3.cursor import V3CursorContext, V3Keyset, create_v3_cursor
+from utils.memory.v3.memory_read_service import (
     V3MemoryReadRequest,
     V3MemoryReadServiceInput,
     V3MemoryReadServiceResult,
     plan_v3_memory_read,
 )
-from utils.memory.v3_projection_readiness import DERIVED_COMPATIBILITY_PROJECTION_SOURCE
+from utils.memory.v3.projection_readiness import DERIVED_COMPATIBILITY_PROJECTION_SOURCE
 
 SECRET = b'unit-test-memory-v3-read-service-secret'
 
@@ -158,6 +158,24 @@ def test_projection_ready_page_passes_memorydb_compatible_body_and_adds_next_cur
     assert 'read_decision' not in body[0]
 
 
+def test_next_cursor_without_context_fails_closed():
+    result = plan_v3_memory_read(
+        _service_input(
+            cursor_context=None,
+            cursor_secret=None,
+            next_keyset=V3Keyset(created_at_ms=1_799_999_123_456, memory_id='memory-9'),
+        )
+    )
+
+    assert result.http_status == 400
+    assert result.read_plan == 'fail_closed'
+    assert result.read_decision == 'next_cursor_context_missing'
+    assert result.headers == {
+        'X-Omi-Memory-Read-Source': 'none',
+        'X-Omi-Memory-Read-Decision': 'next_cursor_context_missing',
+    }
+
+
 def test_cursor_validation_is_required_in_memory_mode_and_invalid_cursor_never_downgrades_to_offset_or_legacy():
     valid_cursor = create_v3_cursor(
         V3Keyset(created_at_ms=1_799_999_123_456, memory_id='memory-9'),
@@ -210,7 +228,7 @@ def test_read_service_is_pure_local_and_does_not_import_routers_database_or_netw
     assert 'include_archive_by_default' not in result_fields
     assert 'show_stale_short_term_by_default' not in result_fields
 
-    source = inspect.getsource(__import__('utils.memory.v3_memory_read_service', fromlist=['']))
+    source = inspect.getsource(__import__('utils.memory.v3.memory_read_service', fromlist=['']))
     forbidden = [
         'routers.memories',
         'database.',

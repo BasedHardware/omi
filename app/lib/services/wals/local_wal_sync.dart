@@ -26,20 +26,13 @@ import 'package:omi/utils/wal_file_manager.dart';
 const _kBackendBusyErrorHint = 'background worker likely died';
 const _freshSyncCutoffSeconds = 6 * 60 * 60;
 
-SyncUploadLane syncUploadLaneForTimestamp(
-  int captureSeconds,
-  int nowSeconds, {
-  required bool hasServerCaptureProof,
-}) =>
+SyncUploadLane syncUploadLaneForTimestamp(int captureSeconds, int nowSeconds, {required bool hasServerCaptureProof}) =>
     hasServerCaptureProof && nowSeconds - captureSeconds <= _freshSyncCutoffSeconds
         ? SyncUploadLane.fresh
         : SyncUploadLane.backfill;
 
-SyncUploadLane _syncLaneForWal(Wal wal, int nowSeconds) => syncUploadLaneForTimestamp(
-      wal.timerStart,
-      nowSeconds,
-      hasServerCaptureProof: wal.conversationId != null,
-    );
+SyncUploadLane _syncLaneForWal(Wal wal, int nowSeconds) =>
+    syncUploadLaneForTimestamp(wal.timerStart, nowSeconds, hasServerCaptureProof: wal.conversationId != null);
 
 @visibleForTesting
 Set<String> oversizedFreshConversationIds(List<Wal> pending, int nowSeconds) {
@@ -584,10 +577,7 @@ class LocalWalSyncImpl implements LocalWalSync {
   Future<SyncLocalFilesResponse?> syncFreshOnly({IWalSyncProgressListener? progress}) =>
       _syncAll(progress: progress, includeBackfill: false);
 
-  Future<SyncLocalFilesResponse?> _syncAll({
-    IWalSyncProgressListener? progress,
-    required bool includeBackfill,
-  }) async {
+  Future<SyncLocalFilesResponse?> _syncAll({IWalSyncProgressListener? progress, required bool includeBackfill}) async {
     await _flush();
     _isCancelled = false;
     _accumulatedResponse = null;

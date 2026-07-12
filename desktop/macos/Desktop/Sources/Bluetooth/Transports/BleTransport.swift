@@ -204,24 +204,25 @@ final class BleTransport: NSObject, DeviceTransport {
         // Cancel pending continuations. Capture-and-nil every continuation under
         // the lock, then resume OUTSIDE it, so a concurrent connect callback or
         // delegate cannot double-resume the same continuation.
-        continuationsLock.lock()
-        let pendingConnection = connectionContinuation
-        connectionContinuation = nil
-        let pendingDiscovery = serviceDiscoveryContinuation
-        serviceDiscoveryContinuation = nil
-        let pendingReads = characteristicContinuations
-        let pendingWrites = writeContinuations
-        characteristicContinuations.removeAll()
-        writeContinuations.removeAll()
-        continuationsLock.unlock()
+        let pendingContinuations = continuationsLock.withLock {
+            let pendingConnection = connectionContinuation
+            connectionContinuation = nil
+            let pendingDiscovery = serviceDiscoveryContinuation
+            serviceDiscoveryContinuation = nil
+            let pendingReads = characteristicContinuations
+            let pendingWrites = writeContinuations
+            characteristicContinuations.removeAll()
+            writeContinuations.removeAll()
+            return (pendingConnection, pendingDiscovery, pendingReads, pendingWrites)
+        }
 
-        pendingConnection?.resume(throwing: CancellationError())
-        pendingDiscovery?.resume(throwing: CancellationError())
+        pendingContinuations.0?.resume(throwing: CancellationError())
+        pendingContinuations.1?.resume(throwing: CancellationError())
 
-        for (_, continuation) in pendingReads {
+        for (_, continuation) in pendingContinuations.2 {
             continuation.resume(throwing: CancellationError())
         }
-        for (_, continuation) in pendingWrites {
+        for (_, continuation) in pendingContinuations.3 {
             continuation.resume(throwing: CancellationError())
         }
 

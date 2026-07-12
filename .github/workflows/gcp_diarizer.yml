@@ -20,6 +20,11 @@ on:
         required: false
         default: ''
 
+# Serialize Helm writers to this environment's diarizer release.
+concurrency:
+  group: deploy-gke-diarizer-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
 env:
   SERVICE: diarizer
   REGION: us-central1

@@ -27,7 +27,15 @@ def _asset(release: dict, names: set[str]) -> dict:
     fail(f"release is missing required asset: {', '.join(sorted(names))}")
 
 
-def prepare_manifest(release: dict, release_tag: str, target_sha: str, zip_sha256: str, dmg_sha256: str) -> dict:
+def prepare_manifest(
+    release: dict,
+    release_tag: str,
+    target_sha: str,
+    zip_sha256: str,
+    dmg_sha256: str,
+    *,
+    allow_stable_channel: bool = False,
+) -> dict:
     if release.get("tagName") != release_tag:
         fail(f"release tag mismatch: expected {release_tag}, got {release.get('tagName')}")
     match = TAG_RE.match(release_tag)
@@ -43,8 +51,14 @@ def prepare_manifest(release: dict, release_tag: str, target_sha: str, zip_sha25
         fail("candidate release must have isLive: false")
     if channel == "beta" and is_live not in {"true", "1", "yes"}:
         fail("beta release must have isLive: true")
-    if channel not in {"candidate", "beta"}:
-        fail(f"release channel must be candidate or beta, got {channel!r}")
+    if channel == "stable" and is_live not in {"true", "1", "yes"}:
+        fail("stable release must have isLive: true")
+    allowed_channels = {"candidate", "beta"}
+    if allow_stable_channel:
+        allowed_channels.add("stable")
+    if channel not in allowed_channels:
+        accepted = "candidate, beta, or stable" if allow_stable_channel else "candidate or beta"
+        fail(f"release channel must be {accepted}, got {channel!r}")
 
     asset_names = {asset.get("name") for asset in release.get("assets", []) if asset.get("name")}
     qualification = desktop_qualification_from_metadata(metadata)
@@ -97,11 +111,19 @@ def main() -> int:
     parser.add_argument("--target-sha", required=True)
     parser.add_argument("--zip-sha256", required=True)
     parser.add_argument("--dmg-sha256", required=True)
+    parser.add_argument("--allow-stable-channel", action="store_true")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
 
     release = json.loads(Path(args.release_json).read_text())
-    manifest = prepare_manifest(release, args.release_tag, args.target_sha, args.zip_sha256, args.dmg_sha256)
+    manifest = prepare_manifest(
+        release,
+        args.release_tag,
+        args.target_sha,
+        args.zip_sha256,
+        args.dmg_sha256,
+        allow_stable_channel=args.allow_stable_channel,
+    )
     Path(args.output).write_text(json.dumps(manifest, indent=2) + "\n")
     print(f"qualified beta manifest prepared: {args.release_tag}")
     return 0

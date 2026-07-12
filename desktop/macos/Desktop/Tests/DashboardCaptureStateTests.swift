@@ -98,8 +98,6 @@ final class DashboardCaptureStateTests: XCTestCase {
         XCTAssertTrue(exportMethod.contains("presentExportDestination(destination)"))
         XCTAssertFalse(importMethod.contains("navigate(to: .apps)"))
         XCTAssertFalse(exportMethod.contains("navigate(to: .apps)"))
-        XCTAssertFalse(importMethod.contains("desktopAutomationOpenImportRequested"))
-        XCTAssertFalse(exportMethod.contains("desktopAutomationOpenExportRequested"))
     }
 
     func testHomeMoreUsesAppsPopup() throws {

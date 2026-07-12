@@ -7,6 +7,7 @@ covers:
   - desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+ListenEvents.swift
   - desktop/macos/Desktop/Sources/AppState/STTSessionState.swift
+  - desktop/macos/Desktop/Sources/LocalTranscriptionService.swift
   - desktop/macos/Desktop/Sources/TranscriptionService.swift
   - desktop/macos/Desktop/Sources/APIClient.swift
   - desktop/macos/Desktop/Sources/Services/OmiHTTPTransport.swift
@@ -16,8 +17,13 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Conversations/ConversationRepository.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/VideoChunkEncoder.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/TranscriptionModels.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/TranscriptionStorage.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/ProactiveStorage.swift
+  - desktop/macos/Desktop/Sources/LiveNotes/NoteStorage.swift
+  - desktop/macos/Desktop/Sources/FileIndexing/KnowledgeGraphStorage.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/AIUserProfileService.swift
   - desktop/macos/Desktop/Sources/APIClient.swift
   - desktop/macos/Desktop/Sources/OmiWAL/WALModel.swift
   - desktop/macos/Desktop/Sources/WAL/StorageSyncService.swift
@@ -36,6 +42,8 @@ covers:
   - desktop/macos/Desktop/Sources/Services/QueryTracer.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/VideoChunkEncoder.swift
   - desktop/macos/Desktop/Sources/Rewind/Services/RewindIndexer.swift
+  - desktop/macos/Desktop/Sources/MeetingDetector.swift
+  - desktop/macos/Desktop/Sources/Rewind/Services/PowerMonitor.swift
 preconditions:
   - automation_bridge_ready
 

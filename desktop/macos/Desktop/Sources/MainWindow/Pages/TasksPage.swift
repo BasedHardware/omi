@@ -50,6 +50,11 @@ struct TaskSortOrderSyncFailure: Equatable {
     }
 }
 
+private struct TaskDynamicFilterInput: Sendable {
+    let source: String?
+    let tags: [String]
+}
+
 // MARK: - Task Filter Tag
 
 enum TaskFilterGroup: String, CaseIterable {
@@ -1412,7 +1417,9 @@ class TasksViewModel: ObservableObject {
         let version = recomputeVersion
 
         // Snapshot inputs for background computation
-        let allTasks = store.incompleteTasks + store.completedTasks
+        let tagInputs = (store.incompleteTasks + store.completedTasks).map { task in
+            TaskDynamicFilterInput(source: task.source, tags: task.tags)
+        }
         let knownSources = TaskFilterTag.knownSources
         let knownCategories = TaskFilterTag.knownCategories
 
@@ -1424,11 +1431,11 @@ class TasksViewModel: ObservableObject {
             var allSources: [String: Int] = [:]
             var allCategories: [String: Int] = [:]
 
-            for task in allTasks {
-                if let source = task.source, !source.isEmpty {
+            for input in tagInputs {
+                if let source = input.source, !source.isEmpty {
                     allSources[source, default: 0] += 1
                 }
-                for tag in task.tags {
+                for tag in input.tags {
                     allCategories[tag, default: 0] += 1
                 }
             }

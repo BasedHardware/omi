@@ -75,6 +75,19 @@ describe("macOS release CI", () => {
     expect(prepareRuntimeScript).toContain('prune_non_macos_node_packages "$temp_dir"');
   });
 
+  it("enforces the bundled Node runtime floor required by maintained pi packages", () => {
+    const prepareRuntimeScript = readFileSync(
+      new URL("../../scripts/prepare-agent-runtime.sh", import.meta.url),
+      "utf8"
+    );
+
+    expect(prepareRuntimeScript).toContain('NODE_VERSION="${OMI_AGENT_NODE_VERSION:-v22.19.0}"');
+    expect(prepareRuntimeScript).toContain('NODE_MIN_VERSION="v22.19.0"');
+    expect(prepareRuntimeScript).toContain("node_version_at_least()");
+    expect(prepareRuntimeScript).toContain('node_version_at_least "$staged_version" "$NODE_MIN_VERSION"');
+    expect(prepareRuntimeScript).not.toContain('NODE_VERSION="${OMI_AGENT_NODE_VERSION:-v22.14.0}"');
+  });
+
   it("signs bundled pi-mono-extension native dependencies before app signing", () => {
     const codemagic = readFileSync(new URL("../../../../codemagic.yaml", import.meta.url), "utf8");
 

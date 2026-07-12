@@ -46,6 +46,7 @@ env:
   SERVICE: desktop-backend
   REGION: us-central1
   TRACK_TAG: desktop-backend-prod-deployed
+  GCS_DESKTOP_UPDATES_BUCKET: ${{ vars.GCS_DESKTOP_UPDATES_BUCKET || 'gs://omi_macos_updates' }}
 
 jobs:
   promote:
@@ -91,7 +92,7 @@ jobs:
             "+refs/tags/${TRACK_TAG}:refs/tags/${TRACK_TAG}" || true
 
           gh release view "$RELEASE_TAG" --repo "$REPO" \
-            --json tagName,body,isDraft,isPrerelease,assets \
+            --json tagName,body,isDraft,isPrerelease,publishedAt,assets \
             > /tmp/desktop-release.json
 
           TARGET_SHA=$(git rev-list -n1 "$RELEASE_TAG")
@@ -443,6 +444,82 @@ jobs:
           echo "Prod backend did not report the promoted release identity." >&2
           exit 1
 
+      - name: Publish immutable stable repair installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          TARGET_SHA: ${{ steps.plan.outputs.target_sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/desktop-stable-repair-assets
+          gh release download "$RELEASE_TAG" --repo "$REPO" \
+            --pattern 'Omi.zip' --pattern 'Omi.dmg' --pattern 'omi.dmg' --dir /tmp/desktop-stable-repair-assets
+          ZIP_PATH=/tmp/desktop-stable-repair-assets/Omi.zip
+          test -f "$ZIP_PATH"
+          DMG_PATHS=()
+          for candidate in Omi.dmg omi.dmg; do
+            candidate_path="/tmp/desktop-stable-repair-assets/$candidate"
+            if [ -f "$candidate_path" ]; then
+              DMG_PATHS+=("$candidate_path")
+            fi
+          done
+          if [ "${#DMG_PATHS[@]}" -ne 1 ]; then
+            echo "Expected exactly one qualified Omi.dmg or omi.dmg release asset." >&2
+            exit 1
+          fi
+          DMG_PATH="${DMG_PATHS[0]}"
+          ZIP_SHA=$(sha256sum "$ZIP_PATH" | cut -d' ' -f1)
+          DMG_SHA=$(sha256sum "$DMG_PATH" | cut -d' ' -f1)
+
+          python3 .github/scripts/prepare-desktop-beta-promotion.py \
+            --release-json /tmp/desktop-release.json \
+            --release-tag "$RELEASE_TAG" \
+            --target-sha "$TARGET_SHA" \
+            --zip-sha256 "$ZIP_SHA" \
+            --dmg-sha256 "$DMG_SHA" \
+            --allow-stable-channel \
+            --output /tmp/desktop-stable-release-manifest.json
+          python3 .github/scripts/desktop_repair_installer.py \
+            --manifest /tmp/desktop-stable-release-manifest.json \
+            --bucket "$GCS_DESKTOP_UPDATES_BUCKET" \
+            --output-dir /tmp/desktop-stable-repair
+
+          INSTALLER_URL=$(python3 -c "import json; print(json.load(open('/tmp/desktop-stable-repair/repair.json'))['installer_url'])")
+          REPAIR_MANIFEST_URL=$(python3 -c "import json; print(json.load(open('/tmp/desktop-stable-repair/latest.json'))['repair_manifest_url'])")
+
+          upload_immutable() {
+            local source="$1"
+            local destination="$2"
+            local content_type="$3"
+            local existing
+            existing=$(mktemp)
+            if gcloud storage objects describe "$destination" >/dev/null 2>&1; then
+              gcloud storage cp "$destination" "$existing"
+              cmp -s "$source" "$existing" || {
+                echo "Refusing to overwrite immutable repair object: $destination" >&2
+                exit 1
+              }
+              return
+            fi
+            if ! gcloud storage cp --if-generation-match=0 \
+              --cache-control='public,max-age=31536000,immutable' \
+              --content-type="$content_type" "$source" "$destination"; then
+              gcloud storage cp "$destination" "$existing"
+              cmp -s "$source" "$existing" || {
+                echo "Immutable repair object changed during publication: $destination" >&2
+                exit 1
+              }
+            fi
+          }
+
+          upload_immutable "$DMG_PATH" "$GCS_DESKTOP_UPDATES_BUCKET/stable/$RELEASE_TAG/Omi.dmg" \
+            'application/x-apple-diskimage'
+          upload_immutable /tmp/desktop-stable-repair/repair.json \
+            "$GCS_DESKTOP_UPDATES_BUCKET/stable/$RELEASE_TAG/repair.json" 'application/json; charset=utf-8'
+          curl -fsSI "$INSTALLER_URL" >/dev/null
+          curl -fsSI "$REPAIR_MANIFEST_URL" >/dev/null
+
       - name: Promote Firestore release stable
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
@@ -512,6 +589,38 @@ jobs:
             > /tmp/desktop-stable-pointer-response.json
           python3 -m json.tool /tmp/desktop-stable-pointer-response.json
           echo "Advanced explicit stable pointer to $RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish latest stable repair route
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          for file in index.html latest.json; do
+            gcloud storage cp --cache-control='no-store,max-age=0' \
+              --content-type="$([ "$file" = index.html ] && echo 'text/html; charset=utf-8' || echo 'application/json; charset=utf-8')" \
+              "/tmp/desktop-stable-repair/$file" "$GCS_DESKTOP_UPDATES_BUCKET/stable/$file"
+          done
+          LATEST_URL=$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          repair_manifest_url = json.loads(Path('/tmp/desktop-stable-repair/latest.json').read_text())['repair_manifest_url']
+          print(repair_manifest_url.rsplit('/', 2)[0] + '/latest.json')
+          PY
+          )
+          curl -fsS "$LATEST_URL" > /tmp/desktop-stable-repair-live.json
+          RELEASE_TAG="$RELEASE_TAG" python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          latest = json.loads(Path('/tmp/desktop-stable-repair-live.json').read_text())
+          if latest['channel'] != 'stable':
+              raise SystemExit('repair route must be stable only')
+          if latest['release_id'] != os.environ['RELEASE_TAG']:
+              raise SystemExit('repair route release does not match stable promotion')
+          PY
+          echo "Verified stable repair route: $LATEST_URL" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Generate Omi Bot token for release mutations
         id: app-token
