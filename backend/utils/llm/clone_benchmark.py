@@ -49,7 +49,6 @@ def benchmark_clone(uid: str, request: CloneBenchmarkRequest) -> CloneBenchmarkR
                     contact_name=sample.contact_name,
                     network=sample.network,
                     use_persona=request.use_persona,
-                    mode='review',
                 )
                 generated = draft_on_behalf_reply(uid, reply_request).draft
                 judgment = _judge_match(sample.incoming_message, sample.actual_reply, generated)
