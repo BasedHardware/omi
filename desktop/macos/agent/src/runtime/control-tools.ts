@@ -16,6 +16,10 @@ import { AgentRuntimeKernel, type DesktopAwarenessSnapshot, type ExecuteAgentRun
 import { serializeArtifact } from "./artifact-serialization.js";
 import { agentControlCapabilityManifest, agentControlInputSchema } from "./control-tool-manifest.js";
 import type { McpServerBuildContext } from "./jsonl-transport.js";
+import {
+  parseAgentSpawnProducerJournalDescriptor,
+  type AgentSpawnProducerJournalDescriptor,
+} from "./agent-spawn-journal.js";
 import { evaluateDesktopToolPolicy } from "./desktop-tool-policy.js";
 import type { DesktopCoordinatorBundle } from "./desktop-tool-policy.js";
 import type {
@@ -41,6 +45,13 @@ const agentSurfaceKindSchema = z.enum([
   "background_agent",
   "floating_bar",
   "floating_pill",
+]);
+const originSurfaceKindSchema = z.enum([
+  "main_chat",
+  "floating_bar",
+  "realtime",
+  "task_chat",
+  "agent_control",
 ]);
 const artifactRoleSchema = z.enum(["input", "result", "checkpoint", "tool_output", "log", "other"]);
 const artifactLifecycleStateSchema = z.enum(["retained", "dismissed", "opened"]);
@@ -133,11 +144,33 @@ const buildDesktopContextPacketSchema = strictObject({
   retentionClass: z.enum(["ephemeral", "debug", "core"]),
 });
 
+const desktopIntentSyntaxFactsSchema = strictObject({
+  delegationNegated: z.boolean().optional(),
+  explicitSessionId: z.string().min(1).nullable().optional(),
+  explicitRunId: z.string().min(1).nullable().optional(),
+  parentRunId: z.string().min(1).nullable().optional(),
+  explicitProvider: z.string().min(1).nullable().optional(),
+  requestedAgentCount: z.coerce.number().int().positive().nullable().optional(),
+});
+
+const desktopIntentProposalSchema = z.discriminatedUnion("intent", [
+  strictObject({ intent: z.literal("answer_inline") }),
+  strictObject({ intent: z.literal("spawn_agent") }),
+  strictObject({ intent: z.literal("continue_run") }),
+  strictObject({
+    intent: z.literal("clarify"),
+    missing: z.array(z.string().min(1)).max(10).optional(),
+  }),
+]);
+
 const routeDesktopIntentSchema = strictObject({
   ownerId: z.string().min(1).optional(),
   utterance: z.string().min(1),
   surfaceKind: z.string().min(1),
   taskId: z.string().min(1).nullable().optional(),
+  snapshotVersion: z.string().min(1).optional(),
+  syntaxFacts: desktopIntentSyntaxFactsSchema.optional(),
+  proposal: desktopIntentProposalSchema.optional(),
 });
 
 const evaluateDesktopToolPolicySchema = strictObject({
@@ -235,6 +268,7 @@ const updateAgentArtifactLifecycleSchema = strictObject({
 
 const sendAgentMessageSchema = strictObject({
   sessionId: z.string().min(1),
+  originSurfaceKind: originSurfaceKindSchema,
   ownerId: z.string().min(1).optional(),
   prompt: z.string().min(1),
   mode: runModeSchema.default("ask"),
@@ -248,6 +282,7 @@ const sendAgentMessageSchema = strictObject({
 
 const spawnBackgroundAgentSchema = strictObject({
   prompt: z.string().min(1),
+  originSurfaceKind: originSurfaceKindSchema,
   title: z.string().min(1).optional(),
   surfaceKind: z.string().min(1).default("floating_bar"),
   externalRefKind: z.string().min(1).optional(),
@@ -265,6 +300,8 @@ const spawnBackgroundAgentSchema = strictObject({
 
 const spawnAgentSchema = strictObject({
   objective: z.string().min(1),
+  originSurfaceKind: originSurfaceKindSchema,
+  requestedAgentCount: z.coerce.number().int().min(1).max(8).default(1),
   provider: z.enum(["openclaw", "hermes"]).optional(),
   parentRunId: z.string().min(1).optional(),
   visible: z.boolean().default(true),
@@ -282,6 +319,7 @@ const spawnAgentSchema = strictObject({
 const runAgentAndWaitSchema = strictObject({
   objective: z.string().min(1),
   parentRunId: z.string().min(1),
+  originSurfaceKind: originSurfaceKindSchema,
   context: z.string().max(4000).optional(),
   ownerId: z.string().min(1).optional(),
   adapterId: z.string().min(1).optional(),
@@ -464,8 +502,9 @@ export interface AgentControlToolContext {
   executionRole?: AgentExecutionRole;
   /** Persisted caller session used for kernel-level spawn authority checks. */
   callerSessionId?: string;
-  /** @deprecated Compatibility for older direct callers; use executionRole. */
-  canSpawnAgents?: boolean;
+  /** Kernel-synthesized authority; never copied from adapter/model metadata. */
+  authorizedProducerJournal?: AgentSpawnProducerJournalDescriptor;
+  authorizedCallerRunId?: string;
   trustedUserControl?: boolean;
   getOwnerId?: () => string;
   recoverRunInput?: (adapterId: string) => Pick<ExecuteAgentRunInput, "maxAttempts" | "recoverAfterError">;
@@ -486,6 +525,35 @@ function controlRunRecovery(
 
 function defaultControlAdapterId(context: AgentControlToolContext): string {
   return context.defaultAdapterId ?? "acp";
+}
+
+function controlSpawnProfile(
+  context: AgentControlToolContext,
+  ownerId: string,
+): { adapterId: string; modelProfile: string | null; workingDirectory: string | undefined } {
+  if (context.callerSessionId) {
+    const profile = context.kernel.sessionExecutionProfile(context.callerSessionId, ownerId);
+    return {
+      adapterId: profile.adapterId,
+      modelProfile: profile.modelProfile,
+      workingDirectory: profile.workingDirectory || undefined,
+    };
+  }
+  if (context.trustedUserControl) {
+    const preference = context.kernel.defaultExecutionProfilePreference(ownerId);
+    if (preference) {
+      return {
+        adapterId: preference.adapterId,
+        modelProfile: preference.modelProfile,
+        workingDirectory: preference.workingDirectory,
+      };
+    }
+  }
+  return {
+    adapterId: defaultControlAdapterId(context),
+    modelProfile: null,
+    workingDirectory: undefined,
+  };
 }
 
 function assertAdapterAllowedForControlRun(context: AgentControlToolContext, adapterId: string): void {
@@ -553,7 +621,7 @@ function assertAdapterAllowedForDirectSessionContinuation(
 }
 
 function assertAgentSpawningAllowed(context: AgentControlToolContext): void {
-  if (context.executionRole === "leaf" || context.canSpawnAgents === false) {
+  if (context.executionRole === "leaf") {
     throw new Error("Background agents are leaf workers and cannot start additional agents.");
   }
 }
@@ -582,84 +650,7 @@ function backgroundSpawnAuthority(context: AgentControlToolContext): {
   return {};
 }
 
-export interface ActiveControlToolOwnerInput {
-  requestKey?: string;
-  runId?: string;
-  attemptId?: string;
-  ownerIdForRequest?: (requestKey: string) => string | undefined;
-  ownerIdForRun?: (runId: string) => string | undefined;
-  ownerIdForAttempt?: (attemptId: string) => string | undefined;
-  fallbackOwnerId?: string;
-  allowFallbackOwner?: boolean;
-}
-
-export interface ControlRequestKeyInput {
-  requestId?: string;
-  clientId?: string;
-}
-
-export interface ControlRequestContextInput extends ControlRequestKeyInput {
-  ownerGuard?: string;
-  activeOwnerId?: string;
-  requireActiveOwner?: boolean;
-  requireOwnerGuard?: boolean;
-}
-
-export interface SignedDirectControlOwnerInput {
-  requestKey?: string;
-  ownerGuard?: string;
-  ownerIdForRequest: (requestKey: string) => string | undefined;
-  registerOwner: (requestKey: string, ownerId: string) => boolean;
-}
-
-export interface ResolvedControlRequestContext {
-  requestKey?: string;
-  activeOwnerId: string;
-  ownerGuard?: string;
-}
-
 export const DEFAULT_LOCAL_OWNER_ID = "desktop-local-user";
-
-export function controlRequestKey(input: ControlRequestKeyInput): string | undefined {
-  return input.requestId && input.clientId ? JSON.stringify([input.clientId, input.requestId]) : undefined;
-}
-
-export function registerSignedDirectControlOwner(input: SignedDirectControlOwnerInput): boolean {
-  const ownerGuard = input.ownerGuard?.trim();
-  if (!input.requestKey || !ownerGuard || ownerGuard === DEFAULT_LOCAL_OWNER_ID) {
-    return false;
-  }
-  if (input.ownerIdForRequest(input.requestKey)) {
-    return false;
-  }
-  return input.registerOwner(input.requestKey, ownerGuard);
-}
-
-export function resolveControlRequestContext(input: ControlRequestContextInput): ResolvedControlRequestContext {
-  const ownerGuard = input.ownerGuard?.trim();
-  if (input.ownerGuard !== undefined && !ownerGuard) {
-    throw new Error("ownerId cannot be empty");
-  }
-  const activeContextOwnerId = input.activeOwnerId?.trim();
-  if (input.requireOwnerGuard && !ownerGuard) {
-    throw new Error("missing owner guard");
-  }
-  if (input.requireActiveOwner && (!activeContextOwnerId || activeContextOwnerId === DEFAULT_LOCAL_OWNER_ID)) {
-    throw new Error("missing active control owner");
-  }
-  const activeOwnerId =
-    activeContextOwnerId && activeContextOwnerId !== DEFAULT_LOCAL_OWNER_ID
-      ? activeContextOwnerId
-      : ownerGuard || activeContextOwnerId || DEFAULT_LOCAL_OWNER_ID;
-  if (ownerGuard && ownerGuard !== activeOwnerId) {
-    throw new Error("ownerId does not match active control owner");
-  }
-  return {
-    requestKey: controlRequestKey(input),
-    activeOwnerId,
-    ownerGuard,
-  };
-}
 
 export function withDefaultOwnerGuard(input: Record<string, unknown>, ownerGuard: string): Record<string, unknown> {
   if (Object.hasOwn(input, "ownerId")) {
@@ -791,6 +782,7 @@ export async function handleAgentControlToolCall(
         const route = context.kernel.routeDesktopIntent({
           ...parsed,
           ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
+          callerSessionId: context.callerSessionId,
           taskId: parsed.taskId ?? null,
         });
         return stringifyToolResult({ route });
@@ -870,30 +862,47 @@ export async function handleAgentControlToolCall(
       }
       case "send_agent_message": {
         const parsed = agentControlToolSchemas.send_agent_message.parse(input);
-        const targetPolicy = context.kernel.executionPolicyForSession(parsed.sessionId);
+        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        const targetPolicy = context.kernel.executionPolicyForOwnedSession(parsed.sessionId, ownerId);
         const adapterId = parsed.adapterId ?? targetPolicy.defaultAdapterId;
         assertAdapterAllowedForDirectSessionContinuation(context, adapterId, targetPolicy);
         rejectSynchronousNestedRun(context, adapterId, parsed.sessionId);
-        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
         const requestId = parsed.requestId ?? `send-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        const result = await context.kernel.sendAgentMessage({
-          ...parsed,
-          ...controlRunRecovery(context, adapterId),
-          ownerId,
-          requestId,
-          metadata: { ...(parsed.metadata ?? {}) },
-          mcpServers: buildControlRunMcpServers(context, {
-            mode: parsed.mode,
-            cwd: parsed.cwd,
+        const routed = await context.kernel.applyDesktopIntentEffect(
+          {
+            ownerId,
+            callerSessionId: context.callerSessionId,
+            restrictiveCallerExecutionRole: context.executionRole,
+            surfaceKind: parsed.originSurfaceKind,
+            snapshotVersion: controlRouteSnapshotVersion(parsed.metadata),
+            utterance: parsed.prompt,
+            effect: "continue_run",
+            syntaxFacts: {
+              explicitSessionId: parsed.sessionId,
+              explicitProvider: adapterId,
+            },
+          },
+          () => context.kernel.sendAgentMessage({
+            ...parsed,
+            ...controlRunRecovery(context, adapterId),
             ownerId,
             requestId,
-            clientId: parsed.clientId,
-            adapterId,
-            screenContext: true,
-            executionRole: targetPolicy.executionRole,
+            metadata: { ...(parsed.metadata ?? {}) },
+            mcpServers: buildControlRunMcpServers(context, {
+              mode: parsed.mode,
+              cwd: parsed.cwd,
+              ownerId,
+              requestId,
+              clientId: parsed.clientId,
+              adapterId,
+              screenContext: true,
+              executionRole: targetPolicy.executionRole,
+            }),
           }),
-        });
+        );
+        const result = routed.result;
         return stringifyToolResult({
+          routeDecision: routed.decision,
           session: serializeSession(result.session),
           run: serializeRun(result.run),
           attempt: serializeAttempt(result.attempt),
@@ -908,30 +917,52 @@ export async function handleAgentControlToolCall(
         const parsed = agentControlToolSchemas.spawn_background_agent.parse(input);
         const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
         const requestId = parsed.requestId ?? `background-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        const adapterId = parsed.adapterId ?? parsed.defaultAdapterId ?? defaultControlAdapterId(context);
+        const spawnProfile = controlSpawnProfile(context, ownerId);
+        const adapterId = parsed.adapterId ?? parsed.defaultAdapterId ?? spawnProfile.adapterId;
+        const cwd = parsed.cwd ?? spawnProfile.workingDirectory;
+        const model = parsed.model ?? spawnProfile.modelProfile ?? undefined;
         assertAdapterAllowedForTopLevelLocalProviderSpawn(context, adapterId);
-        const result = await context.kernel.spawnBackgroundAgent({
-          ...parsed,
-          ...controlRunRecovery(context, adapterId),
-          ...backgroundSpawnAuthority(context),
-          adapterId,
-          defaultAdapterId: adapterId,
-          ownerId,
-          requestId,
-          surfaceKind: parsed.surfaceKind ?? "floating_bar",
-          metadata: { ...(parsed.metadata ?? {}) },
-          mcpServers: buildControlRunMcpServers(context, {
-            mode: parsed.mode,
-            cwd: parsed.cwd,
+        const routed = await context.kernel.applyDesktopIntentEffect(
+          {
+            ownerId,
+            callerSessionId: context.callerSessionId,
+            restrictiveCallerExecutionRole: context.executionRole,
+            surfaceKind: parsed.originSurfaceKind,
+            snapshotVersion: controlRouteSnapshotVersion(parsed.metadata),
+            utterance: parsed.prompt,
+            effect: "spawn_agent",
+            syntaxFacts: {
+              explicitProvider: adapterId,
+              requestedAgentCount: 1,
+            },
+          },
+          () => context.kernel.spawnBackgroundAgent({
+            ...parsed,
+            ...controlRunRecovery(context, adapterId),
+            ...backgroundSpawnAuthority(context),
+            adapterId,
+            defaultAdapterId: adapterId,
+            cwd,
+            model,
             ownerId,
             requestId,
-            clientId: parsed.clientId,
-            adapterId,
-            screenContext: true,
-            executionRole: "leaf",
+            surfaceKind: parsed.surfaceKind ?? "floating_bar",
+            metadata: { ...(parsed.metadata ?? {}) },
+            mcpServers: buildControlRunMcpServers(context, {
+              mode: parsed.mode,
+              cwd,
+              ownerId,
+              requestId,
+              clientId: parsed.clientId,
+              adapterId,
+              screenContext: true,
+              executionRole: "leaf",
+            }),
           }),
-        });
+        );
+        const result = routed.result;
         return stringifyToolResult({
+          routeDecision: routed.decision,
           session: serializeSession(result.session),
           run: serializeRun(result.run),
           attempt: result.attempt ? serializeAttempt(result.attempt) : null,
@@ -940,10 +971,22 @@ export async function handleAgentControlToolCall(
       case "spawn_agent": {
         assertAgentSpawningAllowed(context);
         const parsed = agentControlToolSchemas.spawn_agent.parse(input);
-        if (parsed.parentRunId) {
-          assertCanonicalRunId(parsed.parentRunId, "parentRunId");
+        const callerMetadata = { ...(parsed.metadata ?? {}) };
+        const proposedProducerJournal = callerMetadata.producerJournal;
+        delete callerMetadata.producerJournal;
+        const producerJournal = context.authorizedProducerJournal
+          ?? (context.trustedUserControl && proposedProducerJournal !== undefined
+            ? parseAgentSpawnProducerJournalDescriptor(proposedProducerJournal)
+            : undefined);
+        const parentRunId = context.authorizedCallerRunId ?? parsed.parentRunId;
+        if (context.authorizedCallerRunId && parsed.parentRunId && parsed.parentRunId !== context.authorizedCallerRunId) {
+          throw new Error("Agent spawn parent run does not match authorized caller run");
+        }
+        if (parentRunId) {
+          assertCanonicalRunId(parentRunId, "parentRunId");
         }
         const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        const spawnProfile = controlSpawnProfile(context, ownerId);
         const requestId = parsed.requestId ?? `spawn-agent-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         if (parsed.provider && parsed.adapterId && parsed.provider !== parsed.adapterId) {
           throw new Error("provider and adapterId must match when both are supplied");
@@ -951,85 +994,165 @@ export async function handleAgentControlToolCall(
         const adapterId =
           parsed.adapterId ??
           (parsed.provider === "openclaw" ? "openclaw" : parsed.provider === "hermes" ? "hermes" : undefined) ??
-          (parsed.parentRunId
-            ? context.kernel.defaultAdapterIdForRun(parsed.parentRunId)
-            : defaultControlAdapterId(context));
-        if (parsed.parentRunId) {
+          (parentRunId
+            ? context.kernel.defaultAdapterIdForRun(parentRunId)
+            : spawnProfile.adapterId);
+        const cwd = parsed.cwd ?? (parentRunId ? undefined : spawnProfile.workingDirectory);
+        const model = parsed.model ?? (parentRunId ? undefined : spawnProfile.modelProfile ?? undefined);
+        if (parentRunId) {
           assertAdapterAllowedForControlRun(context, adapterId);
         } else {
           assertAdapterAllowedForTopLevelLocalProviderSpawn(context, adapterId, parsed.provider);
         }
-        const visiblePillExternalRefId = parsed.visible ? (parsed.externalRefId ?? randomUUID()) : parsed.externalRefId;
         const childSurfaceKind = parsed.visible ? "floating_bar" : "delegated_agent";
         const childExternalRefKind = parsed.visible ? "pill" : undefined;
-        const mcpServers = buildControlRunMcpServers(context, {
-          mode: "act",
-          cwd: parsed.cwd,
-          ownerId,
-          requestId,
-          clientId: parsed.clientId,
-          adapterId: adapterId ?? defaultControlAdapterId(context),
-          surfaceKind: childSurfaceKind,
-          externalRefKind: childExternalRefKind,
-          externalRefId: visiblePillExternalRefId,
-          screenContext: true,
-          executionRole: "leaf",
-        });
-        if (parsed.parentRunId) {
-          const result = await context.kernel.delegateAgent({
-            ...controlRunRecovery(context, adapterId ?? defaultControlAdapterId(context)),
-            mode: "spawn",
-            parentRunId: parsed.parentRunId,
-            objective: parsed.objective,
+        const producerContextSnapshot = !parentRunId && producerJournal
+          ? context.kernel.contextSnapshotForExactSurface(ownerId, producerJournal.surface)
+          : undefined;
+        const routed = await context.kernel.applyDesktopIntentEffect(
+          {
             ownerId,
-            requestId,
-            adapterId,
-            defaultAdapterId: adapterId,
-            childSurfaceKind,
-            childExternalRefKind,
-            childExternalRefId: visiblePillExternalRefId,
-            childTitle: parsed.title ?? `Delegated: ${parsed.objective.slice(0, 80)}`,
-            cwd: parsed.cwd,
-            model: parsed.model,
-            runMode: "act",
-            clientId: parsed.clientId,
-            metadata: { ...(parsed.metadata ?? {}), visible: parsed.visible },
-            mcpServers,
-          });
-          return stringifyToolResult({
-            delegation: serializeDelegation(result.delegation),
-            session: serializeSession(result.childSession),
-            run: serializeRun(result.childRun),
-            attempt: result.childAttempt ? serializeAttempt(result.childAttempt) : null,
-          });
-        }
-        const result = await context.kernel.spawnBackgroundAgent({
-          ...controlRunRecovery(context, adapterId ?? defaultControlAdapterId(context)),
-          ...backgroundSpawnAuthority(context),
-          ownerId,
-          clientId: parsed.clientId,
-          requestId,
-          prompt: parsed.objective,
-          title: parsed.title ?? `Background: ${parsed.objective.slice(0, 80)}`,
-          surfaceKind: childSurfaceKind,
-          externalRefKind: childExternalRefKind,
-          externalRefId: visiblePillExternalRefId,
-          adapterId,
-          defaultAdapterId: adapterId,
-          cwd: parsed.cwd,
-          model: parsed.model,
-          mode: "act",
-          metadata: {
-            ...(parsed.metadata ?? {}),
-            visible: parsed.visible,
-            provider: parsed.provider ?? null,
+            callerSessionId: context.callerSessionId,
+            restrictiveCallerExecutionRole: context.executionRole,
+            surfaceKind: parsed.originSurfaceKind,
+            snapshotVersion: controlRouteSnapshotVersion(parsed.metadata),
+            utterance: parsed.objective,
+            effect: "spawn_agent",
+            syntaxFacts: {
+              parentRunId,
+              explicitProvider: adapterId,
+              requestedAgentCount: parsed.requestedAgentCount,
+            },
           },
-          mcpServers,
-        });
+          async () => {
+            const siblings: Array<
+              | { kind: "delegated"; result: Awaited<ReturnType<AgentRuntimeKernel["delegateAgent"]>> }
+              | { kind: "background"; result: Awaited<ReturnType<AgentRuntimeKernel["spawnBackgroundAgent"]>> }
+            > = [];
+            for (let index = 0; index < parsed.requestedAgentCount; index += 1) {
+              const ordinal = index + 1;
+              const siblingRequestId = parsed.requestedAgentCount === 1 ? requestId : `${requestId}:${ordinal}`;
+              const siblingExternalRefId = parsed.visible
+                ? parsed.requestedAgentCount === 1
+                  ? (parsed.externalRefId ?? randomUUID())
+                  : randomUUID()
+                : parsed.externalRefId;
+              const titleSuffix = parsed.requestedAgentCount === 1 ? "" : ` (${ordinal}/${parsed.requestedAgentCount})`;
+              const childTitle = `${parsed.title ?? `${parentRunId ? "Delegated" : "Background"}: ${parsed.objective.slice(0, 80)}`}${titleSuffix}`;
+              const siblingProducerJournal = producerJournal && siblingExternalRefId
+                ? {
+                    ...producerJournal,
+                    continuityKey: parsed.requestedAgentCount === 1
+                      ? producerJournal.continuityKey
+                      : `${producerJournal.continuityKey}:${ordinal}`,
+                    pillId: siblingExternalRefId,
+                    objective: parsed.objective,
+                    title: childTitle,
+                  }
+                : undefined;
+              const siblingMetadata = {
+                ...callerMetadata,
+                visible: parsed.visible,
+                siblingOrdinal: ordinal,
+                ...(parsed.requestedAgentCount > 1 && parsed.externalRefId
+                  ? { siblingGroupExternalRefId: parsed.externalRefId }
+                  : {}),
+                ...(parsed.visible && siblingExternalRefId ? { pillId: siblingExternalRefId } : {}),
+                ...(siblingProducerJournal ? { producerJournal: siblingProducerJournal } : {}),
+              };
+              const mcpServers = buildControlRunMcpServers(context, {
+                mode: "act",
+                cwd,
+                ownerId,
+                requestId: siblingRequestId,
+                clientId: parsed.clientId,
+                adapterId: adapterId ?? defaultControlAdapterId(context),
+                surfaceKind: childSurfaceKind,
+                externalRefKind: childExternalRefKind,
+                externalRefId: siblingExternalRefId,
+                screenContext: true,
+                executionRole: "leaf",
+              });
+              if (parentRunId) {
+                siblings.push({
+                  kind: "delegated",
+                  result: await context.kernel.delegateAgent({
+                    ...controlRunRecovery(context, adapterId ?? defaultControlAdapterId(context)),
+                    mode: "spawn",
+                    parentRunId,
+                    objective: parsed.objective,
+                    ownerId,
+                    requestId: siblingRequestId,
+                    adapterId,
+                    defaultAdapterId: adapterId,
+                    childSurfaceKind,
+                    childExternalRefKind,
+                    childExternalRefId: siblingExternalRefId,
+                    childTitle,
+                    cwd,
+                    model,
+                    runMode: "act",
+                    clientId: parsed.clientId,
+                    metadata: siblingMetadata,
+                    mcpServers,
+                  }),
+                });
+              } else {
+                siblings.push({
+                  kind: "background",
+                  result: await context.kernel.spawnBackgroundAgent({
+                    ...controlRunRecovery(context, adapterId ?? defaultControlAdapterId(context)),
+                    ...backgroundSpawnAuthority(context),
+                    ownerId,
+                    clientId: parsed.clientId,
+                    requestId: siblingRequestId,
+                    prompt: parsed.objective,
+                    title: childTitle,
+                    surfaceKind: childSurfaceKind,
+                    externalRefKind: childExternalRefKind,
+                    externalRefId: siblingExternalRefId,
+                    adapterId,
+                    defaultAdapterId: adapterId,
+                    cwd,
+                    model,
+                    mode: "act",
+                    metadata: {
+                      ...siblingMetadata,
+                      provider: parsed.provider ?? null,
+                    },
+                    admittedContextSnapshot: producerContextSnapshot,
+                    mcpServers,
+                  }),
+                });
+              }
+            }
+            return siblings;
+          },
+        );
+        const agents = routed.result.map((sibling) => sibling.kind === "delegated"
+          ? {
+              kind: sibling.kind,
+              delegation: serializeDelegation(sibling.result.delegation),
+              session: serializeSession(sibling.result.childSession),
+              run: serializeRun(sibling.result.childRun),
+              attempt: sibling.result.childAttempt ? serializeAttempt(sibling.result.childAttempt) : null,
+            }
+          : {
+              kind: sibling.kind,
+              delegation: null,
+              session: serializeSession(sibling.result.session),
+              run: serializeRun(sibling.result.run),
+              attempt: sibling.result.attempt ? serializeAttempt(sibling.result.attempt) : null,
+            });
+        const first = agents[0]!;
         return stringifyToolResult({
-          session: serializeSession(result.session),
-          run: serializeRun(result.run),
-          attempt: result.attempt ? serializeAttempt(result.attempt) : null,
+          routeDecision: routed.decision,
+          requestedAgentCount: parsed.requestedAgentCount,
+          agents,
+          delegation: first.delegation,
+          session: first.session,
+          run: first.run,
+          attempt: first.attempt,
         });
       }
       case "run_agent_and_wait": {
@@ -1040,35 +1163,53 @@ export async function handleAgentControlToolCall(
         const requestId = parsed.requestId ?? `run-and-wait-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const adapterId = parsed.adapterId ?? context.kernel.defaultAdapterIdForRun(parsed.parentRunId);
         assertAdapterAllowedForControlRun(context, adapterId);
-        const result = await context.kernel.delegateAgent({
-          ...controlRunRecovery(context, adapterId),
-          mode: "call",
-          parentRunId: parsed.parentRunId,
-          objective: parsed.objective,
-          context: parsed.context,
-          ownerId,
-          requestId,
-          adapterId,
-          defaultAdapterId: adapterId,
-          cwd: parsed.cwd,
-          model: parsed.model,
-          runMode: parsed.runMode,
-          clientId: parsed.clientId,
-          maxDepth: parsed.maxDepth,
-          maxBudgetUsd: parsed.maxBudgetUsd,
-          metadata: { ...(parsed.metadata ?? {}) },
-          mcpServers: buildControlRunMcpServers(context, {
-            mode: parsed.runMode,
-            cwd: parsed.cwd,
+        const routed = await context.kernel.applyDesktopIntentEffect(
+          {
+            ownerId,
+            callerSessionId: context.callerSessionId,
+            restrictiveCallerExecutionRole: context.executionRole,
+            surfaceKind: parsed.originSurfaceKind,
+            snapshotVersion: controlRouteSnapshotVersion(parsed.metadata),
+            utterance: parsed.objective,
+            effect: "spawn_agent",
+            syntaxFacts: {
+              parentRunId: parsed.parentRunId,
+              explicitProvider: adapterId,
+              requestedAgentCount: 1,
+            },
+          },
+          () => context.kernel.delegateAgent({
+            ...controlRunRecovery(context, adapterId),
+            mode: "call",
+            parentRunId: parsed.parentRunId,
+            objective: parsed.objective,
+            context: parsed.context,
             ownerId,
             requestId,
-            clientId: parsed.clientId,
             adapterId,
-            screenContext: true,
-            executionRole: "leaf",
+            defaultAdapterId: adapterId,
+            cwd: parsed.cwd,
+            model: parsed.model,
+            runMode: parsed.runMode,
+            clientId: parsed.clientId,
+            maxDepth: parsed.maxDepth,
+            maxBudgetUsd: parsed.maxBudgetUsd,
+            metadata: { ...(parsed.metadata ?? {}) },
+            mcpServers: buildControlRunMcpServers(context, {
+              mode: parsed.runMode,
+              cwd: parsed.cwd,
+              ownerId,
+              requestId,
+              clientId: parsed.clientId,
+              adapterId,
+              screenContext: true,
+              executionRole: "leaf",
+            }),
           }),
-        });
+        );
+        const result = routed.result;
         return stringifyToolResult({
+          routeDecision: routed.decision,
           delegation: serializeDelegation(result.delegation),
           session: serializeSession(result.childSession),
           run: serializeRun(result.childRun),
@@ -1437,30 +1578,16 @@ function assertCanonicalRunId(value: string, fieldName: string): void {
   }
 }
 
+function controlRouteSnapshotVersion(metadata: Record<string, unknown> | undefined): string {
+  const value = metadata?.contextSnapshotVersion ?? metadata?.snapshotVersion;
+  return typeof value === "string" && value.trim() ? value.trim() : "snapshot:control-unversioned";
+}
+
 function controlToolOwnerId(context: AgentControlToolContext): string {
   const ownerId = context.getOwnerId?.().trim();
   return ownerId || "desktop-local-user";
 }
 
-export function activeControlToolOwnerId(input: ActiveControlToolOwnerInput): string {
-  const requestOwnerId = input.requestKey ? input.ownerIdForRequest?.(input.requestKey)?.trim() : undefined;
-  if (requestOwnerId) {
-    return requestOwnerId;
-  }
-  const attemptOwnerId = input.attemptId ? input.ownerIdForAttempt?.(input.attemptId)?.trim() : undefined;
-  if (attemptOwnerId) {
-    return attemptOwnerId;
-  }
-  const runOwnerId = input.runId ? input.ownerIdForRun?.(input.runId)?.trim() : undefined;
-  if (runOwnerId) {
-    return runOwnerId;
-  }
-  if (!input.allowFallbackOwner) {
-    throw new Error("Owner-scoped control tools require active request, run, or attempt context");
-  }
-  const fallbackOwnerId = input.fallbackOwnerId?.trim();
-  return fallbackOwnerId || "desktop-local-user";
-}
 
 function effectiveControlToolOwnerId(context: AgentControlToolContext, requestedOwnerId?: string): string {
   const activeOwnerId = controlToolOwnerId(context);
@@ -1645,6 +1772,18 @@ function serializeRunDetails(details: {
   events: AgentEvent[];
   parentDelegations: AgentDelegation[];
   childDelegations: AgentDelegation[];
+  toolInvocations: Array<{
+    invocationId: string;
+    runId: string;
+    attemptId: string;
+    toolName: string;
+    status: string;
+    errorCode: string | null;
+    preparedAtMs: number;
+    dispatchedAtMs: number | null;
+    completedAtMs: number | null;
+    updatedAtMs: number;
+  }>;
 }): Record<string, unknown> {
   return {
     session: serializeSession(details.session),
@@ -1655,6 +1794,7 @@ function serializeRunDetails(details: {
     events: details.events.map(serializeEvent),
     parentDelegations: details.parentDelegations.map(serializeDelegation),
     childDelegations: details.childDelegations.map(serializeDelegation),
+    toolInvocations: details.toolInvocations,
   };
 }
 

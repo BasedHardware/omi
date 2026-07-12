@@ -15,18 +15,6 @@ import {
   type LegacyMainChatSessionEntry,
   type ResolveSurfaceSessionInput,
 } from "./surface-session.js";
-import {
-  appendConversationTurn,
-  conversationIdForSession,
-  importConversationTurnsForSurface,
-  recordSurfaceTurn as persistSurfaceTurn,
-} from "./conversation-turns.js";
-import {
-  acknowledgeCompletionDelta,
-  assembleTurnContext,
-  bindingCarriesNativeHistory,
-  getVoiceSeedContext,
-} from "./turn-context.js";
 import type {
   AdapterBinding,
   AgentArtifact,
@@ -45,7 +33,6 @@ import type {
 } from "./types.js";
 import { buildDesktopActionQueue } from "./desktop-action-queue.js";
 import { buildDesktopContextPacket, type DesktopContextPacketBuildInput } from "./desktop-context-packet.js";
-import { routeDesktopIntent } from "./desktop-intent-router.js";
 import { OmiArtifactStorage } from "./artifact-storage.js";
 import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -132,6 +119,7 @@ import type {
 import { StaleAdapterBindingError } from "./kernel-types.js";
 
 import { KernelCore } from "./kernel-core.js";
+import { ensureAgentSpawnJournalIfPresent } from "./agent-spawn-journal.js";
 
 export class KernelRuns extends KernelCore {
   async executeRun(input: ExecuteAgentRunInput): Promise<KernelRunResult> {
@@ -141,6 +129,15 @@ export class KernelRuns extends KernelCore {
 
   async sendAgentMessage(input: SendAgentMessageInput): Promise<KernelRunResult> {
     const session = this.readSession(input.sessionId);
+    if (input.adapterId !== undefined && input.adapterId !== session.defaultAdapterId) {
+      throw new Error("Existing session execution profile rejects adapter override");
+    }
+    if (input.model !== undefined && input.model !== session.modelProfile) {
+      throw new Error("Existing session execution profile rejects model override");
+    }
+    if (input.cwd !== undefined && input.cwd !== session.defaultCwd) {
+      throw new Error("Existing session execution profile rejects cwd override");
+    }
     return this.executeRun({
       ownerId: input.ownerId,
       sessionId: input.sessionId,
@@ -151,9 +148,9 @@ export class KernelRuns extends KernelCore {
       prompt: input.prompt,
       promptBlocks: input.promptBlocks,
       mode: input.mode,
-      adapterId: input.adapterId ?? session.defaultAdapterId,
-      cwd: input.cwd ?? session.defaultCwd ?? undefined,
-      model: input.model,
+      adapterId: session.defaultAdapterId,
+      cwd: session.defaultCwd ?? undefined,
+      model: session.modelProfile ?? undefined,
       mcpServers: input.mcpServers,
       maxAttempts: input.maxAttempts,
       recoverAfterError: input.recoverAfterError,
@@ -162,8 +159,10 @@ export class KernelRuns extends KernelCore {
   }
 
   async spawnBackgroundAgent(input: SpawnBackgroundAgentInput): Promise<SpawnBackgroundAgentResult> {
+    let owningSession: AgentSession | undefined;
     if (input.callerSessionId) {
       const callerSession = this.readSession(input.callerSessionId);
+      owningSession = callerSession;
       this.assertSessionOwner(callerSession, input.ownerId);
       if (callerSession.executionRole === "leaf") {
         throw new Error("Leaf workers cannot create background agents.");
@@ -171,21 +170,30 @@ export class KernelRuns extends KernelCore {
     } else if (!input.trustedUserSpawn) {
       throw new Error("Background agent spawn requires a coordinator caller session.");
     }
+    const adapterId = owningSession?.defaultAdapterId ?? input.adapterId ?? input.defaultAdapterId ?? "pi-mono";
+    const modelProfile = owningSession ? owningSession.modelProfile : (input.model ?? null);
+    if (owningSession && input.adapterId !== undefined && input.adapterId !== adapterId) {
+      throw new Error("Child execution profile must inherit the coordinator adapter");
+    }
+    if (owningSession && input.model !== undefined && input.model !== modelProfile) {
+      throw new Error("Child execution profile must inherit the coordinator model profile");
+    }
     const runInput: ExecuteAgentRunInput = {
       ownerId: input.ownerId,
       surfaceKind: input.surfaceKind ?? "floating_bar",
       executionRole: "leaf",
+      executionProfileSource: "child_derivation",
       externalRefKind: input.externalRefKind,
       externalRefId: input.externalRefId,
       title: input.title ?? `Background: ${input.prompt.slice(0, 80)}`,
-      defaultAdapterId: input.defaultAdapterId ?? input.adapterId,
-      adapterId: input.adapterId ?? input.defaultAdapterId,
+      defaultAdapterId: adapterId,
+      adapterId,
       clientId: input.clientId,
       requestId: input.requestId,
       prompt: input.prompt,
       mode: input.mode ?? "act",
-      cwd: input.cwd,
-      model: input.model,
+      cwd: owningSession?.defaultCwd ?? input.cwd,
+      model: modelProfile ?? undefined,
       mcpServers: input.mcpServers,
       maxAttempts: input.maxAttempts,
       recoverAfterError: input.recoverAfterError,
@@ -193,11 +201,40 @@ export class KernelRuns extends KernelCore {
         ...(input.metadata ?? {}),
         spawnKind: "background_agent",
       },
+      admittedContextSnapshot: input.admittedContextSnapshot,
     };
     const accepted = this.createAcceptedRun(runInput);
-    void this.executeAcceptedRun(runInput, accepted).catch(() => {
-      // executeAcceptedRun records the failed run/attempt and emits events.
+    const producerJournal = ensureAgentSpawnJournalIfPresent(this.store, {
+      ownerId: input.ownerId,
+      sessionId: accepted.session.sessionId,
+      runId: accepted.run.runId,
     });
+    void this.executeAcceptedRun(runInput, accepted)
+      .then(() => {
+        if (!producerJournal) return;
+        try {
+          ensureAgentSpawnJournalIfPresent(this.store, {
+            ownerId: input.ownerId,
+            sessionId: accepted.session.sessionId,
+            runId: accepted.run.runId,
+          });
+        } catch {
+          // Startup metadata repair closes a process-exit race after acceptance.
+        }
+      })
+      .catch(() => {
+        // executeAcceptedRun records the failed run/attempt and emits events.
+        if (!producerJournal) return;
+        try {
+          ensureAgentSpawnJournalIfPresent(this.store, {
+            ownerId: input.ownerId,
+            sessionId: accepted.session.sessionId,
+            runId: accepted.run.runId,
+          });
+        } catch {
+          // Startup metadata repair closes a process-exit race after acceptance.
+        }
+      });
     return {
       session: accepted.session,
       run: accepted.run,
@@ -216,23 +253,30 @@ export class KernelRuns extends KernelCore {
     }
     const ownerId = input.ownerId ?? parentSession.ownerId;
     const childPrompt = buildDelegatedPrompt(input.objective, input.context);
+    if (input.adapterId !== undefined && input.adapterId !== parentSession.defaultAdapterId) {
+      throw new Error("Delegated execution profile must inherit the parent adapter");
+    }
+    if (input.model !== undefined && input.model !== parentSession.modelProfile) {
+      throw new Error("Delegated execution profile must inherit the parent model profile");
+    }
     const childRunInput: ExecuteAgentRunInput = {
       ownerId,
       sessionId: input.mode === "continue" ? requiredChildSessionId(input.childSessionId) : input.childSessionId,
       surfaceKind: input.childSurfaceKind ?? "delegated_agent",
       executionRole: "leaf",
+      executionProfileSource: "child_derivation",
       providerBoundary: parentSession.providerBoundary,
       externalRefKind: input.childExternalRefKind,
       externalRefId: input.childExternalRefId,
       title: input.childTitle ?? `Delegated: ${input.objective.slice(0, 80)}`,
-      defaultAdapterId: input.defaultAdapterId ?? input.adapterId ?? parentSession.defaultAdapterId,
-      adapterId: input.adapterId ?? input.defaultAdapterId ?? parentSession.defaultAdapterId,
+      defaultAdapterId: parentSession.defaultAdapterId,
+      adapterId: parentSession.defaultAdapterId,
       clientId: input.clientId,
       requestId: input.requestId,
       prompt: childPrompt,
       mode: input.runMode ?? "ask",
-      cwd: input.cwd ?? parentRun.cwd ?? parentSession.defaultCwd ?? undefined,
-      model: input.model,
+      cwd: parentSession.defaultCwd ?? parentRun.cwd ?? undefined,
+      model: parentSession.modelProfile ?? undefined,
       mcpServers: input.mcpServers,
       maxAttempts: input.maxAttempts,
       recoverAfterError: input.recoverAfterError,
@@ -246,12 +290,40 @@ export class KernelRuns extends KernelCore {
       },
     };
     const created = this.createDelegatedRun(parentSession, parentRun, childRunInput, input);
+    const producerJournal = ensureAgentSpawnJournalIfPresent(this.store, {
+      ownerId,
+      sessionId: created.session.sessionId,
+      runId: created.run.runId,
+    });
 
     if (input.mode === "spawn") {
       const runningDelegation = this.updateDelegationStatus(created.delegation, "running");
-      void this.executeDelegationAsync(childRunInput, { ...created, delegation: runningDelegation }, false).catch((error) => {
-        this.updateDelegationStatus(runningDelegation, "failed", messageFrom(error));
-      });
+      void this.executeDelegationAsync(childRunInput, { ...created, delegation: runningDelegation }, false)
+        .then(() => {
+          if (!producerJournal) return;
+          try {
+            ensureAgentSpawnJournalIfPresent(this.store, {
+              ownerId,
+              sessionId: created.session.sessionId,
+              runId: created.run.runId,
+            });
+          } catch {
+            // Startup metadata repair closes a process-exit race after acceptance.
+          }
+        })
+        .catch((error) => {
+          this.updateDelegationStatus(runningDelegation, "failed", messageFrom(error));
+          if (!producerJournal) return;
+          try {
+            ensureAgentSpawnJournalIfPresent(this.store, {
+              ownerId,
+              sessionId: created.session.sessionId,
+              runId: created.run.runId,
+            });
+          } catch {
+            // Startup metadata repair closes a process-exit race after acceptance.
+          }
+        });
       return {
         delegation: runningDelegation,
         childSession: created.session,
