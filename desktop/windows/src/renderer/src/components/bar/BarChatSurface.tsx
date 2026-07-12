@@ -6,7 +6,7 @@
 // window.omiBar.sendChat). This component owns NO chat engine.
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import { ChatMessages } from '../chat/ChatMessages'
-import { omiChatListStatus } from './barDisplay'
+import { agentRowStatus, omiChatListStatus, type BarAgentRow } from './barDisplay'
 import type { BarChatState } from '../../../../shared/types'
 
 function ChevronRight(): React.JSX.Element {
@@ -39,6 +39,8 @@ function ChevronLeft(): React.JSX.Element {
 
 export type BarChatSurfaceProps = {
   chat: BarChatState
+  /** Connected coding agents to list under "Omi Chat". */
+  agents: BarAgentRow[]
   view: 'list' | 'conversation'
   onOpenConversation: () => void
   onBack: () => void
@@ -119,6 +121,7 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
   if (view === 'list') {
     return (
       <div className="flex flex-col gap-1 px-3 pb-3 pt-1">
+        {/* Omi Chat — always present (INV-CHAT-1: the one shared thread). */}
         <button
           type="button"
           onClick={props.onOpenConversation}
@@ -132,7 +135,30 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
             <ChevronRight />
           </span>
         </button>
-        {/* Agent rows land here later (data-driven scaffold) — nothing yet. */}
+        {/* Connected coding agents. A row opens the SAME inline conversation —
+            agent progress streams into the shared thread (no separate store). */}
+        {props.agents.map((agent) => (
+          <button
+            key={agent.id}
+            type="button"
+            onClick={props.onOpenConversation}
+            className="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/[0.06]"
+          >
+            <span
+              aria-hidden="true"
+              className={`h-2 w-2 shrink-0 rounded-full ${
+                agent.working ? 'animate-pulse bg-emerald-400' : 'bg-neutral-600'
+              }`}
+            />
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium text-neutral-100">{agent.displayName}</div>
+              <div className="truncate text-xs text-neutral-500">{agentRowStatus(agent)}</div>
+            </div>
+            <span className="shrink-0 text-neutral-600 transition-colors group-hover:text-neutral-400">
+              <ChevronRight />
+            </span>
+          </button>
+        ))}
       </div>
     )
   }

@@ -89,6 +89,9 @@ body.bar-body {
   font-weight: 500;
   letter-spacing: 0.02em;
   color: rgb(212 212 212);
+  /* The pill is a fixed 148px hit-rect; "Listening" must never wrap or push the
+     orb (the label swaps in place, orb stays put — no jank). */
+  white-space: nowrap;
 }
 
 /* The expanded ask panel lays out at the overlay's original 480px and paints

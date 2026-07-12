@@ -31,6 +31,7 @@ const baseChat: BarChatState = {
 function renderSurface(overrides: Partial<BarChatSurfaceProps> = {}): BarChatSurfaceProps {
   const props: BarChatSurfaceProps = {
     chat: baseChat,
+    agents: [],
     view: 'list',
     onOpenConversation: vi.fn(),
     onBack: vi.fn(),
@@ -58,6 +59,24 @@ describe('BarChatSurface', () => {
     // The row previews the last turn.
     expect(screen.getByText('Here is the answer')).toBeTruthy()
     fireEvent.click(screen.getByText('Omi Chat'))
+    expect(props.onOpenConversation).toHaveBeenCalledTimes(1)
+  })
+
+  it('list: renders a row per connected agent and opens the shared conversation on click', () => {
+    const props = renderSurface({
+      view: 'list',
+      agents: [
+        { id: 'acp', displayName: 'Claude Code', working: false },
+        { id: 'codex', displayName: 'Codex', working: true }
+      ]
+    })
+    expect(screen.getByText('Claude Code')).toBeTruthy()
+    expect(screen.getByText('Ready')).toBeTruthy()
+    // The running agent shows its live status.
+    expect(screen.getByText('Codex')).toBeTruthy()
+    expect(screen.getByText('Working…')).toBeTruthy()
+    // A row opens the SAME inline conversation as Omi Chat (shared thread).
+    fireEvent.click(screen.getByText('Claude Code'))
     expect(props.onOpenConversation).toHaveBeenCalledTimes(1)
   })
 

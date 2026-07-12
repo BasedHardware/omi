@@ -21,11 +21,13 @@ import { getPreferences, onPreferencesChange } from '../../lib/preferences'
 import { usePushToTalk } from '../../hooks/usePushToTalk'
 import { Orb } from '../orb/Orb'
 import { BarChatSurface } from './BarChatSurface'
-import { deriveOrbState, isBarBusy } from './barDisplay'
+import { deriveOrbState, isBarBusy, deriveAgentRows, pillLabel } from './barDisplay'
 import type {
   BarMode,
   BarShowPayload,
   BarChatState,
+  CodingAgentId,
+  CodingAgentInfo,
   WaveformSource
 } from '../../../../shared/types'
 import './bar.css'
@@ -63,8 +65,12 @@ export function BarApp(): React.JSX.Element {
   const [sliding, setSliding] = useState<'in' | 'out'>('out')
   const [genesisNonce, setGenesisNonce] = useState(0)
   const [continuous, setContinuous] = useState(() => !!getPreferences().continuousRecording)
-  const [signedIn, setSignedIn] = useState(() => !!auth.currentUser)
   const [chat, setChat] = useState<BarChatState>(EMPTY_CHAT)
+  const [agents, setAgents] = useState<CodingAgentInfo[]>([])
+  // Which adapter is running the current task (the shared engine only projects a
+  // single global agentsActive; agent_selected names the adapter). At most one
+  // row shows "Working…".
+  const [activeAgentId, setActiveAgentId] = useState<CodingAgentId | null>(null)
   const [view, setView] = useState<'list' | 'conversation'>('list')
   const [draft, setDraft] = useState('')
   const modeRef = useRef<BarMode | null>(null)
@@ -88,10 +94,8 @@ export function BarApp(): React.JSX.Element {
     void auth.authStateReady().then(() => {
       if (active) setAuthReady(true)
     })
-    const unsub = auth.onAuthStateChanged((u) => setSignedIn(!!u))
     return () => {
       active = false
-      unsub()
     }
   }, [])
 
@@ -105,6 +109,28 @@ export function BarApp(): React.JSX.Element {
   useEffect(() => window.omiBar.onChatState((s) => setChat(s)), [])
   // Pull the current thread on mount (in case we missed prior broadcasts).
   useEffect(() => window.omiBar.requestChatState(), [])
+
+  // --- coding agents (list view rows) -----------------------------------------
+  // The connected agents Omi can delegate to (Claude Code always; the external
+  // CLIs when configured). Refresh on mount and whenever the launch commands
+  // change in Settings, so a freshly-connected agent shows without a restart.
+  const refreshAgents = useCallback((): void => {
+    void window.omi
+      .codingAgentList(getPreferences().agentCommands)
+      .then(setAgents)
+      .catch(() => setAgents([]))
+  }, [])
+  useEffect(refreshAgents, [refreshAgents])
+  useEffect(() => onPreferencesChange(refreshAgents), [refreshAgents])
+  // Track which adapter is running the current task; the terminal signal is the
+  // global agentsActive dropping (no per-task "done" broadcast exists).
+  useEffect(
+    () =>
+      window.omi.onCodingAgentEvent((e) => {
+        if (e.type === 'agent_selected') setActiveAgentId(e.adapterId)
+      }),
+    []
+  )
 
   // --- push-to-talk (always mounted; drives the orb + voice sends) ------------
   const ptt = usePushToTalk({
@@ -250,17 +276,27 @@ export function BarApp(): React.JSX.Element {
   const maxListHeight = Math.max(160, Math.round((window.innerHeight - 150) / PANEL_ZOOM))
 
   // --- orb state (the sole status indicator) ----------------------------------
+  // `user` (from useAuth) is the single auth source — fake-aware for the E2E and
+  // equivalent to a live session in prod (both read the same auth).
+  const continuousListening = continuous && !!user
   const orb = deriveOrbState({
     recording: ptt.recording,
     transcribing: ptt.transcribing,
     status: chat.status,
-    continuousListening: continuous && signedIn,
+    continuousListening,
     agentsActive: chat.agentsActive ?? false
   })
   const orbState = orb.state
+  // Pill wordmark → "Listening" whenever the user's voice is being captured
+  // (PTT hold or always-on), else "Omi". Activity-keyed, not orb-pose-keyed: a
+  // PTT hold derives as the 'speaking' pose but is still Omi listening to you.
+  const pillText = pillLabel({ recording: ptt.recording, continuousListening })
   const amplitudeSource: (() => WaveformSource | null) | null = orb.withAmplitude
     ? () => ptt.analyserRef.current
     : null
+
+  // Connected coding agents to list under "Omi Chat" (at most one "Working…").
+  const agentRows = deriveAgentRows(agents, activeAgentId, chat.agentsActive ?? false)
 
   const surfaceStyle = expanded
     ? { width: PANEL_WIDTH, height: panelHeight }
@@ -293,7 +329,7 @@ export function BarApp(): React.JSX.Element {
                 genesisNonce={genesisNonce}
                 visible={mode !== null}
               />
-              <span className="bar-pill-label">Omi</span>
+              <span className="bar-pill-label">{pillText}</span>
             </div>
           </div>
 
@@ -319,6 +355,7 @@ export function BarApp(): React.JSX.Element {
                 ) : (
                   <BarChatSurface
                     chat={chat}
+                    agents={agentRows}
                     view={view}
                     onOpenConversation={() => setView('conversation')}
                     onBack={() => setView('list')}

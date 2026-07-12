@@ -25,11 +25,11 @@ const baseEnv = {
   OMI_SKIP_TUNNEL: '1'
 }
 
-async function launch(extraArgs = []) {
+async function launch(extraArgs = [], extraEnv = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'omi-bar-e2e-'))
   const app = await electron.launch({
     args: [mainEntry, `--user-data-dir=${dir}`, ...extraArgs],
-    env: baseEnv
+    env: { ...baseEnv, ...extraEnv }
   })
   const cleanup = async () => {
     try {
@@ -259,6 +259,115 @@ test('paint-ack: reveal defers the HWND show until the renderer paints slide-in'
     `visible frame was the off-screen blank (translateY ratio ${ratio.toFixed(2)}, ` +
       `transform "${first.transform}", height ${first.height})`
   )
+})
+
+// Bug A regression: a normal mouse move onto the pill + click must expand into
+// the chat/agents surface. The reported bug was the pill "not expanding": main
+// left the window click-through until an async renderer mouseenter → IPC round
+// trip flipped hit-testing on, so a fast click landed first and passed through.
+// The fix drives interactivity from the OS cursor in main (peekTick). This test
+// drives the REAL built app: reveal the pill, locate its rect, move+click it,
+// and assert the bar expanded (focusable) with the Omi Chat + agent rows shown.
+// Signed-in (OMI_E2E_FAKE_AUTH) so the expanded surface renders its real rows,
+// not the signed-out prompt. Repeated to prove it is reliable, not flaky.
+//
+// (Note: Playwright's page.mouse dispatches via CDP, below the OS window-message
+// layer that setIgnoreMouseEvents gates, so this asserts the click→expand WIRING
+// + rendered surface end-to-end; the OS-cursor→interactivity race itself is
+// covered deterministically by the main/bar/watchdog.test.ts unit tests.)
+test('pill click expands into the chat/agents surface (Bug A)', async (t) => {
+  const { app, cleanup } = await launch([], { OMI_E2E_FAKE_AUTH: '1' })
+  t.after(cleanup)
+  await app.firstWindow()
+  // Live-desktop cursor sits outside the peek footprint; hold the pill open so
+  // the retract watchdog can't hide it between reveal and click.
+  await app.evaluate(() => globalThis.__omiE2E.barHoldPeekOpen(true))
+  const barPage = await findBarPage(app)
+
+  for (let i = 0; i < 5; i++) {
+    await barShow(app, 'peek')
+    // A REAL click on the pill. Playwright's locator.click auto-waits for the
+    // element to be visible + STABLE (so the slide-in animation has settled) and
+    // that it receives pointer events, then dispatches a real click — far more
+    // robust than a raw mouse.move+click at a rect read mid-animation.
+    await barPage.locator('.bar-content[role="button"]').click()
+
+    // Expand is async: the mode IPC flips focus in main immediately, but the
+    // renderer's pill→panel morph + content render lands a beat later. Wait for
+    // the expanded surface's rows rather than reading once (that read raced the
+    // morph). Presence of the shared "Omi Chat" row AND the always-connected
+    // "Claude Code" agent row proves the click reached the real chat surface.
+    await barPage.waitForFunction(() => {
+      const texts = [...document.querySelectorAll('.bar-content-active .text-sm')].map((e) =>
+        (e.textContent ?? '').trim()
+      )
+      return texts.includes('Omi Chat') && texts.includes('Claude Code')
+    })
+
+    const s = await app.evaluate(() => globalThis.__omiE2E.barState())
+    assert.equal(s.focusable, true, `pill click #${i} must expand the bar (focusable)`)
+
+    // Back to a pill for the next iteration.
+    await app.evaluate(() => globalThis.__omiE2E.barHide())
+    await new Promise((r) => setTimeout(r, 700))
+  }
+})
+
+// Skeptical-review screenshot of the expanded surface WITH the agent rows
+// (signed-in so the real rows render, not the sign-in prompt).
+test('bar expanded agents-surface screenshot (signed-in)', async (t) => {
+  mkdirSync(shotsDir, { recursive: true })
+  const { app, cleanup } = await launch([], { OMI_E2E_FAKE_AUTH: '1' })
+  t.after(cleanup)
+  await app.firstWindow()
+  await app.evaluate(() => globalThis.__omiE2E.barHoldPeekOpen(true))
+  const barPage = await findBarPage(app)
+  await barShow(app, 'expanded')
+  await new Promise((r) => setTimeout(r, 900)) // morph + content dissolve + agent list
+  await barPage.screenshot({ path: path.join(shotsDir, 'bar-expanded-agents.png') })
+})
+
+// Bug C: the collapsed pill shows "Listening" while the orb is in its listening
+// pose (always-on mic live), and the resting "Omi" wordmark otherwise. Drives a
+// REAL listening state: signed-in (fake auth) + the continuousRecording pref
+// flipped on via the bar's own localStorage prefs channel — no test-only render
+// hook. Asserts the label flips Omi→Listening and captures the pill for review.
+test('pill shows the Listening label in the listening pose (Bug C)', async (t) => {
+  mkdirSync(shotsDir, { recursive: true })
+  const { app, cleanup } = await launch([], { OMI_E2E_FAKE_AUTH: '1' })
+  t.after(cleanup)
+  await app.firstWindow()
+  await app.evaluate(() => globalThis.__omiE2E.barHoldPeekOpen(true))
+  const barPage = await findBarPage(app)
+  await barShow(app, 'peek')
+
+  const labelText = () =>
+    barPage.evaluate(() => document.querySelector('.bar-pill-label')?.textContent ?? null)
+
+  // Resting pill: the "Omi" wordmark (continuous recording off).
+  await barPage.waitForFunction(
+    () => document.querySelector('.bar-pill-label')?.textContent === 'Omi'
+  )
+  assert.equal(await labelText(), 'Omi', 'resting pill should show the Omi wordmark')
+
+  // Flip always-on mic ON through the real preferences channel (the bar listens
+  // for the cross-window `storage` event and re-derives the orb pose).
+  await barPage.evaluate(() => {
+    const KEY = 'omi-windows-prefs-v1'
+    const prefs = JSON.parse(localStorage.getItem(KEY) || '{}')
+    prefs.continuousRecording = true
+    localStorage.setItem(KEY, JSON.stringify(prefs))
+    window.dispatchEvent(
+      new StorageEvent('storage', { key: KEY, newValue: localStorage.getItem(KEY) })
+    )
+  })
+
+  await barPage.waitForFunction(
+    () => document.querySelector('.bar-pill-label')?.textContent === 'Listening'
+  )
+  assert.equal(await labelText(), 'Listening', 'listening pose should show the Listening label')
+  await new Promise((r) => setTimeout(r, 400)) // let the orb settle for the shot
+  await barPage.screenshot({ path: path.join(shotsDir, 'bar-peek-listening.png') })
 })
 
 test('bar screenshots (collapsed / expanded) for the skeptical review', async (t) => {

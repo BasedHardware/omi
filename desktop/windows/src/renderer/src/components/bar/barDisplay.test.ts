@@ -1,6 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { deriveOrbState, isBarBusy, omiChatListStatus } from './barDisplay'
-import type { BarChatState } from '../../../../shared/types'
+import {
+  deriveOrbState,
+  deriveMainWindowOrbState,
+  isBarBusy,
+  omiChatListStatus,
+  deriveAgentRows,
+  agentRowStatus,
+  pillLabel
+} from './barDisplay'
+import type { BarChatState, CodingAgentInfo } from '../../../../shared/types'
 
 const chat = (partial: Partial<BarChatState> = {}): BarChatState => ({
   messages: [],
@@ -73,6 +81,33 @@ describe('deriveOrbState', () => {
   })
 })
 
+describe('deriveMainWindowOrbState (sidebar orb)', () => {
+  const base = {
+    speaking: false,
+    sending: false,
+    agentActive: false,
+    continuousListening: false
+  } as const
+
+  it('projects the shared chat engine: streaming → thinking, agent → agents, TTS → speaking', () => {
+    expect(deriveMainWindowOrbState({ ...base, sending: true })).toBe('thinking')
+    expect(deriveMainWindowOrbState({ ...base, agentActive: true, sending: true })).toBe('agents')
+    expect(deriveMainWindowOrbState({ ...base, speaking: true })).toBe('speaking')
+  })
+
+  it('shows a calm listening orbit when always-on mic is live, else idle', () => {
+    expect(deriveMainWindowOrbState({ ...base, continuousListening: true })).toBe('listening')
+    expect(deriveMainWindowOrbState(base)).toBe('idle')
+  })
+
+  it('matches the bar precedence — the sidebar orb never carries mic amplitude', () => {
+    // A spoken reply outranks the agents pose (same order as the bar).
+    expect(deriveMainWindowOrbState({ ...base, speaking: true, agentActive: true })).toBe(
+      'speaking'
+    )
+  })
+})
+
 describe('isBarBusy (pill retract-hold)', () => {
   it('holds the pill open during recording / finalizing / streaming / speaking', () => {
     expect(isBarBusy({ recording: true, transcribing: false, status: 'idle' })).toBe(true)
@@ -109,5 +144,66 @@ describe('omiChatListStatus', () => {
 
   it('invites when the thread is empty', () => {
     expect(omiChatListStatus(chat())).toBe('Ask me anything')
+  })
+})
+
+describe('deriveAgentRows', () => {
+  const info = (
+    over: Partial<CodingAgentInfo> & { id: CodingAgentInfo['id'] }
+  ): CodingAgentInfo => ({
+    displayName: over.id,
+    connected: false,
+    ...over
+  })
+
+  it('lists only connected agents (the summon list is for acting, not setup)', () => {
+    const rows = deriveAgentRows(
+      [
+        info({ id: 'acp', displayName: 'Claude Code', connected: true }),
+        info({ id: 'codex', displayName: 'Codex', connected: false })
+      ],
+      null,
+      false
+    )
+    expect(rows.map((r) => r.id)).toEqual(['acp'])
+    expect(rows[0].displayName).toBe('Claude Code')
+  })
+
+  it('marks exactly the active adapter as working while a task runs', () => {
+    const agents = [
+      info({ id: 'acp', displayName: 'Claude Code', connected: true }),
+      info({ id: 'codex', displayName: 'Codex', connected: true })
+    ]
+    const rows = deriveAgentRows(agents, 'codex', true)
+    expect(rows.find((r) => r.id === 'codex')?.working).toBe(true)
+    expect(rows.find((r) => r.id === 'acp')?.working).toBe(false)
+  })
+
+  it('no row is working once the global agentsActive drops, even with a stale active id', () => {
+    const agents = [info({ id: 'acp', displayName: 'Claude Code', connected: true })]
+    expect(deriveAgentRows(agents, 'acp', false).every((r) => !r.working)).toBe(true)
+  })
+})
+
+describe('agentRowStatus', () => {
+  it('reads Working… while running, Ready otherwise', () => {
+    expect(agentRowStatus({ id: 'acp', displayName: 'Claude Code', working: true })).toBe(
+      'Working…'
+    )
+    expect(agentRowStatus({ id: 'acp', displayName: 'Claude Code', working: false })).toBe('Ready')
+  })
+})
+
+describe('pillLabel', () => {
+  it('says "Listening" whenever the user is being captured — a PTT hold OR always-on', () => {
+    // PTT hold: recording even though the orb pose derives as 'speaking'.
+    expect(pillLabel({ recording: true, continuousListening: false })).toBe('Listening')
+    // Always-on continuous listening.
+    expect(pillLabel({ recording: false, continuousListening: true })).toBe('Listening')
+  })
+
+  it('keeps the resting "Omi" wordmark when the user is NOT being captured', () => {
+    // Idle.
+    expect(pillLabel({ recording: false, continuousListening: false })).toBe('Omi')
   })
 })
