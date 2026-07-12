@@ -2,6 +2,31 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.72",
+      "date": "2026-07-12",
+      "changes": [
+        "Fixed the chat view jumping instead of holding your place when loading earlier messages, and stopped push-to-talk from dropping a legitimately repeated word within a single turn",
+        "Fixed stopped or timed-out AI replies from resurfacing after a newer request",
+        "Improved macOS desktop test coverage checks so stale fork refs no longer create false coverage failures.",
+        "Improved macOS reliability around sign-out cleanup, capture lifecycle recovery, Bluetooth audio, and local storage persistence.",
+        "Fixed more reliability issues: Rewind's 'Rebuild Index' recovery now actually restores your video history, task search no longer returns the wrong task, screen-file indexing no longer drops your files when a folder is temporarily unreadable, and voice turns can't be duplicated in chat",
+        "Fixed more reliability issues: a system-audio cleanup deadlock, a Bluetooth crash while syncing recordings from storage, a possible hang when importing large connector sessions, agent sync no longer skipping same-second bulk edits, and the 'screen recording needs reset' notice no longer being lost if you were snoozed",
+        "Fixed audio loss and data races on macOS: duplicate-id recordings no longer overwrite earlier audio, Bluetooth reads/writes no longer race, the Memory graph layout no longer corrupts during render, and legacy Rewind migration no longer drops recent writes",
+        "Fixed more macOS defects: the Automation permission prompt is now reliably triggered on the main thread, deleting a memory no longer skips one memory the next time the list pages, rapid task reordering no longer briefly flickers back to the old order, and a Limitless storage-status check no longer risks a crash",
+        "Fixed several crashes and data-loss issues: a Rewind cleanup bug that could delete your entire screenshot history, cross-account data leaking between sign-ins, Bluetooth device crashes and silent audio, and duplicate-task deletion destroying the kept task",
+        "Updated the macOS bundled pi agent runtime packages to maintained releases.",
+        "Fixed local storage continuing to use a stale database connection after an automatic corruption recovery, which could hide recent data or repeat errors until the next restart",
+        "Fixed a rare crash when stopping or restarting a running task agent while it was being polled for progress",
+        "Improved the reliability of voice turn and response timeout recovery",
+        "Fixed a crash that could occur when a Bee device sent a corrupted audio frame",
+        "Fixed a background timer leak that accumulated wakeups over time when the voice assistant hub reconnected, reducing battery drain",
+        "Fixed Rewind capturing no video (every recorded chunk was discarded), restoring the Rewind timeline",
+        "Improved recovery for macOS updates with a verified stable repair download",
+        "Fixed system audio being captured ~6 dB too quiet, improving transcription accuracy for meetings and calls",
+        "Fixed a rare race where a recording started during a cloud sync could be dropped and never uploaded"
+      ]
+    },
+    {
       "version": "0.12.71",
       "date": "2026-07-11",
       "changes": [

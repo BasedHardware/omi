@@ -231,3 +231,62 @@ def test_get_memories_all_malformed_returns_empty():
         result = _call_memories()
 
     assert result['memories'] == []
+
+
+# --- _resolve_geolocation: the integration conversation-create geo enrichment must not be discarded ---
+
+
+async def _passthrough_run_blocking(executor, fn, *args):
+    return fn(*args)
+
+
+def test_resolve_geolocation_keeps_enrichment():
+    import asyncio
+
+    from models.geolocation import Geolocation
+
+    enriched = Geolocation(latitude=37.78, longitude=-122.4, google_place_id='ChIJ_test', address='1 Main St')
+    with patch.object(integ, 'run_blocking', side_effect=_passthrough_run_blocking), patch.object(
+        integ, 'get_google_maps_location', return_value=enriched
+    ):
+        raw = Geolocation(latitude=37.78, longitude=-122.4)  # coordinates, no google_place_id yet
+        result = asyncio.run(integ._resolve_geolocation(raw))
+
+    assert result.google_place_id == 'ChIJ_test'  # enrichment kept, not clobbered back to the raw value
+
+
+def test_resolve_geolocation_falls_back_to_raw_on_geocode_miss():
+    import asyncio
+
+    from models.geolocation import Geolocation
+
+    with patch.object(integ, 'run_blocking', side_effect=_passthrough_run_blocking), patch.object(
+        integ, 'get_google_maps_location', return_value=None  # geocoder found nothing
+    ):
+        raw = Geolocation(latitude=37.78, longitude=-122.4)
+        result = asyncio.run(integ._resolve_geolocation(raw))
+
+    assert result is raw  # raw coordinates preserved, not dropped to None
+
+
+def test_resolve_geolocation_skips_when_place_id_present():
+    import asyncio
+
+    from models.geolocation import Geolocation
+
+    with patch.object(integ, 'get_google_maps_location') as geo:
+        already = Geolocation(latitude=1.0, longitude=2.0, google_place_id='ChIJ_existing')
+        result = asyncio.run(integ._resolve_geolocation(already))
+
+    assert result is already
+    geo.assert_not_called()  # already enriched -> no geocoder call
+
+
+def test_resolve_geolocation_none_passthrough():
+    import asyncio
+
+    with patch.object(integ, 'get_google_maps_location') as geo:
+        result = asyncio.run(integ._resolve_geolocation(None))
+
+    assert result is None
+    geo.assert_not_called()

@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, cast
@@ -9,6 +10,7 @@ from uuid import uuid4
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
+from pydantic import ValidationError
 
 import database.action_items as action_items_db
 from database._client import db
@@ -22,6 +24,8 @@ from models.candidate import (
     CandidateSubjectKind,
 )
 from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
+
+logger = logging.getLogger(__name__)
 
 CANDIDATES_COLLECTION = 'candidates'
 ACTION_ITEMS_COLLECTION = 'action_items'
@@ -216,7 +220,13 @@ def list_candidates(
     query = query.limit(limit)
     records: list[CandidateRecord] = []
     for snapshot in query.stream():
-        records.append(CandidateRecord.from_storage(_snapshot_dict(snapshot)))
+        try:
+            records.append(CandidateRecord.from_storage(_snapshot_dict(snapshot)))
+        except ValidationError as e:
+            # One malformed/legacy candidate doc must not 500 the whole list. Catch only the pydantic
+            # validation failure (from_storage is model_validate) so unexpected runtime errors still
+            # surface; log the exception detail so the offending legacy shape is diagnosable.
+            logger.warning('Skipping malformed candidate record %s: %s', getattr(snapshot, 'id', None), e)
     return records
 
 

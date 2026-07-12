@@ -111,7 +111,15 @@ def get_conversations_text(
             all_person_ids.update([s.get('person_id') for s in segments if s.get('person_id')])
         if all_person_ids:
             people_data = users_db.get_people_by_ids(uid, list(all_person_ids))
-            people = [Person(**p) for p in people_data]
+            for p in people_data:
+                try:
+                    people.append(Person(**p))
+                except Exception as e:
+                    # A legacy/malformed person doc (e.g. missing the required name) must not 500 the
+                    # whole conversation list; skip it so that speaker's name just goes unresolved. Mirrors
+                    # the deserialize_conversation loop below and search_conversations_text's guard.
+                    logger.warning(f"get_conversations_text skipping malformed person {p.get('id')}: {e}")
+                    continue
 
     # Convert to objects
     conversations: List[Conversation] = []

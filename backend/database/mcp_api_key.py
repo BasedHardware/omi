@@ -4,6 +4,7 @@ import logging
 from typing import Any, Dict, Optional, Tuple, cast
 
 from google.cloud import firestore
+from pydantic import ValidationError
 
 import database.redis_db as redis_db
 from database._client import get_firestore_client
@@ -168,7 +169,13 @@ def get_mcp_keys_for_user(user_id: str) -> list[McpApiKey]:
     for doc in docs:
         raw: object = doc.to_dict()
         data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
-        keys.append(McpApiKey.model_validate(data))
+        # Older key docs may omit the id field; fall back to the document id, mirroring the other
+        # readers in this module. Skip a genuinely malformed/legacy key rather than 500 the whole list.
+        data["id"] = data.get("id") or doc.id
+        try:
+            keys.append(McpApiKey.model_validate(data))
+        except ValidationError as e:
+            logger.warning("Skipping malformed MCP key %s: %s", doc.id, e)
     return keys
 
 

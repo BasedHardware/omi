@@ -143,15 +143,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     return connection.getStorageList();
   }
 
-  Future<BtDevice?> _getConnectedDevice() async {
-    var deviceId = SharedPreferencesUtil().btDevice.id;
-    if (deviceId.isEmpty) {
-      return null;
-    }
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    return connection?.device;
-  }
-
   initiateBleBatteryListener() async {
     if (connectedDevice == null) {
       return;

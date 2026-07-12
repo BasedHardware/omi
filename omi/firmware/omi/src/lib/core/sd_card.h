@@ -24,6 +24,17 @@ int app_sd_init(void);
 int app_sd_off(void);
 void sd_write_pause(bool pause);
 bool is_sd_on(void);
+/** @brief True when the SD is powered AND mounted (ring reads/writes will work). */
+bool sd_is_ready(void);
+
+/**
+ * @brief Request the SD worker to power the SD NAND on (remount) or off.
+ *
+ * Async (posts to the priority queue). On power-on, SD is marked available
+ * immediately so audio keeps being queued and buffers in the write queue until
+ * the remount completes. Used to cut SD power while the mic is in AAD sleep.
+ */
+void sd_request_power(bool on);
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 

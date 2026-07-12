@@ -12,8 +12,6 @@ final class FriendPendantConnection: BaseDeviceConnection {
     // MARK: - Constants
 
     private static let packetFooterSize = 5
-    private static let packetSize = 95
-    private static let lc3DataSize = 90  // 3 frames of 30 bytes each
     private static let lc3FrameSize = 30 // Single LC3 frame size
 
     // MARK: - Private Properties
@@ -21,32 +19,33 @@ final class FriendPendantConnection: BaseDeviceConnection {
     private let logger = Logger(subsystem: "me.omi.desktop", category: "FriendPendantConnection")
     private var audioStreamSubject = PassthroughSubject<Data, Error>()
     private var audioSubscription: Task<Void, Never>?
-    private var isRecording = false
 
     // MARK: - Initialization
 
-    override init(device: BtDevice, transport: DeviceTransport) {
-        super.init(device: device, transport: transport)
+    override init(
+        device: BtDevice,
+        transport: DeviceTransport,
+        operationClock: any DeviceOperationClock = ContinuousDeviceOperationClock()
+    ) {
+        super.init(
+            device: device,
+            transport: transport,
+            operationClock: operationClock
+        )
     }
 
     // MARK: - Connection
 
-    override func connect() async throws {
-        try await super.connect()
+    override func prepareDeviceAfterConnect() async throws {
+        try await operationClock.sleep(for: .seconds(1))
 
-        // Wait for connection to stabilize
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
-
-        // Subscribe to audio stream
         startAudioListener()
     }
 
-    override func disconnect() async {
-        isRecording = false
+    override func teardownDevice() async {
         audioSubscription?.cancel()
         audioSubscription = nil
-
-        await super.disconnect()
+        audioStreamSubject.send(completion: .finished)
     }
 
     // MARK: - Audio Handling
@@ -101,18 +100,30 @@ final class FriendPendantConnection: BaseDeviceConnection {
     }
 
     override func getBatteryLevelStream() -> AsyncThrowingStream<Int, Error> {
-        return AsyncThrowingStream { continuation in
-            Task {
+        return AsyncThrowingStream { [weak self] continuation in
+            let pollingTask = Task { [weak self] in
+                guard let self else {
+                    continuation.finish()
+                    return
+                }
                 // Send initial battery level
                 continuation.yield(90)
 
                 // Send 90% every 30 seconds
                 while !Task.isCancelled {
-                    try? await Task.sleep(nanoseconds: 30_000_000_000)
+                    do {
+                        try await self.operationClock.sleep(for: .seconds(30))
+                    } catch {
+                        break
+                    }
+                    guard !Task.isCancelled else { break }
                     continuation.yield(90)
                 }
 
                 continuation.finish()
+            }
+            continuation.onTermination = { @Sendable _ in
+                pollingTask.cancel()
             }
         }
     }
@@ -130,8 +141,6 @@ final class FriendPendantConnection: BaseDeviceConnection {
                 return
             }
 
-            self.isRecording = true
-
             let cancellable = self.audioStreamSubject
                 .sink(
                     receiveCompletion: { _ in
@@ -144,9 +153,6 @@ final class FriendPendantConnection: BaseDeviceConnection {
 
             continuation.onTermination = { @Sendable _ in
                 cancellable.cancel()
-                Task { @MainActor in
-                    self.isRecording = false
-                }
             }
         }
     }

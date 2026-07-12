@@ -1106,9 +1106,12 @@ def search_conversations_endpoint(
     conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
     redact_conversations_for_list(conversations)
     search_results['items'] = conversations
-    search_results['total_pages'] = (
-        search_request.page + 1 if len(conversations) >= search_request.per_page else search_request.page
-    )
+    # Recompute total_pages from the effective (clamped) pagination the search actually ran with, not the
+    # raw request: search_request.page/per_page are optional and unbounded, so a null/0/huge value here
+    # would 500 (None + 1 / len(...) >= None). search_conversations returns clamped current_page/per_page.
+    effective_page = search_results.get('current_page', 1)
+    effective_per_page = search_results.get('per_page', 10)
+    search_results['total_pages'] = effective_page + 1 if len(conversations) >= effective_per_page else effective_page
     return search_results
 
 

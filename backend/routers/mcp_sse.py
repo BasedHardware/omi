@@ -1295,7 +1295,10 @@ def execute_tool(
         return {"success": True}
 
     elif tool_name == "get_goals":
-        include_inactive = parse_mcp_bool(arguments.get("include_inactive"), "include_inactive", default=False)
+        try:
+            include_inactive = parse_mcp_bool(arguments.get("include_inactive"), "include_inactive", default=False)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
         return {"goals": goals_db.get_all_goals(user_id, include_inactive=include_inactive)}
 
     elif tool_name == "get_chat_messages":
@@ -1314,7 +1317,10 @@ def execute_tool(
         start = _parse_mcp_date(arguments.get("start_date"), "start_date")
         end = _parse_mcp_date(arguments.get("end_date"), "end_date")
         app = arguments.get("app")
-        summary = parse_mcp_bool(arguments.get("summary"), "summary", default=False)
+        try:
+            summary = parse_mcp_bool(arguments.get("summary"), "summary", default=False)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
         if summary:
             try:
                 return screen_activity_db.get_screen_activity_summary(user_id, start_date=start, end_date=end)

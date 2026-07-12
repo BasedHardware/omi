@@ -2080,6 +2080,9 @@ def get_goals(
     - **limit**: Maximum number of goals to return
     - **include_inactive**: If True, includes inactive/completed goals
     """
+    # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
+    # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
+    limit = max(1, min(limit, 1000))
     if include_inactive:
         goals = goals_db.get_all_goals(uid, include_inactive=True)
     else:

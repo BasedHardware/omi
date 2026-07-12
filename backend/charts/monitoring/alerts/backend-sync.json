@@ -141,7 +141,7 @@
       }
     ],
     "updated": "2026-06-23T01:27:10Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
@@ -154,7 +154,11 @@
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "ticket",
+      "instatus_component": "api"
+    }
   },
   {
     "id": 34,
@@ -204,7 +208,7 @@
             "groupBys": [
               "metric.label.response_code_class"
             ],
-            "perSeriesAligner": "ALIGN_SUM",
+            "perSeriesAligner": "ALIGN_NONE",
             "preprocessor": "rate",
             "projectName": "based-hardware",
             "view": "FULL"
@@ -298,7 +302,7 @@
       }
     ],
     "updated": "2026-06-23T01:27:10Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "3m",
     "keep_firing_for": "0s",
@@ -308,7 +312,8 @@
       "threshold": "2"
     },
     "labels": {
-      "instatus_component": "api"
+      "instatus_component": "api",
+      "severity": "critical"
     },
     "isPaused": false,
     "notification_settings": {
@@ -454,7 +459,7 @@
       }
     ],
     "updated": "2026-06-20T02:27:42Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
@@ -467,7 +472,11 @@
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "ticket",
+      "instatus_component": "api"
+    }
   },
   {
     "id": 35,
@@ -607,7 +616,7 @@
       }
     ],
     "updated": "2026-06-20T02:27:43Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
@@ -620,7 +629,11 @@
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "ticket",
+      "instatus_component": "api"
+    }
   },
   {
     "id": 31,
@@ -768,7 +781,7 @@
       }
     ],
     "updated": "2026-06-20T02:27:43Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
@@ -781,168 +794,11 @@
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
-  },
-  {
-    "id": 32,
-    "uid": "bew97osjuu22of",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Backend-sync",
-    "title": "Backend-sync request latency is high",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "timeSeriesList",
-        "relativeTimeRange": {
-          "from": 86400,
-          "to": 0
-        },
-        "datasourceUid": "beuxmaq8oxhq8e",
-        "model": {
-          "aliasBy": "p99",
-          "datasource": {
-            "type": "stackdriver",
-            "uid": "beuxmaq8oxhq8e"
-          },
-          "instant": false,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "queryType": "timeSeriesList",
-          "range": true,
-          "refId": "A",
-          "timeSeriesList": {
-            "alignmentPeriod": "cloud-monitoring-auto",
-            "crossSeriesReducer": "REDUCE_PERCENTILE_99",
-            "filters": [
-              "resource.label.location",
-              "=",
-              "us-central1",
-              "AND",
-              "resource.label.project_id",
-              "=",
-              "based-hardware",
-              "AND",
-              "resource.label.service_name",
-              "=",
-              "backend-sync",
-              "AND",
-              "metric.type",
-              "=",
-              "run.googleapis.com/request_latencies"
-            ],
-            "groupBys": [
-              "resource.label.service_name"
-            ],
-            "perSeriesAligner": "ALIGN_SUM",
-            "preprocessor": "none",
-            "projectName": "based-hardware",
-            "view": "FULL"
-          }
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "D"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  180000
-                ],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "E"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "updated": "2026-06-20T02:27:43Z",
-    "noDataState": "Alerting",
-    "execErrState": "Error",
-    "for": "5m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "33",
-      "threshold": "180000ms (3m)"
-    },
-    "isPaused": true,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "ticket",
+      "instatus_component": "api"
+    }
   },
   {
     "uid": "bfobs1syncenq01",
@@ -1038,19 +894,25 @@
       }
     ],
     "updated": "2026-07-08T21:00:00Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
       "runbook": "backend/docs/runbooks/sync-dispatch-fallback.md",
-      "summary": "Paused: backend-sync metrics not scraped by GKE Prometheus — use Cloud Logging",
-      "threshold": "0.2 (20% enqueue_failed)"
+      "summary": "Paused: backend-sync metrics not scraped by GKE Prometheus \u2014 use Cloud Logging",
+      "threshold": "0.2 (20% enqueue_failed)",
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "3"
     },
-    "isPaused": true,
+    "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "api"
+    }
   }
 ]

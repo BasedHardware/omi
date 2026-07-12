@@ -1,0 +1,3 @@
+{
+  "change": "Fixed long-context AI requests failing with \"AI request took too long\" even when the model had already produced an answer"
+}

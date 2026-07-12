@@ -1,5 +1,8 @@
 import copy
+import inspect
 import json
+import logging
+import threading
 import uuid
 import zlib
 from datetime import datetime, timedelta, timezone
@@ -8,6 +11,7 @@ from typing import List, Optional, Dict, Any
 from google.api_core.exceptions import AlreadyExists, Conflict, NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
+from prometheus_client import Counter
 
 import utils.other.hume as hume
 from database import users as users_db
@@ -19,11 +23,68 @@ from utils import encryption
 from ._client import db
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from utils.other.storage import list_audio_chunks
-import logging
 
 logger = logging.getLogger(__name__)
 
 conversations_collection = 'conversations'
+
+
+# This is intentionally a temporary inventory, not a new lifecycle abstraction.
+# #9516 first characterizes the current many-writer state so the convergence
+# change can prove every legacy writer reached zero before removal.
+# Prometheus registration mutates the process-global collector registry. Keep it
+# lazy so importing this database module remains pure.
+CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS: Optional[Counter] = None
+_LEGACY_LIFECYCLE_METRIC_LOCK = threading.Lock()
+
+_LIFECYCLE_WRITER_LABELS = {
+    'routers.transcribe': 'transcribe',
+    'routers.pusher': 'pusher',
+    'routers.conversations': 'conversations_router',
+    'routers.sync': 'sync_router',
+    'routers.developer': 'developer_router',
+    'utils.sync.pipeline': 'sync_pipeline',
+    'utils.conversations.process_conversation': 'process_conversation',
+    'utils.conversations.postprocess_conversation': 'postprocess_conversation',
+    'utils.conversations.merge_conversations': 'merge_conversations',
+    'utils.imports.limitless': 'limitless_import',
+}
+_LIFECYCLE_FIELDS = frozenset({'status', 'discarded'})
+
+
+def lifecycle_writer_label(module_name: str) -> str:
+    """Return a bounded label for the module that initiated a lifecycle write."""
+    return _LIFECYCLE_WRITER_LABELS.get(module_name, 'other')
+
+
+def _legacy_lifecycle_writer() -> str:
+    """Find the first caller outside this database module and its write decorators."""
+    frame = inspect.currentframe()
+    try:
+        frame = frame.f_back if frame is not None else None
+        while frame is not None:
+            module_name = frame.f_globals.get('__name__', '')
+            if module_name not in {__name__, 'database.helpers'}:
+                return lifecycle_writer_label(module_name)
+            frame = frame.f_back
+    finally:
+        # Frame references retain local variables. Clear ours promptly because this
+        # helper runs on every currently-direct lifecycle mutation.
+        del frame
+    return 'other'
+
+
+def _record_legacy_lifecycle_mutation(operation: str) -> None:
+    global CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS
+    if CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS is None:
+        with _LEGACY_LIFECYCLE_METRIC_LOCK:
+            if CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS is None:
+                CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS = Counter(
+                    'conversation_lifecycle_legacy_mutations_total',
+                    'Conversation lifecycle mutations by the current direct writer and operation',
+                    ['writer', 'operation'],
+                )
+    CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS.labels(writer=_legacy_lifecycle_writer(), operation=operation).inc()
 
 
 def get_conversation_ids(uid: str) -> List[str]:
@@ -252,6 +313,8 @@ def upsert_conversation(uid: str, conversation_data: dict):
         transaction.set(conversation_ref, write_data)
 
     _write_processing_result(transaction)
+    if _LIFECYCLE_FIELDS.intersection(conversation_data):
+        _record_legacy_lifecycle_mutation('upsert')
 
 
 @set_data_protection_level(data_arg_name='conversation_data')
@@ -268,6 +331,8 @@ def create_conversation_if_absent(uid: str, conversation_data: dict) -> bool:
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
     try:
         conversation_ref.create(conversation_data)
+        if _LIFECYCLE_FIELDS.intersection(conversation_data):
+            _record_legacy_lifecycle_mutation('create_if_absent')
         return True
     except (AlreadyExists, Conflict):
         return False
@@ -450,6 +515,8 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict):
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
     prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
     doc_ref.update(prepared_data)
+    if _LIFECYCLE_FIELDS.intersection(update_data):
+        _record_legacy_lifecycle_mutation('generic_update')
 
 
 def create_audio_files_from_chunks(
@@ -873,6 +940,7 @@ def update_conversation_status(uid: str, conversation_id: str, status: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'status': status})
+    _record_legacy_lifecycle_mutation('status_update')
 
 
 def claim_conversation_status(
@@ -901,13 +969,17 @@ def claim_conversation_status(
         transaction.update(conversation_ref, updates)
         return True
 
-    return _claim(transaction)
+    claimed = _claim(transaction)
+    if claimed:
+        _record_legacy_lifecycle_mutation('conditional_claim')
+    return claimed
 
 
 def set_conversation_as_discarded(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'discarded': True})
+    _record_legacy_lifecycle_mutation('discard')
 
 
 # *********************************
@@ -1180,11 +1252,15 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
     speechmatics_ref = conversation_ref.collection('speechmatics_streaming')
     whisperx_ref = conversation_ref.collection('fal_whisperx')
 
+    # Sort each provider's segments by start time, tolerating a legacy/partial doc missing 'start'
+    # (a bare x['start'] would KeyError and 500 the whole transcripts response).
     return {
-        'deepgram': list(sorted([doc.to_dict() for doc in deepgram_ref.stream()], key=lambda x: x['start'])),
-        'soniox': list(sorted([doc.to_dict() for doc in soniox_ref.stream()], key=lambda x: x['start'])),
-        'speechmatics': list(sorted([doc.to_dict() for doc in speechmatics_ref.stream()], key=lambda x: x['start'])),
-        'whisperx': list(sorted([doc.to_dict() for doc in whisperx_ref.stream()], key=lambda x: x['start'])),
+        'deepgram': list(sorted([doc.to_dict() for doc in deepgram_ref.stream()], key=lambda x: x.get('start', 0))),
+        'soniox': list(sorted([doc.to_dict() for doc in soniox_ref.stream()], key=lambda x: x.get('start', 0))),
+        'speechmatics': list(
+            sorted([doc.to_dict() for doc in speechmatics_ref.stream()], key=lambda x: x.get('start', 0))
+        ),
+        'whisperx': list(sorted([doc.to_dict() for doc in whisperx_ref.stream()], key=lambda x: x.get('start', 0))),
     }
 
 

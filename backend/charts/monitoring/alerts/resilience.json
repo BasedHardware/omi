@@ -100,11 +100,14 @@
     "annotations": {
       "runbook": "backend/docs/runbooks/llm-gateway-fallback.md",
       "severity": "ticket",
-      "summary": "Dependency health — elevated LLM gateway fallback rate, not a product outage by itself",
-      "threshold": "0.05 (5% fallback share over 30m)"
+      "summary": "Dependency health \u2014 elevated LLM gateway fallback rate, not a product outage by itself",
+      "threshold": "0.05 (5% fallback share over 30m)",
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "5"
     },
     "labels": {
-      "severity": "ticket"
+      "severity": "warning",
+      "instatus_component": "ai-chat"
     },
     "isPaused": false,
     "notification_settings": {

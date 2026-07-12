@@ -115,20 +115,24 @@
       }
     ],
     "updated": "2026-06-20T02:27:45Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "45",
+      "__panelId__": "77",
       "threshold": "1"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    }
   },
   {
     "id": 22,
@@ -252,11 +256,12 @@
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "45",
+      "__panelId__": "77",
       "threshold": "1"
     },
     "labels": {
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "severity": "critical"
     },
     "isPaused": false,
     "notification_settings": {
@@ -380,20 +385,24 @@
       }
     ],
     "updated": "2026-06-20T02:27:45Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "42",
+      "__panelId__": "75",
       "threshold": "10"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "ticket",
+      "instatus_component": "live-transcription"
+    }
   },
   {
     "id": 23,
@@ -490,20 +499,24 @@
       }
     ],
     "updated": "2026-06-20T02:27:46Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "69",
+      "__panelId__": "79",
       "threshold": "40"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "ticket",
+      "instatus_component": "live-transcription"
+    }
   },
   {
     "id": 20,
@@ -527,7 +540,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(pusher_active_ws_connections{pod=~\"prod-omi-pusher.*\"})",
+          "expr": "max(pusher_active_ws_connections{job=\"pusher-metrics\"})",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -621,20 +634,24 @@
       }
     ],
     "updated": "2026-06-20T04:06:09Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "43",
+      "__panelId__": "88",
       "threshold": "30"
     },
-    "isPaused": true,
+    "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    }
   },
   {
     "uid": "bfobs1pusherdeg01",
@@ -657,7 +674,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(pusher_sessions_degraded) / clamp_min(sum(pusher_active_ws_connections), 1)",
+          "expr": "sum(pusher_sessions_degraded{job=\"pusher-metrics\"}) / clamp_min(sum(pusher_active_ws_connections{job=\"pusher-metrics\"}), 1)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -730,7 +747,7 @@
       }
     ],
     "updated": "2026-07-08T21:00:00Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "10m",
     "keep_firing_for": "0s",
@@ -744,6 +761,10 @@
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    }
   }
 ]

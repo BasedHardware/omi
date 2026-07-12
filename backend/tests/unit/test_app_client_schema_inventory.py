@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -275,7 +276,7 @@ def test_inventory_strict_raw_decode_site_gate_fails_with_actionable_sites():
 
     assert result.returncode == 1
     assert 'Raw Dart decode sites:' in result.stdout
-    assert 'app/lib/backend/schema/app.dart:32' in result.stdout
+    assert re.search(r'app/lib/backend/schema/app\.dart:\d+ \(field_access\)', result.stdout)
 
 
 def test_inventory_openapi_route_response_decode_migration_complete():

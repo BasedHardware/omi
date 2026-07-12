@@ -26,7 +26,6 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
     private var requestId = 0
 
     private var audioStreamSubject = PassthroughSubject<Data, Error>()
-    private var flashPageSubject = PassthroughSubject<[String: Any], Never>()
     private var buttonStreamSubject = PassthroughSubject<[UInt8], Never>()
 
     private var rxSubscription: Task<Void, Never>?
@@ -45,49 +44,50 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
     private var lastAcknowledgedIndex = -1
 
     private var firstFlashPageTimestampMs: Int64?
-    // getStorageStatus() stores its continuation here and it is resumed from two
-    // unsynchronized executors — the 3s timeout Task and the RX parser Task — which
-    // without a lock can BOTH resume the same CheckedContinuation (double-resume
-    // trap / crash) or leak a displaced one. All three fields are guarded by
-    // storageStateLock: capture-and-nil the continuation UNDER the lock, resume it
-    // OUTSIDE (exactly one context wins). The generation tag lets a timeout resume
-    // only its OWN pending call, never a newer one that displaced it.
-    private let storageStateLock = NSLock()
+    private let storageStatusOperations: DeviceOperationBroker<String, [String: Int]>
+    private let storageStatusGate = UncorrelatedOperationGate<String>()
     private var storageState: [String: Int]?
-    private var storageStateCompletion: CheckedContinuation<[String: Int]?, Never>?
-    private var storageStateGeneration = 0
     private var lastLedBrightness: Int?
 
     // MARK: - Initialization
 
-    override init(device: BtDevice, transport: DeviceTransport) {
-        super.init(device: device, transport: transport)
+    override init(
+        device: BtDevice,
+        transport: DeviceTransport,
+        operationClock: any DeviceOperationClock = ContinuousDeviceOperationClock()
+    ) {
+        self.storageStatusOperations = DeviceOperationBroker(clock: operationClock)
+        super.init(
+            device: device,
+            transport: transport,
+            operationClock: operationClock
+        )
     }
 
     // MARK: - Connection
 
-    override func connect() async throws {
-        try await super.connect()
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
+    override func prepareDeviceAfterConnect() async throws {
+        try await operationClock.sleep(for: .seconds(1))
 
         startRxListener()
 
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        try await operationClock.sleep(for: .seconds(1))
 
         try await initialize()
     }
 
-    override func disconnect() async {
+    override func teardownDevice() async {
         rxSubscription?.cancel()
         rxSubscription = nil
         audioStreamSubject.send(completion: .finished)
+        buttonStreamSubject.send(completion: .finished)
         isBatchMode = false
-        await super.disconnect()
+        await storageStatusOperations.cancelAll(reason: .disconnected)
+        storageStatusGate.reset()
     }
 
-    override func unpair() async {
+    override func performDeviceUnpair() async {
         await unpairWithoutReset()
-        await super.unpair()
     }
 
     // MARK: - Initialization
@@ -101,7 +101,7 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
             characteristicUUID: DeviceUUIDs.Limitless.txCharacteristic,
             withResponse: true
         )
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        try await operationClock.sleep(for: .seconds(1))
 
         // Command 2: Enable data streaming
         let dataStreamCmd = encodeEnableDataStream()
@@ -111,7 +111,7 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
             characteristicUUID: DeviceUUIDs.Limitless.txCharacteristic,
             withResponse: true
         )
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        try await operationClock.sleep(for: .seconds(1))
 
         isInitialized = true
     }
@@ -288,8 +288,6 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
                         firstFlashPageTimestampMs = timestamp
                     }
                 }
-
-                flashPageSubject.send(flashPage)
             }
         }
     }
@@ -630,12 +628,17 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
                         guard statusLength >= 5, statusLength <= 500, innerPos + statusLength <= data.count else { return }
 
                         if let state = parseStorageStateFromDeviceStatus(data, start: innerPos, end: innerPos + statusLength) {
-                            storageStateLock.lock()
                             storageState = state
-                            let completion = storageStateCompletion
-                            storageStateCompletion = nil
-                            storageStateLock.unlock()
-                            completion?.resume(returning: state)
+                            if let handle = storageStatusGate.takeHandleForCallback(
+                                key: "storage-status"
+                            ) {
+                                Task {
+                                    await storageStatusOperations.succeed(
+                                        handle: handle,
+                                        value: state
+                                    )
+                                }
+                            }
                         }
                         return
                     }
@@ -863,45 +866,37 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
     /// Get storage status
     func getStorageStatus() async -> [String: Int]? {
         guard isInitialized else { return nil }
+        guard storageStatusGate.canStart("storage-status") else {
+            return storageState
+        }
 
         do {
-            let statusCmd = encodeGetDeviceStatus()
-            try await transport.writeCharacteristic(
-                data: Data(statusCmd),
-                serviceUUID: DeviceUUIDs.Limitless.service,
-                characteristicUUID: DeviceUUIDs.Limitless.txCharacteristic,
-                withResponse: true
-            )
-
-            // Wait for response with timeout
-            return await withCheckedContinuation { continuation in
-                storageStateLock.lock()
-                let displaced = storageStateCompletion
-                storageStateGeneration += 1
-                let myGeneration = storageStateGeneration
-                storageStateCompletion = continuation
-                storageStateLock.unlock()
-                // A prior in-flight getStorageStatus would otherwise be leaked (its
-                // continuation overwritten, never resumed) — resolve it with nil.
-                displaced?.resume(returning: nil)
-
-                Task {
-                    try? await Task.sleep(nanoseconds: 3_000_000_000)
-                    let timeoutResult = storageStateLock.withLock {
-                        var timedOut: CheckedContinuation<[String: Int]?, Never>?
-                        var snapshot: [String: Int]?
-                        // Only fire if OUR call is still the pending one (a newer call
-                        // would have bumped the generation and owns the slot now).
-                        if storageStateGeneration == myGeneration, let completion = storageStateCompletion {
-                            timedOut = completion
-                            storageStateCompletion = nil
-                            snapshot = storageState
-                        }
-                        return (timedOut, snapshot)
-                    }
-                    timeoutResult.0?.resume(returning: timeoutResult.1)
+            let status = try await storageStatusOperations.perform(
+                key: "storage-status",
+                timeout: .seconds(3),
+                onTerminal: { [weak self] handle, termination in
+                    self?.storageStatusGate.terminal(
+                        handle: handle,
+                        termination: termination
+                    )
                 }
+            ) { [weak self] handle in
+                guard let self else { throw DeviceTransportError.disposed }
+                guard self.storageStatusGate.register(handle) else {
+                    throw DeviceConnectionError.operationFailed(
+                        "Storage status callback identity is no longer trustworthy"
+                    )
+                }
+                try await self.transport.writeCharacteristic(
+                    data: Data(self.encodeGetDeviceStatus()),
+                    serviceUUID: DeviceUUIDs.Limitless.service,
+                    characteristicUUID: DeviceUUIDs.Limitless.txCharacteristic,
+                    withResponse: true
+                )
             }
+            return status
+        } catch DeviceOperationBrokerError.timedOut {
+            return storageState
         } catch {
             logger.debug("Error getting storage status: \(error.localizedDescription)")
             return nil
@@ -1054,7 +1049,10 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
             }
 
             let cancellable = self.buttonStreamSubject
-                .sink(receiveValue: { value in continuation.yield(value) })
+                .sink(
+                    receiveCompletion: { _ in continuation.finish() },
+                    receiveValue: { value in continuation.yield(value) }
+                )
 
             continuation.onTermination = { @Sendable _ in
                 cancellable.cancel()
