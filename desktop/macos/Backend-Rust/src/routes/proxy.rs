@@ -50,9 +50,21 @@ const MAX_OUTPUT_TOKENS_CAP: u64 = 8192;
 /// explicitly on all production paths.
 const DEFAULT_THINKING_BUDGET: u64 = 1024;
 
-/// Keep non-streaming upstream calls below observed Cloud Run request boundaries
-/// so the proxy owns timeout mapping and desktop clients get a retryable error.
-const GEMINI_UPSTREAM_TIMEOUT: Duration = Duration::from_secs(90);
+/// Cloud Run's configured request timeout for `desktop-backend`.
+const CLOUD_RUN_REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
+
+/// Headroom reserved under the platform deadline so the proxy — not Cloud Run —
+/// is the one that gives up, and clients get our typed, retryable `upstream_timeout`
+/// body instead of an opaque platform 504.
+const GEMINI_UPSTREAM_HEADROOM_SECS: u64 = 60;
+
+/// Deadline for non-streaming upstream calls, derived from the platform bound so it
+/// can never drift above it. Long-context `generateContent` on 2.5-flash regularly
+/// spends 60-100s thinking before the first response byte, so a deadline near that
+/// tail converts successful generations into 504s (#9135). The Swift client waits
+/// 300s (`GeminiClient.swift`) and does not auto-retry timeouts.
+const GEMINI_UPSTREAM_TIMEOUT: Duration =
+    Duration::from_secs(CLOUD_RUN_REQUEST_TIMEOUT.as_secs() - GEMINI_UPSTREAM_HEADROOM_SECS);
 
 /// Bound TCP/TLS setup for all Gemini proxy calls. Streaming requests must not
 /// use a total response timeout because long SSE replies are expected.
@@ -1097,8 +1109,17 @@ mod tests {
     #[test]
     fn gemini_upstream_timeout_stays_below_cloud_run_deadline() {
         assert!(GEMINI_CONNECT_TIMEOUT < GEMINI_UPSTREAM_TIMEOUT);
-        assert!(GEMINI_UPSTREAM_TIMEOUT <= Duration::from_secs(90));
-        assert!(GEMINI_UPSTREAM_TIMEOUT < Duration::from_secs(120));
+
+        // The proxy must give up before Cloud Run does, so clients get our typed
+        // `upstream_timeout` body rather than an opaque platform 504. Keep real
+        // headroom for the response to flush.
+        assert!(GEMINI_UPSTREAM_TIMEOUT < CLOUD_RUN_REQUEST_TIMEOUT);
+        assert!(CLOUD_RUN_REQUEST_TIMEOUT - GEMINI_UPSTREAM_TIMEOUT >= Duration::from_secs(30));
+
+        // Regression guard (#9135): a 90s deadline cut off long-context 2.5-flash
+        // generations that complete upstream in 90-100s, turning them into 504s.
+        // Verified against prod Vertex: a 150k-token request returned 200 at 95.5s.
+        assert!(GEMINI_UPSTREAM_TIMEOUT >= Duration::from_secs(180));
     }
 
     #[test]
