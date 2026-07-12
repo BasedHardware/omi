@@ -10,11 +10,6 @@ extension SettingsContentView {
       // Screen Capture toggle
       settingsCard(settingId: "general.screencapture") {
         HStack(spacing: OmiSpacing.lg) {
-          Circle()
-            .fill(isMonitoring ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
-            .frame(width: 12, height: 12)
-            .shadow(color: isMonitoring ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
-
           Image(systemName: "rectangle.dashed.badge.record")
             .scaledFont(size: OmiType.subheading)
             .foregroundColor(OmiColors.info)
@@ -57,18 +52,6 @@ extension SettingsContentView {
       // Audio Recording toggle
       settingsCard(settingId: "general.audiorecording") {
         HStack(spacing: OmiSpacing.lg) {
-          Circle()
-            .fill(
-              isTranscribing
-                ? (appState.isAwaitingMeeting ? OmiColors.warning : OmiColors.success)
-                : OmiColors.textTertiary.opacity(0.3)
-            )
-            .frame(width: 12, height: 12)
-            .shadow(
-              color: isTranscribing
-                ? (appState.isAwaitingMeeting ? OmiColors.warning : OmiColors.success).opacity(0.5)
-                : .clear, radius: 6)
-
           Image(systemName: "mic.fill")
             .scaledFont(size: OmiType.subheading)
             .foregroundColor(OmiColors.info)
@@ -115,20 +98,6 @@ extension SettingsContentView {
       settingsCard(settingId: "general.notifications") {
         VStack(spacing: OmiSpacing.md) {
           HStack(spacing: OmiSpacing.lg) {
-            // Same leading pattern as Screen Capture / Audio Recording:
-            // status dot + info-tinted SF icon.
-            Circle()
-              .fill(
-                appState.hasNotificationPermission && !appState.isNotificationBannerDisabled
-                  ? OmiColors.success
-                  : (appState.isNotificationBannerDisabled
-                    ? OmiColors.warning : OmiColors.textTertiary.opacity(0.3))
-              )
-              .frame(width: 12, height: 12)
-              .shadow(
-                color: appState.hasNotificationPermission && !appState.isNotificationBannerDisabled
-                  ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
-
             Image(systemName: "bell.fill")
               .scaledFont(size: OmiType.subheading)
               .foregroundColor(OmiColors.info)
@@ -283,9 +252,7 @@ extension SettingsContentView {
               Button("Reset") {
                 fontScaleSettings.resetToDefault()
               }
-              .scaledFont(size: 12, weight: .medium)
-              .foregroundColor(OmiColors.info)
-              .buttonStyle(.plain)
+              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
             }
           }
 
@@ -310,14 +277,6 @@ extension SettingsContentView {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, OmiSpacing.xxs)
 
-          // Keyboard shortcuts for font size
-          VStack(spacing: OmiSpacing.xs) {
-            fontShortcutRow(label: "Increase font size", keys: "\u{2318}+")
-            fontShortcutRow(label: "Decrease font size", keys: "\u{2318}\u{2212}")
-            fontShortcutRow(label: "Reset font size", keys: "\u{2318}0")
-          }
-          .padding(.top, OmiSpacing.xxs)
-
           HStack {
             Spacer()
             Button(action: {
@@ -325,19 +284,10 @@ extension SettingsContentView {
             }) {
               HStack(spacing: OmiSpacing.xs) {
                 Image(systemName: "arrow.uturn.backward")
-                  .scaledFont(size: OmiType.caption)
                 Text("Reset Window Size")
-                  .scaledFont(size: OmiType.caption, weight: .medium)
               }
-              .foregroundColor(OmiColors.textSecondary)
-              .padding(.horizontal, OmiSpacing.sm)
-              .padding(.vertical, OmiSpacing.xxs)
-              .background(
-                RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
-                  .fill(OmiColors.backgroundTertiary)
-              )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(OmiButtonStyle(.primary, size: .compact))
           }
         }
       }

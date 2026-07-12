@@ -31,8 +31,7 @@ struct BillingWebFlowSheet: View {
         Button("Close") {
           onComplete(.dismissed)
         }
-        .buttonStyle(.plain)
-        .foregroundColor(OmiColors.textSecondary)
+        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
       }
       .padding(.horizontal, OmiSpacing.xl)
       .padding(.vertical, OmiSpacing.lg)

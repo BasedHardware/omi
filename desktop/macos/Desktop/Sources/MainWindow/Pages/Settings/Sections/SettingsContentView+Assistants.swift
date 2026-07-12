@@ -67,7 +67,7 @@ extension SettingsContentView {
                 }
               }
               .pickerStyle(.menu)
-              .frame(width: 120)
+              .frame(width: 200)
               .onChange(of: cooldownInterval) { _, newValue in
                 FocusAssistantSettings.shared.cooldownInterval = newValue
                 SettingsSyncManager.shared.pushPartialUpdate(
@@ -267,15 +267,14 @@ extension SettingsContentView {
                   TaskAgentSettings.shared.workingDirectory = url.path
                 }
               }
-              .scaledFont(size: OmiType.body)
+              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
 
               if !taskAgentWorkingDirectory.isEmpty {
                 Button("Clear") {
                   taskAgentWorkingDirectory = ""
                   TaskAgentSettings.shared.workingDirectory = ""
                 }
-                .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
               }
             }
 
@@ -1177,16 +1176,8 @@ extension SettingsContentView {
 
           Button(action: { showResetOnboardingAlert = true }) {
             Text("Reset")
-              .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(.black)
-              .padding(.horizontal, OmiSpacing.md)
-              .padding(.vertical, OmiSpacing.xs)
-              .background(
-                RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
-                  .fill(.white)
-              )
           }
-          .buttonStyle(.plain)
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
         }
       }
       .alert("Reset Onboarding?", isPresented: $showResetOnboardingAlert) {

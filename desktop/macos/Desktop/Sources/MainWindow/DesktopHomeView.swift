@@ -908,7 +908,11 @@ struct DesktopHomeView: View {
         // Extracted into a separate struct so that pages like TasksPage
         // are not re-rendered when AppState publishes unrelated changes.
         VStack(spacing: 0) {
-          if !useLegacyHomeDesign && selectedIndex != SidebarNavItem.dashboard.rawValue {
+          // Settings has its own Back affordance in SettingsSidebar, so skip the
+          // redundant Home chrome there.
+          if !useLegacyHomeDesign && selectedIndex != SidebarNavItem.dashboard.rawValue
+            && !isInSettings
+          {
             PageChromeBar(
               onHome: {
                 selectedIndex = SidebarNavItem.dashboard.rawValue

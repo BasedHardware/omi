@@ -169,7 +169,7 @@ extension SettingsContentView {
               Text("30 days").tag(30)
             }
             .pickerStyle(.menu)
-            .frame(width: 110)
+            .frame(width: 200)
           }
         }
       }

@@ -9,11 +9,6 @@ extension SettingsContentView {
     VStack(spacing: OmiSpacing.xl) {
       settingsCard(settingId: "floatingbar.show") {
         HStack(spacing: OmiSpacing.lg) {
-          Circle()
-            .fill(showAskOmiBar ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
-            .frame(width: 12, height: 12)
-            .shadow(color: showAskOmiBar ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
-
           Text("Show floating bar")
             .scaledFont(size: OmiType.subheading, weight: .semibold)
             .foregroundColor(OmiColors.textPrimary)
@@ -139,8 +134,7 @@ extension SettingsContentView {
         }
         .pickerStyle(.menu)
         .labelsHidden()
-        .frame(width: 180)
-        .tint(OmiColors.accent)
+        .frame(width: 200)
       }
     }
   }

@@ -380,16 +380,8 @@ struct ShortcutsSettingsSection: View {
 
         Button(action: action) {
           Text(isRecording ? "Listening..." : "Save")
-            .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
-            .padding(.horizontal, OmiSpacing.md)
-            .padding(.vertical, OmiSpacing.sm)
-            .background(
-              RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-                .fill(OmiColors.backgroundPrimary)
-            )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
       }
 
       Text(helperText)

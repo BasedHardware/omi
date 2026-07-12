@@ -433,13 +433,10 @@ extension SettingsContentView {
           Button(action: { showOverageExplainer = true }) {
             HStack(spacing: OmiSpacing.xxs) {
               Text(info.explainerTitle)
-                .scaledFont(size: OmiType.caption, weight: .medium)
               Image(systemName: "info.circle")
-                .scaledFont(size: OmiType.caption)
             }
-            .foregroundColor(OmiColors.accent)
           }
-          .buttonStyle(.plain)
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
         }
       }
     } else if isLoadingOverage && overageInfo == nil {
