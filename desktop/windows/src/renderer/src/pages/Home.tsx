@@ -213,6 +213,13 @@ export function Home(): React.JSX.Element {
   const [showThread, setShowThread] = useState(false)
 
   const started = chat.history.length > 0
+  // The top cards belong to the idle homepage only. The instant a conversation
+  // is on screen (`started`), the widgets row tucks away — fade + height
+  // collapse — so the thread owns the space; it returns if the thread is ever
+  // cleared. (Collapsing on mere input focus, before any message, was declined:
+  // it leaves an awkward greeting-with-no-cards empty state and can oscillate on
+  // focus/blur. Engagement-on-`started` is the single trigger.)
+  const widgetsVisible = widgetsReady && !started
 
   // Draft text is LOCAL state (not in the app-wide chat hook) so typing only
   // re-renders Home's chat bar — not the whole app shell + every mounted page.
@@ -373,14 +380,25 @@ export function Home(): React.JSX.Element {
       {/* Widgets row — its height grows smoothly (0 → measured) when data loads,
           so the chat box slides to make room instead of jumping. Each card also
           fades in via widget-fade. */}
-      {/* The row's height is set instantly (no layout animation) once both
+      {/* On REVEAL the height is set instantly (no layout animation) once both
           widgets are ready; the reveal itself is a compositor-only transform +
-          opacity fade, so it can't reflow/jank the way animating height did. */}
-      <div className="overflow-hidden" style={{ height: widgetsReady ? widgetsH + 48 : 0 }}>
+          opacity fade, so it can't reflow/jank the way animating height did. On
+          ENGAGE (`started`) the row collapses the other way — the height IS
+          transitioned to 0 (only while collapsed, so reveal stays instant),
+          tucked together with the 600ms fade and nested inside the 1000ms grid
+          split so the cards leave as one coherent motion. */}
+      <div
+        data-testid="widgets-row"
+        className={cn(
+          'overflow-hidden',
+          started && 'transition-[height] duration-[600ms] ease-[cubic-bezier(0.4,0,0.2,1)]'
+        )}
+        style={{ height: widgetsVisible ? widgetsH + 48 : 0 }}
+      >
         <div
           className={cn(
             'transition-[transform,opacity] duration-[600ms] ease-[cubic-bezier(0.4,0,0.2,1)] will-change-transform',
-            widgetsReady ? 'translate-y-0 opacity-100' : '-translate-y-3 opacity-0'
+            widgetsVisible ? 'translate-y-0 opacity-100' : '-translate-y-3 opacity-0'
           )}
         >
           <div
@@ -431,8 +449,8 @@ export function Home(): React.JSX.Element {
                       key={m.id ?? `${windowStart}-${i}`}
                       className="bubble-in flex items-start gap-3"
                     >
-                      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white">
-                        <img src={omiMark} alt="Omi" className="h-4 w-4 object-contain" />
+                      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white">
+                        <img src={omiMark} alt="Omi" className="h-5 w-5 object-contain" />
                       </div>
                       <div className="min-w-0 max-w-[85%] pt-0.5 text-[15px] leading-[1.65] text-white/90">
                         {m.content ? (
