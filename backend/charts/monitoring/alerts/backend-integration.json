@@ -306,7 +306,7 @@
       }
     ],
     "updated": "2026-06-23T01:27:11Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "3m",
     "keep_firing_for": "0s",
