@@ -19,7 +19,7 @@ from google.cloud import firestore
 
 from database.memory_collections import MemoryCollections
 from database.memory_compatibility_projection import read_v3_compatibility_projection_page
-from utils.memory.v3_projection_reader_contract import (
+from utils.memory.v3.projection_reader_contract import (
     V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
     V3ProjectionFailureReason,
     V3ProjectionReadError,

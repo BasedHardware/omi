@@ -14,12 +14,12 @@ except Exception as exc:  # pragma: no cover - system pytest env without backend
 from config.memory_rollout import MemoryRolloutMode
 from database.memory_collections import MemoryCollections
 from utils.memory.default_read_rollout import DEFAULT_READ_ROLLOUT_SCHEMA_VERSION
-from utils.memory.v3_composed_get_service import (
+from utils.memory.v3.composed_get_service import (
     V3ComposedRequestParams,
     V3ComposedResponse,
     compose_v3_get,
 )
-from utils.memory.v3_production_runtime import build_v3_production_runtime
+from utils.memory.v3.production_runtime import build_v3_production_runtime
 
 
 @dataclass

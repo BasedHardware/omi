@@ -300,7 +300,7 @@ class HermeticRuntime:
                 lambda **_: trusted,
             ),
             patch(
-                "utils.memory.v3_account_generation_source.read_memory_v3_trusted_account_generation",
+                "utils.memory.v3.account_generation_source.read_memory_v3_trusted_account_generation",
                 lambda **_: trusted,
                 create=True,
             ),
@@ -368,7 +368,7 @@ class MemoryContinuityGauntlet:
         from config.memory_rollout import PASSED, MemoryRolloutMode, MemoryRolloutStageGate
         from tests.unit.fixtures.memory_adapter_fakes import enabled_rollout_doc
         from utils.memory.default_read_rollout import GLOBAL_READ_GATE_PATH
-        from utils.memory.v3_limited_rollout_config import WRITE_CONVERGENCE_GATE_PATH
+        from utils.memory.v3.limited_rollout_config import WRITE_CONVERGENCE_GATE_PATH
 
         def _set_gate(path: str, payload: dict[str, Any]) -> None:
             parts = path.split("/")
@@ -670,7 +670,7 @@ class MemoryContinuityGauntlet:
         )
 
         def failing_memory_service(_params, _adapters):
-            from utils.memory.v3_composed_get_service import V3ComposedResponse
+            from utils.memory.v3.composed_get_service import V3ComposedResponse
 
             return V3ComposedResponse.error(503, "infrastructure_failure")
 

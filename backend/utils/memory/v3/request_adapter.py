@@ -1,6 +1,6 @@
-"""Canonical module for ``utils.memory.v3_request_adapter`` (WS-G8b).
+"""Canonical module for ``utils.memory.v3.request_adapter`` (WS-G8b).
 
-Neutral ``v3_request_adapter`` is the source of truth. Legacy ``v3_request_adapter`` remains an importable alias.
+This module adapts HTTP parameters for the V3 read path.
 """
 
 from __future__ import annotations
@@ -10,8 +10,8 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Mapping, cast
 
-from utils.memory.v3_cursor import validate_v3_cursor_request
-from utils.memory.v3_memory_read_service import V3_READ_MODE, V3_READ_SOURCE
+from utils.memory.v3.cursor import validate_v3_cursor_request
+from utils.memory.v3.memory_read_service import V3_READ_MODE, V3_READ_SOURCE
 
 LEGACY_V3_READ_SOURCE = 'legacy_users_uid_memories'
 LEGACY_V3_READ_MODE = 'legacy_primary'

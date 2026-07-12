@@ -1,6 +1,6 @@
-"""Canonical module for ``utils.memory.v3_response_adapter`` (WS-G8b).
+"""Canonical module for ``utils.memory.v3.response_adapter`` (WS-G8b).
 
-Neutral ``v3_response_adapter`` is the source of truth. Legacy ``v3_response_adapter`` remains an importable alias.
+This module adapts V3 memory-read results into API responses.
 """
 
 from __future__ import annotations
@@ -8,8 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping, cast
 
-from utils.memory.v3_compatibility import V3CompatibilityReadPath
-from utils.memory.v3_memory_read_service import V3MemoryReadServiceResult
+from utils.memory.v3.compatibility import V3CompatibilityReadPath
+from utils.memory.v3.memory_read_service import V3MemoryReadServiceResult
 
 _ALLOWED_HEADER_NAMES = {
     'X-Omi-Memory-Read-Source',

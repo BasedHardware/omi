@@ -1,6 +1,6 @@
-"""Canonical module for ``utils.memory.v3_control_reader_contract`` (WS-G8b).
+"""Canonical module for ``utils.memory.v3.control_reader_contract`` (WS-G8b).
 
-Neutral ``v3_control_reader_contract`` is the source of truth. Legacy ``v3_control_reader_contract`` remains an importable alias.
+This module owns the V3 control-document read contract.
 """
 
 from __future__ import annotations

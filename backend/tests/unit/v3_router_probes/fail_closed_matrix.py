@@ -26,7 +26,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[3]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from utils.memory.v3_projection_readiness import DERIVED_COMPATIBILITY_PROJECTION_SOURCE
+from utils.memory.v3.projection_readiness import DERIVED_COMPATIBILITY_PROJECTION_SOURCE
 from testing.memory.v3_route_planner import V3RouteExecutionPlan, V3RoutePlanInput, plan_v3_memory_route
 
 REAL_ROUTER_FAIL_CLOSED_MATRIX_PROOF = {

@@ -1,13 +1,13 @@
 import inspect
 
-from utils.memory.v3_cursor import V3CursorContext, V3Keyset, create_v3_cursor
-from utils.memory.v3_memory_read_service import (
+from utils.memory.v3.cursor import V3CursorContext, V3Keyset, create_v3_cursor
+from utils.memory.v3.memory_read_service import (
     V3MemoryReadRequest,
     V3MemoryReadServiceInput,
     V3MemoryReadServiceResult,
     plan_v3_memory_read,
 )
-from utils.memory.v3_projection_readiness import DERIVED_COMPATIBILITY_PROJECTION_SOURCE
+from utils.memory.v3.projection_readiness import DERIVED_COMPATIBILITY_PROJECTION_SOURCE
 
 SECRET = b'unit-test-memory-v3-read-service-secret'
 
@@ -210,7 +210,7 @@ def test_read_service_is_pure_local_and_does_not_import_routers_database_or_netw
     assert 'include_archive_by_default' not in result_fields
     assert 'show_stale_short_term_by_default' not in result_fields
 
-    source = inspect.getsource(__import__('utils.memory.v3_memory_read_service', fromlist=['']))
+    source = inspect.getsource(__import__('utils.memory.v3.memory_read_service', fromlist=['']))
     forbidden = [
         'routers.memories',
         'database.',
