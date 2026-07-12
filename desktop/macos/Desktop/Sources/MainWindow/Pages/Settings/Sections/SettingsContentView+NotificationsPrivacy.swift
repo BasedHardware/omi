@@ -145,7 +145,7 @@ extension SettingsContentView {
                 }
               }
               .pickerStyle(.menu)
-              .frame(width: 100)
+              .frame(width: 200)
               .onChange(of: dailySummaryHour) { _, newValue in
                 updateDailySummarySettings(hour: newValue)
               }

@@ -62,7 +62,7 @@ struct AppRuleEditorView: View {
           .onSubmit { addApp() }
 
         Button(addButtonTitle) { addApp() }
-          .buttonStyle(.bordered)
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
           .disabled(newAppName.trimmingCharacters(in: .whitespaces).isEmpty)
       }
 
@@ -194,8 +194,7 @@ struct BrowserKeywordListView: View {
           .onSubmit { addKeyword() }
 
         Button("Add") { addKeyword() }
-          .buttonStyle(.bordered)
-          .controlSize(.small)
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
           .disabled(newKeyword.trimmingCharacters(in: .whitespaces).isEmpty)
       }
 

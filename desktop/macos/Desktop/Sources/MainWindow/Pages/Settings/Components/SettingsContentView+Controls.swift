@@ -502,7 +502,7 @@ extension SettingsContentView {
                 Button("Dismiss") {
                   updaterViewModel.lastUpdateFailure = nil
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
               }
             }
             .padding(OmiSpacing.md)
@@ -578,7 +578,7 @@ extension SettingsContentView {
             }
             .pickerStyle(.menu)
             .labelsHidden()
-            .frame(width: 100)
+            .frame(width: 200)
           }
         }
       }

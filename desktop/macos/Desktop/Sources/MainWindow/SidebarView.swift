@@ -103,7 +103,6 @@ struct SidebarView: View {
   // Drag state
   @State private var dragOffset: CGFloat = 0
   @GestureState private var isDragging = false
-  @State private var isProfileMenuPresented = false
   @State private var isProfileButtonHovered = false
 
   // Constants
@@ -557,10 +556,6 @@ struct SidebarView: View {
 
   // MARK: - Profile Menu
 
-  private var shouldShowReferFriend: Bool {
-    currentTierLevel == 0 || currentTierLevel >= 4
-  }
-
   private var shouldShowScreenRecordingStatus: Bool {
     appState.hasScreenRecordingPermission || !appState.hasScreenRecordingPermission
       || appState.isScreenCaptureKitBroken
@@ -609,7 +604,8 @@ struct SidebarView: View {
 
   private var profileMenuButton: some View {
     Button {
-      isProfileMenuPresented.toggle()
+      // Straight to Settings — no intermediate menu popover.
+      selectedIndex = SidebarNavItem.settings.rawValue
     } label: {
       HStack(spacing: isCollapsed ? 0 : 10) {
         ZStack {
@@ -629,10 +625,6 @@ struct SidebarView: View {
             .lineLimit(1)
 
           Spacer(minLength: 8)
-
-          Image(systemName: "ellipsis")
-            .scaledFont(size: OmiType.body, weight: .semibold)
-            .foregroundColor(OmiColors.textTertiary)
         }
       }
       .padding(.horizontal, OmiSpacing.md)
@@ -641,7 +633,7 @@ struct SidebarView: View {
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
           .fill(
-            isProfileMenuPresented || isProfileButtonHovered
+            selectedIndex == SidebarNavItem.settings.rawValue || isProfileButtonHovered
               ? OmiColors.backgroundTertiary.opacity(0.55) : Color.clear
           )
       )
@@ -651,51 +643,7 @@ struct SidebarView: View {
     .onHover { hovering in
       isProfileButtonHovered = hovering
     }
-    .popover(isPresented: $isProfileMenuPresented, arrowEdge: .bottom) {
-      profileMenuPopover
-    }
-    .help("Open settings menu")
-  }
-
-  private var profileMenuPopover: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-      VStack(spacing: OmiSpacing.xxs) {
-        if shouldShowReferFriend {
-          ProfileMenuActionRow(icon: "gift.fill", label: "Refer a Friend") {
-            isProfileMenuPresented = false
-            openReferFriend()
-          }
-        }
-
-        ProfileMenuActionRow(icon: "message.fill", label: "Discord") {
-          isProfileMenuPresented = false
-          openDiscord()
-        }
-
-        ProfileMenuActionRow(
-          icon: "gearshape.fill",
-          label: "Settings",
-          isSelected: selectedIndex == SidebarNavItem.settings.rawValue
-        ) {
-          isProfileMenuPresented = false
-          selectedIndex = SidebarNavItem.settings.rawValue
-        }
-      }
-    }
-    .padding(OmiSpacing.sm)
-    .frame(width: 220)
-    .background(OmiColors.backgroundPrimary)
-  }
-
-  private func openReferFriend() {
-    if let url = URL(string: "https://affiliate.omi.me") {
-      NSWorkspace.shared.open(url)
-    }
-  }
-
-  private func openDiscord() {
-    guard let url = URL(string: "https://discord.com/invite/8MP3b9ymvx") else { return }
-    NSWorkspace.shared.open(url)
+    .help("Open Settings")
   }
 
   // MARK: - Permission Warning Button
@@ -1569,46 +1517,6 @@ struct BottomNavItemView: View {
   }
 }
 
-private struct ProfileMenuActionRow: View {
-  let icon: String
-  let label: String
-  var isSelected: Bool = false
-  let action: () -> Void
-
-  @State private var isHovered = false
-
-  var body: some View {
-    Button(action: action) {
-      HStack(spacing: OmiSpacing.sm) {
-        Image(systemName: icon)
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
-          .frame(width: 16)
-
-        Text(label)
-          .scaledFont(size: OmiType.body, weight: isSelected ? .medium : .regular)
-          .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
-
-        Spacer()
-      }
-      .padding(.horizontal, OmiSpacing.sm)
-      .padding(.vertical, OmiSpacing.sm)
-      .background(
-        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-          .fill(
-            isSelected
-              ? OmiColors.backgroundSecondary
-              : (isHovered ? OmiColors.backgroundTertiary.opacity(0.6) : Color.clear)
-          )
-      )
-      .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .onHover { hovering in
-      isHovered = hovering
-    }
-  }
-}
 
 // MARK: - Audio Level Nav Item Wrapper
 
