@@ -23,6 +23,10 @@ os.environ.setdefault('TYPESENSE_HOST', 'localhost')
 os.environ.setdefault('TYPESENSE_HOST_PORT', '8108')
 os.environ.setdefault('TYPESENSE_PROTOCOL', 'http')
 
+# Imported at module scope (not inside the test) so the heavy routers.sync import cost
+# lands in collection, keeping the per-test call within the fast-unit duration guard.
+import routers.sync as routers_sync  # noqa: E402
+
 BACKEND_DIR = os.path.join(os.path.dirname(__file__), '..', '..')
 
 
@@ -233,18 +237,16 @@ class TestV2HandlerRetrySemantics:
     async def test_v2_transient_error_propagates_for_retry(self):
         from unittest.mock import AsyncMock, patch
 
-        import routers.sync as sync
-
         payload = {'schema_version': 2, 'conversation_id': 'c1', 'uid': 'u1', 'fingerprint': 'fp'}
-        with patch.object(sync, '_run_conversation_merge_job', new=AsyncMock(side_effect=RuntimeError('gcs 503'))):
+        with patch.object(
+            routers_sync, '_run_conversation_merge_job', new=AsyncMock(side_effect=RuntimeError('gcs 503'))
+        ):
             with pytest.raises(RuntimeError):
-                await sync.run_audio_merge_job(self._FakeRequest(payload), task_retry_count=0)
+                await routers_sync.run_audio_merge_job(self._FakeRequest(payload), task_retry_count=0)
 
     async def test_malformed_payload_still_dropped_200(self):
-        import routers.sync as sync
-
         req = self._FakeRequest(raise_on_json=ValueError('bad json'))
-        resp = await sync.run_audio_merge_job(req, task_retry_count=0)
+        resp = await routers_sync.run_audio_merge_job(req, task_retry_count=0)
         assert resp.status_code == 200
         assert b'invalid_payload' in resp.body
 
