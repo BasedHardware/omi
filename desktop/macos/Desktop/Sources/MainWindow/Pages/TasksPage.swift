@@ -2310,8 +2310,8 @@ class TasksViewModel: ObservableObject {
 
         registry.register(
             name: "reorder_task",
-            summary: "Move a task to a new index within a category (today|tomorrow|later|nodeadline) via the real drag path, flush the sortOrder sync to SQLite + backend, and return the resulting order",
-            params: ["id", "index", "category"]
+            summary: "Move a task to a new index within a category (today|tomorrow|later|nodeadline) via the real drag path and return the resulting order. Flushes the sortOrder sync to SQLite + backend by default; pass flush=false to leave the production 500ms debounce running so a harness can prove coalescing (TASK-05).",
+            params: ["id", "index", "category", "flush"]
         ) { [weak self] params in
             guard let self else { return ["error": "tasks view model deallocated"] }
             await self.ensureTasksLoadedForAutomation()
@@ -2322,9 +2322,16 @@ class TasksViewModel: ObservableObject {
             let index = max(0, Int(params["index"] ?? "") ?? 0)
             let category = Self.automationCategory(params["category"]) ?? .today
             self.moveTask(task, toIndex: index, inCategory: category)
-            await self.flushSortOrderSyncForAutomation()
+            // flush=false keeps the production 500ms debounce live: rapid calls then
+            // coalesce into ONE syncSortOrders (observable as a single "TasksVM: Synced"
+            // log line) — exactly the TASK-05 coalescing criterion. Default stays
+            // flush=true so existing recipes keep their deterministic SQLite reads.
+            let flush = (params["flush"] ?? "true").lowercased() != "false"
+            if flush {
+                await self.flushSortOrderSyncForAutomation()
+            }
             let order = self.getOrderedTasks(for: category).map(\.id).joined(separator: ",")
-            return ["id": id, "category": category.rawValue, "order": order]
+            return ["id": id, "category": category.rawValue, "order": order, "flushed": flush ? "true" : "false"]
         }
 
         registry.register(

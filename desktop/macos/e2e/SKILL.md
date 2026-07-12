@@ -291,6 +291,49 @@ Hermetic ratchets: `xcrun swift test --package-path Desktop --filter FloatingBar
 (deterministic counter + `testResetClearsLimitReachedState`) and `--filter UsageLimiterActionTests`
 (the non-prod actions wire to the limiter and the reset is prod-gated).
 
+### 2k. Prove rapid reorders coalesce through the 500ms debounce (TASK-05)
+`reorder_task` flushes the sortOrder sync by default (deterministic SQLite reads for
+CRUD recipes) — which *hides* the debounce under test. Pass `flush=false` to leave the
+production 500ms debounce running: rapid calls must coalesce into exactly ONE
+`TasksVM: Synced N sort orders` log line, with no lost update.
+```bash
+cd desktop/macos
+./scripts/omi-ctl action seed_tasks count=5 prefix=T05x      # note the returned ids
+MARK="T05-$(date +%s)"; echo "$MARK" >> /private/tmp/omi-dev.log
+# three reorders inside one debounce window (each returns immediately, flushed=false)
+./scripts/omi-ctl action reorder_task id=<id1> index=0 category=nodeadline flush=false
+./scripts/omi-ctl action reorder_task id=<id2> index=1 category=nodeadline flush=false
+./scripts/omi-ctl action reorder_task id=<id3> index=2 category=nodeadline flush=false
+sleep 2   # > 500ms debounce + sync
+awk "/$MARK/{f=1} f" /private/tmp/omi-dev.log | grep -c 'TasksVM: Synced'   # assert exactly 1
+./scripts/omi-ctl action dump_tasks limit=5000                 # assert final order persisted (no lost update)
+```
+Hermetic ratchets: `--filter HardeningSeamActionTests` (flush param wiring) and
+`--filter Task03ReorderStressTests` (150-reorder collision-free/deterministic property).
+
+### 2l. Prove post-wake restart paths without sleeping the machine (CHAT-07)
+`simulate_system_wake` (non-prod) posts `NSWorkspace.didWakeNotification` on the
+**workspace** notification center — the top of the real wake chain. Every production
+consumer then fires exactly as on a physical wake: `RealtimeHubController` re-warms
+(or defers) its session, and AppState re-broadcasts the default-center
+`.systemDidWake` downstream. (Posting only `.systemDidWake` would silently miss
+RealtimeHub, which observes the workspace center directly.) The stray-turn_end half
+of CHAT-07 is the CHAT-02 suspend/resume path (a SIGSTOP'd agent across a "sleep" is
+the same stale-subprocess class) — already runtime-proven; see §2e.
+```bash
+cd desktop/macos
+MARK="C07-$(date +%s)"; echo "$MARK" >> /private/tmp/omi-dev.log
+./scripts/omi-ctl action simulate_system_wake     # {"posted":"NSWorkspace.didWakeNotification"}
+sleep 2
+awk "/$MARK/{f=1} f" /private/tmp/omi-dev.log | grep -E 'System woke from sleep|system_wake'
+#   assert: "System woke from sleep" (AppState observer ran) AND a RealtimeHub system_wake line —
+#   either "re-warming idle session" or "deferring system_wake ..." (defer while mid-turn). With no
+#   warm session yet, requestSessionRefresh no-ops by design (guard session != nil); warm one first
+#   with a ptt_test_burst if you need the re-warm line specifically.
+```
+Hermetic ratchet: `--filter HardeningSeamActionTests` (action posts the real top-of-chain
+signal on the workspace center, non-prod gated).
+
 ### The full loop
 ```bash
 cd desktop/macos

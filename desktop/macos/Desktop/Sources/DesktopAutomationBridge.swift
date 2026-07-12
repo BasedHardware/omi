@@ -3124,6 +3124,31 @@ final class DesktopAutomationActionRegistry {
       return ["blocking_main_thread_ms": "\(durationMs)"]
     }
 
+    // CHAT-07: post `NSWorkspace.didWakeNotification` on the WORKSPACE notification
+    // center — the top of the real wake chain. Every production consumer then fires
+    // exactly as on a physical wake: RealtimeHubController re-warms/defers its
+    // session ("system_wake"), and AppState's observer re-broadcasts the
+    // default-center `.systemDidWake` for downstream consumers. (Posting only the
+    // default-center `.systemDidWake` would MISS RealtimeHub, which observes the
+    // workspace center directly.) Transcription restart stays guarded by
+    // wasTranscribingBeforeSleep, so a synthetic wake is a safe no-op there.
+    // Read-only with respect to user data; non-prod only.
+    register(
+      name: "simulate_system_wake",
+      summary: "Post NSWorkspace.didWakeNotification on the workspace center (the top of the real wake chain: RealtimeHub re-warm + AppState .systemDidWake re-broadcast) so post-wake restart paths run without a real sleep — CHAT-07 harness. Non-prod only.",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "simulate_system_wake is disabled on production bundles"]
+      }
+      await MainActor.run {
+        NSWorkspace.shared.notificationCenter.post(
+          name: NSWorkspace.didWakeNotification, object: nil)
+      }
+      log("DesktopAutomationBridge: simulate_system_wake posted NSWorkspace.didWakeNotification")
+      return ["posted": "NSWorkspace.didWakeNotification"]
+    }
+
     // PERM-06: trigger the permission-flow "Quit & Reopen" restart — the exact
     // AppState.restartApp() path used after granting Accessibility / Screen
     // Recording — so a harness can prove the SAME bundle relaunches with the
