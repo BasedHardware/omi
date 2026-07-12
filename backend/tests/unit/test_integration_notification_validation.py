@@ -107,3 +107,35 @@ def test_missing_message_returns_400():
             authorization=None,
         )
     assert e.value.status_code == 400
+
+
+class _FakeRedis:
+    """Minimal in-memory redis with integer counter semantics for check_rate_limit."""
+
+    def __init__(self):
+        self.store = {}
+
+    def get(self, key):
+        return self.store.get(key)  # None when absent, like redis
+
+    def setex(self, key, ttl, value):
+        self.store[key] = int(value)
+
+    def incr(self, key):
+        self.store[key] = int(self.store.get(key, 0)) + 1
+        return self.store[key]
+
+
+def test_check_rate_limit_allows_full_hourly_quota():
+    # Regression: the first request seeded the counter to 1 AND then incremented it, so it consumed two
+    # tokens -> only MAX-1 notifications were ever allowed and the remaining header was off by one.
+    # routers/integration.py::check_rate_limit is a byte-identical twin fixed the same way.
+    fake = _FakeRedis()
+    max_n = notif_mod.MAX_NOTIFICATIONS_PER_HOUR
+    with patch.object(notif_mod, 'redis_client', fake):
+        results = [notif_mod.check_rate_limit('app1', 'uid1') for _ in range(max_n + 1)]
+
+    allowed = [r[0] for r in results]
+    assert allowed[:max_n] == [True] * max_n  # full quota deliverable
+    assert allowed[max_n] is False  # only the (max_n + 1)th request is throttled
+    assert results[0][1] == max_n - 1  # first send reports the full remaining quota, not one short
