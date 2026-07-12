@@ -10,6 +10,59 @@ const String batchRecordingDevice = 'omibatch';
 /// `limitless` so the backend tags the conversation `source=limitless`.
 const String limitlessBatchRecordingDevice = 'omibatchlimitless';
 
+/// Marker for phone-mic recordings captured via explicit Transcribe Later. Starts
+/// with [batchRecordingDevice] so the recordings scanner matches it; the backend
+/// maps the `omibatchphone` substring to `source=phone`. These stay strictly
+/// manual — the user chose Transcribe Later, so they never auto-upload.
+const String phoneBatchRecordingDevice = 'omibatchphone';
+
+/// Marker for phone-mic recordings captured by the automatic offline fallback
+/// (the user wanted a live conversation but had no connectivity). Starts with
+/// [phoneBatchRecordingDevice] (hence also [batchRecordingDevice], so both the
+/// scanner and the backend `source=phone` mapping still match), with an `auto`
+/// suffix that flags it for silent auto-upload once connectivity returns.
+const String phoneBatchAutoRecordingDevice = 'omibatchphoneauto';
+
+/// True if [fileName] is an automatic offline-fallback phone-mic recording
+/// (as opposed to an explicit Transcribe Later one). Only these are eligible for
+/// silent auto-upload; every other recording stays manual.
+bool isAutoPhoneBatchRecording(String fileName) => fileName.startsWith('audio_${phoneBatchAutoRecordingDevice}_');
+
+/// Per-file auto-upload failure cap: after this many consecutive failures for a
+/// file we stop retrying it until the app relaunches (the count lives in memory).
+const int autoPhoneUploadMaxFailures = 3;
+
+/// Whether the silent auto-upload of offline-fallback recordings may run right
+/// now. Mirrors the gates in `SyncProvider._autoUploadPendingPhoneFiles`:
+/// custom-STT users sync manually (with confirmation), the auto-sync opt-out is
+/// respected, and a second upload never starts while one is already in flight.
+bool canAutoUploadPhoneRecordings({
+  required bool useCustomStt,
+  required bool autoSyncOfflineRecordings,
+  required bool isUploading,
+}) =>
+    !useCustomStt && autoSyncOfflineRecordings && !isUploading;
+
+/// The next offline-fallback recording to auto-upload from [fileNames], or null
+/// when none is eligible. Only auto-marker files qualify (explicit Transcribe
+/// Later recordings stay manual); [busyNames] (uploading or processing) are
+/// skipped, and a file at/over its [failureCounts] cap is skipped until the next
+/// app launch. Pure so the selection/backoff rules are unit testable without the
+/// provider's heavy singletons.
+String? selectNextAutoPhoneUpload(
+  List<String> fileNames, {
+  required Set<String> busyNames,
+  required Map<String, int> failureCounts,
+}) {
+  for (final name in fileNames) {
+    if (!isAutoPhoneBatchRecording(name)) continue;
+    if (busyNames.contains(name)) continue;
+    if ((failureCounts[name] ?? 0) >= autoPhoneUploadMaxFailures) continue;
+    return name;
+  }
+  return null;
+}
+
 /// Metadata parsed from a batch recording filename written by the native layer:
 ///
 ///   audio_{device}_{codec}_{sampleRate}_{channel}_fs{frameSize}_{timestamp}.bin
