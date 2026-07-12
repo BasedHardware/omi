@@ -38,6 +38,7 @@ import {
   type DisplayLike
 } from './placement'
 import { SummonGesture, type GestureKind } from './gesture'
+import { evaluatePeekWatchdog, nextInteractivity } from './watchdog'
 import { makeKeySampler } from './keyState'
 import { getAppSettings, setAppSettings } from '../appSettings'
 
@@ -296,7 +297,11 @@ function commitReveal(token: number): void {
 // top edge (live bug). Main polls the cursor ONLY while a peek bar is visible
 // (a rare, brief state — idle remains strictly zero-poll) and hides after the
 // grace period once the cursor is outside (bar footprint ∪ strip footprint).
-const PEEK_WATCH_MS = 150
+// Poll fast while a peek pill is visible (a rare, brief state — idle stays
+// strictly zero-poll): the tick both drives interactivity from the OS cursor
+// and runs the retract grace, and a normal move-and-click on the pill must flip
+// hit-testing on before the click lands (Bug A). 50ms keeps that imperceptible.
+const PEEK_WATCH_MS = 50
 const PEEK_GRACE_MS = 600
 let peekWatch: ReturnType<typeof setInterval> | null = null
 let peekOutsideSince: number | null = null
@@ -311,43 +316,67 @@ let peekWatchSuspended = false
  *  short grace) when the exchange ends, letting the normal cursor watchdog
  *  reclaim the pill. */
 let barActivityHold = false
+/** Set for the ENTIRE lifetime of a summon gesture (the hotkey is physically
+ *  held, or the gap window before a no-sampler gesture ends). Suppresses the
+ *  retract watchdog structurally so a silent hold can't retract the pill before
+ *  the renderer's busy-derived keepAlive arms (Bug B). Cleared at gesture end. */
+let gestureActiveHold = false
 
 export function setPeekWatchSuspended(suspended: boolean): void {
   peekWatchSuspended = suspended
 }
 
+/** One watchdog poll: drive interactivity from the OS cursor, then run the
+ *  retract grace. Also called once synchronously at reveal so a cursor already
+ *  over the pill / outside the footprint is handled without a tick's delay. */
+function peekTick(): void {
+  const win = barWindow
+  if (!win || win.isDestroyed() || !win.isVisible() || currentMode !== 'peek') {
+    stopPeekWatch()
+    return
+  }
+  const display =
+    screen.getAllDisplays().find((d) => d.id === activeDisplayId) ?? screen.getPrimaryDisplay()
+  const dl = displayLike(display)
+  const cursor = screen.getCursorScreenPoint()
+  // Main-driven interactivity (Bug A): the OS cursor over the 148×36 pill hit
+  // rect is the source of truth — enable hit-testing the instant it enters (no
+  // async renderer mouseenter → IPC round-trip a fast click could beat), and
+  // force the oversized window back to click-through the instant it leaves so a
+  // control under the top-center dead space stays clickable. The renderer's
+  // mouseenter/leave path stays as a belt; here main leads.
+  const wantInteractive = nextInteractivity({
+    cursorOverPill: isCursorOverPill(cursor, dl),
+    interactive: barInteractive,
+    suspended: peekWatchSuspended
+  })
+  if (wantInteractive && !barInteractive) {
+    barInteractive = true
+    win.setIgnoreMouseEvents(false)
+  } else if (!wantInteractive && barInteractive) {
+    applyClickThrough(win)
+  }
+  const { outsideSince, retract } = evaluatePeekWatchdog({
+    suspended: peekWatchSuspended,
+    activityHold: barActivityHold,
+    gestureActive: gestureActiveHold,
+    cursorInFootprint: isCursorInPeekFootprint(cursor, dl),
+    outsideSince: peekOutsideSince,
+    now: Date.now(),
+    graceMs: PEEK_GRACE_MS
+  })
+  peekOutsideSince = outsideSince
+  if (retract) {
+    stopPeekWatch()
+    hideBar()
+  }
+}
+
 function startPeekWatch(): void {
   stopPeekWatch()
   peekOutsideSince = null
-  peekWatch = setInterval(() => {
-    const win = barWindow
-    if (!win || win.isDestroyed() || !win.isVisible() || currentMode !== 'peek') {
-      stopPeekWatch()
-      return
-    }
-    const display =
-      screen.getAllDisplays().find((d) => d.id === activeDisplayId) ?? screen.getPrimaryDisplay()
-    const dl = displayLike(display)
-    const cursor = screen.getCursorScreenPoint()
-    // Click-through safety net: the bar window is intentionally oversized (560×…
-    // for the morph), but only the 148×36 pill should ever capture a click. If
-    // the interactive flag stuck on after the cursor left the pill (DOM
-    // mouseleave never fires once the cursor exits a forwarded-events window),
-    // force the whole window back to click-through so a control under the
-    // top-center dead space stays clickable. (Not while the E2E holds peek open.)
-    if (!peekWatchSuspended && barInteractive && !isCursorOverPill(cursor, dl)) {
-      applyClickThrough(win)
-    }
-    const inside = peekWatchSuspended || barActivityHold || isCursorInPeekFootprint(cursor, dl)
-    if (inside) {
-      peekOutsideSince = null
-    } else if (peekOutsideSince === null) {
-      peekOutsideSince = Date.now()
-    } else if (Date.now() - peekOutsideSince >= PEEK_GRACE_MS) {
-      stopPeekWatch()
-      hideBar()
-    }
-  }, PEEK_WATCH_MS)
+  peekTick()
+  peekWatch = setInterval(peekTick, PEEK_WATCH_MS)
 }
 
 function stopPeekWatch(): void {
@@ -433,6 +462,10 @@ function onGestureStart(): void {
   if (!barEnabled) return
   broadcast('overlay:summoned')
   gestureStartedVisible = isBarVisible()
+  // Pin the pill open for the whole physical hold (Bug B): the watchdog can't
+  // retract while the key is down, so a silent hold never snaps shut before the
+  // renderer's busy-derived keepAlive arms. Cleared in onGestureEnd.
+  gestureActiveHold = true
   if (samplerAvailable) {
     // Tap-vs-hold resolves at release; reveal the PILL now (a tap peeks, never
     // auto-opens the chat — Chris's rule), and arm the PTT path (the renderer's
@@ -449,6 +482,11 @@ function onGestureStart(): void {
 }
 
 function onGestureEnd(kind: GestureKind): void {
+  // Release the physical-hold suppression FIRST — before any early return — so
+  // gap mode (no sampler) and dispose()/rebind can never leave the watchdog
+  // permanently suppressed (a stuck-open pill). The renderer's keepAlive takes
+  // over from here for a real voice/chat exchange.
+  gestureActiveHold = false
   if (!samplerAvailable) return
   sendPtt('up')
   // A tap on an already-open bar closes it (deferred to release so a HOLD on
@@ -556,8 +594,9 @@ export function registerBarIpc(sendToMain: (channel: string, ...args: unknown[])
 // --- Teardown -----------------------------------------------------------------
 
 export function destroyBar(): void {
-  gesture?.dispose()
+  gesture?.dispose() // ends an active gesture → onGestureEnd clears the hold
   gesture = null
+  gestureActiveHold = false
   stopPeekWatch()
   cancelPendingReveal()
   if (hideFallback) clearTimeout(hideFallback)

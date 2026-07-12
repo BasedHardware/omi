@@ -101,6 +101,42 @@ describe('SummonGesture with key-state sampling', () => {
     expect(w.events).toEqual(['start', 'end:tap', 'start', 'end:tap'])
   })
 
+  it('dispose during an active hold ends the gesture, so a start-set suppression is always released (Bug B, case d)', () => {
+    // window.ts sets a watchdog-suppression hold in onStart and clears it in
+    // onEnd. If a rebind/quit disposes mid-hold, onEnd MUST still fire or the
+    // pill would be stuck un-retractable. Model that hold with a boolean.
+    let down = true
+    let held = false
+    let now = 0
+    const timers: { fn: () => void; id: number }[] = []
+    const g = new SummonGesture(
+      {
+        onStart: () => (held = true),
+        onEnd: () => (held = false)
+      },
+      {
+        sampleKeyDown: () => down,
+        now: () => now,
+        setTimer: (fn) => {
+          timers.push({ fn, id: timers.length + 1 })
+          return timers.length
+        },
+        clearTimer: () => {}
+      }
+    )
+    g.fire()
+    now = 500 // held past the threshold — a genuine hold in flight
+    expect(held).toBe(true)
+    expect(g.isActive).toBe(true)
+    g.dispose() // rebind / quit while the key is still physically down
+    expect(held).toBe(false)
+    expect(g.isActive).toBe(false)
+    // A stray sampler tick after dispose must not resurrect the hold.
+    down = true
+    timers.forEach((t) => t.fn())
+    expect(held).toBe(false)
+  })
+
   it('polling only runs during a gesture (zero idle cost)', () => {
     const sample = vi.fn(() => false)
     let now = 0
