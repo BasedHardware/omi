@@ -454,7 +454,7 @@ extension SettingsContentView {
             Button("Check Now") {
               updaterViewModel.checkForUpdates()
             }
-            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+            .buttonStyle(OmiButtonStyle(.primary, size: .compact))
             .disabled(!updaterViewModel.canCheckForUpdates)
             .help(
               updaterViewModel.canCheckForUpdates
@@ -491,13 +491,13 @@ extension SettingsContentView {
                     NSWorkspace.shared.open(
                       URL(fileURLWithPath: "/Applications", isDirectory: true))
                   }
-                  .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+                  .buttonStyle(OmiButtonStyle(.primary, size: .compact))
                 }
 
                 Button("Download Latest") {
                   openURLInDefaultBrowser(AppBuild.manualDownloadURL)
                 }
-                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
 
                 Button("Dismiss") {
                   updaterViewModel.lastUpdateFailure = nil
@@ -618,7 +618,7 @@ extension SettingsContentView {
           Button("Report") {
             FeedbackWindow.show(userEmail: AuthState.shared.userEmail)
           }
-          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
         }
       }
     }

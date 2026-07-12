@@ -92,7 +92,7 @@ extension SettingsContentView {
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
 
                 Button(action: {
                   PromptEditorWindow.show()
@@ -104,7 +104,7 @@ extension SettingsContentView {
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
               }
             }
 
@@ -362,7 +362,7 @@ extension SettingsContentView {
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
 
                 Button(action: {
                   TaskPromptEditorWindow.show()
@@ -374,7 +374,7 @@ extension SettingsContentView {
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
               }
             }
 
@@ -501,7 +501,7 @@ extension SettingsContentView {
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
               }
             }
           }  // end if taskEnabled
@@ -628,7 +628,7 @@ extension SettingsContentView {
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
 
                 Button(action: {
                   InsightPromptEditorWindow.show()
@@ -640,7 +640,7 @@ extension SettingsContentView {
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
               }
             }
 
@@ -830,7 +830,7 @@ extension SettingsContentView {
                     .scaledFont(size: OmiType.caption)
                 }
               }
-              .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
             }
 
             Divider()
