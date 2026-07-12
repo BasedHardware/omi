@@ -3,11 +3,12 @@
 //   2. transparent background (1px border + corners fully alpha-0)
 //   3. orb stays in bounds (never touches the canvas edge)
 //   4. blob count via connected components matches the choreography
-//      (8 separated dots for idle/listening/THINKING / 1 speech blob / 4 agent
-//      pills / 0 at genesis-zero), with no punched holes and no stray specks
-//   5. BOUNDED speech wave: for extreme amplitude inputs (silence, clipping,
-//      square wave, seeded noise) the blob's iso-contour stays inside designed
-//      min/max radii every frame and never flatlines to a hard circle
+//      (8 separated dots for idle/listening/THINKING / N waveform bars for
+//      speaking / 4 agent pills / 0 at genesis-zero), with no punched holes and
+//      no stray specks
+//   5. BOUNDED waveform: for extreme level inputs (silence, clipping, square,
+//      seeded noise) the bars stay a horizontal row inside the canvas bounds
+//      every frame — the loudest bar never reaches the edge
 //   6. agents transition never bridges pills across rows
 // Run: node scripts/orb/check-invariants.mjs  (exit 1 on any violation)
 import { openHarness, renderPixels } from './lib/harness.mjs'
@@ -16,9 +17,15 @@ import {
   checkTransparentEdges,
   components,
   whiteMask,
-  countHolePixels,
-  contourWaviness
+  countHolePixels
 } from './lib/pixels.mjs'
+
+// Waveform level fixtures (square mount → ~7 slots; a longer array is windowed
+// by slotCount inside the choreography via waveBars on whatever it is handed —
+// here we hand exactly what a 7-ish-slot row shows, so extra entries are unused).
+const SILENCE = new Array(8).fill(0)
+// Left silence dots, right speech bars of mixed height (never all-max).
+const SPEECH = [0, 0, 0.2, 0.75, 0.35, 0.9, 0.55, 1.0]
 
 const CASES = [
   // Idle: calm ring — dots separated, never merged without a speech signal.
@@ -30,35 +37,39 @@ const CASES = [
     spec: { t: 12, state: 'listening', stateTime: 5, amplitude: 0.4 },
     blobs: 8
   },
-  // Speaking: the voice blob — wavy, solid, hole-free.
+  // Speaking: the waveform. A silent row is a line of dots; a speech row is
+  // vertical bars. Either way N separated pieces on the horizontal centerline
+  // (never a blob), hole-free, in bounds. Square mount (aspect 1) → ~7 slots.
   {
-    name: 'speaking-held',
-    spec: { t: 40, state: 'speaking', stateTime: 3, speechMerge: 1, amplitude: 0.7 },
-    blobs: 1,
+    name: 'speaking-silence',
+    spec: { t: 40, state: 'speaking', stateTime: 3, speechMerge: 1, waveLevels: SILENCE },
+    blobsBetween: [5, 8],
     noHoles: true,
-    wavy: true
-  },
-  // Conglomerate / dissolve mid-points (any 1..8 pieces, no holes, no specks).
-  {
-    name: 'speaking-gather',
-    spec: { t: 1.3, state: 'speaking', stateTime: 0.3, voiceDemo: true },
-    blobsBetween: [1, 8],
-    noHoles: true,
-    noSpecks: true
+    noSpecks: true,
+    waveRow: true
   },
   {
-    name: 'speaking-mid',
-    spec: { t: 1.45, state: 'speaking', stateTime: 0.45, voiceDemo: true },
-    blobsBetween: [1, 8],
+    name: 'speaking-bars',
+    spec: { t: 40, state: 'speaking', stateTime: 3, speechMerge: 1, waveLevels: SPEECH },
+    blobsBetween: [5, 8],
     noHoles: true,
-    noSpecks: true
+    noSpecks: true,
+    waveRow: true
   },
+  // Scrolling voice demo mid-utterance: still a bounded row of bars/dots.
   {
-    name: 'speaking-dissolve',
-    spec: { t: 5.5, state: 'speaking', stateTime: 4.5, voiceDemo: true },
-    blobsBetween: [1, 8],
+    name: 'speaking-scroll',
+    spec: { t: 3.0, state: 'speaking', stateTime: 3.0, waveDemo: true },
+    blobsBetween: [5, 8],
     noHoles: true,
-    noSpecks: true
+    noSpecks: true,
+    waveRow: true
+  },
+  // Mid-crossfade (dots gliding to the line, bars fading in): only bounds/palette
+  // are asserted — the count is ambiguous while both layers are visible.
+  {
+    name: 'speaking-enter',
+    spec: { t: 40, state: 'speaking', stateTime: 3, speechMerge: 0.5, waveLevels: SPEECH }
   },
   // Thinking: the dots STAY a separated orbiting ring — merge-into-a-blob is
   // reserved for speech. Never a transient blob at any stage after entry (this
@@ -157,57 +168,73 @@ async function main() {
               `${tag}: stray ${speck.size}px speck at (${speck.cx | 0},${speck.cy | 0})`
             )
         }
-        if (c.wavy) {
-          const { cv } = contourWaviness(img)
-          if (cv < 0.015)
-            failures.push(`${tag}: contour cv ${cv.toFixed(4)} — blob reads as a plain ball`)
-          if (cv > 0.2) failures.push(`${tag}: contour cv ${cv.toFixed(4)} — wobble past tasteful`)
+        if (c.waveRow) {
+          // Every bar/dot sits on the horizontal centerline: all component
+          // centroids share a narrow vertical band around the canvas center, and
+          // they spread horizontally (a row, not a stack).
+          const cy = img.height / 2
+          const offRow = comps.filter((k) => Math.abs(k.cy - cy) > 0.14 * img.height)
+          if (offRow.length)
+            failures.push(
+              `${tag}: ${offRow.length} bar(s) off the centerline, e.g. cy ${offRow[0].cy | 0} vs ${cy}`
+            )
+          const xs = comps.map((k) => k.cx).sort((a, b) => a - b)
+          if (xs.length >= 2 && xs[xs.length - 1] - xs[0] < 0.35 * img.width)
+            failures.push(`${tag}: bars span only ${(xs[xs.length - 1] - xs[0]) | 0}px — not a row`)
         }
       }
     }
 
-    // --- 5. Bounded wave under EXTREME amplitude sequences ---------------------
-    // For arbitrary input — dead silence, clipping 5x, a square wave, seeded
-    // noise — the held speech blob's contour must stay inside designed radii
-    // every frame: never spikes toward the disc edge, never flatlines into a
-    // hard circle, never collapses.
+    // --- 5. Bounded waveform under EXTREME level sequences ---------------------
+    // For arbitrary per-slot input — dead silence, clipping 5×, a square pattern,
+    // seeded noise — the bars stay a horizontal row inside the canvas bounds every
+    // frame: the tallest bar never reaches the edge, the row never leaves the
+    // centerline, and no bar merges into a blob or punches a hole.
     {
       const rng = mulberry32(1234)
+      const N = 8
       const seqs = {
         silence: () => 0,
-        clipping: () => 5,
-        square: (i) => (i % 6 < 3 ? 1 : 0),
+        clipping: () => 5, // clamped to 1 inside waveBars → max-height bars, bounded
+        square: (j) => (j % 2 === 0 ? 1 : 0),
         noise: () => rng() * 3
       }
-      // Designed bounds (px at size=96 dpr=2: half-extent 96, disc 0.92·96≈88).
-      const MAX_R = 0.62 * 96 // blob may never reach past ~2/3 of the half-extent
-      const MIN_R = 0.16 * 96 // and never collapse below this
-      for (const [name, amp] of Object.entries(seqs)) {
-        for (let i = 0; i < 12; i++) {
+      // Designed bound (px at size=96 dpr=2 → 192px, half-extent 96): the loudest
+      // bar tops out at WAVE.maxHalfExtent (0.82) → ~157px total, comfortably off
+      // the edge. A bar reaching past this = an unbounded height.
+      const MAX_H = 0.86 * 192
+      const cyc = 192 / 2
+      for (const [name, lvl] of Object.entries(seqs)) {
+        for (let i = 0; i < 6; i++) {
+          const waveLevels = Array.from({ length: N }, (_, j) => lvl(j + i))
           const img = await renderPixels(page, {
-            t: 40 + i * 0.18,
+            t: 40 + i * 0.2,
             state: 'speaking',
-            stateTime: 3 + i * 0.18,
+            stateTime: 3 + i * 0.2,
             speechMerge: 1,
-            amplitude: amp(i)
+            waveLevels
           })
           checked++
-          const { mean, cv } = contourWaviness(img)
           const comps = components(whiteMask(img))
-          const tag = `amp-${name}/frame${i}`
-          if (comps.length !== 1) failures.push(`${tag}: blob split into ${comps.length} pieces`)
-          if (mean > MAX_R)
-            failures.push(
-              `${tag}: contour mean ${mean.toFixed(1)}px exceeds max ${MAX_R.toFixed(1)}px`
-            )
-          if (mean < MIN_R)
-            failures.push(
-              `${tag}: contour mean ${mean.toFixed(1)}px under min ${MIN_R.toFixed(1)}px`
-            )
-          if (cv < 0.008)
-            failures.push(`${tag}: cv ${cv.toFixed(4)} — flatlined to a hard circle mid-speech`)
-          if (cv > 0.22)
-            failures.push(`${tag}: cv ${cv.toFixed(4)} — wave spiked past the designed range`)
+          const tag = `wave-${name}/frame${i}`
+          // Every bar/dot sits on the centerline.
+          for (const k of comps) {
+            if (Math.abs(k.cy - cyc) > 0.16 * 192)
+              failures.push(`${tag}: a bar left the centerline (cy ${k.cy | 0} vs ${cyc})`)
+          }
+          // Bounded height: the white pixels never span more than MAX_H vertically.
+          const { mask, width, height } = whiteMask(img)
+          let minY = Infinity
+          let maxY = -Infinity
+          for (let y = 0; y < height; y++)
+            for (let x = 0; x < width; x++)
+              if (mask[y * width + x]) {
+                if (y < minY) minY = y
+                if (y > maxY) maxY = y
+                break
+              }
+          const h = maxY < 0 ? 0 : maxY - minY
+          if (h > MAX_H) failures.push(`${tag}: waveform height ${h}px exceeds max ${MAX_H | 0}px`)
           const holes = countHolePixels(img)
           if (holes > 3) failures.push(`${tag}: ${holes} hole pixel(s)`)
         }

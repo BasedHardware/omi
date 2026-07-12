@@ -36,9 +36,15 @@ const ORB_SUPERSAMPLE = 3.0
 const ORB_MAX_BACKING = 256
 
 export type OrbProps = {
-  /** CSS size in px. The canvas backing store is supersampled to
-   *  size × max(devicePixelRatio, ORB_SUPERSAMPLE), capped at ORB_MAX_BACKING. */
+  /** CSS size in px (square by default). The canvas backing store is
+   *  supersampled to size × max(devicePixelRatio, ORB_SUPERSAMPLE), capped at
+   *  ORB_MAX_BACKING. */
   size: number
+  /** Optional non-square CSS box (px). When given, the orb renders at width×height
+   *  — a wide mount shows a longer waveform row. Both default to `size`. The
+   *  supersample cap applies to the LARGER dimension, preserving aspect. */
+  width?: number
+  height?: number
   state: OrbState
   /** Real speech signal (PTT capturing / VAD gate open). Only meaningful with
    *  state 'listening' — 'speaking' implies it. */
@@ -71,6 +77,8 @@ function sampleAmplitude(source: WaveformSource, scratch: Uint8Array): number {
 
 export function Orb({
   size,
+  width,
+  height,
   state,
   speechActive = false,
   amplitudeSource = null,
@@ -79,6 +87,8 @@ export function Orb({
   preset = 'default',
   className
 }: OrbProps): React.JSX.Element {
+  const cssW = width ?? size
+  const cssH = height ?? size
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animatorRef = useRef<OrbAnimator | null>(null)
   // The orb reveals only once its WebGL animator is built; until then the static
@@ -96,9 +106,20 @@ export function Orb({
     const canvas = canvasRef.current
     if (!canvas) return
     const dpr = window.devicePixelRatio || 1
-    const backing = Math.min(ORB_MAX_BACKING, Math.round(size * Math.max(dpr, ORB_SUPERSAMPLE)))
-    canvas.width = backing
-    canvas.height = backing
+    // Supersample both dimensions by the same factor (preserves aspect), then cap
+    // by the LARGER edge so a wide mount never blows past ORB_MAX_BACKING while
+    // keeping its aspect intact.
+    const scale = Math.max(dpr, ORB_SUPERSAMPLE)
+    let backingW = cssW * scale
+    let backingH = cssH * scale
+    const longEdge = Math.max(backingW, backingH)
+    if (longEdge > ORB_MAX_BACKING) {
+      const k = ORB_MAX_BACKING / longEdge
+      backingW *= k
+      backingH *= k
+    }
+    canvas.width = Math.max(1, Math.round(backingW))
+    canvas.height = Math.max(1, Math.round(backingH))
     let animator: OrbAnimator | null = null
     try {
       animator = new OrbAnimator(canvas, ORB_PRESETS[preset] ?? DEFAULT_ORB_PARAMS)
@@ -129,7 +150,7 @@ export function Orb({
       animatorRef.current = null
       animator?.dispose()
     }
-  }, [size, preset, retryNonce])
+  }, [cssW, cssH, preset, retryNonce])
 
   // `ready` is in each dep list so that when a RETRY finally builds a fresh
   // animator (ready flips false→true), the app's current state / visibility /
@@ -174,7 +195,7 @@ export function Orb({
   return (
     <div
       className={className}
-      style={{ position: 'relative', width: size, height: size }}
+      style={{ position: 'relative', width: cssW, height: cssH }}
       aria-hidden
     >
       <canvas
@@ -187,8 +208,8 @@ export function Orb({
         key={retryNonce}
         ref={canvasRef}
         style={{
-          width: size,
-          height: size,
+          width: cssW,
+          height: cssH,
           display: 'block',
           opacity: ready ? 1 : 0,
           transition: 'opacity 200ms ease'
@@ -203,8 +224,8 @@ export function Orb({
           style={{
             position: 'absolute',
             inset: 0,
-            width: size,
-            height: size,
+            width: cssW,
+            height: cssH,
             objectFit: 'contain'
           }}
         />

@@ -1,9 +1,9 @@
 // Orb harness — TRANSITION contact sheet: renders the real OrbAnimator timeline
 // across each state change (16 frames per row, left→right = time, switch near
-// the middle) so a human/skeptical reviewer can confirm the blob morphs
-// CONTINUOUSLY — no explode-to-dots-and-reform snap (C6). Composited over the
-// bar's dark background, flipped top-down. Also includes an amplitude sweep so
-// the reviewer can judge the blob's audio reactivity (C8b).
+// the middle) so a human/skeptical reviewer can confirm the ring ↔ waveform
+// handoff is CONTINUOUS — no frame where it snaps (C6). Composited over the bar's
+// dark background, flipped top-down. Also includes a level sweep so the reviewer
+// can judge the bars' reactivity.
 // Output: .orb-out/transitions.png + .orb-out/transitions-INDEX.md
 // Run: node scripts/orb/contact-sheet-transitions.mjs [preset]
 import { PNG } from 'pngjs'
@@ -16,11 +16,44 @@ const COLS = 16
 const BG = [21, 21, 21]
 const preset = process.argv[2] ?? 'default'
 
+// A static speech-ish bar pattern held through the transition rows so the
+// crossfade (ring dots ↔ bar row) is what reads, not a scroll.
+const LEVELS = [0, 0, 0.3, 0.8, 0.4, 1, 0.5, 0.2]
+
 const TRANSITIONS = [
-  { name: 'speaking → thinking (PTT release): must NOT explode to dots', from: 'speaking', to: 'thinking' },
-  { name: 'thinking → idle: blob dissolves back to the ring (smooth outward ease)', from: 'thinking', to: 'idle' },
-  { name: 'idle → thinking: ring gathers into the autonomous blob', from: 'idle', to: 'thinking' },
-  { name: 'speaking → idle: blob dissolves as speech ends', from: 'speaking', to: 'idle' }
+  {
+    // Longer window: the line rolls UP first (~0.85s), THEN the whirl fires on the
+    // re-formed ring (anchored) and decays to cruise — need the extra seconds to
+    // SEE the fast spin land on the ring rather than get lost under the roll-up.
+    name: 'speaking → thinking (reply ends): line rolls up, then the ring WHIRLS then settles',
+    from: 'speaking',
+    to: 'thinking',
+    duration: 2.8
+  },
+  {
+    // GAP-2 evidence: the same on the COMPACT preset (the 22–26px bar mount) where
+    // the cruise was raised 1.55→2.0× — the ring must read as clearly spinning.
+    name: 'speaking → thinking on the COMPACT bar mount: whirl + fast cruise must be obvious',
+    from: 'speaking',
+    to: 'thinking',
+    duration: 2.8,
+    preset: 'compact'
+  },
+  {
+    name: 'thinking → idle: the ring settles (no waveform)',
+    from: 'thinking',
+    to: 'idle'
+  },
+  {
+    name: 'idle → speaking: ring dots line up and hand off to the bars',
+    from: 'idle',
+    to: 'speaking'
+  },
+  {
+    name: 'speaking → idle: bars dissolve as speech ends',
+    from: 'speaking',
+    to: 'idle'
+  }
 ]
 
 function decode(res) {
@@ -47,7 +80,10 @@ function blit(sheet, img, col, row) {
 async function main() {
   mkdirSync(outDir, { recursive: true })
   const { page, close } = await openHarness(`?size=100&dpr=2&preset=${preset}`)
-  const rows = [...TRANSITIONS, { name: 'amplitude sweep 0→1→0 on the held speech blob', ampSweep: true }]
+  const rows = [
+    ...TRANSITIONS,
+    { name: 'level sweep 0→1→0 on the held waveform (bar heights track the level)', ampSweep: true }
+  ]
   const sheet = new PNG({ width: COLS * TILE, height: rows.length * TILE })
   for (let i = 0; i < sheet.width * sheet.height; i++) {
     sheet.data[i * 4] = BG[0]
@@ -60,19 +96,33 @@ async function main() {
       const row = rows[r]
       if (row.ampSweep) {
         for (let c = 0; c < COLS; c++) {
-          const amp = Math.sin((c / (COLS - 1)) * Math.PI) * 1.2
+          // Uniform level swept 0→1→0 across the row — every bar rises then falls.
+          const level = Math.sin((c / (COLS - 1)) * Math.PI)
+          const waveLevels = new Array(8).fill(level)
           const img = decode(
-            await page.evaluate(
-              (s) => (window.orb.renderAt(s), window.orb.pixels()),
-              { t: 40, state: 'speaking', stateTime: 3, speechMerge: 1, amplitude: amp, preset }
-            )
+            await page.evaluate((s) => (window.orb.renderAt(s), window.orb.pixels()), {
+              t: 40,
+              state: 'speaking',
+              stateTime: 3,
+              speechMerge: 1,
+              waveLevels,
+              preset
+            })
           )
           blit(sheet, img, c, r)
         }
       } else {
         const { width, height, frames } = await page.evaluate(
           (o) => window.orb.transitionFrames(o),
-          { from: row.from, to: row.to, switchAt: 0.45, duration: 1.4, count: COLS, amplitude: 0.6, preset }
+          {
+            from: row.from,
+            to: row.to,
+            switchAt: 0.45,
+            duration: row.duration ?? 1.4,
+            count: COLS,
+            waveLevels: LEVELS,
+            preset: row.preset ?? preset
+          }
         )
         frames.forEach((data, c) => blit(sheet, decode({ width, height, data }), c, r))
       }
@@ -88,10 +138,10 @@ async function main() {
     `# Orb TRANSITION contact sheet (preset: ${preset})`,
     '',
     `Grid: ${COLS} columns × ${rows.length} rows, ${TILE}px tiles, left→right = time.`,
-    'The four transition rows render the REAL OrbAnimator timeline (envelope +',
-    'enterMerge cross-fade + spin ease) across a state change near column 5.',
-    'A correct fix shows the blob morphing continuously — NO frame where it',
-    'suddenly bursts into 8 separate dots and reforms.',
+    'The four transition rows render the REAL OrbAnimator timeline (speech-merge',
+    'envelope + spin ease) across a state change near column 5. A correct handoff',
+    'shows the ring dots lining up and the bars fading in (or dissolving back to',
+    'the ring) continuously — NO frame where it snaps between ring and waveform.',
     '',
     ...rows.map((row, i) => `- Row ${i + 1}: ${row.name}`),
     ''

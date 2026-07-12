@@ -33,6 +33,23 @@ uniform float u_sminK;       // smin blend distance at full merge (disc units)
 uniform float u_centerR;     // center pool-blob radius (disc units, 0 = none)
 uniform float u_amplitude;   // shaped voice amplitude 0..1 (bounded upstream)
 
+// Waveform visualizer (replaces the speech blob). TWO decoupled parameters so the
+// ring visibly UNROLLS into the line rather than opacity-crossfading:
+//   u_waveMix — unroll / disc-fade: fades the dark DISC out while the dots travel
+//               at FULL opacity to their line positions (JS moves them).
+//   u_barMix  — dot→bar handoff, staged AFTER the unroll: ON the line the white
+//               dots crossfade to the bar primitives (a representation swap at the
+//               same place). 0 = keep the dots, 1 = only the bars.
+// u_wave[] holds up to 40 slots (x, halfWidth, halfHeight) in normalized
+// short-axis units. Corner radius is min(halfWidth, halfHeight), so a slot with
+// halfWidth==halfHeight is a circle (the resting dot) and a tall slot is a
+// round-capped vertical bar.
+#define WAVE_MAX_SLOTS 40
+uniform float u_waveMix;              // 0 = ring, 1 = dots fanned out to the line
+uniform float u_barMix;              // 0 = dots on the line, 1 = bars (post-unroll)
+uniform int u_waveCount;             // active bars in u_wave[]
+uniform vec4 u_wave[WAVE_MAX_SLOTS]; // x, halfWidth, halfHeight, (unused)
+
 out vec4 outColor;
 
 // --- SDFs --------------------------------------------------------------------
@@ -137,20 +154,68 @@ void main() {
   float aaDots = fwidth(dDots) + 1e-4;
 
   float surfMask = 1.0 - smoothstep(-aaSurf, aaSurf, dSurf);
-  float dotMask = (1.0 - smoothstep(-aaDots, aaDots, dDots)) * surfMask;
+  // Dots are clipped to the disc at REST (idle ring / morph), but UNCLIPPED once
+  // the unroll engages (u_waveMix > 0) so they can travel out along the line
+  // beyond the disc. The switch is invisible: when u_waveMix first leaves 0 the
+  // dots are still on the ring (inside the disc, where surfMask is already 1), so
+  // nothing off-disc is lit yet.
+  float dotClip = mix(surfMask, 1.0, step(1e-4, u_waveMix));
+  float dotMask = (1.0 - smoothstep(-aaDots, aaDots, dDots)) * dotClip;
+
+  // Waveform: union (plain min — discrete bars with gaps, no smin pooling) of the
+  // vertical rounded-capsule bars. Each is a rounded box of half-extent
+  // (capRadius, halfHeight) with corner = capRadius, so halfHeight == capRadius
+  // renders a perfect circle (the silence dot). Light on transparent — NOT clipped
+  // to the disc, so it can span a wide mount.
+  float dWave = 1e5;
+  for (int i = 0; i < WAVE_MAX_SLOTS; i++) {
+    if (i >= u_waveCount) break;
+    vec4 b = u_wave[i]; // x, halfWidth, halfHeight
+    dWave = min(dWave, sdRoundBox(q - vec2(b.x, 0.0), vec2(b.y, b.z), min(b.y, b.z)));
+  }
+  float aaWave = fwidth(dWave) + 1e-4;
+  // Bar coverage is opacity-gated by u_barMix (the post-unroll handoff), NOT
+  // u_waveMix — during the unroll the bars stay invisible so only the traveling
+  // dots are seen; they fade in on the line once the row is formed.
+  float waveCov = 1.0 - smoothstep(-aaWave, aaWave, dWave);
 
   // Hide entirely at (near-)zero genesis — no sub-pixel residue.
-  surfMask *= smoothstep(0.0, 0.02, u_genesis);
-  dotMask *= smoothstep(0.0, 0.02, u_genesis);
+  float genesisGate = smoothstep(0.0, 0.02, u_genesis);
+  surfMask *= genesisGate;
+  dotMask *= genesisGate;
+  waveCov *= genesisGate;
 
-  // Neutral palette only: near-black disc with a whisper of center lift, pure
-  // white dots. (Zero-purple is asserted per-frame by the harness.)
+  // Neutral palette only: near-black disc with a whisper of center lift, white
+  // dots and white bars. (Zero-purple is asserted per-frame by the harness.)
   float lift = 0.03 * (1.0 - smoothstep(0.0, u_disc, length(q)));
   vec3 disc = vec3(0.055 + lift);
-  vec3 col = mix(disc, vec3(1.0), dotMask);
 
-  // Premultiplied alpha over a transparent background.
-  float alpha = surfMask;
-  outColor = vec4(col * alpha, alpha);
+  // Three premultiplied layers, source-over top→bottom = bars, dots, disc:
+  //   • DISC — dark backing; fades out as the ring unrolls (u_waveMix). This is
+  //            the only thing that fades WITH the unroll, so the ring opens up.
+  //   • DOTS — white; FULL opacity while they travel (the fan-out), fading only as
+  //            the bars take over ON the line (u_barMix). Keeping the dots opaque
+  //            through the unroll is what makes the ring visibly fan out into the
+  //            line instead of a ring↔line opacity crossfade.
+  //   • BARS — white; fade in on the line post-unroll (u_barMix).
+  // At u_waveMix=0,u_barMix=0 this reduces exactly to the idle disc+dots render;
+  // at 1,1 only the white bars remain.
+  float discA = surfMask * (1.0 - u_waveMix);
+  vec3 discPre = disc * discA;
+
+  float dotA = dotMask * (1.0 - u_barMix);
+  vec3 dotPre = vec3(1.0) * dotA;
+
+  // dots over disc
+  vec3 rdPre = dotPre + discPre * (1.0 - dotA);
+  float rdA = dotA + discA * (1.0 - dotA);
+
+  float waveA = waveCov * u_barMix;
+  vec3 wavePre = vec3(1.0) * waveA;
+
+  // bars over (dots over disc)
+  vec3 outPre = wavePre + rdPre * (1.0 - waveA);
+  float outA = waveA + rdA * (1.0 - waveA);
+  outColor = vec4(outPre, outA);
 }
 `

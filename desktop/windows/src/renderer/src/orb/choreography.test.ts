@@ -17,7 +17,12 @@ import {
   stepMergeEnvelope,
   mergeAmount,
   MERGE_XFADE,
+  waveMixFor,
+  unrollPositions,
   spinTargetFor,
+  anchorWhirlStart,
+  WHIRL_ANCHOR_EPS,
+  WHIRL_TAU,
   AGENTS_WHIRL,
   genesisScale,
   genesisSettled,
@@ -173,19 +178,13 @@ describe('speech merge envelope', () => {
 })
 
 describe('mergeAmount', () => {
-  it('speaking/listening/idle follow the speechMerge envelope', () => {
-    expect(mergeAmount('speaking', 5, 0)).toBe(0)
-    expect(mergeAmount('speaking', 5, 1)).toBe(1)
-    expect(mergeAmount('listening', 5, 0.5)).toBeCloseTo(easeInOut(0.5), 9)
-    expect(mergeAmount('idle', 5, 0)).toBe(0)
-  })
-
-  it('thinking and agents never merge — the blob is reserved for speech', () => {
-    // The dots stay separate on the ring regardless of stateTime or any speech
-    // signal (thinking orbits them; agents pairs them into pills).
-    expect(mergeAmount('thinking', 0, 1)).toBe(0)
-    expect(mergeAmount('thinking', 2, 1)).toBe(0)
-    expect(mergeAmount('agents', 5, 1)).toBe(0)
+  it('no state merges — the puddle blob is retired (steady 0 everywhere)', () => {
+    // The speech blob is replaced by the waveform; merge stays 0 for every state
+    // and any speech signal. Only a residual enterMerge dissolves (below).
+    for (const state of ['idle', 'listening', 'speaking', 'thinking', 'agents'] as const) {
+      expect(mergeAmount(state, 5, 0)).toBe(0)
+      expect(mergeAmount(state, 5, 1)).toBe(0)
+    }
   })
 
   // C6: with enterMerge supplied, a state change cross-fades from the value on
@@ -289,13 +288,55 @@ describe('spinTargetFor (state-speed choreography)', () => {
     expect(spinTargetFor('listening', 0, P)).toBeCloseTo(spinTargetFor('listening', SETTLED, P), 9)
   })
 
-  it('compact mounts whirl and cruise more gently than the default', () => {
-    expect(spinTargetFor('thinking', SETTLED, ORB_PRESETS.compact)).toBeLessThan(
-      spinTargetFor('thinking', SETTLED, P)
+  it('compact mounts cruise UNMISTAKABLY fast when thinking (small-mount legibility)', () => {
+    // Raised from 1.55 → 2.0 (user + investigator: 1.55 read as barely turning at
+    // 22–26px). The compact thinking cruise now matches the default busy multiplier
+    // and is clearly fast — a glance at the bar pill must register the spin.
+    expect(ORB_PRESETS.compact.spinBusyMult).toBe(2.0)
+    expect(spinTargetFor('thinking', SETTLED, ORB_PRESETS.compact)).toBeCloseTo(2.0, 6)
+    expect(spinTargetFor('thinking', SETTLED, ORB_PRESETS.compact)).toBeGreaterThan(1.55)
+    // Still overshoots on entry, then settles to that quick cruise.
+    expect(spinTargetFor('thinking', 0, ORB_PRESETS.compact)).toBeGreaterThan(
+      spinTargetFor('thinking', SETTLED, ORB_PRESETS.compact) + 1
     )
-    expect(spinTargetFor('thinking', 0, ORB_PRESETS.compact)).toBeLessThan(
-      spinTargetFor('thinking', 0, P)
-    )
+  })
+
+  it('the whirl decays on the WHIRL clock, not stateTime — full overshoot at whirlTime 0 however long the state has been active', () => {
+    // The 4th arg anchors the whirl decay. At whirlTime=0 the whirl is at FULL
+    // overshoot REGARDLESS of stateTime — this is what lets the animator hold it
+    // primed through a speaking→thinking roll-up and fire it on the formed ring.
+    const peak = spinTargetFor('thinking', 0, P) // fresh entry (whirlTime defaults to 0)
+    const lateButAnchored = spinTargetFor('thinking', 5, P, 0) // 5s in, ring just formed
+    expect(lateButAnchored).toBeCloseTo(peak, 6) // still the full overshoot
+    // Whereas keying off stateTime (the OLD behavior / default) has fully decayed.
+    expect(spinTargetFor('thinking', 5, P)).toBeLessThan(peak - 1)
+    // And it decays with the whirl clock: whirlTime≈WHIRL_TAU is ~1/e of the way.
+    expect(spinTargetFor('thinking', 5, P, WHIRL_TAU)).toBeLessThan(lateButAnchored)
+  })
+})
+
+describe('anchorWhirlStart (whirl fires on the RE-FORMED ring)', () => {
+  it('holds primed (null) while the line is still rolling back, latches when the ring re-forms', () => {
+    // Entering thinking from speaking: waveMix starts high (line) and rolls to 0.
+    let start: number | null = null
+    // Still rolling up (waveMix well above eps) → not yet.
+    start = anchorWhirlStart(start, true, 0.0, 0.9)
+    expect(start).toBe(null)
+    start = anchorWhirlStart(start, true, 0.3, 0.2)
+    expect(start).toBe(null)
+    // Ring formed (waveMix < eps) → latch the current time.
+    start = anchorWhirlStart(start, true, 0.85, WHIRL_ANCHOR_EPS / 2)
+    expect(start).toBe(0.85)
+    // Latched: holds its value even as time advances (a single decay per episode).
+    start = anchorWhirlStart(start, true, 1.5, 0)
+    expect(start).toBe(0.85)
+  })
+
+  it('a whirl entered on an already-formed ring latches immediately; non-whirl states clear it', () => {
+    // idle→thinking: waveMix already 0, so the whirl starts at once (== old behavior).
+    expect(anchorWhirlStart(null, true, 2.0, 0)).toBe(2.0)
+    // Not a whirl state → always cleared (idle/speaking/listening never whirl).
+    expect(anchorWhirlStart(1.23, false, 3.0, 0)).toBe(null)
   })
 })
 
@@ -330,61 +371,113 @@ describe('computeOrbFrame', () => {
     }
   })
 
-  it('speaking conglomerates: full speechMerge pulls every dot to the center pool', () => {
+  it('speaking lines the dots up horizontally and emits the waveform bars (no blob)', () => {
     const f = computeOrbFrame({
       t: 100,
       state: 'speaking',
       stateTime: 3,
       speechMerge: 1,
-      amplitude: 0.6
+      waveLevels: [0, 0, 0.3, 0.8, 0.5, 1, 0.4, 0.2]
     })
-    expect(f.merge).toBe(1)
-    expect(f.centerR).toBeGreaterThan(0)
+    // No blob: merge/centerR stay 0, the crossfade is full, bars are present.
+    expect(f.merge).toBe(0)
+    expect(f.centerR).toBe(0)
+    expect(f.waveMix).toBe(1)
+    expect(f.waveBars).toHaveLength(8)
+    // Every ring dot has glided onto the y=0 centerline (a horizontal line).
     for (const d of f.dots) {
-      expect(Math.hypot(d.x, d.y)).toBeLessThan(0.01)
-      expect(d.r).toBeGreaterThan(P.dotRadius)
+      expect(Math.abs(d.y)).toBeLessThan(1e-6)
+      expect(d.halfLen).toBe(0)
     }
+    // The dots span a horizontal range (they lined up, not collapsed to a point).
+    const xs = f.dots.map((d) => d.x)
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(1)
   })
 
-  it('the speech wave tracks amplitude; the pool swells with the voice', () => {
-    const quiet = computeOrbFrame({
+  it('the waveform bars track the per-slot levels; a silent slot is a dot', () => {
+    const f = computeOrbFrame({
       t: 9,
       state: 'speaking',
       stateTime: 3,
       speechMerge: 1,
-      amplitude: 0
+      waveLevels: [0, 1]
     })
-    const loud = computeOrbFrame({
+    const [silent, loud] = f.waveBars
+    // A silent slot is a small round dot (halfW == halfH); a loud slot is a much
+    // taller vertical bar.
+    expect(silent.halfW).toBeCloseTo(silent.halfH, 6)
+    expect(loud.halfH).toBeGreaterThan(silent.halfH * 2)
+    expect(loud.halfH).toBeGreaterThan(loud.halfW)
+    // Bounded: even the loudest bar stays within the short-axis half-extent.
+    expect(loud.halfH).toBeLessThanOrEqual(0.82 + 1e-9)
+  })
+
+  it('waveResponse gates the bars: 0 = flat dots even with loud levels, 1 = full', () => {
+    const base = {
       t: 9,
+      state: 'speaking' as const,
+      stateTime: 3,
+      speechMerge: 1,
+      waveLevels: [1, 1, 1, 1]
+    }
+    const gated = computeOrbFrame({ ...base, waveResponse: 0 })
+    const live = computeOrbFrame({ ...base, waveResponse: 1 })
+    // At response 0 every slot is a resting dot (halfW == halfH); at 1 they're tall.
+    for (const b of gated.waveBars) expect(b.halfW).toBeCloseTo(b.halfH, 6)
+    for (const b of live.waveBars) expect(b.halfH).toBeGreaterThan(b.halfW)
+  })
+
+  it('barMix stages the dot→bar handoff AFTER the unroll (0 on the ring & mid-unroll, 1 held)', () => {
+    // The dots must stay fully visible (barMix 0) until the row is formed, so the
+    // shader shows the TRAVELING dots — not a ring↔line opacity crossfade. barMix
+    // ramps only once on the line (waveMix≈1 AND the response gain has come in).
+    const idle = computeOrbFrame({ t: 5, state: 'idle', stateTime: 3 })
+    expect(idle.barMix).toBe(0) // ring: no handoff, dots shown
+    // Mid-unroll: the dots are traveling (waveMix ~0.5) but the bars are still held
+    // off (response 0) — barMix must be 0 so the dots render at full opacity.
+    const midUnroll = computeOrbFrame({
+      t: 40,
+      state: 'speaking',
+      stateTime: 40,
+      speechMerge: 0.5,
+      waveResponse: 0,
+      waveLevels: [0.2, 0.8, 0.5, 1]
+    })
+    expect(midUnroll.waveMix).toBeGreaterThan(0) // dots ARE traveling
+    expect(midUnroll.barMix).toBe(0) // …but the bars have not taken over yet
+    // Held speaking (row formed, response full): the bars own the line.
+    const held = computeOrbFrame({
+      t: 40,
       state: 'speaking',
       stateTime: 3,
       speechMerge: 1,
-      amplitude: 1
+      waveResponse: 1,
+      waveLevels: [0.2, 0.8, 0.5, 1]
     })
-    expect(loud.waveAmp).toBeGreaterThan(quiet.waveAmp)
-    expect(loud.centerR).toBeGreaterThan(quiet.centerR)
+    expect(held.barMix).toBe(1)
   })
 
-  it('thinking is DISTINCT from the speech blob: tighter pool, fixed lower wave, no audio coupling', () => {
-    const think0 = computeOrbFrame({ t: 9, state: 'thinking', stateTime: 3, amplitude: 0 })
-    const think1 = computeOrbFrame({ t: 9, state: 'thinking', stateTime: 3, amplitude: 1 })
+  it('thinking stays a ring (no waveform) while speaking shows bars', () => {
+    const think = computeOrbFrame({ t: 9, state: 'thinking', stateTime: 3, amplitude: 1 })
     const speak = computeOrbFrame({
       t: 9,
       state: 'speaking',
       stateTime: 3,
       speechMerge: 1,
-      amplitude: 0.9
+      waveLevels: [0.2, 0.6, 0.9, 0.4]
     })
-    // Zero audio coupling.
-    expect(think1.waveAmp).toBe(think0.waveAmp)
-    expect(think1.centerR).toBe(think0.centerR)
-    expect(think0.waveAmp).toBeCloseTo(P.noiseAmp * THINK_WAVE_GAIN, 9)
-    // Tighter + calmer than a loud speech blob.
-    expect(think0.centerR).toBeLessThan(speak.centerR)
-    expect(think0.waveAmp).toBeLessThan(speak.waveAmp)
+    // Thinking: the orbiting ring — no crossfade, no bars, dots on the ring.
+    expect(think.waveMix).toBe(0)
+    expect(think.waveBars).toHaveLength(0)
+    for (const d of think.dots) expect(Math.hypot(d.x, d.y)).toBeCloseTo(P.orbitRadius, 6)
+    // Thinking still uses its own autonomous wave gain (unchanged, unused blob).
+    expect(think.waveAmp).toBeCloseTo(P.noiseAmp * THINK_WAVE_GAIN, 9)
+    // Speaking: the waveform is engaged.
+    expect(speak.waveMix).toBe(1)
+    expect(speak.waveBars.length).toBeGreaterThan(0)
   })
 
-  it('quiet listening keeps the calm ring (no merge without a speech signal)', () => {
+  it('quiet listening keeps the calm ring (no waveform without a speech signal)', () => {
     const f = computeOrbFrame({ t: 12, state: 'listening', stateTime: 5, amplitude: 0.4 })
     expect(f.merge).toBe(0)
     expect(f.centerR).toBe(0)
@@ -436,20 +529,14 @@ describe('computeOrbFrame', () => {
     }
   })
 
-  it('the center pool stays at zero until the dots cover the center (no floating speck)', () => {
-    // The pool is a separate primitive: if it appears while the dots are still a
-    // spread ring it renders as an isolated center speck — a phantom 9th dot
-    // (skeptical-review Critical). Its onset is held back until the leading
-    // (staggered) dot has converged onto the center, so the pool is always
-    // absorbed by a dot, never isolated, and its area grows in continuously
-    // (no hard floor to jump across mid-dissolve — C6). Below the onset it must
-    // be EXACTLY zero; a fully held blob must have a pool filling its interior.
-    for (let m = 0; m <= 1.0001; m += 0.02) {
+  it('the center pool is retired — centerR is always 0 for any speech signal', () => {
+    // The blob (and its center pool) is replaced by the waveform, so the pool
+    // never appears regardless of the speech-merge envelope value.
+    for (let m = 0; m <= 1.0001; m += 0.05) {
       const f = computeOrbFrame({ t: 0.41, state: 'speaking', stateTime: 1, speechMerge: m })
-      if (f.merge < 0.3) expect(f.centerR).toBe(0)
+      expect(f.centerR).toBe(0)
+      expect(f.merge).toBe(0)
     }
-    const held = computeOrbFrame({ t: 0.41, state: 'speaking', stateTime: 1, speechMerge: 1 })
-    expect(held.centerR).toBeGreaterThan(0.02)
   })
 
   it('genesis defaults to materialized; genesisTime drives the spring', () => {
@@ -483,16 +570,18 @@ describe('computeOrbFrame', () => {
 // hiding the orbit entirely.
 describe('thinking orbits — dots stay separate and keep moving', () => {
   it('keeps the 8 dots separated on the ring — never a blob', () => {
+    // The app closes the speech gate on thinking (speechActive → false), so its
+    // steady input has no speech signal: the orbiting ring, no waveform.
     const f = computeOrbFrame({
       t: 5,
       state: 'thinking',
       stateTime: 3,
-      speechMerge: 1,
       amplitude: 1
     })
-    // No merge, no center pool — the ring is intact.
+    // No merge, no center pool, no waveform — the ring is intact.
     expect(f.merge).toBe(0)
     expect(f.centerR).toBe(0)
+    expect(f.waveMix).toBe(0)
     for (const d of f.dots) {
       expect(Math.hypot(d.x, d.y)).toBeCloseTo(P.orbitRadius, 6)
       expect(d.halfLen).toBe(0)
@@ -533,6 +622,110 @@ describe('thinking orbits — dots stay separate and keep moving', () => {
     // Proves the glide (flow) is what removes the rest — idle still pauses.
     const restT = P.orbitPeriod * (1 - P.restFraction / 2)
     expect(orbitVelocity(restT, P, 0)).toBe(0)
+  })
+})
+
+// The waveform REPLACES the speech blob: audio states line the dots up and hand
+// off to the bar visualizer, driven by the speech-merge envelope so a state
+// change mid-utterance dissolves the bars back to the ring instead of snapping.
+describe('waveform crossfade', () => {
+  it('waveMixFor follows the speech-merge envelope (eased), independent of state', () => {
+    expect(waveMixFor('speaking', 0)).toBe(0)
+    expect(waveMixFor('speaking', 1)).toBe(1)
+    expect(waveMixFor('listening', 0.5)).toBeCloseTo(easeInOut(0.5), 9)
+    // Following the envelope (not the raw state) is what dissolves the bars into
+    // thinking/idle on release: a lingering signal still reads as a partial wave.
+    expect(waveMixFor('thinking', 0.5)).toBeCloseTo(easeInOut(0.5), 9)
+    expect(waveMixFor('idle', 0)).toBe(0)
+  })
+
+  it('the dots unroll from the ring to a flat line as the mix rises', () => {
+    const ring = computeOrbFrame({ t: 3, state: 'speaking', stateTime: 3, speechMerge: 0 })
+    const full = computeOrbFrame({ t: 3, state: 'speaking', stateTime: 3, speechMerge: 1 })
+    // At mix 0 the dots are the ring (on the orbit radius); at mix 1 they're a flat
+    // horizontal row (y == 0) spread across a width.
+    for (const d of ring.dots) expect(Math.hypot(d.x, d.y)).toBeCloseTo(P.orbitRadius, 6)
+    for (const d of full.dots) expect(Math.abs(d.y)).toBeLessThan(1e-6)
+    const xs = full.dots.map((d) => d.x)
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(1)
+  })
+
+  it('unrollPositions: exact ring at u=0, exact flat line at u=1, ordered left→right', () => {
+    const angle = 0.7
+    const lineHalf = 0.85
+    const at0 = unrollPositions(0, angle, lineHalf)
+    const at1 = unrollPositions(1, angle, lineHalf)
+    expect(at0).toHaveLength(DOT_COUNT)
+    // u=0 is EXACTLY the live ring.
+    for (let i = 0; i < DOT_COUNT; i++) {
+      const a = angle + (i * 2 * Math.PI) / DOT_COUNT
+      expect(at0[i].x).toBeCloseTo(Math.cos(a) * P.orbitRadius, 9)
+      expect(at0[i].y).toBeCloseTo(Math.sin(a) * P.orbitRadius, 9)
+    }
+    // u=1 is a flat row (y=0) whose xs are evenly spaced and centered.
+    for (const pt of at1) expect(Math.abs(pt.y)).toBeLessThan(1e-9)
+    const xs = at1.map((p) => p.x).sort((a, b) => a - b)
+    expect(xs[0]).toBeCloseTo(-xs[xs.length - 1], 9) // symmetric
+    const pitch = xs[1] - xs[0]
+    for (let i = 2; i < xs.length; i++) expect(xs[i] - xs[i - 1]).toBeCloseTo(pitch, 9)
+  })
+
+  it('unrollPositions moves continuously — no per-dot jump across a fine u sweep', () => {
+    const angle = 1.3
+    const lineHalf = 0.85
+    let prev = unrollPositions(0, angle, lineHalf)
+    let maxStep = 0
+    for (let k = 1; k <= 120; k++) {
+      const cur = unrollPositions(k / 120, angle, lineHalf)
+      for (let i = 0; i < DOT_COUNT; i++) {
+        maxStep = Math.max(maxStep, Math.hypot(cur[i].x - prev[i].x, cur[i].y - prev[i].y))
+      }
+      prev = cur
+    }
+    // Each 1/120 step moves every dot only a small amount (smooth, no pop).
+    expect(maxStep).toBeLessThan(0.1)
+  })
+
+  it('unrollPositions bows through an arc mid-unroll (vertical spread between ring & flat), x fans out monotonically', () => {
+    const angle = 0.4
+    const lineHalf = 0.85
+    const vSpreadOf = (pts) => Math.max(...pts.map((p) => p.y)) - Math.min(...pts.map((p) => p.y))
+    const ringV = vSpreadOf(unrollPositions(0, angle, lineHalf))
+    const midV = vSpreadOf(unrollPositions(0.5, angle, lineHalf))
+    const lineV = vSpreadOf(unrollPositions(1, angle, lineHalf))
+    // Ring is tall (~2·orbitRadius), the line is flat, and mid-unroll is a BOWED
+    // ARC strictly between the two — NOT still a full ring, NOT already flat. (A
+    // rigid ring that only crossfades would stay at full height here.)
+    expect(lineV).toBeLessThan(1e-6)
+    expect(ringV).toBeGreaterThan(1.5 * P.orbitRadius)
+    expect(midV).toBeGreaterThan(0.15) // it's an open arc, not flat
+    expect(midV).toBeLessThan(0.9 * ringV) // …and it has collapsed from the ring
+    // Every dot fans OUT in x monotonically across the sweep — no teleport, no
+    // backtrack (the bow lives in y; x travels straight to its slot).
+    const samples = Array.from({ length: 21 }, (_, k) => unrollPositions(k / 20, angle, lineHalf))
+    for (let i = 0; i < DOT_COUNT; i++) {
+      const dir = Math.sign(samples[20][i].x - samples[0][i].x)
+      if (Math.abs(samples[20][i].x - samples[0][i].x) < 1e-6) continue
+      for (let k = 1; k <= 20; k++) {
+        const dx = samples[k][i].x - samples[k - 1][i].x
+        expect(dx * dir).toBeGreaterThanOrEqual(-1e-3) // monotone toward the slot
+      }
+    }
+  })
+
+  it('release dissolves the bars smoothly back to the ring (no one-frame snap)', () => {
+    // Drive the envelope down (speech ended) while the state has moved to thinking:
+    // the mix must follow the envelope down continuously, not cut to 0.
+    let merge = 1
+    let prevMix = waveMixFor('thinking', merge)
+    for (let i = 0; i < 60; i++) {
+      merge = stepMergeEnvelope(merge, 0, 1 / 60)
+      const mix = waveMixFor('thinking', merge)
+      expect(mix).toBeLessThanOrEqual(prevMix + 1e-9) // monotone down
+      expect(prevMix - mix).toBeLessThan(0.1) // no snap
+      prevMix = mix
+    }
+    expect(prevMix).toBeLessThan(0.05) // fully dissolved
   })
 })
 

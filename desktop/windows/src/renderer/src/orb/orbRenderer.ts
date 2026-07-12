@@ -4,6 +4,7 @@
 // OrbAnimator) decide when and with what time to render.
 import { ORB_VERT, ORB_FRAG } from './shader'
 import { DOT_COUNT, type OrbFrame } from './choreography'
+import { WAVE_MAX_SLOTS } from './waveform'
 
 /** Rounded-rect target for the disc→rect morph, in disc-radius units. */
 export type OrbRect = { halfW: number; halfH: number; corner: number }
@@ -17,6 +18,7 @@ export class OrbRenderer {
   private u: Record<string, WebGLUniformLocation | null> = {}
   private dotData = new Float32Array(DOT_COUNT * 4)
   private dotMergeData = new Float32Array(DOT_COUNT)
+  private waveData = new Float32Array(WAVE_MAX_SLOTS * 4)
   private disposed = false
 
   constructor(
@@ -82,7 +84,11 @@ export class OrbRenderer {
       'u_noiseFreq',
       'u_sminK',
       'u_centerR',
-      'u_amplitude'
+      'u_amplitude',
+      'u_waveMix',
+      'u_barMix',
+      'u_waveCount',
+      'u_wave'
     ]) {
       this.u[name] = gl.getUniformLocation(program, name)
     }
@@ -125,6 +131,21 @@ export class OrbRenderer {
     gl.uniform1f(this.u.u_sminK, frame.params.sminK)
     gl.uniform1f(this.u.u_centerR, frame.centerR)
     gl.uniform1f(this.u.u_amplitude, frame.amplitude)
+
+    // Waveform bars: pack (x, halfWidth, halfHeight, 0) per active slot. Trailing
+    // slots stay zeroed and are skipped by the shader's u_waveCount cutoff.
+    const bars = frame.waveBars
+    const count = Math.min(bars.length, WAVE_MAX_SLOTS)
+    for (let i = 0; i < count; i++) {
+      this.waveData[i * 4] = bars[i].x
+      this.waveData[i * 4 + 1] = bars[i].halfW
+      this.waveData[i * 4 + 2] = bars[i].halfH
+      this.waveData[i * 4 + 3] = 0
+    }
+    gl.uniform1f(this.u.u_waveMix, frame.waveMix)
+    gl.uniform1f(this.u.u_barMix, frame.barMix)
+    gl.uniform1i(this.u.u_waveCount, count)
+    gl.uniform4fv(this.u.u_wave, this.waveData)
 
     gl.drawArrays(gl.TRIANGLES, 0, 3)
   }
