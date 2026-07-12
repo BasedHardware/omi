@@ -734,6 +734,12 @@ if [ -z "$SIGN_IDENTITY" ]; then
     fi
 fi
 
+"$(dirname "$0")/scripts/prepare-local-dev-entitlements.sh" \
+    --validate-identity \
+    "$SIGN_IDENTITY" \
+    "$IS_NAMED_BUNDLE" \
+    "${OMI_ALLOW_ADHOC_SIGN:-0}"
+
 if [ -n "$SIGN_IDENTITY" ]; then
     substep "Using identity: $SIGN_IDENTITY"
     if [ -d "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework" ]; then
@@ -792,10 +798,17 @@ if [ -n "$SIGN_IDENTITY" ]; then
     fi
 
     if [ "$USE_FALLBACK_ENTITLEMENTS" = true ]; then
-        cp Desktop/Omi.entitlements /tmp/omi-local-dev.entitlements
-        /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.applesignin" /tmp/omi-local-dev.entitlements 2>/dev/null || true
+        LOCAL_SIGNING_MODE="development"
+        if [ "$SIGN_IDENTITY" = "-" ]; then
+            LOCAL_SIGNING_MODE="adhoc"
+        fi
+        LOCAL_DEV_ENTITLEMENTS="$("$(dirname "$0")/scripts/prepare-local-dev-entitlements.sh" \
+            Desktop/Omi.entitlements \
+            "$OMI_DEV_DIR" \
+            "$BUNDLE_ID" \
+            "$LOCAL_SIGNING_MODE")"
         rm -f "$PROFILE_PATH"
-        EFFECTIVE_ENTITLEMENTS="/tmp/omi-local-dev.entitlements"
+        EFFECTIVE_ENTITLEMENTS="$LOCAL_DEV_ENTITLEMENTS"
     fi
     substep "Signing app bundle"
     codesign --force --options runtime --entitlements "$EFFECTIVE_ENTITLEMENTS" --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
