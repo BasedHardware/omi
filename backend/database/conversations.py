@@ -1,6 +1,8 @@
 import copy
 import inspect
 import json
+import logging
+import threading
 import uuid
 import zlib
 from datetime import datetime, timedelta, timezone
@@ -21,7 +23,6 @@ from utils import encryption
 from ._client import db
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from utils.other.storage import list_audio_chunks
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ conversations_collection = 'conversations'
 # Prometheus registration mutates the process-global collector registry. Keep it
 # lazy so importing this database module remains pure.
 CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS: Optional[Counter] = None
+_LEGACY_LIFECYCLE_METRIC_LOCK = threading.Lock()
 
 _LIFECYCLE_WRITER_LABELS = {
     'routers.transcribe': 'transcribe',
@@ -75,11 +77,13 @@ def _legacy_lifecycle_writer() -> str:
 def _record_legacy_lifecycle_mutation(operation: str) -> None:
     global CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS
     if CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS is None:
-        CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS = Counter(
-            'conversation_lifecycle_legacy_mutations_total',
-            'Conversation lifecycle mutations by the current direct writer and operation',
-            ['writer', 'operation'],
-        )
+        with _LEGACY_LIFECYCLE_METRIC_LOCK:
+            if CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS is None:
+                CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS = Counter(
+                    'conversation_lifecycle_legacy_mutations_total',
+                    'Conversation lifecycle mutations by the current direct writer and operation',
+                    ['writer', 'operation'],
+                )
     CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS.labels(writer=_legacy_lifecycle_writer(), operation=operation).inc()
 
 

@@ -345,3 +345,36 @@ def test_lifecycle_metric_traces_the_direct_writer_module(lifecycle_store):
     transcribe.mark_processing()
 
     assert metric.events == [{'writer': 'transcribe', 'operation': 'status_update'}]
+
+
+def test_lazy_lifecycle_metric_registers_once_under_concurrent_first_calls(monkeypatch):
+    """Double-checked locking must prevent duplicate Prometheus Counter registration."""
+    created: list[object] = []
+    create_lock = threading.Lock()
+
+    class _FakeCounter:
+        def __init__(self, *args, **kwargs):
+            with create_lock:
+                created.append(self)
+
+        def labels(self, **labels: str):
+            return self
+
+        def inc(self) -> None:
+            return None
+
+    monkeypatch.setattr(conversations_db, 'CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS', None)
+    monkeypatch.setattr(conversations_db, 'Counter', _FakeCounter)
+
+    workers = 16
+    barrier = threading.Barrier(workers)
+
+    def race(_: int) -> None:
+        barrier.wait()
+        conversations_db._record_legacy_lifecycle_mutation('status_update')
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        list(pool.map(race, range(workers)))
+
+    assert len(created) == 1
+    assert conversations_db.CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS is created[0]
