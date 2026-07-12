@@ -96,6 +96,24 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     /// Key: notification identifier, Value: (title, assistantId)
     private var notificationMetadata: [String: (title: String, assistantId: String)] = [:]
 
+    /// Insertion order of `notificationMetadata` keys, used to evict the oldest entries.
+    /// Metadata is only removed on user interaction (`didReceive`); a functional banner
+    /// the user never touches (ages out / is cleared without a dismiss action) would
+    /// otherwise leak its entry for the life of the process. Bounded FIFO eviction caps
+    /// the growth.
+    private var notificationMetadataOrder: [String] = []
+    private static let maxNotificationMetadata = 200
+
+    /// Evict oldest ids from `order`/`store` until `order.count <= max`.
+    /// `nonisolated static` + generic so the FIFO eviction policy is synchronously
+    /// unit-testable without hopping the main actor.
+    nonisolated static func evictOldestMetadata<V>(order: inout [String], store: inout [String: V], max: Int) {
+        guard order.count > max else { return }
+        let removeCount = order.count - max
+        for id in order.prefix(removeCount) { store.removeValue(forKey: id) }
+        order.removeFirst(removeCount)
+    }
+
     /// Last time we triggered a notification repair (debounce to avoid hammering lsregister)
     private var lastRepairAttempt: Date?
 
@@ -226,6 +244,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
             // Clean up metadata
             self.notificationMetadata.removeValue(forKey: notificationId)
+            self.notificationMetadataOrder.removeAll { $0 == notificationId }
         }
 
         completionHandler()
@@ -427,8 +446,15 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             trigger: nil // Deliver immediately
         )
 
-        // Store metadata for later retrieval in delegate callbacks
+        // Store metadata for later retrieval in delegate callbacks, capping growth so
+        // never-interacted banners cannot leak entries unboundedly.
         notificationMetadata[notificationId] = (title: title, assistantId: assistantId)
+        notificationMetadataOrder.append(notificationId)
+        Self.evictOldestMetadata(
+            order: &notificationMetadataOrder,
+            store: &notificationMetadata,
+            max: Self.maxNotificationMetadata
+        )
 
         // Play custom sound manually (SPM resources aren't found by UNNotificationSound)
         sound.playCustomSound()
@@ -441,6 +467,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
                 // Clean up metadata on error
                 Task { @MainActor in
                     self?.notificationMetadata.removeValue(forKey: notificationId)
+                    self?.notificationMetadataOrder.removeAll { $0 == notificationId }
                 }
             } else {
                 print("Notification sent successfully")
