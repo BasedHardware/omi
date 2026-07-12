@@ -1,9 +1,28 @@
+{{- if .Values.ingress.enabled -}}
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: nllb-translation-backend-config
+spec:
+  healthCheck:
+    checkIntervalSec: 10
+    timeoutSec: 5
+    port: {{ .Values.service.port }}
+    type: HTTP
+    requestPath: /health
+---
+{{- end }}
 apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "nllb-translation.fullname" . }}
   labels:
     {{- include "nllb-translation.labels" . | nindent 4 }}
+  {{- if .Values.ingress.enabled }}
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+    cloud.google.com/backend-config: '{"default": "nllb-translation-backend-config"}'
+  {{- end }}
 spec:
   type: {{ .Values.service.type }}
   ports:

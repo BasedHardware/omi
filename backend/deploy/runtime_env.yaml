@@ -33,7 +33,10 @@ environments:
               name: dev-omi-backend-secrets
               key: MODULATE_API_KEY
           HOSTED_PARAKEET_API_URL:
-            value: http://dev-omi-parakeet.dev-omi-backend.svc.cluster.local:8080
+            value: http://parakeet.omiapi.com
+            category: service_discovery
+          HOSTED_TRANSLATION_API_URL:
+            value: http://nllb.omiapi.com
             category: service_discovery
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
@@ -497,7 +500,10 @@ environments:
               name: prod-omi-backend-secrets
               key: MODULATE_API_KEY
           HOSTED_PARAKEET_API_URL:
-            value: http://prod-omi-parakeet.prod-omi-backend.svc.cluster.local:8080
+            value: http://parakeet.omi.me
+            category: service_discovery
+          HOSTED_TRANSLATION_API_URL:
+            value: http://nllb.omi.me
             category: service_discovery
           SERVICE_ACCOUNT_JSON:
             secret:
