@@ -16,7 +16,7 @@ export function tsToX(ts: number, span: TimeSpan): number {
 export function xToTs(x: number, span: TimeSpan): number {
   const range = span.maxTs - span.minTs
   if (span.width <= 0) return span.minTs
-  return Math.round(span.minTs + clamp(x, 0, span.width) / span.width * range)
+  return Math.round(span.minTs + (clamp(x, 0, span.width) / span.width) * range)
 }
 
 // Human-friendly tick intervals (ms), smallest → largest.
@@ -75,6 +75,34 @@ export function activitySegments(
   }
   segments.push({ start, end: prev })
   return segments
+}
+
+/**
+ * Complement of the activity segments within [windowStart, windowEnd]: the
+ * stretches with no recorded activity. Used to draw a "no signal" flatline
+ * through blank regions of the timeline. An empty timeline yields one
+ * full-width gap; touching/adjacent segments leave no gap between them; and
+ * sub-threshold gaps that `activitySegments` already merged never appear (they
+ * live inside a single segment). Segments are clamped to the window, so a
+ * caller passing bounds narrower than the frames still gets in-window gaps.
+ */
+export function gapSegments(
+  sortedTs: number[],
+  gapMs: number,
+  windowStart: number,
+  windowEnd: number
+): { start: number; end: number }[] {
+  if (windowEnd <= windowStart) return []
+  const gaps: { start: number; end: number }[] = []
+  let cursor = windowStart
+  for (const seg of activitySegments(sortedTs, gapMs)) {
+    const segStart = clamp(seg.start, windowStart, windowEnd)
+    const segEnd = clamp(seg.end, windowStart, windowEnd)
+    if (segStart > cursor) gaps.push({ start: cursor, end: segStart })
+    cursor = Math.max(cursor, segEnd)
+  }
+  if (cursor < windowEnd) gaps.push({ start: cursor, end: windowEnd })
+  return gaps
 }
 
 /**

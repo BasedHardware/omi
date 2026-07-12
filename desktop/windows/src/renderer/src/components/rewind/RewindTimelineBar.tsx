@@ -5,6 +5,7 @@ import {
   xToTs,
   axisTicks,
   activitySegments,
+  gapSegments,
   REWIND_ACTIVITY_GAP_MS
 } from '../../../../shared/timelineGeometry'
 import { useElementWidth } from '../../hooks/useElementWidth'
@@ -19,6 +20,29 @@ const dateLabel = (ts: number): string =>
 // you can pan across — not a squished fit-to-width overview. Larger = more zoomed
 // in (a longer history overflows the viewport and scrolls).
 const PX_PER_HOUR = 140
+
+// Blank stretches (no recording) at least this wide get a seismograph-style
+// "no signal" zigzag; narrower slivers stay flat so the bar isn't littered with
+// tiny stubs between near-adjacent activity blocks.
+const REWIND_GAP_MIN_PX = 24
+// Zigzag geometry (px): peak-to-peak tooth height, one full up→down wavelength,
+// and the track height (matches the track's `h-12`) the line is centered in.
+const ZIGZAG_TOOTH_PX = 7
+const ZIGZAG_WAVELENGTH_PX = 9
+const TRACK_HEIGHT_PX = 48
+
+// Points for a horizontal sawtooth spanning [0, width], centered vertically in
+// the track — a flatline that says "nothing recorded here", not decoration.
+function zigzagPoints(width: number): string {
+  const mid = TRACK_HEIGHT_PX / 2
+  const half = ZIGZAG_TOOTH_PX / 2
+  const step = ZIGZAG_WAVELENGTH_PX / 2
+  const pts: string[] = []
+  for (let i = 0, x = 0; x <= width; i++, x = i * step) {
+    pts.push(`${x.toFixed(1)},${(mid + (i % 2 === 0 ? -half : half)).toFixed(1)}`)
+  }
+  return pts.join(' ')
+}
 
 // Axis ticks aligned to LOCAL time boundaries (round local hours/days), so labels
 // don't land on UTC boundaries that render as e.g. "20:00". Reuses the shared
@@ -64,8 +88,13 @@ export function RewindTimelineBar({
     onSeek(xToTs(clientX - rect.left, span))
   }
 
-  const ticks = span ? localAxisTicks(minTs, maxTs, Math.max(4, Math.round(contentWidth / 110))) : []
-  const segments = span ? activitySegments(frames.map((f) => f.ts), REWIND_ACTIVITY_GAP_MS) : []
+  const ticks = span
+    ? localAxisTicks(minTs, maxTs, Math.max(4, Math.round(contentWidth / 110)))
+    : []
+  const frameTimes = frames.map((f) => f.ts)
+  const segments = span ? activitySegments(frameTimes, REWIND_ACTIVITY_GAP_MS) : []
+  // Complement of the activity blocks: the blank stretches drawn as flatlines.
+  const gaps = span ? gapSegments(frameTimes, REWIND_ACTIVITY_GAP_MS, minTs, maxTs) : []
 
   // Center the cursor whenever it actually CHANGES — the initial open position
   // (the newest frame, so the bar lands on the recent edge), a seek, or live-follow.
@@ -103,6 +132,32 @@ export function RewindTimelineBar({
             onClick={(e) => seekFromEvent(e.clientX)}
             className="relative h-12 cursor-pointer rounded bg-white/5"
           >
+            {span &&
+              gaps.map((g) => {
+                const left = tsToX(g.start, span)
+                const width = tsToX(g.end, span) - left
+                if (width < REWIND_GAP_MIN_PX) return null
+                return (
+                  <svg
+                    key={`gap-${g.start}`}
+                    data-testid="rewind-gap-zigzag"
+                    aria-hidden="true"
+                    className="pointer-events-none absolute top-0 text-white/15"
+                    style={{ left, width, height: TRACK_HEIGHT_PX }}
+                    width={width}
+                    height={TRACK_HEIGHT_PX}
+                  >
+                    <polyline
+                      points={zigzagPoints(width)}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={1.5}
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                )
+              })}
             {span &&
               segments.map((s) => {
                 const left = tsToX(s.start, span)

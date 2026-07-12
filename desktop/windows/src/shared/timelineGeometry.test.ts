@@ -5,6 +5,7 @@ import {
   nearestFrameIndex,
   axisTicks,
   activitySegments,
+  gapSegments,
   frameIndexAtCursor
 } from './timelineGeometry'
 
@@ -74,6 +75,50 @@ describe('activitySegments', () => {
 
   it('keeps frames exactly at the gap threshold together', () => {
     expect(activitySegments([0, 60_000], 60_000)).toEqual([{ start: 0, end: 60_000 }])
+  })
+})
+
+describe('gapSegments', () => {
+  const GAP = 60_000
+
+  it('yields one full-width gap for an empty timeline', () => {
+    expect(gapSegments([], GAP, 0, 100_000)).toEqual([{ start: 0, end: 100_000 }])
+  })
+
+  it('returns the blank stretch between two activity blocks', () => {
+    // Blocks 0–1000 and 200000–201000; the gap is the span between them.
+    expect(gapSegments([0, 1000, 200_000, 201_000], GAP, 0, 201_000)).toEqual([
+      { start: 1000, end: 200_000 }
+    ])
+  })
+
+  it('includes leading and trailing gaps when the window overhangs the frames', () => {
+    expect(gapSegments([1000, 2000], GAP, 0, 5000)).toEqual([
+      { start: 0, end: 1000 },
+      { start: 2000, end: 5000 }
+    ])
+  })
+
+  it('leaves no gap where frames sit exactly one threshold apart (merged, not split)', () => {
+    // Each hop is exactly the gap threshold, so activitySegments keeps them in
+    // one block 0–120000 — the window is fully covered, no blank.
+    expect(gapSegments([0, 60_000, 120_000], GAP, 0, 120_000)).toEqual([])
+  })
+
+  it('does not emit sub-threshold gaps that live inside one merged segment', () => {
+    // 30s apart (< 60s) → one segment 0–90000, so the whole window is covered.
+    expect(gapSegments([0, 30_000, 60_000, 90_000], GAP, 0, 90_000)).toEqual([])
+  })
+
+  it('is the exact complement of the activity blocks across the window', () => {
+    expect(gapSegments([0, 1000, 200_000], GAP, 0, 200_000)).toEqual([
+      { start: 1000, end: 200_000 }
+    ])
+  })
+
+  it('returns nothing for a non-positive window', () => {
+    expect(gapSegments([1000], GAP, 500, 500)).toEqual([])
+    expect(gapSegments([1000], GAP, 900, 500)).toEqual([])
   })
 })
 
