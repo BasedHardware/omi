@@ -272,7 +272,7 @@ class _Input extends StatelessWidget {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF7B5CFF)),
+          borderSide: const BorderSide(color: Colors.white),
         ),
       ),
     );
@@ -301,7 +301,7 @@ class _ChipRow extends StatelessWidget {
           label: Text(value[0].toUpperCase() + value.substring(1)),
           selected: isSelected,
           onSelected: (_) => onSelected(value),
-          selectedColor: const Color(0xFF7B5CFF),
+          selectedColor: const Color(0xFF34343B),
           backgroundColor: const Color(0xFF1F1F25),
           labelStyle: TextStyle(
             color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.72),
@@ -310,7 +310,7 @@ class _ChipRow extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
             side: BorderSide(
-              color: isSelected ? const Color(0xFF7B5CFF) : const Color(0xFF34343B),
+              color: isSelected ? Colors.white : const Color(0xFF34343B),
             ),
           ),
         );
@@ -369,7 +369,7 @@ class _SwitchTile extends StatelessWidget {
           ),
           Switch(
             value: value,
-            activeThumbColor: const Color(0xFF7B5CFF),
+            activeThumbColor: Colors.white,
             onChanged: onChanged,
           ),
         ],
