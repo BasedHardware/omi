@@ -141,7 +141,7 @@
       }
     ],
     "updated": "2026-06-23T01:27:10Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
@@ -154,7 +154,11 @@
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "api"
+    }
   },
   {
     "id": 17,
@@ -311,7 +315,8 @@
       "threshold": "1"
     },
     "labels": {
-      "instatus_component": "api"
+      "instatus_component": "api",
+      "severity": "critical"
     },
     "isPaused": false,
     "notification_settings": {
@@ -439,7 +444,7 @@
       }
     ],
     "updated": "2026-06-20T02:27:33Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "OK",
     "for": "5m",
     "keep_firing_for": "0s",
@@ -448,7 +453,8 @@
       "__panelId__": "62"
     },
     "labels": {
-      "instatus_component": "api"
+      "instatus_component": "api",
+      "severity": "warning"
     },
     "isPaused": false,
     "notification_settings": {
@@ -595,7 +601,7 @@
       }
     ],
     "updated": "2026-06-23T01:20:15Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
@@ -608,7 +614,11 @@
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "ticket",
+      "instatus_component": "api"
+    }
   },
   {
     "id": 18,
@@ -748,7 +758,7 @@
       }
     ],
     "updated": "2026-06-20T02:27:34Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
@@ -761,7 +771,11 @@
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "ticket",
+      "instatus_component": "api"
+    }
   },
   {
     "id": 15,
@@ -909,7 +923,7 @@
       }
     ],
     "updated": "2026-06-20T02:27:34Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
@@ -922,7 +936,11 @@
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "ticket",
+      "instatus_component": "api"
+    }
   },
   {
     "id": 48,
@@ -1044,7 +1062,7 @@
       }
     ],
     "updated": "2026-06-20T02:27:33Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "OK",
     "for": "5m",
     "keep_firing_for": "5m",
@@ -1053,7 +1071,8 @@
       "__panelId__": "62"
     },
     "labels": {
-      "instatus_component": "ai-chat"
+      "instatus_component": "api",
+      "severity": "ticket"
     },
     "isPaused": false,
     "notification_settings": {

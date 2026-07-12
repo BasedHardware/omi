@@ -1,11 +1,10 @@
 [
   {
-    "id": 57,
-    "uid": "dfpgfzd3t1m9sf",
+    "uid": "tz_parakeet_rps_zero",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Parakeet",
-    "title": "Parakeet - 5XX error rate is high",
+    "ruleGroup": "Traffic Zero Detection",
+    "title": "Parakeet - traffic dropped to zero",
     "condition": "C",
     "data": [
       {
@@ -21,7 +20,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_count{forwarding_rule_name=\"k8s2-fr-heiog7uv-prod-omi-backend-prod-omi-parakeet-g38rzz69\",response_code_class=\"500\"}[5m])) or vector(0)",
+          "expr": "sum(rate(parakeet_requests_total{namespace=\"prod-omi-backend\"}[10m])) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -37,27 +36,6 @@
         },
         "datasourceUid": "__expr__",
         "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "B"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
           "datasource": {
             "type": "__expr__",
             "uid": "__expr__"
@@ -83,9 +61,9 @@
             {
               "evaluator": {
                 "params": [
-                  0.1
+                  0.001
                 ],
-                "type": "gt"
+                "type": "lt"
               },
               "operator": {
                 "type": "and"
@@ -114,556 +92,491 @@
         }
       }
     ],
-    "updated": "2026-06-20T02:27:44Z",
     "noDataState": "Alerting",
     "execErrState": "Error",
-    "for": "3m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
-      "__panelId__": "7",
-      "threshold": "0.1"
-    },
-    "labels": {
-      "instatus_component": "speech-processing",
-      "severity": "critical"
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null
-  },
-  {
-    "id": 61,
-    "uid": "efpossz9hmsqod",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Parakeet",
-    "title": "Parakeet - LB 5XX error ratio is critical",
-    "condition": "D",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(sum(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_count{forwarding_rule_name=\"k8s2-fr-heiog7uv-prod-omi-backend-prod-omi-parakeet-g38rzz69\",response_code_class=\"500\"}[5m])) or vector(0)) / (sum(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_count{forwarding_rule_name=\"k8s2-fr-heiog7uv-prod-omi-backend-prod-omi-parakeet-g38rzz69\"}[5m])) > 0)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "A"
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_count{forwarding_rule_name=\"k8s2-fr-heiog7uv-prod-omi-backend-prod-omi-parakeet-g38rzz69\"}[5m]))",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "$A > 0.01 && $B > 0.5",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "math"
-        }
-      },
-      {
-        "refId": "D",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "D"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "C",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "D",
-          "type": "reduce"
-        }
-      }
-    ],
-    "updated": "2026-06-20T08:36:19Z",
-    "noDataState": "Alerting",
-    "execErrState": "Error",
-    "for": "2m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
-      "__panelId__": "122",
-      "summary": "5xx errors exceed 1% of Parakeet LB traffic (min 30 req/min gate)",
-      "threshold": "0.01"
-    },
-    "labels": {
-      "instatus_component": "speech-processing",
-      "severity": "critical"
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null
-  },
-  {
-    "id": 60,
-    "uid": "efpnx71qc88aob",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Parakeet",
-    "title": "Parakeet - pod restart detected (possible OOMKill)",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(increase(kube_pod_container_status_restarts_total{container=\"parakeet\",namespace=\"prod-omi-backend\"}[10m]))",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "A"
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "B"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  0
-                ],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "C"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "updated": "2026-06-20T02:28:35Z",
-    "noDataState": "OK",
-    "execErrState": "Error",
-    "for": "0s",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
-      "__panelId__": "113"
-    },
-    "labels": {
-      "instatus_component": "speech-processing",
-      "severity": "warning"
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null
-  },
-  {
-    "id": 58,
-    "uid": "efpgg049laqyof",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Parakeet",
-    "title": "Parakeet - request latency is high",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "histogram_quantile(0.99, sum by (le)(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_bucket{forwarding_rule_name=\"k8s2-fr-heiog7uv-prod-omi-backend-prod-omi-parakeet-g38rzz69\"}[5m])))",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "A"
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "B"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  30000
-                ],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "C"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "updated": "2026-06-20T02:27:44Z",
-    "noDataState": "OK",
-    "execErrState": "Error",
-    "for": "5m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
-      "__panelId__": "6",
-      "threshold": "30000ms"
-    },
-    "labels": {
-      "instatus_component": "speech-processing",
-      "severity": "warning"
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null
-  },
-  {
-    "id": 59,
-    "uid": "efpgg1kfjglj4d",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Parakeet",
-    "title": "Parakeet RPS is high",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_count{forwarding_rule_name=\"k8s2-fr-heiog7uv-prod-omi-backend-prod-omi-parakeet-g38rzz69\"}[5m]))",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "A"
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "B"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  5
-                ],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "C"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "updated": "2026-06-20T02:27:44Z",
-    "noDataState": "OK",
-    "execErrState": "Error",
-    "for": "5m",
+    "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
       "__panelId__": "5",
-      "threshold": "5 req/s"
+      "summary": "Parakeet receiving zero traffic for 10+ minutes \u2014 possible ILB connectivity or config issue (previous incident: https\u2192http misconfiguration caused 8h outage)",
+      "threshold": "< 0.001 rps (effectively zero)"
     },
     "labels": {
-      "instatus_component": "speech-processing",
-      "severity": "warning"
+      "severity": "critical",
+      "instatus_component": "speech-processing"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "tz_backend_listen_lb_zero",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Traffic Zero Detection",
+    "title": "Backend-listen - LB traffic dropped to zero",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(stackdriver_https_lb_rule_loadbalancing_googleapis_com_https_backend_request_count{backend_target_name=\"custom-domains-api-omi-me-backend-listen-49a4-be\"}[10m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0.001
+                ],
+                "type": "lt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "__panelId__": "19",
+      "summary": "Backend-listen receiving zero LB traffic for 10+ minutes \u2014 transcription pipeline may be down",
+      "threshold": "< 0.001 rps (effectively zero)"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "tz_backend_listen_pods_zero",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Traffic Zero Detection",
+    "title": "Backend-listen - no ready pods",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(kube_deployment_status_replicas_ready{deployment=\"prod-omi-backend-listen\", namespace=\"prod-omi-backend\"}) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  1
+                ],
+                "type": "lt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "__panelId__": "9",
+      "summary": "Backend-listen has zero ready pods \u2014 all replicas are down or failing health checks",
+      "threshold": "< 1 ready pod"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "tz_pusher_connections_zero",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Traffic Zero Detection",
+    "title": "Pusher - zero active WebSocket connections",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(pusher_active_ws_connections{namespace=\"prod-omi-backend\", pod=~\"prod-omi-pusher.*\"}) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  1
+                ],
+                "type": "lt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "__panelId__": "43",
+      "summary": "Pusher has zero active WebSocket connections for 10+ minutes \u2014 live transcription pipeline broken",
+      "threshold": "< 1 active connection"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "tz_backend_cloudrun_zero",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Traffic Zero Detection",
+    "title": "Backend (Cloud Run) - traffic dropped to zero",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "timeSeriesList",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "beuxmaq8oxhq8e",
+        "model": {
+          "aliasBy": "Backend RPS",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "instant": false,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "queryType": "timeSeriesList",
+          "range": true,
+          "refId": "A",
+          "timeSeriesList": {
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "filters": [
+              "resource.label.backend_target_name",
+              "=",
+              "custom-domains-api-omi-me-backend-49a4-be",
+              "AND",
+              "metric.type",
+              "=",
+              "loadbalancing.googleapis.com/https/backend_request_count"
+            ],
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_NONE",
+            "preprocessor": "rate",
+            "projectName": "based-hardware",
+            "view": "FULL"
+          }
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0.001
+                ],
+                "type": "lt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "__panelId__": "3",
+      "summary": "Backend Cloud Run service receiving zero LB traffic for 15+ minutes \u2014 API may be unreachable",
+      "threshold": "< 0.001 rps (effectively zero)"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "api"
     },
     "isPaused": false,
     "notification_settings": {
