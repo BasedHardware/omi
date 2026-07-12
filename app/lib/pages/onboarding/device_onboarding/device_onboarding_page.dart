@@ -29,7 +29,6 @@ class _DeviceOnboardingPageState extends State<DeviceOnboardingPage> with Single
   late Animation<double> _arrowAnimation;
   late VideoPlayerController _videoController;
   bool _isVideoInitialized = false;
-  double _videoProgress = 0.0;
 
   // Content for each slide
   final List<Map<String, String>> _slideContent = [
@@ -83,30 +82,14 @@ class _DeviceOnboardingPageState extends State<DeviceOnboardingPage> with Single
       });
       _videoController.setLooping(true);
       _videoController.play();
-
-      // Listen to video progress
-      _videoController.addListener(_updateVideoProgress);
     } catch (e) {
       print('Error initializing video: $e');
-    }
-  }
-
-  void _updateVideoProgress() {
-    if (_videoController.value.isInitialized) {
-      final position = _videoController.value.position;
-      final duration = _videoController.value.duration;
-      if (duration.inMilliseconds > 0) {
-        setState(() {
-          _videoProgress = position.inMilliseconds / duration.inMilliseconds;
-        });
-      }
     }
   }
 
   @override
   void dispose() {
     _controller.dispose();
-    _videoController.removeListener(_updateVideoProgress);
     _videoController.dispose();
     super.dispose();
   }
