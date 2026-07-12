@@ -718,7 +718,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(kube_deployment_status_replicas_ready{deployment=\"deepgram-engine\", namespace=\"prod-omi-backend\"}) or vector(0)",
+          "expr": "sum(kube_deployment_status_replicas_ready{deployment=\"deepgram-engine\", namespace=\"prod-omi-dg-self-hosted\"}) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
