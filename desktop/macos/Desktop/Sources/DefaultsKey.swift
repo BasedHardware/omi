@@ -53,6 +53,10 @@ struct ScopedDefaultsKey {
     static func taskContextSubjectMatches(ownerHash: String) -> Self {
         Self(rawValue: "taskContextSubjectMatches.v1.\(ownerHash)")
     }
+
+    static func memoryAtlasCommunityProjection(version: Int, userID: String) -> Self {
+        Self(rawValue: "memoryAtlas.communityProjection.v\(version).\(userID)")
+    }
 }
 
 /// Typed accessors that take a `DefaultsKey` instead of a `String`.

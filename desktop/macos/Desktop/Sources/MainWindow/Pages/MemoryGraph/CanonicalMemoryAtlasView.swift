@@ -865,9 +865,9 @@ enum MemoryAtlasLayoutEngine {
 private enum MemoryAtlasCommunityProjectionStore {
   private static let detectorVersion = 1
 
-  private static var key: String {
-    let userID = UserDefaults.standard.string(forKey: "auth_userId") ?? "anonymous"
-    return "memoryAtlas.communityProjection.v\(detectorVersion).\(userID)"
+  private static var key: ScopedDefaultsKey {
+    let userID = UserDefaults.standard.string(forKey: .authUserId) ?? "anonymous"
+    return .memoryAtlasCommunityProjection(version: detectorVersion, userID: userID)
   }
 
   static func load() -> MemoryAtlasCommunityProjection? {
