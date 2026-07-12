@@ -112,6 +112,71 @@ final class TranscriptionTransportTests: XCTestCase {
     XCTAssertEqual(model.turn?.projection.hint, "")
   }
 
+  /// MIC-04 (behavioral): the per-turn buffer must stop growing at the ~4.5-min cap
+  /// (bounded RSS on a >5-min dictation) and warn the user exactly once, at the
+  /// crossing. The live-mic path can't reach this cap from the automation bridge —
+  /// the PTT actions drive the realtime hub, not the batch buffer (proven in the
+  /// Wave-19 runtime attempts) — so the pure cap decision is the criterion's real
+  /// test seam.
+  func testBatchAudioCapBoundsBufferAndWarnsExactlyOnce() {
+    let cap = PushToTalkManager.maxBatchAudioBytes
+    XCTAssertEqual(cap, Int(4.5 * 60) * 16_000 * 2, "cap is 4.5 min of 16kHz s16 mono")
+
+    // Well under the cap: keep appending, no warning.
+    let low = PushToTalkManager.batchAudioCapDecision(
+      bufferedBytes: 0, chunkBytes: 3_200, alreadySignaled: false)
+    XCTAssertTrue(low.append)
+    XCTAssertFalse(low.warn)
+
+    // The chunk that crosses the cap is kept, and it is the one that warns.
+    let crossing = PushToTalkManager.batchAudioCapDecision(
+      bufferedBytes: cap - 100, chunkBytes: 3_200, alreadySignaled: false)
+    XCTAssertTrue(crossing.append, "the crossing chunk is kept so the buffered audio still transcribes")
+    XCTAssertTrue(crossing.warn, "the crossing chunk warns the user")
+
+    // Same crossing, already warned: still no second warning (once per turn).
+    let crossingAgain = PushToTalkManager.batchAudioCapDecision(
+      bufferedBytes: cap - 100, chunkBytes: 3_200, alreadySignaled: true)
+    XCTAssertTrue(crossingAgain.append)
+    XCTAssertFalse(crossingAgain.warn, "the overflow warning must fire exactly once per turn")
+
+    // At/over the cap the buffer stops growing entirely — this is the bounded-RSS guarantee.
+    for buffered in [cap, cap + 1, cap * 2] {
+      let over = PushToTalkManager.batchAudioCapDecision(
+        bufferedBytes: buffered, chunkBytes: 3_200, alreadySignaled: true)
+      XCTAssertFalse(over.append, "buffer must not grow past the cap (bounded memory)")
+      XCTAssertFalse(over.warn)
+    }
+  }
+
+  /// Simulating a >5-min dictation chunk-by-chunk: RSS is bounded at the cap and the
+  /// user is warned exactly once across the whole turn.
+  func testSimulatedLongDictationStaysBoundedWithSingleWarning() {
+    let cap = PushToTalkManager.maxBatchAudioBytes
+    let chunk = 3_200  // 100ms of 16kHz s16 mono
+    var buffered = 0
+    var signaled = false
+    var warnings = 0
+
+    // 6 minutes of continuous speech — well past the 4.5-min cap.
+    let chunksIn6Min = (6 * 60 * 16_000 * 2) / chunk
+    for _ in 0..<chunksIn6Min {
+      let d = PushToTalkManager.batchAudioCapDecision(
+        bufferedBytes: buffered, chunkBytes: chunk, alreadySignaled: signaled)
+      if d.append { buffered += chunk }
+      if d.warn {
+        warnings += 1
+        signaled = true
+      }
+    }
+
+    XCTAssertEqual(warnings, 1, "exactly one 'Recording too long' warning across a 6-min turn")
+    XCTAssertLessThanOrEqual(
+      buffered, cap + chunk,
+      "buffer must not exceed the cap by more than the single crossing chunk (bounded RSS)")
+    XCTAssertGreaterThanOrEqual(buffered, cap, "the full ~4.5 min is retained for transcription")
+  }
+
   // MARK: BL-014 — deinit must not deadlock
 
   func testAudioCaptureDeinitDoesNotSyncOnAudioQueue() throws {

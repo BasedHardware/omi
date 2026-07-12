@@ -1116,16 +1116,36 @@ class PushToTalkManager: ObservableObject {
     // Append while under the cap (the chunk that reaches it is kept, so the warning
     // fires exactly at the crossing). Set the once-flag atomically under the lock so
     // the warning is enqueued exactly once, not on every subsequent chunk.
-    var justHitCap = false
-    if batchAudioBuffer.count < Self.maxBatchAudioBytes {
-      batchAudioBuffer.append(audioData)
-      if batchAudioBuffer.count >= Self.maxBatchAudioBytes && !batchAudioOverflowSignaled {
-        batchAudioOverflowSignaled = true
-        justHitCap = true
-      }
-    }
+    let decision = Self.batchAudioCapDecision(
+      bufferedBytes: batchAudioBuffer.count,
+      chunkBytes: audioData.count,
+      alreadySignaled: batchAudioOverflowSignaled
+    )
+    if decision.append { batchAudioBuffer.append(audioData) }
+    if decision.warn { batchAudioOverflowSignaled = true }
     batchAudioLock.unlock()
-    if justHitCap { showBatchAudioOverflowWarning(turn: turn) }
+    if decision.warn { showBatchAudioOverflowWarning(turn: turn) }
+  }
+
+  /// Pure cap decision behind `appendBatchAudioBounded` (MIC-04): should this mic
+  /// chunk be appended, and does it cross the cap (warn exactly once)?
+  ///
+  /// Extracted so the bounding guarantee — RSS stays bounded past ~4.5 min and the
+  /// user is warned once, not per chunk — is unit-testable without driving the audio
+  /// thread. The live-mic path can't reach this cap from the automation bridge (the
+  /// PTT actions drive the realtime hub, not the batch buffer), so this is the
+  /// criterion's real test seam. Keep in lockstep with `appendBatchAudioBounded`.
+  nonisolated static func batchAudioCapDecision(
+    bufferedBytes: Int,
+    chunkBytes: Int,
+    cap: Int = maxBatchAudioBytes,
+    alreadySignaled: Bool
+  ) -> (append: Bool, warn: Bool) {
+    // At or over the cap the buffer stops growing entirely — bounded RSS.
+    guard bufferedBytes < cap else { return (append: false, warn: false) }
+    // Under the cap: keep the chunk. If it crosses the cap, warn once.
+    let crosses = (bufferedBytes + chunkBytes) >= cap
+    return (append: true, warn: crosses && !alreadySignaled)
   }
 
   /// Surface the one-time "recording too long" warning when the turn buffer is
