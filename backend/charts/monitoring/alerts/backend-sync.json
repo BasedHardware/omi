@@ -302,7 +302,7 @@
       }
     ],
     "updated": "2026-06-23T01:27:10Z",
-    "noDataState": "OK",
+    "noDataState": "Alerting",
     "execErrState": "Error",
     "for": "3m",
     "keep_firing_for": "0s",
@@ -313,7 +313,7 @@
     },
     "labels": {
       "instatus_component": "api",
-      "severity": "warning"
+      "severity": "critical"
     },
     "isPaused": false,
     "notification_settings": {
