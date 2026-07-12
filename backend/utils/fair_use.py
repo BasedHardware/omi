@@ -18,37 +18,23 @@ import database.users as users_db
 from database.redis_db import r as redis_client
 from models.fair_use import SoftCapTrigger
 from utils.subscription import has_transcription_credits, is_paid_plan
-from utils.executors import db_executor, run_blocking
+from utils.executors import db_executor, postprocess_executor, run_blocking
+from utils.llm.fair_use_classifier import classify_user_purpose
+from utils.notifications import send_notification
 
-# Deferred imports — exception to CLAUDE.md top-level import rule.
-# classify_user_purpose: fair_use_classifier.py constructs ChatOpenAI at import time,
-#   which raises openai.OpenAIError if OPENAI_API_KEY is not set.
-# send_notification: imports firebase_admin.messaging which requires Firebase app init.
-# Both are only called in async runtime paths, never at import time.
-_classify_user_purpose: Optional[Callable[..., Any]] = None
-_send_notification: Optional[Callable[..., Any]] = None
+# Patchable lazy-held callables keep tests at a production seam without using
+# in-function imports. Both imported modules are import-pure and construct their
+# provider clients only when the callable is invoked.
+_classify_user_purpose: Callable[..., Any] = classify_user_purpose
+_send_notification: Callable[..., Any] = send_notification
 
 
 def _get_classify_user_purpose() -> Callable[..., Any]:
-    global _classify_user_purpose
-    cached: Optional[Callable[..., Any]] = _classify_user_purpose
-    if cached is None:
-        from utils.llm.fair_use_classifier import classify_user_purpose
-
-        cached = classify_user_purpose
-        _classify_user_purpose = cached
-    return cached
+    return _classify_user_purpose
 
 
 def _get_send_notification() -> Callable[..., Any]:
-    global _send_notification
-    cached: Optional[Callable[..., Any]] = _send_notification
-    if cached is None:
-        from utils.notifications import send_notification
-
-        cached = send_notification
-        _send_notification = cached
-    return cached
+    return _send_notification
 
 
 logger = logging.getLogger(__name__)
@@ -698,7 +684,7 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: List[Dict[str, 
     """
     # Already at terminal stage — no escalation possible, skip LLM + lock (#6316)
     try:
-        current_stage = get_enforcement_stage(uid)
+        current_stage = await run_blocking(db_executor, get_enforcement_stage, uid)
         if current_stage == 'restrict':
             logger.info(f'fair_use: uid={uid} already at restrict stage, skipping classifier')
             return
@@ -709,7 +695,14 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: List[Dict[str, 
     lock_token = str(uuid.uuid4())
 
     try:
-        acquired = redis_client.set(lock_key, lock_token, nx=True, ex=FAIR_USE_CLASSIFIER_COOLDOWN_SECONDS)
+        acquired = await run_blocking(
+            db_executor,
+            redis_client.set,
+            lock_key,
+            lock_token,
+            nx=True,
+            ex=FAIR_USE_CLASSIFIER_COOLDOWN_SECONDS,
+        )
         if not acquired:
             logger.info(f'fair_use: classifier already running/recent for {uid}')
             return
@@ -719,12 +712,12 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: List[Dict[str, 
 
     try:
         # Free-exhausted users: synthetic score > 0.7, skip LLM classifier (#6083)
-        if is_free_credits_exhausted(uid):
+        if await run_blocking(db_executor, is_free_credits_exhausted, uid):
             classifier_result = {'misuse_score': 1.0, 'usage_type': 'free_exhausted'}
             logger.info(f'fair_use: free-exhausted uid={uid}, using synthetic score 1.0')
         else:
             classifier_result = await _get_classify_user_purpose()(uid)
-        escalation = escalate_enforcement(uid, triggered_caps, classifier_result)
+        escalation = await run_blocking(db_executor, escalate_enforcement, uid, triggered_caps, classifier_result)
 
         logger.info(
             'fair_use: uid=%s action=%s score=%.2f type=%s stage=%s->%s',
@@ -746,7 +739,7 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: List[Dict[str, 
     except Exception as e:
         logger.error(f'fair_use: classifier/escalation error for {uid}: {e}')
         try:
-            _release_lock(lock_key, lock_token)
+            await run_blocking(db_executor, _release_lock, lock_key, lock_token)
         except Exception:
             pass
 
@@ -785,4 +778,4 @@ async def _send_fair_use_notification(uid: str, action: str, case_ref: str = '')
         data = {'type': 'fair_use', 'action': action}
         if case_ref:
             data['case_ref'] = case_ref
-        _get_send_notification()(uid, title, body, data=data)
+        await run_blocking(postprocess_executor, _get_send_notification(), uid, title, body, data=data)

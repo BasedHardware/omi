@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -13,6 +14,7 @@ from typing import Iterable
 
 DESKTOP_SWIFT_ROOT = Path("desktop/macos/Desktop/Sources")
 DEFAULT_FLOWS_DIR = Path("desktop/macos/e2e/flows")
+GIT_ENV_DROP = {"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"}
 
 
 @dataclass(frozen=True)
@@ -37,6 +39,10 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def git_env() -> dict[str, str]:
+    return {key: value for key, value in os.environ.items() if key not in GIT_ENV_DROP}
+
+
 def repo_root(explicit: str | None) -> Path:
     if explicit:
         return Path(explicit).resolve()
@@ -47,6 +53,7 @@ def repo_root(explicit: str | None) -> Path:
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,
+            env=git_env(),
         )
         return Path(result.stdout.strip()).resolve()
     except (subprocess.CalledProcessError, FileNotFoundError):
@@ -61,6 +68,7 @@ def run_git(root: Path, args: list[str]) -> list[str]:
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         text=True,
+        env=git_env(),
     )
     if result.returncode != 0:
         return []
@@ -68,7 +76,8 @@ def run_git(root: Path, args: list[str]) -> list[str]:
 
 
 def default_base(root: Path) -> str | None:
-    for candidate in ("origin/main", "main"):
+    best: tuple[int, str] | None = None
+    for candidate in ("upstream/main", "origin/main", "main"):
         result = subprocess.run(
             ["git", "merge-base", candidate, "HEAD"],
             cwd=root,
@@ -76,10 +85,29 @@ def default_base(root: Path) -> str | None:
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,
+            env=git_env(),
         )
-        if result.returncode == 0 and result.stdout.strip():
-            return result.stdout.strip()
-    return None
+        merge_base = result.stdout.strip()
+        if result.returncode != 0 or not merge_base:
+            continue
+        distance_result = subprocess.run(
+            ["git", "rev-list", "--count", f"{merge_base}..HEAD"],
+            cwd=root,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            env=git_env(),
+        )
+        if distance_result.returncode != 0:
+            continue
+        try:
+            distance = int(distance_result.stdout.strip())
+        except ValueError:
+            continue
+        if best is None or distance < best[0]:
+            best = (distance, merge_base)
+    return best[1] if best else None
 
 
 def changed_files_from_git(root: Path, base: str | None, staged: bool) -> list[str]:

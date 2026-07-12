@@ -82,12 +82,12 @@ surfaces:
     migration_status: gateway_capable_central_flip
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
   - surface: anthropic_agentic_chat
-    code_path: backend/utils/retrieval/agentic.py:_run_anthropic_agent_stream
+    code_path: backend/utils/llm/gateway_anthropic.py:_GatewayAnthropicStreamWithFallback
     current_provider_model: anthropic/chat_agent
     request_shape: streaming, native tool calling, server-side web search
-    gateway_lane_capability_needed: anthropic provider adapter with tools enabled on omi:auto:chat-agent
-    migration_status: inventoried_explicit_direct_anthropic_stream_exception; blocked during OMI_LLM_GATEWAY_FEATURE_MODE=gateway unless explicitly acknowledged
-    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+    gateway_lane_capability_needed: native anthropic.messages surface with streaming and tools on omi:auto:chat-agent
+    migration_status: gateway_routed_with_direct_anthropic_transport_fallback; fallback reports recovered only after terminal legacy success and exhausted on legacy failure
+    test_guardrail_coverage: backend/tests/unit/test_gateway_anthropic_client.py
   - surface: perplexity_web_search_tool
     code_path: backend/utils/retrieval/tools/perplexity_tools.py:perplexity_web_search_tool
     current_provider_model: perplexity/web_search

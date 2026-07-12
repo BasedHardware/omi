@@ -27,7 +27,7 @@ from models.product_memory import (
     is_default_access_eligible,
 )
 from utils.memory.memory_read_api import query_default_product_memory_items
-from utils.memory.v3_control_reader_contract import (
+from utils.memory.v3.control_reader_contract import (
     V3ControlDecisionReason,
     V3ControlReadResult,
     V3ControlReaderRequest,

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from utils.memory.v3_archive_visibility_readiness import (
+from utils.memory.v3.archive_visibility_readiness import (
     decide_default_visibility,
     evaluate_archive_short_term_visibility_readiness,
 )
@@ -207,11 +207,11 @@ def test_readiness_module_and_script_do_not_import_memories_router():
     import sys
 
     sys.modules.pop('routers.memories', None)
-    importlib.import_module('utils.memory.v3_archive_visibility_readiness')
+    importlib.import_module('utils.memory.v3.archive_visibility_readiness')
     importlib.import_module('scripts.p1_3_v3_archive_short_term_visibility_readiness')
 
     script_source = (ROOT / 'scripts' / 'p1_3_v3_archive_short_term_visibility_readiness.py').read_text()
-    utility_source = (ROOT / 'utils' / 'memory' / 'v3_archive_visibility_readiness.py').read_text()
+    utility_source = (ROOT / 'utils' / 'memory' / 'v3' / 'archive_visibility_readiness.py').read_text()
     assert 'routers.memories' not in sys.modules
     assert 'routers.memories' not in script_source
     assert 'routers.memories' not in utility_source

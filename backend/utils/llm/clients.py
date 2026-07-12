@@ -502,6 +502,7 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
             feature=feature,
             gateway_model=gateway_model,
             legacy_model=byok_client,
+            credential_source='service_forwarded_byok',
         )
     elif byok_key:
         byok_client = _create_byok_client(model, provider, byok_key, streaming, feature)
@@ -521,6 +522,7 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
                 feature=feature,
                 gateway_model=gateway_model,
                 legacy_model=legacy_model,
+                credential_source='omi_managed',
             )
     else:
         result = get_default_client(model, provider, streaming, get_route_options(feature, model, provider))

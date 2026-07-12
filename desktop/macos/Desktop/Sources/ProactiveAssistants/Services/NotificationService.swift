@@ -263,12 +263,18 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         // re-fires this on every session (soft-recovery + app restart), which buried
         // users in duplicate banners when a stale TCC csreq from an auto-update made
         // the capture path unrecoverable without a manual toggle in System Settings.
-        if title == Self.screenCaptureResetTitle {
-            if UserDefaults.standard.bool(forKey: Self.screenCaptureResetShownKey) {
-                log("NotificationService: suppressing duplicate screen capture reset notification")
-                return
-            }
-            UserDefaults.standard.set(true, forKey: Self.screenCaptureResetShownKey)
+        // NOTE: only READ the "already shown" flag here. The flag is SET at actual
+        // delivery time (just before showNotification below), NOT here — setting it
+        // before the snooze/enabled/frequency gates meant that if any gate suppressed
+        // this delivery (e.g. the user is snoozed when capture breaks), the flag was
+        // still persisted, and since it is only cleared on capture RECOVERY — which
+        // never happens while capture stays broken — every later retry hit this early
+        // return and the "screen recording needs reset" notice was never delivered.
+        if title == Self.screenCaptureResetTitle
+            && UserDefaults.standard.bool(forKey: Self.screenCaptureResetShownKey)
+        {
+            log("NotificationService: suppressing duplicate screen capture reset notification")
+            return
         }
 
         // Honor the floating-bar snooze for both the in-bar preview and the native
@@ -294,6 +300,13 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         if respectFrequency && !shouldAllowProactiveNotification(assistantId: assistantId) {
             log("NotificationService: throttled \(assistantId) notification (frequency=\(Self.currentFrequencyLevel()))")
             return
+        }
+
+        // Mark the screen-capture reset notice as shown only now that it has passed
+        // every suppression gate and is actually being delivered — so a snoozed (or
+        // otherwise gated) attempt does not permanently suppress it for the episode.
+        if title == Self.screenCaptureResetTitle {
+            UserDefaults.standard.set(true, forKey: Self.screenCaptureResetShownKey)
         }
 
         FloatingControlBarManager.shared.showNotification(

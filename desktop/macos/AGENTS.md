@@ -21,6 +21,24 @@ See `.claude/skills/sentry-release/SKILL.md` for full documentation.
 ### User Issue Investigation
 When debugging issues for a specific user, check Sentry dashboard for crashes and PostHog for events.
 
+### Product analytics integrity
+
+- A desktop chat query starts after local concurrency/quota preflight and must
+  emit exactly one terminal outcome: `completed`, `failed`, or `cancelled`.
+  Intentional Stop and supersession are cancellations, never errors.
+- Query latency ends when the final answer is visible. Persistence, title
+  generation, and other post-answer work have their own reliability signals and
+  must not inflate user-visible query duration.
+- Product authority is independent from telemetry. Revoked or timed-out turns
+  cannot apply late callbacks/results or persist a late response even if
+  analytics is disabled or refactored.
+- PostHog receives bounded dimensions and shape metadata only. Never send raw
+  prompts, responses, notification/window titles, filesystem paths, or exception
+  messages. Keep diagnostic detail in the private local log and Sentry.
+- Production `QueryTracer` output is shape-only and stored under a `0700`
+  directory in `0600` files. Full prompt/response/tool content is a deliberate
+  non-production debugging capability only.
+
 ### Fallback / resilience telemetry
 Provider/mode switches and fail-open paths must call `DesktopDiagnosticsManager.recordFallback(area:from:to:reason:outcome:)` (PostHog `desktop_health_event` / `fallback_triggered`) or Rust `fallback::record_fallback`. Same field contract as root `AGENTS.md` → Fallback / resilience telemetry. Do not invent new health-event enum cases or product “Recording Error” events for successful heals (`outcome=recovered`).
 

@@ -19,6 +19,12 @@ on:
         required: true
         default: 'main'
 
+# This chart path mutates backend-listen and shared backend-secrets, which are
+# also applied by the full backend deploy for the same environment.
+concurrency:
+  group: deploy-backend-stack-${{ github.event.inputs.environment || 'development' }}
+  cancel-in-progress: false
+
 env:
   REGION: us-central1
 

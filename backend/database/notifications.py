@@ -9,8 +9,6 @@ users/{uid}/fcm_tokens (subcollection)
       └── time_zone: "America/New_York"
 """
 
-import asyncio
-
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
 from google.cloud.firestore import DELETE_FIELD
@@ -272,15 +270,15 @@ def remove_bulk_tokens(tokens: list[str]) -> None:
             batch.commit()
 
 
-async def get_users_token_in_timezones(timezones: list[str]) -> List[str]:
-    return await _get_users_in_timezones(timezones, 'fcm_token')
+def get_users_token_in_timezones(timezones: list[str]) -> List[str]:
+    return _get_users_in_timezones(timezones, 'fcm_token')
 
 
-async def get_users_id_in_timezones(timezones: list[str]) -> List[Union[str, Tuple[str, List[str], Any]]]:
-    return await _get_users_in_timezones(timezones, 'id')
+def get_users_id_in_timezones(timezones: list[str]) -> List[Union[str, Tuple[str, List[str], Any]]]:
+    return _get_users_in_timezones(timezones, 'id')
 
 
-async def get_users_for_daily_summary(timezones: list[str], target_local_hour: int) -> List[Tuple[str, List[str], Any]]:
+def get_users_for_daily_summary(timezones: list[str], target_local_hour: int) -> List[Tuple[str, List[str], Any]]:
     """
     Get users who should receive daily summary notifications.
 
@@ -304,117 +302,99 @@ async def get_users_for_daily_summary(timezones: list[str], target_local_hour: i
     # 'Where in' query only supports 30 or fewer items in list so we split in chunks
     timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
 
-    async def query_chunk(chunk: List[str]) -> List[Tuple[str, List[str], Any]]:
-        def sync_query() -> List[Tuple[str, List[str], Any]]:
-            chunk_users: List[Tuple[str, List[str], Any]] = []
-            try:
-                # Query users in these timezones
-                query = db.collection('users').where(filter=FieldFilter('time_zone', 'in', chunk))
+    for chunk in timezone_chunks:
+        chunk_users: List[Tuple[str, List[str], Any]] = []
+        try:
+            # Query users in these timezones
+            query = db.collection('users').where(filter=FieldFilter('time_zone', 'in', chunk))
 
-                for user_doc in query.stream():
-                    uid = str(user_doc.id)
-                    user_data = _typed_doc(user_doc)
+            for user_doc in query.stream():
+                uid = str(user_doc.id)
+                user_data = _typed_doc(user_doc)
 
-                    # Check if daily summary is enabled (default: True)
-                    if user_data.get('daily_summary_enabled') is False:
-                        continue
+                # Check if daily summary is enabled (default: True)
+                if user_data.get('daily_summary_enabled') is False:
+                    continue
 
-                    # Check if user's preferred hour matches target hour
-                    # If not set, use default (22 = 10 PM)
-                    user_hour = user_data.get('daily_summary_hour_local', DEFAULT_DAILY_SUMMARY_HOUR_LOCAL)
-                    if user_hour != target_local_hour:
-                        continue
+                # Check if user's preferred hour matches target hour
+                # If not set, use default (22 = 10 PM)
+                user_hour = user_data.get('daily_summary_hour_local', DEFAULT_DAILY_SUMMARY_HOUR_LOCAL)
+                if user_hour != target_local_hour:
+                    continue
 
-                    # Collect tokens from subcollection
-                    tokens: List[str] = []
-                    token_docs = db.collection('users').document(uid).collection('fcm_tokens').stream()
-                    for token_doc in token_docs:
-                        token_data = _typed_doc(token_doc)
-                        token_value = token_data.get('token')
-                        if token_value:
-                            tokens.append(str(token_value))
+                # Collect tokens from subcollection
+                tokens: List[str] = []
+                token_docs = db.collection('users').document(uid).collection('fcm_tokens').stream()
+                for token_doc in token_docs:
+                    token_data = _typed_doc(token_doc)
+                    token_value = token_data.get('token')
+                    if token_value:
+                        tokens.append(str(token_value))
 
-                    # Add legacy token if exists and not already in list
-                    legacy_token = user_data.get('fcm_token')
-                    if legacy_token and legacy_token not in tokens:
-                        tokens.append(str(legacy_token))
+                # Add legacy token if exists and not already in list
+                legacy_token = user_data.get('fcm_token')
+                if legacy_token and legacy_token not in tokens:
+                    tokens.append(str(legacy_token))
 
-                    # Skip users with no tokens
-                    if not tokens:
-                        continue
+                # Skip users with no tokens
+                if not tokens:
+                    continue
 
-                    time_zone = user_data.get('time_zone')
-                    chunk_users.append((uid, tokens, time_zone))
+                time_zone = user_data.get('time_zone')
+                chunk_users.append((uid, tokens, time_zone))
 
-            except Exception as e:
-                logger.error(f"Error querying chunk for daily summary: {e}")
-            return chunk_users
-
-        return await asyncio.to_thread(sync_query)
-
-    tasks = [query_chunk(chunk) for chunk in timezone_chunks]
-    results = await asyncio.gather(*tasks)
-
-    for chunk_users in results:
+        except Exception as e:
+            logger.error(f"Error querying chunk for daily summary: {e}")
         users.extend(chunk_users)
 
     return users
 
 
-async def _get_users_in_timezones(timezones: list[str], filter: str) -> List[Any]:
+def _get_users_in_timezones(timezones: list[str], filter: str) -> List[Any]:
     """Query main user documents by timezone, then get tokens from subcollection and legacy field"""
     users: List[Any] = []
 
     # 'Where in' query only supports 30 or fewer items in list so we split in chunks
     timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
 
-    async def query_chunk(chunk: List[str]) -> List[Any]:
-        def sync_query() -> List[Any]:
-            chunk_users: List[Any] = []
-            try:
-                # Query main user documents by time_zone
-                query = db.collection('users').where(filter=FieldFilter('time_zone', 'in', chunk))
+    for chunk in timezone_chunks:
+        chunk_users: List[Any] = []
+        try:
+            # Query main user documents by time_zone
+            query = db.collection('users').where(filter=FieldFilter('time_zone', 'in', chunk))
 
-                for user_doc in query.stream():
-                    uid = str(user_doc.id)
-                    user_data = _typed_doc(user_doc)
+            for user_doc in query.stream():
+                uid = str(user_doc.id)
+                user_data = _typed_doc(user_doc)
 
-                    # Collect tokens from subcollection
-                    tokens: List[str] = []
-                    token_docs = db.collection('users').document(uid).collection('fcm_tokens').stream()
-                    for token_doc in token_docs:
-                        token_data = _typed_doc(token_doc)
-                        token_value = token_data.get('token')
-                        if token_value:
-                            tokens.append(str(token_value))
+                # Collect tokens from subcollection
+                tokens: List[str] = []
+                token_docs = db.collection('users').document(uid).collection('fcm_tokens').stream()
+                for token_doc in token_docs:
+                    token_data = _typed_doc(token_doc)
+                    token_value = token_data.get('token')
+                    if token_value:
+                        tokens.append(str(token_value))
 
-                    # Add legacy token if exists and not already in list
-                    legacy_token = user_data.get('fcm_token')
-                    if legacy_token and legacy_token not in tokens:
-                        tokens.append(str(legacy_token))
+                # Add legacy token if exists and not already in list
+                legacy_token = user_data.get('fcm_token')
+                if legacy_token and legacy_token not in tokens:
+                    tokens.append(str(legacy_token))
 
-                    # Skip users with no tokens
-                    if not tokens:
-                        continue
+                # Skip users with no tokens
+                if not tokens:
+                    continue
 
-                    if filter == 'fcm_token':
-                        # Return flat list of tokens
-                        chunk_users.extend(tokens)
-                    else:
-                        # Return list of (uid, [tokens], time_zone) tuples
-                        time_zone = user_data.get('time_zone')
-                        chunk_users.append((uid, tokens, time_zone))
+                if filter == 'fcm_token':
+                    # Return flat list of tokens
+                    chunk_users.extend(tokens)
+                else:
+                    # Return list of (uid, [tokens], time_zone) tuples
+                    time_zone = user_data.get('time_zone')
+                    chunk_users.append((uid, tokens, time_zone))
 
-            except Exception as e:
-                logger.error(f"Error querying chunk {chunk}: {e}")
-            return chunk_users
-
-        return await asyncio.to_thread(sync_query)
-
-    tasks = [query_chunk(chunk) for chunk in timezone_chunks]
-    results = await asyncio.gather(*tasks)
-
-    for chunk_users in results:
+        except Exception as e:
+            logger.error(f"Error querying chunk {chunk}: {e}")
         users.extend(chunk_users)
 
     return users

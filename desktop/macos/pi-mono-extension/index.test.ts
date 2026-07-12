@@ -34,7 +34,7 @@ import {
   __registerOmiToolsForTest,
   __resetOmiPipeForTest,
 } from "./index.ts";
-import type { ToolCallEvent } from "@mariozechner/pi-coding-agent";
+import type { ToolCallEvent } from "@earendil-works/pi-coding-agent";
 import { agentControlCapabilityManifest } from "../agent/src/runtime/control-tool-manifest.ts";
 import {
   buildToolAvailabilitySnapshot,

@@ -73,7 +73,7 @@ final class RealtimeOmniTestHarness: NSObject, RealtimeOmniServiceDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { [weak self] in self?.pump() }
     }
 
-    func omniDidReceiveInputTranscript(_ text: String, isFinal: Bool) {
+    func omniDidReceiveInputTranscript(_ text: String, isFinal: Bool, itemID: String?) {
         if isFinal {
             if !text.isEmpty { finalText = text }
             finish(reason: "final_transcript")  // STT done — no need to wait for turn end

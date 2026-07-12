@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-enum ScreenContextFailureCode: String {
+enum ScreenContextFailureCode: String, CaseIterable {
   case permissionDenied = "permission_denied"
   case databaseUnavailable = "database_unavailable"
   case screenNowUnavailable = "screen_now_unavailable"

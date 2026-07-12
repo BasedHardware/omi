@@ -253,6 +253,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       final file = File('${directory.path}/$filename.png');
       await file.writeAsBytes(bytes);
 
+      if (!mounted) return;
       final box = context.findRenderObject() as RenderBox?;
       final sharePositionOrigin = box != null ? Rect.fromLTWH(0, 0, box.size.width, box.size.height / 2) : null;
 

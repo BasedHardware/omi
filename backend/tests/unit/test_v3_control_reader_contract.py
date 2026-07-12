@@ -1,7 +1,7 @@
 import inspect
 
 from config.memory_rollout import MemoryRolloutMode
-from utils.memory.v3_control_reader_contract import (
+from utils.memory.v3.control_reader_contract import (
     V3ControlDecisionReason,
     V3ControlReadResult,
     V3ControlReaderRequest,
@@ -200,7 +200,7 @@ def test_control_reader_contract_is_pure_local_fake_injectable_and_has_stable_de
         'requires_legacy_reader',
     }.issubset(decision_fields)
 
-    source = inspect.getsource(__import__('utils.memory.v3_control_reader_contract', fromlist=['']))
+    source = inspect.getsource(__import__('utils.memory.v3.control_reader_contract', fromlist=['']))
     forbidden = [
         'routers.memories',
         'database.',
