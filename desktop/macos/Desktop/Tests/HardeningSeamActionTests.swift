@@ -58,14 +58,64 @@ final class HardeningSeamActionTests: XCTestCase {
       "the notification must post on the main actor like the real observers expect")
   }
 
+  func testAuthTokenSeamsAreProdGatedAndLeakNoTokenMaterial() throws {
+    let bridge = try bridgeSource()
+    for action in ["expire_auth_token", "auth_token_status"] {
+      guard let start = bridge.range(of: "name: \"\(action)\"") else {
+        return XCTFail("\(action) registration not found")
+      }
+      let block = String(bridge[start.lowerBound...].prefix(900))
+      XCTAssertTrue(
+        block.contains("guard AppBuild.isNonProduction"),
+        "\(action) must refuse to run on production bundles")
+    }
+
+    let auth = try authServiceSource()
+    // Both seams are double-gated (bridge + AuthService) because they touch the session.
+    for fn in ["func expireStoredTokenForAutomation", "func tokenStatusForAutomation"] {
+      guard let start = auth.range(of: fn) else { return XCTFail("\(fn) not found") }
+      let body = String(auth[start.lowerBound...].prefix(1200))
+      XCTAssertTrue(
+        body.contains("guard AppBuild.isNonProduction"),
+        "\(fn) must be non-prod gated inside AuthService too, not only at the bridge")
+      // Status/booleans only — the stored token itself must never be returned.
+      XCTAssertFalse(
+        body.contains("\"id_token\"") || body.contains("\"refresh_token\""),
+        "\(fn) must never return token material — presence/expiry booleans only")
+    }
+
+    // The expiry seam must go through the real storage path (saveTokens), NOT a
+    // UserDefaults key: tokens are keychain-backed, and the old harness tampered a key
+    // the app no longer reads, silently measuring nothing.
+    guard let expireStart = auth.range(of: "func expireStoredTokenForAutomation") else {
+      return XCTFail("expireStoredTokenForAutomation not found")
+    }
+    let expireBody = String(auth[expireStart.lowerBound...].prefix(1200))
+    XCTAssertTrue(
+      expireBody.contains("try saveTokens("),
+      "expiry must be forced through saveTokens so it works for keychain AND UserDefaults")
+    XCTAssertFalse(
+      expireBody.contains("UserDefaults.standard.set"),
+      "expiry must not be forced by writing a UserDefaults key the app may not read")
+  }
+
   // MARK: - Helpers
+
+  private func authServiceSource() throws -> String {
+    let url = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/AuthService.swift")
+    // omi-test-quality: source-inspection -- static contract: AUTH-03 token seams stay double-gated on AppBuild.isNonProduction, never return token material, and force expiry via saveTokens (real storage) not a UserDefaults key.
+    return try String(contentsOf: url, encoding: .utf8)
+  }
 
   private func tasksPageSource() throws -> String {
     let url = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/MainWindow/Pages/TasksPage.swift")
-    // omi-test-quality: source-inspection -- static contract: the reorder_task flush seam must stay param-gated with a flush=true default; the action runs through the registry against the @MainActor store and cannot be behaviorally unit-run in the test host. Coalescing behavior is proven on the runtime lane (SKILL §2k).
+    // omi-test-quality: source-inspection -- static contract: the reorder_task flush seam must stay param-gated with a flush=true default; it runs through the registry against the @MainActor store and can't be unit-run.
     return try String(contentsOf: url, encoding: .utf8)
   }
 
@@ -74,7 +124,7 @@ final class HardeningSeamActionTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/DesktopAutomationBridge.swift")
-    // omi-test-quality: source-inspection -- static contract: simulate_system_wake must stay registered, non-prod gated, and posting the real .systemDidWake signal; the action can't be behaviorally unit-run (registry + MainActor notification). Post-wake behavior is proven on the runtime lane (SKILL §2l).
+    // omi-test-quality: source-inspection -- static contract: simulate_system_wake must stay registered, non-prod gated, and post the real workspace-center wake signal; it can't be behaviorally unit-run.
     return try String(contentsOf: url, encoding: .utf8)
   }
 }
