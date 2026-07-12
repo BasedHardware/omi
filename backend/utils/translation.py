@@ -160,6 +160,10 @@ class TranslationService:
     def set_negative_cache(self, fingerprint: str, target_language: str) -> None:
         self.cache.put_negative(fingerprint, target_language, self._profile_resolver())
 
+    def clear_session_cache(self) -> None:
+        """Release per-session translation state while retaining shared Redis data."""
+        self.cache.clear_memory()
+
 
 _default_service: TranslationService | None = None
 

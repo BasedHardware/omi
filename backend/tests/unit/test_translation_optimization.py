@@ -147,6 +147,25 @@ def test_memory_cache_survives_persistent_cache_miss():
     assert len(provider.calls) == 1
 
 
+def test_session_cleanup_releases_memory_without_clearing_shared_storage():
+    store = DictTranslationStore()
+    provider = FakeProvider(
+        TranslationProvider.google,
+        responses=[translations(('Hola', 'en')), translations(('Hola otra vez', 'en'))],
+    )
+    service, _cache = build_service({TranslationProvider.google: provider}, store=store)
+
+    assert service.translate_text('es', 'Hello') == ('Hola', 'en')
+    persisted = dict(store.values)
+
+    service.clear_session_cache()
+
+    assert store.values == persisted
+    store.values.clear()
+    assert service.translate_text('es', 'Hello') == ('Hola otra vez', 'en')
+    assert len(provider.calls) == 2
+
+
 def test_typed_unchanged_outcome_maps_to_legacy_tuple_only_at_facade():
     provider = FakeProvider(TranslationProvider.google, responses=[translations(('Hello', 'en'))])
     service, _cache = build_service({TranslationProvider.google: provider})

@@ -186,6 +186,11 @@ class TranslationCache:
         if self._persistent is not None:
             self._persistent.put_negative(fingerprint, target_language, profile.negative_cache_ttl_seconds)
 
+    def clear_memory(self) -> None:
+        """Release this session's bounded LRU without mutating shared storage."""
+        with self._memory_lock:
+            self._memory.clear()
+
     def _put_memory(self, key: str, value: CachedTranslation) -> None:
         with self._memory_lock:
             self._memory.pop(key, None)
