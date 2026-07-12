@@ -2,11 +2,13 @@
 
 import hashlib
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any, Optional, cast
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
+from pydantic import ValidationError
 
 import database.goals as goals_db
 from database._client import get_firestore_client
@@ -36,6 +38,8 @@ from models.workstream import (
     WorkstreamStatus,
     WorkstreamUpdate,
 )
+
+logger = logging.getLogger(__name__)
 
 WORKSTREAMS_COLLECTION = 'workstreams'
 EVENTS_COLLECTION = 'events'
@@ -737,7 +741,14 @@ def list_artifact_descriptors(
         .order_by('created_at', direction=firestore.Query.DESCENDING)
         .limit(limit)
     )
-    return [ArtifactDescriptor.model_validate(_snapshot_dict(snapshot)) for snapshot in query.stream()]
+    descriptors: list[ArtifactDescriptor] = []
+    for snapshot in query.stream():
+        try:
+            descriptors.append(ArtifactDescriptor.model_validate(_snapshot_dict(snapshot)))
+        except ValidationError as e:
+            # Skip a malformed/legacy artifact doc rather than 500 the whole page.
+            logger.warning('Skipping malformed artifact descriptor %s: %s', getattr(snapshot, 'id', None), e)
+    return descriptors
 
 
 def upsert_continuation_checkpoint(
@@ -827,7 +838,14 @@ def list_continuation_checkpoints(
         .collection(CHECKPOINTS_COLLECTION)
         .stream()
     )
-    return [ContinuationCheckpoint.model_validate(_snapshot_dict(snapshot)) for snapshot in snapshots]
+    checkpoints: list[ContinuationCheckpoint] = []
+    for snapshot in snapshots:
+        try:
+            checkpoints.append(ContinuationCheckpoint.model_validate(_snapshot_dict(snapshot)))
+        except ValidationError as e:
+            # Skip a malformed/legacy checkpoint doc rather than 500 the whole page.
+            logger.warning('Skipping malformed continuation checkpoint %s: %s', getattr(snapshot, 'id', None), e)
+    return checkpoints
 
 
 def resolve_workstream_candidate(
