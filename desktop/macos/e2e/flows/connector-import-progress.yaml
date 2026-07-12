@@ -6,6 +6,7 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/Automation/DesktopAutomationPresentationCoordinator.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  - desktop/macos/Desktop/Sources/MemoryExportExecutor.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConnectorImportOperations.swift

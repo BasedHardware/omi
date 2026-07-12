@@ -5,6 +5,8 @@ description: Hermetic task create, toggle, dump, and delete via bridge actions
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift
+  - desktop/macos/Desktop/Sources/Services/LocalMutationAuthorization.swift
+  - desktop/macos/Desktop/Sources/Stores/APIClient+Tasks.swift
   - desktop/macos/Desktop/Sources/Stores/TasksStore.swift
 preconditions:
   - automation_bridge_ready
