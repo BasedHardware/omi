@@ -190,6 +190,21 @@ impl GeminiFallbackTelemetry {
     }
 }
 
+/// Mid-request Vertex → AI Studio heal reason, if any.
+///
+/// Missing `vertex_auth` is steady-state boot routing (AI Studio when Vertex was
+/// never configured), not a fallback — do not emit `record_fallback` for that.
+/// Token acquisition failure after Vertex was selected IS a real fallback.
+fn vertex_to_ai_studio_fallback_reason(
+    had_vertex_auth: bool,
+    token_failed: bool,
+) -> Option<&'static str> {
+    match (had_vertex_auth, token_failed) {
+        (true, true) => Some("auth"),
+        _ => None,
+    }
+}
+
 impl Drop for GeminiFallbackTelemetry {
     fn drop(&mut self) {
         if !self.completed {
@@ -628,8 +643,8 @@ async fn gemini_proxy_server_key(
                             e
                         );
                         telemetry.set_provider("ai_studio");
-                        fallback_telemetry =
-                            Some(GeminiFallbackTelemetry::vertex_to_ai_studio("auth"));
+                        fallback_telemetry = vertex_to_ai_studio_fallback_reason(true, true)
+                            .map(GeminiFallbackTelemetry::vertex_to_ai_studio);
                         telemetry.set_phase("provider");
                         let url = build_gemini_url(effective_path, gemini_key);
                         state
@@ -649,16 +664,14 @@ async fn gemini_proxy_server_key(
                 }
             }
         } else {
-            // Vertex AI requested but not configured → AI Studio
+            // Vertex AI requested but not configured → AI Studio (steady-state
+            // boot routing, not a mid-request heal — no record_fallback).
             let gemini_key = state
                 .config
                 .gemini_api_key
                 .as_ref()
                 .ok_or(ProxyError::Status(StatusCode::SERVICE_UNAVAILABLE))?;
             telemetry.set_provider("ai_studio");
-            fallback_telemetry = Some(GeminiFallbackTelemetry::vertex_to_ai_studio(
-                "config_incomplete",
-            ));
             telemetry.set_phase("provider");
             let url = build_gemini_url(effective_path, gemini_key);
             state
@@ -1395,6 +1408,30 @@ mod tests {
         assert_eq!(duration_bucket(Duration::from_secs(4)), "0-5s");
         assert_eq!(duration_bucket(Duration::from_secs(60)), "60-120s");
         assert_eq!(duration_bucket(Duration::from_secs(120)), "120s+");
+    }
+
+    #[test]
+    fn vertex_missing_auth_is_steady_state_not_fallback() {
+        // Vertex route + vertex_auth=None → AI Studio without record_fallback.
+        assert_eq!(vertex_to_ai_studio_fallback_reason(false, false), None);
+        assert_eq!(vertex_to_ai_studio_fallback_reason(false, true), None);
+        // Successful Vertex token path also must not emit fallback.
+        assert_eq!(vertex_to_ai_studio_fallback_reason(true, false), None);
+    }
+
+    #[test]
+    fn vertex_token_failure_records_auth_fallback() {
+        assert_eq!(
+            vertex_to_ai_studio_fallback_reason(true, true),
+            Some("auth")
+        );
+        let mut telemetry = GeminiFallbackTelemetry::vertex_to_ai_studio("auth");
+        assert_eq!(telemetry.reason, "auth");
+        assert_eq!(telemetry.from, "vertex_ai");
+        assert_eq!(telemetry.to, "ai_studio");
+        telemetry.complete(FallbackOutcome::Recovered);
+        // Drop must not double-emit after complete.
+        drop(telemetry);
     }
 
     #[tokio::test]
