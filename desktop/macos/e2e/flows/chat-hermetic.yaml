@@ -40,6 +40,9 @@ covers:
   - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift
   - desktop/macos/Desktop/Sources/Diagnostics/DesktopStressDiagnostics.swift
   - desktop/macos/Backend-Rust/src/routes/chat_completions.rs
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatScrollBehavior.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatSessionsSidebar.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/AgentConnectPickerSheet.swift
 preconditions:
   - automation_bridge_ready
 
