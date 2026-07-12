@@ -115,7 +115,7 @@
       }
     ],
     "updated": "2026-06-20T02:27:39Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
@@ -128,7 +128,11 @@
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "speech-processing"
+    }
   },
   {
     "id": 42,
@@ -256,7 +260,8 @@
       "threshold": "0.1"
     },
     "labels": {
-      "instatus_component": "speech-processing"
+      "instatus_component": "speech-processing",
+      "severity": "critical"
     },
     "isPaused": false,
     "notification_settings": {
@@ -380,7 +385,7 @@
       }
     ],
     "updated": "2026-06-23T01:20:17Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
@@ -393,7 +398,11 @@
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "ticket",
+      "instatus_component": "speech-processing"
+    }
   },
   {
     "id": 43,
@@ -516,7 +525,7 @@
       }
     ],
     "updated": "2026-06-20T02:27:42Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
@@ -529,7 +538,11 @@
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "ticket",
+      "instatus_component": "speech-processing"
+    }
   },
   {
     "id": 40,
@@ -647,7 +660,7 @@
       }
     ],
     "updated": "2026-06-20T02:27:42Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
@@ -656,10 +669,14 @@
       "__panelId__": "50",
       "threshold": "2500ms (2.5s)"
     },
-    "isPaused": true,
+    "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "speech-processing"
+    }
   }
 ]
