@@ -68,6 +68,14 @@ struct FloatingControlBarView: View {
             ? max(notchChromeWidth, FloatingControlBarWindow.notchExpandedWidth)
             : notchChromeWidth
     }
+    /// Chrome width that follows the hover morph: the side lobes (and their
+    /// icons) slide outward with the expanding surface instead of standing
+    /// still while it widens around them. Chat mode keeps progress at 0, so
+    /// its chrome stays collapsed exactly as before.
+    private var notchChromeMorphWidth: CGFloat {
+        let expanded = max(notchChromeWidth, FloatingControlBarWindow.notchExpandedWidth)
+        return notchChromeWidth + (expanded - notchChromeWidth) * notchSwitcherProgress
+    }
     private var notchSurfaceHorizontalInset: CGFloat {
         state.usesNotchIsland ? FloatingControlBarWindow.notchGlowOutsetX : 0
     }
@@ -252,17 +260,10 @@ struct FloatingControlBarView: View {
         .padding(.bottom, notchSurfaceBottomInset)
         .background(alignment: .top) {
             GeometryReader { geometry in
-                let hasExpandedSurface = state.showingAIConversation
-                    || state.currentNotification != nil
-                    || shouldShowNotchHoverMenu
-                    || !state.pttHintText.isEmpty
                 let bottomRadius: CGFloat = state.showingAIConversation || state.currentNotification != nil ? 22 : 18
-                let surfaceWidth = hasExpandedSurface
-                    ? max(notchChromeWidth, geometry.size.width - notchSurfaceHorizontalInset * 2)
-                    : notchChromeWidth
-                let surfaceHeight = hasExpandedSurface
-                    ? max(notchChromeHeight, geometry.size.height - notchSurfaceBottomInset)
-                    : notchChromeHeight
+                let surfaceSize = floatingSurfaceSize(geometry: geometry)
+                let surfaceWidth = surfaceSize.width
+                let surfaceHeight = surfaceSize.height
 
                 ZStack(alignment: .top) {
                     NotchDockShape(
@@ -308,13 +309,14 @@ struct FloatingControlBarView: View {
         .contextMenu { barContextMenu }
         .onHover(perform: handleBarHover)
         .onChange(of: shouldShowNotchHoverMenu) { _, visible in
-            // NSPanel owns geometry. This value only fades/morphs the row
-            // contents, using a monotonic curve so it cannot overshoot
-            // vertically. Match the window's expand/collapse durations exactly
-            // so the rows and the panel finish together (no post-expand slide).
+            // Fixed window, animated content: in notch mode the NSPanel frame
+            // never moves for hover expand/collapse — this value carries the
+            // ENTIRE visible morph (black surface height/width, row reveal,
+            // dot fan-out). A gentle spring on open, a bounce-free settle on
+            // close, both Reduce Motion-gated.
             let morphAnim: Animation = visible
-                ? .easeOut(duration: FloatingControlBarWindow.notchHoverMenuExpandDuration)
-                : .easeOut(duration: FloatingControlBarWindow.notchHoverMenuCollapseDuration)
+                ? FloatingControlBarWindow.notchHoverMenuExpandAnimation
+                : FloatingControlBarWindow.notchHoverMenuCollapseAnimation
             OmiMotion.withGated(morphAnim) {
                 notchSwitcherProgress = visible ? 1 : 0
             }
@@ -337,6 +339,39 @@ struct FloatingControlBarView: View {
         .onDisappear { state.setNotchHoverMenuOpen(false) }
     }
 
+    /// Size of the visible black surface behind the floating content.
+    ///
+    /// Notch idle ↔ hover lifecycle: the NSPanel frame is FIXED at the maximum
+    /// hover surface, so the visible surface must derive from the content
+    /// morph (`notchSwitcherProgress`), not from the window geometry — the
+    /// spring on that progress IS the expand/collapse animation. Other states
+    /// (chat, voice, notification, PTT hint) still resize the panel and keep
+    /// the geometry-driven surface.
+    private func floatingSurfaceSize(geometry: GeometryProxy) -> CGSize {
+        let notchHoverLifecycle = state.usesNotchIsland
+            && !state.showingAIConversation
+            && state.currentNotification == nil
+            && state.pttHintText.isEmpty
+        if notchHoverLifecycle {
+            let openWidth = max(notchChromeWidth, FloatingControlBarWindow.notchExpandedWidth)
+            return CGSize(
+                width: notchChromeWidth + (openWidth - notchChromeWidth) * notchSwitcherProgress,
+                height: notchChromeHeight + notchHoverMenuHeight * notchSwitcherProgress
+            )
+        }
+        let hasExpandedSurface = state.showingAIConversation
+            || state.currentNotification != nil
+            || shouldShowNotchHoverMenu
+            || !state.pttHintText.isEmpty
+        guard hasExpandedSurface else {
+            return CGSize(width: notchChromeWidth, height: notchChromeHeight)
+        }
+        return CGSize(
+            width: max(notchChromeWidth, geometry.size.width - notchSurfaceHorizontalInset * 2),
+            height: max(notchChromeHeight, geometry.size.height - notchSurfaceBottomInset)
+        )
+    }
+
     private var notchChrome: some View {
         ZStack {
             HStack(spacing: 0) {
@@ -353,7 +388,7 @@ struct FloatingControlBarView: View {
                 .frame(width: notchHiddenCenterWidth, height: notchChromeHeight)
                 .allowsHitTesting(false)
         }
-        .frame(width: notchChromeWidth, height: notchChromeHeight)
+        .frame(width: notchChromeMorphWidth, height: notchChromeHeight)
     }
 
     private var notchAgentLobe: some View {
@@ -806,7 +841,7 @@ struct FloatingControlBarView: View {
     private func handleBarHover(_ hovering: Bool) {
         if state.usesNotchIsland {
             (window as? FloatingControlBarWindow)?.updateNotchPointerFromGlobalMouse()
-            OmiMotion.withGated(.easeInOut(duration: 0.12)) {
+            OmiMotion.withGated(.easeOut(duration: FloatingControlBarWindow.notchHoverMenuExpandDuration)) {
                 isHovering = state.isNotchHoverMenuVisible
                 notchSettingsHovering = hovering
             }
@@ -845,7 +880,7 @@ struct FloatingControlBarView: View {
         if effectiveHover {
             didExpand = (window as? FloatingControlBarWindow)?.resizeForHover(expanded: true) ?? false
         }
-        OmiMotion.withGated(.easeInOut(duration: 0.12)) {
+        OmiMotion.withGated(.easeOut(duration: FloatingControlBarWindow.notchHoverMenuExpandDuration)) {
             isHovering = effectiveHover && didExpand
         }
         if !effectiveHover {
@@ -856,14 +891,26 @@ struct FloatingControlBarView: View {
     private func isWithinActivationZoneForCurrentMode() -> Bool {
         guard state.usesNotchIsland else { return true }
         guard let window else { return false }
+        // The notch window frame is fixed at the maximum hover surface, so the
+        // activation zone must be derived from the VISIBLE content (collapsed
+        // chrome when idle, the current-agent-count menu when open), never
+        // from the window frame — otherwise hover triggers far below/beside
+        // the visible island.
         let hitHeight = state.isAgentSwitcherExpanded
-            ? max(notchChromeHeight, window.frame.height - notchSurfaceBottomInset)
+            ? max(notchChromeHeight, notchChromeHeight + notchHoverMenuHeight)
             : FloatingControlBarWindow.notchActivationHeight
+        let visibleWidth = state.isAgentSwitcherExpanded
+            ? max(notchChromeWidth, FloatingControlBarWindow.notchExpandedWidth)
+            : notchChromeWidth
+        let horizontalOutset = max(
+            FloatingControlBarWindow.notchGlowOutsetX,
+            (window.frame.width - visibleWidth) / 2
+        )
         return FloatingControlBarGeometry.notchChromeActivationContains(
             mouseLocation: NSEvent.mouseLocation,
             windowFrame: window.frame,
             chromeHeight: hitHeight,
-            horizontalOutset: FloatingControlBarWindow.notchGlowOutsetX
+            horizontalOutset: horizontalOutset
         )
     }
 
