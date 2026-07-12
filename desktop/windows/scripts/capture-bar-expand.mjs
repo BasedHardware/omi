@@ -19,7 +19,10 @@ import path from 'node:path'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const mainEntry = path.join(root, 'out', 'main', 'index.js')
 const OUT = process.env.OUT || path.join(root, '.orb-out', 'bar-expand')
-const SLOWMO = Number(process.env.SLOWMO || 6)
+// REALSPEED=1 skips the slow-mo style and samples tightly, reproducing what the
+// user actually perceives at shipped timing.
+const REALSPEED = process.env.REALSPEED === '1'
+const SLOWMO = REALSPEED ? 1 : Number(process.env.SLOWMO || 6)
 mkdirSync(OUT, { recursive: true })
 
 const baseEnv = {
@@ -106,24 +109,49 @@ async function main() {
     const page = await findBarPage(app)
     await barShow(app, 'peek')
     await sleep(700) // slide-in + genesis settle
-    await installSlowmo(page, SLOWMO)
+    if (!REALSPEED) await installSlowmo(page, SLOWMO)
 
-    // 1) EXPAND: peek pill -> expanded panel.
-    await captureStrip(app, page, 'expand', async () => {
-      await app.evaluate(() => globalThis.__omiE2E.barShow('expanded'))
-    })
+    const step = REALSPEED ? 16 : 55
+    const frames = REALSPEED ? 26 : 22
+
+    // 1) EXPAND: peek pill -> expanded panel VIA THE REAL CLICK PATH (bar:expand
+    // → onMode), exactly what the user does — NOT barShow('expanded') (onShow).
+    await captureStrip(
+      app,
+      page,
+      'expand',
+      async () => {
+        await page.locator('.bar-content[role="button"]').click()
+      },
+      frames,
+      step
+    )
     await sleep(600 * SLOWMO) // let it fully settle
 
     // 2) LIST -> CONVERSATION (click the Omi Chat row).
-    await captureStrip(app, page, 'list-to-convo', async () => {
-      await page.locator('.bar-content-active button', { hasText: 'Omi Chat' }).first().click()
-    })
+    await captureStrip(
+      app,
+      page,
+      'list-to-convo',
+      async () => {
+        await page.locator('.bar-content-active button', { hasText: 'Omi Chat' }).first().click()
+      },
+      frames,
+      step
+    )
     await sleep(400 * SLOWMO)
 
-    // 3) COLLAPSE: expanded -> peek pill.
-    await captureStrip(app, page, 'collapse', async () => {
-      await app.evaluate(() => globalThis.__omiE2E.barShow('peek'))
-    })
+    // 3) COLLAPSE: expanded -> peek pill via the real collapse IPC (bar:collapse).
+    await captureStrip(
+      app,
+      page,
+      'collapse',
+      async () => {
+        await page.evaluate(() => window.omiBar.collapse())
+      },
+      frames,
+      step
+    )
     await sleep(400 * SLOWMO)
     console.log('capture done ->', OUT)
   } finally {

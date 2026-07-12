@@ -58,14 +58,15 @@ body.bar-body {
     border-radius 240ms cubic-bezier(0.3, 0.8, 0.3, 1);
 }
 
-/* Content layers cross-dissolve INSIDE the single morphing surface — but they
-   also INFLATE with it. Anchored at top-center (the pill's seat), the inactive
-   layer is a scaled-down copy that grows to full as it activates, so an expand
-   reads as the pill GROWING into the panel (content and all), not a curtain
-   lifting over pre-placed rows. A pure scale (no translate — a translate reads
-   as a slide, the very thing we're removing) keeps the top edge pinned to the
-   screen while the body unfolds downward. transform + opacity only (GPU-cheap);
-   the surface box still owns the width/height/radius size morph. */
+/* Content layers cross-dissolve INSIDE the single morphing surface. The base
+   rules (below) also carry a top-center scale so the *collapse* deflates the
+   body back into the pill — that direction already reads right. The load-bearing
+   fix for OPEN is the expand-scoped override further down: at shipped speed the
+   box grows ~150px downward in 240ms, so ANY content painted during that growth
+   (even scaled) reads as "falling in from the top" as the descending edge
+   uncovers it. So on expand we hold the body invisible while the empty panel
+   INFLATES from the pill, then bloom it in place once the box has mostly
+   settled. transform + opacity only (GPU-cheap); the box owns the size morph. */
 .bar-content {
   position: absolute;
   top: 0;
@@ -74,20 +75,30 @@ body.bar-body {
   opacity: 0;
   pointer-events: none;
   transform-origin: top center;
-  transform: scale(0.85);
+  transform: scale(0.9);
   transition:
     opacity 130ms ease,
-    transform 220ms cubic-bezier(0.3, 0.8, 0.3, 1);
+    transform 200ms cubic-bezier(0.3, 0.8, 0.3, 1);
 }
 .bar-content.bar-content-active {
   opacity: 1;
   pointer-events: auto;
   transform: none;
-  /* Content settles in just behind the box's leading edge (small opacity delay)
-     so the panel inflates first and the body grows into it. */
   transition:
-    opacity 170ms ease 60ms,
-    transform 260ms cubic-bezier(0.3, 0.8, 0.3, 1);
+    opacity 150ms ease,
+    transform 200ms cubic-bezier(0.3, 0.8, 0.3, 1);
+}
+
+/* EXPAND ONLY (scoped to the expanded surface, so COLLAPSE keeps the base rules
+   the user already likes): the panel body waits out the box inflation, then
+   fades + settles into the near-full panel — the pill grows into an empty panel
+   first, then fills. This is what kills the top-slide on open. The box height
+   morph is 240ms; content bloom starts at ~55% of that. */
+.bar-surface-expanded .bar-content-active {
+  transform: none;
+  transition:
+    opacity 150ms ease 130ms,
+    transform 190ms cubic-bezier(0.3, 0.8, 0.3, 1) 120ms;
 }
 
 /* Inner view swap (chat list ⇄ inline conversation) morphs in place — a gentle
