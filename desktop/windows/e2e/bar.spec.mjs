@@ -138,17 +138,21 @@ test('bar hide returns cleanly and can re-reveal', async (t) => {
   await app.firstWindow()
 
   await barShow(app, 'peek')
-  // Graceful hide: renderer slide-out (≤200ms) then requestHide; fallback
-  // 450ms. Observe the window's 'hide' EVENT rather than polling visibility.
-  const didHide = await app.evaluate(({ BrowserWindow }) => {
-    return new Promise((resolve) => {
-      const win = BrowserWindow.fromId(globalThis.__omiE2E.barState().id)
-      win.once('hide', () => resolve(true))
-      globalThis.__omiE2E.barHide()
-      setTimeout(() => resolve(false), 1500)
-    })
-  })
-  assert.equal(didHide, true, 'bar should hide after the slide-out (event observed)')
+  // Graceful hide: renderer slide-out (≤200ms) then requestHide; fallback 450ms.
+  // The persistent window is PARKED off-screen rather than win.hide()'d (parking
+  // avoids the OS window-show fade on the NEXT reveal — see window.ts), so there
+  // is no window 'hide' event to observe. Assert the LOGICAL visibility instead.
+  await app.evaluate(() => globalThis.__omiE2E.barHide())
+  let didHide = false
+  for (let i = 0; i < 20; i++) {
+    const s = await app.evaluate(() => globalThis.__omiE2E.barState())
+    if (!s.visible) {
+      didHide = true
+      break
+    }
+    await new Promise((r) => setTimeout(r, 100))
+  }
+  assert.equal(didHide, true, 'bar should hide (park off-screen) after the slide-out')
   const again = await barShow(app, 'expanded')
   assert.equal(again.visible, true, 'bar should re-reveal after a hide')
 })
