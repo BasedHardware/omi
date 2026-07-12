@@ -232,18 +232,23 @@ final class MeetingDetectorTests: XCTestCase {
         detector.start()
         defer { detector.stop() }
         XCTAssertEqual(firstProbeStarted.wait(timeout: .now() + 2), .success)
+        guard let firstProbeTask = detector.currentProbeTaskForTesting else {
+            return XCTFail("initial probe task was not installed")
+        }
 
-        detector.triggerProbeForTesting()
+        guard let secondProbeTask = detector.triggerProbeForTesting() else {
+            return XCTFail("replacement probe task was not installed")
+        }
         XCTAssertEqual(secondProbeStarted.wait(timeout: .now() + 2), .success)
 
         releaseSecondProbe.signal()
-        await Task.yield()
+        await secondProbeTask.value
         XCTAssertTrue(detector.hasObservedState)
         XCTAssertFalse(detector.isMeetingActive)
         XCTAssertEqual(initialObservedCount, 1)
 
         releaseFirstProbe.signal()
-        await Task.yield()
+        await firstProbeTask.value
         XCTAssertFalse(detector.isMeetingActive, "the canceled older probe must not overwrite the newer result")
         XCTAssertEqual(changes, [])
         XCTAssertEqual(unexpectedChange.wait(timeout: .now()), .timedOut)
