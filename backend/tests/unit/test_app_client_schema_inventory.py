@@ -275,7 +275,7 @@ def test_inventory_strict_raw_decode_site_gate_fails_with_actionable_sites():
 
     assert result.returncode == 1
     assert 'Raw Dart decode sites:' in result.stdout
-    assert 'app/lib/backend/schema/app.dart:31' in result.stdout
+    assert 'app/lib/backend/schema/app.dart:32' in result.stdout
 
 
 def test_inventory_openapi_route_response_decode_migration_complete():

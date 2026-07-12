@@ -81,6 +81,53 @@ final class ToolCallStatusTests: XCTestCase {
     )
   }
 
+  func testSystemStopsAndFailedPreconditionsMarkRemainingToolsFailed() {
+    XCTAssertEqual(
+      ChatProvider.remainingToolStatusAfterPartialResponseError(
+        BridgeError.stopped,
+        watchdogFired: true
+      ),
+      .failed
+    )
+    XCTAssertEqual(
+      ChatProvider.remainingToolStatusAfterPartialResponseError(
+        BridgeError.stopped,
+        toolStallAbortFired: true
+      ),
+      .failed
+    )
+    XCTAssertEqual(
+      ChatProvider.remainingToolStatusAfterPartialResponseError(
+        BridgeError.stopped,
+        stopReason: .browserExtensionMissing
+      ),
+      .failed
+    )
+  }
+
+  func testLateResultToolStatusPreservesTerminalTruth() {
+    XCTAssertEqual(
+      ChatProvider.lateResultToolStatus(watchdogFired: false, toolStallAbortFired: false),
+      .completed
+    )
+    XCTAssertEqual(
+      ChatProvider.lateResultToolStatus(watchdogFired: true, toolStallAbortFired: false),
+      .failed
+    )
+    XCTAssertEqual(
+      ChatProvider.lateResultToolStatus(watchdogFired: false, toolStallAbortFired: true),
+      .failed
+    )
+    XCTAssertEqual(
+      ChatProvider.lateResultToolStatus(
+        watchdogFired: false,
+        toolStallAbortFired: false,
+        stopReason: .browserExtensionMissing
+      ),
+      .failed
+    )
+  }
+
   // MARK: - Tool-call content block lifecycle
 
   func testStreamingBufferPreservesTextBeforeToolOrder() {
@@ -138,6 +185,22 @@ final class ToolCallStatusTests: XCTestCase {
           case .text(_, "C") = messages[0].contentBlocks[2] else {
       return XCTFail("Expected text, thinking, text block order")
     }
+  }
+
+  func testDiscardingRevokedTurnPreservesNewerTurnSegments() {
+    var messages = [
+      ChatMessage(id: "revoked", text: "", sender: .ai, isStreaming: true),
+      ChatMessage(id: "current", text: "", sender: .ai, isStreaming: true),
+    ]
+    let buffer = ChatStreamingBuffer(flushInterval: 10)
+
+    buffer.appendText(messageId: "revoked", text: "late output", scheduleFlush: {})
+    buffer.appendText(messageId: "current", text: "current output", scheduleFlush: {})
+    buffer.discardPendingSegments(messageId: "revoked")
+    buffer.flush(messages: &messages)
+
+    XCTAssertEqual(messages[0].text, "")
+    XCTAssertEqual(messages[1].text, "current output")
   }
 
   func testManualFlushCancelsScheduledFlush() {
