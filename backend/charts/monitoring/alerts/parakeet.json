@@ -125,7 +125,8 @@
       "threshold": "0.1"
     },
     "labels": {
-      "instatus_component": "speech-processing"
+      "instatus_component": "speech-processing",
+      "severity": "critical"
     },
     "isPaused": false,
     "notification_settings": {
@@ -257,7 +258,8 @@
       "threshold": "0.01"
     },
     "labels": {
-      "instatus_component": "speech-processing"
+      "instatus_component": "speech-processing",
+      "severity": "critical"
     },
     "isPaused": false,
     "notification_settings": {
@@ -381,7 +383,7 @@
       }
     ],
     "updated": "2026-06-20T02:28:35Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "0s",
     "keep_firing_for": "0s",
@@ -390,7 +392,8 @@
       "__panelId__": "113"
     },
     "labels": {
-      "instatus_component": "speech-processing"
+      "instatus_component": "speech-processing",
+      "severity": "warning"
     },
     "isPaused": false,
     "notification_settings": {
@@ -514,7 +517,7 @@
       }
     ],
     "updated": "2026-06-20T02:27:44Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
@@ -524,7 +527,8 @@
       "threshold": "30000ms"
     },
     "labels": {
-      "instatus_component": "speech-processing"
+      "instatus_component": "speech-processing",
+      "severity": "warning"
     },
     "isPaused": false,
     "notification_settings": {
@@ -648,7 +652,7 @@
       }
     ],
     "updated": "2026-06-20T02:27:44Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
@@ -658,7 +662,8 @@
       "threshold": "5 req/s"
     },
     "labels": {
-      "instatus_component": "speech-processing"
+      "instatus_component": "speech-processing",
+      "severity": "warning"
     },
     "isPaused": false,
     "notification_settings": {
