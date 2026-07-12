@@ -87,6 +87,12 @@ class ChatMessageCountResponse(BaseModel):
     count: int
 
 
+class DesktopMessageReconcilePageResponse(BaseModel):
+    messages: list[Message]
+    next_cursor: str | None
+    has_more: bool
+
+
 # ============================================================================
 # CHAT SESSION ENDPOINTS
 # ============================================================================
@@ -156,16 +162,19 @@ def save_message(
     x_app_platform: str | None = Header(None),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    saved = chat_db.save_message(
-        uid,
-        text=request.text,
-        sender=request.sender,
-        app_id=request.app_id,
-        session_id=request.session_id,
-        metadata=request.metadata,
-        client_message_id=request.client_message_id,
-        message_source=request.message_source,
-    )
+    try:
+        saved = chat_db.save_message(
+            uid,
+            text=request.text,
+            sender=request.sender,
+            app_id=request.app_id,
+            session_id=request.session_id,
+            metadata=request.metadata,
+            client_message_id=request.client_message_id,
+            message_source=request.message_source,
+        )
+    except chat_db.ClientMessageIdPayloadConflict as exc:
+        raise HTTPException(status_code=409, detail='client_message_id payload conflict') from exc
     if request.sender == 'human' and request.message_source == 'desktop_chat':
         try:
             llm_usage_db.record_chat_quota_question(
@@ -190,6 +199,35 @@ def get_messages(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     return chat_db.get_messages(uid, app_id=app_id, chat_session_id=session_id, limit=limit, offset=offset)
+
+
+@router.get(
+    '/v2/desktop/messages/reconcile',
+    tags=['chat-sessions'],
+    response_model=DesktopMessageReconcilePageResponse,
+)
+def reconcile_messages(
+    app_id: str | None = Query(None),
+    session_id: str | None = Query(None),
+    limit: int = Query(100, ge=1, le=100),
+    cursor: str | None = Query(None, min_length=1, max_length=200),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    try:
+        messages, next_cursor, has_more = chat_db.get_messages_reconcile_page(
+            uid,
+            app_id=app_id,
+            chat_session_id=session_id,
+            limit=limit,
+            cursor_message_id=cursor,
+        )
+    except chat_db.MessageReconcileCursorError as exc:
+        raise HTTPException(status_code=400, detail='invalid message reconciliation cursor') from exc
+    return {
+        'messages': messages,
+        'next_cursor': next_cursor,
+        'has_more': has_more,
+    }
 
 
 @router.delete('/v2/desktop/messages', tags=['chat-sessions'], response_model=DeleteMessagesResponse)

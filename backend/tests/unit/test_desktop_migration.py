@@ -586,6 +586,135 @@ class TestSessionScopedQueries:
         assert 'chat_session_id' not in fields, f"chat_session_id should NOT be filtered in app-scoped mode: {fields}"
 
 
+class TestMessageReconcileKeyset:
+    class FakeDocument:
+        def __init__(self, document_id, payload, exists=True):
+            self.id = document_id
+            self._payload = payload
+            self.exists = exists
+
+        def to_dict(self):
+            return dict(self._payload)
+
+        def get(self):
+            return self
+
+    class FakeQuery:
+        def __init__(self, collection, after_id=None, requested_limit=None):
+            self.collection = collection
+            self.after_id = after_id
+            self.requested_limit = requested_limit
+
+        def where(self, **_kwargs):
+            return self
+
+        def order_by(self, *_args, **_kwargs):
+            return self
+
+        def start_after(self, document):
+            return self.__class__(self.collection, after_id=document.id)
+
+        def limit(self, value):
+            return self.__class__(self.collection, after_id=self.after_id, requested_limit=value)
+
+        def stream(self):
+            rows = self.collection.rows
+            start = 0
+            if self.after_id is not None:
+                start = next(index for index, row in enumerate(rows) if row.id == self.after_id) + 1
+            end = start + (self.requested_limit or len(rows))
+            return rows[start:end]
+
+    class FakeCollection:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def where(self, **_kwargs):
+            return TestMessageReconcileKeyset.FakeQuery(self)
+
+        def document(self, document_id):
+            return next(
+                (row for row in self.rows if row.id == document_id),
+                TestMessageReconcileKeyset.FakeDocument(document_id, {}, exists=False),
+            )
+
+    @staticmethod
+    def message(document_id, created_at, *, reported=False, plugin_id=None):
+        return TestMessageReconcileKeyset.FakeDocument(
+            document_id,
+            {
+                'id': document_id,
+                'text': document_id,
+                'sender': 'human',
+                'type': 'text',
+                'created_at': created_at,
+                'plugin_id': plugin_id,
+                'app_id': plugin_id,
+                'reported': reported,
+            },
+        )
+
+    @staticmethod
+    def patched_db(collection):
+        patched_db = MagicMock()
+        patched_db.collection.return_value.document.return_value.collection.return_value = collection
+        return patch.object(chat_db, 'db', patched_db)
+
+    def test_insert_between_pages_does_not_skip_or_duplicate(self):
+        now = datetime.now(timezone.utc)
+        collection = self.FakeCollection(
+            [
+                self.message('remote-4', now),
+                self.message('remote-3', now),
+                self.message('remote-2', now),
+                self.message('remote-1', now),
+            ]
+        )
+        with self.patched_db(collection):
+            first, cursor, has_more = chat_db.get_messages_reconcile_page('uid', limit=2)
+            collection.rows.insert(0, self.message('remote-new', now))
+            second, next_cursor, _ = chat_db.get_messages_reconcile_page('uid', limit=2, cursor_message_id=cursor)
+
+        assert [row['id'] for row in first] == ['remote-4', 'remote-3']
+        assert cursor == 'remote-3'
+        assert has_more is True
+        assert [row['id'] for row in second] == ['remote-2', 'remote-1']
+        assert next_cursor == 'remote-1'
+
+    def test_reported_rows_advance_cursor_without_consuming_page_capacity(self):
+        now = datetime.now(timezone.utc)
+        collection = self.FakeCollection(
+            [
+                self.message('visible-2', now),
+                self.message('reported', now, reported=True),
+                self.message('visible-1', now),
+            ]
+        )
+        with self.patched_db(collection):
+            rows, cursor, has_more = chat_db.get_messages_reconcile_page('uid', limit=2)
+            tail_rows, tail_cursor, tail_has_more = chat_db.get_messages_reconcile_page(
+                'uid', limit=2, cursor_message_id=cursor
+            )
+
+        assert [row['id'] for row in rows] == ['visible-2', 'visible-1']
+        assert cursor == 'visible-1'
+        assert has_more is True
+        assert tail_rows == []
+        assert tail_cursor is None
+        assert tail_has_more is False
+
+    def test_cursor_must_exist_in_authenticated_filter_scope(self):
+        now = datetime.now(timezone.utc)
+        collection = self.FakeCollection(
+            [
+                self.message('other-app', now, plugin_id='other'),
+            ]
+        )
+        with self.patched_db(collection):
+            with pytest.raises(chat_db.MessageReconcileCursorError):
+                chat_db.get_messages_reconcile_page('uid', limit=2, cursor_message_id='other-app', app_id='requested')
+
+
 class TestGetChatSessionsQuery:
     """Verify get_chat_sessions query construction."""
 
@@ -812,6 +941,180 @@ class TestDeleteChatSessionCascade:
 
 class TestSaveMessageSessionBehavior:
     """Verify save_message session acquisition and preview behavior."""
+
+    def test_client_message_id_retry_returns_same_row_without_second_write(self):
+        payload_hash = chat_db._message_idempotency_payload_hash(
+            text='hello',
+            sender='human',
+            app_id=None,
+            session_id=None,
+            metadata='{"origin":"typed_chat"}',
+            message_source='desktop_chat',
+        )
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'hello',
+            'sender': 'human',
+            'metadata': '{"origin":"typed_chat"}',
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+            'client_message_payload_hash': payload_hash,
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            result = chat_db.save_message(
+                'uid',
+                text='hello',
+                sender='human',
+                metadata='{"origin":"typed_chat"}',
+                client_message_id='turn-1',
+            )
+
+        assert result['id'] == 'turn-1'
+        assert result['created'] is False
+        message_ref.create.assert_not_called()
+        message_ref.set.assert_not_called()
+
+    def test_client_message_id_fingerprint_distinguishes_omitted_from_explicit_session(self):
+        payload_hash = chat_db._message_idempotency_payload_hash(
+            text='hello',
+            sender='human',
+            app_id=None,
+            session_id=None,
+            metadata=None,
+            message_source='desktop_chat',
+        )
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'hello',
+            'sender': 'human',
+            'metadata': None,
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+            'client_message_payload_hash': payload_hash,
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
+                chat_db.save_message(
+                    'uid',
+                    text='hello',
+                    sender='human',
+                    session_id='session-1',
+                    client_message_id='turn-1',
+                )
+
+        message_ref.create.assert_not_called()
+
+    def test_client_message_id_payload_collision_is_rejected(self):
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'original',
+            'sender': 'human',
+            'metadata': None,
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
+                chat_db.save_message(
+                    'uid',
+                    text='different',
+                    sender='human',
+                    session_id='session-1',
+                    client_message_id='turn-1',
+                )
+
+        message_ref.create.assert_not_called()
+
+    def test_legacy_client_message_id_rejects_different_app_when_retry_omits_app(self):
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'hello',
+            'sender': 'human',
+            'app_id': 'different-app',
+            'plugin_id': 'different-app',
+            'metadata': None,
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
+                chat_db.save_message(
+                    'uid',
+                    text='hello',
+                    sender='human',
+                    client_message_id='turn-1',
+                )
+
+        message_ref.create.assert_not_called()
+
+    def test_legacy_race_validates_the_requested_session_not_the_locally_acquired_session(self):
+        missing = MagicMock()
+        missing.exists = False
+        winner = MagicMock()
+        winner.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'hello',
+            'sender': 'human',
+            'app_id': None,
+            'plugin_id': None,
+            'metadata': None,
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'winner-session',
+            'session_id': 'winner-session',
+        }
+        message_ref = MagicMock()
+        message_ref.get.side_effect = [missing, winner]
+        message_ref.create.side_effect = chat_db.AlreadyExists('concurrent writer won')
+
+        with patch.object(chat_db, 'acquire_chat_session', return_value='locally-acquired-session'), patch.object(
+            chat_db, 'db'
+        ) as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            result = chat_db.save_message(
+                'uid',
+                text='hello',
+                sender='human',
+                client_message_id='turn-1',
+            )
+
+        assert result['id'] == 'turn-1'
+        assert result['session_id'] == 'winner-session'
+        assert result['created'] is False
+        message_ref.create.assert_called_once()
 
     def test_explicit_session_id_skips_acquire(self):
         """save_message with explicit session_id doesn't call acquire_chat_session."""
