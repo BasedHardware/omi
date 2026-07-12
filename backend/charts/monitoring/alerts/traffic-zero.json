@@ -20,7 +20,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(parakeet_requests_total[10m])) or vector(0)",
+          "expr": "sum(rate(parakeet_requests_total{namespace=\"prod-omi-backend\"}[10m])) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -246,7 +246,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(kube_deployment_status_replicas_ready{deployment=\"prod-omi-backend-listen\"}) or vector(0)",
+          "expr": "sum(kube_deployment_status_replicas_ready{deployment=\"prod-omi-backend-listen\", namespace=\"prod-omi-backend\"}) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -718,7 +718,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(kube_deployment_status_replicas_ready{deployment=\"deepgram-engine\"}) or vector(0)",
+          "expr": "sum(kube_deployment_status_replicas_ready{deployment=\"deepgram-engine\", namespace=\"prod-omi-backend\"}) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
