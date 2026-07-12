@@ -166,10 +166,6 @@ def test_pre_push_requires_backend_python_lazily():
     assert 'if [[ ! -x "$BACKEND_PYTHON" ]]' not in setup_prefix
     for function_name in (
         "check_backend_runtime_env_if_needed",
-        "check_backend_async_blockers_if_needed",
-        "check_module_stub_pollution_if_needed",
-        "check_import_time_side_effects_if_needed",
-        "check_workflow_contracts_if_needed",
         "check_backend_typecheck_if_needed",
         "check_backend_unit_tests_if_needed",
         "check_openapi_contract_if_needed",
@@ -190,21 +186,35 @@ def test_pre_push_runs_each_named_check_phase_once():
 def test_shared_change_detection_and_backend_isolation_are_ci_wired():
     repo = BACKEND_DIR.parent
     detect_changes = (repo / ".github/actions/detect-changes/action.yml").read_text()
+    manifest = (repo / ".github/checks-manifest.yaml").read_text()
     backend_checks = (repo / ".github/workflows/backend-checks.yml").read_text()
+    repo_checks = (repo / ".github/workflows/repo-checks.yml").read_text()
     desktop_checks = (repo / ".github/workflows/desktop-checks.yml").read_text()
+    agent_proxy_auto_deploy = (repo / ".github/workflows/gcp_backend_agent_proxy_auto_deploy.yml").read_text()
     swift_test_suites = (repo / "desktop/macos/scripts/swift-test-suites.sh").read_text()
     pre_push = (repo / "scripts/pre-push").read_text()
 
     assert 'FILES=$(scripts/changed-files "$DIFF_BASE"...HEAD)' in detect_changes
     assert "has_backend_isolation_gate" in detect_changes
     assert 'scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD' in desktop_checks
-    assert "scan_import_time_side_effects.py" in backend_checks
-    assert "check_module_stub_pollution.py" in backend_checks
-    assert 'MERGE_BASE="$(git merge-base "${{ needs.changes.outputs.diff_base }}" HEAD)"' in backend_checks
-    assert '--check-allowlist-monotonic "$MERGE_BASE"' in backend_checks
+    assert "- 'backend/utils/__init__.py'" in agent_proxy_auto_deploy
+    assert "- 'backend/utils/executors.py'" in agent_proxy_auto_deploy
+    assert "^backend/agent-proxy/Dockerfile$" in detect_changes
+    assert "scan_import_time_side_effects.py" in manifest
+    assert "check_module_stub_pollution.py" in manifest
+    assert '"--check-allowlist-monotonic", "{base}"' in manifest
+    assert "backend/agent-proxy" in manifest
+    assert "backend/dependencies.py" in manifest
+    assert "unmanaged_thread_offload" in manifest
+    assert "scan_import_time_side_effects.py" not in backend_checks
+    assert "check_module_stub_pollution.py" not in backend_checks
+    assert "run_checks.py --lane ci" in repo_checks
     assert 'BASE_REMOTE="${PRE_PUSH_BASE_REMOTE:-origin}"' in pre_push
     assert 'scripts/changed-files "$DIFF_BASE" "$local_oid"' in pre_push
-    assert "run_step check_desktop_quality_if_needed" in pre_push
+    assert "scripts/pr-preflight --lane local" in pre_push
+    assert "scan_import_time_side_effects.py" not in pre_push
+    assert "check_module_stub_pollution.py" not in pre_push
+    assert "check_desktop_test_quality.py" in manifest
     assert 'python3 "$SCRIPT_DIR/check_desktop_test_quality.py"' in swift_test_suites
     assert 'if [ -z "${OMI_SWIFT_TEST_DISCOVERY_ROOT:-}" ]; then' in swift_test_suites
 

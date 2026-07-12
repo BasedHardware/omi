@@ -179,13 +179,8 @@ class SystemAudioCaptureService: @unchecked Sendable {
         sourceSampleRate = format.mSampleRate
         log("SystemAudioCapture: Source format - \(format.mSampleRate)Hz, \(format.mChannelsPerFrame) channels, \(format.mBitsPerChannel) bits")
 
-        // 5. Create AVAudioFormat for conversion
-        guard let inputFmt = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: format.mSampleRate,
-            channels: AVAudioChannelCount(format.mChannelsPerFrame),
-            interleaved: false
-        ) else {
+        // 5. Create AVAudioFormat for conversion (see makeConverterInputFormat — MONO).
+        guard let inputFmt = Self.makeConverterInputFormat(sampleRate: format.mSampleRate) else {
             cleanup()
             throw SystemAudioCaptureError.formatError
         }
@@ -295,6 +290,23 @@ class SystemAudioCaptureService: @unchecked Sendable {
         )
 
         return status == noErr ? format : nil
+    }
+
+    /// Builds the converter input format. It is ALWAYS mono: `handleAudioInput`
+    /// down-mixes stereo source frames into a single channel (channel 0) and never
+    /// fills a second channel, so the converter must see a mono input and perform only
+    /// sample-rate conversion. Declaring the source channel count here made the
+    /// converter run its own stereo→mono downmix against the unwritten channel 1,
+    /// averaging our real mix against silence (~6 dB attenuation of all system audio
+    /// fed to transcription). The microphone path (AudioCaptureService) likewise builds
+    /// its input format with channels: 1. `static` so the mono contract is unit-testable.
+    static func makeConverterInputFormat(sampleRate: Double) -> AVAudioFormat? {
+        AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: sampleRate,
+            channels: 1,
+            interleaved: false
+        )
     }
 
     /// Handle incoming audio data from the tap

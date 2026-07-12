@@ -7,6 +7,7 @@ actor ActionItemStorage {
     static let shared = ActionItemStorage()
 
     private var _dbQueue: DatabasePool?
+    private var _dbGeneration = -1
     private var isInitialized = false
 
     private init() {}
@@ -19,7 +20,7 @@ actor ActionItemStorage {
 
     /// Ensure database is initialized before use
     private func ensureInitialized() async throws -> DatabasePool {
-        if let db = _dbQueue {
+        if let db = _dbQueue, await RewindDatabase.shared.poolGeneration() == _dbGeneration {
             return db
         }
 
@@ -31,11 +32,13 @@ actor ActionItemStorage {
             throw error
         }
 
-        guard let db = await RewindDatabase.shared.getDatabaseQueue() else {
+        let (queue, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+        guard let db = queue else {
             throw ActionItemStorageError.databaseNotInitialized
         }
 
         _dbQueue = db
+        _dbGeneration = generation
         isInitialized = true
         return db
     }

@@ -6,6 +6,7 @@ import pytest
 import yaml
 
 from llm_gateway.gateway.config_loader import ConfigValidationError, load_gateway_config
+from llm_gateway.gateway.schemas import Surface
 from utils.llm.model_config import get_all_configured_features, get_model
 
 LANE_ID = 'omi:auto:chat-structured'
@@ -41,6 +42,10 @@ def test_gateway_route_overrides_do_not_change_the_legacy_model_profile():
     assert config.route_artifacts['route.chat_agent.model_config.001'].primary.model == 'claude-sonnet-5'
     assert config.route_artifacts['route.memory_l2.model_config.001'].provider_options['reasoning_effort'] == 'medium'
     assert config.route_artifacts['route.chat_agent.model_config.001'].provider_options['effort'] == 'medium'
+    chat_agent_lane = config.lanes['omi:auto:chat-agent']
+    assert chat_agent_lane.surface == Surface.ANTHROPIC_MESSAGES
+    assert chat_agent_lane.capabilities.streaming is True
+    assert chat_agent_lane.capabilities.tools is True
 
 
 def test_unknown_gateway_route_override_fails(tmp_path):

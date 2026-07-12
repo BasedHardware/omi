@@ -887,18 +887,19 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
 
                 Task {
                     try? await Task.sleep(nanoseconds: 3_000_000_000)
-                    storageStateLock.lock()
-                    var timedOut: CheckedContinuation<[String: Int]?, Never>?
-                    var snapshot: [String: Int]?
-                    // Only fire if OUR call is still the pending one (a newer call
-                    // would have bumped the generation and owns the slot now).
-                    if storageStateGeneration == myGeneration, let completion = storageStateCompletion {
-                        timedOut = completion
-                        storageStateCompletion = nil
-                        snapshot = storageState
+                    let timeoutResult = storageStateLock.withLock {
+                        var timedOut: CheckedContinuation<[String: Int]?, Never>?
+                        var snapshot: [String: Int]?
+                        // Only fire if OUR call is still the pending one (a newer call
+                        // would have bumped the generation and owns the slot now).
+                        if storageStateGeneration == myGeneration, let completion = storageStateCompletion {
+                            timedOut = completion
+                            storageStateCompletion = nil
+                            snapshot = storageState
+                        }
+                        return (timedOut, snapshot)
                     }
-                    storageStateLock.unlock()
-                    timedOut?.resume(returning: snapshot)
+                    timeoutResult.0?.resume(returning: timeoutResult.1)
                 }
             }
         } catch {

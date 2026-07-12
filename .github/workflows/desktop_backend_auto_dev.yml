@@ -14,7 +14,8 @@ env:
 
 concurrency:
   group: desktop-backend-auto-dev
-  cancel-in-progress: true
+  # Do not interrupt the Cloud Run mutation or its traffic verification.
+  cancel-in-progress: false
 
 jobs:
   deploy:

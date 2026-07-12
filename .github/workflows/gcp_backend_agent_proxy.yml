@@ -12,6 +12,11 @@ on:
         required: true
         default: 'main'
 
+# Serialize Helm writers to this environment's agent-proxy release.
+concurrency:
+  group: deploy-gke-agent-proxy-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
 env:
   SERVICE: agent-proxy
   REGION: us-central1

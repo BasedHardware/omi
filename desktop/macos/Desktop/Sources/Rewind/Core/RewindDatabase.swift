@@ -23,8 +23,17 @@ actor RewindDatabase {
     /// The user ID that was actually used to open the current database
     private var openedForUserId: String?
 
-    /// Generation counter — incremented on close() so stale task completions don't corrupt state
+    /// Generation counter — incremented on close() so stale task completions don't corrupt state.
+    /// NOTE: `initialize()` captures this before `performInitialization()` and clears
+    /// `initializationTask` only if it is unchanged afterward, so it MUST NOT be bumped
+    /// during a normal open. Pool-swap detection uses the separate `poolEpoch` below.
     private var initGeneration: Int = 0
+
+    /// Epoch of the current `dbQueue`, bumped on every close AND every pool (re)open.
+    /// Storage actors cache this alongside the pool and revalidate to detect a swap
+    /// (recovery replaces the pool) — kept distinct from `initGeneration` so bumping it
+    /// on open does not break the in-flight-close detection in `initialize()`.
+    private var poolEpoch: Int = 0
 
     /// Static user ID for nonisolated markCleanShutdown (set by configure(userId:))
     nonisolated(unsafe) static var currentUserId: String?
@@ -49,6 +58,20 @@ actor RewindDatabase {
     /// Get the database pool for other storage actors
     func getDatabaseQueue() -> DatabasePool? {
         return dbQueue
+    }
+
+    /// Monotonic epoch of the current `dbQueue`. Bumped on every close and every
+    /// pool (re)open, so a storage actor that cached a pool can detect a swap
+    /// (corruption/maintenance recovery replaces the pool) and drop its stale
+    /// reference instead of reading/writing a closed or unlinked file.
+    func poolGeneration() -> Int {
+        return poolEpoch
+    }
+
+    /// Atomically read the current pool and its epoch together, so a caching
+    /// storage actor stores a consistent (pool, generation) pair.
+    func getDatabaseQueueWithGeneration() -> (pool: DatabasePool?, generation: Int) {
+        return (dbQueue, poolEpoch)
     }
 
     /// Report a query error from a storage actor or subsystem.
@@ -215,25 +238,15 @@ actor RewindDatabase {
         do {
             try db.execute(sql: "DROP TABLE IF EXISTS action_items_fts")
         } catch {
-            try forceRemoveBrokenActionItemsFTSMetadata(in: db)
+            try dropActionItemsFTSShadowsIfPresent(in: db)
+            try db.execute(sql: "DROP TABLE IF EXISTS action_items_fts")
         }
     }
 
-    private static func forceRemoveBrokenActionItemsFTSMetadata(in db: Database) throws {
-        try db.execute(sql: "PRAGMA writable_schema = ON")
-        defer { try? db.execute(sql: "PRAGMA writable_schema = OFF") }
-
-        try db.execute(sql: "DELETE FROM sqlite_master WHERE type = 'table' AND name = 'action_items_fts'")
+    private static func dropActionItemsFTSShadowsIfPresent(in db: Database) throws {
         for table in actionItemsFTSShadowTables {
-            do {
-                try db.execute(sql: "DROP TABLE IF EXISTS \(table)")
-            } catch {
-                try db.execute(sql: "DELETE FROM sqlite_master WHERE type = 'table' AND name = '\(table)'")
-            }
+            try db.execute(sql: "DROP TABLE IF EXISTS \(table)")
         }
-
-        let schemaVersion = (try Int.fetchOne(db, sql: "PRAGMA schema_version")) ?? 0
-        try db.execute(sql: "PRAGMA schema_version = \(schemaVersion + 1)")
     }
 
     /// Configure the database for a specific user.
@@ -249,22 +262,28 @@ actor RewindDatabase {
 
     /// Close the database only if no new session has started (configure() not called since).
     /// Prevents a stale sign-out Task from closing a freshly opened database.
-    func closeIfStale(generation: Int) {
+    @discardableResult
+    func closeIfStale(generation: Int) -> Bool {
         guard generation == RewindDatabase.configureGeneration else {
             log("RewindDatabase: Skipping stale close (requested gen \(generation), current gen \(RewindDatabase.configureGeneration))")
-            return
+            return false
         }
         close()
+        return true
     }
 
     /// Close the database, allowing re-initialization for a different user.
     func close() {
+        if let runningFlagPath {
+            try? FileManager.default.removeItem(atPath: runningFlagPath)
+        }
         dbQueue = nil
         initializationTask = nil
         runningFlagPath = nil
         openedForUserId = nil
         initGeneration += 1
-        log("RewindDatabase: Closed database (generation \(initGeneration))")
+        poolEpoch += 1
+        log("RewindDatabase: Closed database (generation \(initGeneration), pool epoch \(poolEpoch))")
     }
 
     /// Switch to a different user's database.
@@ -277,8 +296,16 @@ actor RewindDatabase {
     /// Returns the per-user base directory: ~/Library/Application Support/Omi/users/{userId}/
     /// Falls back to the static currentUserId (set synchronously at app start) when
     /// configure() hasn't been called yet (e.g., TierManager triggers init early).
+    private func targetUserId() -> String {
+        if RewindDatabase.currentUserId == nil,
+           UserDefaults.standard.string(forKey: .authUserId) == nil {
+            return "anonymous"
+        }
+        return configuredUserId ?? RewindDatabase.currentUserId ?? "anonymous"
+    }
+
     private func userBaseDirectory() -> URL {
-        let userId = configuredUserId ?? RewindDatabase.currentUserId ?? "anonymous"
+        let userId = targetUserId()
         return DesktopLocalProfile.applicationSupportURL()
             .appendingPathComponent("users", isDirectory: true)
             .appendingPathComponent(userId, isDirectory: true)
@@ -313,7 +340,7 @@ actor RewindDatabase {
     /// If the DB is open for a different user (e.g., "anonymous" before configure was called),
     /// closes it and reopens for the configured user.
     func initialize() async throws {
-        let targetUser = configuredUserId ?? RewindDatabase.currentUserId ?? "anonymous"
+        let targetUser = targetUserId()
 
         // Already initialized for the correct user
         if dbQueue != nil && openedForUserId == targetUser {
@@ -471,7 +498,14 @@ actor RewindDatabase {
         }
 
         dbQueue = activeQueue
-        openedForUserId = configuredUserId ?? RewindDatabase.currentUserId ?? "anonymous"
+        // Bump the pool epoch on every (re)open so storage actors that cached the
+        // previous pool revalidate and drop it — recovery may have replaced the
+        // underlying omi.db file, leaving the old pool pointing at a stale inode.
+        // This is `poolEpoch`, NOT `initGeneration`: initialize() relies on
+        // initGeneration staying unchanged across a normal open to clear its
+        // initializationTask.
+        poolEpoch += 1
+        openedForUserId = targetUserId()
         consecutiveQueryIOErrors = 0
 
         try migrate(activeQueue)
@@ -543,7 +577,7 @@ actor RewindDatabase {
             .appendingPathComponent("users", isDirectory: true)
             .appendingPathComponent("anonymous", isDirectory: true)
 
-        let effectiveUserId = configuredUserId ?? RewindDatabase.currentUserId ?? "anonymous"
+        let effectiveUserId = targetUserId()
         let sourceDir: URL
         if fileManager.fileExists(atPath: legacyDB.path) {
             sourceDir = omiDir

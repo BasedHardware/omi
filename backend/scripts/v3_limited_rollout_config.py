@@ -17,7 +17,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from utils.memory.v3_limited_rollout_config import build_limited_rollout_config_bundle
+from utils.memory.v3.limited_rollout_config import build_limited_rollout_config_bundle
 
 
 def build_report(*, uid: str, account_generation: int) -> Dict[str, Any]:

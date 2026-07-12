@@ -1327,7 +1327,11 @@ class AuthService {
                 durationMs: authFlowDurationMs(startedAt: activeFlowStartedAt),
                 extraProperties: ["callback_transport": activeCallbackTransport]
             )
-            AnalyticsManager.shared.signInFailed(provider: provider, error: AuthError.timeout.localizedDescription)
+            AnalyticsManager.shared.signInFailed(
+                provider: provider,
+                error: AuthError.timeout.localizedDescription,
+                errorClass: authFailureClass(for: AuthError.timeout)
+            )
             if let activeFlowId {
                 clearOAuthFlowIfCurrent(flowId: activeFlowId, callbackServer: activeCallbackServer)
             }
@@ -1348,7 +1352,11 @@ class AuthService {
                 durationMs: authFlowDurationMs(startedAt: activeFlowStartedAt),
                 extraProperties: ["callback_transport": activeCallbackTransport]
             )
-            AnalyticsManager.shared.signInFailed(provider: provider, error: error.localizedDescription)
+            AnalyticsManager.shared.signInFailed(
+                provider: provider,
+                error: error.localizedDescription,
+                errorClass: authFailureClass(for: error)
+            )
             if let activeFlowId {
                 clearOAuthFlowIfCurrent(flowId: activeFlowId, callbackServer: activeCallbackServer)
             }
@@ -1420,7 +1428,9 @@ class AuthService {
             properties["failure_class"] = failureClass
         }
         if let error {
-            properties["error"] = String(error.prefix(200))
+            let errorClass = PostHogManager.diagnosticErrorClass(error)
+            properties["error"] = errorClass
+            properties["error_class"] = errorClass
         }
         if let durationMs {
             properties["duration_ms"] = durationMs
@@ -2417,7 +2427,7 @@ class AuthService {
             SentrySDK.setUser(nil)
         }
 
-        let signingOutUserID = UserDefaults.standard.string(forKey: "auth_userId")
+        let signingOutUserID = UserDefaults.standard.string(forKey: .authUserId)
         try Auth.auth().signOut()
         // Reset coordinator only after Firebase sign-out succeeds so the state
         // transition is atomic — if signOut() throws (e.g. keychain error), the
@@ -2431,11 +2441,26 @@ class AuthService {
         // Clear saved auth state and tokens
         saveAuthState(isSignedIn: false, email: nil, userId: nil)
         clearTokens()
+        RewindDatabase.currentUserId = nil
 
         // Stop background services that make API calls before clearing caches
-        Task {
+        Task { [signingOutUserID] in
+            guard UserDefaults.standard.string(forKey: .authUserId) == nil
+                || UserDefaults.standard.string(forKey: .authUserId) == signingOutUserID
+            else {
+                log("AuthService: skipping stale sign-out service cleanup after a new sign-in")
+                return
+            }
             await AgentSyncService.shared.stop()
-            await FloatingBarUsageLimiter.shared.reset()
+            await MainActor.run {
+                guard UserDefaults.standard.string(forKey: .authUserId) == nil
+                    || UserDefaults.standard.string(forKey: .authUserId) == signingOutUserID
+                else {
+                    log("AuthService: skipping stale usage limiter reset after a new sign-in")
+                    return
+                }
+                FloatingBarUsageLimiter.shared.reset()
+            }
         }
 
         // Stop trial polling and reset banner state for this user session
@@ -2452,7 +2477,11 @@ class AuthService {
         // a new sign-in session has already called configure() by the time this runs.
         let closeGeneration = RewindDatabase.configureGeneration
         Task {
-            await RewindDatabase.shared.closeIfStale(generation: closeGeneration)
+            let didClose = await RewindDatabase.shared.closeIfStale(generation: closeGeneration)
+            guard didClose else {
+                log("AuthService: skipping stale sign-out cache invalidation after a new database session")
+                return
+            }
             await RewindIndexer.shared.reset()
             await RewindStorage.shared.reset()
             await TranscriptionStorage.shared.invalidateCache()

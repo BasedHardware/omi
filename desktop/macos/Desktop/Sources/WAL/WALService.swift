@@ -66,6 +66,7 @@ final class WALService: ObservableObject {
     private let fileManager = FileManager.default
     private let apiClient: APIClient
     private let reconciler: WALSyncReconciler
+    private let walMetadataWriteQueue = DispatchQueue(label: "me.omi.desktop.wal.metadata.write")
     private var frameWriteInProgress = false
 
     /// Test seam — when set, bypasses `APIClient.uploadLocalFilesV2`.
@@ -89,6 +90,10 @@ final class WALService: ObservableObject {
 
     func flushToDiskForTesting() {
         flushToDisk()
+    }
+
+    func waitForWalMetadataWritesForTesting() {
+        walMetadataWriteQueue.sync {}
     }
 
     func createWalFromCurrentFramesForTesting() {
@@ -116,10 +121,10 @@ final class WALService: ObservableObject {
 
     init(
         apiClient: APIClient = .shared,
-        reconciler: WALSyncReconciler = .shared
+        reconciler: WALSyncReconciler? = nil
     ) {
         self.apiClient = apiClient
-        self.reconciler = reconciler
+        self.reconciler = reconciler ?? .shared
         setupWalDirectory()
         loadWals()
     }
@@ -217,8 +222,9 @@ final class WALService: ObservableObject {
             let metadata = WALMetadata(wals: wals)
             let data = try JSONEncoder().encode(metadata)
 
-            // Write to disk on background thread to avoid blocking UI
-            DispatchQueue.global(qos: .utility).async {
+            // Write to disk on a serial background queue so older snapshots cannot
+            // finish after newer snapshots and roll metadata backward across restart.
+            walMetadataWriteQueue.async {
                 do {
                     // Create backup first
                     if FileManager.default.fileExists(atPath: file.path) {
@@ -736,9 +742,14 @@ final class WALService: ObservableObject {
             }
         }
 
-        var workingWals = wals
+        // Reconcile operates on a pre-await snapshot because it runs per-job network
+        // awaits on the main actor; merge its id-keyed transitions back onto the live
+        // array so WALs appended during those awaits are not dropped (see
+        // WALCloudSyncLogic.mergeReconciledUploads).
+        let snapshot = wals
+        var workingWals = snapshot
         if await reconciler.reconcileUploadedWals(wals: &workingWals, walDirectory: walDirectory) {
-            wals = workingWals
+            wals = WALCloudSyncLogic.mergeReconciledUploads(live: wals, snapshot: snapshot, reconciled: workingWals)
             updatePendingWals()
             saveWals()
         }

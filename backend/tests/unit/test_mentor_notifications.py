@@ -122,9 +122,11 @@ def _apply_fakes(monkeypatch):
     # generate_notification / validate_notification / evaluate_proactive_notification
     # use it when tests configure mock_llm_mini.with_structured_output).
     monkeypatch.setattr(pn_mod, 'get_llm', MagicMock(return_value=mock_llm_mini))
-    # utils.llm.clients.get_llm -> fresh chain mock for _process_proactive_notification's
-    # in-function `from utils.llm.clients import get_llm`.
-    monkeypatch.setattr(llm_clients_mod, 'get_llm', MagicMock())
+    # app_integrations binds get_llm at module import; patch both the source and
+    # consumption seam to keep the proactive coordinator hermetic.
+    get_llm = MagicMock()
+    monkeypatch.setattr(llm_clients_mod, 'get_llm', get_llm)
+    monkeypatch.setattr(app_int, 'get_llm', get_llm)
 
     # app_integrations local bindings (from X import Y).
     monkeypatch.setattr(app_int, 'get_user_goals', mock_get_user_goals)

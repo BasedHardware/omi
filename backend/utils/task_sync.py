@@ -6,7 +6,7 @@ import httpx
 import database.users as users_db
 import database.action_items as action_items_db
 from utils.executors import db_executor, run_blocking
-from utils.notifications import send_apple_reminders_sync_push
+from utils.notifications import send_apple_reminders_sync_push_async
 from utils.task_integrations_ops import create_task_internal
 import logging
 
@@ -43,7 +43,7 @@ async def auto_sync_action_item(
         if default_app == "apple_reminders":
             if skip_apple_reminders:
                 return {"synced": False, "reason": "client_handles_sync"}
-            return _sync_to_apple_reminders(uid, [action_item])
+            return await _sync_to_apple_reminders(uid, [action_item])
         else:
             return await _sync_to_cloud_service(uid, default_app, integration, action_item)
 
@@ -84,11 +84,11 @@ async def _sync_to_cloud_service(
     return {"synced": False, "platform": app_key, "error": result.get("error")}
 
 
-def _sync_to_apple_reminders(uid: str, action_items: List[Dict[str, Any]]) -> Dict[str, Any]:
+async def _sync_to_apple_reminders(uid: str, action_items: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Mark items as sync_requested and send a single silent push for Apple Reminders."""
     item_ids: List[Any] = [item['id'] for item in action_items]
-    action_items_db.batch_set_sync_requested(uid, item_ids)
-    success = send_apple_reminders_sync_push(user_id=uid, action_items=action_items)
+    await run_blocking(db_executor, action_items_db.batch_set_sync_requested, uid, item_ids)
+    success = await send_apple_reminders_sync_push_async(user_id=uid, action_items=action_items)
     return {"synced": success, "platform": "apple_reminders", "pending_device": True}
 
 
@@ -121,7 +121,7 @@ async def auto_sync_action_items_batch(uid: str, action_items: List[Dict[str, An
 
         # Apple Reminders: send all items in a single push
         if default_app == "apple_reminders":
-            result = _sync_to_apple_reminders(uid, action_items)
+            result = await _sync_to_apple_reminders(uid, action_items)
             return [result] * len(action_items)
 
         # Cloud services: sync individually
