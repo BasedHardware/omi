@@ -11,9 +11,11 @@ class OnDeviceTranscriptQualityGate {
   };
   static const int _lowEnergyAverageAbsThreshold = 180;
 
+  // Each long-lived provider owns one gate. Real speech clears this state, so
+  // duplicate suppression only spans adjacent filler results in that session.
   String? _lastAcceptedFiller;
 
-  String? filter(String text, {required Uint8List audioData, required Duration duration}) {
+  String? filter(String text, {required Uint8List audioData}) {
     final cleaned = _clean(text);
     if (cleaned.isEmpty) return null;
 

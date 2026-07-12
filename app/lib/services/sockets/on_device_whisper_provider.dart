@@ -96,12 +96,10 @@ class OnDeviceWhisperProvider implements ISttProvider {
         cleanText = cleanText.replaceAll(RegExp(r'\[.*?\]'), '').trim();
         cleanText = cleanText.replaceAll(RegExp(r'\(.*?\)'), '').trim();
 
-        // Calculate duration: 16kHz * 2 bytes/sample * 1 channel = 32000 bytes/sec
         final duration = audioData.lengthInBytes / 32000.0;
         final filteredText = _qualityGate.filter(
           cleanText,
           audioData: audioData,
-          duration: Duration(microseconds: (duration * Duration.microsecondsPerSecond).round()),
         );
         if (filteredText == null) {
           CustomSttLogService.instance.warning('OnDeviceWhisper', 'Dropped low-quality local transcript: $cleanText');

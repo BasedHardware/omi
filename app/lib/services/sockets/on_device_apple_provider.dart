@@ -45,12 +45,10 @@ class OnDeviceAppleProvider implements ISttProvider {
           return null;
         }
 
-        // Calculate duration: 16kHz * 2 bytes/sample * 1 channel = 32000 bytes/sec
         final duration = audioData.lengthInBytes / 32000.0;
         final filteredText = _qualityGate.filter(
           result,
           audioData: audioData,
-          duration: Duration(microseconds: (duration * Duration.microsecondsPerSecond).round()),
         );
         if (filteredText == null) {
           CustomSttLogService.instance.warning('OnDeviceApple', 'Dropped low-quality local transcript: $result');
