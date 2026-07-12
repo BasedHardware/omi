@@ -208,9 +208,12 @@ actor AgentSyncService {
             return
         }
 
-        guard let url = URL(string: "http://\(vmIP):8080/health") else { return }
+        guard let url = URL(string: "http://\(vmIP):8080/health?token=\(authToken)") else { return }
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            var request = URLRequest(url: url)
+            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+            request.timeoutInterval = 10
+            let (data, _) = try await URLSession.shared.data(for: request)
             guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let dbReady = json["databaseReady"] as? Bool,
                   !dbReady else { return }

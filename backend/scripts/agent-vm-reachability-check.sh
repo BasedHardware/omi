@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # Hermetic contract check (default) or live GCP verification for agent VM firewall.
+#
+# Phase 1: hermetic checks only validate deferred IaC shape.
+# Live (--live) expects phase-3 rules already applied — do not use until cutover.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -10,10 +13,12 @@ usage() {
 Usage: backend/scripts/agent-vm-reachability-check.sh [--live PROJECT]
 
 Hermetic (default):
-  - validate firewall IaC allows private tcp:8080 before denying public tcp:8080
+  - validate deferred firewall IaC allows private tcp:8080 before denying public tcp:8080
+  - confirm apply script is phase-3 gated
 
-Live (--live, requires gcloud auth):
+Live (--live, requires gcloud auth) — phase 3 only:
   - describe the applied firewall rules in GCP and enforce the same contract
+  - do not run until AGENT_VM_FIREWALL_APPLY_PHASE3 cutover has completed
 EOF
 }
 

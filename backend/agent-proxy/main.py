@@ -247,10 +247,11 @@ async def _ensure_vm_running(uid: str, vm: Dict[str, Any], health_failed: bool =
 async def _wait_for_vm_healthy(vm_ip: str, auth_token: str, timeout: float = 120) -> bool:
     """Poll the VM's /health endpoint until it responds OK."""
     deadline = asyncio.get_event_loop().time() + timeout
+    headers = {"Authorization": f"Bearer {auth_token}"}
     async with httpx.AsyncClient(timeout=5) as client:
         while asyncio.get_event_loop().time() < deadline:
             try:
-                resp = await client.get(f"http://{vm_ip}:8080/health")
+                resp = await client.get(f"http://{vm_ip}:8080/health", headers=headers)
                 if resp.status_code == 200:
                     return True
             except Exception:
@@ -421,8 +422,9 @@ async def agent_ws(websocket: WebSocket):
     # Only fall back to GCE check + restart if the VM isn't reachable.
     if vm.get("status") == "ready" and vm_ip:
         try:
+            headers = {"Authorization": f"Bearer {vm_token}"} if vm_token else {}
             async with httpx.AsyncClient(timeout=3) as client:
-                resp = await client.get(f"http://{vm_ip}:8080/health")
+                resp = await client.get(f"http://{vm_ip}:8080/health", headers=headers)
                 if resp.status_code != 200:
                     raise Exception(f"health returned {resp.status_code}")
         except Exception:

@@ -1,15 +1,25 @@
-# GCP firewall rules for agent VM port 8080 exposure control (#7326).
+# Agent VM firewall IaC — PHASE 3 / DEFERRED (#7326).
 #
-# Agent VMs are tagged `omi-agent-vm` at provision time (desktop Backend-Rust
-# build_gce_vm_insert_body). Keep the private allow rule higher priority than
-# the public deny rule: a 0.0.0.0/0 DENY also matches internal VPC sources.
+# DO NOT APPLY in production yet. agent-proxy runs on GKE in `omi-prod-vpc-1`
+# while agent VMs live on `default` with no VPC peering. Desktop clients also
+# talk to VMs directly on public :8080. A public DENY (or removing NAT) breaks
+# both paths until:
+#   1) Desktop upload/sync is routed through agent-proxy (PR10c)
+#   2) Firewall allowlist uses reserved Cloud NAT IPs for proxy egress
+#      (or VMs move / peer onto the proxy VPC)
+#   3) Optional later: drop ONE_TO_ONE_NAT once private reachability is proven
 #
-# Apply (idempotent):
-#   backend/scripts/apply-agent-vm-firewall.sh
+# Phase 1 (this PR): keep public NAT; tag VMs `omi-agent-vm`; auth-gate VM HTTP.
+# These rules are the intended end-state shape only.
 #
-# Verify before desktop-backend deploy:
+# Apply is intentionally gated:
+#   AGENT_VM_FIREWALL_APPLY_PHASE3=I_UNDERSTAND_BREAKS_DESKTOP_AND_PROXY \
+#     backend/scripts/apply-agent-vm-firewall.sh
+#
+# Hermetic verify (safe anytime):
 #   backend/scripts/agent-vm-reachability-check.sh
-#   backend/scripts/agent-vm-reachability-check.sh --live based-hardware
+applyEnabled: false
+phase: 3
 firewallRules:
   - name: omi-agent-vm-allow-private-8080
     project: based-hardware
@@ -27,7 +37,7 @@ firewallRules:
       - 192.168.0.0/16
     targetTags:
       - omi-agent-vm
-    description: Allow private VPC ingress from agent-proxy to agent VM HTTP/WS port 8080 (#7326)
+    description: "PHASE3 deferred: allow private VPC ingress to agent VM :8080 (#7326)"
   - name: omi-agent-vm-deny-public-8080
     project: based-hardware
     network: default
@@ -42,4 +52,4 @@ firewallRules:
       - 0.0.0.0/0
     targetTags:
       - omi-agent-vm
-    description: Deny public internet ingress to agent VM HTTP/WS port 8080 (#7326)
+    description: "PHASE3 deferred: deny public internet ingress to agent VM :8080 (#7326)"

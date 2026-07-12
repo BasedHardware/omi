@@ -1,12 +1,36 @@
 #!/usr/bin/env bash
 # Idempotently apply the agent VM port-8080 firewall rules from IaC.
+#
+# PHASE 3 / DEFERRED: refused unless AGENT_VM_FIREWALL_APPLY_PHASE3 is set.
+# See backend/charts/agent-vm-firewall/firewall-rule.yaml for prerequisites.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RULE_FILE="${ROOT}/charts/agent-vm-firewall/firewall-rule.yaml"
+APPLY_GATE_VALUE="I_UNDERSTAND_BREAKS_DESKTOP_AND_PROXY"
 
 if [[ ! -f "$RULE_FILE" ]]; then
   echo "ERROR: missing firewall IaC: $RULE_FILE" >&2
+  exit 1
+fi
+
+if [[ "${AGENT_VM_FIREWALL_APPLY_PHASE3:-}" != "$APPLY_GATE_VALUE" ]]; then
+  cat >&2 <<EOF
+REFUSED: agent VM public-deny firewall apply is phase-3 / deferred (#7326).
+
+Applying these rules (or removing public NAT) breaks agent-proxy and desktop
+connectivity today: VMs are on VPC \`default\`, proxy is on \`omi-prod-vpc-1\`
+(no peering), and desktop still calls http://{vmIP}:8080 directly.
+
+Prerequisites before apply:
+  1) Route desktop upload/sync through agent-proxy (PR10c)
+  2) Allowlist reserved Cloud NAT egress for proxy (or peer/move VMs)
+  3) Verify private path end-to-end
+
+To override after those land:
+  AGENT_VM_FIREWALL_APPLY_PHASE3=$APPLY_GATE_VALUE \\
+    backend/scripts/apply-agent-vm-firewall.sh
+EOF
   exit 1
 fi
 
