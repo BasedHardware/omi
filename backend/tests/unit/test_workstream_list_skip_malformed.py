@@ -5,6 +5,11 @@ try/except, so one malformed/legacy doc raised ValidationError and 500'd the who
 (GET /v1/workstreams/{id}/artifacts and /checkpoints). This mirrors the skip-malformed guard the
 sibling list endpoints already carry. database.workstreams is light (firestore_client injectable),
 so the test drives it directly with a fake client.
+
+The same gap existed in the get_goal_detail / get_workstream_detail tasks loops (per-item
+ActionItemResponse.model_validate with no guard -> 500 on GET /v1/goals/{id}/detail and
+GET /v1/workstreams/{id}); both now route tasks through the shared _task_responses_from_snapshots
+helper, which is exercised directly here.
 """
 
 import os
@@ -89,3 +94,27 @@ def test_unexpected_error_is_not_swallowed(monkeypatch):
     client = _fake_client([_snapshot({'id': 'a1'})])
     with pytest.raises(RuntimeError):
         ws.list_artifact_descriptors('u1', 'w1', firestore_client=client)
+
+
+def test_task_responses_from_snapshots_skips_malformed(monkeypatch):
+    _stub_validate(monkeypatch, 'ActionItemResponse')
+    snaps = [_snapshot({'id': 't1'}), _snapshot({'id': 'bad', '_bad': True}), _snapshot({'id': 't2'})]
+    result = ws._task_responses_from_snapshots(snaps, context='goal_detail')
+    assert result == [{'id': 't1'}, {'id': 't2'}]  # one malformed task must not 500 the detail page
+
+
+def test_task_responses_from_snapshots_skips_deleted(monkeypatch):
+    _stub_validate(monkeypatch, 'ActionItemResponse')
+    snaps = [_snapshot({'id': 't1'}), _snapshot({'id': 't2', 'deleted': True})]
+    result = ws._task_responses_from_snapshots(snaps, context='workstream_detail')
+    assert result == [{'id': 't1'}]  # a soft-deleted task is filtered before validation
+
+
+def test_task_responses_unexpected_error_propagates(monkeypatch):
+    # Only ValidationError is skipped; an unexpected error must surface, not be hidden as a skip.
+    def boom(doc):
+        raise RuntimeError('unexpected')
+
+    monkeypatch.setattr(ws.ActionItemResponse, 'model_validate', staticmethod(boom))
+    with pytest.raises(RuntimeError):
+        ws._task_responses_from_snapshots([_snapshot({'id': 't1'})], context='goal_detail')

@@ -85,6 +85,22 @@ def _snapshot_dict(snapshot: Any) -> dict[str, Any]:
     return cast(dict[str, Any], payload) if isinstance(payload, dict) else {}
 
 
+def _task_responses_from_snapshots(snapshots: Any, *, context: str) -> list[ActionItemResponse]:
+    # Skip a malformed/legacy action item doc rather than 500 the whole detail page,
+    # mirroring routers.action_items._safe_action_item_responses for the same model.
+    tasks: list[ActionItemResponse] = []
+    for snapshot in snapshots:
+        payload = _snapshot_dict(snapshot)
+        if payload.get('deleted'):
+            continue
+        payload.setdefault('id', snapshot.id)
+        try:
+            tasks.append(ActionItemResponse.model_validate(payload))
+        except ValidationError as e:
+            logger.warning('Skipping malformed action item %s (%s): %s', payload.get('id'), context, e)
+    return tasks
+
+
 def _user_ref(uid: str, *, firestore_client: Any = None):
     return _get_db(firestore_client).collection('users').document(uid)
 
@@ -1354,13 +1370,7 @@ def get_goal_detail(uid: str, goal_id: str, *, firestore_client: Any = None) -> 
     task_snapshots = (
         user_ref.collection(ACTION_ITEMS_COLLECTION).where(filter=FieldFilter('goal_id', '==', goal_id)).stream()
     )
-    tasks: list[ActionItemResponse] = []
-    for snapshot in task_snapshots:
-        payload = _snapshot_dict(snapshot)
-        if payload.get('deleted'):
-            continue
-        payload.setdefault('id', snapshot.id)
-        tasks.append(ActionItemResponse.model_validate(payload))
+    tasks = _task_responses_from_snapshots(task_snapshots, context='goal_detail')
     return GoalDetailProjection(
         goal=GoalResponse.model_validate(goals_db.ensure_released_goal_aliases(goal)),
         active_threads=list_workstreams_for_goal(uid, goal_id, firestore_client=client),
@@ -1385,13 +1395,7 @@ def get_workstream_detail(
         .where(filter=FieldFilter('workstream_id', '==', workstream_id))
         .stream()
     )
-    tasks: list[ActionItemResponse] = []
-    for snapshot in task_snapshots:
-        payload = _snapshot_dict(snapshot)
-        if payload.get('deleted'):
-            continue
-        payload.setdefault('id', snapshot.id)
-        tasks.append(ActionItemResponse.model_validate(payload))
+    tasks = _task_responses_from_snapshots(task_snapshots, context='workstream_detail')
     return WorkstreamDetailProjection(
         workstream=workstream,
         recent_events=list_workstream_events(uid, workstream_id, firestore_client=client),
