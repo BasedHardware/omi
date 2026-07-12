@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the SD-card sync screen always showing 0 B/s instead of the real download speed"
+}

@@ -47,6 +47,7 @@ final class StorageSyncService: ObservableObject {
     private var downloadedFrames: [Data] = []
     private var totalBytesDownloaded = 0
     private var lastProgressUpdate = Date()
+    private var lastProgressBytes = 0
 
     // MARK: - Initialization
 
@@ -101,6 +102,8 @@ final class StorageSyncService: ObservableObject {
         errorMessage = nil
         downloadedFrames = []
         totalBytesDownloaded = 0
+        lastProgressUpdate = Date()
+        lastProgressBytes = 0
 
         // Create WAL for this sync
         currentWal = walService.createSdCardWal(
@@ -142,6 +145,7 @@ final class StorageSyncService: ObservableObject {
         currentWal = nil
         downloadedFrames = []
         totalBytesDownloaded = 0
+        lastProgressBytes = 0
 
         logger.info("Sync stopped")
     }
@@ -324,13 +328,25 @@ final class StorageSyncService: ObservableObject {
         }
     }
 
+    /// Throughput over an interval. `nonisolated static` so it is synchronously
+    /// unit-testable without hopping the main actor.
+    nonisolated static func bytesPerSecond(bytesDelta: Int, interval: TimeInterval) -> Double {
+        interval > 0 ? Double(bytesDelta) / interval : 0
+    }
+
     private func updateProgress() {
         let now = Date()
-        guard now.timeIntervalSince(lastProgressUpdate) >= 0.5 else { return }
-        lastProgressUpdate = now
+        let interval = now.timeIntervalSince(lastProgressUpdate)
+        guard interval >= 0.5 else { return }
 
-        let elapsed = now.timeIntervalSince(lastProgressUpdate)
-        let bytesPerSecond = elapsed > 0 ? Double(totalBytesDownloaded) / elapsed : 0
+        // Rate over the elapsed interval since the last update, using the bytes
+        // downloaded in that window. The previous code reassigned lastProgressUpdate
+        // to `now` before computing `elapsed = now - lastProgressUpdate`, so `elapsed`
+        // was always 0 and the reported speed was always 0 B/s.
+        let bytesDelta = totalBytesDownloaded - lastProgressBytes
+        let bytesPerSecond = Self.bytesPerSecond(bytesDelta: bytesDelta, interval: interval)
+        lastProgressUpdate = now
+        lastProgressBytes = totalBytesDownloaded
 
         Task { @MainActor in
             progress = SyncProgress(
