@@ -6,6 +6,8 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/local_storage_page.dart';
 import 'package:omi/pages/conversations/private_cloud_sync_page.dart';
+import 'package:omi/pages/conversations/widgets/device_storage_card.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/wals.dart';
@@ -36,14 +38,15 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<SyncProvider>().refreshWals();
+      context.read<DeviceProvider>().refreshRingStorageStatus();
       SyncReconciler.instance.poke();
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<SyncProvider, UserProvider>(
-      builder: (context, syncProvider, userProvider, _) {
+    return Consumer3<SyncProvider, UserProvider, DeviceProvider>(
+      builder: (context, syncProvider, userProvider, deviceProvider, _) {
         final syncState = syncProvider.syncState;
         final pendingWals = syncProvider.pendingWals;
         final syncedWals = syncProvider.syncedWals;
@@ -92,6 +95,11 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                       _buildConversationsCard(syncProvider),
                     ],
                     if (syncState.hasError) ...[const SizedBox(height: 16), _buildErrorCard(syncState, syncProvider)],
+                    if (WalSyncs.isRingBufferFirmware(deviceProvider.currentFirmwareVersion) &&
+                        deviceProvider.ringStatus != null) ...[
+                      const SizedBox(height: 32),
+                      DeviceStorageCard(status: deviceProvider.ringStatus!),
+                    ],
                     const SizedBox(height: 32),
                     _buildStorageSettings(userProvider),
                     if (hasAnyRecording) ...[
