@@ -11,24 +11,23 @@ void main() {
     test('drops repeated one-word no hallucinations', () {
       final gate = OnDeviceTranscriptQualityGate();
 
-      expect(gate.filter('no', audioData: _loudPcmWav(), duration: const Duration(seconds: 3)), 'no');
-      expect(gate.filter('No.', audioData: _loudPcmWav(), duration: const Duration(seconds: 3)), isNull);
-      expect(gate.filter(' no ', audioData: _loudPcmWav(), duration: const Duration(seconds: 3)), isNull);
+      expect(gate.filter('no', audioData: _loudPcmWav()), 'no');
+      expect(gate.filter('No.', audioData: _loudPcmWav()), isNull);
+      expect(gate.filter(' no ', audioData: _loudPcmWav()), isNull);
     });
 
     test('drops filler no on low-energy audio', () {
       final gate = OnDeviceTranscriptQualityGate();
 
-      expect(gate.filter('no', audioData: _silentPcmWav(), duration: const Duration(seconds: 3)), isNull);
+      expect(gate.filter('no', audioData: _silentPcmWav()), isNull);
     });
 
     test('keeps real speech and resets duplicate gate', () {
       final gate = OnDeviceTranscriptQualityGate();
 
-      expect(gate.filter('no', audioData: _loudPcmWav(), duration: const Duration(seconds: 3)), 'no');
-      expect(gate.filter('no problem, start capture', audioData: _loudPcmWav(), duration: const Duration(seconds: 3)),
-          'no problem, start capture');
-      expect(gate.filter('no', audioData: _loudPcmWav(), duration: const Duration(seconds: 3)), 'no');
+      expect(gate.filter('no', audioData: _loudPcmWav()), 'no');
+      expect(gate.filter('no problem, start capture', audioData: _loudPcmWav()), 'no problem, start capture');
+      expect(gate.filter('no', audioData: _loudPcmWav()), 'no');
     });
   });
 
@@ -39,8 +38,8 @@ void main() {
       multiLine: true,
     ).firstMatch(source)!.namedGroup('block')!;
 
-    expect(appleBlock, contains('bufferDuration: const Duration(seconds: 3)'));
-    expect(appleBlock, contains('minBufferSizeBytes: sampleRate * 2 * 2'));
+    expect(appleBlock, contains('bufferDuration: const Duration(seconds: 5)'));
+    expect(appleBlock, contains('minBufferSizeBytes: sampleRate * 2'));
   });
 
   test('native iOS speech fallback is tuned for dictation', () {
