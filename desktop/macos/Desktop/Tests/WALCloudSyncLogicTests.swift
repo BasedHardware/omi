@@ -156,7 +156,7 @@ final class WALCloudSyncLogicTests: XCTestCase {
     reconciled[0].uploadedAt = 0
 
     // Meanwhile the live array gained a brand-new WAL (chunk timer fired during await).
-    let appended = makeWal(timerStart: 1_700_000_500, status: .memory)
+    let appended = makeWal(timerStart: 1_700_000_500, status: .inProgress)
     let live = [uploaded, appended]
 
     let merged = WALCloudSyncLogic.mergeReconciledUploads(
@@ -170,7 +170,7 @@ final class WALCloudSyncLogicTests: XCTestCase {
     // ...and the WAL appended during the await is NOT dropped (the regression).
     let mergedAppended = merged.first { $0.id == appended.id }
     XCTAssertNotNil(mergedAppended, "WAL appended during reconcile must survive the merge")
-    XCTAssertEqual(mergedAppended?.status, .memory)
+    XCTAssertEqual(mergedAppended?.status, .inProgress)
   }
 
   func testMergeDoesNotClobberConcurrentFieldUpdateOnUntouchedEntry() {
