@@ -82,6 +82,14 @@ class LegacyBackfillBucket(str, Enum):
     hold_sensitive = "hold_sensitive"
 
 
+class LegacyBackfillRemediationAction(str, Enum):
+    """Read-only recommendation for a pre-admission legacy backfill item."""
+
+    archive = "archive"
+    keep = "keep"
+    review = "review"
+
+
 WRITABLE_LEGACY_BACKFILL_BUCKETS = {
     LegacyBackfillBucket.reviewed_long_term,
     LegacyBackfillBucket.manual_required_promotion,
@@ -120,6 +128,14 @@ _DOWNLOADS_PATTERN = re.compile(
     r"(?:\blocal downloads include\b|\bdownloads include\b|~/downloads\b|/downloads/)", re.I
 )
 _FOCUS_PATTERN = re.compile(r"^\s*focused on\b", re.I)
+_GAUNTLET_MARKER_PATTERN = re.compile(
+    r"\bgauntlet\s+recall\s+page\b|\bgauntlet\s+marker\s*:\s*gauntlet[-_][a-z0-9]|\bmarker\s+gauntlet[-_][a-z0-9]",
+    re.I,
+)
+_RAW_EMAIL_PATTERN = re.compile(r"^\s*email from\b", re.I)
+_ATTENTION_TELEMETRY_PATTERN = re.compile(r"^\s*distracted on\b", re.I)
+_FILE_INVENTORY_PATTERN = re.compile(r"\b\d[\d,]*\s+local files indexed\b", re.I)
+_LOCAL_PROJECT_DISCOVERY_PATTERN = re.compile(r"\bworks on a local project named\b", re.I)
 _IMPERATIVE_PATTERN = re.compile(
     r"^\s*(address|review|persist|seed|run|make|add|fix|check|confirm|use|build|deploy|merge|push)\b",
     re.I,
@@ -163,6 +179,8 @@ class BackfillReport:
     bucket_samples: BucketSampleMap = field(default_factory=_empty_bucket_samples)
     skipped_bucket_not_selected: int = 0
     skipped_bucket_not_writable: int = 0
+    skipped_non_admissible: int = 0
+    admissible_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -173,6 +191,30 @@ class LegacyBackfillRowResult:
     vector_sync_failed: bool = False
     keyword_sync_succeeded: bool = True
     kg_extraction_failed: bool = False
+
+
+@dataclass(frozen=True)
+class LegacyBackfillRemediationEntry:
+    """A content-free cleanup recommendation for an existing canonical item."""
+
+    memory_id: str
+    action: LegacyBackfillRemediationAction
+    reason: str
+    bucket: Optional[str]
+    user_asserted: bool
+    captured_at: datetime
+    evidence_count: int
+    content_hash: Optional[str]
+
+
+@dataclass(frozen=True)
+class LegacyBackfillRemediationPlan:
+    """Read-only plan for canonical rows written by the historical backfill."""
+
+    uid: str
+    candidate_count: int
+    action_counts: Dict[str, int]
+    samples: Dict[str, List[LegacyBackfillRemediationEntry]]
 
 
 def legacy_backfill_memory_id(*, uid: str, legacy_memory_id: str) -> str:
@@ -325,6 +367,36 @@ def is_active_legacy_row(row: LegacyRow) -> bool:
     return row.get("user_review") is not False and row.get("invalid_at") is None
 
 
+def legacy_backfill_noise_reason(content: str) -> Optional[str]:
+    """Return a stable reason when historical content must never enter admission.
+
+    These are source artifacts or test/attention telemetry, not candidate facts.
+    Keep this deterministic and conservative: ambiguous content belongs in review,
+    never in this denylist.
+    """
+
+    normalized = " ".join((content or "").split())
+    if not normalized:
+        return "empty_content"
+    if _GAUNTLET_MARKER_PATTERN.search(normalized):
+        return "test_marker"
+    if _RAW_EMAIL_PATTERN.search(normalized):
+        return "raw_email"
+    if _ATTENTION_TELEMETRY_PATTERN.search(normalized):
+        return "attention_telemetry"
+    if _FILE_INVENTORY_PATTERN.search(normalized):
+        return "file_inventory"
+    if _LOCAL_PROJECT_DISCOVERY_PATTERN.search(normalized):
+        return "local_project_inventory"
+    if _DOWNLOADS_PATTERN.search(normalized):
+        return "downloads_inventory"
+    if _FOCUS_PATTERN.search(normalized):
+        return "focus_telemetry"
+    if _IMPERATIVE_PATTERN.search(normalized):
+        return "imperative_fragment"
+    return None
+
+
 def classify_legacy_backfill_bucket(row: LegacyRow) -> LegacyBackfillBucket:
     """Route a legacy memory into the safest first-pass migration bucket."""
     content = _row_content(row)
@@ -332,7 +404,7 @@ def classify_legacy_backfill_bucket(row: LegacyRow) -> LegacyBackfillBucket:
         return LegacyBackfillBucket.hold_noise
     if _SENSITIVE_PATTERN.search(content):
         return LegacyBackfillBucket.hold_sensitive
-    if _DOWNLOADS_PATTERN.search(content) or _FOCUS_PATTERN.search(content) or _IMPERATIVE_PATTERN.search(content):
+    if legacy_backfill_noise_reason(content) is not None:
         return LegacyBackfillBucket.hold_noise
     if row.get("manually_added") is True or row.get("category") == "manual":
         return LegacyBackfillBucket.manual_required_promotion
@@ -341,6 +413,97 @@ def classify_legacy_backfill_bucket(row: LegacyRow) -> LegacyBackfillBucket:
             return LegacyBackfillBucket.reviewed_long_term
         return LegacyBackfillBucket.profile_required_promotion
     return LegacyBackfillBucket.archive_review
+
+
+def is_legacy_backfill_admissible(row: LegacyRow) -> bool:
+    """Whether a legacy row may enter hidden canonical admission staging."""
+
+    return classify_legacy_backfill_bucket(row) not in {
+        LegacyBackfillBucket.hold_noise,
+        LegacyBackfillBucket.hold_sensitive,
+    }
+
+
+def _is_legacy_backfill_item(item: MemoryItem) -> bool:
+    return (item.promotion or {}).get("source_surface") == "legacy_backfill"
+
+
+def classify_legacy_backfill_remediation(item: MemoryItem) -> LegacyBackfillRemediationEntry:
+    """Classify an existing backfilled canonical item without mutating it.
+
+    Manual assertions and explicitly reviewed historical rows are preserved.
+    Known source artifacts are recommended for Archive, while all ambiguous
+    historical profile rows remain review-only. This deliberately avoids an LLM
+    decision so a plan is deterministic and auditable before any future apply run.
+    """
+
+    promotion = item.promotion or {}
+    bucket = promotion.get("bucket")
+    if item.sensitivity_labels or _SENSITIVE_PATTERN.search(item.content or ""):
+        action = LegacyBackfillRemediationAction.review
+        reason = "sensitive_requires_review"
+    elif bool(item.user_asserted) or bucket == LegacyBackfillBucket.manual_required_promotion.value:
+        action = LegacyBackfillRemediationAction.keep
+        reason = "user_asserted"
+    elif bucket == LegacyBackfillBucket.reviewed_long_term.value:
+        action = LegacyBackfillRemediationAction.keep
+        reason = "explicitly_reviewed"
+    else:
+        noise_reason = legacy_backfill_noise_reason(item.content or "")
+        if noise_reason is not None:
+            action = LegacyBackfillRemediationAction.archive
+            reason = noise_reason
+        else:
+            action = LegacyBackfillRemediationAction.review
+            reason = "historical_import_requires_adjudication"
+    return LegacyBackfillRemediationEntry(
+        memory_id=item.memory_id,
+        action=action,
+        reason=reason,
+        bucket=str(bucket) if bucket else None,
+        user_asserted=bool(item.user_asserted),
+        captured_at=item.captured_at,
+        evidence_count=len(item.evidence),
+        content_hash=item.content_hash,
+    )
+
+
+def build_legacy_backfill_remediation_plan(
+    uid: str,
+    *,
+    db_client: Any = None,
+    sample_size: int = 5,
+) -> LegacyBackfillRemediationPlan:
+    """Build a metadata-only, read-only remediation plan for historical imports.
+
+    The plan intentionally scopes itself to active canonical rows with explicit
+    ``legacy_backfill`` provenance. Unattributed historical rows are excluded
+    until a separate lineage audit can explain their ingress.
+    """
+
+    client: Any = db_client if db_client is not None else default_db_client
+    action_counts = {action.value: 0 for action in LegacyBackfillRemediationAction}
+    samples: Dict[str, List[LegacyBackfillRemediationEntry]] = {
+        action.value: [] for action in LegacyBackfillRemediationAction
+    }
+    candidates = [
+        item
+        for item in fetch_authoritative_product_memory_items(uid=uid, db_client=client)
+        if item.tier == MemoryLayer.long_term
+        and item.status == MemoryItemStatus.active
+        and _is_legacy_backfill_item(item)
+    ]
+    for item in candidates:
+        entry = classify_legacy_backfill_remediation(item)
+        action_counts[entry.action.value] += 1
+        if len(samples[entry.action.value]) < max(0, sample_size):
+            samples[entry.action.value].append(entry)
+    return LegacyBackfillRemediationPlan(
+        uid=uid,
+        candidate_count=len(candidates),
+        action_counts=action_counts,
+        samples={action: entries for action, entries in samples.items() if entries},
+    )
 
 
 def _legacy_bucket_sample(row: LegacyRow, *, bucket: LegacyBackfillBucket) -> Payload:
@@ -1217,17 +1380,19 @@ def backfill_user(
         db_client=client,
         get_non_filtered_memories_fn=get_non_filtered_memories_fn,
     )
-    fingerprint = legacy_source_fingerprint(legacy_rows)
     eligible_rows = [row for row in legacy_rows if _row_content(row)]
+    admissible_rows = [row for row in eligible_rows if is_legacy_backfill_admissible(row)]
+    skipped_non_admissible = len(eligible_rows) - len(admissible_rows)
+    fingerprint = legacy_source_fingerprint(admissible_rows)
     source_count = len(eligible_rows)
 
     if dry_run:
         control = _read_control_state(uid, db_client=client, create_if_missing=False)
         start_index = 0
         if resume and control.legacy_backfill_source_fingerprint == fingerprint:
-            start_index = min(control.legacy_backfill_processed_count, source_count)
-        intended_count = max(0, source_count - start_index)
-        _, destination_count, verified, discrepancy = reconcile_backfill_counts(uid, eligible_rows, db_client=client)
+            start_index = min(control.legacy_backfill_processed_count, len(admissible_rows))
+        intended_count = max(0, len(admissible_rows) - start_index)
+        _, destination_count, verified, discrepancy = reconcile_backfill_counts(uid, admissible_rows, db_client=client)
         return BackfillReport(
             uid=uid,
             dry_run=True,
@@ -1243,12 +1408,14 @@ def backfill_user(
             resumed_from_index=start_index,
             completed=False,
             legacy_rows_touched=0,
+            skipped_non_admissible=skipped_non_admissible,
+            admissible_count=len(admissible_rows),
         )
 
     control = _read_control_state(uid, db_client=client)
     start_index = 0
     if resume and control.legacy_backfill_source_fingerprint == fingerprint:
-        start_index = min(control.legacy_backfill_processed_count, source_count)
+        start_index = min(control.legacy_backfill_processed_count, len(admissible_rows))
     elif (
         resume and control.legacy_backfill_processed_count and control.legacy_backfill_source_fingerprint != fingerprint
     ):
@@ -1258,7 +1425,7 @@ def backfill_user(
         )
         start_index = 0
 
-    intended_count = max(0, source_count - start_index)
+    intended_count = max(0, len(admissible_rows) - start_index)
     written_count = 0
     skipped_already_present = 0
     skipped_both_store_duplicate = 0
@@ -1269,16 +1436,16 @@ def backfill_user(
     errors: List[str] = []
     materialized_semantic_keys: set[str] = set()
 
-    if resume and start_index >= source_count and source_count > 0:
+    if resume and start_index >= len(admissible_rows) and admissible_rows:
         vector_sync_failures, keyword_sync_failures, kg_extraction_failures = _reconcile_backfill_side_effects_for_rows(
             uid=uid,
-            legacy_rows=eligible_rows,
+            legacy_rows=admissible_rows,
             db_client=client,
         )
 
     processed_index = start_index
-    while processed_index < source_count:
-        legacy_row = eligible_rows[processed_index]
+    while processed_index < len(admissible_rows):
+        legacy_row = admissible_rows[processed_index]
         semantic_key = semantic_materialization_key(uid=uid, legacy_row=legacy_row)
         if semantic_key is not None and semantic_key in materialized_semantic_keys:
             skipped_semantic_duplicate += 1
@@ -1334,13 +1501,13 @@ def backfill_user(
         _persist_control_state(control, db_client=client)
 
         if batch_size > 0 and (processed_index - start_index) % max(1, batch_size) == 0:
-            logger.debug("legacy backfill checkpoint for %s at %s/%s", uid, processed_index, source_count)
+            logger.debug("legacy backfill checkpoint for %s at %s/%s", uid, processed_index, len(admissible_rows))
 
-    completed = processed_index >= source_count and not errors
+    completed = processed_index >= len(admissible_rows) and not errors
     if completed:
         control = control.model_copy(
             update={
-                "legacy_backfill_processed_count": source_count,
+                "legacy_backfill_processed_count": len(admissible_rows),
                 "legacy_backfill_source_fingerprint": fingerprint,
                 "legacy_backfill_completed_at": datetime.now(timezone.utc),
                 "updated_at": datetime.now(timezone.utc),
@@ -1348,7 +1515,7 @@ def backfill_user(
         )
         _persist_control_state(control, db_client=client)
 
-    _, destination_count, verified, discrepancy = reconcile_backfill_counts(uid, eligible_rows, db_client=client)
+    _, destination_count, verified, discrepancy = reconcile_backfill_counts(uid, admissible_rows, db_client=client)
 
     return BackfillReport(
         uid=uid,
@@ -1369,4 +1536,6 @@ def backfill_user(
         keyword_sync_failures=keyword_sync_failures,
         kg_extraction_failures=kg_extraction_failures,
         errors=errors,
+        skipped_non_admissible=skipped_non_admissible,
+        admissible_count=len(admissible_rows),
     )
