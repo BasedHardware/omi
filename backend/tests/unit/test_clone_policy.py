@@ -3,11 +3,8 @@
 from utils.clone_policy import (
     ACTION_HOLD,
     ACTION_REVIEW,
-    ACTION_SEND,
-    AUTO,
-    REVIEW,
-    SendPolicy,
-    evaluate_send_policy,
+    SERVER_MIN_CONFIDENCE_FLOOR,
+    evaluate_safety_floor,
     is_prompt_injection,
     is_sensitive_content,
 )
@@ -59,97 +56,51 @@ class TestIsSensitiveContent:
         assert not is_sensitive_content("all good", "see you at 8")
 
 
-def _allowlisted_auto_policy(**overrides):
-    base = dict(mode=AUTO, auto_allowlist=["contact-1"], min_confidence=0.7, block_sensitive=True)
-    base.update(overrides)
-    return SendPolicy(**base)
+class TestEvaluateSafetyFloor:
+    """The server-owned, non-negotiable pre-send gate. Clearing it is necessary but not
+    sufficient to send (local/persisted policy still decides); failing it can never send."""
 
+    def test_clears_floor_when_safe_and_confident(self):
+        floor = evaluate_safety_floor(confidence=0.9, sensitive=False, injection=False)
+        assert floor.meets_floor
+        assert floor.action == ACTION_REVIEW
 
-class TestEvaluateSendPolicy:
-    def test_review_mode_always_reviews(self):
-        policy = SendPolicy(mode=REVIEW, auto_allowlist=["contact-1"])
-        d = evaluate_send_policy(policy, contact_id="contact-1", local_hour=12, confidence=0.99, sensitive=False)
-        assert d.action == ACTION_REVIEW
-        assert not d.will_send
+    def test_holds_sensitive_content(self):
+        floor = evaluate_safety_floor(confidence=0.99, sensitive=True, injection=False)
+        assert not floor.meets_floor
+        assert floor.action == ACTION_HOLD
 
-    def test_auto_sends_when_all_guardrails_pass(self):
-        d = evaluate_send_policy(
-            _allowlisted_auto_policy(), contact_id="contact-1", local_hour=12, confidence=0.9, sensitive=False
-        )
-        assert d.action == ACTION_SEND
-        assert d.will_send
+    def test_holds_prompt_injection(self):
+        floor = evaluate_safety_floor(confidence=0.99, sensitive=False, injection=True)
+        assert not floor.meets_floor
+        assert floor.action == ACTION_HOLD
+        assert "injection" in floor.reason.lower()
 
-    def test_auto_reviews_contact_not_on_allowlist(self):
-        d = evaluate_send_policy(
-            _allowlisted_auto_policy(), contact_id="stranger", local_hour=12, confidence=0.9, sensitive=False
-        )
-        assert d.action == ACTION_REVIEW
+    def test_holds_low_confidence(self):
+        floor = evaluate_safety_floor(confidence=0.5, sensitive=False, injection=False)
+        assert not floor.meets_floor
+        assert floor.action == ACTION_HOLD
 
-    def test_auto_reviews_sensitive_content(self):
-        d = evaluate_send_policy(
-            _allowlisted_auto_policy(), contact_id="contact-1", local_hour=12, confidence=0.95, sensitive=True
-        )
-        assert d.action == ACTION_REVIEW
+    def test_confidence_exactly_at_floor_clears(self):
+        floor = evaluate_safety_floor(confidence=SERVER_MIN_CONFIDENCE_FLOOR, sensitive=False, injection=False)
+        assert floor.meets_floor
 
-    def test_sensitive_can_be_allowed_when_block_disabled(self):
-        d = evaluate_send_policy(
-            _allowlisted_auto_policy(block_sensitive=False),
-            contact_id="contact-1",
-            local_hour=12,
-            confidence=0.95,
-            sensitive=True,
-        )
-        assert d.action == ACTION_SEND
+    def test_caller_cannot_lower_the_floor(self):
+        # A caller-supplied min_confidence below the server floor is ignored: the effective floor
+        # is max(caller, SERVER_MIN_CONFIDENCE_FLOOR), so a low-confidence draft is still held even
+        # when the caller asks for min_confidence=0.
+        floor = evaluate_safety_floor(confidence=0.1, sensitive=False, injection=False, min_confidence=0.0)
+        assert not floor.meets_floor
+        assert floor.action == ACTION_HOLD
 
-    def test_auto_reviews_low_confidence(self):
-        d = evaluate_send_policy(
-            _allowlisted_auto_policy(min_confidence=0.8),
-            contact_id="contact-1",
-            local_hour=12,
-            confidence=0.5,
-            sensitive=False,
-        )
-        assert d.action == ACTION_REVIEW
+    def test_trusted_setting_can_raise_the_floor(self):
+        # A trusted persisted setting may require MORE confidence than the server default.
+        below = evaluate_safety_floor(confidence=0.85, sensitive=False, injection=False, min_confidence=0.95)
+        assert not below.meets_floor
+        at_or_above = evaluate_safety_floor(confidence=0.96, sensitive=False, injection=False, min_confidence=0.95)
+        assert at_or_above.meets_floor
 
-    def test_auto_holds_during_quiet_hours(self):
-        # Quiet 22:00 -> 07:00 (wraparound); 02:00 is inside it.
-        d = evaluate_send_policy(
-            _allowlisted_auto_policy(quiet_hours_start=22, quiet_hours_end=7),
-            contact_id="contact-1",
-            local_hour=2,
-            confidence=0.9,
-            sensitive=False,
-        )
-        assert d.action == ACTION_HOLD
-
-    def test_auto_sends_outside_quiet_hours(self):
-        d = evaluate_send_policy(
-            _allowlisted_auto_policy(quiet_hours_start=22, quiet_hours_end=7),
-            contact_id="contact-1",
-            local_hour=10,
-            confidence=0.9,
-            sensitive=False,
-        )
-        assert d.action == ACTION_SEND
-
-    def test_allowlist_is_case_insensitive_and_trimmed(self):
-        d = evaluate_send_policy(
-            _allowlisted_auto_policy(auto_allowlist=["  Contact-1  "]),
-            contact_id="contact-1",
-            local_hour=12,
-            confidence=0.9,
-            sensitive=False,
-        )
-        assert d.action == ACTION_SEND
-
-    def test_auto_reviews_prompt_injection(self):
-        d = evaluate_send_policy(
-            _allowlisted_auto_policy(),
-            contact_id="contact-1",
-            local_hour=12,
-            confidence=0.99,
-            sensitive=False,
-            injection=True,
-        )
-        assert d.action == ACTION_REVIEW
-        assert "injection" in d.reason.lower()
+    def test_sensitive_is_held_even_at_max_confidence(self):
+        # No confidence level unlocks sensitive/high-stakes content; the floor is non-negotiable.
+        floor = evaluate_safety_floor(confidence=1.0, sensitive=True, injection=False)
+        assert not floor.meets_floor

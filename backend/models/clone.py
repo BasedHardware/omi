@@ -9,8 +9,10 @@ MAX_CLONE_ALTERNATIVES = 2
 MAX_CLONE_SAFETY_NOTES = 5
 MAX_CLONE_THREAD_MESSAGES = 40
 
-CloneSendMode = Literal['review', 'auto']
-CloneSendAction = Literal['send', 'review', 'hold']
+# The backend returns a safety-floor verdict only: 'review' (cleared the floor, a local or
+# persisted policy decides whether to send) or 'hold' (failed the non-negotiable floor, do not
+# auto-send). The backend never certifies 'send' from a request field.
+CloneSendAction = Literal['review', 'hold']
 
 
 class CloneThreadMessage(BaseModel):
@@ -42,15 +44,12 @@ class CloneReplyRequest(BaseModel):
     include_memories: bool = True
     use_persona: bool = True
 
-    # Send policy (optional; defaults to safe review-first).
-    mode: CloneSendMode = 'review'
-    auto_allowlist: List[str] = Field(default_factory=list, max_length=500)
-    min_confidence: float = Field(default=0.7, ge=0.0, le=1.0)
-    block_sensitive: bool = True
-    quiet_hours_start: Optional[int] = Field(default=None, ge=0, le=23)
-    quiet_hours_end: Optional[int] = Field(default=None, ge=0, le=23)
-    # Caller's current local hour, used only for the quiet-hours check.
-    local_hour: Optional[int] = Field(default=None, ge=0, le=23)
+    # The request carries only drafting context. Send authorization (mode, allowlist, quiet
+    # hours) is intentionally NOT accepted here: the backend owns the non-negotiable safety
+    # floor (utils.clone_policy.evaluate_safety_floor), and whether a cleared draft is actually
+    # auto-sent is a local bridge / trusted persisted-settings decision, never a request-body
+    # field a token holder could set to weaken the floor (min_confidence=0, block_sensitive=false,
+    # allowlist the contact).
 
     @field_validator('incoming_message', 'contact_id', mode='before')
     @classmethod
@@ -103,8 +102,13 @@ class CloneReplyResponse(BaseModel):
     draft: str = Field(..., min_length=1, max_length=MAX_CLONE_REPLY_LENGTH)
     alternatives: List[str] = Field(default_factory=list, max_length=MAX_CLONE_ALTERNATIVES)
     confidence: float = Field(..., ge=0.0, le=1.0)
-    # 'send' = guardrails passed and it may be auto-sent; 'review' = draft for the
-    # user to approve/edit; 'hold' = do not send now (e.g. quiet hours).
+    # Server safety-floor verdict. True only when the draft cleared the non-negotiable floor
+    # (not sensitive, not a prompt-injection attempt, confidence at/above the server floor). A
+    # local bridge or trusted persisted settings may auto-send only when this is True; the backend
+    # itself never certifies auto-send from request fields.
+    meets_safety_floor: bool = False
+    # 'review' = cleared the safety floor, a local/persisted policy decides whether to send;
+    # 'hold' = failed the floor, do not auto-send.
     action: CloneSendAction
     action_reason: str = Field(default='', max_length=1000)
     needs_review: bool = True

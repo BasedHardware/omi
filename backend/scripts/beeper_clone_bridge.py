@@ -7,20 +7,26 @@ incoming message the bridge:
 
   1. reads the recent thread with that contact from Beeper,
   2. asks the Omi backend to draft a reply AS the user (POST /v1/clone/reply),
-  3. per the returned send policy either auto-sends via Beeper, or queues the
-     draft for the user to review in the desktop app.
+  3. decides locally whether to auto-send via Beeper or queue the draft for the
+     user to review in the desktop app.
 
-The Beeper access token never leaves the machine. Auto-send is opt-in and requires
-both CLONE_MODE=auto locally AND the backend send policy returning action == "send"
-(allowlisted contact, high confidence, not sensitive, outside quiet hours). In the
-default review mode everything is queued for the user to approve in the desktop app.
+The Beeper access token never leaves the machine. The backend owns the non-negotiable
+safety floor and only returns a verdict (meets_safety_floor); it never certifies auto-send.
+Auto-send is the operator's LOCAL decision and requires ALL of: CLONE_MODE=auto, the contact
+on the local CLONE_ALLOWLIST, outside local CLONE_QUIET_HOURS, and the backend reporting
+meets_safety_floor=true (not sensitive, no injection, confidence above the server floor). The
+allowlist and mode are local operator policy and are never sent to the backend, so a token
+holder cannot ask the backend to certify a send. In the default review mode everything is
+queued for the user to approve in the desktop app.
 
 Env:
   BEEPER_ACCESS_TOKEN   Beeper Desktop API token (required)
   OMI_API_BASE_URL      Omi backend base URL (default https://api.omi.me)
   OMI_AUTH_TOKEN        Firebase ID token for the Omi user (required)
-  CLONE_MODE            "review" (default) or "auto"
-  CLONE_ALLOWLIST       comma-separated Beeper chat ids allowed to auto-reply
+  CLONE_MODE            "review" (default) or "auto" (local operator policy)
+  CLONE_ALLOWLIST       comma-separated Beeper chat ids allowed to auto-reply (local policy)
+  CLONE_QUIET_HOURS     optional local quiet window "START-END" in 24h hours (e.g. "22-7");
+                        auto-send is suppressed inside it
   CLONE_REVIEW_QUEUE    path to append review drafts as JSON lines
                         (default: ~/.omi/clone_review_queue.jsonl)
 
@@ -30,6 +36,7 @@ https://developers.beeper.com/desktop-api-reference/cli
 
 from __future__ import annotations
 
+import datetime
 import json
 import os
 import subprocess
@@ -44,6 +51,7 @@ OMI_API_BASE_URL = os.environ.get("OMI_API_BASE_URL", "https://api.omi.me").rstr
 OMI_AUTH_TOKEN = os.environ.get("OMI_AUTH_TOKEN", "")
 CLONE_MODE = os.environ.get("CLONE_MODE", "review").strip().lower()
 CLONE_ALLOWLIST = [c.strip() for c in os.environ.get("CLONE_ALLOWLIST", "").split(",") if c.strip()]
+CLONE_QUIET_HOURS = os.environ.get("CLONE_QUIET_HOURS", "").strip()
 CLONE_REVIEW_QUEUE = Path(os.environ.get("CLONE_REVIEW_QUEUE", str(Path.home() / ".omi" / "clone_review_queue.jsonl")))
 
 # Bounded dedup so a replayed/duplicate watch event isn't drafted (and possibly
@@ -127,8 +135,6 @@ def _draft_reply(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "contact_name": event.get("senderName") or event.get("sender_name"),
         "network": event.get("network") or event.get("accountID"),
         "thread": _recent_thread(chat_id),
-        "mode": CLONE_MODE,
-        "auto_allowlist": CLONE_ALLOWLIST,
     }
     request = urllib.request.Request(
         f"{OMI_API_BASE_URL}/v1/clone/reply",
@@ -154,6 +160,41 @@ def _send(chat_id: str, text: str) -> None:
     print(f"[clone-bridge] auto-sent reply to {chat_id}")
 
 
+def _in_local_quiet_hours() -> bool:
+    """True if the operator's local time is inside CLONE_QUIET_HOURS ("START-END", 24h hours).
+    Auto-send is suppressed during the window; supports wraparound (e.g. "22-7")."""
+    if "-" not in CLONE_QUIET_HOURS:
+        return False
+    start_s, _, end_s = CLONE_QUIET_HOURS.partition("-")
+    try:
+        start, end = int(start_s) % 24, int(end_s) % 24
+    except ValueError:
+        return False
+    if start == end:
+        return False
+    hour = datetime.datetime.now().hour
+    if start < end:
+        return start <= hour < end
+    return hour >= start or hour < end
+
+
+def _local_auto_send_allowed(chat_id: str, reply: Dict[str, Any]) -> bool:
+    """Auto-send only when the operator's LOCAL policy authorizes it AND the backend certified
+    the draft cleared its non-negotiable safety floor. Mode, allowlist, and quiet hours are local
+    operator policy and are never sent to or trusted from the backend, so a token holder cannot ask
+    the backend to certify a send."""
+    if CLONE_MODE != "auto":
+        return False
+    if not reply.get("meets_safety_floor"):
+        return False
+    if not reply.get("draft"):
+        return False
+    if _in_local_quiet_hours():
+        return False
+    allow = {c.strip().lower() for c in CLONE_ALLOWLIST if c.strip()}
+    return chat_id.strip().lower() in allow
+
+
 def _handle_event(event: Dict[str, Any]) -> None:
     # Only react to inbound message events from other people. Require an explicit
     # message type; an untyped/malformed event is ignored rather than trusted.
@@ -175,10 +216,10 @@ def _handle_event(event: Dict[str, Any]) -> None:
     reply = _draft_reply(event)
     if not reply:
         return
-    # Defense in depth: auto-send only when the operator explicitly ran the bridge in
-    # auto mode AND the backend send policy independently returned "send". In review
-    # mode everything is queued, no matter what the backend returns.
-    if CLONE_MODE == "auto" and reply.get("action") == "send" and reply.get("draft"):
+    # Auto-send is a purely LOCAL decision: the backend only certifies that the draft cleared
+    # its non-negotiable safety floor (meets_safety_floor); the operator's mode, allowlist, and
+    # quiet hours decide whether to actually send. In review mode everything is queued.
+    if _local_auto_send_allowed(chat_id, reply):
         _send(chat_id, reply["draft"])
     else:
         _queue_for_review(chat_id, incoming, reply)

@@ -1,26 +1,34 @@
-"""Safety-first send policy for the AI clone / on-behalf responder.
+"""Safety-first gate for the AI clone / on-behalf responder.
 
-The clone drafts replies in the user's voice; this module decides whether a draft
-may be sent automatically or must be held for human review. Defaults are
-conservative: review-first, allowlisted contacts only, never auto-send sensitive
-content, and respect quiet hours. All logic here is pure and deterministic so it
-is fully unit-tested without the LLM or any I/O.
+Two layers, deliberately separated so the trust boundary is explicit:
+
+- Safety floor (server-owned, non-negotiable): ``evaluate_safety_floor`` decides whether a
+  draft is even eligible to be sent. Sensitive/high-stakes content and prompt-injection
+  attempts are always held, and confidence must clear a server-side floor. No client
+  request field can weaken this.
+- Send authorization (local/persisted policy, layered on top of a passing floor): whether to
+  actually auto-send to a given contact (mode, allowlist, quiet hours) is the operator's local
+  bridge policy or trusted persisted user settings, never a backend certification derived from
+  request-body fields.
+
+All logic here is pure and deterministic so it is fully unit-tested without the LLM or any I/O.
 """
 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
-from typing import List, Optional
+from dataclasses import dataclass
+from typing import Optional
 
-# Send modes.
-REVIEW = "review"  # default: always draft, the user approves before sending
-AUTO = "auto"  # opt-in: may auto-send when every guardrail passes
+# Backend safety-floor verdicts. The backend never certifies "send" from request policy; it
+# returns REVIEW (draft cleared the floor, local/persisted policy decides sending) or HOLD
+# (draft failed the non-negotiable floor and must not be auto-sent).
+ACTION_REVIEW = "review"  # cleared the safety floor; local/persisted policy decides whether to send
+ACTION_HOLD = "hold"  # failed the safety floor (sensitive, injection, or low confidence); do not auto-send
 
-# Decisions.
-ACTION_SEND = "send"  # safe to send now
-ACTION_REVIEW = "review"  # queue a draft for the user to approve/edit
-ACTION_HOLD = "hold"  # do not send now (e.g. quiet hours); revisit later
+# Non-negotiable server-owned confidence floor for auto-send eligibility. A client cannot lower
+# this; trusted persisted settings may only raise it.
+SERVER_MIN_CONFIDENCE_FLOOR = 0.7
 
 # Substrings that make a message "sensitive" and therefore never auto-sent.
 _SENSITIVE_KEYWORDS = (
@@ -126,79 +134,44 @@ def is_prompt_injection(*texts: Optional[str]) -> bool:
 
 
 @dataclass
-class SendPolicy:
-    mode: str = REVIEW
-    # Contact ids/handles allowed to receive auto-replies (only used when mode == AUTO).
-    auto_allowlist: List[str] = field(default_factory=list)
-    # Minimum model self-reported confidence [0,1] required to auto-send.
-    min_confidence: float = 0.7
-    # Never auto-send sensitive/high-stakes content.
-    block_sensitive: bool = True
-    # Local-hour quiet window [start, end); supports wraparound (e.g. 22 -> 7).
-    quiet_hours_start: Optional[int] = None
-    quiet_hours_end: Optional[int] = None
+class SafetyFloor:
+    """Server-owned verdict on whether a draft is eligible to be sent at all."""
 
-    def normalized_allowlist(self) -> set:
-        return {a.strip().lower() for a in self.auto_allowlist if a and a.strip()}
-
-
-@dataclass
-class SendDecision:
-    action: str
+    meets_floor: bool
+    action: str  # ACTION_REVIEW when the floor is cleared, ACTION_HOLD when it is not
     reason: str
 
-    @property
-    def will_send(self) -> bool:
-        return self.action == ACTION_SEND
 
-
-def _in_quiet_hours(hour: int, start: Optional[int], end: Optional[int]) -> bool:
-    if start is None or end is None:
-        return False
-    start %= 24
-    end %= 24
-    hour %= 24
-    if start == end:
-        return False
-    if start < end:
-        return start <= hour < end
-    # Wraparound window (e.g. 22:00 -> 07:00).
-    return hour >= start or hour < end
-
-
-def evaluate_send_policy(
-    policy: SendPolicy,
+def evaluate_safety_floor(
     *,
-    contact_id: str,
-    local_hour: int,
     confidence: float,
     sensitive: bool,
-    injection: bool = False,
-) -> SendDecision:
-    """Decide whether a drafted on-behalf reply may be auto-sent.
+    injection: bool,
+    min_confidence: float = SERVER_MIN_CONFIDENCE_FLOOR,
+) -> SafetyFloor:
+    """Non-negotiable pre-send gate owned entirely by the backend.
 
-    Conservative by default: anything not clearly safe becomes a review draft
-    (never silently dropped, never silently sent).
+    A draft is eligible to be sent only if it clears every check here. This is
+    independent of any client send policy, so a caller holding the user's token cannot
+    weaken it: sensitive/high-stakes content and prompt-injection attempts never clear
+    the floor, and confidence must meet a floor of at least SERVER_MIN_CONFIDENCE_FLOOR
+    (trusted persisted settings may raise it, never lower it). Whether a cleared draft is
+    actually auto-sent to a given contact (mode, allowlist, quiet hours) is a separate
+    local/persisted decision layered on top of a passing floor.
     """
-    if policy.mode != AUTO:
-        return SendDecision(ACTION_REVIEW, "Review-first mode: the user approves every reply.")
-
-    if contact_id.strip().lower() not in policy.normalized_allowlist():
-        return SendDecision(ACTION_REVIEW, "Contact is not on the auto-reply allowlist.")
-
+    floor = max(min_confidence, SERVER_MIN_CONFIDENCE_FLOOR)
     if injection:
-        return SendDecision(ACTION_REVIEW, "Message looks like a prompt-injection attempt; held for review.")
-
-    if policy.block_sensitive and sensitive:
-        return SendDecision(ACTION_REVIEW, "Message looks sensitive or high-stakes; held for review.")
-
-    if confidence < policy.min_confidence:
-        return SendDecision(
-            ACTION_REVIEW,
-            f"Draft confidence {confidence:.2f} is below the auto-send threshold {policy.min_confidence:.2f}.",
+        return SafetyFloor(False, ACTION_HOLD, "Message looks like a prompt-injection attempt; held for review.")
+    if sensitive:
+        return SafetyFloor(False, ACTION_HOLD, "Message looks sensitive or high-stakes; held for review.")
+    if confidence < floor:
+        return SafetyFloor(
+            False,
+            ACTION_HOLD,
+            f"Draft confidence {confidence:.2f} is below the safety floor {floor:.2f}.",
         )
-
-    if _in_quiet_hours(local_hour, policy.quiet_hours_start, policy.quiet_hours_end):
-        return SendDecision(ACTION_HOLD, "Within quiet hours; will not auto-send right now.")
-
-    return SendDecision(ACTION_SEND, "All auto-reply guardrails passed.")
+    return SafetyFloor(
+        True,
+        ACTION_REVIEW,
+        "Draft cleared the safety floor; whether to send is a local or persisted policy decision.",
+    )

@@ -2,12 +2,14 @@
 
 Builds a reply in the user's own voice for a specific contact on a personal chat
 app (WhatsApp/Telegram/iMessage/...), grounded in the user's memories, persona,
-and the recent thread with that contact. The model returns a calibrated
-confidence that drives the send policy in utils.clone_policy: review-first by
-default, auto-send only when every guardrail passes.
+and the recent thread with that contact. The model returns a calibrated confidence
+that feeds the server-owned safety floor in utils.clone_policy.evaluate_safety_floor:
+sensitive/high-stakes content and prompt-injection attempts are always held, and
+confidence must clear a server-side floor. The response is a verdict only; whether a
+cleared draft is auto-sent is a local/persisted policy decision, never certified here.
 
 This extends the review-first reply-draft primitive (utils/llm/reply_draft.py)
-with contact-thread context, an optional persona voice, and a send decision.
+with contact-thread context, an optional persona voice, and a safety-floor verdict.
 """
 
 from typing import List, Optional, Sequence, cast
@@ -28,8 +30,7 @@ from models.clone import (
     CloneThreadMessage,
 )
 from utils.clone_policy import (
-    SendPolicy,
-    evaluate_send_policy,
+    evaluate_safety_floor,
     is_prompt_injection,
     is_sensitive_content,
 )
@@ -49,7 +50,6 @@ from utils.users import get_user_display_name
 
 MAX_THREAD_MESSAGES = 20
 MAX_PERSONA_PROMPT_CHARS = 4000
-DEFAULT_LOCAL_HOUR = 12
 # Pull a deep pool of memories, then relevance-rank down: the clone answers from the
 # user's memory bank ("millions of memories"), not the last few.
 MAX_MEMORY_POOL = 200
@@ -159,41 +159,26 @@ def draft_on_behalf_reply(uid: str, request: CloneReplyRequest) -> CloneReplyRes
         *[msg.text for msg in thread],
     )
     injection = is_prompt_injection(request.incoming_message, *[msg.text for msg in thread])
-    policy = _policy_from_request(request)
-    local_hour = request.local_hour if request.local_hour is not None else DEFAULT_LOCAL_HOUR
-    decision = evaluate_send_policy(
-        policy,
-        contact_id=request.contact_id,
-        local_hour=local_hour,
-        confidence=confidence,
-        sensitive=sensitive,
-        injection=injection,
-    )
+    # The backend owns the non-negotiable safety floor and returns only a verdict; it never
+    # certifies auto-send from request fields. Whether a cleared draft is actually sent to this
+    # contact (mode, allowlist, quiet hours) is decided locally by the bridge or from trusted
+    # persisted settings.
+    floor = evaluate_safety_floor(confidence=confidence, sensitive=sensitive, injection=injection)
 
     return CloneReplyResponse(
         draft=draft,
         alternatives=alternatives,
         confidence=confidence,
-        action=cast(CloneSendAction, decision.action),
-        action_reason=decision.reason,
-        needs_review=not decision.will_send,
+        meets_safety_floor=floor.meets_floor,
+        action=cast(CloneSendAction, floor.action),
+        action_reason=floor.reason,
+        needs_review=True,
         safety_notes=safety_notes,
         used_context=CloneContextSummary(
             memories_used=len(memories),
             thread_messages_used=len(thread),
             persona_used=persona_prompt is not None,
         ),
-    )
-
-
-def _policy_from_request(request: CloneReplyRequest) -> SendPolicy:
-    return SendPolicy(
-        mode=request.mode,
-        auto_allowlist=list(request.auto_allowlist),
-        min_confidence=request.min_confidence,
-        block_sensitive=request.block_sensitive,
-        quiet_hours_start=request.quiet_hours_start,
-        quiet_hours_end=request.quiet_hours_end,
     )
 
 
