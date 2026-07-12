@@ -45,6 +45,13 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
     XCTAssertNotNil(first.pool)
 
     await RewindDatabase.shared.close()
+    let closedGeneration = await RewindDatabase.shared.poolGeneration()
+    XCTAssertGreaterThan(
+      closedGeneration,
+      first.generation,
+      "closing the database must invalidate cached storage pools"
+    )
+
     await RewindDatabase.shared.configure(userId: testUserId)
     try await RewindDatabase.shared.initialize()
 
@@ -52,8 +59,8 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
     XCTAssertNotNil(reopened.pool)
     XCTAssertGreaterThan(
       reopened.generation,
-      first.generation,
-      "storage actors use this generation to drop stale cached pools after recovery or reopen"
+      closedGeneration,
+      "reopening the database must invalidate caches independently from close()"
     )
 
     await RewindDatabase.shared.close()
