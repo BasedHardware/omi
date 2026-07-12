@@ -278,9 +278,9 @@ final class BrowserAutomationTargetTests: XCTestCase {
   func testClaudeNativeSetupWaitsForAccessibilityApprovalInsteadOfAgentFallback() {
     // Assisted-first Claude setup needs no Accessibility preflight; the check
     // only applies while a destination maps to .browserAutonomous.
-    XCTAssertFalse(MemoryExportExecutor.requiresAccessibilityPreflight(.claude))
-    XCTAssertFalse(MemoryExportExecutor.requiresAccessibilityPreflight(.chatgpt))
-    XCTAssertFalse(MemoryExportExecutor.requiresAccessibilityPreflight(.codex))
+    for destination in MemoryExportDestination.allCases {
+      XCTAssertFalse(MemoryExportExecutor.requiresAccessibilityPreflight(destination))
+    }
 
     XCTAssertTrue(
       MemoryExportExecutor.cloudFormFillRequiresAccessibilityApproval(
@@ -311,6 +311,28 @@ final class BrowserAutomationTargetTests: XCTestCase {
       MemoryExportExecutor.cloudFormFillNeedsManualClaudeAdd(
         "Error: Claude connector is added, but the Connect button is not exposed to Accessibility."
       )
+    )
+  }
+
+  func testExportConnectionSheetsPollAccessibilityOnlyWhilePreflightIsMissing() throws {
+    let pickerSource = try sourceFile("MainWindow/Pages/AgentConnectPickerSheet.swift")
+    let sheetSource = try sourceFile("MainWindow/Pages/MemoryExportDestinationSheet.swift")
+
+    XCTAssertTrue(
+      pickerSource.contains(
+        "if MemoryExportExecutor.accessibilityPreflightMissing(for: destination) {\n      content.onReceive(permissionRefreshTimer)"
+      )
+    )
+    XCTAssertTrue(
+      sheetSource.contains(
+        "if MemoryExportExecutor.accessibilityPreflightMissing(for: destination) {\n      sheet.onReceive(permissionRefreshTimer)"
+      )
+    )
+    XCTAssertTrue(
+      pickerSource.contains(".onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))")
+    )
+    XCTAssertTrue(
+      sheetSource.contains(".onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))")
     )
   }
 
@@ -864,4 +886,14 @@ extension Result {
     }
     return nil
   }
+}
+
+private func sourceFile(_ relativePath: String) throws -> String {
+  let testsURL = URL(fileURLWithPath: #filePath)
+    .deletingLastPathComponent()
+    .deletingLastPathComponent()
+  let sourceURL = testsURL
+    .appendingPathComponent("Sources")
+    .appendingPathComponent(relativePath)
+  return try String(contentsOf: sourceURL, encoding: .utf8)
 }

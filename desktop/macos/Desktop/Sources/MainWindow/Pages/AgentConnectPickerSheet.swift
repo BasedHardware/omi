@@ -125,7 +125,7 @@ private struct ConnectOptionCard: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
+    let content = VStack(alignment: .leading, spacing: 12) {
       HStack(spacing: 12) {
         ConnectorBrandIcon(brand: destination.brand, size: 38, cornerRadius: 10)
         VStack(alignment: .leading, spacing: 2) {
@@ -190,12 +190,17 @@ private struct ConnectOptionCard: View {
       statuses[destination] = await MemoryExportService.shared.status(for: destination)
       await prepareMCPKeyIfNeeded()
     }
-    .onReceive(permissionRefreshTimer) { _ in
-      refreshPermissionStateIfNeeded()
-    }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
     { _ in
       refreshPermissionStateIfNeeded()
+    }
+
+    if MemoryExportExecutor.accessibilityPreflightMissing(for: destination) {
+      content.onReceive(permissionRefreshTimer) { _ in
+        refreshPermissionStateIfNeeded()
+      }
+    } else {
+      content
     }
   }
 
