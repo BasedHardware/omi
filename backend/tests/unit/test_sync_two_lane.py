@@ -253,6 +253,9 @@ def test_server_manifest_allows_only_one_content_set_per_conversation(monkeypatc
 
 
 def test_backfill_reservation_maps_user_and_global_caps(monkeypatch):
+    # Admission caps are opt-in now (Cloud Tasks queue is the pacer); enable them
+    # to exercise the user/global cap → reason mapping.
+    monkeypatch.setenv('SYNC_BACKFILL_ADMISSION_LIMITS', 'true')
     redis = MagicMock()
     monkeypatch.setattr(backfill, 'redis_client', redis)
     monkeypatch.setattr(backfill, 'retry_after_next_utc_day', lambda: 123)
