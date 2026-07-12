@@ -5,6 +5,8 @@ description: Explicit release channels, qualification, fallback, and recovery fo
 
 Desktop updates use immutable release manifests and explicit `stable` and `beta` pointers. A release build is not a channel. Promotion changes a pointer; it does not rebuild or mutate the artifact.
 
+The live pointer manifest is the current app-only control-plane record. `DesktopReleaseManifest` v1 is the next release-unit contract that binds the signed app to an optional Rust `desktop-backend`; it is defined independently first so shadow manifests can be compared without changing a live channel.
+
 ## Resolution order
 
 For each channel, the Python appcast and manual download endpoints resolve in this order:
@@ -41,6 +43,47 @@ The automatic path calls the same script with `--automatic`, adding signed-artif
 Set `DESKTOP_AUTO_BETA_ENABLED=false` in either the Codemagic desktop environment or GitHub's `prod` environment to pause automatic beta. Failures leave the candidate non-live. Stable nomination and `desktop_promote_prod.yml` remain manual-only.
 
 After beta soak, an operator may run `desktop_nominate_stable_candidate.yml`. It verifies the tag is the current beta pointer, verifies the pointer's immutable manifest source SHA matches the tag commit, and requires explicit soak, telemetry, release-note, rationale, operator, and qualification-evidence fields. Nomination writes `stableCandidate*` metadata only: it never moves beta or stable, and it never deploys production. `desktop_promote_prod.yml` is the sole stable decision point; it requires that nomination plus `confirm=promote-stable`, with an audited typed break-glass path for emergencies.
+
+## Immutable app/backend release-unit contract
+
+The authoritative executable contract is the stdlib-only validator and canonicalizer at `.github/scripts/desktop_release_manifest.py`, so artifact production, beta qualification, and stable promotion can share one fail-closed implementation on clean runners. `.github/schemas/desktop-release-manifest-v1.schema.json` is its structural projection for tooling and documentation; schema-only validation is insufficient for cross-field tag, compatibility, and artifact-provenance rules.
+
+V1 has two exact modes:
+
+| Mode | Backend identity | Promotion meaning |
+| --- | --- | --- |
+| `app_only` | All `desktop_backend_*` fields are forbidden | App pointers may advance without building or deploying Rust. |
+| `backend_required` | Source SHA, OCI index digest, and deployed platform-child digest are required | The app and Rust image come from the same source SHA; beta and stable must select those exact OCI objects. |
+
+Every manifest binds the release tag, version, build, app source SHA, ZIP/DMG URLs and SHA-256 digests, Sparkle signature, qualification evidence asset and digest, passed T2 tier, environment-contract version, and creation time. The compatibility contract repeats the exact app, backend-mode, backend identity when present, and environment identity. V1 deliberately permits no ranges or inferred compatibility: any mismatch fails validation before a later workflow is allowed to mutate traffic or a channel.
+
+Manifest integrity uses a detached digest in `sha256:<64 lowercase hex>` form plus an `hmac-sha256:<64 lowercase hex>` signature made with a separately controlled release-manifest signing secret of at least 32 bytes. Canonical bytes are UTF-8 JSON with keys sorted recursively, separators `,` and `:` with no insignificant whitespace, and non-ASCII characters preserved; the signature covers a V1 domain separator followed by those bytes. The detached form avoids excluding or special-casing a self-referential field inside the manifest. ZIP, DMG, qualification evidence, OCI index, and platform-child comparisons use the same exact digest boundary. The JSON and public digest may travel together, but the HMAC key remains an independent trust anchor supplied from the protected release environment. Every consumer runs executable validation, recomputes the digest, and verifies the signature before trusting identity or compatibility; rewriting both JSON and its colocated digest still fails signature verification.
+
+### Phased migration
+
+The contract lands before it controls a live release. This order prevents an untested manifest or registry seam from changing beta or stable behavior.
+
+1. Define and test V1 with no live promotion mutation.
+2. Produce detached-digest V1 manifests in shadow mode and compare them with GitHub, Firestore, release artifacts, and Cloud Run for several tags.
+3. Build and publish a required Rust image once during candidate preparation, then record its OCI index and `linux/arm64` child digests.
+4. Make beta deploy or select the manifest-pinned digest and verify its labels and `/health` identity.
+5. Require at least one complete beta cycle whose app and backend identities match V1.
+6. Make stable consume the same manifest and digest, remove source checkout/build steps, and delete transitional identities only after exact comparison evidence passes.
+
+The following sources of truth remain transitional until their named deletion gate. There must not be an indefinite path that accepts either a tag rebuild or a V1 digest.
+
+| Transitional source | Current purpose | Deletion or demotion gate |
+| --- | --- | --- |
+| GitHub Release `KEY_VALUE` metadata | Candidate/beta/stable visibility and qualification/nomination metadata | Keep only presentation and nomination metadata after both channel workflows read V1 qualification and artifact identity. |
+| `desktop_release_manifests` current record | App artifact manifest used by explicit pointers | Replace atomically after shadow records match and the shared Python API accepts V1; do not dual-write indefinitely. |
+| `desktop_update_channels/macos-beta` and `macos-stable` | Explicit channel pointers | Retain as pointers, but point only at the immutable V1 `release_id` after both channels migrate. |
+| Legacy Rust `desktop_releases` collection | Appcast bridge for older Rust clients | Delete after supported clients resolve the Python pointer feed and fallback telemetry shows no legacy reads. |
+| Stable workflow tag checkout and Docker build | Rebuilds Rust during production promotion | Delete immediately when stable is gated on one successfully exercised V1 beta cycle. |
+| Cloud Run `/health` tag/SHA/channel fields | Runtime release identity | Extend to V1 release ID, source SHA, manifest digest, and image digest; retire ambiguous fields after release doctor compares them for the migration window. |
+| `desktop-backend-prod-deployed` tag | Tracks the source believed to be in production | Keep only as a projection written from the promoted V1 manifest, then remove when no operator or automation reads it as authority. |
+| Generic `commit-sha` image/service label | Historical deployment metadata | Stop treating it as release identity once `release-id`, `release-source-sha`, `release-manifest-digest`, and `image-digest` labels are verified in beta and stable. |
+
+Python `backend*` deployment identity is independent. V1 neither reads nor mutates Python backend release state; only the existing desktop manifest/pointer API is involved in the later control-plane migration.
 
 ## Developer head-of-main
 
