@@ -145,10 +145,10 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
               duration: const Duration(milliseconds: 300),
               height: showReviewField
                   ? (showButton
-                        ? (MediaQuery.sizeOf(context).height < 680
-                              ? MediaQuery.sizeOf(context).height * 0.28
-                              : MediaQuery.sizeOf(context).height * 0.2)
-                        : MediaQuery.sizeOf(context).height * 0.132)
+                      ? (MediaQuery.sizeOf(context).height < 680
+                          ? MediaQuery.sizeOf(context).height * 0.28
+                          : MediaQuery.sizeOf(context).height * 0.2)
+                      : MediaQuery.sizeOf(context).height * 0.132)
                   : 0,
               child: !showReviewField
                   ? null
@@ -235,9 +235,9 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
                                       if (isSuccessful) {
                                         updateShowButton(false);
                                         if (context.mounted) {
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(SnackBar(content: Text(context.l10n.reviewAddedSuccessfully)));
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text(context.l10n.reviewAddedSuccessfully)),
+                                          );
                                         }
                                         bool hadReview = widget.app.userReview != null;
                                         if (!hadReview) widget.app.ratingCount += 1;

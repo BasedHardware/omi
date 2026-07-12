@@ -472,8 +472,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
             }
             // Timestamp marker: 0xFF followed by 4-byte little-endian epoch
             if (packageSize == 0xFF && packageOffset + 5 <= value.length) {
-              var epoch =
-                  value[packageOffset + 1] |
+              var epoch = value[packageOffset + 1] |
                   (value[packageOffset + 2] << 8) |
                   (value[packageOffset + 3] << 16) |
                   (value[packageOffset + 4] << 24);

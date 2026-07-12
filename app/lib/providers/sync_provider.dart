@@ -293,9 +293,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     IWalService? walService,
     SyncUploadGate? uploadGate,
     @visibleForTesting bool startBackgroundSync = true,
-  }) : _walServiceOverride = walService,
-       _uploadGate = uploadGate ?? SyncUploadGate.instance,
-       _startBackgroundSync = startBackgroundSync {
+  })  : _walServiceOverride = walService,
+        _uploadGate = uploadGate ?? SyncUploadGate.instance,
+        _startBackgroundSync = startBackgroundSync {
     _walService.subscribe(this, this);
     _audioPlayerUtils.addListener(_onAudioPlayerStateChanged);
     _freshRateLimitWasActive = SyncRateLimiter.instance.isLimitedForLane('fresh');

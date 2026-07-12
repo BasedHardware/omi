@@ -205,8 +205,7 @@ class RingStorageSyncImpl implements RingStorageSync {
         ),
       ];
       Logger.debug(
-        'RingStorageSync.refreshWalsFromDevice: 1 virtual WAL (${status.unreadPackets} pkts, ~${estimatedSecs}s)',
-      );
+          'RingStorageSync.refreshWalsFromDevice: 1 virtual WAL (${status.unreadPackets} pkts, ~${estimatedSecs}s)');
     } catch (e) {
       Logger.debug('RingStorageSync.refreshWalsFromDevice: error: $e');
     }
@@ -358,9 +357,10 @@ class RingStorageSyncImpl implements RingStorageSync {
       return true;
     }
     if (ringInfo.droppedPackets > 0) {
-      DebugLogManager.logWarning('RingStorageSync: ring overwrote ${ringInfo.droppedPackets} packets before sync', {
-        'ringInfo': ringInfo.toString(),
-      });
+      DebugLogManager.logWarning(
+        'RingStorageSync: ring overwrote ${ringInfo.droppedPackets} packets before sync',
+        {'ringInfo': ringInfo.toString()},
+      );
     }
     final status = await connection.getRingStatus();
     final rtcValid = status?.isRtcValid ?? false;
@@ -426,8 +426,7 @@ class RingStorageSyncImpl implements RingStorageSync {
           final begin = RingProtocol.parseReadBeginNotification(value);
           if (begin != null) {
             Logger.debug(
-              'RingStorageSync: NOTIFY_READ_BEGIN start=${begin.transferStartSeq} count=${begin.packetCount}',
-            );
+                'RingStorageSync: NOTIFY_READ_BEGIN start=${begin.transferStartSeq} count=${begin.packetCount}');
             if (!firstDataReceived) {
               firstDataReceived = true;
               firstDataTimer?.cancel();
@@ -552,8 +551,7 @@ class RingStorageSyncImpl implements RingStorageSync {
     }
 
     Logger.debug(
-      'RingStorageSync: reading from seq=${ringInfo.readSeq} (write=${ringInfo.writeSeq}, unread=${ringInfo.unreadPackets})',
-    );
+        'RingStorageSync: reading from seq=${ringInfo.readSeq} (write=${ringInfo.writeSeq}, unread=${ringInfo.unreadPackets})');
 
     bool reachedDone = false;
     try {
@@ -603,8 +601,7 @@ class RingStorageSyncImpl implements RingStorageSync {
       return ok;
     } else {
       Logger.debug(
-        'RingStorageSync: skipping advance (reachedDone=$reachedDone doneOk=$doneOk flushError=$flushError cancelled=$_isCancelled records=$recordsConsumed)',
-      );
+          'RingStorageSync: skipping advance (reachedDone=$reachedDone doneOk=$doneOk flushError=$flushError cancelled=$_isCancelled records=$recordsConsumed)');
       return false;
     }
   }

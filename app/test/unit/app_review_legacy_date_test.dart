@@ -39,21 +39,13 @@ void main() {
 
   group('legacy cached apps list with empty-string review dates', () {
     test('App.fromJson parses a review with responded_at == "" (crash case)', () {
-      final app = App.fromJson(
-        minimalAppJson(
-          reviews: [reviewJson(respondedAt: '', updatedAt: '')],
-        ),
-      );
+      final app = App.fromJson(minimalAppJson(reviews: [reviewJson(respondedAt: '', updatedAt: '')]));
       expect(app.reviews, hasLength(1));
       expect(app.reviews.first.respondedAt, isNull);
     });
 
     test('App.fromJson parses a user_review with responded_at == ""', () {
-      final app = App.fromJson(
-        minimalAppJson(
-          userReview: reviewJson(respondedAt: '', updatedAt: ''),
-        ),
-      );
+      final app = App.fromJson(minimalAppJson(userReview: reviewJson(respondedAt: '', updatedAt: '')));
       expect(app.userReview, isNotNull);
       expect(app.userReview!.respondedAt, isNull);
     });
@@ -72,7 +64,12 @@ void main() {
 
   group('AppReview.toJson no longer writes empty-string dates', () {
     test('null dates serialize as null and survive a cache round-trip', () {
-      final review = AppReview(uid: 'user-1', ratedAt: DateTime.utc(2026, 7, 1, 10), score: 4.0, review: 'nice app');
+      final review = AppReview(
+        uid: 'user-1',
+        ratedAt: DateTime.utc(2026, 7, 1, 10),
+        score: 4.0,
+        review: 'nice app',
+      );
       final json = review.toJson();
       expect(json['responded_at'], isNull);
       expect(json['updated_at'], isNull);
