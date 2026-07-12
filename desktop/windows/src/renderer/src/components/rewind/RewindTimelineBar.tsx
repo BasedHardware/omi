@@ -1,12 +1,14 @@
 import { useEffect, useRef } from 'react'
 import type { RewindFrame } from '../../../../shared/types'
 import {
+  buildTimelineMapping,
   tsToX,
   xToTs,
+  tsInBreak,
   axisTicks,
   activitySegments,
-  gapSegments,
-  REWIND_ACTIVITY_GAP_MS
+  REWIND_ACTIVITY_GAP_MS,
+  type TimelineMapping
 } from '../../../../shared/timelineGeometry'
 import { useElementWidth } from '../../hooks/useElementWidth'
 import { isSameDay } from '../../../../shared/relativeTime'
@@ -16,32 +18,22 @@ const clockLabel = (ts: number): string =>
 const dateLabel = (ts: number): string =>
   new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric' })
 
-// Fixed horizontal time scale, so the activity bar is a SCROLLABLE broad timeline
-// you can pan across — not a squished fit-to-width overview. Larger = more zoomed
-// in (a longer history overflows the viewport and scrolls).
+// Fixed horizontal time scale for the ACTIVITY portions, so the bar is a broad
+// scrollable timeline you can pan across — not a squished fit-to-width overview.
+// Long blank gaps don't scroll past at this scale; they collapse to a break (see
+// buildTimelineMapping), so activity keeps almost all the horizontal space.
 const PX_PER_HOUR = 140
+const TRACK_HEIGHT_PX = 48 // matches the track's `h-12`
 
-// Blank stretches (no recording) at least this wide get a seismograph-style
-// "no signal" zigzag; narrower slivers stay flat so the bar isn't littered with
-// tiny stubs between near-adjacent activity blocks.
-const REWIND_GAP_MIN_PX = 24
-// Zigzag geometry (px): peak-to-peak tooth height, one full up→down wavelength,
-// and the track height (matches the track's `h-12`) the line is centered in.
-const ZIGZAG_TOOTH_PX = 7
-const ZIGZAG_WAVELENGTH_PX = 9
-const TRACK_HEIGHT_PX = 48
-
-// Points for a horizontal sawtooth spanning [0, width], centered vertically in
-// the track — a flatline that says "nothing recorded here", not decoration.
-function zigzagPoints(width: number): string {
-  const mid = TRACK_HEIGHT_PX / 2
-  const half = ZIGZAG_TOOTH_PX / 2
-  const step = ZIGZAG_WAVELENGTH_PX / 2
-  const pts: string[] = []
-  for (let i = 0, x = 0; x <= width; i++, x = i * step) {
-    pts.push(`${x.toFixed(1)},${(mid + (i % 2 === 0 ? -half : half)).toFixed(1)}`)
-  }
-  return pts.join(' ')
+// A quiet vertical zigzag "cut" seam spanning the track height — a chart axis
+// break / video-editor splice mark. Kept thin and low-contrast so it reads as a
+// seam you notice only when you look, not a bold symbol shouting for attention.
+function breakZigzagPoints(width: number, height: number): string {
+  const cx = width / 2
+  const amp = Math.min(3, width * 0.22)
+  // 5 rows → 4 diagonals → 3 gentle switchbacks, top to bottom.
+  const rows = [0, height / 4, height / 2, (height * 3) / 4, height]
+  return rows.map((y, i) => `${(i % 2 === 0 ? cx - amp : cx + amp).toFixed(1)},${y.toFixed(1)}`).join(' ')
 }
 
 // Axis ticks aligned to LOCAL time boundaries (round local hours/days), so labels
@@ -76,29 +68,29 @@ export function RewindTimelineBar({
   const minTs = dataMin ?? 0
   const maxTs = dataMax ?? 0
 
-  // Content is laid out at the fixed scale, but never narrower than the viewport.
-  const contentWidth = hasSpan
-    ? Math.max(viewWidth, ((maxTs - minTs) / 3_600_000) * PX_PER_HOUR)
-    : viewWidth
-  const span = hasSpan ? { minTs, maxTs, width: contentWidth } : null
+  const frameTimes = frames.map((f) => f.ts)
+  // Non-linear layout: activity to scale, long blank gaps collapsed to breaks.
+  const mapping: TimelineMapping | null = hasSpan
+    ? buildTimelineMapping(frameTimes, minTs, maxTs, { pxPerHour: PX_PER_HOUR, minWidth: viewWidth })
+    : null
+  const contentWidth = mapping ? mapping.width : viewWidth
 
   const seekFromEvent = (clientX: number): void => {
-    if (!innerRef.current || !span) return
+    if (!innerRef.current || !mapping) return
     const rect = innerRef.current.getBoundingClientRect()
-    onSeek(xToTs(clientX - rect.left, span))
+    onSeek(xToTs(clientX - rect.left, mapping))
   }
 
-  const ticks = span
-    ? localAxisTicks(minTs, maxTs, Math.max(4, Math.round(contentWidth / 110)))
-    : []
-  const frameTimes = frames.map((f) => f.ts)
-  const segments = span ? activitySegments(frameTimes, REWIND_ACTIVITY_GAP_MS) : []
-  // Complement of the activity blocks: the blank stretches drawn as flatlines.
-  const gaps = span ? gapSegments(frameTimes, REWIND_ACTIVITY_GAP_MS, minTs, maxTs) : []
+  const ticks = mapping ? localAxisTicks(minTs, maxTs, Math.max(4, Math.round(contentWidth / 110))) : []
+  // Ticks that land inside a collapsed break would pile up in ~16px — drop them;
+  // the break mark stands in for that stretch of time.
+  const visibleTicks = mapping ? ticks.filter((t) => !tsInBreak(t, mapping)) : []
+  const segments = mapping ? activitySegments(frameTimes, REWIND_ACTIVITY_GAP_MS) : []
+  const breaks = mapping ? mapping.pieces.filter((p) => p.kind === 'break') : []
 
   // Center the cursor whenever it actually CHANGES — the initial open position
   // (the newest frame, so the bar lands on the recent edge), a seek, or live-follow.
-  // NOT on the per-second live poll: `span` is a fresh object every render, so
+  // NOT on the per-second live poll: `mapping` is a fresh object every render, so
   // without this guard the effect would fire each tick and yank the bar back to the
   // cursor while the user is panning through history. Guarding on the cursor value
   // (not a one-shot `didInit`) also survives the load race where the frames and the
@@ -106,11 +98,11 @@ export function RewindTimelineBar({
   const lastCursorRef = useRef<number | null>(null)
   useEffect(() => {
     const outer = outerRef.current
-    if (!outer || !span) return
+    if (!outer || !mapping) return
     if (lastCursorRef.current === cursorTs) return // not a seek → leave the user's pan alone
     lastCursorRef.current = cursorTs
-    outer.scrollLeft = Math.max(0, tsToX(cursorTs, span) - outer.clientWidth / 2)
-  }, [contentWidth, cursorTs, span])
+    outer.scrollLeft = Math.max(0, tsToX(cursorTs, mapping) - outer.clientWidth / 2)
+  }, [contentWidth, cursorTs, mapping])
 
   return (
     <div className="w-full">
@@ -132,36 +124,39 @@ export function RewindTimelineBar({
             onClick={(e) => seekFromEvent(e.clientX)}
             className="relative h-12 cursor-pointer rounded bg-white/5"
           >
-            {span &&
-              gaps.map((g) => {
-                const left = tsToX(g.start, span)
-                const width = tsToX(g.end, span) - left
-                if (width < REWIND_GAP_MIN_PX) return null
+            {mapping &&
+              breaks.map((b) => {
+                const left = b.xStart
+                const width = b.xEnd - b.xStart
                 return (
+                  // A thin, low-opacity zigzag seam — no fill/notch, so the track
+                  // reads as continuous and the collapse is a quiet "cut", not a
+                  // sore thumb. pointer-events-none keeps the surface scrubbable.
                   <svg
-                    key={`gap-${g.start}`}
-                    data-testid="rewind-gap-zigzag"
+                    key={`break-${b.tStart}`}
+                    data-testid="rewind-break"
                     aria-hidden="true"
-                    className="pointer-events-none absolute top-0 text-white/15"
-                    style={{ left, width, height: TRACK_HEIGHT_PX }}
+                    className="pointer-events-none absolute inset-y-0 text-white/20"
+                    style={{ left, width }}
                     width={width}
                     height={TRACK_HEIGHT_PX}
+                    viewBox={`0 0 ${width} ${TRACK_HEIGHT_PX}`}
                   >
                     <polyline
-                      points={zigzagPoints(width)}
+                      points={breakZigzagPoints(width, TRACK_HEIGHT_PX)}
                       fill="none"
                       stroke="currentColor"
-                      strokeWidth={1.5}
+                      strokeWidth={1.25}
                       strokeLinejoin="round"
                       strokeLinecap="round"
                     />
                   </svg>
                 )
               })}
-            {span &&
+            {mapping &&
               segments.map((s) => {
-                const left = tsToX(s.start, span)
-                const right = tsToX(s.end, span)
+                const left = tsToX(s.start, mapping)
+                const right = tsToX(s.end, mapping)
                 return (
                   <div
                     key={`seg-${s.start}`}
@@ -170,32 +165,32 @@ export function RewindTimelineBar({
                   />
                 )
               })}
-            {span &&
-              ticks.map((t) => (
+            {mapping &&
+              visibleTicks.map((t) => (
                 <div
                   key={`tick-${t}`}
                   className="absolute top-0 h-full w-px bg-white/15"
-                  style={{ left: tsToX(t, span) }}
+                  style={{ left: tsToX(t, mapping) }}
                 />
               ))}
-            {span && (
+            {mapping && (
               <div
                 className="absolute top-0 h-full w-0.5 bg-[color:var(--accent)]"
-                style={{ left: tsToX(cursorTs, span) }}
+                style={{ left: tsToX(cursorTs, mapping) }}
               />
             )}
           </div>
-          {span && (
+          {mapping && (
             <div className="tnum relative h-4 text-[10px] text-white/40">
-              {ticks.map((t, i) => {
+              {visibleTicks.map((t, i) => {
                 // Show the DATE on the first tick of each day (and the very first
                 // tick) so panning across midnight is anchored; times elsewhere.
-                const newDay = i === 0 || !isSameDay(ticks[i - 1], t)
+                const newDay = i === 0 || !isSameDay(visibleTicks[i - 1], t)
                 return (
                   <span
                     key={`label-${t}`}
                     className={`absolute -translate-x-1/2 whitespace-nowrap ${newDay ? 'font-medium text-white/60' : ''}`}
-                    style={{ left: tsToX(t, span) }}
+                    style={{ left: tsToX(t, mapping) }}
                   >
                     {newDay ? dateLabel(t) : clockLabel(t)}
                   </span>

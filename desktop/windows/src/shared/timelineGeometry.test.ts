@@ -1,15 +1,26 @@
 import { describe, it, expect } from 'vitest'
 import {
+  buildTimelineMapping,
   tsToX,
   xToTs,
+  tsInBreak,
   nearestFrameIndex,
   axisTicks,
   activitySegments,
   gapSegments,
-  frameIndexAtCursor
+  frameIndexAtCursor,
+  REWIND_BREAK_THRESHOLD_MS
 } from './timelineGeometry'
 
 const H = 3_600_000
+
+// pxPerHour 3600 → 1px per real second; minWidth 0 → no viewport stretch, so
+// piece widths equal their natural (unstretched) sizes and are easy to assert.
+// breakThresholdMs is pinned (not the shipped default) so the mapping-math
+// scenarios below stay deterministic regardless of the tuning knob; a separate
+// describe covers the real default threshold.
+const OPTS = { pxPerHour: 3600, minWidth: 0, breakThresholdMs: 300_000 }
+const MIN = 60_000 // 60s activity blocks in the scenarios below
 
 describe('axisTicks', () => {
   it('picks a "nice" interval keeping the tick count within the budget', () => {
@@ -34,22 +45,156 @@ describe('axisTicks', () => {
   })
 })
 
-describe('tsToX / xToTs', () => {
-  const span = { minTs: 1000, maxTs: 2000, width: 100 }
-  it('maps min->0 and max->width', () => {
-    expect(tsToX(1000, span)).toBe(0)
-    expect(tsToX(2000, span)).toBe(100)
+describe('buildTimelineMapping', () => {
+  // Two 60s activity blocks (0–60s and 600–660s) with a 540s blank gap between.
+  // The gap (540s ≥ 5min break threshold) collapses; each block lays out to
+  // scale (60px at 1px/s).
+  const twoBlocks = [0, MIN, 600_000, 660_000]
+
+  it('collapses a ≥threshold gap to a fixed-width break and lays activity to scale', () => {
+    const m = buildTimelineMapping(twoBlocks, 0, 660_000, OPTS)
+    expect(m.pieces.map((p) => p.kind)).toEqual(['linear', 'break', 'linear'])
+    const [a, gap, b] = m.pieces
+    expect(a.xEnd - a.xStart).toBe(60) // 60s activity → 60px
+    expect(gap.xEnd - gap.xStart).toBe(16) // 540s gap → fixed 16px break
+    expect(b.xEnd - b.xStart).toBe(60)
+    expect(m.width).toBe(136)
   })
-  it('maps the midpoint', () => {
-    expect(tsToX(1500, span)).toBe(50)
-    expect(xToTs(50, span)).toBe(1500)
+
+  it('leaves a sub-threshold gap linear (uncompressed) — no break piece', () => {
+    // 120s gap (< 5min) between two blocks stays real-duration: one linear run.
+    const m = buildTimelineMapping([0, MIN, 180_000, 240_000], 0, 240_000, OPTS)
+    expect(m.pieces.every((p) => p.kind === 'linear')).toBe(true)
+    expect(m.pieces).toHaveLength(1)
+    expect(m.width).toBe(240) // full 240s to scale, gap NOT collapsed
   })
-  it('clamps out-of-range input', () => {
-    expect(tsToX(5000, span)).toBe(100)
-    expect(xToTs(-10, span)).toBe(1000)
+
+  it('handles a window that is one giant gap (zero frames)', () => {
+    const m = buildTimelineMapping([], 0, 1_000_000, OPTS)
+    expect(m.pieces.map((p) => p.kind)).toEqual(['break'])
+    expect(m.width).toBe(16)
+    expect(tsToX(0, m)).toBe(0)
+    expect(tsToX(1_000_000, m)).toBe(16)
   })
-  it('handles a zero-width span without dividing by zero', () => {
-    expect(tsToX(1000, { minTs: 1000, maxTs: 1000, width: 100 })).toBe(0)
+
+  it('puts a break at the window start when activity is only late', () => {
+    const m = buildTimelineMapping([600_000, 660_000], 0, 660_000, OPTS)
+    expect(m.pieces[0].kind).toBe('break')
+    expect(m.pieces[0].tStart).toBe(0)
+    expect(m.pieces.at(-1)?.kind).toBe('linear')
+  })
+
+  it('puts a break at the window end when activity is only early', () => {
+    const m = buildTimelineMapping([0, MIN], 0, 660_000, OPTS)
+    expect(m.pieces.map((p) => p.kind)).toEqual(['linear', 'break'])
+    expect(m.pieces.at(-1)?.tEnd).toBe(660_000)
+  })
+
+  it('emits one break per collapsed gap for multiple consecutive breaks', () => {
+    const m = buildTimelineMapping([0, MIN, 600_000, 660_000, 1_200_000, 1_260_000], 0, 1_260_000, OPTS)
+    expect(m.pieces.map((p) => p.kind)).toEqual(['linear', 'break', 'linear', 'break', 'linear'])
+  })
+
+  it('stretches to minWidth by widening activity, never the breaks', () => {
+    const m = buildTimelineMapping(twoBlocks, 0, 660_000, { ...OPTS, minWidth: 400 })
+    expect(m.width).toBe(400)
+    const gap = m.pieces.find((p) => p.kind === 'break')!
+    expect(gap.xEnd - gap.xStart).toBe(16) // break stays fixed
+    // The two activity pieces absorb all 264px of extra width equally.
+    const acts = m.pieces.filter((p) => p.kind === 'linear')
+    expect(acts[0].xEnd - acts[0].xStart).toBeCloseTo(192, 5)
+    expect(acts[1].xEnd - acts[1].xStart).toBeCloseTo(192, 5)
+  })
+
+  it('fills the viewport even when the whole window is one break (no activity to widen)', () => {
+    const m = buildTimelineMapping([], 0, 1_000_000, { ...OPTS, minWidth: 300 })
+    expect(m.width).toBe(300)
+    expect(m.pieces[0].xStart).toBe(0)
+    expect(m.pieces[0].xEnd).toBe(300)
+  })
+
+  it('returns an empty mapping for a non-positive window', () => {
+    const m = buildTimelineMapping([0, MIN], 500, 500, OPTS)
+    expect(m.pieces).toEqual([])
+    expect(tsToX(500, m)).toBe(0)
+    expect(xToTs(10, m)).toBe(500)
+  })
+})
+
+describe('buildTimelineMapping default break threshold', () => {
+  // No breakThresholdMs override → the shipped default applies. Only genuinely
+  // long dead stretches should collapse, so the bar isn't littered with seams.
+  const DEFAULTS = { pxPerHour: 3600, minWidth: 0 }
+  const hasBreak = (m: ReturnType<typeof buildTimelineMapping>): boolean =>
+    m.pieces.some((p) => p.kind === 'break')
+
+  it('defaults to at least 30 minutes', () => {
+    expect(REWIND_BREAK_THRESHOLD_MS).toBeGreaterThanOrEqual(30 * 60_000)
+  })
+
+  it('does NOT collapse a 20-minute gap (stays linear, unmarked)', () => {
+    const m = buildTimelineMapping([0, MIN, 20 * 60_000, 20 * 60_000 + MIN], 0, 20 * 60_000 + MIN, DEFAULTS)
+    expect(hasBreak(m)).toBe(false)
+  })
+
+  it('DOES collapse a 45-minute gap', () => {
+    const m = buildTimelineMapping([0, MIN, 45 * 60_000, 45 * 60_000 + MIN], 0, 45 * 60_000 + MIN, DEFAULTS)
+    expect(hasBreak(m)).toBe(true)
+  })
+})
+
+describe('tsToX / xToTs (non-linear mapping)', () => {
+  const twoBlocks = [0, MIN, 600_000, 660_000]
+  const m = buildTimelineMapping(twoBlocks, 0, 660_000, OPTS) // width 136, break 60–76px
+
+  it('maps windowStart→0 and windowEnd→width', () => {
+    expect(tsToX(0, m)).toBe(0)
+    expect(tsToX(660_000, m)).toBe(136)
+  })
+
+  it('places activity to scale and collapses the gap between the blocks', () => {
+    expect(tsToX(MIN, m)).toBe(60) // end of block A
+    expect(tsToX(600_000, m)).toBe(76) // start of block B — only 16px past A
+  })
+
+  it('is monotonic non-decreasing across the whole domain (including the break)', () => {
+    const samples = [0, 30_000, MIN, 200_000, 400_000, 600_000, 630_000, 660_000]
+    const xs = samples.map((t) => tsToX(t, m))
+    for (let i = 1; i < xs.length; i++) expect(xs[i]).toBeGreaterThanOrEqual(xs[i - 1])
+  })
+
+  it('round-trips a click inside an activity block', () => {
+    expect(xToTs(30, m)).toBe(30_000) // 30px into block A → 30s
+  })
+
+  it('snaps a click inside a break to the nearest activity edge', () => {
+    // Break spans x 60–76 (center 68). Left half → block A end; right half → block B start.
+    expect(xToTs(63, m)).toBe(MIN) // near A edge
+    expect(xToTs(74, m)).toBe(600_000) // near B edge
+  })
+
+  it('clamps out-of-range input to the ends', () => {
+    expect(tsToX(-5000, m)).toBe(0)
+    expect(tsToX(9_999_999, m)).toBe(136)
+    expect(xToTs(-10, m)).toBe(0)
+    expect(xToTs(9999, m)).toBe(660_000)
+  })
+})
+
+describe('tsInBreak', () => {
+  const m = buildTimelineMapping([0, MIN, 600_000, 660_000], 0, 660_000, OPTS)
+
+  it('is true strictly inside a collapsed break', () => {
+    expect(tsInBreak(300_000, m)).toBe(true)
+  })
+
+  it('is false at the break edges (they are activity boundaries)', () => {
+    expect(tsInBreak(MIN, m)).toBe(false)
+    expect(tsInBreak(600_000, m)).toBe(false)
+  })
+
+  it('is false inside an activity block', () => {
+    expect(tsInBreak(30_000, m)).toBe(false)
   })
 })
 
