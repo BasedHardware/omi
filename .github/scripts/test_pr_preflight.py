@@ -82,6 +82,8 @@ class SelectionTests(unittest.TestCase):
                 "product-invariants",
                 "desktop-changelog-data",
                 "deferred-work-markers",
+                "lifecycle-headers",
+                "version-prefixed-filenames",
             },
         )
 
