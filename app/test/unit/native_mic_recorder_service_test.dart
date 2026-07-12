@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
