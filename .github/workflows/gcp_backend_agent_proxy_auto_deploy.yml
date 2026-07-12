@@ -9,6 +9,11 @@ on:
       - 'backend/utils/__init__.py'
       - 'backend/utils/executors.py'
 
+# Share the development agent-proxy lock with manual deployments.
+concurrency:
+  group: deploy-gke-agent-proxy-development
+  cancel-in-progress: false
+
 env:
   SERVICE: agent-proxy
   REGION: us-central1

@@ -788,6 +788,8 @@ else
 fi
 
 run_step python3 .github/scripts/check-desktop-prod-promotion-policy.py
+run_step python3 .github/scripts/check-deployment-concurrency.py --self-test
+run_step python3 .github/scripts/check-deployment-concurrency.py
 run_step check_backend_runtime_env_if_needed
 run_step check_backend_async_blockers_if_needed
 run_step check_module_stub_pollution_if_needed
