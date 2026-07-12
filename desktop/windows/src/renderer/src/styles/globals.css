@@ -232,6 +232,19 @@
     @apply glass;
   }
 
+  /* Same look as .glass but WITHOUT backdrop-filter. Live backdrop-blur is the
+     most expensive property to composite, and a scroll container full of blurred
+     cards (e.g. the Apps grid) janks on every frame. Use this for many-of cards
+     where the blur is imperceptible over the app's static dark background. */
+  .surface-card-flat {
+    @apply rounded-2xl;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.18),
+      inset 0 1px 0 var(--glass-highlight);
+  }
+
   .surface-card-interactive {
     @apply glass transition-all duration-200 ease-out;
   }
