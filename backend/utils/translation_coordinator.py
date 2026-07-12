@@ -3,7 +3,7 @@
 Replaces the scattered state in transcribe.py with a single coordinator that:
 - Tracks per-segment committed text (prefix-safe)
 - Gates translation on text stability signals
-- Batches eligible segments into minimal GCP API calls
+- Batches eligible segments into minimal provider API calls
 - Integrates with ConversationLanguageState for monolingual gating
 - Supports negative caching to avoid re-checking known target-language text
 
@@ -20,9 +20,8 @@ from typing import Awaitable, Callable, Dict, List, Optional, Set, Tuple
 from models.transcript_segment import TranscriptSegment, SENTENCE_ENDERS
 from utils.translation import (
     TranslationNeed,
+    TranslationStatus,
     classify_translation_need,
-    get_cached_translation,
-    set_negative_cache,
     TranslationService,
 )
 from utils.executors import db_executor, sync_executor, run_blocking
@@ -101,15 +100,15 @@ class TranslationCoordinator:
     ## Architecture
 
     This coordinator implements SINGLE-PHASE translation: every stable text
-    update is sent in full to the batch translator, which calls Google
-    Translate V3 with the complete segment text. See DD-008 design doc
+    update is sent in full to the configured translation provider with the
+    complete segment text. See DD-008 design doc
     (`deep-dives/DD-008-design-review.md`) for the planned TWO-PHASE
     architecture (streaming deltas + final full-sentence translation).
 
     ## Data Flow
 
     observe() → [stability gates] → batch_buffer → _flush_batch()
-        → translate_units_batch() → [LRU → Redis → API]
+        → translate_outcomes() → [LRU → Redis → provider chain]
         → on_translation_ready() → Firestore persist + WebSocket push
 
     ## Cost Note
@@ -211,20 +210,18 @@ class TranslationCoordinator:
 
                 # Check if the new merged text was already translated (Redis cache)
                 text_hash = hashlib.md5(text.encode()).hexdigest()
-                redis_cached = await run_blocking(db_executor, get_cached_translation, text_hash, self.target_language)
+                redis_cached = await run_blocking(
+                    db_executor,
+                    self.translation_service.get_cached_translation,
+                    text_hash,
+                    self.target_language,
+                )
                 if redis_cached:
                     # Found in Redis — adopt as committed, skip re-translation
                     translated_text = redis_cached['text']
                     detected_lang = redis_cached.get('detected_lang', '')
-                    # Apply cached detected language to conversation state so the
-                    # monolingual gate doesn't incorrectly stay enabled for foreign text.
-                    # Use the same logic as observe() but with known detected_lang.
                     if detected_lang:
-                        _det_base = _normalize_base_language(detected_lang) or ''
-                        if _det_base and _det_base != self.language_state.target_base:
-                            # Foreign-language cache hit — exit monolingual gate
-                            self.language_state.monolingual = False
-                            self.language_state.consecutive_target = 0
+                        self.language_state.observe_detection(detected_lang, 1.0)
 
                     # Guard: skip no-op "translations" that would spam UI badges.
                     if not should_persist_translation(text, translated_text, detected_lang, self.target_language):
@@ -275,7 +272,12 @@ class TranslationCoordinator:
                 state.committed_text = text
                 # Set negative cache for this text
                 text_hash = hashlib.md5(text.encode()).hexdigest()
-                set_negative_cache(text_hash, self.target_language)
+                await run_blocking(
+                    db_executor,
+                    self.translation_service.set_negative_cache,
+                    text_hash,
+                    self.target_language,
+                )
                 self.metrics['negative_cache_sets'] += 1
                 continue
 
@@ -295,7 +297,12 @@ class TranslationCoordinator:
                 self.metrics['classify_skips'] += 1
                 state.committed_text = text
                 text_hash = hashlib.md5(text.encode()).hexdigest()
-                set_negative_cache(text_hash, self.target_language)
+                await run_blocking(
+                    db_executor,
+                    self.translation_service.set_negative_cache,
+                    text_hash,
+                    self.target_language,
+                )
                 self.metrics['negative_cache_sets'] += 1
                 continue
 
@@ -312,7 +319,7 @@ class TranslationCoordinator:
             # `new_text` (the uncommitted delta) to the batch translator.
             #
             # Rationale:
-            # - Google Translate V3 translates each content string independently;
+            # - Translation providers translate each content string independently;
             #   full sentence context improves disambiguation (gender agreement,
             #   idioms like "estoy de acuerdo" → "I agree", not "acuerdo" → "agreement")
             # - The assembled_translation IS the final persisted result — it must be
@@ -373,56 +380,69 @@ class TranslationCoordinator:
         logger.info(f"translate_coordinator [batch] units={len(api_units)}")
 
         try:
-            # Run the sync GCP API call in a thread pool to avoid blocking the event loop
-            results = await run_blocking(
+            # Run the sync provider call in a thread pool to avoid blocking the event loop
+            outcomes = await run_blocking(
                 sync_executor,
-                self.translation_service.translate_units_batch,
+                self.translation_service.translate_outcomes,
                 self.target_language,
                 api_units,
                 source_language=self.source_language,
             )
+            if len(outcomes) != len(valid_units):
+                raise RuntimeError('Translation service returned the wrong number of outcomes')
 
-            for seg_id, translated_text, detected_lang in results:
-                # Find the corresponding entry
-                matching: List[Tuple[str, str, str, int]] = [(s, t, c, v) for s, t, c, v in valid_units if s == seg_id]
-                if not matching:
-                    continue
-                _, original_text, conv_id, version = matching[0]
+            for outcome, (seg_id, original_text, conv_id, version) in zip(outcomes, valid_units):
 
                 state = self._segment_states.get(seg_id)
                 if not state or state.version != version:
                     continue
+                if outcome.status == TranslationStatus.failed:
+                    continue
 
                 # Check if translation is meaningful
                 target_base = self.target_base
-                if not should_persist_translation(original_text, translated_text, detected_lang, target_base):
-                    # Distinguish real no-op (target-language text) from translation failure.
-                    # A failure returns original_text with empty detected_lang — do NOT
-                    # set negative cache or advance committed_text, so the segment can
-                    # be retried on the next cycle.
-                    if detected_lang:
-                        # Genuine no-op: source is already in target language
-                        text_hash = hashlib.md5(original_text.encode()).hexdigest()
-                        set_negative_cache(text_hash, self.target_language)
-                        self.metrics['negative_cache_sets'] += 1
+                if not should_persist_translation(
+                    original_text,
+                    outcome.text,
+                    outcome.detected_language,
+                    target_base,
+                ):
+                    detected_base = _normalize_base_language(outcome.detected_language) or ''
+                    if outcome.status == TranslationStatus.unchanged:
+                        if outcome.detected_language:
+                            self.language_state.observe_detection(outcome.detected_language, 1.0)
+                        if detected_base == target_base:
+                            # Only target-language no-ops belong in the negative cache.
+                            text_hash = hashlib.md5(original_text.encode()).hexdigest()
+                            await run_blocking(
+                                db_executor,
+                                self.translation_service.set_negative_cache,
+                                text_hash,
+                                self.target_language,
+                            )
+                            self.metrics['negative_cache_sets'] += 1
                         state.committed_text = original_text
-                    # else: translation failure — skip silently, allow retry
                     continue
 
                 # Update state
                 state.committed_text = original_text
-                state.assembled_translation = translated_text
-                state.detected_lang = detected_lang
+                state.assembled_translation = outcome.text
+                state.detected_lang = outcome.detected_language
 
                 # Update language state from API response
-                if detected_lang:
-                    self.language_state.observe(original_text, speaker_id=None)
+                if outcome.detected_language:
+                    self.language_state.observe_detection(outcome.detected_language, 1.0)
 
                 # Notify via callback
-                await self.on_translation_ready(seg_id, translated_text, detected_lang, conv_id)
+                await self.on_translation_ready(
+                    seg_id,
+                    outcome.text,
+                    outcome.detected_language,
+                    conv_id,
+                )
 
-        except Exception as e:
-            logger.error(f"TranslationCoordinator batch error: {e}")
+        except (RuntimeError, ValueError) as error:
+            logger.error('TranslationCoordinator batch error: %s', error)
 
     async def flush(self):
         """Flush all pending translations before session cleanup."""
