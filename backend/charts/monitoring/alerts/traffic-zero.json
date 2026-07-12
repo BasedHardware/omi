@@ -99,7 +99,7 @@
     "annotations": {
       "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
       "__panelId__": "5",
-      "summary": "Parakeet receiving zero traffic for 10+ minutes — possible ILB connectivity or config issue (previous incident: https→http misconfiguration caused 8h outage)",
+      "summary": "Parakeet receiving zero traffic for 10+ minutes \u2014 possible ILB connectivity or config issue (previous incident: https\u2192http misconfiguration caused 8h outage)",
       "threshold": "< 0.001 rps (effectively zero)"
     },
     "labels": {
@@ -212,7 +212,7 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "19",
-      "summary": "Backend-listen receiving zero LB traffic for 10+ minutes — transcription pipeline may be down",
+      "summary": "Backend-listen receiving zero LB traffic for 10+ minutes \u2014 transcription pipeline may be down",
       "threshold": "< 0.001 rps (effectively zero)"
     },
     "labels": {
@@ -325,7 +325,7 @@
     "annotations": {
       "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
       "__panelId__": "9",
-      "summary": "Backend-listen has zero ready pods — all replicas are down or failing health checks",
+      "summary": "Backend-listen has zero ready pods \u2014 all replicas are down or failing health checks",
       "threshold": "< 1 ready pod"
     },
     "labels": {
@@ -438,7 +438,7 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "43",
-      "summary": "Pusher has zero active WebSocket connections for 10+ minutes — live transcription pipeline broken",
+      "summary": "Pusher has zero active WebSocket connections for 10+ minutes \u2014 live transcription pipeline broken",
       "threshold": "< 1 active connection"
     },
     "labels": {
@@ -571,7 +571,7 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "3",
-      "summary": "Backend Cloud Run service receiving zero LB traffic for 15+ minutes — API may be unreachable",
+      "summary": "Backend Cloud Run service receiving zero LB traffic for 15+ minutes \u2014 API may be unreachable",
       "threshold": "< 0.001 rps (effectively zero)"
     },
     "labels": {
