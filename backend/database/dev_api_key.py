@@ -1,8 +1,10 @@
+import logging
 import uuid
 from datetime import datetime
 from typing import List, Optional, Tuple
 
 from google.cloud import firestore
+from pydantic import ValidationError
 
 import database.redis_db as redis_db
 from database._client import db
@@ -13,6 +15,8 @@ from database.memory_app_key_grants import (
 from models.dev_api_key import DevApiKey
 from utils.dev_api_keys import generate_dev_api_key, hash_dev_api_key
 from utils.scopes import READ_ONLY_SCOPES, Scopes
+
+logger = logging.getLogger(__name__)
 
 
 def create_dev_key(user_id: str, name: str, scopes: Optional[List[str]] = None) -> Tuple[str, DevApiKey]:
@@ -82,7 +86,13 @@ def get_dev_keys_for_user(user_id: str) -> List[DevApiKey]:
         # Ensure scopes field is present (None for backward compat)
         if "scopes" not in key_dict:
             key_dict["scopes"] = None
-        keys.append(DevApiKey.model_validate(key_dict))
+        # Older key docs may omit the id field; fall back to the document id, mirroring
+        # get_mcp_keys_for_user. Skip a malformed/legacy key rather than 500 the whole list.
+        key_dict["id"] = key_dict.get("id") or doc.id
+        try:
+            keys.append(DevApiKey.model_validate(key_dict))
+        except ValidationError as e:
+            logger.warning("Skipping malformed dev API key %s: %s", doc.id, e)
     return keys
 
 
