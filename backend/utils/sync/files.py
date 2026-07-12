@@ -8,6 +8,7 @@ from typing import Any, List, Optional
 
 from fastapi import HTTPException, UploadFile
 
+from models.conversation_enums import ConversationSource
 from utils.log_sanitizer import sanitize
 from utils.request_validation import parse_sync_filename_timestamp
 from utils.sync import playback as sync_playback
@@ -186,6 +187,25 @@ def decode_pcm_file_to_wav(
 def _is_pcm_codec(filename: str) -> bool:
     """Check if the filename indicates a PCM codec (pcm8 or pcm16)."""
     return '_pcm16_' in filename or '_pcm8_' in filename
+
+
+def detect_source_from_filenames(filenames: List[Optional[str]]) -> ConversationSource:
+    """Detect the conversation source for a /v2/sync-local-files batch from uploaded filenames.
+
+    Keeps the original first-match-wins loop semantics: the first filename that carries a known
+    marker sets the source and stops the scan. limitless is checked before phone so a limitless
+    file never loses to phone. 'omibatchphone' also covers the 'omibatchphoneauto' offline
+    auto-switch variant; 'phonemic' covers the phone-mic WAL fallback uploads. Defaults to omi.
+    """
+    for filename in filenames:
+        if not filename:
+            continue
+        name = filename.lower()
+        if 'limitless' in name:
+            return ConversationSource.limitless
+        if 'omibatchphone' in name or 'phonemic' in name:
+            return ConversationSource.phone
+    return ConversationSource.omi
 
 
 def decode_files_to_wav(files_path: List[str]) -> List[str]:
