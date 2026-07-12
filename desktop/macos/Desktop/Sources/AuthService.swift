@@ -1327,7 +1327,11 @@ class AuthService {
                 durationMs: authFlowDurationMs(startedAt: activeFlowStartedAt),
                 extraProperties: ["callback_transport": activeCallbackTransport]
             )
-            AnalyticsManager.shared.signInFailed(provider: provider, error: AuthError.timeout.localizedDescription)
+            AnalyticsManager.shared.signInFailed(
+                provider: provider,
+                error: AuthError.timeout.localizedDescription,
+                errorClass: authFailureClass(for: AuthError.timeout)
+            )
             if let activeFlowId {
                 clearOAuthFlowIfCurrent(flowId: activeFlowId, callbackServer: activeCallbackServer)
             }
@@ -1348,7 +1352,11 @@ class AuthService {
                 durationMs: authFlowDurationMs(startedAt: activeFlowStartedAt),
                 extraProperties: ["callback_transport": activeCallbackTransport]
             )
-            AnalyticsManager.shared.signInFailed(provider: provider, error: error.localizedDescription)
+            AnalyticsManager.shared.signInFailed(
+                provider: provider,
+                error: error.localizedDescription,
+                errorClass: authFailureClass(for: error)
+            )
             if let activeFlowId {
                 clearOAuthFlowIfCurrent(flowId: activeFlowId, callbackServer: activeCallbackServer)
             }
@@ -1420,7 +1428,9 @@ class AuthService {
             properties["failure_class"] = failureClass
         }
         if let error {
-            properties["error"] = String(error.prefix(200))
+            let errorClass = PostHogManager.diagnosticErrorClass(error)
+            properties["error"] = errorClass
+            properties["error_class"] = errorClass
         }
         if let durationMs {
             properties["duration_ms"] = durationMs

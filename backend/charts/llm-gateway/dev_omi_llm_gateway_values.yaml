@@ -68,6 +68,11 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: OPENAI_API_KEY
+  - name: ANTHROPIC_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: ANTHROPIC_API_KEY
   - name: GEMINI_API_KEY
     valueFrom:
       secretKeyRef:
@@ -109,9 +114,15 @@ livenessProbe:
   timeoutSeconds: 5
 
 readinessProbe:
-  httpGet:
-    path: /health
-    port: 8080
+  exec:
+    command:
+      - sh
+      - -ec
+      - >-
+        curl --fail --silent --show-error --max-time 4
+        --header "Authorization: Bearer ${OMI_LLM_GATEWAY_SERVICE_TOKEN}"
+        --header "X-Omi-Service-Caller: backend"
+        http://127.0.0.1:8080/ready >/dev/null
   failureThreshold: 3
   periodSeconds: 10
   timeoutSeconds: 5
