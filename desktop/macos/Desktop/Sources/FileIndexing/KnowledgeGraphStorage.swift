@@ -6,17 +6,20 @@ actor KnowledgeGraphStorage {
     static let shared = KnowledgeGraphStorage()
 
     private var _dbQueue: DatabasePool?
+    private var _dbGeneration = -1
 
     private init() {}
 
     private func ensureDB() async throws -> DatabasePool {
-        if let db = _dbQueue { return db }
+        if let db = _dbQueue, await RewindDatabase.shared.poolGeneration() == _dbGeneration { return db }
 
         try await RewindDatabase.shared.initialize()
-        guard let db = await RewindDatabase.shared.getDatabaseQueue() else {
+        let (queue, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+        guard let db = queue else {
             throw NSError(domain: "KnowledgeGraphStorage", code: 1, userInfo: [NSLocalizedDescriptionKey: "Database not initialized"])
         }
         _dbQueue = db
+        _dbGeneration = generation
         return db
     }
 

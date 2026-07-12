@@ -10,8 +10,11 @@ covers:
   - desktop/Desktop/Sources/AppState.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarUsageLimiter.swift
   - desktop/macos/Desktop/Sources/Bluetooth/Transports/BleTransport.swift
+  - desktop/macos/Desktop/Sources/Audio/AudioCodecDecoder.swift
   - desktop/macos/Desktop/Sources/Bluetooth/Connections/BeeDeviceConnection.swift
   - desktop/macos/Desktop/Sources/Bluetooth/Connections/PlaudDeviceConnection.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Connections/LimitlessDeviceConnection.swift
+  - desktop/macos/Desktop/Sources/SystemAudioCaptureService.swift
 preconditions:
   - auth_ready
 

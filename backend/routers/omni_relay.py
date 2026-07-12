@@ -14,7 +14,7 @@ from utils.byok import (
     set_byok_keys,
     validate_byok_websocket,
 )
-from utils.executors import critical_executor, run_blocking
+from utils.executors import critical_executor, db_executor, run_blocking
 from utils.llm.gateway_client import raise_if_gateway_feature_mode_blocks_direct_model_surface
 from utils.other.endpoints import _verify_ws_auth  # type: ignore[reportPrivateUsage]  # shared WS auth helper, intentionally reused cross-module
 from utils.subscription import is_trial_paywalled
@@ -99,7 +99,7 @@ async def omni_relay(websocket: WebSocket):
 
     # Same desktop gate as /v4/listen: Operator/Architect + BYOK pass; un-entitled
     # desktop users past their trial are paywalled.
-    if is_trial_paywalled(uid, "desktop"):
+    if await run_blocking(db_executor, is_trial_paywalled, uid, "desktop"):
         logger.info(f"omni relay paywalled uid={uid}")
         await websocket.close(code=1008, reason="trial_expired")
         return

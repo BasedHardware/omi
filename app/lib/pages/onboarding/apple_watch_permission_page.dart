@@ -156,10 +156,12 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
         _isRequestingPermission = false;
       });
 
-      AppSnackbar.showSnackbar(
-        context.l10n.errorRequestingPermission(e.toString()),
-        duration: const Duration(seconds: 3),
-      );
+      if (mounted) {
+        AppSnackbar.showSnackbar(
+          context.l10n.errorRequestingPermission(e.toString()),
+          duration: const Duration(seconds: 3),
+        );
+      }
     }
   }
 
@@ -168,15 +170,26 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
       final bool recordingStarted = await widget.connection.checkPermissionAndStartRecording();
 
       if (recordingStarted) {
-        AppSnackbar.showSnackbar(context.l10n.recordingStartedSuccessfully, duration: const Duration(seconds: 3));
+        if (mounted) {
+          AppSnackbar.showSnackbar(context.l10n.recordingStartedSuccessfully, duration: const Duration(seconds: 3));
+        }
 
         widget.onPermissionGranted?.call();
-        Navigator.of(context).pop();
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
       } else {
-        AppSnackbar.showSnackbar(context.l10n.permissionNotGrantedYet, duration: const Duration(seconds: 5));
+        if (mounted) {
+          AppSnackbar.showSnackbar(context.l10n.permissionNotGrantedYet, duration: const Duration(seconds: 5));
+        }
       }
     } catch (e) {
-      AppSnackbar.showSnackbar(context.l10n.errorStartingRecording(e.toString()), duration: const Duration(seconds: 3));
+      if (mounted) {
+        AppSnackbar.showSnackbar(
+          context.l10n.errorStartingRecording(e.toString()),
+          duration: const Duration(seconds: 3),
+        );
+      }
     }
   }
 

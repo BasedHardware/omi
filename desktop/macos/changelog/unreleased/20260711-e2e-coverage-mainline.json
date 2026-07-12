@@ -1,0 +1,3 @@
+{
+  "change": "Improved macOS desktop test coverage checks so stale fork refs no longer create false coverage failures."
+}

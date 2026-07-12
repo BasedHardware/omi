@@ -41,6 +41,13 @@ final class LocalTranscriptionService: @unchecked Sendable {
 
     typealias SegmentsHandler = @MainActor ([TranscriptionService.BackendSegment]) -> Void
 
+    private struct DrainSnapshot {
+        let manager: AsrManager
+        let window: [Float]
+        let startSec: Double
+        let durSec: Double
+    }
+
     private let language: String
     /// Source-based diarization: mic = the user ("You"), system audio = another speaker.
     private let isUser: Bool
@@ -102,10 +109,10 @@ final class LocalTranscriptionService: @unchecked Sendable {
                 let models = try await AsrModels.downloadAndLoad(version: version)
                 let manager = AsrManager()
                 try await manager.loadModels(models)
-                self.lock.lock()
-                self.asrManager = manager
-                self.isReady = true
-                self.lock.unlock()
+                self.lock.withLock {
+                    self.asrManager = manager
+                    self.isReady = true
+                }
                 log("LocalTranscriptionService: Parakeet \(version) ready in \(String(format: "%.1f", Date().timeIntervalSince(started)))s")
             } catch {
                 logError("LocalTranscriptionService: model load failed", error: error)
@@ -127,11 +134,11 @@ final class LocalTranscriptionService: @unchecked Sendable {
     func appendAudio(_ data: Data) {
         let floats = Self.int16ToFloat32(data)
         guard !floats.isEmpty else { return }
-        lock.lock()
-        if acceptingAudio {
-            buffer.append(contentsOf: floats)
+        lock.withLock {
+            if acceptingAudio {
+                buffer.append(contentsOf: floats)
+            }
         }
-        lock.unlock()
     }
 
     /// Fire-and-forget stop. Prefer `await finish()` whenever the session lifecycle allows it —
@@ -142,7 +149,7 @@ final class LocalTranscriptionService: @unchecked Sendable {
     func stop() {
         pumpTask?.cancel()
         pumpTask = nil
-        lock.lock(); acceptingAudio = false; lock.unlock()
+        lock.withLock { acceptingAudio = false }
         // Strong `self` (not weak): the caller (AppState) nils its reference immediately after
         // stop(), so a weak capture could deallocate the service before the final tail is
         // transcribed. The strong reference keeps it alive until drainAll() finishes.
@@ -159,7 +166,7 @@ final class LocalTranscriptionService: @unchecked Sendable {
         // Stop buffering new audio first so the single drain below captures the complete buffer —
         // capture can still be running (finishConversation rotation) and would otherwise append
         // past the drain snapshot.
-        lock.lock(); acceptingAudio = false; lock.unlock()
+        lock.withLock { acceptingAudio = false }
         await drainAll()
     }
 
@@ -167,7 +174,7 @@ final class LocalTranscriptionService: @unchecked Sendable {
     /// flush first, then transcribes the sub-window tail so the last words aren't dropped.
     private func drainAll() async {
         for _ in 0..<50 {
-            lock.lock(); let busy = isFlushing; lock.unlock()
+            let busy = lock.withLock { isFlushing }
             if !busy { break }
             try? await Task.sleep(nanoseconds: 100_000_000)
         }
@@ -176,38 +183,39 @@ final class LocalTranscriptionService: @unchecked Sendable {
 
     /// Transcribe one window (or whatever remains, when `force`) and emit a segment.
     private func drain(force: Bool) async {
-        lock.lock()
-        guard isReady, let manager = asrManager, !isFlushing else { lock.unlock(); return }
-        let available = buffer.count
-        // On force (stop/finish) flush whatever is left, even a sub-window tail; otherwise wait for a full window.
-        let ready = available >= windowSamples || (force && available > 0)
-        guard ready else { lock.unlock(); return }
-        let take = force ? available : windowSamples
-        let window = Array(buffer.prefix(take))
-        buffer.removeFirst(take)
-        let startSec = emittedSeconds
-        let durSec = Double(take) / Double(sampleRate)
-        emittedSeconds += durSec
-        isFlushing = true
-        lock.unlock()
+        guard let snapshot = lock.withLock({
+            guard isReady, let manager = asrManager, !isFlushing else { return nil as DrainSnapshot? }
+            let available = buffer.count
+            // On force (stop/finish) flush whatever is left, even a sub-window tail; otherwise wait for a full window.
+            let ready = available >= windowSamples || (force && available > 0)
+            guard ready else { return nil }
+            let take = force ? available : windowSamples
+            let window = Array(buffer.prefix(take))
+            buffer.removeFirst(take)
+            let startSec = emittedSeconds
+            let durSec = Double(take) / Double(sampleRate)
+            emittedSeconds += durSec
+            isFlushing = true
+            return DrainSnapshot(manager: manager, window: window, startSec: startSec, durSec: durSec)
+        }) else { return }
 
         defer {
-            lock.lock(); isFlushing = false; lock.unlock()
+            lock.withLock { isFlushing = false }
         }
 
         // Only skip DEAD silence (noise floor). The previous 0.012 threshold was tuned on loud
         // speaker playback and ate real (quieter) microphone speech — users saw "nothing
         // transcribed". A low floor lets normal mic speech through; hallucinations on near-silence
         // are filtered below by the model's own confidence score instead.
-        let rms = (window.reduce(Float(0)) { $0 + $1 * $1 } / Float(window.count)).squareRoot()
+        let rms = (snapshot.window.reduce(Float(0)) { $0 + $1 * $1 } / Float(snapshot.window.count)).squareRoot()
         guard rms > 0.004 else { return }
 
         // Music/video gate: don't turn songs, TV, or videos playing through *system audio* into
         // "conversations" — only real conversations/calls should be transcribed. Applied to the
         // system channel only; the mic channel (the user's own voice) is never gated. Runs Apple's
         // on-device SoundAnalysis classifier *before* Parakeet, so music also costs us no transcription.
-        if !isUser, Self.windowIsMusic(window, sampleRate: sampleRate) {
-            log(String(format: "LocalTranscriptionService[sys]: skipped %.1fs music/video window (rms=%.4f)", durSec, rms))
+        if !isUser, Self.windowIsMusic(snapshot.window, sampleRate: sampleRate) {
+            log(String(format: "LocalTranscriptionService[sys]: skipped %.1fs music/video window (rms=%.4f)", snapshot.durSec, rms))
             return
         }
 
@@ -216,7 +224,7 @@ final class LocalTranscriptionService: @unchecked Sendable {
             // windows makes the transducer decoder drift — it starts looping ("...AND AND AND"),
             // Title-Casing every word, and emitting gibberish. Independent per-window decode is stable.
             var ds = try TdtDecoderState()
-            let result = try await manager.transcribe(window, decoderState: &ds, language: nil)
+            let result = try await snapshot.manager.transcribe(snapshot.window, decoderState: &ds, language: nil)
 
             var text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
             // Silence makes the TDT decoder emit just "." / "..." — drop windows with no real speech.
@@ -236,8 +244,8 @@ final class LocalTranscriptionService: @unchecked Sendable {
                 speaker_id: speakerId,
                 is_user: isUser,
                 person_id: nil,
-                start: startSec,
-                end: startSec + durSec,
+                start: snapshot.startSec,
+                end: snapshot.startSec + snapshot.durSec,
                 translations: nil
             )
             // Deliver synchronously on the main actor so an awaited finish() guarantees the
@@ -247,7 +255,7 @@ final class LocalTranscriptionService: @unchecked Sendable {
                 await MainActor.run { onSegments(segs) }
             }
             log(String(format: "LocalTranscriptionService[%@]: %.1fs rms=%.4f conf=%.2f rtfx=%.0fx → %@",
-                       isUser ? "mic" : "sys", durSec, rms, result.confidence, result.rtfx, text))
+                       isUser ? "mic" : "sys", snapshot.durSec, rms, result.confidence, result.rtfx, text))
         } catch {
             logError("LocalTranscriptionService: transcribe failed", error: error)
         }

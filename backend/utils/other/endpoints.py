@@ -417,7 +417,7 @@ def with_rate_limit(auth_dependency: Callable[..., Any], policy_name: str) -> Ca
         raise ValueError(f"Unknown rate limit policy: {policy_name}")
 
     async def dependency(uid: str = Depends(auth_dependency)) -> str:
-        _enforce_rate_limit(uid, policy_name)
+        await run_blocking(critical_executor, _enforce_rate_limit, uid, policy_name)
         return uid
 
     return dependency
@@ -439,7 +439,8 @@ def with_rate_limit_context(auth_context_dependency: Callable[..., Any], policy_
         raise ValueError(f"Unknown rate limit policy: {policy_name}")
 
     async def dependency(auth_context: Any = Depends(auth_context_dependency)) -> Any:
-        _enforce_rate_limit(rate_limit_key_for_context(auth_context), policy_name, fail_closed=True)
+        key = rate_limit_key_for_context(auth_context)
+        await run_blocking(critical_executor, _enforce_rate_limit, key, policy_name, fail_closed=True)
         return auth_context
 
     return dependency

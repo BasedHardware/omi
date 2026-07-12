@@ -693,7 +693,9 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                   onTap: () async {
                                     final files = await DebugLogManager.listLogFiles();
                                     if (files.isEmpty) {
-                                      AppSnackbar.showSnackbarError(context.l10n.noLogFilesFound);
+                                      if (context.mounted) {
+                                        AppSnackbar.showSnackbarError(context.l10n.noLogFilesFound);
+                                      }
                                       return;
                                     }
                                     if (files.length == 1) {
@@ -963,9 +965,13 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                 try {
                                   // Call delete endpoint
                                   await KnowledgeGraphApi.deleteKnowledgeGraph();
-                                  AppSnackbar.showSnackbar(context.l10n.knowledgeGraphDeletedSuccessfully);
+                                  if (context.mounted) {
+                                    AppSnackbar.showSnackbar(context.l10n.knowledgeGraphDeletedSuccessfully);
+                                  }
                                 } catch (e) {
-                                  AppSnackbar.showSnackbarError(context.l10n.failedToDeleteGraph(e.toString()));
+                                  if (context.mounted) {
+                                    AppSnackbar.showSnackbarError(context.l10n.failedToDeleteGraph(e.toString()));
+                                  }
                                 }
                               },
                               child: Text(context.l10n.delete, style: const TextStyle(color: Colors.redAccent)),

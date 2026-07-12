@@ -6,6 +6,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPTS = REPO_ROOT / ".github" / "scripts"
 PROMOTE_BETA_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "desktop_promote_beta.yml"
+PROMOTE_PROD_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "desktop_promote_prod.yml"
 
 
 def _load(name: str, filename: str):
@@ -19,6 +20,7 @@ def _load(name: str, filename: str):
 mark_beta = _load("mark_desktop_release_beta", "mark-desktop-release-beta.py")
 prepare_beta = _load("prepare_desktop_beta_promotion", "prepare-desktop-beta-promotion.py")
 nominate_stable = _load("nominate_desktop_stable_candidate", "nominate-desktop-stable-candidate.py")
+repair_installer = _load("desktop_repair_installer", "desktop_repair_installer.py")
 
 
 def _release(body: str | None = None):
@@ -70,6 +72,57 @@ def test_prepare_manifest_requires_exact_qualification_and_assets():
     assert manifest["changelog"] == ["Fixed updates", "Improved recovery"]
 
 
+def test_stable_repair_bundle_uses_an_immutable_gcs_artifact():
+    manifest = prepare_beta.prepare_manifest(
+        _release(),
+        "v0.12.64+12064-macos",
+        "a" * 40,
+        "b" * 64,
+        "c" * 64,
+    )
+
+    bundle = repair_installer.build_repair_bundle(manifest, "gs://omi_macos_updates")
+
+    assert bundle["artifact_object"] == "stable/v0.12.64+12064-macos/Omi.dmg"
+    assert bundle["repair_object"] == "stable/v0.12.64+12064-macos/repair.json"
+    assert bundle["repair"]["channel"] == "stable"
+    assert bundle["repair"]["installer_sha256"] == "c" * 64
+    assert bundle["repair"]["installer_url"] == (
+        "https://storage.googleapis.com/omi_macos_updates/stable/v0.12.64+12064-macos/Omi.dmg"
+    )
+    assert "example.com" not in bundle["latest"]["installer_url"]
+    assert "/Applications" in bundle["landing_page"]
+
+
+@pytest.mark.parametrize("field, value", [("platform", "windows"), ("dmg_sha256", "not-a-digest")])
+def test_stable_repair_bundle_rejects_incomplete_or_wrong_platform_manifest(field, value):
+    manifest = prepare_beta.prepare_manifest(
+        _release(),
+        "v0.12.64+12064-macos",
+        "a" * 40,
+        "b" * 64,
+        "c" * 64,
+    )
+    manifest[field] = value
+
+    with pytest.raises(ValueError):
+        repair_installer.build_repair_bundle(manifest, "gs://omi_macos_updates")
+
+
+def test_stable_repair_bundle_requires_the_release_publication_time():
+    manifest = prepare_beta.prepare_manifest(
+        _release(),
+        "v0.12.64+12064-macos",
+        "a" * 40,
+        "b" * 64,
+        "c" * 64,
+    )
+    manifest.pop("published_at")
+
+    with pytest.raises(ValueError, match="published_at"):
+        repair_installer.build_repair_bundle(manifest, "gs://omi_macos_updates")
+
+
 def test_prepare_manifest_accepts_legacy_qualification_metadata():
     release = _release()
     release["body"] = (
@@ -89,6 +142,32 @@ def test_prepare_manifest_accepts_legacy_qualification_metadata():
     )
     assert manifest["qualification"]["blessed_at"] == "2026-07-09T12:00:00Z"
     assert "qualified_at" not in manifest["qualification"]
+
+
+def test_prepare_manifest_allows_an_already_stable_release_only_for_repair_retries():
+    release = _release()
+    release["body"] = (
+        release["body"].replace("isLive: false", "isLive: true").replace("channel: candidate", "channel: stable")
+    )
+
+    with pytest.raises(SystemExit, match="candidate or beta"):
+        prepare_beta.prepare_manifest(
+            release,
+            "v0.12.64+12064-macos",
+            "a" * 40,
+            "b" * 64,
+            "c" * 64,
+        )
+
+    manifest = prepare_beta.prepare_manifest(
+        release,
+        "v0.12.64+12064-macos",
+        "a" * 40,
+        "b" * 64,
+        "c" * 64,
+        allow_stable_channel=True,
+    )
+    assert manifest["release_id"] == "v0.12.64+12064-macos"
 
 
 def test_prepare_manifest_rejects_unqualified_candidate():
@@ -190,10 +269,27 @@ def test_automatic_beta_is_pauseable_and_rejects_stale_tags():
 
 
 def test_stable_promotion_remains_manual_only():
-    workflow = (REPO_ROOT / ".github" / "workflows" / "desktop_promote_prod.yml").read_text()
+    workflow = PROMOTE_PROD_WORKFLOW.read_text()
 
     assert "on:\n  workflow_dispatch:" in workflow
     assert "\n  schedule:" not in workflow
     assert "\n  push:" not in workflow
     assert "confirm:" in workflow
     assert "promote-stable" in workflow
+
+
+def test_stable_repair_is_published_immutably_before_stable_pointer_advances():
+    """Static wiring contract: a stable pointer is never advanced ahead of its repair artifact."""
+    workflow = PROMOTE_PROD_WORKFLOW.read_text()
+
+    immutable_repair = workflow.index("      - name: Publish immutable stable repair installer")
+    legacy_bridge = workflow.index("      - name: Promote Firestore release stable")
+    pointer = workflow.index("      - name: Advance explicit stable pointer")
+    latest_route = workflow.index("      - name: Publish latest stable repair route")
+
+    assert immutable_repair < legacy_bridge < pointer < latest_route
+    assert "--json tagName,body,isDraft,isPrerelease,publishedAt,assets" in workflow
+    assert "--pattern 'Omi.zip' --pattern 'Omi.dmg' --pattern 'omi.dmg'" in workflow
+    assert "--pattern '*.dmg'" not in workflow
+    assert "Expected exactly one qualified Omi.dmg or omi.dmg release asset." in workflow
+    assert "--if-generation-match=0" in workflow
