@@ -22,6 +22,26 @@ describe('Orb — WebGL-unavailable resilience', () => {
     expect(container.querySelector('img')).not.toBeNull()
   })
 
+  it('supersamples the drawing buffer so the shader AA edge stays crisp at bar sizes', () => {
+    // The effect sizes canvas.width/height BEFORE building the (here-failing)
+    // animator, so the backing store is set even without WebGL. Regression guard
+    // for the "misty rim": a buffer sized at only size×dpr made the shader's
+    // fixed ~2px AA band a large fraction of a 22–34px orb. It must be
+    // supersampled (well above the CSS box) and downscaled by the browser.
+    const size = 26
+    const { container } = render(<Orb size={size} state="idle" />)
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement
+    // Backing store is clearly supersampled — well above the CSS box (it would be
+    // just `size` at dpr 1 under the old size×dpr sizing, the bug). Bounded on
+    // both sides so the guard tracks "supersampled" intent rather than the exact
+    // factor, and a runaway backing (a cost blow-up) fails it too.
+    expect(canvas.width).toBeGreaterThanOrEqual(size * 2.5)
+    expect(canvas.width).toBeLessThanOrEqual(size * 4)
+    expect(canvas.height).toBe(canvas.width)
+    // CSS box stays the requested size — only the backing store is larger.
+    expect(canvas.style.width).toBe(`${size}px`)
+  })
+
   it('retries construction rather than latching immediately', () => {
     vi.useFakeTimers()
     try {

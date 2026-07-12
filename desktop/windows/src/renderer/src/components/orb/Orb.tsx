@@ -17,8 +17,27 @@ import omiLogo from '../../assets/omi-logo.png'
 const MAX_ORB_ATTEMPTS = 60
 const ORB_RETRY_MS = 700
 
+// Supersample the orb's WebGL drawing buffer to at least this many samples per
+// CSS px (the device pixel ratio wins when it is higher). The shader antialiases
+// the blob with a fixed ~2px band derived from the field gradient; on a 22–34px
+// orb that band is a large fraction of the whole shape and reads as a soft,
+// "misty" rim at 1×. Rendering the buffer larger and letting the browser
+// downscale it into the CSS box shrinks the band to a sub-pixel fraction, so the
+// merged blob's edge stays crisp.
+//
+// 3.0 is the measured knee: sweeping the factor at the real mount sizes (22/26/
+// 34px, dpr 1) the rim's soft-edge fraction drops steeply from 1×→~2.5× then
+// plateaus — 3.0 already sits on that plateau, so a higher factor only adds
+// render cost (12× the fragments at 3.0) for no visible gain. Verified against
+// real bar sizes at dpr 1/1.5; per-frame SwiftShader cost stays a couple ms.
+const ORB_SUPERSAMPLE = 3.0
+// Ceiling on the drawing-buffer edge (px): past this the AA band is already
+// sub-pixel, so it only bounds cost on any large future mount.
+const ORB_MAX_BACKING = 256
+
 export type OrbProps = {
-  /** CSS size in px (the canvas backing store is size × devicePixelRatio). */
+  /** CSS size in px. The canvas backing store is supersampled to
+   *  size × max(devicePixelRatio, ORB_SUPERSAMPLE), capped at ORB_MAX_BACKING. */
   size: number
   state: OrbState
   /** Real speech signal (PTT capturing / VAD gate open). Only meaningful with
@@ -77,8 +96,9 @@ export function Orb({
     const canvas = canvasRef.current
     if (!canvas) return
     const dpr = window.devicePixelRatio || 1
-    canvas.width = Math.round(size * dpr)
-    canvas.height = Math.round(size * dpr)
+    const backing = Math.min(ORB_MAX_BACKING, Math.round(size * Math.max(dpr, ORB_SUPERSAMPLE)))
+    canvas.width = backing
+    canvas.height = backing
     let animator: OrbAnimator | null = null
     try {
       animator = new OrbAnimator(canvas, ORB_PRESETS[preset] ?? DEFAULT_ORB_PARAMS)
