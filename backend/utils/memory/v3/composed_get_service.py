@@ -231,10 +231,19 @@ class V3ComposedResponse:
         )
 
 
+class V3ComposedError(Exception):
+    """A fail-closed step failure handled at the composition boundary."""
+
+    def __init__(self, http_status: int, reason: str):
+        self.http_status = http_status
+        self.reason = reason
+        super().__init__(reason)
+
+
 NormalizeRequest = Callable[[V3ComposedRequestParams], object]
 DecideDependency = Callable[[V3ComposedRequest, int], V3ComposedDependencyDecision]
 BuildSnapshot = Callable[[str, V3ComposedRequest, int], V3ComposedSnapshotDecision]
-DecodeCursor = Callable[[str | None, V3ComposedExecutionContext, int], V3ComposedCursor | None]
+DecodeCursor = Callable[[str | None, V3ComposedExecutionContext, int], object]
 ReadProjection = Callable[
     [V3ComposedRequest, V3ComposedExecutionContext, V3ComposedCursor | None, int, int],
     V3ComposedProjectionPage,
@@ -261,36 +270,57 @@ def _budget(params: V3ComposedRequestParams, adapters: V3ComposedAdapters) -> in
     return max(0, deadline - adapters.now_ms())
 
 
-def _ensure_budget(params: V3ComposedRequestParams, adapters: V3ComposedAdapters) -> int | V3ComposedResponse:
+def _require_budget(params: V3ComposedRequestParams, adapters: V3ComposedAdapters) -> int:
     remaining = _budget(params, adapters)
     if remaining < _MIN_STAGE_BUDGET_MS:
-        return V3ComposedResponse.error(504, 'deadline_exhausted')
+        raise V3ComposedError(504, 'deadline_exhausted')
     return remaining
 
 
-def _valid_dependency(decision: object) -> V3ComposedDependencyDecision | V3ComposedResponse:
+def _require_request(request: object) -> V3ComposedRequest:
+    if not isinstance(request, V3ComposedRequest):
+        raise V3ComposedError(503, 'adapter_contract')
+    if request.limit < 1 or request.limit > _MAX_LIMIT:
+        raise V3ComposedError(400, 'bad_request')
+    return request
+
+
+def _require_memory_request(request: V3ComposedRequest) -> V3ComposedRequest:
+    if request.offset not in (None, 0):
+        raise V3ComposedError(400, 'offset_invalid')
+    if request.offset == 0:
+        return V3ComposedRequest(
+            limit=request.limit,
+            cursor=request.cursor,
+            include_archive=request.include_archive,
+            include_historical=request.include_historical,
+        )
+    return request
+
+
+def _require_dependency(decision: object) -> V3ComposedDependencyDecision:
     if not isinstance(decision, V3ComposedDependencyDecision):
-        return V3ComposedResponse.error(503, 'adapter_contract')
+        raise V3ComposedError(503, 'adapter_contract')
     if decision.status not in {'enrolled_ready', 'legacy', 'fail'}:
-        return V3ComposedResponse.error(503, 'adapter_contract')
+        raise V3ComposedError(503, 'adapter_contract')
     if decision.status == 'enrolled_ready':
         if not decision.subject_uid or not decision.should_read_projection or decision.should_read_legacy:
-            return V3ComposedResponse.error(503, 'adapter_contract')
+            raise V3ComposedError(503, 'adapter_contract')
     if decision.status == 'legacy':
         if not decision.subject_uid or not decision.should_read_legacy or decision.should_read_projection:
-            return V3ComposedResponse.error(503, 'adapter_contract')
+            raise V3ComposedError(503, 'adapter_contract')
     if decision.status == 'fail' and not (400 <= decision.http_status <= 599):
-        return V3ComposedResponse.error(503, 'adapter_contract')
+        raise V3ComposedError(503, 'adapter_contract')
     return decision
 
 
-def _valid_snapshot(snapshot: object) -> V3ComposedSnapshotDecision | V3ComposedResponse:
+def _require_snapshot(snapshot: object) -> V3ComposedSnapshotDecision:
     if not isinstance(snapshot, V3ComposedSnapshotDecision):
-        return V3ComposedResponse.error(503, 'adapter_contract')
+        raise V3ComposedError(503, 'adapter_contract')
     if snapshot.status not in {'ready', 'fail'}:
-        return V3ComposedResponse.error(503, 'adapter_contract')
+        raise V3ComposedError(503, 'adapter_contract')
     if snapshot.status == 'ready' and not isinstance(snapshot.context, V3ComposedExecutionContext):
-        return V3ComposedResponse.error(503, 'adapter_contract')
+        raise V3ComposedError(503, 'adapter_contract')
     return snapshot
 
 
@@ -337,12 +367,10 @@ def _row_visible(row: V3ComposedRow, request: V3ComposedRequest) -> bool:
     return bool(decision.get('default_visible') or decision.get('opt_in_visible'))
 
 
-def _normalize_or_default(
-    params: V3ComposedRequestParams, adapters: V3ComposedAdapters
-) -> V3ComposedRequest | V3ComposedResponse:
+def _normalize_or_default(params: V3ComposedRequestParams, adapters: V3ComposedAdapters) -> V3ComposedRequest:
     normalized = adapters.normalize_request(params)
     if not isinstance(normalized, V3ComposedRequest):
-        return V3ComposedResponse.error(503, 'adapter_contract')
+        raise V3ComposedError(503, 'adapter_contract')
     raw_limit = cast(int | None, normalized.limit)
     if raw_limit is None:
         return V3ComposedRequest(
@@ -355,6 +383,36 @@ def _normalize_or_default(
     return normalized
 
 
+def _decode_cursor(
+    token: str, context: V3ComposedExecutionContext, budget: int, adapters: V3ComposedAdapters
+) -> V3ComposedCursor | None:
+    try:
+        cursor = adapters.decode_cursor(token, context, budget)
+    except Exception as error:
+        raise V3ComposedError(400, 'cursor_invalid') from error
+    if cursor is not None and not isinstance(cursor, V3ComposedCursor):
+        raise V3ComposedError(400, 'cursor_invalid')
+    return cursor
+
+
+def _require_page(page: object) -> V3ComposedProjectionPage:
+    if not isinstance(page, V3ComposedProjectionPage):
+        raise V3ComposedError(503, 'adapter_contract')
+    return page
+
+
+def _require_cursor_token(token: object) -> str:
+    if not isinstance(token, str) or not token:
+        raise V3ComposedError(503, 'adapter_contract')
+    return token
+
+
+def _require_legacy_response(response: object) -> V3ComposedResponse:
+    if not isinstance(response, V3ComposedResponse):
+        raise V3ComposedError(503, 'adapter_contract')
+    return response
+
+
 def compose_v3_get(
     params: V3ComposedRequestParams,
     adapters: V3ComposedAdapters,
@@ -362,50 +420,21 @@ def compose_v3_get(
     """Compose future GET stages with fail-closed typed adapter boundaries."""
 
     try:
-        budget = _ensure_budget(params, adapters)
-        if isinstance(budget, V3ComposedResponse):
-            return budget
-        raw_request = _normalize_or_default(params, adapters)
-        if isinstance(raw_request, V3ComposedResponse):
-            return raw_request
-        if raw_request.limit < 1 or raw_request.limit > _MAX_LIMIT:
-            return V3ComposedResponse.error(400, 'bad_request')
-        request = raw_request
+        _require_budget(params, adapters)
+        request = _require_request(_normalize_or_default(params, adapters))
 
-        budget = _ensure_budget(params, adapters)
-        if isinstance(budget, V3ComposedResponse):
-            return budget
-        dependency_or_response = _valid_dependency(adapters.decide_dependency(request, budget))
-        if isinstance(dependency_or_response, V3ComposedResponse):
-            return dependency_or_response
-        dependency = dependency_or_response
+        budget = _require_budget(params, adapters)
+        dependency = _require_dependency(adapters.decide_dependency(request, budget))
 
         if dependency.status == 'fail':
             return V3ComposedResponse.error(dependency.http_status, dependency.reason)
         if dependency.status == 'legacy':
-            budget = _ensure_budget(params, adapters)
-            if isinstance(budget, V3ComposedResponse):
-                return budget
-            legacy = adapters.read_legacy(request, budget)
-            return legacy
+            budget = _require_budget(params, adapters)
+            return _require_legacy_response(adapters.read_legacy(request, budget))
 
-        if request.offset not in (None, 0):
-            return V3ComposedResponse.error(400, 'offset_invalid')
-        if request.offset == 0:
-            request = V3ComposedRequest(
-                limit=request.limit,
-                cursor=request.cursor,
-                include_archive=request.include_archive,
-                include_historical=request.include_historical,
-            )
-
-        budget = _ensure_budget(params, adapters)
-        if isinstance(budget, V3ComposedResponse):
-            return budget
-        snapshot_or_response = _valid_snapshot(adapters.build_snapshot(dependency.subject_uid or '', request, budget))
-        if isinstance(snapshot_or_response, V3ComposedResponse):
-            return snapshot_or_response
-        snapshot = snapshot_or_response
+        request = _require_memory_request(request)
+        budget = _require_budget(params, adapters)
+        snapshot = _require_snapshot(adapters.build_snapshot(dependency.subject_uid or '', request, budget))
         if snapshot.status == 'fail':
             if snapshot.reason == 'grant_denied' or (snapshot.grant is not None and snapshot.grant.revoked):
                 return V3ComposedResponse.error(403, 'grant_denied')
@@ -413,14 +442,9 @@ def compose_v3_get(
         context = snapshot.context
         assert context is not None
 
-        budget = _ensure_budget(params, adapters)
-        if isinstance(budget, V3ComposedResponse):
-            return budget
+        budget = _require_budget(params, adapters)
         if request.cursor is not None:
-            try:
-                after = adapters.decode_cursor(request.cursor, context, budget)
-            except Exception:
-                return V3ComposedResponse.error(400, 'cursor_invalid')
+            after = _decode_cursor(request.cursor, context, budget, adapters)
         else:
             after = None
 
@@ -433,15 +457,10 @@ def compose_v3_get(
         verified_projection_empty = False
 
         while len(body) < request.limit and read_count < params.max_projection_reads and scans < params.scan_budget:
-            budget = _ensure_budget(params, adapters)
-            if isinstance(budget, V3ComposedResponse):
-                return budget
+            budget = _require_budget(params, adapters)
             remaining_items = request.limit - len(body)
             read_limit = min(max(remaining_items, 1) + 10, params.scan_budget - scans, _MAX_LIMIT)
-            try:
-                page = adapters.read_projection(request, context, next_page_cursor, read_limit, budget)
-            except Exception:
-                return V3ComposedResponse.error(503, 'adapter_exception')
+            page = _require_page(adapters.read_projection(request, context, next_page_cursor, read_limit, budget))
             read_count += 1
             if page.partial:
                 return V3ComposedResponse.error(503, 'partial_projection')
@@ -469,15 +488,8 @@ def compose_v3_get(
 
         next_cursor_token = None
         if next_page_cursor is not None and last_scanned_cursor is not None:
-            budget = _ensure_budget(params, adapters)
-            if isinstance(budget, V3ComposedResponse):
-                return budget
-            try:
-                next_cursor_token = adapters.encode_cursor(last_scanned_cursor, context, budget)
-            except Exception:
-                return V3ComposedResponse.error(503, 'adapter_exception')
-            if not next_cursor_token:
-                return V3ComposedResponse.error(503, 'adapter_contract')
+            budget = _require_budget(params, adapters)
+            next_cursor_token = _require_cursor_token(adapters.encode_cursor(last_scanned_cursor, context, budget))
 
         return V3ComposedResponse.success(
             body=body,
@@ -487,5 +499,7 @@ def compose_v3_get(
             scanned_count=scans,
             verified_empty=verified_projection_empty,
         )
+    except V3ComposedError as error:
+        return V3ComposedResponse.error(error.http_status, error.reason)
     except Exception:
         return V3ComposedResponse.error(503, 'adapter_exception')
