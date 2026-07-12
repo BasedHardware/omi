@@ -264,6 +264,7 @@ _STRUCTURED_OUTPUT_FEATURES = {
     'external_structure',
     'trends',
     'what_matters_now',
+    'reply_draft',
 }
 STRUCTURED_OUTPUT_FEATURES = _STRUCTURED_OUTPUT_FEATURES
 
