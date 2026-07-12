@@ -47,23 +47,8 @@ class ResizeObserverStub {
 /* eslint-enable @typescript-eslint/no-empty-function */
 ;(globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = ResizeObserverStub
 
-// jsdom has no IntersectionObserver either (Home uses one to re-arm the cards
-// when the kept-alive panel becomes visible again). The stub captures the latest
-// callback so a test can simulate a "revisit" by firing an intersecting entry.
-type IOEntry = { isIntersecting: boolean }
-let lastIntersectionCallback: ((entries: IOEntry[]) => void) | null = null
-class IntersectionObserverStub {
-  constructor(cb: (entries: IOEntry[]) => void) {
-    lastIntersectionCallback = cb
-  }
-  /* eslint-disable @typescript-eslint/no-empty-function -- no-op stub */
-  observe(): void {}
-  unobserve(): void {}
-  disconnect(): void {}
-  /* eslint-enable @typescript-eslint/no-empty-function */
-}
-;(globalThis as unknown as { IntersectionObserver: unknown }).IntersectionObserver =
-  IntersectionObserverStub
+// (jsdom provides MutationObserver natively — Home's card re-arm watches its
+// kept-alive wrapper's `hidden` class with one, driven directly in the tests.)
 
 import { Home } from './Home'
 
@@ -103,19 +88,30 @@ describe('Home — streaming reply reveal (bug 3)', () => {
     expect(md()!.textContent).toBe(LONG)
   })
 
-  it('renders the assistant avatar logo at the enlarged size (was too small in chat)', () => {
-    // The omi mark sits in a white badge next to each assistant turn. It read too
-    // small across two rounds (h-7/h-4, then h-10/h-7 at ~70% fill); it is now a
-    // h-11 badge with a h-9 mark (~82% fill) so the mark's circles read clearly.
+  it('clips the assistant avatar mark to the round badge (no square-corner poke)', () => {
+    // Geometry regression: a square mark larger than the badge radius poked its
+    // (opaque) corners past the rounded-full circle → four corner bumps. The fix
+    // is mechanical — the badge MUST clip (overflow-hidden + rounded-full) so the
+    // square asset can never escape the circle, whatever its size or background.
     render(<Home />)
     act(() => vi.advanceTimersByTime(1150))
     const logo = document.querySelector('img[alt="Omi"]') as HTMLImageElement | null
     expect(logo).not.toBeNull()
-    expect(logo!.className).toContain('h-9')
-    expect(logo!.className).toContain('w-9')
     const badge = logo!.parentElement as HTMLElement
+    // The clip is the load-bearing guarantee against the corner poke.
+    expect(badge.className).toContain('overflow-hidden')
+    expect(badge.className).toContain('rounded-full')
+    // Badge h-11 (44px); mark rendered larger (h-14) so it reads clearly, its
+    // overflow safely clipped by the badge above.
     expect(badge.className).toContain('h-11')
     expect(badge.className).toContain('w-11')
+    expect(logo!.className).toContain('h-14')
+    expect(logo!.className).toContain('w-14')
+    // First-line alignment: the reply text carries the computed top pad (pt-3)
+    // that optically centers its first line on the 44px badge. (Was pt-0.5,
+    // tuned for the old 28px badge, which left the text riding the badge's top.)
+    const text = badge.nextElementSibling as HTMLElement
+    expect(text.className).toContain('pt-3')
   })
 
   it('gives every bubble the iMessage-style pop-in entrance (user + assistant)', () => {
@@ -185,17 +181,27 @@ describe('Home — top cards persist per visit, dismiss on click below them', ()
     expect(isCollapsed()).toBe(true)
   })
 
-  it('re-arms the cards when the kept-alive panel becomes visible again (revisit)', () => {
+  it('re-arms the cards when the kept-alive panel becomes visible again (revisit)', async () => {
     chat.sending = false
     chat.history = []
-    render(<Home />)
+    const { container } = render(<Home />)
     advanceToReady()
     const below = document.querySelector('[data-testid="chat-below-region"]') as HTMLElement
     act(() => fireEvent.mouseDown(below))
     expect(isCollapsed()).toBe(true)
-    // Simulate navigating away and back: MainViews keeps Home mounted, so the
-    // IntersectionObserver firing "intersecting" is what a revisit looks like.
-    act(() => lastIntersectionCallback?.([{ isIntersecting: true }]))
-    expect(isOpen()).toBe(true)
+    // Home's root parent is the panel wrapper MainViews toggles `hidden` on;
+    // here the testing-library container plays that wrapper. Leaving Home adds
+    // `hidden`; returning removes it — only the return re-arms the cards. The
+    // MutationObserver delivers on a microtask, so flush one after each toggle.
+    await act(async () => {
+      container.classList.add('hidden')
+      await Promise.resolve()
+    })
+    expect(isCollapsed()).toBe(true) // leaving must NOT re-arm
+    await act(async () => {
+      container.classList.remove('hidden')
+      await Promise.resolve()
+    })
+    expect(isOpen()).toBe(true) // the revisit re-arms
   })
 })

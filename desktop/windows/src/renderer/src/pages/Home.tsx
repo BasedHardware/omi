@@ -8,7 +8,7 @@ import { QuickGoalsWidget } from '../components/home/QuickGoalsWidget'
 import { RevealMarkdown } from '../components/chat/RevealMarkdown'
 import { maybeBuildLocalGraph } from '../lib/kgSynthesis'
 import { cn } from '../lib/utils'
-import omiMark from '../assets/omi-logo.png'
+import omiMark from '../assets/omi-mark.png'
 import { maybeStartScreenSynthesis } from '../lib/screenSynthesis'
 import { maybeStartInsightEngine } from '../lib/insightEngine'
 import { maybeStartRetentionSweep } from '../lib/retentionSweep'
@@ -275,20 +275,25 @@ export function Home(): React.JSX.Element {
     return () => ro.disconnect()
   }, [])
 
-  // Home is kept-alive by MainViews (hidden, not unmounted), so per-visit state
-  // like `cardsDismissed` can't reset on unmount. Re-arm the cards each time the
-  // panel becomes visible again: an IntersectionObserver on the root fires when
-  // it flips from display:none back to shown — exactly a "visit". (Deliberately
-  // NOT useLocation, which would re-render this heavy panel on every unrelated
-  // navigation — the lag MainViews' memo() exists to avoid.)
+  // Home is kept-alive by MainViews — it toggles a `hidden` class on Home's
+  // WRAPPER (see MainViews.panelClass), never unmounting Home — so per-visit
+  // state like `cardsDismissed` can't reset on unmount. Watch that wrapper's
+  // class directly: each hidden→visible flip is a fresh visit, so re-arm the
+  // cards. A MutationObserver on the exact attribute that changes is
+  // deterministic (an IntersectionObserver threshold callback proved unreliable
+  // on the display:none flip); and it avoids re-rendering this heavy panel on
+  // every unrelated navigation the way useLocation would.
   useEffect(() => {
-    const el = rootRef.current
-    if (!el) return
-    const io = new IntersectionObserver((entries) => {
-      if (entries.some((e) => e.isIntersecting)) setCardsDismissed(false)
+    const panel = rootRef.current?.parentElement
+    if (!panel) return
+    let wasHidden = panel.classList.contains('hidden')
+    const mo = new MutationObserver(() => {
+      const isHidden = panel.classList.contains('hidden')
+      if (wasHidden && !isHidden) setCardsDismissed(false)
+      wasHidden = isHidden
     })
-    io.observe(el)
-    return () => io.disconnect()
+    mo.observe(panel, { attributes: true, attributeFilter: ['class'] })
+    return () => mo.disconnect()
   }, [])
 
   // Drive the staggered split once a conversation starts: lead-in → bar down →
@@ -476,10 +481,25 @@ export function Home(): React.JSX.Element {
                       key={m.id ?? `${windowStart}-${i}`}
                       className="bubble-in flex items-start gap-3"
                     >
-                      <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white">
-                        <img src={omiMark} alt="Omi" className="h-9 w-9 object-contain" />
+                      {/* Crisp 256px omi mark (omi-mark.png) clipped to the
+                          circle. overflow-hidden is load-bearing: it guarantees
+                          the asset's SQUARE bounds can never poke past the round
+                          badge (the old 40px omi-logo.png had opaque-white
+                          corners whose diagonal exceeded the badge radius → four
+                          corner bumps). The mark is rendered larger than the
+                          badge (h-14 in an h-11 badge) to offset the asset's
+                          ~23% built-in padding, so the dot-ring reads at ~30px. */}
+                      <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white">
+                        <img src={omiMark} alt="Omi" className="h-14 w-14 object-contain" />
                       </div>
-                      <div className="min-w-0 max-w-[85%] pt-0.5 text-[15px] leading-[1.65] text-white/90">
+                      {/* pt-3 (12px) optically centers the first reply line on
+                          the 44px badge: Inter 15px/24.75px puts the first line's
+                          cap-midline ~12.4px below the text-box top, so a 12px
+                          top pad lands it at ~24px = the badge's vertical center
+                          (measured live: badge centerY 648 vs first-line ~638
+                          before, ~648 after). Tuned to the badge size — revisit
+                          if the badge height changes. */}
+                      <div className="min-w-0 max-w-[85%] pt-3 text-[15px] leading-[1.65] text-white/90">
                         {m.content ? (
                           <RevealMarkdown
                             text={m.content}
