@@ -3112,5 +3112,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Emmagatzematge del dispositiu",
+    "deviceStoragePercentFull": "{percent}% ple",
+    "deviceStorageUsedOfTotal": "{used} de {total} utilitzat",
+    "deviceStorageFree": "{free} lliure",
+    "deviceStorageNearlyFull": "El dispositiu és gairebé ple — sincronitza per alliberar espai."
 }

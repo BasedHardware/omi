@@ -10721,5 +10721,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "فضای ذخیره‌سازی دستگاه",
+    "deviceStoragePercentFull": "{percent}٪ پر",
+    "deviceStorageUsedOfTotal": "{used} از {total} استفاده‌شده",
+    "deviceStorageFree": "{free} آزاد",
+    "deviceStorageNearlyFull": "دستگاه تقریباً پر است — برای آزادسازی فضا همگام‌سازی کنید."
 }

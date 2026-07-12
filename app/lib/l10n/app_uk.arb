@@ -3143,5 +3143,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Сховище пристрою",
+    "deviceStoragePercentFull": "заповнено {percent}%",
+    "deviceStorageUsedOfTotal": "використано {used} з {total}",
+    "deviceStorageFree": "{free} вільно",
+    "deviceStorageNearlyFull": "Пристрій майже заповнений — синхронізуйте, щоб звільнити місце."
 }
