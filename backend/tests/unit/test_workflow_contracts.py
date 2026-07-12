@@ -41,6 +41,7 @@ def test_workflow_contract_sources_select_adjacent_tests():
     selected_cases = {
         "backend/utils/memory/legacy_backfill.py": "tests/unit/test_ws_c_backfill.py",
         "backend/utils/memory/canonical_memory_adapter.py": "testing/e2e/test_canonical_memory_pipeline.py",
+        "backend/routers/conversations.py": "tests/unit/test_conversation_lifecycle_contract.py",
         "backend/services/users/account_deletion.py": "tests/services/users/test_account_deletion.py",
         "backend/routers/sync.py": "tests/unit/test_sync_v2.py",
         "backend/utils/sync/pipeline.py": "tests/unit/test_sync_v2.py",
@@ -277,6 +278,42 @@ def test_workflow_contracts_static_check_skips_workflows_without_tuple_check(tmp
                 "sources": ["backend/routers/sync.py"],
                 "tests": ["tests/unit/test_sync_v2.py"],
                 "checks": [],
+            }
+        ],
+    }
+
+    assert checker.check_no_large_tuple_results(contracts) == []
+
+
+def test_workflow_contracts_static_check_ignores_non_python_glob_matches(tmp_path, monkeypatch):
+    checker = _load_script("check_workflow_contracts")
+    fake_repo = tmp_path / "repo"
+    source_dir = fake_repo / "backend" / "utils" / "memory"
+    source_dir.mkdir(parents=True)
+    (source_dir / "contract.py").write_text("def safe_contract() -> tuple[int, int, int]:\n    return 1, 2, 3\n")
+    (source_dir / "ARCHITECTURE.md").write_text("# architecture\n")
+    pycache = source_dir / "__pycache__"
+    pycache.mkdir()
+    (pycache / "contract.cpython-311.pyc").write_bytes(b"\xa7\r\r\n")
+
+    monkeypatch.setattr(checker, "REPO_DIR", fake_repo)
+    contracts = {
+        "checks": {
+            "no_large_tuple_results": {
+                "allowlist": [
+                    {
+                        "path": "backend/utils/memory/contract.py",
+                        "function": "safe_contract",
+                    }
+                ]
+            }
+        },
+        "workflows": [
+            {
+                "risk": "high",
+                "sources": ["backend/utils/memory/**"],
+                "tests": ["tests/unit/test_contract.py"],
+                "checks": ["no_large_tuple_results"],
             }
         ],
     }
