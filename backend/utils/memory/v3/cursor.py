@@ -1,6 +1,6 @@
-"""Canonical module for ``utils.memory.v3_cursor`` (WS-G8b).
+"""Canonical module for ``utils.memory.v3.cursor`` (WS-G8b).
 
-Neutral ``v3_cursor`` is the source of truth. Legacy ``v3_cursor`` remains an importable alias.
+This module owns signed V3 pagination cursors.
 """
 
 from __future__ import annotations
@@ -180,11 +180,3 @@ def validate_v3_cursor_request(*, limit: int, cursor: str | None, offset: int | 
     if limit < 1 or limit > _DEFAULT_MAX_LIMIT:
         raise V3CursorError('limit_out_of_range')
     return V3CursorPageRequest(limit=limit, cursor=cursor)
-
-
-# Neutral symbol aliases (memory names remain valid via shim)
-V3CursorError = V3CursorError
-V3Keyset = V3Keyset
-V3CursorContext = V3CursorContext
-V3CursorClaims = V3CursorClaims
-V3CursorPageRequest = V3CursorPageRequest

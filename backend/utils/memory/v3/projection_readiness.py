@@ -1,6 +1,6 @@
-"""Canonical module for ``utils.memory.v3_projection_readiness`` (WS-G8b).
+"""Canonical module for ``utils.memory.v3.projection_readiness`` (WS-G8b).
 
-Neutral ``v3_projection_readiness`` is the source of truth. Legacy ``v3_projection_readiness`` remains an importable alias.
+This module owns V3 projection serve-readiness decisions.
 """
 
 from __future__ import annotations

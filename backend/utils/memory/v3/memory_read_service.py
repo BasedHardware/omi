@@ -1,6 +1,6 @@
-"""Canonical module for ``utils.memory.v3_memory_read_service`` (WS-G8b).
+"""Canonical module for ``utils.memory.v3.memory_read_service`` (WS-G8b).
 
-Neutral ``v3_memory_read_service`` is the source of truth. Legacy ``v3_memory_read_service`` remains an importable alias.
+This module owns the canonical V3 memory-read service.
 """
 
 from __future__ import annotations
@@ -8,12 +8,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from utils.memory.v3_compatibility import (
+from utils.memory.v3.compatibility import (
     V3CompatibilityContext,
     V3CompatibilityReadPath,
     decide_v3_compatibility,
 )
-from utils.memory.v3_cursor import (
+from utils.memory.v3.cursor import (
     V3CursorContext,
     V3CursorError,
     V3Keyset,
@@ -21,7 +21,7 @@ from utils.memory.v3_cursor import (
     parse_v3_cursor,
     validate_v3_cursor_request,
 )
-from utils.memory.v3_projection_readiness import (
+from utils.memory.v3.projection_readiness import (
     V3ProjectionReadinessContext,
     V3ProjectionReadinessState,
     decide_v3_projection_readiness,

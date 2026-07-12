@@ -1,6 +1,6 @@
 import inspect
 
-from utils.memory.v3_write_convergence import (
+from utils.memory.v3.write_convergence import (
     V3ExternalWriteOperation,
     V3WriteConvergenceContext,
     V3WriteConvergenceDecision,
@@ -180,7 +180,7 @@ def test_non_enrolled_legacy_primary_plan_only_and_no_enrolled_legacy_direct_wri
     assert forbidden_fields.isdisjoint(decision_fields)
     assert forbidden_fields.isdisjoint(context_fields)
 
-    source = inspect.getsource(__import__('utils.memory.v3_write_convergence', fromlist=['']))
+    source = inspect.getsource(__import__('utils.memory.v3.write_convergence', fromlist=['']))
     forbidden_tokens = [
         'routers.memories',
         'database.',

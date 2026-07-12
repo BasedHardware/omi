@@ -1,8 +1,8 @@
 import inspect
 
-from utils.memory.v3_projection_readiness import DERIVED_COMPATIBILITY_PROJECTION_SOURCE
+from utils.memory.v3.projection_readiness import DERIVED_COMPATIBILITY_PROJECTION_SOURCE
 from testing.memory.v3_route_planner import V3RoutePlanInput, plan_v3_memory_route
-from utils.memory.v3_write_convergence import V3ExternalWriteOperation, V3WriteConvergenceStatus
+from utils.memory.v3.write_convergence import V3ExternalWriteOperation, V3WriteConvergenceStatus
 
 
 def _projection_context(**overrides):

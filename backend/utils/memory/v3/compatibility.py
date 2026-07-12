@@ -1,7 +1,7 @@
-"""Canonical module for ``utils.memory.v3_compatibility`` (WS-G8b).
+"""Canonical module for ``utils.memory.v3.compatibility`` (WS-G8b).
 
 Planner/test-path `/v3` compatibility decisions. Production GET routing uses
-``v3_control_reader_contract.decide_v3_control_route`` instead; this module
+``v3.control_reader_contract.decide_v3_control_route`` instead; this module
 remains for ``plan_v3_memory_read`` and equivalence tests that document
 intentional divergence (e.g. ``rollout_write_ready`` coupling, archive 404).
 """
@@ -17,8 +17,6 @@ from utils.memory.memory_read_rollout_core import (
     evaluate_enrolled_memory_read_gates,
     EnrolledMemoryReadGateContext,
 )
-
-# Neutral ``v3_compatibility`` is the source of truth. Legacy ``v3_compatibility`` remains an importable alias.
 
 
 class V3CompatibilityReadPath(str, Enum):

@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from config.memory_rollout import MemoryRolloutMode
-from utils.memory.v3_limited_rollout_config import (
+from utils.memory.v3.limited_rollout_config import (
     GLOBAL_READ_GATE_PATH,
     WRITE_CONVERGENCE_GATE_PATH,
     build_limited_rollout_config_bundle,

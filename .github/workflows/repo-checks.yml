@@ -109,6 +109,12 @@ jobs:
             --changed-files /tmp/changed-files.txt \
             --base "${{ needs.changes.outputs.diff_base }}"
 
+      - name: Test version-prefixed filename lint
+        run: python3 .github/scripts/test_check_version_prefixed_filenames.py
+
+      - name: Check version-prefixed filenames
+        run: python3 .github/scripts/check_version_prefixed_filenames.py
+
       - name: Check desktop changelog data
         if: github.event_name != 'pull_request'
         run: python3 .github/scripts/desktop-changelog.py validate

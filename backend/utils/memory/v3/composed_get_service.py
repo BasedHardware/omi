@@ -1,6 +1,6 @@
-"""Canonical module for ``utils.memory.v3_composed_get_service`` (WS-G8b).
+"""Canonical module for ``utils.memory.v3.composed_get_service`` (WS-G8b).
 
-Neutral ``v3_composed_get_service`` is the source of truth. Legacy ``v3_composed_get_service`` remains an importable alias.
+This module owns the composed V3 GET pipeline.
 """
 
 from __future__ import annotations
@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, cast
 
-from utils.memory.v3_archive_visibility_readiness import decide_default_visibility
+from utils.memory.v3.archive_visibility_readiness import decide_default_visibility
 
 DependencyStatus = Literal['enrolled_ready', 'legacy', 'fail']
 SnapshotStatus = Literal['ready', 'fail']
