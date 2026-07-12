@@ -2,7 +2,9 @@ import Foundation
 
 /// Checks every 60 seconds for recurring tasks that are due and triggers
 /// AI chat investigations for each one via TaskChatCoordinator (agent bridge).
-/// Dedup is automatic — investigateInBackground skips tasks with existing messages.
+/// Dedup gate: `agentStartedAt` (stamped by investigateInBackground) limits
+/// each task to one investigation per 4 hours — nothing advances `dueAt`, so
+/// without the gate every due task would re-fire on every 60s tick forever.
 @MainActor
 class RecurringTaskScheduler {
     static let shared = RecurringTaskScheduler()
@@ -49,37 +51,16 @@ class RecurringTaskScheduler {
 
         log("RecurringTaskScheduler: Found \(tasks.count) due recurring task(s)")
 
-        // Separate daily tasks for special handling
-        let dailyTasks = tasks.filter { $0.recurrenceRule == "daily" }
-        let otherTasks = tasks.filter { $0.recurrenceRule != "daily" }
-
-        // Handle daily tasks with lighter touch - just check if investigation already exists
-        for task in dailyTasks {
-            // Only investigate if no recent chat session exists
-            // (can't use || with await because the rhs is an @autoclosure)
-            let needsInvestigation: Bool
-            if task.chatSessionId == nil {
-                needsInvestigation = true
-            } else {
-                needsInvestigation = await shouldReinvestigateDaily(task: task)
-            }
-            if needsInvestigation {
-                await coordinator.investigateInBackground(for: task)
-            }
-        }
-
-        // Handle other recurring tasks normally
-        for task in otherTasks {
+        for task in tasks where Self.shouldInvestigate(lastInvestigatedAt: task.agentStartedAt) {
             await coordinator.investigateInBackground(for: task)
         }
     }
 
-    /// Check if a daily task should be re-investigated (less frequent than other tasks)
-    private func shouldReinvestigateDaily(task: TaskActionItem) async -> Bool {
-        // For daily tasks, only re-investigate if more than 4 hours have passed
-        // to avoid overwhelming the user with daily task investigations
-        guard let lastInvestigation = task.agentStartedAt else { return true }
-        let hoursSinceLastInvestigation = Date().timeIntervalSince(lastInvestigation) / 3600
-        return hoursSinceLastInvestigation > 4
+    /// One investigation per task per 4 hours, all recurrence kinds.
+    /// (The old daily-only gate also read `chatSessionId`, which nothing on
+    /// the kernel path ever writes — it was permanently nil.)
+    static func shouldInvestigate(lastInvestigatedAt: Date?, now: Date = Date()) -> Bool {
+        guard let lastInvestigatedAt else { return true }
+        return now.timeIntervalSince(lastInvestigatedAt) > 4 * 3600
     }
 }

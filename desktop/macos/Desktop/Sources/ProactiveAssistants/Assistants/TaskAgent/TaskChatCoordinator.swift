@@ -229,7 +229,12 @@ final class TaskChatCoordinator: ObservableObject {
 
   func investigateInBackground(for task: TaskActionItem) async {
     await openThread(for: task, createIfNeeded: true, revealPanel: false)
-    guard let state = activeTaskState, !state.isSending else { return }
+    // openThread can early-exit (isOpening) or fail without resetting state when
+    // revealPanel is false — activeTaskState may still belong to a previous task.
+    // Never send this task's prompt into another task's thread.
+    guard activeTaskId == task.id, let state = activeTaskState, !state.isSending else { return }
+    // Stamp before sending: RecurringTaskScheduler gates re-investigation on this.
+    try? await ActionItemStorage.shared.updateAgentStartedAt(taskId: task.id, startedAt: Date())
     await state.sendMessage(
       TaskAgentSettings.shared.buildCanonicalTaskPrompt(for: task),
       taskContext: activeContextPacket

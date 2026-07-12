@@ -1485,6 +1485,31 @@ actor ActionItemStorage {
         }
     }
 
+    /// Stamp when a background investigation last started for a task —
+    /// RecurringTaskScheduler's dedup gate. Leaves all other agent fields alone.
+    func updateAgentStartedAt(taskId: String, startedAt: Date) async throws {
+        let db = try await ensureInitialized()
+
+        try await db.write { database in
+            var record: ActionItemRecord?
+            if taskId.hasPrefix("local_"), let localId = Int64(taskId.dropFirst(6)) {
+                record = try ActionItemRecord.fetchOne(database, key: localId)
+            } else {
+                record = try ActionItemRecord
+                    .filter(Column("backendId") == taskId)
+                    .fetchOne(database)
+            }
+
+            guard var rec = record else {
+                log("ActionItemStorage: updateAgentStartedAt - record not found for taskId \(taskId)")
+                return
+            }
+
+            rec.agentStartedAt = startedAt
+            try rec.update(database)
+        }
+    }
+
     // MARK: - Chat Session
 
     /// Update chat session ID for a task
