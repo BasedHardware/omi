@@ -742,9 +742,14 @@ final class WALService: ObservableObject {
             }
         }
 
-        var workingWals = wals
+        // Reconcile operates on a pre-await snapshot because it runs per-job network
+        // awaits on the main actor; merge its id-keyed transitions back onto the live
+        // array so WALs appended during those awaits are not dropped (see
+        // WALCloudSyncLogic.mergeReconciledUploads).
+        let snapshot = wals
+        var workingWals = snapshot
         if await reconciler.reconcileUploadedWals(wals: &workingWals, walDirectory: walDirectory) {
-            wals = workingWals
+            wals = WALCloudSyncLogic.mergeReconciledUploads(live: wals, snapshot: snapshot, reconciled: workingWals)
             updatePendingWals()
             saveWals()
         }

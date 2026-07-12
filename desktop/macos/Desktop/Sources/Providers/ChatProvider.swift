@@ -16,25 +16,6 @@ extension UserDefaults {
     }
 }
 
-private final class PendingToolTraceInputStore: @unchecked Sendable {
-    typealias Entry = (name: String, inputJson: String, started: ContinuousClock.Instant)
-
-    private let lock = NSLock()
-    private var entries: [String: Entry] = [:]
-
-    func set(_ entry: Entry, forKey key: String) {
-        lock.withLock {
-            entries[key] = entry
-        }
-    }
-
-    func removeValue(forKey key: String) -> Entry? {
-        lock.withLock {
-            entries.removeValue(forKey: key)
-        }
-    }
-}
-
 // MARK: - Chat Session Model
 
 /// A chat session that groups related messages
@@ -471,6 +452,28 @@ final class ChatResponseMetrics: @unchecked Sendable {
         }
         let numStr = result[match].components(separatedBy: " ").first ?? "0"
         return Int(numStr) ?? 0
+    }
+}
+
+final class ChatToolTraceInputStore: @unchecked Sendable {
+    struct Entry {
+        let inputJson: String
+        let started: ContinuousClock.Instant
+    }
+
+    private let lock = NSLock()
+    private var entries: [String: Entry] = [:]
+
+    func record(id: String, inputJson: String, started: ContinuousClock.Instant = .now) {
+        lock.lock()
+        entries[id] = Entry(inputJson: inputJson, started: started)
+        lock.unlock()
+    }
+
+    func take(id: String) -> Entry? {
+        lock.lock()
+        defer { lock.unlock() }
+        return entries.removeValue(forKey: id)
     }
 }
 
@@ -923,8 +926,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// Watchdog tasks capture their gen and only reset state if it still
     /// matches — so a watchdog fired by a stuck send #N won't cancel a
     /// later, healthy send #N+1. See sendMessage() and stopAgent().
-    private var sendGeneration: Int = 0
-    private var activeBridgeSendGeneration: Int?
+private var sendGeneration: Int = 0
+private var sendLockOwnership = ChatSendLockOwnership()
+private var activeBridgeSendGeneration: Int?
+    private var activeChatTelemetryAttempt: (generation: Int, attempt: ChatQueryTelemetryAttempt)?
+    private var activeChatTurnLifecycle: (generation: Int, lifecycle: ChatTurnLifecycle)?
+    private var activeChatClientTurnId: (generation: Int, id: String)?
+    private var activeStopReason: (generation: Int, reason: ChatTurnStopReason)?
 
     /// Set to a send's generation when the 180s watchdog fires for it, *before*
     /// the watchdog interrupts the bridge. `interrupt()` resumes the in-flight
@@ -1394,7 +1402,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         await ensureBridgeStarted()
     }
 
-    private func ensureBridgeStarted(fromModeSwitch: Bool = false) async -> Bool {
+    private func ensureBridgeStarted(
+        fromModeSwitch: Bool = false,
+        authoritativeGeneration: Int? = nil
+    ) async -> Bool {
         // Wait for any in-flight mode switch to finish before touching the bridge.
         // Without this, a query arriving mid-switch could restart the OLD bridge
         // with the wrong harness mode. Skipped when called from switchBridgeMode
@@ -1466,13 +1477,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             return true
         } catch {
             logError("Failed to start agent bridge", error: error)
-            let rawError = String(describing: error)
-            if let bridgeError = error as? BridgeError, let card = ChatErrorState.from(bridgeError) {
-                currentError = card
-                errorMessage = nil
-            } else {
-                AnalyticsManager.shared.chatAgentError(error: "AI not available: bridge failed to start", rawError: rawError)
-                errorMessage = "AI not available: \(error.localizedDescription)"
+            let mayMutateSendState = authoritativeGeneration.map { sendGeneration == $0 } ?? true
+            if mayMutateSendState {
+                if let bridgeError = error as? BridgeError, let card = ChatErrorState.from(bridgeError) {
+                    currentError = card
+                    errorMessage = nil
+                } else {
+                    errorMessage = "AI not available: \(error.localizedDescription)"
+                }
             }
             return false
         }
@@ -1893,9 +1905,15 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     ///   - title: Optional session title
     ///   - skipGreeting: Skip the initial AI greeting message
     ///   - appId: Override app ID (e.g. "task-chat" to isolate task sessions from default chat)
-    func createNewSession(title: String? = nil, skipGreeting: Bool = false, appId: String? = nil) async -> ChatSession? {
+    func createNewSession(
+        title: String? = nil,
+        skipGreeting: Bool = false,
+        appId: String? = nil,
+        authoritativeSendGeneration: Int? = nil
+    ) async -> ChatSession? {
         do {
             let session = try await APIClient.shared.createChatSession(title: title, appId: appId ?? selectedAppId)
+            guard authoritativeSendGeneration.map({ sendGeneration == $0 }) ?? true else { return nil }
             sessions.insert(session, at: 0)
             currentSession = session
             isInDefaultChat = false
@@ -1906,24 +1924,30 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
             // Generate initial greeting message (skip for task chats that send their own context)
             if !skipGreeting {
-                await fetchInitialMessage(for: session)
+                await fetchInitialMessage(for: session, authoritativeSendGeneration: authoritativeSendGeneration)
             }
 
             return session
         } catch {
             logError("Failed to create chat session", error: error)
-            errorMessage = "Failed to create new chat"
+            if authoritativeSendGeneration.map({ sendGeneration == $0 }) ?? true {
+                errorMessage = "Failed to create new chat"
+            }
             return nil
         }
     }
 
     /// Fetch and display an initial greeting message for a new session
-    private func fetchInitialMessage(for session: ChatSession) async {
+    private func fetchInitialMessage(
+        for session: ChatSession,
+        authoritativeSendGeneration: Int? = nil
+    ) async {
         do {
             let response = try await APIClient.shared.getInitialMessage(
                 sessionId: session.id,
                 appId: selectedAppId
             )
+            guard authoritativeSendGeneration.map({ sendGeneration == $0 }) ?? true else { return }
 
             // Add the AI greeting to messages (already has server ID)
             let greetingMessage = ChatMessage(
@@ -3094,6 +3118,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     @discardableResult
     func stopAgent(owner: ChatTurnOwner) -> Bool {
+        stopAgent(owner: owner, reason: .userStop)
+    }
+
+    @discardableResult
+    func stopAgent(owner: ChatTurnOwner, reason: ChatTurnStopReason) -> Bool {
         guard isSending else { return false }
         guard let activeTurnOwner, owner.canInterrupt(activeTurnOwner) else {
             log("ChatProvider: ignoring stop from non-owner turn")
@@ -3101,6 +3130,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
         isStopping = true
         let stoppedGen = sendGeneration
+        activeStopReason = (generation: stoppedGen, reason: reason)
+        if activeChatTurnLifecycle?.generation == stoppedGen {
+            activeChatTurnLifecycle?.lifecycle.revoke(.stop(reason))
+        }
         sendGeneration += 1
         let myGen = sendGeneration
         Task {
@@ -3121,9 +3154,27 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // after a short grace so the user's next query is not silently swallowed.
             try? await Task.sleep(nanoseconds: 3_000_000_000)
             await MainActor.run {
-                if self.isSending && self.sendGeneration == myGen {
+                if self.isSending,
+                   self.sendGeneration == myGen,
+                   self.sendLockOwnership.generation == stoppedGen {
                     log("ChatProvider: interrupt didn't close stream in 3s — force-resetting isSending")
-                    self.releaseSendLock(sendGeneration: myGen)
+                    let activeClientTurnId = self.activeChatClientTurnId.flatMap {
+                        $0.generation == stoppedGen ? $0.id : nil
+                    }
+                    let partialResponse = activeClientTurnId.map { clientTurnId in
+                        self.messages.contains {
+                            $0.clientTurnId == clientTurnId
+                                && $0.sender == .ai
+                                && $0.isStreaming
+                                && (!$0.text.isEmpty || !$0.contentBlocks.isEmpty)
+                        }
+                    } ?? false
+                    self.finishActiveChatTelemetry(
+                        generation: stoppedGen,
+                        stopReason: reason,
+                        partialResponse: partialResponse
+                    )
+                    self.releaseSendLock(sendGeneration: stoppedGen)
                 }
             }
         }
@@ -3718,7 +3769,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         // Guard against concurrent sendMessage calls.
         // The bridge uses a single message continuation, so concurrent queries
         // would cause responses to be consumed by the wrong caller.
-        guard !isSending else {
+        guard !isSending, !sendLockOwnership.isHeld else {
             log("ChatProvider: sendMessage called while already sending, ignoring")
             return nil
         }
@@ -3743,31 +3794,62 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         // floating-bar / PTT entry points (nil for non-traced call sites).
         let tracer = QueryTracerContext.current
 
+        sendGeneration += 1
+        let sendGen = sendGeneration
+        guard sendLockOwnership.acquire(generation: sendGen) else {
+            log("ChatProvider: bridge send lock was held while isSending=false; rejecting send")
+            return nil
+        }
         isSending = true
         isStopping = false
         activeTurnOwner = turnOwner
         errorMessage = nil
         currentError = nil
-        sendGeneration += 1
-        let sendGen = sendGeneration
+        let telemetrySurface = Self.chatTelemetrySurface(
+            turnOwner: turnOwner,
+            isOnboarding: isOnboarding,
+            systemPromptStyle: systemPromptStyle
+        )
+        let telemetryAttempt = ChatQueryTelemetryAttempt(
+            attemptId: clientTurnId,
+            surface: telemetrySurface,
+            harness: activeBridgeHarness,
+            runtimeSurface: surfaceRef?.surfaceKind,
+            inputLength: trimmedText.count,
+            attachmentCount: pendingAttachments.count,
+            hasImage: Self.chatTelemetryHasImage(
+                explicitImagePresent: imageData != nil,
+                stagedImageAttachmentPresent: pendingAttachments.contains(where: \.isImage)
+            )
+        )
+        let turnLifecycle = ChatTurnLifecycle()
+        activeChatTelemetryAttempt = (generation: sendGen, attempt: telemetryAttempt)
+        activeChatTurnLifecycle = (generation: sendGen, lifecycle: turnLifecycle)
+        activeChatClientTurnId = (generation: sendGen, id: clientTurnId)
 
         // Ensure bridge is running
         tracer?.begin("bridge_ensure")
-        guard await ensureBridgeStarted() else {
+        let bridgeStarted = await ensureBridgeStarted(authoritativeGeneration: sendGen)
+        guard sendGeneration == sendGen, turnLifecycle.acceptsResult else {
+            tracer?.end("bridge_ensure", metadata: ["status": "cancelled"])
+            tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
+            telemetryAttempt.finish(stopReason: turnLifecycle.stopReason ?? stopReason(for: sendGen))
+            clearChatTelemetryState(for: sendGen)
+            releaseSendLock(sendGeneration: sendGen)
+            return nil
+        }
+        guard bridgeStarted else {
             tracer?.end("bridge_ensure", metadata: ["error": "bridge_failed"])
             tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
             if currentError == nil, errorMessage?.isEmpty ?? true {
                 errorMessage = "AI not available"
             }
+            telemetryAttempt.fail(errorClass: .bridgeUnavailable)
+            clearChatTelemetryState(for: sendGen)
             releaseSendLock(sendGeneration: sendGen)
             return nil
         }
         tracer?.end("bridge_ensure", metadata: ["status": "ok"])
-        guard sendGeneration == sendGen else {
-            tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
-            clearSendLockState()
-            return nil
-        }
 
         // Show upgrade prompt if over threshold but don't block the message.
         // Never for paid/BYOK users — they aren't subject to the free Omi spend cap.
@@ -3783,11 +3865,20 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         if !isInDefaultChat {
             // Session mode - require a session
             if currentSession == nil {
-                _ = await createNewSession()
+                _ = await createNewSession(authoritativeSendGeneration: sendGen)
+            }
+            guard sendGeneration == sendGen, turnLifecycle.acceptsResult else {
+                tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
+                telemetryAttempt.finish(stopReason: turnLifecycle.stopReason ?? stopReason(for: sendGen))
+                clearChatTelemetryState(for: sendGen)
+                releaseSendLock(sendGeneration: sendGen)
+                return nil
             }
             guard let sid = currentSessionId else {
                 errorMessage = "Failed to create chat session"
                 tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
+                telemetryAttempt.fail(errorClass: .sessionSetup)
+                clearChatTelemetryState(for: sendGen)
                 releaseSendLock(sendGeneration: sendGen)
                 return nil
             }
@@ -3795,7 +3886,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
         guard sendGeneration == sendGen else {
             tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
-            clearSendLockState()
+            telemetryAttempt.finish(stopReason: stopReason(for: sendGen))
+            clearChatTelemetryState(for: sendGen)
+            releaseSendLock(sendGeneration: sendGen)
             return nil
         }
 
@@ -3806,6 +3899,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         // release isSending so the user's next query isn't silently dropped
         // by the "already sending" guard. The generation check means the
         // watchdog only fires if no later send has replaced this one.
+        let watchdogAIMessageId = Self.messageIds(forClientTurnId: clientTurnId).assistant
         Task { [weak self] in
             do {
                 try await Task.sleep(nanoseconds: 180_000_000_000)
@@ -3819,7 +3913,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 // Mark this generation before interrupting: interrupt() resumes the
                 // in-flight request with `.stopped`, and the catch below uses this
                 // marker to surface the timeout instead of silently dropping the turn.
-                self.sendWatchdogFiredGeneration = sendGen
+                if turnLifecycle.revoke(.watchdogTimeout) {
+                    self.sendWatchdogFiredGeneration = sendGen
+                } else if turnLifecycle.revocationReason == .toolStall {
+                    log("ChatProvider: send watchdog preserving earlier tool-stall terminal cause")
+                }
                 return true
             }
             guard stillStuck else { return }
@@ -3834,8 +3932,63 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // increase, so it never matches a later send.
             await MainActor.run {
                 guard self.isSending, self.sendGeneration == sendGen else { return }
+                let revocationReason = turnLifecycle.revocationReason
+                let toolStallAbortFired = self.sendToolStallAbortGeneration == sendGen
+                    || revocationReason == .toolStall
+                let watchdogFired = self.sendWatchdogFiredGeneration == sendGen
+                    || revocationReason == .watchdogTimeout
+
+                // Preserve already-delivered output, but make every visible row
+                // terminal before releasing the provider for another send.
+                self.streamingBuffer.cancelPendingFlush()
+                self.flushStreamingBuffer()
+                var partialResponse = false
+                if let index = self.messages.firstIndex(where: { $0.id == watchdogAIMessageId }) {
+                    partialResponse = !self.messages[index].text.isEmpty
+                        || !self.messages[index].contentBlocks.isEmpty
+                    if partialResponse {
+                        self.messages[index].isStreaming = false
+                        ToolCallBlockUpdater.completeRemainingToolCalls(
+                            in: &self.messages[index].contentBlocks,
+                            terminalStatus: ChatProvider.lateResultToolStatus(
+                                watchdogFired: watchdogFired,
+                                toolStallAbortFired: toolStallAbortFired,
+                                stopReason: turnLifecycle.stopReason
+                            )
+                        )
+                    } else {
+                        self.messages.remove(at: index)
+                    }
+                }
+
+                let traceReason = toolStallAbortFired ? "tool_stall" : "watchdog_timeout"
+                tracer?.mark("forced_terminal_fallback", metadata: ["reason": traceReason])
+                tracer?.end("ttft")
+                tracer?.end("generation")
+                tracer?.end("llm_request")
+                tracer?.finalize(tokenCount: 0, model: model ?? self.modelOverride)
+
+                if let terminalMessage = ChatProvider.stoppedTurnErrorMessage(
+                    watchdogFired: watchdogFired,
+                    toolStallAbortFired: toolStallAbortFired
+                ) {
+                    self.currentError = nil
+                    self.errorMessage = terminalMessage
+                }
+                if !telemetryAttempt.isTerminal {
+                    if toolStallAbortFired {
+                        telemetryAttempt.fail(errorClass: .toolStall, partialResponse: partialResponse)
+                    } else if watchdogFired {
+                        telemetryAttempt.fail(errorClass: .timeout, partialResponse: partialResponse)
+                    } else {
+                        telemetryAttempt.finish(
+                            stopReason: turnLifecycle.stopReason ?? self.stopReason(for: sendGen),
+                            partialResponse: partialResponse
+                        )
+                    }
+                }
+                self.clearChatTelemetryState(for: sendGen)
                 _ = self.releaseSendLock(sendGeneration: sendGen)
-                self.errorMessage = "Response took too long. Try again."
             }
         }
 
@@ -3846,15 +3999,23 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         var attachmentsForMessage: [ChatAttachment] = []
         if !pendingAttachments.isEmpty {
             let ok = await awaitPendingUploads()
-            guard sendGeneration == sendGen else {
+            guard ChatQueryResultAuthority.acceptsContinuation(
+                currentGeneration: sendGeneration,
+                turnGeneration: sendGen,
+                turnAcceptsResult: turnLifecycle.acceptsResult
+            ) else {
                 tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
-                clearSendLockState()
+                telemetryAttempt.finish(stopReason: turnLifecycle.stopReason ?? stopReason(for: sendGen))
+                clearChatTelemetryState(for: sendGen)
+                releaseSendLock(sendGeneration: sendGen)
                 return nil
             }
             if !ok {
                 releaseSendLock(sendGeneration: sendGen)
                 errorMessage = "Some attachments failed to upload. Remove them and try again."
                 tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
+                telemetryAttempt.fail(errorClass: .attachmentUpload)
+                clearChatTelemetryState(for: sendGen)
                 return nil
             }
             attachmentsForMessage = pendingAttachments
@@ -3874,7 +4035,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         // the entire duration of the ACP query, so the poll timer is suppressed
         // the whole time — by the time isSending is released the user message
         // save has almost always already completed and its ID has been synced.
-        let userMessageId = UUID().uuidString
+        let turnMessageIds = Self.messageIds(forClientTurnId: clientTurnId)
+        let userMessageId = turnMessageIds.user
         let isFirstMessage = messages.isEmpty
         let capturedSessionId = sessionId
         let capturedAppId = overrideAppId ?? selectedAppId
@@ -3939,7 +4101,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         localSendToken = LocalSendToken(generation: sendGeneration)
         onAccepted?()
 
-        // Track onboarding user messages with full content
+        // Track onboarding user-message shape without content.
         if isOnboarding {
             AnalyticsManager.shared.onboardingChatMessageDetailed(
                 role: "user", text: trimmedText, step: "chat"
@@ -3958,7 +4120,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         // Lifecycle: local UUID → streaming text appended token by token →
         // isStreaming=false → isSending=false → backend save → ID replaced with
         // server ID, isSynced=true (rating buttons appear).
-        let aiMessageId = UUID().uuidString
+        let aiMessageId = turnMessageIds.assistant
         let aiMessage = ChatMessage(
             id: aiMessageId,
             clientTurnId: clientTurnId,
@@ -3969,8 +4131,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         )
         messages.append(aiMessage)
 
-        // Analytics: track timing and tool usage
-        let queryStartTime = Date()
+        // Analytics: track tool usage; the telemetry attempt owns wall-clock timing.
         var toolNames: [String] = []
         var toolStartTimes: [String: Date] = [:]
         let responseMetrics = ChatResponseMetrics()
@@ -3992,7 +4153,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         // Refresh memories each turn so <user_facts> stays current.
         await refreshMemoriesForPrompt()
         let promptContext = formatMemoriesSection()
-        var stoppedByUser = false
         do {
             // Use the system prompt built at warmup. The agent bridge applies it only
             // at session/new; for the normal reused-session path it is ignored.
@@ -4110,7 +4270,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // Kernel control tools (spawn_agent, list_agent_sessions, …) execute in
             // the Node runtime and only surface via tool_activity + tool_result_display.
             // Pair started input with completed output for QueryTracer.tool_executions.
-            let pendingToolTraceInputs = PendingToolTraceInputStore()
+            let pendingToolTraceInputs = ChatToolTraceInputStore()
+            let callbackQueue = ChatTurnCallbackQueue()
             let textDeltaHandler: AgentClient.TextDeltaHandler = { [weak self] delta in
                 let nowMs = ChatProvider.monotonicNowMs()
                 if responseMetrics.markFirstOutputIfNeeded() {
@@ -4120,10 +4281,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 if responseMetrics.markGenerationStartedIfNeeded() {
                     tracer?.begin("generation")
                 }
-                Task { @MainActor [weak self] in
-                    self?.appendToMessage(id: aiMessageId, text: delta)
+                callbackQueue.submit { @MainActor [weak self] in
+                    guard let self,
+                          self.sendGeneration == sendGen,
+                          turnLifecycle.acceptsResult else { return }
+                    self.appendToMessage(id: aiMessageId, text: delta)
                     let transitions = await stallDetector.step(kind: .other, atMs: nowMs)
-                    self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
+                    self.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
                 }
             }
             let toolCallHandler: AgentClient.ToolCallHandler = { callId, name, input in
@@ -4136,7 +4300,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     originatingSurfaceRef: resolvedSurface,
                     permissionAuthorization: permissionAuthorization,
                     isOnboardingSurface: currentIsOnboardingSurface)
-                log("OMI tool \(name) executed for callId=\(callId)")
+                log("OMI tool \(ChatTelemetryDimension.toolName(name)) executed for callId=\(callId)")
                 responseMetrics.recordToolResult(name: name, result: result)
                 return result
             }
@@ -4154,26 +4318,28 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 // start/end windows across spans reveal parallel vs sequential
                 // tool execution. A tool_use start also counts as first output
                 // for TTFT when the model leads with a tool call (no text first).
-                let spanKey = "tool:\(toolUseId ?? name)"
+                let traceToolName = tracer?.toolNameForTrace(name) ?? ChatTelemetryDimension.toolName(name)
+                let spanKey = "tool:\(toolUseId ?? traceToolName)"
                 if status == "started" {
                     if responseMetrics.markFirstOutputIfNeeded() {
                         tracer?.end("ttft")
                         tracer?.markTTFT()
                     }
-                    tracer?.begin(spanKey, metadata: ["tool": name])
+                    tracer?.begin(spanKey, metadata: ["tool": traceToolName])
                     if let input {
                         let inputJson =
                             (try? String(data: JSONSerialization.data(withJSONObject: input), encoding: .utf8))
                             ?? "\(input)"
-                        pendingToolTraceInputs.set(
-                            (name, inputJson, ContinuousClock.now),
-                            forKey: trackedId)
+                        pendingToolTraceInputs.record(id: trackedId, inputJson: inputJson)
                     }
                 } else if toolStatus != .running {
                     tracer?.end(spanKey)
                 }
-                Task { @MainActor [weak self] in
-                    self?.addToolActivity(
+                callbackQueue.submit { @MainActor [weak self] in
+                    guard let self,
+                          self.sendGeneration == sendGen,
+                          turnLifecycle.acceptsResult else { return }
+                    self.addToolActivity(
                         messageId: aiMessageId,
                         toolName: name,
                         status: toolStatus,
@@ -4187,9 +4353,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         if (name.contains("browser") || name.contains("playwright")) {
                             let token = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
                             if token.isEmpty {
-                                log("ChatProvider: Browser tool \(name) called without extension token — aborting query and prompting setup")
-                                self?.needsBrowserExtensionSetup = true
-                                self?.stopAgent(owner: turnOwner)
+                                log(
+                                    "ChatProvider: Browser tool \(ChatTelemetryDimension.toolName(name)) "
+                                        + "called without extension token — aborting query and prompting setup"
+                                )
+                                self.needsBrowserExtensionSetup = true
+                                self.stopAgent(owner: turnOwner, reason: .browserExtensionMissing)
                                 // Keep floating-bar sessions non-intrusive: do not foreground
                                 // the main window when the query originated from the floating bar.
                                 if systemPromptStyle != .floating {
@@ -4215,25 +4384,28 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         }
                     }
                     let transitions = await stallDetector.step(kind: detectorKind, atMs: nowMs)
-                    self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
+                    self.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
                 }
             }
             let thinkingDeltaHandler: AgentClient.ThinkingDeltaHandler = { [weak self] text in
                 let nowMs = ChatProvider.monotonicNowMs()
-                Task { @MainActor [weak self] in
-                    self?.appendThinking(messageId: aiMessageId, text: text)
+                callbackQueue.submit { @MainActor [weak self] in
+                    guard let self,
+                          self.sendGeneration == sendGen,
+                          turnLifecycle.acceptsResult else { return }
+                    self.appendThinking(messageId: aiMessageId, text: text)
                     let transitions = await stallDetector.step(kind: .other, atMs: nowMs)
-                    self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
+                    self.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
                 }
             }
             let toolResultDisplayHandler: AgentClient.ToolResultDisplayHandler = { [weak self] toolUseId, name, output in
                 let nowMs = ChatProvider.monotonicNowMs()
-                if tracer != nil {
+                if let tracer {
                     let trackedId = ChatProvider.stallTrackingId(toolUseId: toolUseId, name: name)
-                    let pending = pendingToolTraceInputs.removeValue(forKey: trackedId)
+                    let pending = pendingToolTraceInputs.take(id: trackedId)
                     let inputJson = pending?.inputJson ?? ""
                     let durationMs = pending.map { (ContinuousClock.now - $0.started).milliseconds }
-                    tracer?.captureToolExecution(
+                    tracer.captureToolExecution(
                         toolUseId: toolUseId.isEmpty ? nil : toolUseId,
                         name: name,
                         input: inputJson,
@@ -4241,11 +4413,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         durationMs: durationMs
                     )
                 }
-                Task { @MainActor [weak self] in
-                    self?.addToolResult(messageId: aiMessageId, toolUseId: toolUseId, name: name, output: output)
+                callbackQueue.submit { @MainActor [weak self] in
+                    guard let self,
+                          self.sendGeneration == sendGen,
+                          turnLifecycle.acceptsResult else { return }
+                    self.addToolResult(messageId: aiMessageId, toolUseId: toolUseId, name: name, output: output)
                     responseMetrics.recordToolResult(name: name, result: output)
                     let transitions = await stallDetector.step(kind: .other, atMs: nowMs)
-                    self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
+                    self.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
                 }
             }
 
@@ -4261,7 +4436,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     let transitions = await stallDetector.tick(atMs: nowMs)
                     if !transitions.isEmpty {
                         await MainActor.run { [weak self] in
-                            self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
+                            guard let self,
+                                  self.sendGeneration == sendGen,
+                                  turnLifecycle.acceptsResult else { return }
+                            self.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
                         }
                     }
                     if !issuedToolStallAbort {
@@ -4274,6 +4452,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                             let shouldInterrupt = await MainActor.run { () -> Bool in
                                 guard let self, self.isSending, self.sendGeneration == sendGen else { return false }
                                 self.sendToolStallAbortGeneration = sendGen
+                                turnLifecycle.revoke(.toolStall)
                                 log(
                                     "ChatProvider: tool stall guard fired at \\(Self.perToolStallAbortMs / 1_000)s "
                                         + "(active_tools=\\(overdueToolIds.count)); interrupting bridge"
@@ -4305,33 +4484,152 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 tracer.begin("ttft")
             }
 
+            // Stop can arrive while prompt context/backfill is still awaiting.
+            // Do not launch a bridge query after ownership was revoked.
+            guard ChatQueryResultAuthority.acceptsContinuation(
+                currentGeneration: sendGeneration,
+                turnGeneration: sendGen,
+                turnAcceptsResult: turnLifecycle.acceptsResult
+            ) else {
+                tracer?.end("ttft")
+                tracer?.end("llm_request")
+                tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
+                if let index = messages.firstIndex(where: { $0.id == aiMessageId }),
+                   messages[index].text.isEmpty,
+                   messages[index].contentBlocks.isEmpty {
+                    messages.remove(at: index)
+                }
+                telemetryAttempt.finish(stopReason: turnLifecycle.stopReason ?? stopReason(for: sendGen))
+                clearChatTelemetryState(for: sendGen)
+                releaseSendLock(sendGeneration: sendGen)
+                return nil
+            }
+
             activeBridgeSendGeneration = sendGen
-            let queryResult = try await resolvedAgentClient().query(
-                prompt: trimmedText,
-                systemPrompt: systemPrompt,
-                surface: resolvedSurface,
-                cwd: effectiveAgentWorkingDirectory(),
-                mode: chatMode.rawValue,
-                model: effectiveRequestModel,
-                imageData: effectiveImageData,
-                attachmentMetadataJson: Self.attachmentContextPrompt(for: attachmentsForMessage),
-                onTextDelta: textDeltaHandler,
-                onToolCall: toolCallHandler,
-                onToolActivity: toolActivityHandler,
-                onThinkingDelta: thinkingDeltaHandler,
-                onToolResultDisplay: toolResultDisplayHandler,
-                onAuthRequired: { [weak self] methods, authUrl in
-                    Task { @MainActor [weak self] in
-                        self?.handleClaudeAuthRequired(methods: methods, authUrl: authUrl)
+            let queryResult: AgentClient.QueryResult
+            do {
+                queryResult = try await resolvedAgentClient().query(
+                    prompt: trimmedText,
+                    systemPrompt: systemPrompt,
+                    surface: resolvedSurface,
+                    cwd: effectiveAgentWorkingDirectory(),
+                    mode: chatMode.rawValue,
+                    model: effectiveRequestModel,
+                    imageData: effectiveImageData,
+                    attachmentMetadataJson: Self.attachmentContextPrompt(for: attachmentsForMessage),
+                    onTextDelta: textDeltaHandler,
+                    onToolCall: toolCallHandler,
+                    onToolActivity: toolActivityHandler,
+                    onThinkingDelta: thinkingDeltaHandler,
+                    onToolResultDisplay: toolResultDisplayHandler,
+                    onAuthRequired: { [weak self] methods, authUrl in
+                        callbackQueue.submit { @MainActor [weak self] in
+                            guard let self,
+                                  self.sendGeneration == sendGen,
+                                  turnLifecycle.acceptsResult else { return }
+                            self.handleClaudeAuthRequired(methods: methods, authUrl: authUrl)
+                        }
+                    },
+                    onAuthSuccess: { [weak self] in
+                        callbackQueue.submit { @MainActor [weak self] in
+                            guard let self,
+                                  self.sendGeneration == sendGen,
+                                  turnLifecycle.acceptsResult else { return }
+                            self.handleClaudeAuthSuccess()
+                        }
                     }
-                },
-                onAuthSuccess: { [weak self] in
-                    Task { @MainActor [weak self] in
-                        self?.handleClaudeAuthSuccess()
+                )
+            } catch {
+                await callbackQueue.drain()
+                throw error
+            }
+            await callbackQueue.drain()
+            if activeBridgeSendGeneration == sendGen {
+                activeBridgeSendGeneration = nil
+            }
+
+            let watchdogFiredBeforeResult = sendWatchdogFiredGeneration == sendGen
+            let toolStallAbortFiredBeforeResult = sendToolStallAbortGeneration == sendGen
+            guard ChatQueryResultAuthority.accepts(
+                currentGeneration: sendGeneration,
+                resultGeneration: sendGen,
+                turnAcceptsResult: turnLifecycle.acceptsResult,
+                watchdogFired: watchdogFiredBeforeResult,
+                toolStallAbortFired: toolStallAbortFiredBeforeResult
+            ) else {
+                // A stopped/timed-out bridge may still deliver a late success.
+                // Never let it resurrect the old bubble, overwrite a newer
+                // turn's bridge ownership, or persist a response the user did
+                // not accept. Remove only this turn's buffered segments.
+                streamingBuffer.discardPendingSegments(messageId: aiMessageId)
+                var hadPartialResponse = false
+                if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
+                    hadPartialResponse = !messages[index].text.isEmpty
+                        || !messages[index].contentBlocks.isEmpty
+                    if messages[index].text.isEmpty && messages[index].contentBlocks.isEmpty {
+                        messages.remove(at: index)
+                    } else {
+                        messages[index].isStreaming = false
+                        ToolCallBlockUpdater.completeRemainingToolCalls(
+                            in: &messages[index].contentBlocks,
+                            terminalStatus: ChatProvider.lateResultToolStatus(
+                                watchdogFired: watchdogFiredBeforeResult,
+                                toolStallAbortFired: toolStallAbortFiredBeforeResult,
+                                stopReason: turnLifecycle.stopReason
+                            )
+                        )
                     }
                 }
-            )
-            activeBridgeSendGeneration = nil
+
+                tracer?.mark("late_result_discarded", metadata: ["reason": "turn_revoked"])
+                tracer?.end("ttft")
+                tracer?.end("generation")
+                tracer?.end("llm_request")
+                tracer?.finalize(
+                    tokenCount: queryResult.outputTokens,
+                    model: effectiveRequestModel,
+                    inputTokens: queryResult.inputTokens,
+                    outputTokens: queryResult.outputTokens,
+                    cacheReadTokens: queryResult.cacheReadTokens,
+                    cacheWriteTokens: queryResult.cacheWriteTokens,
+                    costUsd: queryResult.costUsd
+                )
+
+                if !telemetryAttempt.isTerminal {
+                    if toolStallAbortFiredBeforeResult {
+                        telemetryAttempt.fail(
+                            errorClass: .toolStall,
+                            partialResponse: hadPartialResponse
+                        )
+                    } else if watchdogFiredBeforeResult {
+                        telemetryAttempt.fail(
+                            errorClass: .timeout,
+                            partialResponse: hadPartialResponse
+                        )
+                    } else {
+                        telemetryAttempt.finish(
+                            stopReason: stopReason(for: sendGen),
+                            partialResponse: hadPartialResponse
+                        )
+                    }
+                }
+                clearChatTelemetryState(for: sendGen)
+
+                if sendGeneration == sendGen {
+                    if let timeoutMessage = ChatProvider.stoppedTurnErrorMessage(
+                        watchdogFired: watchdogFiredBeforeResult,
+                        toolStallAbortFired: toolStallAbortFiredBeforeResult
+                    ) {
+                        errorMessage = timeoutMessage
+                    }
+                    releaseSendLock(sendGeneration: sendGen)
+                } else if isStopping {
+                    releaseSendLock(sendGeneration: sendGen)
+                }
+                log("ChatProvider: discarded late result for revoked generation \(sendGen)")
+                return nil
+            }
+
             // Flush any remaining buffered streaming text before finalizing
             streamingBuffer.cancelPendingFlush()
             flushStreamingBuffer()
@@ -4396,6 +4694,25 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 cacheWriteTokens: queryResult.cacheWriteTokens,
                 costUsd: queryResult.costUsd
             )
+
+            // The user-visible query is complete as soon as the final response
+            // is in the timeline. Persistence and title generation are separate
+            // background reliability concerns and must not inflate query latency
+            // or turn a successful answer into a failed attempt.
+            turnLifecycle.complete()
+            telemetryAttempt.complete(metrics: ChatQueryCompletionMetrics(
+                toolCallCount: toolNames.count,
+                toolNames: toolNames,
+                costUsd: queryResult.costUsd,
+                responseLength: messageText.count,
+                screenToolRequested: metricsSnapshot.screenContext.screenToolRequested,
+                screenToolSucceeded: metricsSnapshot.screenContext.screenToolSucceeded,
+                screenToolApprovalRequired: metricsSnapshot.screenContext.screenToolApprovalRequired,
+                screenToolFailureCodes: metricsSnapshot.screenContext.screenToolFailureCodes,
+                runtimeRunId: queryResult.runId,
+                runtimeAttemptId: queryResult.attemptId
+            ))
+            clearChatTelemetryState(for: sendGen)
 
             // Release the sending lock as soon as the AI response is visible in the
             // UI. Backend persistence is slow (can timeout at 30s+) and should not
@@ -4465,7 +4782,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
             log("Chat response complete")
 
-            // Track onboarding AI responses with full content and tool calls
+            // Track onboarding response shape and bounded tool dimensions without content.
             if isOnboarding {
                 let aiText = messages.first(where: { $0.id == aiMessageId })?.text ?? queryResult.text
                 AnalyticsManager.shared.onboardingChatMessageDetailed(
@@ -4476,21 +4793,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     model: effectiveRequestModel
                 )
             }
-
-            // Analytics: track query completion
-            let durationMs = Int(Date().timeIntervalSince(queryStartTime) * 1000)
-            let responseLength = messages.first(where: { $0.id == aiMessageId })?.text.count ?? 0
-            AnalyticsManager.shared.chatAgentQueryCompleted(
-                durationMs: durationMs,
-                toolCallCount: toolNames.count,
-                toolNames: toolNames,
-                costUsd: queryResult.costUsd,
-                messageLength: responseLength,
-                screenToolRequested: metricsSnapshot.screenContext.screenToolRequested,
-                screenToolSucceeded: metricsSnapshot.screenContext.screenToolSucceeded,
-                screenToolApprovalRequired: metricsSnapshot.screenContext.screenToolApprovalRequired,
-                screenToolFailureCodes: metricsSnapshot.screenContext.screenToolFailureCodes
-            )
 
             // Skip client-side cost telemetry for piMono because /v2/chat/completions
             // already logs Omi-account token/cost usage server-side. Question
@@ -4533,13 +4835,39 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
             completedResponseText = messageText
         } catch {
-            activeBridgeSendGeneration = nil
+            if activeBridgeSendGeneration == sendGen {
+                activeBridgeSendGeneration = nil
+            }
             // QueryTracer: error path — close spans and write the (partial) trace
             // so failed/timed-out queries still show up in benchmarks.
             tracer?.end("ttft")
             tracer?.end("generation")
             tracer?.end("llm_request")
             tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
+
+            // A timeout/stop fallback may already have finalized this turn and
+            // released the provider for a newer query. Do not flush the shared
+            // buffer or mutate global error state from this late failure.
+            if telemetryAttempt.isTerminal {
+                streamingBuffer.discardPendingSegments(messageId: aiMessageId)
+                if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
+                    if messages[index].text.isEmpty && messages[index].contentBlocks.isEmpty {
+                        messages.remove(at: index)
+                    } else {
+                        messages[index].isStreaming = false
+                        ToolCallBlockUpdater.completeRemainingToolCalls(
+                            in: &messages[index].contentBlocks,
+                            terminalStatus: ChatProvider.lateResultToolStatus(
+                                watchdogFired: sendWatchdogFiredGeneration == sendGen,
+                                toolStallAbortFired: sendToolStallAbortGeneration == sendGen,
+                                stopReason: turnLifecycle.stopReason
+                            )
+                        )
+                    }
+                }
+                log("ChatProvider: discarded late failure for terminal generation \(sendGen)")
+                return nil
+            }
 
             // On timeout, cancel the stuck ACP session so it's not left dangling
             if let bridgeError = error as? BridgeError, case .timeout = bridgeError {
@@ -4550,6 +4878,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // Flush any remaining buffered streaming text before handling the error
             streamingBuffer.cancelPendingFlush()
             flushStreamingBuffer()
+            let watchdogFired = (sendWatchdogFiredGeneration == sendGen)
+            let toolStallAbortFired = (sendToolStallAbortGeneration == sendGen)
+            let explicitStopReason = turnLifecycle.stopReason
+            let hadPartialResponse = messages.first(where: { $0.id == aiMessageId }).map {
+                !$0.text.isEmpty || !$0.contentBlocks.isEmpty
+            } ?? false
 
             // Only remove the AI message if it's still empty (no streamed text yet).
             // If text was already streamed and visible, keep it and just stop streaming.
@@ -4560,7 +4894,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     messages[index].isStreaming = false
                     completeRemainingToolCalls(
                         messageId: aiMessageId,
-                        terminalStatus: ChatProvider.remainingToolStatusAfterPartialResponseError(error)
+                        terminalStatus: ChatProvider.remainingToolStatusAfterPartialResponseError(
+                            error,
+                            watchdogFired: watchdogFired,
+                            toolStallAbortFired: toolStallAbortFired,
+                            stopReason: explicitStopReason
+                        )
                     )
                     log("Bridge error after partial response — keeping \(messages[index].text.count) chars of streamed text")
                     // Still try to persist the partial response.
@@ -4597,21 +4936,61 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 }
             }
 
-            logError("Failed to get AI response", error: error)
-            // Send both user-friendly and raw error to analytics for remote debugging
-            let rawError: String
-            if let bridgeError = error as? BridgeError {
-                rawError = String(describing: bridgeError)
+            if !watchdogFired, !toolStallAbortFired, let explicitStopReason {
+                telemetryAttempt.finish(
+                    stopReason: explicitStopReason,
+                    partialResponse: hadPartialResponse
+                )
+                if explicitStopReason == .browserExtensionMissing {
+                    logError(
+                        "Failed to get AI response attempt_id=\(telemetryAttempt.context.attemptId) error_class=\(ChatQueryErrorClass.browserExtensionMissing.rawValue)",
+                        error: error
+                    )
+                } else {
+                    log(
+                        "Chat query cancelled attempt_id=\(telemetryAttempt.context.attemptId) reason=\(explicitStopReason)"
+                    )
+                }
             } else {
-                rawError = "\(error)"
+                let telemetryDisposition = ChatQueryFailureDisposition.classify(
+                    error,
+                    watchdogFired: watchdogFired,
+                    toolStallAbortFired: toolStallAbortFired
+                )
+                switch telemetryDisposition {
+                case .failed(let errorClass):
+                    telemetryAttempt.fail(errorClass: errorClass, partialResponse: hadPartialResponse)
+                    logError(
+                        "Failed to get AI response attempt_id=\(telemetryAttempt.context.attemptId) error_class=\(errorClass.rawValue)",
+                        error: error
+                    )
+                case .cancelled(let reason):
+                    telemetryAttempt.cancel(reason: reason, partialResponse: hadPartialResponse)
+                    log(
+                        "Chat query cancelled attempt_id=\(telemetryAttempt.context.attemptId) reason=\(reason.rawValue)"
+                    )
+                }
             }
-            AnalyticsManager.shared.chatAgentError(error: error.localizedDescription, rawError: rawError)
+            clearChatTelemetryState(for: sendGen)
 
-            // Track onboarding errors with full context
+            // Preserve only a bounded error class in analytics. Raw details stay
+            // in the local log and Sentry error above.
             if isOnboarding {
+                let onboardingRole: String
+                if !watchdogFired, !toolStallAbortFired, let explicitStopReason {
+                    onboardingRole = explicitStopReason == .browserExtensionMissing ? "error" : "cancelled"
+                } else {
+                    onboardingRole = ChatQueryFailureDisposition.classify(
+                        error,
+                        watchdogFired: watchdogFired,
+                        toolStallAbortFired: toolStallAbortFired
+                    ).presentsUserError ? "error" : "cancelled"
+                }
                 AnalyticsManager.shared.onboardingChatMessageDetailed(
-                    role: "error", text: trimmedText, step: "chat",
-                    error: rawError
+                    role: onboardingRole,
+                    text: trimmedText,
+                    step: "chat",
+                    error: onboardingRole == "error" ? String(describing: error) : nil
                 )
             }
 
@@ -4629,8 +5008,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 // watchdog's own interrupt() — the turn timed out, so surface it
                 // instead of letting the turn vanish (the watchdog's own error-set
                 // races this catch and bails once `isSending` is released here).
-                let watchdogFired = (sendWatchdogFiredGeneration == sendGen)
-                let toolStallAbortFired = (sendToolStallAbortGeneration == sendGen)
                 sendWatchdogFiredGeneration = nil
                 sendToolStallAbortGeneration = nil
                 currentError = nil
@@ -4640,10 +5017,17 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 ) {
                     errorMessage = timeoutMessage
                 } else {
-                    stoppedByUser = true
                     lastFailedPrompt = nil
                     errorMessage = nil
                 }
+            } else if !ChatQueryFailureDisposition.classify(
+                error,
+                watchdogFired: watchdogFired,
+                toolStallAbortFired: toolStallAbortFired
+            ).presentsUserError {
+                lastFailedPrompt = nil
+                currentError = nil
+                errorMessage = nil
             } else if let bridgeError = error as? BridgeError,
                       let card = ChatErrorState.from(bridgeError) {
                 currentError = card
@@ -4655,11 +5039,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
         }
 
-        if stoppedByUser, isStopping, sendGeneration != sendGen {
-            clearSendLockState()
-        } else {
-            releaseSendLock(sendGeneration: sendGen)
-        }
+        releaseSendLock(sendGeneration: sendGen)
 
         return completedResponseText
     }
@@ -4678,14 +5058,76 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         })
     }
 
+    nonisolated static func chatTelemetrySurface(
+        turnOwner: ChatTurnOwner,
+        isOnboarding: Bool,
+        systemPromptStyle: ChatSystemPromptStyle
+    ) -> String {
+        if isOnboarding { return "onboarding" }
+        switch turnOwner {
+        case .floatingDefault: return "floating_text"
+        case .floatingVoice: return "floating_voice"
+        case .taskChat: return "task_chat"
+        case .agentPill: return "agent_pill"
+        case .mainChat:
+            return systemPromptStyle == .floating ? "floating_text" : "main_chat"
+        }
+    }
+
+    nonisolated static func chatTelemetryHasImage(
+        explicitImagePresent: Bool,
+        stagedImageAttachmentPresent: Bool
+    ) -> Bool {
+        explicitImagePresent || stagedImageAttachmentPresent
+    }
+
+    nonisolated static func messageIds(forClientTurnId clientTurnId: String) -> (
+        user: String,
+        assistant: String
+    ) {
+        (user: clientTurnId, assistant: "\(clientTurnId)-assistant")
+    }
+
     @discardableResult
     private func releaseSendLock(sendGeneration generation: Int) -> Bool {
-        guard sendGeneration == generation else { return false }
+        guard sendLockOwnership.release(generation: generation) else { return false }
         clearSendLockState()
         return true
     }
 
+    private func stopReason(for generation: Int) -> ChatTurnStopReason {
+        guard activeStopReason?.generation == generation else { return .userStop }
+        return activeStopReason?.reason ?? .userStop
+    }
+
+    private func finishActiveChatTelemetry(
+        generation: Int,
+        stopReason: ChatTurnStopReason,
+        partialResponse: Bool
+    ) {
+        guard let active = activeChatTelemetryAttempt,
+              active.generation == generation else { return }
+        active.attempt.finish(stopReason: stopReason, partialResponse: partialResponse)
+        clearChatTelemetryState(for: generation)
+    }
+
+    private func clearChatTelemetryState(for generation: Int) {
+        if activeChatTelemetryAttempt?.generation == generation {
+            activeChatTelemetryAttempt = nil
+        }
+        if activeStopReason?.generation == generation {
+            activeStopReason = nil
+        }
+        if activeChatTurnLifecycle?.generation == generation {
+            activeChatTurnLifecycle = nil
+        }
+        if activeChatClientTurnId?.generation == generation {
+            activeChatClientTurnId = nil
+        }
+    }
+
     private func clearSendLockState() {
+        assert(!sendLockOwnership.isHeld, "send presentation state cleared while another generation owns the lock")
         isSending = false
         isStopping = false
         activeBridgeSendGeneration = nil
@@ -4727,7 +5169,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 currentSession?.title = response.title
             }
 
-            log("Generated session title: \(response.title)")
+            log("Generated session title (\(response.title.count) chars)")
             AnalyticsManager.shared.sessionTitleGenerated()
         } catch {
             logError("Failed to generate session title", error: error)
@@ -5092,11 +5534,27 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     /// Intentional user stops should not make in-flight tool rows look
     /// like execution errors. Real bridge failures still surface as failed.
-    nonisolated static func remainingToolStatusAfterPartialResponseError(_ error: Error) -> ToolCallStatus {
+    nonisolated static func remainingToolStatusAfterPartialResponseError(
+        _ error: Error,
+        watchdogFired: Bool = false,
+        toolStallAbortFired: Bool = false,
+        stopReason: ChatTurnStopReason? = nil
+    ) -> ToolCallStatus {
+        if watchdogFired || toolStallAbortFired || stopReason == .browserExtensionMissing {
+            return .failed
+        }
         if let bridgeError = error as? BridgeError, case .stopped = bridgeError {
             return .completed
         }
         return .failed
+    }
+
+    nonisolated static func lateResultToolStatus(
+        watchdogFired: Bool,
+        toolStallAbortFired: Bool,
+        stopReason: ChatTurnStopReason? = nil
+    ) -> ToolCallStatus {
+        watchdogFired || toolStallAbortFired || stopReason == .browserExtensionMissing ? .failed : .completed
     }
 
     /// The banner text to show when a turn ends with `BridgeError.stopped`.

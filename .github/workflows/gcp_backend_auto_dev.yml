@@ -6,6 +6,12 @@ on:
     paths:
       - 'backend/**'
 
+# Share the development backend mutation domain with manual deploys, traffic
+# repair, backend-listen, and LLM Gateway's shared backend-secrets updates.
+concurrency:
+  group: deploy-backend-stack-development
+  cancel-in-progress: false
+
 env:
   SERVICE: backend
   REGION: us-central1
@@ -44,8 +50,9 @@ jobs:
       - name: Compute short SHA
         id: image-tag
         run: |
-          echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-          echo "revision_suffix=${GITHUB_SHA::7}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+          SHORT_SHA="$(git rev-parse --short=7 HEAD)"
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "revision_suffix=${SHORT_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
 
       - name: Install Python deps for deploy scripts
         run: python3 -m pip install -q pyyaml

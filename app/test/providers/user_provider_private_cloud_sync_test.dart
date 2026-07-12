@@ -32,10 +32,12 @@ void main() {
 
     test('preserves the enabled state when the fetch throws', () async {
       var shouldThrow = false;
-      final provider = UserProvider(privateCloudSyncFetcher: () async {
-        if (shouldThrow) throw Exception('network down');
-        return true;
-      });
+      final provider = UserProvider(
+        privateCloudSyncFetcher: () async {
+          if (shouldThrow) throw Exception('network down');
+          return true;
+        },
+      );
       addTearDown(provider.dispose);
 
       await provider.loadPrivateCloudSyncStatus();

@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a background timer leak that accumulated wakeups over time when the voice assistant hub reconnected, reducing battery drain"
+}

@@ -21,7 +21,7 @@ from models.memory_evidence import ArtifactPreservationState, MemoryEvidence
 from models.memory_apply import ApplyStatus, MemoryControlState
 from models.memory_contracts import DurablePatchDecision, LifecycleState
 from models.memory_operations import MemoryOperation, MemoryOperationType
-from utils.memory.v3_account_generation_source import read_memory_v3_trusted_account_generation
+from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
 
 
 def _stored_model(model: Any) -> dict[str, Any]:

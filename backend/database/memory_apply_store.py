@@ -26,7 +26,7 @@ from models.memory_apply import (
 )
 from models.memory_operations import MemoryOperation
 from models.product_memory import MemoryItemStatus, MemoryItem
-from utils.memory.v3_account_generation_source import (
+from utils.memory.v3.account_generation_source import (
     V3_TRUSTED_ACCOUNT_GENERATION_SCHEMA_VERSION,
     V3_TRUSTED_ACCOUNT_GENERATION_SOURCE,
 )
