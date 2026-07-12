@@ -60,15 +60,26 @@ export const WAVE = {
 //   1. NOISE GATE at the silence p95 — anything at/below the ambient floor is a
 //      resting dot (level 0), so a quiet room reads as dots, not tall bars.
 //   2. tanh soft-knee above the gate — a soft onset so quiet speech still
-//      registers, placing normal speech (~0.98) at ~0.5 and peaks (~1.38) at
-//      ~0.8, asymptoting to CEIL so genuinely loud never pins at the max.
+//      registers, but a DELIBERATELY GENTLE slope so the bars LIVE in the middle
+//      of the range with visible headroom almost always and only genuinely loud
+//      moments approach the ceiling.
+// The knee gain was softened 2.0 → 1.5 (user, live tune 2026-07-12: "still
+// getting maxed a lot" — their live speech runs HOTTER than the calibration
+// sample). At 1.5: sample-normal (0.98) → 0.40, sample-peak (1.38) → 0.71, and
+// even a hot ~1.5 reads 0.77 / loud ~1.8 reads 0.84 — real headroom stays. There
+// is NO per-slot amplification downstream: shapeBarLevel runs on the smoothed RMS
+// envelope and waveBars maps level→height linearly (halfH = restR + level·growth),
+// so a bar can never exceed its shaped level — softening this curve is the whole
+// fix for "maxing."
 
 /** Ambient floor (raw units): at/below this the bar rests as a dot. Set to the
  *  measured room-silence p95 (0.65) with a hair of margin. */
 export const WAVE_NOISE_GATE = 0.66
-/** Soft-knee gain ABOVE the gate. Placed so measured normal speech (raw ≈ 0.98,
- *  ≈ 0.32 above the gate) lands at ~0.5 and peaks (raw ≈ 1.38) reach ~0.8. */
-export const WAVE_LEVEL_GAIN = 2.0
+/** Soft-knee gain ABOVE the gate — deliberately GENTLE so bars sit mid-range with
+ *  headroom (user: "still getting maxed a lot"; live speech runs hotter than the
+ *  calibration sample). At 1.5: normal (raw ≈ 0.98) → ~0.40, peak (≈ 1.38) → ~0.71,
+ *  hot (≈ 1.8) → ~0.84 — genuinely loud only nears the 0.9 ceiling. */
+export const WAVE_LEVEL_GAIN = 1.5
 /** Ceiling (< 1) the knee asymptotes to: the tallest a bar can get, so genuinely
  *  loud speech APPROACHES but never PINS at the max height (user: "the lines max
  *  out when I'm not even speaking that loud — normalize the animation a tad"). */
@@ -78,10 +89,11 @@ export const WAVE_LEVEL_CEIL = 0.9
  * Gate + compress a raw loudness (≥ 0, possibly hot) into a bar level in
  * [0, CEIL). Subtract the ambient NOISE_GATE, then a tanh soft-knee:
  * `CEIL·tanh((raw − GATE)·GAIN)` for raw > GATE, else 0. Room silence → 0 (a
- * resting dot); normal speech (~0.98) lands mid-range (~0.5); loud (~1.38) reads
- * tall (~0.8) yet asymptotes to CEIL — it can never pin at the maximum. Monotonic
- * and bounded for ANY input. Applied upstream (the animator, on the smoothed
- * envelope); the harness/tests feed already-shaped levels straight into waveBars.
+ * resting dot); normal speech (~0.98) lands low-mid (~0.40); loud (~1.38) reads
+ * ~0.71 and even hot input keeps clear headroom below CEIL — it can never pin at
+ * the maximum. Monotonic and bounded for ANY input. Applied upstream (the
+ * animator, on the smoothed envelope); the harness/tests feed already-shaped
+ * levels straight into waveBars.
  */
 export function shapeBarLevel(raw: number): number {
   const x = raw - WAVE_NOISE_GATE

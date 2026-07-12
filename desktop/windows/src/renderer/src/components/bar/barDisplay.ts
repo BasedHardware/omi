@@ -44,29 +44,6 @@ export function deriveOrbState(a: BarActivity): { state: OrbState; withAmplitude
   return { state: 'idle', withAmplitude: false }
 }
 
-/**
- * Main-window (sidebar) orb state from the shared chat engine's signals. The
- * sidebar has no local PTT, so it has no reactive mic amplitude — it projects the
- * one chat engine (streaming reply → thinking, spoken reply → speaking, coding
- * agent → agents) and the continuous-listen toggle through the SAME precedence as
- * the bar (deriveOrbState), so both orbs read identically for the same activity.
- */
-export function deriveMainWindowOrbState(a: {
-  speaking: boolean
-  sending: boolean
-  agentActive: boolean
-  continuousListening: boolean
-}): OrbState {
-  const status: BarChatStatus = a.speaking ? 'speaking' : a.sending ? 'sending' : 'idle'
-  return deriveOrbState({
-    recording: false,
-    transcribing: false,
-    status,
-    continuousListening: a.continuousListening,
-    agentsActive: a.agentActive
-  }).state
-}
-
 /** True while a summoned pill must NOT auto-retract — a PTT hold / streaming
  *  reply / spoken answer is in flight (the cursor is legitimately away). */
 export function isBarBusy(a: Pick<BarActivity, 'recording' | 'transcribing' | 'status'>): boolean {

@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
   deriveOrbState,
-  deriveMainWindowOrbState,
   isBarBusy,
   omiChatListStatus,
   deriveAgentRows,
@@ -76,33 +75,6 @@ describe('deriveOrbState', () => {
     })
     // Omi speaking a reply also outranks the agents pose
     expect(deriveOrbState({ ...base, agentsActive: true, status: 'speaking' }).state).toBe(
-      'speaking'
-    )
-  })
-})
-
-describe('deriveMainWindowOrbState (sidebar orb)', () => {
-  const base = {
-    speaking: false,
-    sending: false,
-    agentActive: false,
-    continuousListening: false
-  } as const
-
-  it('projects the shared chat engine: streaming → thinking, agent → agents, TTS → speaking', () => {
-    expect(deriveMainWindowOrbState({ ...base, sending: true })).toBe('thinking')
-    expect(deriveMainWindowOrbState({ ...base, agentActive: true, sending: true })).toBe('agents')
-    expect(deriveMainWindowOrbState({ ...base, speaking: true })).toBe('speaking')
-  })
-
-  it('shows a calm listening orbit when always-on mic is live, else idle', () => {
-    expect(deriveMainWindowOrbState({ ...base, continuousListening: true })).toBe('listening')
-    expect(deriveMainWindowOrbState(base)).toBe('idle')
-  })
-
-  it('matches the bar precedence — the sidebar orb never carries mic amplitude', () => {
-    // A spoken reply outranks the agents pose (same order as the bar).
-    expect(deriveMainWindowOrbState({ ...base, speaking: true, agentActive: true })).toBe(
       'speaking'
     )
   })

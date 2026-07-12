@@ -41,15 +41,25 @@ describe('shapeBarLevel (gated sensitivity curve, calibrated to real mic)', () =
     expect(justAbove).toBeLessThan(0.25) // but small — a quiet nudge, not a jump
   })
 
-  it('places normal speech mid-range and peaks tall-but-not-pinned', () => {
-    // Normal speech (~0.98) lands mid-height so the row visibly moves; peaks
-    // (~1.38) read tall yet leave clear headroom and NEVER pin at the max.
+  it('places normal speech low-mid and peaks tall-but-not-pinned (softened knee)', () => {
+    // Softened 2.0 → 1.5 (user: "still getting maxed"). Normal (~0.98) sits
+    // low-mid so the row lives in the middle with headroom; peaks (~1.38) read
+    // tall yet leave clear room below the ceiling.
     const normal = shapeBarLevel(SPEECH_P50)
     const peak = shapeBarLevel(SPEECH_MAX)
-    expect(normal).toBeGreaterThanOrEqual(0.4)
-    expect(normal).toBeLessThanOrEqual(0.6)
+    expect(normal).toBeGreaterThanOrEqual(0.35)
+    expect(normal).toBeLessThanOrEqual(0.5)
     expect(peak).toBeGreaterThan(normal)
-    expect(peak).toBeLessThanOrEqual(0.85)
+    expect(peak).toBeGreaterThanOrEqual(0.6)
+    expect(peak).toBeLessThanOrEqual(0.75)
+  })
+
+  it('keeps headroom for HOT live input — the "still getting maxed" guard', () => {
+    // The user's live speech runs hotter than the calibration sample. Even a hot
+    // ~1.8 must stay clearly below the ceiling (not pin), and the absolute max
+    // orbLevel (2.2 = (255/255)·2.2) still leaves a sliver — bars never max out.
+    expect(shapeBarLevel(1.8)).toBeLessThanOrEqual(0.86)
+    expect(shapeBarLevel(2.2)).toBeLessThan(WAVE_LEVEL_CEIL)
   })
 
   it('is bounded below the ceiling for ANY input — never pins at max (1)', () => {
