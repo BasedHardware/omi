@@ -1,6 +1,6 @@
-"""Canonical module for ``utils.memory.v3_projection_reader_contract`` (WS-G8b).
+"""Canonical module for ``utils.memory.v3.projection_reader_contract`` (WS-G8b).
 
-Neutral ``v3_projection_reader_contract`` is the source of truth. Legacy ``v3_projection_reader_contract`` remains an importable alias.
+This module owns the V3 projection-reader contract.
 """
 
 from __future__ import annotations

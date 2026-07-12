@@ -23,6 +23,8 @@ struct DesktopHomeView: View {
   @ObservedObject private var authState = AuthState.shared
   @ObservedObject private var apiKeyService = APIKeyService.shared
   @ObservedObject private var updatePolicyManager = DesktopUpdatePolicyManager.shared
+  @ObservedObject private var automationPresentationCoordinator =
+    DesktopAutomationPresentationCoordinator.shared
   @State private var selectedIndex: Int = {
     if OMIApp.launchMode == .rewind { return SidebarNavItem.rewind.rawValue }
     let tier = UserDefaults.standard.integer(forKey: "currentTierLevel")
@@ -49,6 +51,8 @@ struct DesktopHomeView: View {
   @State private var proactiveMonitoringWarmupAnchor = Date()
   @State private var didScheduleConversationWarmup = false
   @State private var initialFileIndexingBackfill = DelayedFileIndexingBackfillState()
+  @State private var automationPresentationReadinessGate =
+    DesktopAutomationPresentationReadinessGate()
 
   // Pre-loaded hero logo to avoid NSImage init crashes during SwiftUI body evaluation
   private static let heroLogoImage: NSImage? = {
@@ -423,6 +427,7 @@ struct DesktopHomeView: View {
       // Redirect if current page isn't visible at current tier
       redirectIfPageHidden()
       reportAutomationState()
+      handleAutomationPresentationReadinessChange(viewModelContainer.isInitialLoadComplete)
     }
     .onChange(of: currentTierLevel) { _, _ in
       redirectIfPageHidden()
@@ -433,6 +438,16 @@ struct DesktopHomeView: View {
       // resets the window min — re-pin + re-disable to hold the minimum.
       enforceMainWindowMinimumSize()
       reportAutomationState()
+    }
+    .onChange(of: automationPresentationCoordinator.activeCommand?.generation) { _, _ in
+      guard
+        let command = automationPresentationReadinessGate.commandForConsumption(
+          automationPresentationCoordinator.activeCommand)
+      else { return }
+      handleAutomationPresentationCommand(command)
+    }
+    .onChange(of: viewModelContainer.isInitialLoadComplete) { _, isReady in
+      handleAutomationPresentationReadinessChange(isReady)
     }
     .onChange(of: selectedSettingsSection) { _, _ in reportAutomationState() }
     .onChange(of: highlightedSettingId) { _, _ in reportAutomationState() }
@@ -646,6 +661,26 @@ struct DesktopHomeView: View {
     }
 
     reportAutomationState()
+  }
+
+  private func handleAutomationPresentationCommand(
+    _ command: DesktopAutomationPresentationCommand
+  ) {
+    NSApp.activate()
+    if let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") }) {
+      window.makeKeyAndOrderFront(nil)
+    }
+    selectedIndex = SidebarNavItem.apps.rawValue
+    reportAutomationState()
+  }
+
+  private func handleAutomationPresentationReadinessChange(_ isReady: Bool) {
+    guard
+      let command = automationPresentationReadinessGate.transition(
+        to: isReady,
+        activeCommand: automationPresentationCoordinator.activeCommand)
+    else { return }
+    handleAutomationPresentationCommand(command)
   }
 
   private func resolvedAutomationTarget(_ target: String) -> SidebarNavItem? {
@@ -1139,7 +1174,8 @@ private struct PageContentView: View {
         AppsPage(
           appProvider: viewModelContainer.appProvider,
           appState: appState,
-          connectorStatusStore: viewModelContainer.homeStatusStore.connectorStatusStore)
+          connectorStatusStore: viewModelContainer.homeStatusStore.connectorStatusStore,
+          handlesAutomationPresentations: viewModelContainer.isInitialLoadComplete)
       case 9:
         SettingsPage(
           appState: appState,

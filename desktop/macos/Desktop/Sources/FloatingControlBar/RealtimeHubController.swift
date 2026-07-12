@@ -386,40 +386,45 @@ enum RealtimeHubBargeInContinuity {
 /// boundaries. Realtime providers can leave short gaps between streamed audio
 /// buffers; clearing the glow on every empty queue makes the notch resize and
 /// shimmer restart repeatedly.
+@MainActor
 final class RealtimeResponseGlowGate {
   private let idleClearDelay: TimeInterval
+  private let scheduler: DelayedActionScheduling
   private let setActive: (Bool) -> Void
-  private var idleClearWorkItem: DispatchWorkItem?
+  private var idleClearCancellation: DelayedActionCancellation?
   private(set) var isActive = false
 
-  init(idleClearDelay: TimeInterval = 0.75, setActive: @escaping (Bool) -> Void) {
+  init(
+    idleClearDelay: TimeInterval = 0.75,
+    scheduler: DelayedActionScheduling? = nil,
+    setActive: @escaping (Bool) -> Void
+  ) {
     self.idleClearDelay = idleClearDelay
+    self.scheduler = scheduler ?? TaskDelayedActionScheduler()
     self.setActive = setActive
   }
 
   func markPlaybackActive() {
-    idleClearWorkItem?.cancel()
-    idleClearWorkItem = nil
+    idleClearCancellation?.cancel()
+    idleClearCancellation = nil
     guard !isActive else { return }
     isActive = true
     setActive(true)
   }
 
   func scheduleIdleClear() {
-    idleClearWorkItem?.cancel()
-    let workItem = DispatchWorkItem { [weak self] in
+    idleClearCancellation?.cancel()
+    idleClearCancellation = scheduler.schedule(after: idleClearDelay) { [weak self] in
       guard let self else { return }
+      self.idleClearCancellation = nil
       self.isActive = false
       self.setActive(false)
-      self.idleClearWorkItem = nil
     }
-    idleClearWorkItem = workItem
-    DispatchQueue.main.asyncAfter(deadline: .now() + idleClearDelay, execute: workItem)
   }
 
   func clearImmediately() {
-    idleClearWorkItem?.cancel()
-    idleClearWorkItem = nil
+    idleClearCancellation?.cancel()
+    idleClearCancellation = nil
     guard isActive else {
       setActive(false)
       return

@@ -1,6 +1,6 @@
-"""Canonical module for ``utils.memory.v3_production_runtime`` (WS-G8b).
+"""Canonical module for ``utils.memory.v3.production_runtime`` (WS-G8b).
 
-Neutral ``v3_production_runtime`` is the source of truth. Legacy ``v3_production_runtime`` remains an importable alias.
+This module wires the V3 memory-read production runtime.
 """
 
 from __future__ import annotations
@@ -19,9 +19,9 @@ from config.memory_rollout import (
     rollout_v3_get_enabled_env_value,
 )
 from database import memory_compatibility_projection as projection_db
-from utils.memory.v3_account_generation_source import read_memory_v3_trusted_account_generation
-from utils.memory.v3_account_generation_source import V3TrustedAccountGenerationResult
-from utils.memory.v3_composed_get_service import (
+from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
+from utils.memory.v3.account_generation_source import V3TrustedAccountGenerationResult
+from utils.memory.v3.composed_get_service import (
     V3ComposedAdapters,
     V3ComposedCursor,
     V3ComposedDependencyDecision,
@@ -34,21 +34,21 @@ from utils.memory.v3_composed_get_service import (
     V3ComposedSnapshotDecision,
     compose_v3_get,
 )
-from utils.memory.v3_control_reader_contract import (
+from utils.memory.v3.control_reader_contract import (
     V3ControlReaderRequest,
     V3ControlRouteFamily,
     decide_v3_control_route,
 )
-from utils.memory.v3_control_state_adapter import read_v3_control
-from utils.memory.v3_control_reader_contract import V3ControlReadResult
-from utils.memory.v3_cursor import (
+from utils.memory.v3.control_state_adapter import read_v3_control
+from utils.memory.v3.control_reader_contract import V3ControlReadResult
+from utils.memory.v3.cursor import (
     V3CursorContext,
     V3CursorError,
     V3Keyset,
     create_v3_cursor,
     parse_v3_cursor,
 )
-from utils.memory.v3_projection_reader_contract import V3ProjectionCursor, V3ProjectionPage, V3ProjectionReadRequest
+from utils.memory.v3.projection_reader_contract import V3ProjectionCursor, V3ProjectionPage, V3ProjectionReadRequest
 
 V3GetSourceDecision: TypeAlias = Literal['disabled', 'legacy_primary', 'memory_read']
 MemoryDbItem: TypeAlias = dict[str, Any]

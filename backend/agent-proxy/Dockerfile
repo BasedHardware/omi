@@ -18,6 +18,8 @@ WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
 
 COPY --from=builder /opt/venv /opt/venv
+COPY backend/utils/__init__.py ./utils/__init__.py
+COPY backend/utils/executors.py ./utils/executors.py
 COPY backend/agent-proxy/main.py .
 
 EXPOSE 8080

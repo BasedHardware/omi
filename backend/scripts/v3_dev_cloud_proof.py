@@ -1,5 +1,8 @@
 """Dev-cloud proof helpers for memory ``/v3`` readiness scripts and tests."""
 
+# LIFECYCLE: one-time
+# DELETE-AFTER: INV-MEM-3
+
 from __future__ import annotations
 
 import hashlib
@@ -12,7 +15,7 @@ from typing import Any, Iterable
 from config.memory_rollout import MemoryRolloutMode
 from database.memory_collections import MemoryCollections
 from utils.memory.default_read_rollout import DEFAULT_READ_ROLLOUT_SCHEMA_VERSION
-from utils.memory.v3_limited_rollout_config import GLOBAL_READ_GATE_PATH, WRITE_CONVERGENCE_GATE_PATH
+from utils.memory.v3.limited_rollout_config import GLOBAL_READ_GATE_PATH, WRITE_CONVERGENCE_GATE_PATH
 
 GATE_STATUS_BLOCKED = 'BLOCKED'
 GATE_STATUS_READY_TO_EXECUTE = 'READY_TO_EXECUTE_DEV_CLOUD_PROOF'

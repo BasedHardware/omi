@@ -1,9 +1,6 @@
 import Foundation
 
-@MainActor
-protocol VoiceTurnDeadlineCancellation: AnyObject {
-  func cancel()
-}
+typealias VoiceTurnDeadlineCancellation = DelayedActionCancellation
 
 @MainActor
 protocol VoiceTurnDeadlineScheduling {
@@ -16,21 +13,13 @@ protocol VoiceTurnDeadlineScheduling {
 }
 
 @MainActor
-private final class TaskVoiceTurnDeadlineCancellation: VoiceTurnDeadlineCancellation {
-  private var task: Task<Void, Never>?
-
-  init(task: Task<Void, Never>) {
-    self.task = task
-  }
-
-  func cancel() {
-    task?.cancel()
-    task = nil
-  }
-}
-
-@MainActor
 final class TaskVoiceTurnDeadlineScheduler: VoiceTurnDeadlineScheduling {
+  private let scheduler: DelayedActionScheduling
+
+  init(scheduler: DelayedActionScheduling? = nil) {
+    self.scheduler = scheduler ?? TaskDelayedActionScheduler()
+  }
+
   func schedule(
     deadline: VoiceTurnDeadline,
     after interval: TimeInterval,
@@ -39,16 +28,7 @@ final class TaskVoiceTurnDeadlineScheduler: VoiceTurnDeadlineScheduling {
     -> VoiceTurnDeadlineCancellation
   {
     _ = deadline
-    let task = Task { @MainActor in
-      do {
-        try await Task.sleep(nanoseconds: UInt64(max(0, interval) * 1_000_000_000))
-      } catch {
-        return
-      }
-      guard !Task.isCancelled else { return }
-      action()
-    }
-    return TaskVoiceTurnDeadlineCancellation(task: task)
+    return scheduler.schedule(after: interval, action: action)
   }
 }
 

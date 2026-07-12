@@ -1,6 +1,6 @@
-"""Canonical module for ``utils.memory.v3_account_generation_source`` (WS-G8b).
+"""Canonical module for ``utils.memory.v3.account_generation_source`` (WS-G8b).
 
-Neutral ``v3_account_generation_source`` is the source of truth. Legacy ``v3_account_generation_source`` remains an importable alias.
+This module owns the trusted V3 account-generation read contract.
 """
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 import inspect
 
-from utils.memory.v3_projection_readiness import (
+from utils.memory.v3.projection_readiness import (
     V3ProjectionReadinessContext,
     V3ProjectionReadinessDecision,
     V3ProjectionReadinessState,
