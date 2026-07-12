@@ -43,26 +43,48 @@ export const WAVE = {
   maxHalfExtent: 0.82
 } as const
 
-// --- Sensitivity: raw loudness → bar level (normalized, never pins) -----------
+// --- Sensitivity: raw loudness → bar level (gated + normalized, never pins) ---
+//
+// Calibrated from the user's REAL microphone (2026-07-12, ~956 live `orbLevel`
+// samples = (rms/255)·2.2, captured over CDP across a silent hold + normal
+// speech, k-means split). Measured distribution:
+//   ROOM SILENCE : p50 0.49, p95 0.65, max 0.75   ← NOT zero (the ×2.2 tap +
+//                                                    mic/room low-freq energy)
+//   NORMAL SPEECH: p50 0.98, p95 1.32, max 1.38
+// The old pure-exponential curve (CEIL·(1−e^(−raw·2.1)), no gate) mapped that
+// silence floor to 0.58 and normal speech to 0.79 — so the bars sat at 58–85%
+// height ALWAYS and barely moved (the user: "volume normalization and default
+// bar length weren't really changed"). Two fixes, both measured, not guessed:
+//   1. NOISE GATE at the silence p95 — anything at/below the ambient floor is a
+//      resting dot (level 0), so a quiet room reads as dots, not tall bars.
+//   2. tanh soft-knee above the gate — a soft onset so quiet speech still
+//      registers, placing normal speech (~0.98) at ~0.5 and peaks (~1.38) at
+//      ~0.8, asymptoting to CEIL so genuinely loud never pins at the max.
 
-/** Input scale for the loudness→level curve. Higher = more sensitive. */
-export const WAVE_LEVEL_GAIN = 2.1
-/** Ceiling of the shaped level (< 1): the tallest a bar can get, so genuinely
+/** Ambient floor (raw units): at/below this the bar rests as a dot. Set to the
+ *  measured room-silence p95 (0.65) with a hair of margin. */
+export const WAVE_NOISE_GATE = 0.66
+/** Soft-knee gain ABOVE the gate. Placed so measured normal speech (raw ≈ 0.98,
+ *  ≈ 0.32 above the gate) lands at ~0.5 and peaks (raw ≈ 1.38) reach ~0.8. */
+export const WAVE_LEVEL_GAIN = 2.0
+/** Ceiling (< 1) the knee asymptotes to: the tallest a bar can get, so genuinely
  *  loud speech APPROACHES but never PINS at the max height (user: "the lines max
  *  out when I'm not even speaking that loud — normalize the animation a tad"). */
 export const WAVE_LEVEL_CEIL = 0.9
 
 /**
- * Compress a raw loudness (≥ 0, possibly hot) into a bar level in [0, CEIL) via a
- * saturating exponential: `CEIL·(1 − e^(−raw·GAIN))`. Silence → 0 (a resting
- * dot); moderate speech (~0.4) lands mid-range (~0.5); loud (~1.0) reads tall
- * (~0.8) yet asymptotes to CEIL — it can never pin at the maximum. Monotonic and
- * bounded for ANY input. Applied upstream (the animator, on the live sample); the
- * harness/tests feed already-shaped levels straight into waveBars.
+ * Gate + compress a raw loudness (≥ 0, possibly hot) into a bar level in
+ * [0, CEIL). Subtract the ambient NOISE_GATE, then a tanh soft-knee:
+ * `CEIL·tanh((raw − GATE)·GAIN)` for raw > GATE, else 0. Room silence → 0 (a
+ * resting dot); normal speech (~0.98) lands mid-range (~0.5); loud (~1.38) reads
+ * tall (~0.8) yet asymptotes to CEIL — it can never pin at the maximum. Monotonic
+ * and bounded for ANY input. Applied upstream (the animator, on the smoothed
+ * envelope); the harness/tests feed already-shaped levels straight into waveBars.
  */
 export function shapeBarLevel(raw: number): number {
-  const x = Math.max(0, raw)
-  return WAVE_LEVEL_CEIL * (1 - Math.exp(-x * WAVE_LEVEL_GAIN))
+  const x = raw - WAVE_NOISE_GATE
+  if (x <= 0) return 0
+  return WAVE_LEVEL_CEIL * Math.tanh(x * WAVE_LEVEL_GAIN)
 }
 
 const clamp01 = (x: number): number => Math.min(1, Math.max(0, x))

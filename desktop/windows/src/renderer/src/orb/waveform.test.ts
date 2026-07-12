@@ -3,6 +3,7 @@ import {
   WAVE,
   WAVE_MAX_SLOTS,
   WAVE_LEVEL_CEIL,
+  WAVE_NOISE_GATE,
   waveHalfWidth,
   slotCountForAspect,
   shapeBarLevel,
@@ -12,38 +13,60 @@ import {
   stepWaveLevels
 } from './waveform'
 
-describe('shapeBarLevel (sensitivity curve)', () => {
-  it('maps silence to 0 and asymptotes below the ceiling — never pins at max', () => {
+describe('shapeBarLevel (gated sensitivity curve, calibrated to real mic)', () => {
+  // Reference points are the user's MEASURED live orbLevel distribution
+  // (2026-07-12, ~956 samples = (rms/255)·2.2): room silence p50 0.49 / p95 0.65
+  // / max 0.75; normal speech p50 0.98 / p95 1.32 / max 1.38.
+  const SILENCE_P50 = 0.49
+  const SILENCE_P95 = 0.65
+  const SPEECH_P50 = 0.98
+  const SPEECH_MAX = 1.38
+
+  it('gates the ambient floor to a resting dot (level 0)', () => {
     expect(shapeBarLevel(0)).toBe(0)
     expect(shapeBarLevel(-5)).toBe(0) // negatives clamp to silence
-    // Input stays within the ceiling and NEVER reaches the pinned max (1) — the
-    // whole point of the ceiling. (Saturating input tops out AT the ceiling.)
+    // The whole measured room-silence band must read as a rest dot, not tall
+    // bars — this is the user's core complaint the gate fixes.
+    expect(shapeBarLevel(SILENCE_P50)).toBe(0)
+    expect(shapeBarLevel(SILENCE_P95)).toBe(0)
+    expect(shapeBarLevel(WAVE_NOISE_GATE)).toBe(0)
+    // Gate sits between the silence ceiling and speech onset.
+    expect(WAVE_NOISE_GATE).toBeGreaterThanOrEqual(SILENCE_P95)
+    expect(WAVE_NOISE_GATE).toBeLessThan(SPEECH_P50)
+  })
+
+  it('has a soft onset just above the gate so quiet speech still registers', () => {
+    const justAbove = shapeBarLevel(WAVE_NOISE_GATE + 0.05)
+    expect(justAbove).toBeGreaterThan(0) // registers
+    expect(justAbove).toBeLessThan(0.25) // but small — a quiet nudge, not a jump
+  })
+
+  it('places normal speech mid-range and peaks tall-but-not-pinned', () => {
+    // Normal speech (~0.98) lands mid-height so the row visibly moves; peaks
+    // (~1.38) read tall yet leave clear headroom and NEVER pin at the max.
+    const normal = shapeBarLevel(SPEECH_P50)
+    const peak = shapeBarLevel(SPEECH_MAX)
+    expect(normal).toBeGreaterThanOrEqual(0.4)
+    expect(normal).toBeLessThanOrEqual(0.6)
+    expect(peak).toBeGreaterThan(normal)
+    expect(peak).toBeLessThanOrEqual(0.85)
+  })
+
+  it('is bounded below the ceiling for ANY input — never pins at max (1)', () => {
     for (const raw of [1, 2, 5, 100, 1e6]) {
       expect(shapeBarLevel(raw)).toBeLessThanOrEqual(WAVE_LEVEL_CEIL)
       expect(shapeBarLevel(raw)).toBeLessThan(1)
     }
-    // Normal speech leaves clear headroom below the ceiling.
-    expect(shapeBarLevel(1)).toBeLessThan(WAVE_LEVEL_CEIL)
     expect(WAVE_LEVEL_CEIL).toBeLessThan(1)
   })
 
-  it('is monotonic increasing', () => {
+  it('is monotonic non-decreasing', () => {
     let prev = -1
     for (let i = 0; i <= 40; i++) {
       const v = shapeBarLevel(i / 20)
       expect(v).toBeGreaterThanOrEqual(prev)
       prev = v
     }
-  })
-
-  it('normalizes moderate speech to mid-range and loud to tall-but-not-maxed', () => {
-    // Moderate (~0.4) sits mid-height; loud (~1.0) reads tall but leaves headroom.
-    const moderate = shapeBarLevel(0.4)
-    const loud = shapeBarLevel(1.0)
-    expect(moderate).toBeGreaterThan(0.3)
-    expect(moderate).toBeLessThan(0.7)
-    expect(loud).toBeGreaterThan(moderate)
-    expect(loud).toBeLessThan(0.9) // never near the pinned max
   })
 })
 
