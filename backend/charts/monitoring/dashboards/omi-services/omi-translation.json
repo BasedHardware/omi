@@ -403,7 +403,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "1 - (sum(increase(nllb_requests_total{status!=\"ok\"}[30d])) / (sum(increase(nllb_requests_total[30d])) > 0))",
+          "expr": "(0.005 - (sum(increase(nllb_requests_total{status!=\"ok\"}[30d])) / (sum(increase(nllb_requests_total[30d])) > 0))) / 0.005",
           "legendFormat": "budget"
         }
       ]
@@ -597,7 +597,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(nllb_requests_total{status=\"ok\"}[$__rate_interval])) by (target_lang)",
+          "expr": "sum(rate(nllb_requests_total{status=\"ok\", target_lang=~\"$target_lang\"}[$__rate_interval])) by (target_lang)",
           "legendFormat": "{{ target_lang }}"
         }
       ]
@@ -764,7 +764,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(nllb_chars_translated_total[$__rate_interval])) by (target_lang)",
+          "expr": "sum(rate(nllb_chars_translated_total{target_lang=~\"$target_lang\"}[$__rate_interval])) by (target_lang)",
           "legendFormat": "{{ target_lang }}"
         }
       ]
@@ -952,7 +952,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "histogram_quantile(0.99, sum by (target_lang, le) (rate(nllb_translation_latency_seconds_bucket[$__rate_interval])))",
+          "expr": "histogram_quantile(0.99, sum by (target_lang, le) (rate(nllb_translation_latency_seconds_bucket{target_lang=~\"$target_lang\"}[$__rate_interval])))",
           "legendFormat": "{{ target_lang }}"
         }
       ]
@@ -1543,7 +1543,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(omi_translation_skip_total[$__rate_interval])) by (target_lang)",
+          "expr": "sum(rate(omi_translation_skip_total{target_lang=~\"$target_lang\"}[$__rate_interval])) by (target_lang)",
           "legendFormat": "{{ target_lang }}"
         }
       ]
