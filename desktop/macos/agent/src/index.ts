@@ -49,7 +49,9 @@ import type {
   MigrateSessionExecutionProfileMessage,
   ContextSourceUpdateMessage,
   ImportLegacyMainChatSessionsMessage,
+  InvalidateSessionMessage,
   JournalRecordTurnMessage,
+  JournalRecordExchangeMessage,
   JournalUpdateTurnMessage,
   JournalListTurnsMessage,
   JournalClearTurnsMessage,
@@ -57,6 +59,8 @@ import type {
   JournalBackendSyncResultMessage,
   JournalBackendDeleteResultMessage,
   JournalBackendReconcileResultMessage,
+  RefreshOwnerMessage,
+  RevokeOwnerRuntimeMessage,
   RefreshTokenMessage,
   AuthMethod,
 } from "./protocol.js";
@@ -77,7 +81,6 @@ import {
   SWIFT_ADVERTISED_AGENT_CONTROL_TOOL_NAMES,
   handleAgentControlToolCall,
   isAgentControlToolName,
-  withMergedOwnerGuard,
   DEFAULT_LOCAL_OWNER_ID,
   type AgentControlToolContext,
 } from "./runtime/control-tools.js";
@@ -87,7 +90,7 @@ import { configuredPiMonoMaxWorkers } from "./runtime/worker-pool.js";
 import { failureFromError } from "./runtime/failures.js";
 import { providerBoundaryForAdapter } from "./runtime/execution-policy.js";
 import { executionRoleForSurface } from "./runtime/execution-policy.js";
-import type { AuthorizedRunToolInvocation } from "./runtime/run-tool-capability.js";
+import type { AuthorizedRunToolInvocation, RunToolExecutionLease } from "./runtime/run-tool-capability.js";
 import {
   attachAgentSpawnJournalReceipt,
   parseAgentSpawnProducerJournalDescriptor,
@@ -106,12 +109,22 @@ import {
   failBackendTurnOutbox,
   journalTurnChangedWakes,
   listJournalTurns,
+  recordJournalExchange,
   recordJournalTurn,
   settleClearedBackendTurnClaim,
   updateJournalTurn,
 } from "./runtime/conversation-journal.js";
+import { DirectControlExecutionBroker } from "./runtime/direct-control-execution.js";
+import {
+  authorizeRuntimeTokenRefresh,
+  establishRuntimeOwner,
+  requireActiveRuntimeOwner,
+  runRuntimeOwnerRevocationBarrier,
+  runtimeOwnerForEffects,
+} from "./runtime/runtime-owner-authority.js";
 import type {
   ConversationContentBlock,
+  AgentEvent,
   ConversationResource,
   ConversationTurn,
   ConversationTurnOrigin,
@@ -176,14 +189,27 @@ let omiToolsClients: Socket[] = [];
 let agentControlToolContext: AgentControlToolContext | undefined;
 let runtimeKernel: AgentRuntimeKernel | undefined;
 let currentOwnerId = DEFAULT_LOCAL_OWNER_ID;
+let ownerAuthorityEstablished = false;
+interface OwnerRuntimeRevocationReceipt {
+  ownerId: string;
+  revokedRunIds: string[];
+  invalidatedBindingIds: string[];
+}
+let lastOwnerRuntimeRevocation: OwnerRuntimeRevocationReceipt | null = null;
+const establishedOwnerId = () => runtimeOwnerForEffects({
+  ownerId: currentOwnerId,
+  established: ownerAuthorityEstablished,
+});
+const directControlExecutions = new DirectControlExecutionBroker({
+  activeOwnerId: establishedOwnerId,
+});
 const capabilityRejectionCounts = new Map<string, number>();
 
 function resolveActiveOwner(requestedOwnerId: string | undefined): string {
-  const requested = requestedOwnerId?.trim();
-  if (requested && requested !== currentOwnerId) {
-    throw new Error("owner_mismatch: request owner does not match the active runtime owner");
-  }
-  return currentOwnerId;
+  return requireActiveRuntimeOwner(
+    { ownerId: currentOwnerId, established: ownerAuthorityEstablished },
+    requestedOwnerId,
+  );
 }
 
 function journalOrigin(raw: unknown): ConversationTurnOrigin {
@@ -231,6 +257,19 @@ const pendingExternalToolCalls = new Map<
   }
 >();
 
+const TERMINAL_RUN_TOOL_EVENTS = new Set([
+  "run.succeeded",
+  "run.failed",
+  "run.cancelled",
+  "run.timed_out",
+  "run.orphaned",
+  "attempt.succeeded",
+  "attempt.failed",
+  "attempt.cancelled",
+  "attempt.timed_out",
+  "attempt.orphaned",
+]);
+
 function toolCallPendingKey(input: {
   invocationId: string;
 }): string {
@@ -256,6 +295,7 @@ function resolveToolCall(msg: AuthorizedToolExecutionResultMessage): void {
         executionGeneration: msg.executionGeneration,
         inputHash: msg.inputHash,
         capabilityRef: pending.invocation.capabilityRef,
+        activeOwnerId: currentOwnerId,
         outcome: msg.outcome,
         result: msg.result,
       });
@@ -283,6 +323,7 @@ function resolveToolCall(msg: AuthorizedToolExecutionResultMessage): void {
         executionGeneration: msg.executionGeneration,
         inputHash: msg.inputHash,
         capabilityRef: external.invocation.capabilityRef,
+        activeOwnerId: currentOwnerId,
         outcome: msg.outcome,
         result: msg.result,
       });
@@ -391,31 +432,25 @@ function cancelPendingExternalToolCallsForAttempt(input: {
   }
 }
 
-function rejectPendingToolCallsForOwner(ownerId: string): void {
+function rejectPendingToolCallsForOwner(
+  ownerId: string,
+  errorCode = "owner_changed",
+  message = "Active owner changed during tool execution",
+): void {
   for (const [key, pending] of pendingToolCalls) {
     if (pending.invocation.ownerId !== ownerId) continue;
     pendingToolCalls.delete(key);
     clearTimeout(pending.timeout);
-    try {
-      runtimeKernel?.markRunToolInvocationOutcomeUnknown(pending.invocation, "owner_changed");
-    } catch (error) {
-      logErr(`Failed to mark owner-switched relay invocation outcome unknown: ${error}`);
-    }
     writeRelayToolResult(
       pending.client,
       pending.callId,
-      relayError("owner_changed", "Active owner changed during tool execution"),
+      relayError(errorCode, message),
     );
   }
   for (const [key, pending] of pendingExternalToolCalls) {
     if (pending.invocation.ownerId !== ownerId) continue;
     pendingExternalToolCalls.delete(key);
     clearTimeout(pending.timeout);
-    try {
-      runtimeKernel?.markRunToolInvocationOutcomeUnknown(pending.invocation, "owner_changed");
-    } catch (error) {
-      logErr(`Failed to mark owner-switched external invocation outcome unknown: ${error}`);
-    }
     send({
       type: "external_surface_tool_result",
       requestId: pending.request.requestId,
@@ -426,7 +461,44 @@ function rejectPendingToolCallsForOwner(ownerId: string): void {
       attemptId: pending.invocation.attemptId,
       invocationId: pending.invocation.invocationId,
       ok: false,
-      error: { code: "owner_changed", message: "Active owner changed during tool execution" },
+      error: { code: errorCode, message },
+    });
+  }
+}
+
+/** The broker terminalizes the ledger before subscribers see terminal events. */
+function rejectPendingToolCallsForKernelEvent(event: AgentEvent): void {
+  if (!TERMINAL_RUN_TOOL_EVENTS.has(event.type)) return;
+  const matches = (invocation: AuthorizedRunToolInvocation): boolean =>
+    !!event.runId
+    && invocation.runId === event.runId
+    && (!event.attemptId || invocation.attemptId === event.attemptId);
+  const errorCode = event.type.startsWith("attempt.") ? "attempt_terminal" : "run_terminal";
+  for (const [key, pending] of pendingToolCalls) {
+    if (!matches(pending.invocation)) continue;
+    pendingToolCalls.delete(key);
+    clearTimeout(pending.timeout);
+    writeRelayToolResult(
+      pending.client,
+      pending.callId,
+      relayError(errorCode, "Run tool authority ended before Swift returned a result"),
+    );
+  }
+  for (const [key, pending] of pendingExternalToolCalls) {
+    if (!matches(pending.invocation)) continue;
+    pendingExternalToolCalls.delete(key);
+    clearTimeout(pending.timeout);
+    send({
+      type: "external_surface_tool_result",
+      requestId: pending.request.requestId,
+      clientId: pending.request.clientId,
+      ownerId: pending.invocation.ownerId,
+      sessionId: pending.invocation.sessionId,
+      runId: pending.invocation.runId,
+      attemptId: pending.invocation.attemptId,
+      invocationId: pending.invocation.invocationId,
+      ok: false,
+      error: { code: errorCode, message: "Run tool authority ended before Swift returned a result" },
     });
   }
 }
@@ -451,6 +523,18 @@ function resolveClientToolCalls(client: Socket, result: string): void {
 
 function relayError(code: string, message: string): string {
   return JSON.stringify({ ok: false, error: { code, message } });
+}
+
+function controlToolInvocationOutcome(result: string): "succeeded" | "failed" {
+  try {
+    const parsed = JSON.parse(result) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      && (parsed as { ok?: unknown }).ok === false
+      ? "failed"
+      : "succeeded";
+  } catch {
+    return "failed";
+  }
 }
 
 function writeRelayToolResult(client: Socket, callId: string, result: string): void {
@@ -538,8 +622,13 @@ function startOmiToolsRelay(): Promise<string> {
                 void (async () => {
                   let result: string;
                   let outcome: "succeeded" | "failed" = "succeeded";
+                  let executionLease: RunToolExecutionLease | undefined;
                   try {
                     runtimeKernel?.markRunToolInvocationDispatched(authorized);
+                    executionLease = runtimeKernel?.acquireRunToolExecutionLease(
+                      authorized,
+                      establishedOwnerId,
+                    );
                     if (!agentControlToolContext) {
                       throw new Error("Agent runtime kernel is not ready");
                     }
@@ -567,20 +656,24 @@ function startOmiToolsRelay(): Promise<string> {
                         defaultAdapterId: activeSession.defaultAdapterId,
                         authorizedProducerJournal: preparedSpawn?.producerJournal,
                         authorizedCallerRunId: preparedSpawn?.parentRunId,
-                        getOwnerId: () => authorized.ownerId,
+                        getOwnerId: establishedOwnerId,
+                        executionLease,
                       },
                       authorized.canonicalToolName,
                       preparedSpawn?.toolInput ?? routedProposal.toolInput,
                     );
+                    outcome = controlToolInvocationOutcome(result);
                   } catch (error) {
                     outcome = "failed";
+                    const authorityError = externalAuthorityError(error, "control_tool_failed");
                     result = relayError(
                       error instanceof Error && error.message === "Agent runtime kernel is not ready"
                         ? "runtime_not_ready"
-                        : "control_tool_failed",
-                      error instanceof Error ? error.message : String(error),
+                        : authorityError.code,
+                      authorityError.message,
                     );
                   }
+                  executionLease?.release();
                   try {
                     runtimeKernel?.completeRunToolInvocation({
                       invocationId: authorized.invocationId,
@@ -595,6 +688,7 @@ function startOmiToolsRelay(): Promise<string> {
                       executionGeneration: authorized.executionGeneration,
                       inputHash: authorized.inputHash,
                       capabilityRef: authorized.capabilityRef,
+                      activeOwnerId: currentOwnerId,
                       outcome,
                       result,
                     });
@@ -732,7 +826,6 @@ acpAdapter.onProcessExit = () => {
 
 let isInitialized = false;
 let authMethods: AuthMethod[] = [];
-let authResolve: (() => void) | null = null;
 let activeAuthPromise: Promise<void> | null = null;
 let activeOAuthFlow: OAuthFlowHandle | null = null;
 
@@ -1074,6 +1167,7 @@ async function main(): Promise<void> {
       logErr(`run_tool_capability_rejected code=${code} count=${count}`);
     },
   });
+  kernel.subscribe(rejectPendingToolCallsForKernelEvent);
   runtimeKernel = kernel;
   let piMonoClasses: typeof import("./adapters/pi-mono.js") | undefined;
   let piMonoAuthToken = process.env.OMI_AUTH_TOKEN;
@@ -1142,7 +1236,7 @@ async function main(): Promise<void> {
     defaultAdapterId,
     providerBoundary: providerBoundaryForAdapter(defaultAdapterId),
     executionRole: "coordinator",
-    getOwnerId: () => currentOwnerId,
+    getOwnerId: establishedOwnerId,
     buildMcpServers,
     recoverRunInput,
   };
@@ -1159,8 +1253,64 @@ async function main(): Promise<void> {
       await startAuthFlow();
     },
     maxRecoverableRetries: 2,
-    activeOwnerId: () => currentOwnerId,
+    activeOwnerId: establishedOwnerId,
   });
+  const revokeOwnerRuntimeWork = (
+    ownerId: string,
+    reason: "owner_changed" | "owner_state_cleared",
+  ): { errors: unknown[]; revokedRunIds: string[] } => {
+    const errors: unknown[] = [];
+    let revokedRunIds: string[] = [];
+    const attempt = (work: () => void): void => {
+      try {
+        work();
+      } catch (error) {
+        errors.push(error);
+      }
+    };
+    attempt(() => { directControlExecutions.abortOwner(ownerId, reason); });
+    attempt(() => { revokedRunIds = transport.revokeOwner(ownerId, reason); });
+    attempt(() => { kernel.revokeRunToolCapabilitiesForOwner(ownerId, "owner_changed"); });
+    attempt(() => {
+      rejectPendingToolCallsForOwner(
+        ownerId,
+        reason,
+        reason === "owner_changed"
+          ? "Active owner changed during tool execution"
+          : "Owner runtime state was cleared during tool execution",
+      );
+    });
+    return { errors, revokedRunIds };
+  };
+  const throwOwnerRevocationErrors = (errors: readonly unknown[]): void => {
+    if (errors.length === 0) return;
+    const first = errors[0];
+    throw new Error(
+      `Owner runtime revocation failed at ${errors.length} boundary(s): ${first instanceof Error ? first.message : String(first)}`,
+      { cause: first },
+    );
+  };
+  const terminalizeAndClearOwnerRuntime = (
+    ownerId: string,
+    reason: "owner_changed" | "owner_state_cleared",
+  ): OwnerRuntimeRevocationReceipt => {
+    lastOwnerRuntimeRevocation = null;
+    const revocation = revokeOwnerRuntimeWork(ownerId, reason);
+    let result: ReturnType<AgentRuntimeKernel["clearOwnerState"]> | undefined;
+    try {
+      result = kernel.clearOwnerState(ownerId);
+    } catch (error) {
+      revocation.errors.push(error);
+    }
+    throwOwnerRevocationErrors(revocation.errors);
+    const receipt = {
+      ownerId,
+      revokedRunIds: revocation.revokedRunIds,
+      invalidatedBindingIds: result!.invalidatedBindingIds,
+    };
+    lastOwnerRuntimeRevocation = receipt;
+    return receipt;
+  };
   const preferenceForOwner = (ownerId: string) => kernel.defaultExecutionProfilePreference(ownerId)
     ?? kernel.configureDefaultExecutionProfile({
       ownerId,
@@ -1211,7 +1361,7 @@ async function main(): Promise<void> {
   };
   let pumpingJournalOutbox = false;
   const pumpJournalOutbox = () => {
-    if (pumpingJournalOutbox) return;
+    if (!ownerAuthorityEstablished || pumpingJournalOutbox) return;
     pumpingJournalOutbox = true;
     try {
       const activeOwnerId = currentOwnerId;
@@ -1259,7 +1409,6 @@ async function main(): Promise<void> {
   journalPumpTimer.unref();
   // 3. Signal readiness
   send({ type: "init", sessionId: "", agentControlTools: SWIFT_ADVERTISED_AGENT_CONTROL_TOOL_NAMES });
-  triggerBackendReconcile({ ownerId: currentOwnerId });
   logErr("Agent runtime bridge started, waiting for queries...");
 
   // 4. Read JSON lines from Swift
@@ -1573,7 +1722,6 @@ async function main(): Promise<void> {
           });
           if (isAgentControlToolName(authorized.canonicalToolName)) {
             kernel.markRunToolInvocationDispatched(authorized);
-            const pending = registerPendingExternalToolCall(request, authorized);
             const spawnDescriptor = routed.toolName === "spawn_agent"
               ? parseAgentSpawnProducerJournalDescriptor(
                   ((routed.toolInput.metadata as Record<string, unknown> | undefined) ?? {}).producerJournal,
@@ -1581,7 +1729,9 @@ async function main(): Promise<void> {
               : undefined;
             let result: string;
             let outcome: "succeeded" | "failed" = "succeeded";
+            let executionLease: RunToolExecutionLease | undefined;
             try {
+              executionLease = kernel.acquireRunToolExecutionLease(authorized, establishedOwnerId);
               if (!agentControlToolContext) throw new Error("Agent runtime kernel is not ready");
               const activeSession = requireControlSessionPolicy(authorized.sessionId, authorized.ownerId);
               result = await handleAgentControlToolCall(
@@ -1593,25 +1743,25 @@ async function main(): Promise<void> {
                   defaultAdapterId: activeSession.defaultAdapterId,
                   authorizedProducerJournal: spawnDescriptor,
                   authorizedCallerRunId: routed.toolName === "spawn_agent" ? request.runId : undefined,
-                  getOwnerId: () => authorized.ownerId,
+                  getOwnerId: establishedOwnerId,
+                  executionLease,
                 },
                 authorized.canonicalToolName,
                 routed.toolInput,
               );
+              outcome = controlToolInvocationOutcome(result);
             } catch (error) {
               outcome = "failed";
+              const authorityError = externalAuthorityError(error, "control_tool_failed");
               result = relayError(
-                "control_tool_failed",
-                error instanceof Error ? error.message : "Control tool execution failed",
+                authorityError.code,
+                authorityError.message,
               );
             }
+            executionLease?.release();
             if (outcome === "succeeded" && spawnDescriptor) {
               result = attachAgentSpawnJournalReceipt(result, spawnDescriptor);
             }
-            const pendingKey = toolCallPendingKey(authorized);
-            if (pendingExternalToolCalls.get(pendingKey) !== pending) break;
-            pendingExternalToolCalls.delete(pendingKey);
-            clearTimeout(pending.timeout);
             kernel.completeRunToolInvocation({
               invocationId: authorized.invocationId,
               ownerId: authorized.ownerId,
@@ -1625,6 +1775,7 @@ async function main(): Promise<void> {
               executionGeneration: authorized.executionGeneration,
               inputHash: authorized.inputHash,
               capabilityRef: authorized.capabilityRef,
+              activeOwnerId: currentOwnerId,
               outcome,
               result,
             });
@@ -1808,6 +1959,88 @@ async function main(): Promise<void> {
         break;
       }
 
+      case "journal_record_exchange": {
+        const request = msg as JournalRecordExchangeMessage;
+        try {
+          const ownerId = resolveActiveOwner(request.ownerId);
+          const resolved = resolveJournalSurface({
+            ownerId,
+            surfaceKind: request.surfaceKind,
+            externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId,
+          });
+          const turns = Array.isArray(request.turns) ? request.turns : [];
+          const result = recordJournalExchange(store, {
+            ownerId,
+            conversationId: resolved.conversationId,
+            turns: turns.map((turn) => ({
+              turnId: typeof turn.turnId === "string" ? turn.turnId : undefined,
+              producerId: typeof turn.producerId === "string" ? turn.producerId : undefined,
+              role: turn.role === "assistant" ? "assistant" as const : "user" as const,
+              surfaceKind: request.surfaceKind,
+              origin: journalOrigin(turn.origin ?? "typed_chat"),
+              status: (typeof turn.status === "string" ? turn.status : "pending") as ConversationTurnStatus,
+              content: typeof turn.content === "string" ? turn.content : "",
+              contentBlocks: Array.isArray(turn.contentBlocks)
+                ? turn.contentBlocks as ConversationContentBlock[]
+                : [],
+              resources: Array.isArray(turn.resources) ? turn.resources as ConversationResource[] : [],
+              producingRunId: typeof turn.producingRunId === "string" ? turn.producingRunId : null,
+              metadataJson: typeof turn.metadataJson === "string" ? turn.metadataJson : "{}",
+              delivery: turn.delivery === "local" ? "local" as const : "backend" as const,
+              createdAtMs: typeof turn.createdAtMs === "number" ? turn.createdAtMs : undefined,
+            })),
+          });
+          const range = listJournalTurns(store, {
+            ownerId,
+            conversationId: resolved.conversationId,
+            afterTurnSeq: 0,
+            limit: 1,
+          });
+          send({
+            type: "journal_operation_result",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            operation: "record_exchange",
+            conversationId: resolved.conversationId,
+            surfaceKind: request.surfaceKind,
+            externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId,
+            turns: result.turns.map(journalTurnProjection),
+            clearedCount: 0,
+            highWaterTurnSeq: range.highWaterTurnSeq,
+            generationBaseTurnSeq: range.generationBaseTurnSeq,
+            conversationGeneration: range.generation,
+          });
+          // recordJournalExchange has returned, so its outer transaction is
+          // committed before any observer can see either half.
+          for (const turn of result.createdTurns) {
+            send({
+              type: "journal_turn_changed",
+              conversationGeneration: range.generation,
+              generationBaseTurnSeq: range.generationBaseTurnSeq,
+              surfaceKind: request.surfaceKind,
+              externalRefKind: request.externalRefKind,
+              externalRefId: request.externalRefId,
+              turn: journalTurnProjection(turn),
+            });
+          }
+          pumpJournalOutbox();
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            message: envelope.message,
+            failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
       case "journal_update_turn": {
         const request = msg as JournalUpdateTurnMessage;
         const ownerId = resolveActiveOwner(request.ownerId);
@@ -1985,6 +2218,7 @@ async function main(): Promise<void> {
 
       case "journal_backend_sync_result": {
         const result = msg as JournalBackendSyncResultMessage;
+        resolveActiveOwner(result.ownerId);
         const claimOwner = store.getOptionalRow(
           "SELECT owner_id, conversation_id FROM backend_turn_outbox WHERE turn_id = ?",
           [result.turnId],
@@ -2053,6 +2287,7 @@ async function main(): Promise<void> {
 
       case "journal_backend_delete_result": {
         const result = msg as JournalBackendDeleteResultMessage;
+        resolveActiveOwner(result.ownerId);
         const claim = store.getRow(
           `SELECT owner_id, conversation_id
            FROM backend_conversation_delete_outbox WHERE operation_id = ?`,
@@ -2104,6 +2339,7 @@ async function main(): Promise<void> {
 
       case "journal_backend_reconcile_result": {
         const result = msg as JournalBackendReconcileResultMessage;
+        resolveActiveOwner(result.ownerId);
         const claim = store.getOptionalRow(
           `SELECT owner_id, in_flight_id, status FROM backend_reconcile_state
            WHERE conversation_id = ?`,
@@ -2180,88 +2416,40 @@ async function main(): Promise<void> {
         const control = msg as DirectControlToolRequestMessage;
         const requestId = control.requestId?.trim();
         const clientId = control.clientId?.trim();
-        const ownerGuard = control.ownerId?.trim();
+        const ownerGuard = control.ownerId?.trim() ?? "";
         if (!requestId || !clientId) {
           send({
             type: "control_tool_result",
             protocolVersion: PROTOCOL_VERSION,
             requestId,
             clientId,
+            ownerId: ownerGuard,
             name: control.name,
             result: relayError("invalid_request", "Direct control requires tracing requestId and clientId"),
           });
           break;
         }
-        if (!isAgentControlToolName(control.name)) {
-          send({
-            type: "control_tool_result",
-            protocolVersion: control.protocolVersion,
-            requestId,
-            clientId,
-            name: control.name,
-            result: relayError(
-              "unsupported_direct_control_tool",
-              "Direct app control cannot execute " + control.name,
-            ),
-          });
-          break;
-        }
-        if (!ownerGuard || ownerGuard !== currentOwnerId) {
-          send({
-            type: "control_tool_result",
-            protocolVersion: control.protocolVersion,
-            requestId,
-            clientId,
-            name: control.name,
-            result: relayError("invalid_owner_id", "Direct control owner does not match the active signed-in owner"),
-          });
-          break;
-        }
-
-        let controlInput: Record<string, unknown>;
-        try {
-          controlInput = withMergedOwnerGuard(control.input ?? {}, ownerGuard, currentOwnerId);
-          controlInput = {
-            ...controlInput,
-            requestId:
-              typeof controlInput.requestId === "string" && controlInput.requestId.trim()
-                ? controlInput.requestId
-                : requestId,
-            clientId:
-              typeof controlInput.clientId === "string" && controlInput.clientId.trim()
-                ? controlInput.clientId
-                : clientId,
-          };
-        } catch (error) {
-          send({
-            type: "control_tool_result",
-            protocolVersion: control.protocolVersion,
-            requestId,
-            clientId,
-            name: control.name,
-            result: relayError("invalid_owner_id", error instanceof Error ? error.message : String(error)),
-          });
-          break;
-        }
-
-        const result = agentControlToolContext
-          ? await handleAgentControlToolCall(
-              {
-                ...agentControlToolContext,
-                trustedUserControl: true,
-                getOwnerId: () => currentOwnerId,
-              },
-              control.name,
-              controlInput,
-            )
-          : relayError("runtime_not_ready", "Agent runtime kernel is not ready");
+        const execution = agentControlToolContext
+          ? await directControlExecutions.execute({
+              ownerId: ownerGuard,
+              clientId,
+              requestId,
+              name: control.name,
+              input: control.input ?? {},
+            }, agentControlToolContext)
+          : {
+              ownerId: ownerGuard,
+              name: control.name,
+              result: relayError("runtime_not_ready", "Agent runtime kernel is not ready"),
+            };
         send({
           type: "control_tool_result",
           protocolVersion: control.protocolVersion,
           requestId,
           clientId,
-          name: control.name,
-          result,
+          ownerId: execution.ownerId,
+          name: execution.name,
+          result: execution.result,
         });
         break;
       }
@@ -2273,12 +2461,57 @@ async function main(): Promise<void> {
         });
         break;
 
-      case "clear_owner_state": {
-        const ownerId = resolveActiveOwner(msg.ownerId);
-        const result = kernel.clearOwnerState(ownerId);
-        logErr(
-          `Cleared owner state for ${ownerId}: invalidated ${result.invalidatedBindingIds.length} binding(s)`,
-        );
+      case "revoke_owner_runtime": {
+        const request = msg as RevokeOwnerRuntimeMessage;
+        const requestId = request.requestId?.trim();
+        const clientId = request.clientId?.trim();
+        const requestedOwnerId = request.ownerId?.trim() ?? "";
+        try {
+          if (!requestId || !clientId) {
+            throw new Error("Owner runtime revocation requires requestId and clientId");
+          }
+          const barrier = runRuntimeOwnerRevocationBarrier({
+            state: { ownerId: currentOwnerId, established: ownerAuthorityEstablished },
+            requestedOwnerId,
+            inertOwnerId: DEFAULT_LOCAL_OWNER_ID,
+            lastReceipt: lastOwnerRuntimeRevocation,
+            // Authority is made inert before any abort/terminalization boundary.
+            // No new A or B work can be admitted while the correlated barrier runs.
+            commitAuthority: (state) => {
+              currentOwnerId = state.ownerId;
+              ownerAuthorityEstablished = state.established;
+            },
+            revokeAndClear: (previousOwnerId) => terminalizeAndClearOwnerRuntime(
+              previousOwnerId,
+              "owner_state_cleared",
+            ),
+          });
+          const receipt = barrier.receipt;
+          send({
+            type: "owner_runtime_revoked",
+            protocolVersion: request.protocolVersion,
+            requestId,
+            clientId,
+            ownerId: receipt.ownerId,
+            ok: true,
+            duplicate: barrier.duplicate,
+            revokedRunIds: receipt.revokedRunIds,
+            invalidatedBindingIds: receipt.invalidatedBindingIds,
+          });
+        } catch (error) {
+          send({
+            type: "owner_runtime_revoked",
+            protocolVersion: request.protocolVersion,
+            requestId,
+            clientId,
+            ownerId: requestedOwnerId,
+            ok: false,
+            duplicate: false,
+            revokedRunIds: [],
+            invalidatedBindingIds: [],
+            error: externalAuthorityError(error, "owner_runtime_revoke_failed"),
+          });
+        }
         break;
       }
 
@@ -2323,19 +2556,52 @@ async function main(): Promise<void> {
         break;
       }
 
-      case "invalidate_session":
-        transport.handleInvalidateSession(msg);
+      case "invalidate_session": {
+        const invalidate = msg as InvalidateSessionMessage;
+        invalidate.ownerId = resolveActiveOwner(invalidate.ownerId);
+        transport.handleInvalidateSession(invalidate);
         break;
+      }
+
+      case "refresh_owner": {
+        const owner = msg as RefreshOwnerMessage;
+        const transition = establishRuntimeOwner(
+          { ownerId: currentOwnerId, established: ownerAuthorityEstablished },
+          owner.ownerId,
+        );
+        if (transition.changed && !transition.firstEstablishment) {
+          currentOwnerId = DEFAULT_LOCAL_OWNER_ID;
+          ownerAuthorityEstablished = false;
+          terminalizeAndClearOwnerRuntime(transition.previousOwnerId, "owner_changed");
+        }
+        currentOwnerId = transition.ownerId;
+        ownerAuthorityEstablished = true;
+        lastOwnerRuntimeRevocation = null;
+        if (transition.changed || transition.firstEstablishment) {
+          triggerBackendReconcile({ ownerId: currentOwnerId });
+          pumpJournalOutbox();
+        }
+        break;
+      }
 
       case "refresh_token": {
         const rtm = msg as RefreshTokenMessage;
-        process.env.OMI_AUTH_TOKEN = rtm.token;
-        const nextOwnerId = rtm.ownerId?.trim() || DEFAULT_LOCAL_OWNER_ID;
-        if (nextOwnerId !== currentOwnerId) {
-          rejectPendingToolCallsForOwner(currentOwnerId);
-          kernel.revokeRunToolCapabilitiesForOwner(currentOwnerId, "owner_changed");
-          currentOwnerId = nextOwnerId;
+        const transition = authorizeRuntimeTokenRefresh(
+          { ownerId: currentOwnerId, established: ownerAuthorityEstablished },
+          rtm.ownerId,
+          () => { process.env.OMI_AUTH_TOKEN = rtm.token; },
+        );
+        if (transition.changed) {
+          directControlExecutions.transitionOwner(transition.previousOwnerId, transition.ownerId);
+          kernel.revokeRunToolCapabilitiesForOwner(transition.previousOwnerId, "owner_changed");
+          rejectPendingToolCallsForOwner(transition.previousOwnerId);
+        }
+        currentOwnerId = transition.ownerId;
+        ownerAuthorityEstablished = true;
+        lastOwnerRuntimeRevocation = null;
+        if (transition.changed || transition.firstEstablishment) {
           triggerBackendReconcile({ ownerId: currentOwnerId });
+          pumpJournalOutbox();
         }
         try {
           await ensurePiMonoAdapter(rtm.token);
@@ -2351,18 +2617,15 @@ async function main(): Promise<void> {
         break;
       }
 
-      case "authenticate": {
-        logErr(`Authentication message received from Swift`);
-        send({ type: "auth_success" });
-        if (authResolve) {
-          authResolve();
-          authResolve = null;
-        }
-        break;
-      }
-
       case "stop":
         logErr("Received stop signal, exiting");
+        directControlExecutions.abortAll();
+        kernel.revokeRunToolCapabilities("runtime_stopped");
+        rejectPendingToolCallsForOwner(
+          currentOwnerId,
+          "runtime_stopped",
+          "Agent runtime stopped during tool execution",
+        );
         clearInterval(journalPumpTimer);
         store.close();
         await acpAdapter.stop();
@@ -2379,6 +2642,13 @@ async function main(): Promise<void> {
   rl.on("close", () => {
     logErr("stdin closed, exiting");
     logCrash("stdin closed, exiting");
+    directControlExecutions.abortAll();
+    kernel.revokeRunToolCapabilities("runtime_stopped");
+    rejectPendingToolCallsForOwner(
+      currentOwnerId,
+      "runtime_stopped",
+      "Agent runtime stopped during tool execution",
+    );
     store.close();
     void acpAdapter.stop();
     void Promise.all([...piMonoAdapters].map((adapter) => adapter.stop()));

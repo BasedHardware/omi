@@ -798,19 +798,41 @@ final class ChatTimelineContinuityTests: XCTestCase {
 
   @MainActor
   func testFindPillMatchesByHydratePreferenceOrder() {
-    let runPill = AgentPill(id: UUID(), query: "by-run", model: "test")
+    let defaults = UserDefaults.standard
+    let previousAuthOwner = defaults.object(forKey: .authUserId)
+    let previousAutomationOwner = defaults.object(forKey: .automationOwnerOverride)
+    let ownerID = "timeline-hydrate-owner"
+    defaults.removeObject(forKey: .automationOwnerOverride)
+    defaults.set(ownerID, forKey: .authUserId)
+
+    let runPill = AgentPill(
+      id: UUID(), query: "by-run", model: "test", ownerID: ownerID)
     runPill.canonicalRunId = "run-match"
     runPill.canonicalSessionId = "sess-other"
 
-    let sessionPill = AgentPill(id: UUID(), query: "by-session", model: "test")
+    let sessionPill = AgentPill(
+      id: UUID(), query: "by-session", model: "test", ownerID: ownerID)
     sessionPill.canonicalSessionId = "sess-match"
 
     let pillId = UUID()
-    let idPill = AgentPill(id: pillId, query: "by-id", model: "test")
+    let idPill = AgentPill(
+      id: pillId, query: "by-id", model: "test", ownerID: ownerID)
 
     let manager = AgentPillsManager.shared
     let previous = manager.pills
-    defer { manager.replacePillsForTesting(previous) }
+    defer {
+      if let previousAuthOwner {
+        defaults.set(previousAuthOwner, forKey: .authUserId)
+      } else {
+        defaults.removeObject(forKey: .authUserId)
+      }
+      if let previousAutomationOwner {
+        defaults.set(previousAutomationOwner, forKey: .automationOwnerOverride)
+      } else {
+        defaults.removeObject(forKey: .automationOwnerOverride)
+      }
+      manager.replacePillsForTesting(previous)
+    }
     manager.replacePillsForTesting([runPill, sessionPill, idPill])
 
     XCTAssertEqual(

@@ -111,6 +111,11 @@ Phase 1 uses one long-lived Node process per signed-in desktop app instance. Swi
 
 The Node daemon may own multiple bounded adapter subprocesses. Consolidating lifecycle authority into one daemon does not require forcing every run through one underlying model process.
 
+Before the first owner-scoped RPC, every harness sends the signed-in owner to
+the daemon. Managed pi-mono sessions may establish it with `refresh_token`;
+local ACP, Hermes, and OpenClaw sessions use the token-free `refresh_owner`
+handshake. The daemon's startup placeholder owner is never request authority.
+
 ### 4.2 Worker pools
 
 The adapter registry MUST support bounded worker pools because the current ACP and pi-mono implementations are effectively single-flight per process.
@@ -973,14 +978,31 @@ Rules:
 - No owner-scoped path may fall back to process-global mutable owner state when `clientId`/`requestId` context is expected but absent.
 - Internal maps and queues MUST key request-scoped state by `(clientId, requestId)`, not `requestId` alone.
 - `runId`-only interrupt or control requests MUST still prove owner visibility through the active context or an explicit matching owner guard.
+- JSONL query, interrupt, warmup, and binding-invalidation handlers MUST resolve
+  the active daemon owner before transport mutation and reject a stale or forged
+  owner guard.
 - Swift app surfaces that manage existing agents outside an active query MUST use the dedicated `direct_control_tool`
-  JSONL envelope. It requires a signed-in `ownerId` guard. If it starts a long-lived run, it MUST mint and retain a
-  distinct `(clientId, requestId)` context through that run's terminal event so worker tool relays remain authorized;
-  request-scoped `control_tool` remains valid only while the daemon has an active `(clientId, requestId)` owner context.
-- Query-scoped tool relay messages MUST carry all available Omi correlation fields: `protocolVersion`, `clientId`, `requestId`, `sessionId`, `runId`, `attemptId`, adapter IDs, and explicitly named adapter-native compatibility fields.
+  JSONL envelope. It requires a signed-in `ownerId` guard, but that request lifetime never authorizes child work. A
+  long-lived run receives a kernel-issued run/attempt capability; the control-effect lease revalidates owner, run,
+  attempt, and immutable execution profile before every physical effect and aborts in-flight work on revocation.
+- Swift captures one immutable runtime-owner authorization snapshot at public
+  operation admission and carries it through daemon startup, every awaited RPC,
+  response routing, UI callbacks, and downstream mutation. Re-reading the same
+  uid is not equivalent: authorization generation changes on every real owner
+  transition, including sign-out and sign-in to the same account.
+- Effective-owner replacement sends correlated `revoke_owner_runtime` and waits
+  for `owner_runtime_revoked`. Node deauthorizes the previous owner before it
+  synchronously terminalizes runs, pending tool claims, and bindings. Swift then
+  drains physical tool tasks and confirms the child has exited before defaults
+  expose the replacement owner. Nack, timeout, malformed receipt, or teardown
+  failure may not fail open to the next owner.
+- Multi-agent admission records each child as soon as the kernel accepts it. If
+  a later sibling fails, the handler immediately cancels every admitted child;
+  any cleanup failure returns the admitted run IDs and cancellation receipts.
+- Query-scoped tool relay messages MUST carry all available Omi correlation fields: `protocolVersion`, `clientId`, `requestId`, `sessionId`, `runId`, `attemptId`, adapter IDs, and explicitly named adapter-native compatibility fields. Request/client IDs remain tracing fields; only the persisted invocation claim authorizes execution.
 - Adapter subprocess environments and adapter-to-daemon relay messages are one contract. If the daemon sets `OMI_REQUEST_ID` and `OMI_CLIENT_ID`, the adapter relay MUST serialize them onto any tool-use message that depends on request ownership.
-- Long-lived adapter workers MUST NOT rely on launch-time environment variables as per-attempt context. They MUST refresh active request/run/attempt context through a per-attempt channel before execution, and relay tools MUST read that channel when emitting request-scoped messages.
-- Missing request context for an owner-scoped control tool is a hard error unless the operation is explicitly unscoped and safe by design.
+- Long-lived adapter workers MUST NOT rely on launch-time environment variables as per-attempt context. They MUST refresh active run/attempt capability context through a per-attempt channel before execution, and relay tools MUST read that channel when emitting invocation messages.
+- Missing run/attempt authority for an owner-scoped physical effect is a hard error even when request correlation is present. An operation may omit it only when it is explicitly unscoped and safe by design.
 
 The local implementation may store this as plain objects rather than a named class, but tests MUST assert the complete context survives each boundary:
 
@@ -1003,6 +1025,10 @@ Cleanup MUST remove request maps before or atomically with resuming continuation
 MUST be dropped or logged without reauthorizing a request. Tests SHOULD use fake adapters, temp state, and deterministic
 continuations to cover these terminal paths without depending on wall-clock ordering.
 
+Run/attempt or owner revocation also terminalizes every pending tool invocation:
+`prepared` becomes `failed`, while `dispatched` becomes `outcome_unknown`.
+Swift completion arriving afterward cannot restore durable success.
+
 ### 13.8 v1 compatibility window
 
 For one release, the Node facade SHOULD accept current v1 `query`, `interrupt`, `warmup`, and `invalidate_session` messages.
@@ -1014,34 +1040,31 @@ For one release, the Node facade SHOULD accept current v1 `query`, `interrupt`, 
 - The v1 path still creates canonical sessions, runs, attempts, and events.
 - Do not maintain a separate v1 session map.
 
-## 14. Existing task-chat `acpSessionId` migration
+## 14. Existing task-chat journal migration
 
 ### 14.1 Interpretation
 
-Existing `task_chat_messages.acpSessionId` values are adapter-native ACP session IDs. They MUST NOT be copied into `sessions.session_id` and MUST NOT be reinterpreted as Omi IDs.
+`task_chat_messages` is a read-only legacy source. Its `acpSessionId` values are adapter-native ACP session IDs; they MUST NOT be copied into `sessions.session_id` or reinterpreted as Omi IDs. New task/workstream turns use the kernel conversation journal and `TaskChatState` is only its projection.
 
 ### 14.2 Migration strategy
 
-Use lazy backfill on first task-chat access or first new task query:
+Use lazy, idempotent import on first workstream-chat access:
 
-1. Resolve or create one canonical Omi session using `external_ref_kind = 'task'` and `external_ref_id = task_id`.
-2. Read the latest non-null `acpSessionId` from existing task messages.
-3. If the selected adapter is ACP and the canonical session has no ACP binding, insert that ID as adapter binding generation 1 with `resume_fidelity = 'native'`.
-4. Attempt native resume as attempt 1.
-5. If resume fails, mark the binding stale and create a fresh binding in attempt 2. The canonical Omi session remains unchanged.
-6. Older distinct ACP IDs remain legacy history in message rows. Do not import every historical value as an active binding.
+1. Resolve one canonical `surface_kind=workstream` conversation for the owner and workstream.
+2. Read immutable legacy rows in bounded `(createdAt, rowId)` pages across every task linked to that workstream.
+3. Import each row through the journal API with a stable legacy identity; journal deduplication makes retries and restart safe.
+4. Checkpoint only after the terminal page has been accepted. The legacy table remains untouched and rollback-readable.
+5. Migrate any prior task-scoped kernel conversation through the canonical journal migration transaction, preserving typed blocks, resources, revisions, outbox delivery state, sequence, and current visibility.
+6. Treat historical `acpSessionId` values only as legacy adapter-binding hints where native ACP resume is still required; they never become journal/session identity.
 
-### 14.3 Transitional writes
+### 14.3 Legacy-store boundary
 
-For one rollback-compatible release:
+- `TaskChatMessageStorage` exposes only the bounded, cursor-based `legacyMessagePage` import reader; it has no generic projection/search or message-write API.
+- No new path may write `task_chat_messages` or `acpSessionId`.
+- Task chat, main chat, floating chat, voice, notifications, and agent lifecycle all enter the same journal mutation API with distinct surface scopes.
+- The local task/workstream journal remains local-only where product policy requires it; this is a delivery policy, not a second durable writer.
 
-- `TaskChatState` stores `omiSessionId` and `legacyAcpSessionId` separately in memory.
-- New logic uses `QueryResult.omiSessionId` for canonical continuity.
-- Existing `acpSessionId` message writes MAY continue using `QueryResult.adapterSessionId` only when the active adapter is ACP.
-- Never write an Omi session ID into the `acpSessionId` column.
-- After the compatibility release, stop writing `acpSessionId`; retain the column read-only until a later database cleanup.
-
-No new `agentSessionId` column is required in the task-message database because the canonical mapping is durable in `omi-agentd` by `task_id`. A future cloud/cross-device migration may add a canonical session reference to the action-item model.
+No new `agentSessionId` column is required in the legacy task-message database because canonical surface/session mapping is durable in `omi-agentd`.
 
 The current action-item `chatSessionId = task.id` marker is a separate legacy scheduler/deduplication field. It MUST NOT be repurposed to store an Omi agent session ID.
 

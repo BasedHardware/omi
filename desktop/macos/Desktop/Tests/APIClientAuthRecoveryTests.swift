@@ -4,7 +4,10 @@ import XCTest
 
 final class APIClientAuthRecoveryTests: XCTestCase {
   func testAPIClientCentralizes401RefreshAndInvalidate() throws {
-    let source = try sourceFile("APIClient.swift")
+    let source = try [
+      sourceFile("APIClient.swift"),
+      sourceFile("APIClient+AuthPolicy.swift"),
+    ].joined(separator: "\n")
     XCTAssertTrue(source.contains("invalidateSessionAfterUnauthorized"))
     XCTAssertTrue(source.contains("authorizedRetryRequest"))
     XCTAssertTrue(source.contains("struct RequestAuthPolicy"))

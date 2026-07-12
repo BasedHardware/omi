@@ -325,7 +325,7 @@ final class ChatErrorStateTests: XCTestCase {
     XCTAssertNotNil(range)
     let snippet = String(source[range!.lowerBound...]).prefix(200)
     XCTAssertTrue(snippet.contains("invalidateSession(reason: .restoredSessionInvalid)"))
-    let methodStart = source.range(of: "private func validateRestoredSessionNow() async")
+    let methodStart = source.range(of: "private func validateRestoredSessionNow(attempt:")
     XCTAssertNotNil(methodStart)
     let method = String(source[methodStart!.lowerBound...]).prefix(1200)
     XCTAssertTrue(method.contains("storedIdToken == nil") || method.contains("storedRefreshToken == nil"))
@@ -333,7 +333,7 @@ final class ChatErrorStateTests: XCTestCase {
 
   func testRestoredSessionValidationForceRefreshesOnLaunch() throws {
     let source = try sourceFile("AuthService.swift")
-    let validationRange = source.range(of: "private func validateRestoredSessionNow() async")
+    let validationRange = source.range(of: "private func validateRestoredSessionNow(attempt:")
     XCTAssertNotNil(validationRange)
     let snippet = String(source[validationRange!.lowerBound...])
 

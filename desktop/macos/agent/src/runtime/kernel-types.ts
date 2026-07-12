@@ -87,6 +87,8 @@ export interface ExecuteAgentRunInput extends KernelSessionResolutionInput {
   expectedCapabilityVersion?: string;
   /** Kernel-populated immutable admission snapshot; callers cannot select it. */
   admittedContextSnapshot?: ContextSnapshotProjection;
+  /** Revokes adapter execution when the authorizing parent invocation expires. */
+  authoritySignal?: AbortSignal;
 }
 
 export interface BeginExternalSurfaceRunInput {
@@ -335,6 +337,7 @@ export interface SendAgentMessageInput {
   maxAttempts?: number;
   recoverAfterError?: (error: unknown) => Promise<boolean>;
   metadata?: Record<string, unknown>;
+  authoritySignal?: AbortSignal;
 }
 
 export interface SpawnBackgroundAgentInput {
@@ -364,6 +367,7 @@ export interface SpawnBackgroundAgentInput {
   metadata?: Record<string, unknown>;
   /** Kernel-admitted producer snapshot for trusted top-level surface spawns. */
   admittedContextSnapshot?: ContextSnapshotProjection;
+  authoritySignal?: AbortSignal;
 }
 
 export interface SpawnBackgroundAgentResult {
@@ -396,6 +400,7 @@ export interface DelegateAgentInput {
   maxAttempts?: number;
   recoverAfterError?: (error: unknown) => Promise<boolean>;
   metadata?: Record<string, unknown>;
+  authoritySignal?: AbortSignal;
 }
 
 export interface DelegateAgentResult {

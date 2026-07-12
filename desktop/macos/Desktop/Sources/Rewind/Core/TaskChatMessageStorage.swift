@@ -159,23 +159,6 @@ actor TaskChatMessageStorage {
         return db
     }
 
-    // MARK: - Query
-
-    /// Get all messages for a task, ordered by creation time
-    func getMessages(forTaskId taskId: String) async throws -> [TaskChatMessageRecord] {
-        let db = try await ensureInitialized()
-        return try await db.read { database in
-            try TaskChatMessageRecord
-                .filter(Column("taskId") == taskId)
-                .order(Column("createdAt").asc)
-                .fetchAll(database)
-        }
-    }
-
-    func getMessages(forWorkstreamId workstreamId: String) async throws -> [TaskChatMessageRecord] {
-        try await getMessages(forTaskId: workstreamId)
-    }
-
     /// Read-only compatibility source for the one-time kernel import. Every SQL
     /// read is capped at 100 immutable rows; callers checkpoint only after they
     /// have consumed pages through the terminal short page.
@@ -221,35 +204,6 @@ actor TaskChatMessageStorage {
         }
     }
 
-    // MARK: - Search
-
-    /// Full-text search across task chat messages
-    func search(query: String, taskId: String? = nil, limit: Int = 20) async throws -> [TaskChatMessageRecord] {
-        let db = try await ensureInitialized()
-        return try await db.read { database in
-            var sql = """
-                SELECT task_chat_messages.*
-                FROM task_chat_messages
-                JOIN task_chat_messages_fts ON task_chat_messages.id = task_chat_messages_fts.rowid
-                WHERE task_chat_messages_fts MATCH ?
-            """
-            var arguments: [DatabaseValueConvertible] = [query]
-
-            if let taskId {
-                sql += " AND task_chat_messages.taskId = ?"
-                arguments.append(taskId)
-            }
-
-            sql += " ORDER BY rank LIMIT ?"
-            arguments.append(limit)
-
-            return try TaskChatMessageRecord.fetchAll(
-                database,
-                sql: sql,
-                arguments: StatementArguments(arguments)
-            )
-        }
-    }
 }
 
 // MARK: - TableDocumented

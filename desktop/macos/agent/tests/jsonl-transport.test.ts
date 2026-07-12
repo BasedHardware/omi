@@ -153,6 +153,73 @@ describe("JsonlTransport kernel-owned query contract", () => {
     store.close();
   });
 
+  it("rejects a forged wrong-owner invalidation before mutating that owner's binding", () => {
+    const { store, transport } = fixture();
+    const ownerBSession = store.insertSession({
+      ownerId: "owner-b",
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "owner-b-chat",
+      defaultAdapterId: "fake",
+    });
+    const binding = store.insertAdapterBinding({
+      sessionId: ownerBSession.sessionId,
+      adapterId: "fake",
+      bindingGeneration: 1,
+      adapterNativeSessionId: "owner-b-native",
+      adapterInstanceId: "owner-b-worker",
+      resumeFidelity: "native",
+      status: "active",
+    });
+
+    expect(() => transport.handleInvalidateSession({
+      type: "invalidate_session",
+      protocolVersion: 2,
+      requestId: "forged-owner-b-invalidate",
+      clientId: "client-1",
+      ownerId: "owner-b",
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "owner-b-chat",
+    })).toThrow(/owner_mismatch/);
+    expect(store.getRow(
+      "SELECT status FROM adapter_bindings WHERE binding_id = ?",
+      [binding.bindingId],
+    ).status).toBe("active");
+    store.close();
+  });
+
+  it("rejects an owner-A invalidation that arrives after the runtime transitions to owner B", () => {
+    const { store, session, transport, setActiveOwner } = fixture();
+    const binding = store.insertAdapterBinding({
+      sessionId: session.sessionId,
+      adapterId: "fake",
+      bindingGeneration: 1,
+      adapterNativeSessionId: "owner-a-native",
+      adapterInstanceId: "owner-a-worker",
+      resumeFidelity: "native",
+      status: "active",
+    });
+    const staleMessage = {
+      type: "invalidate_session" as const,
+      protocolVersion: 2 as const,
+      requestId: "stale-owner-a-invalidate",
+      clientId: "client-1",
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+    };
+
+    setActiveOwner("owner-b");
+    expect(() => transport.handleInvalidateSession(staleMessage)).toThrow(/owner_mismatch/);
+    expect(store.getRow(
+      "SELECT status FROM adapter_bindings WHERE binding_id = ?",
+      [binding.bindingId],
+    ).status).toBe("active");
+    store.close();
+  });
+
   it("derives cancellation authority from the persisted run owner", async () => {
     const { store, adapter, session, sent, transport } = fixture();
     adapter.deferResult();
@@ -163,7 +230,7 @@ describe("JsonlTransport kernel-owned query contract", () => {
     await transport.handleInterrupt({
       requestId: "request-1",
       clientId: "client-1",
-      ownerId: "ignored-caller-owner",
+      ownerId: "owner",
       runId: String(run.run_id),
     });
     expect(adapter.cancelled).toHaveLength(1);
@@ -172,6 +239,26 @@ describe("JsonlTransport kernel-owned query contract", () => {
       dispatchAttempted: true,
     });
     adapter.resolveDeferred({ terminalStatus: "cancelled" });
+    await running;
+    store.close();
+  });
+
+  it("rejects wrong-owner cancellation before dispatching a transport mutation", async () => {
+    const { store, adapter, session, transport } = fixture();
+    adapter.deferResult();
+    const running = transport.handleQuery(query(session.sessionId));
+    await waitUntil(() => adapter.executed.length === 1);
+    const run = store.getRow("SELECT run_id FROM runs WHERE session_id = ?", [session.sessionId]);
+
+    await expect(transport.handleInterrupt({
+      requestId: "request-1",
+      clientId: "client-1",
+      ownerId: "owner-b",
+      runId: String(run.run_id),
+    })).rejects.toThrow(/owner_mismatch/);
+    expect(adapter.cancelled).toHaveLength(0);
+
+    adapter.resolveDeferred({ terminalStatus: "succeeded" });
     await running;
     store.close();
   });
@@ -194,6 +281,60 @@ describe("JsonlTransport kernel-owned query contract", () => {
     setActiveOwner("owner");
     adapter.resolveDeferred({ terminalStatus: "cancelled" });
     await running;
+    store.close();
+  });
+
+  it("terminalizes owner A before owner B admission and drops deferred adapter success", async () => {
+    const { store, adapter, session, sent, transport, setActiveOwner } = fixture();
+    adapter.deferResult();
+    const running = transport.handleQuery(query(session.sessionId));
+    await waitUntil(() => adapter.executed.length === 1);
+    sent.splice(0);
+
+    expect(transport.revokeOwner("owner", "owner_changed")).toHaveLength(1);
+    expect(store.getRow("SELECT status, final_text FROM runs LIMIT 1")).toMatchObject({
+      status: "cancelled",
+      final_text: null,
+    });
+    setActiveOwner("owner-b");
+
+    adapter.resolveDeferred({ terminalStatus: "succeeded", text: "late owner A success" });
+    await running;
+    expect(sent).toEqual([]);
+    expect(store.getRow("SELECT status, final_text FROM runs LIMIT 1")).toMatchObject({
+      status: "cancelled",
+      final_text: null,
+    });
+    expect(store.getRow(
+      "SELECT COUNT(*) AS count FROM conversation_turns WHERE content LIKE '%late owner A success%'",
+    ).count).toBe(0);
+    store.close();
+  });
+
+  it("clear-owner revocation terminalizes foreground work even when the adapter ignores abort", async () => {
+    const { store, adapter, session, sent, transport, setActiveOwner } = fixture();
+    adapter.deferResult();
+    const running = transport.handleQuery(query(session.sessionId));
+    await waitUntil(() => adapter.executed.length === 1);
+    sent.splice(0);
+
+    setActiveOwner("");
+    expect(transport.revokeOwner("owner", "owner_state_cleared")).toHaveLength(1);
+    expect(store.getRow("SELECT status, final_text FROM runs LIMIT 1")).toMatchObject({
+      status: "cancelled",
+      final_text: null,
+    });
+
+    adapter.resolveDeferred({ terminalStatus: "succeeded", text: "late cleared-owner success" });
+    await running;
+    expect(sent).toEqual([]);
+    expect(store.getRow("SELECT status, final_text FROM runs LIMIT 1")).toMatchObject({
+      status: "cancelled",
+      final_text: null,
+    });
+    expect(store.getRow(
+      "SELECT COUNT(*) AS count FROM conversation_turns WHERE content LIKE '%late cleared-owner success%'",
+    ).count).toBe(0);
     store.close();
   });
 

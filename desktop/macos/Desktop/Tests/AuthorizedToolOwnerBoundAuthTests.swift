@@ -10,35 +10,44 @@ private extension APIClient {
 }
 
 private actor AuthorizedToolRequestGate {
-  private var pendingProtocol: AuthorizedToolOwnerURLProtocol?
-  private var requestWaiters: [CheckedContinuation<URLRequest, Never>] = []
+  private struct RequestWaiter {
+    let path: String
+    let continuation: CheckedContinuation<URLRequest, Never>
+  }
+
+  private var pendingProtocols: [AuthorizedToolOwnerURLProtocol] = []
+  private var selectedProtocols: [String: AuthorizedToolOwnerURLProtocol] = [:]
+  private var requestWaiters: [RequestWaiter] = []
 
   func reset() {
-    pendingProtocol = nil
+    pendingProtocols.removeAll()
+    selectedProtocols.removeAll()
     requestWaiters.removeAll()
   }
 
   func receive(_ urlProtocol: AuthorizedToolOwnerURLProtocol) {
-    pendingProtocol = urlProtocol
-    let waiters = requestWaiters
-    requestWaiters.removeAll()
-    for waiter in waiters {
-      waiter.resume(returning: urlProtocol.request)
+    pendingProtocols.append(urlProtocol)
+    let path = urlProtocol.request.url?.path ?? ""
+    if let index = requestWaiters.firstIndex(where: { $0.path == path }) {
+      let waiter = requestWaiters.remove(at: index)
+      selectedProtocols[path] = urlProtocol
+      waiter.continuation.resume(returning: urlProtocol.request)
     }
   }
 
-  func waitForRequest() async -> URLRequest {
-    if let pendingProtocol {
+  func waitForRequest(path: String) async -> URLRequest {
+    if let pendingProtocol = pendingProtocols.last(where: { $0.request.url?.path == path }) {
+      selectedProtocols[path] = pendingProtocol
       return pendingProtocol.request
     }
     return await withCheckedContinuation { continuation in
-      requestWaiters.append(continuation)
+      requestWaiters.append(RequestWaiter(path: path, continuation: continuation))
     }
   }
 
-  func succeed(with body: String) {
-    guard let pendingProtocol else { return }
-    self.pendingProtocol = nil
+  func succeed(path: String, with body: String) {
+    guard let pendingProtocol = selectedProtocols.removeValue(forKey: path) else { return }
+    pendingProtocols.removeAll { $0 === pendingProtocol }
     let response = HTTPURLResponse(
       url: pendingProtocol.request.url!,
       statusCode: 200,
@@ -88,6 +97,49 @@ private final class AuthorizedToolOwnerURLProtocol: URLProtocol, @unchecked Send
   override func stopLoading() {}
 }
 
+private actor AuthorizedToolPhysicalEffectGate {
+  private var entered = false
+  private var enteredWaiters: [CheckedContinuation<Void, Never>] = []
+  private var releaseContinuation: CheckedContinuation<Void, Never>?
+
+  func suspendEffectPreparation() async {
+    entered = true
+    enteredWaiters.forEach { $0.resume() }
+    enteredWaiters.removeAll()
+    await withCheckedContinuation { releaseContinuation = $0 }
+  }
+
+  func waitUntilEntered() async {
+    if entered { return }
+    await withCheckedContinuation { enteredWaiters.append($0) }
+  }
+
+  func release() {
+    releaseContinuation?.resume()
+    releaseContinuation = nil
+  }
+}
+
+private actor PermissionCallbackBox<Value: Sendable> {
+  private var callback: (@Sendable (Value) -> Void)?
+  private var installWaiters: [CheckedContinuation<Void, Never>] = []
+
+  func install(_ callback: @escaping @Sendable (Value) -> Void) {
+    self.callback = callback
+    installWaiters.forEach { $0.resume() }
+    installWaiters.removeAll()
+  }
+
+  func waitUntilInstalled() async {
+    if callback != nil { return }
+    await withCheckedContinuation { installWaiters.append($0) }
+  }
+
+  func resolve(_ value: Value) {
+    callback?(value)
+  }
+}
+
 @MainActor
 final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
   private var originalAuthOwner: Any?
@@ -117,12 +169,13 @@ final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
         backendAPIClient: client)
     }
 
-    let request = await AuthorizedToolOwnerURLProtocol.gate.waitForRequest()
+    let request = await AuthorizedToolOwnerURLProtocol.gate.waitForRequest(path: "/v1/tools/memories")
     XCTAssertEqual(request.httpMethod, "GET")
     XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer owner-a-token")
 
     UserDefaults.standard.set("owner-b", forKey: .authUserId)
     await AuthorizedToolOwnerURLProtocol.gate.succeed(
+      path: "/v1/tools/memories",
       with:
         #"{"tool_name":"get_memories","result_text":"owner-a-private-memory","is_error":false}"#)
 
@@ -140,8 +193,9 @@ final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
         backendAPIClient: client)
     }
 
-    _ = await AuthorizedToolOwnerURLProtocol.gate.waitForRequest()
+    _ = await AuthorizedToolOwnerURLProtocol.gate.waitForRequest(path: "/v1/tools/memories")
     await AuthorizedToolOwnerURLProtocol.gate.succeed(
+      path: "/v1/tools/memories",
       with:
         #"{"tool_name":"get_memories","result_text":"owner-a-memory","is_error":false}"#)
 
@@ -161,7 +215,7 @@ final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
         backendAPIClient: client)
     }
 
-    let request = await AuthorizedToolOwnerURLProtocol.gate.waitForRequest()
+    let request = await AuthorizedToolOwnerURLProtocol.gate.waitForRequest(path: "/v1/tools/action-items")
     XCTAssertEqual(request.httpMethod, "POST")
     XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer owner-a-token")
     let body = AuthorizedToolOwnerURLProtocol.bodyData(from: request).flatMap {
@@ -171,6 +225,7 @@ final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
 
     UserDefaults.standard.set("owner-b", forKey: .authUserId)
     await AuthorizedToolOwnerURLProtocol.gate.succeed(
+      path: "/v1/tools/action-items",
       with:
         #"{"tool_name":"create_action_item","result_text":"created-owner-a-task","is_error":false}"#)
 
@@ -201,7 +256,7 @@ final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
       }
     }
 
-    let request = await AuthorizedToolOwnerURLProtocol.gate.waitForRequest()
+    let request = await AuthorizedToolOwnerURLProtocol.gate.waitForRequest(path: "/v2/chat/completions")
     XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer owner-a-token")
     let body = AuthorizedToolOwnerURLProtocol.bodyData(from: request).flatMap {
       try? JSONSerialization.jsonObject(with: $0) as? [String: Any]
@@ -210,10 +265,40 @@ final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
 
     UserDefaults.standard.set("owner-b", forKey: .authUserId)
     await AuthorizedToolOwnerURLProtocol.gate.succeed(
+      path: "/v2/chat/completions",
       with: #"{"choices":[{"message":{"content":"owner-a-private-answer"}}]}"#)
 
     let rejectedLateResponse = await operation.value
     XCTAssertTrue(rejectedLateResponse)
+  }
+
+  func testRealtimeMintNeverReleasesOwnerATokenAfterMidFlightAccountSwitch() async {
+    let client = await makeClient()
+    let operation = Task { @MainActor in
+      do {
+        _ = try await client.mintRealtimeToken(
+          provider: "openai",
+          expectedOwnerID: "owner-a",
+          customBaseURL: "https://owner-bound.invalid/")
+        return false
+      } catch AuthError.userChangedDuringRequest {
+        return true
+      } catch {
+        return false
+      }
+    }
+
+    let request = await AuthorizedToolOwnerURLProtocol.gate.waitForRequest(path: "/v2/realtime/session")
+    XCTAssertEqual(request.url?.path, "/v2/realtime/session")
+    XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer owner-a-token")
+
+    UserDefaults.standard.set("owner-b", forKey: .authUserId)
+    await AuthorizedToolOwnerURLProtocol.gate.succeed(
+      path: "/v2/realtime/session",
+      with: #"{"token":"owner-a-private-ephemeral-token"}"#)
+
+    let rejectedLateToken = await operation.value
+    XCTAssertTrue(rejectedLateToken)
   }
 
   func testRealtimePointClickDoesNotPostEventsForStaleOwner() {
@@ -229,6 +314,89 @@ final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
 
     XCTAssertFalse(clicked)
     XCTAssertFalse(posted)
+  }
+
+  func testAutomationSettingsDoesNotOpenAfterOwnerChangesAtFinalEffectBoundary() {
+    var opened = false
+
+    let didOpen = ChatToolExecutor.openAutomationPrivacySettings(
+      expectedOwnerID: "owner-a",
+      ownerIsCurrent: { _ in false },
+      open: { _ in
+        opened = true
+        return true
+      })
+
+    XCTAssertFalse(didOpen)
+    XCTAssertFalse(opened)
+  }
+
+  func testDetachedPermissionEffectsStayRevokedAcrossSameOwnerSessionReplacement() async {
+    UserDefaults.standard.set("owner-a", forKey: .authUserId)
+    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+      expectedOwnerID: "owner-a")
+    else {
+      XCTFail("owner-a authorization snapshot was not available")
+      return
+    }
+    await replaceStandardOwner(with: nil)
+    await replaceStandardOwner(with: "owner-a")
+
+    var opened = false
+    let didOpen = ChatToolExecutor.openAutomationPrivacySettings(
+      expectedOwnerID: "owner-a",
+      authorizationSnapshot: authorization,
+      open: { _ in
+        opened = true
+        return true
+      })
+    var pendingCallbacks: [String] = []
+    ChatToolExecutor.publishPermissionPendingIfCurrent(
+      "automation",
+      expectedOwnerID: "owner-a",
+      authorizationSnapshot: authorization,
+      callback: { pendingCallbacks.append($0) })
+
+    XCTAssertFalse(didOpen)
+    XCTAssertFalse(opened)
+    XCTAssertTrue(pendingCallbacks.isEmpty)
+    XCTAssertFalse(RuntimeOwnerIdentity.isAuthorizationCurrent(authorization))
+  }
+
+  func testPermissionCallbackCancellationReturnsWithoutWaitingAndIgnoresLateCompletion() async {
+    let callbackBox = PermissionCallbackBox<Bool>()
+    let operation = Task {
+      await ChatToolExecutor.awaitCancellablePermissionRequest { completion in
+        Task { await callbackBox.install(completion) }
+      }
+    }
+
+    await callbackBox.waitUntilInstalled()
+    operation.cancel()
+    let result = await operation.value
+
+    XCTAssertNil(result, "cancellation must release the tracked owner-bound permission task")
+    await callbackBox.resolve(true)
+    await callbackBox.resolve(false)
+    XCTAssertNil(
+      result,
+      "late or duplicate OS callbacks must not resume the revoked continuation again")
+  }
+
+  func testSignedOutPermissionPublicationIsRevokedWhenAnOwnerSignsIn() async {
+    await replaceStandardOwner(with: nil)
+    var pendingCallbacks: [String] = []
+    await replaceStandardOwner(with: "owner-b")
+
+    ChatToolExecutor.publishPermissionPendingIfCurrent(
+      "microphone",
+      expectedOwnerID: nil,
+      authorizationSnapshot: nil,
+      callback: { pendingCallbacks.append($0) })
+
+    XCTAssertTrue(
+      pendingCallbacks.isEmpty,
+      "the narrow signed-out permission path must close as soon as an owner signs in")
   }
 
   func testPermissionAndConnectorEffectsAreNotInvokedAfterOwnerSwap() async {
@@ -249,6 +417,38 @@ final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
       XCTAssertNil(result)
       XCTAssertFalse(invoked, "\(effectName) physical effect must fail closed")
     }
+  }
+
+  func testSuspendedPhysicalEffectStaysRevokedAcrossSameOwnerSessionReplacement() async {
+    UserDefaults.standard.set("owner-a", forKey: .authUserId)
+    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+      expectedOwnerID: "owner-a")
+    else {
+      XCTFail("owner-a authorization snapshot was not available")
+      return
+    }
+    let gate = AuthorizedToolPhysicalEffectGate()
+    var effectCount = 0
+    let operation = Task { @MainActor in
+      await ChatToolExecutor.performOwnerBoundAsyncPhysicalEffect(
+        expectedOwnerID: "owner-a",
+        authorizationSnapshot: authorization,
+        prepare: { await gate.suspendEffectPreparation() },
+        effect: {
+          effectCount += 1
+          return "owner-a-private-result"
+        })
+    }
+
+    await gate.waitUntilEntered()
+    await replaceStandardOwner(with: nil)
+    await replaceStandardOwner(with: "owner-a")
+    await gate.release()
+
+    let result = await operation.value
+    XCTAssertNil(result)
+    XCTAssertEqual(effectCount, 0)
+    XCTAssertFalse(RuntimeOwnerIdentity.isAuthorizationCurrent(authorization))
   }
 
   func testSQLPostCommitDoesNotRetryUnderReplacementOwner() async {
@@ -334,6 +534,24 @@ final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
     let client = APIClient(session: URLSession(configuration: configuration))
     await client.setOwnerBoundTestAuthHeader("Bearer owner-a-token")
     return client
+  }
+
+  private func replaceStandardOwner(with ownerID: String?) async {
+    await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+      defaults: .standard,
+      allowAutomationOverride: false,
+      plannedNextOwner: { _, _ in ownerID },
+      quiesceVoice: { _, _ in },
+      revokeKernelOwner: { _, _ in },
+      retargetLocalStorage: { _, _ in },
+      ownerDidChange: {}
+    ) { defaults in
+      if let ownerID {
+        defaults.set(ownerID, forKey: .authUserId)
+      } else {
+        defaults.removeObject(forKey: .authUserId)
+      }
+    }
   }
 
   private func restoreDefault(_ value: Any?, forKey key: DefaultsKey) {

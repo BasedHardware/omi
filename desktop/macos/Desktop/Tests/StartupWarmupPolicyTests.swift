@@ -306,13 +306,31 @@ final class StartupWarmupPolicyTests: XCTestCase {
 
     @MainActor
     func testTasksStoreStartupMaintenanceSchedulesOnceForFirstUseLoadPath() async {
+        let defaults = UserDefaults.standard
+        let previousOwner = defaults.object(forKey: .authUserId)
+        let previousOverride = defaults.object(forKey: .automationOwnerOverride)
         let store = TasksStore.shared
+        defer {
+            if let previousOwner {
+                defaults.set(previousOwner, forKey: .authUserId)
+            } else {
+                defaults.removeObject(forKey: .authUserId)
+            }
+            if let previousOverride {
+                defaults.set(previousOverride, forKey: .automationOwnerOverride)
+            } else {
+                defaults.removeObject(forKey: .automationOwnerOverride)
+            }
+            store.resetSessionState()
+        }
+        defaults.removeObject(forKey: .automationOwnerOverride)
+        defaults.set("startup-maintenance-owner", forKey: .authUserId)
         store.resetSessionState()
         let counter = StartupMaintenanceCounter()
 
         store.scheduleStartupMaintenanceIfNeeded(
-            fullSyncAndRetry: { await counter.recordFullSyncAndRetry() },
-            relevanceBackfill: { await counter.recordRelevanceBackfill() }
+            fullSyncAndRetry: { _ in await counter.recordFullSyncAndRetry() },
+            relevanceBackfill: { _ in await counter.recordRelevanceBackfill() }
         )
 
         try? await Task.sleep(nanoseconds: 50_000_000)
@@ -323,8 +341,8 @@ final class StartupWarmupPolicyTests: XCTestCase {
         XCTAssertEqual(initialRelevanceBackfillCount, 1)
 
         store.scheduleStartupMaintenanceIfNeeded(
-            fullSyncAndRetry: { await counter.recordFullSyncAndRetry() },
-            relevanceBackfill: { await counter.recordRelevanceBackfill() }
+            fullSyncAndRetry: { _ in await counter.recordFullSyncAndRetry() },
+            relevanceBackfill: { _ in await counter.recordRelevanceBackfill() }
         )
 
         try? await Task.sleep(nanoseconds: 50_000_000)
@@ -341,7 +359,7 @@ final class StartupWarmupPolicyTests: XCTestCase {
             .appendingPathComponent("Sources/Stores/TasksStore.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-        guard let dashboardRefreshRange = source.range(of: "await refreshDashboardTasksFromServer()"),
+        guard let dashboardRefreshRange = source.range(of: "await refreshDashboard(lease: lease, operations: operations)"),
               let hydrationGuardRange = source.range(of: "guard hasLoadedIncomplete else") else {
             return XCTFail("TasksStore.refreshTasksIfNeeded must refresh dashboard slices before requiring Tasks page hydration")
         }
@@ -500,9 +518,9 @@ final class StartupWarmupPolicyTests: XCTestCase {
             source.contains("memoriesLoaded = false"),
             "ChatProvider auth reset must release the memories-loaded guard"
         )
-        XCTAssertTrue(
-            source.contains("await self.resolvedAgentClient().clearOwnerState()"),
-            "Sign-out must clear the previous owner's kernel sessions and context snapshots"
+        XCTAssertFalse(
+            source.contains("clearOwnerState()"),
+            "RuntimeOwnerIdentity's correlated transition barrier must be the exclusive owner revoker"
         )
     }
 }

@@ -66,6 +66,17 @@ export interface RecordJournalTurnResult {
   outboxStatus: BackendTurnOutboxStatus | null;
 }
 
+export interface RecordJournalExchangeInput {
+  ownerId: string;
+  conversationId: string;
+  turns: readonly Omit<RecordJournalTurnInput, "ownerId" | "conversationId">[];
+}
+
+export interface RecordJournalExchangeResult {
+  turns: ConversationTurn[];
+  createdTurns: ConversationTurn[];
+}
+
 export interface UpdateJournalTurnInput {
   ownerId: string;
   conversationId: string;
@@ -188,6 +199,21 @@ export interface JournalTurnChangedWake {
   turn: ConversationTurn;
 }
 
+export interface MigrateJournalConversationInput {
+  ownerId: string;
+  sourceConversationId: string;
+  destinationConversationId: string;
+  nowMs?: number;
+}
+
+export interface MigrateJournalConversationResult {
+  movedTurnCount: number;
+  movedRevisionCount: number;
+  movedOutboxCount: number;
+  destinationGeneration: number;
+  destinationHighWaterTurnSeq: number;
+}
+
 export interface BackendTurnAckInput {
   ownerId: string;
   turnId: string;
@@ -302,6 +328,39 @@ export function recordJournalTurn(
   });
 }
 
+/**
+ * Records the visible halves of one logical exchange under one commit. A
+ * failure or identity collision on either half rolls back every row, revision,
+ * and outbox mutation created by the other half.
+ */
+export function recordJournalExchange(
+  store: AgentStore,
+  input: RecordJournalExchangeInput,
+): RecordJournalExchangeResult {
+  if (input.turns.length > 2) {
+    throw new Error("Journal exchange may contain at most two turns");
+  }
+  const roles = input.turns.map((turn) => turn.role);
+  if (new Set(roles).size !== roles.length) {
+    throw new Error("Journal exchange may contain at most one turn per role");
+  }
+  if (roles.length === 2 && (roles[0] !== "user" || roles[1] !== "assistant")) {
+    throw new Error("Journal exchange turns must be ordered user then assistant");
+  }
+
+  return store.withTransaction(() => {
+    const results = input.turns.map((turn) => recordJournalTurn(store, {
+      ...turn,
+      ownerId: input.ownerId,
+      conversationId: input.conversationId,
+    }));
+    return {
+      turns: results.map((result) => result.turn),
+      createdTurns: results.filter((result) => result.created).map((result) => result.turn),
+    };
+  });
+}
+
 /** Update or complete the producing turn; block/resource IDs are idempotent. */
 export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInput): ConversationTurn {
   if (
@@ -406,6 +465,189 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
       [backendHash, tombstoneCode, tombstoneCode, tombstoneCode, tombstoneCode, now, input.turnId],
     );
     return updated;
+  });
+}
+
+/**
+ * Atomically re-homes the current canonical turn graph into another owned
+ * conversation. This is the migration boundary for surface consolidation:
+ * callers must never copy `conversation_turns` directly because doing so
+ * drops typed blocks/resources, revision visibility, delivery identity, and
+ * the destination journal sequence.
+ */
+export function migrateJournalConversation(
+  store: AgentStore,
+  input: MigrateJournalConversationInput,
+): MigrateJournalConversationResult {
+  if (input.sourceConversationId === input.destinationConversationId) {
+    return store.withTransaction(() => {
+      assertConversationOwner(store, input.destinationConversationId, input.ownerId);
+      const state = ensureJournalState(store, input.destinationConversationId, input.nowMs ?? Date.now());
+      return {
+        movedTurnCount: 0,
+        movedRevisionCount: 0,
+        movedOutboxCount: 0,
+        destinationGeneration: state.generation,
+        destinationHighWaterTurnSeq: state.highWaterTurnSeq,
+      };
+    });
+  }
+  const now = input.nowMs ?? Date.now();
+  return store.withTransaction(() => {
+    assertConversationOwner(store, input.sourceConversationId, input.ownerId);
+    assertConversationOwner(store, input.destinationConversationId, input.ownerId);
+    const sourceState = ensureJournalState(store, input.sourceConversationId, now);
+    ensureJournalState(store, input.destinationConversationId, now);
+
+    const sourceTurns = store.allRows(
+      `SELECT ${TURN_COLUMNS}
+       FROM conversation_turns
+       WHERE conversation_id = ?
+       ORDER BY turn_seq ASC, created_at_ms ASC, turn_id ASC`,
+      [input.sourceConversationId],
+    ).map(conversationTurnFromRow);
+    if (sourceTurns.length === 0) {
+      const destinationState = requireJournalState(store, input.destinationConversationId);
+      return {
+        movedTurnCount: 0,
+        movedRevisionCount: 0,
+        movedOutboxCount: 0,
+        destinationGeneration: destinationState.generation,
+        destinationHighWaterTurnSeq: destinationState.highWaterTurnSeq,
+      };
+    }
+
+    assertJournalMigrationIdentityAvailable(store, input.destinationConversationId, sourceTurns);
+    const sourceTurnIds = new Set(sourceTurns.map((turn) => turn.turnId));
+    const revisionRows = store.allRows(
+      `SELECT conversation_id, turn_seq, generation, turn_id, producer_id,
+              mutation_kind, turn_json, payload_hash, created_at_ms
+       FROM conversation_turn_revisions
+       WHERE conversation_id = ? AND generation = ?
+       ORDER BY turn_seq ASC`,
+      [input.sourceConversationId, sourceState.generation],
+    ).filter((row) => sourceTurnIds.has(String(row.turn_id)));
+    const outboxRows = store.allRows(
+      `SELECT ${OUTBOX_COLUMNS}, client_message_id
+       FROM backend_turn_outbox
+       WHERE conversation_id = ?
+       ORDER BY created_at_ms ASC, turn_id ASC`,
+      [input.sourceConversationId],
+    );
+
+    const currentById = new Map(sourceTurns.map((turn) => [turn.turnId, turn]));
+    const migratedRevisions: Array<{
+      turn: ConversationTurn;
+      mutationKind: "recorded" | "updated" | "imported";
+      createdAtMs: number;
+    }> = [];
+    const migratedCurrentSequence = new Map<string, number>();
+    for (const row of revisionRows) {
+      const current = currentById.get(String(row.turn_id));
+      if (!current) continue;
+      const sequence = nextJournalSequence(store, input.destinationConversationId, now);
+      const revision = migratedJournalRevisionTurn(row, current, input.destinationConversationId, sequence.turnSeq);
+      migratedRevisions.push({
+        turn: revision,
+        mutationKind: journalMutationKind(row.mutation_kind),
+        createdAtMs: Number(row.created_at_ms),
+      });
+      if (Number(row.turn_seq) === current.turnSeq) {
+        migratedCurrentSequence.set(current.turnId, sequence.turnSeq);
+      }
+    }
+    for (const current of sourceTurns) {
+      if (migratedCurrentSequence.has(current.turnId)) continue;
+      const sequence = nextJournalSequence(store, input.destinationConversationId, now);
+      migratedRevisions.push({
+        turn: {
+          ...current,
+          conversationId: input.destinationConversationId,
+          turnSeq: sequence.turnSeq,
+        },
+        mutationKind: "imported",
+        createdAtMs: now,
+      });
+      migratedCurrentSequence.set(current.turnId, sequence.turnSeq);
+    }
+
+    store.execute("DELETE FROM backend_turn_outbox WHERE conversation_id = ?", [input.sourceConversationId]);
+    store.execute("DELETE FROM conversation_turns WHERE conversation_id = ?", [input.sourceConversationId]);
+    store.execute(
+      "DELETE FROM conversation_turn_revisions WHERE conversation_id = ? AND generation = ?",
+      [input.sourceConversationId, sourceState.generation],
+    );
+
+    for (const source of sourceTurns) {
+      const turnSeq = migratedCurrentSequence.get(source.turnId);
+      if (turnSeq === undefined) throw new Error("Journal migration did not assign the current turn sequence");
+      store.insertConversationTurn({
+        conversationId: input.destinationConversationId,
+        turnId: source.turnId,
+        turnSeq,
+        producerId: source.producerId,
+        payloadHash: source.payloadHash,
+        role: source.role,
+        surfaceKind: source.surfaceKind,
+        content: source.content,
+        origin: source.origin,
+        status: source.status,
+        contentBlocks: source.contentBlocks,
+        resources: source.resources,
+        producingRunId: source.producingRunId,
+        remoteId: source.remoteId,
+        createdAtMs: source.createdAtMs,
+        updatedAtMs: source.updatedAtMs,
+        completedAtMs: source.completedAtMs,
+        metadataJson: source.metadataJson,
+      });
+    }
+
+    const destinationState = requireJournalState(store, input.destinationConversationId);
+    for (const revision of migratedRevisions.sort((left, right) => left.turn.turnSeq - right.turn.turnSeq)) {
+      appendJournalRevision(
+        store,
+        revision.turn,
+        destinationState.generation,
+        revision.mutationKind,
+        revision.createdAtMs,
+      );
+    }
+    for (const row of outboxRows) {
+      store.execute(
+        `INSERT INTO backend_turn_outbox(
+           turn_id, conversation_id, owner_id, client_message_id, status,
+           attempt_count, available_at_ms, lease_expires_at_ms, remote_id,
+           last_error_code, payload_hash, delivery_generation,
+           conversation_generation, created_at_ms, updated_at_ms, delivered_at_ms
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          row.turn_id,
+          input.destinationConversationId,
+          row.owner_id,
+          row.client_message_id,
+          row.status,
+          row.attempt_count,
+          row.available_at_ms,
+          row.lease_expires_at_ms,
+          row.remote_id,
+          row.last_error_code,
+          row.payload_hash,
+          row.delivery_generation,
+          destinationState.generation,
+          row.created_at_ms,
+          row.updated_at_ms,
+          row.delivered_at_ms,
+        ],
+      );
+    }
+    return {
+      movedTurnCount: sourceTurns.length,
+      movedRevisionCount: migratedRevisions.length,
+      movedOutboxCount: outboxRows.length,
+      destinationGeneration: destinationState.generation,
+      destinationHighWaterTurnSeq: destinationState.highWaterTurnSeq,
+    };
   });
 }
 
@@ -1830,6 +2072,112 @@ function nextJournalSequence(
   );
   const state = requireJournalState(store, conversationId);
   return { generation: state.generation, turnSeq: state.highWaterTurnSeq };
+}
+
+function ensureJournalState(
+  store: AgentStore,
+  conversationId: string,
+  nowMs: number,
+): { generation: number; generationBaseTurnSeq: number; highWaterTurnSeq: number } {
+  store.execute(
+    `INSERT INTO conversation_journal_state(
+       conversation_id, generation, high_water_turn_seq, updated_at_ms
+     ) SELECT ?, 1, COALESCE(MAX(turn_seq), 0), ?
+       FROM conversation_turns WHERE conversation_id = ?
+     ON CONFLICT(conversation_id) DO NOTHING`,
+    [conversationId, nowMs, conversationId],
+  );
+  return requireJournalState(store, conversationId);
+}
+
+function assertJournalMigrationIdentityAvailable(
+  store: AgentStore,
+  destinationConversationId: string,
+  sourceTurns: readonly ConversationTurn[],
+): void {
+  for (const turn of sourceTurns) {
+    if (store.getOptionalRow(
+      "SELECT 1 FROM conversation_turns WHERE conversation_id = ? AND turn_id = ?",
+      [destinationConversationId, turn.turnId],
+    )) {
+      throw new Error(`Journal migration turn identity collision: ${turn.turnId}`);
+    }
+    if (store.getOptionalRow(
+      "SELECT 1 FROM conversation_turns WHERE conversation_id = ? AND producer_id = ?",
+      [destinationConversationId, turn.producerId],
+    )) {
+      throw new Error(`Journal migration producer identity collision: ${turn.producerId}`);
+    }
+    if (turn.remoteId && store.getOptionalRow(
+      "SELECT 1 FROM conversation_turns WHERE conversation_id = ? AND remote_id = ?",
+      [destinationConversationId, turn.remoteId],
+    )) {
+      throw new Error(`Journal migration remote identity collision: ${turn.remoteId}`);
+    }
+  }
+}
+
+function journalMutationKind(value: unknown): "recorded" | "updated" | "imported" {
+  if (value === "recorded" || value === "updated" || value === "imported") return value;
+  throw new Error("Journal migration encountered an invalid revision mutation kind");
+}
+
+function migratedJournalRevisionTurn(
+  row: Record<string, unknown>,
+  current: ConversationTurn,
+  destinationConversationId: string,
+  destinationTurnSeq: number,
+): ConversationTurn {
+  let parsed: Record<string, unknown>;
+  try {
+    const candidate = JSON.parse(String(row.turn_json)) as unknown;
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) throw new Error("not an object");
+    parsed = candidate as Record<string, unknown>;
+  } catch {
+    throw new Error(`Journal migration encountered an invalid revision for ${current.turnId}`);
+  }
+  if (String(parsed.turnId ?? current.turnId) !== current.turnId) {
+    throw new Error("Journal migration revision turn identity does not match its current turn");
+  }
+  const role = parsed.role ?? current.role;
+  if (role !== "user" && role !== "assistant") throw new Error("Journal migration revision has an invalid role");
+  const status = parsed.status ?? current.status;
+  if (status !== "pending" && status !== "streaming" && status !== "completed" && status !== "failed") {
+    throw new Error("Journal migration revision has an invalid status");
+  }
+  const contentBlocks = validateContentBlocks(
+    Array.isArray(parsed.contentBlocks) ? parsed.contentBlocks as ConversationContentBlock[] : current.contentBlocks,
+  );
+  const resources = validateResources(
+    Array.isArray(parsed.resources) ? parsed.resources as ConversationResource[] : current.resources,
+  );
+  const metadataJson = validObjectJson(String(parsed.metadataJson ?? current.metadataJson), "metadataJson");
+  return {
+    conversationId: destinationConversationId,
+    turnId: current.turnId,
+    turnSeq: destinationTurnSeq,
+    producerId: String(parsed.producerId ?? row.producer_id ?? current.producerId),
+    payloadHash: String(parsed.payloadHash ?? row.payload_hash ?? current.payloadHash),
+    role,
+    surfaceKind: String(parsed.surfaceKind ?? current.surfaceKind),
+    content: String(parsed.content ?? current.content),
+    origin: (parsed.origin ?? current.origin) as ConversationTurnOrigin,
+    status,
+    contentBlocks,
+    resources,
+    producingRunId: parsed.producingRunId === undefined
+      ? current.producingRunId
+      : parsed.producingRunId == null ? null : String(parsed.producingRunId),
+    remoteId: parsed.remoteId === undefined
+      ? current.remoteId
+      : parsed.remoteId == null ? null : String(parsed.remoteId),
+    createdAtMs: Number(parsed.createdAtMs ?? current.createdAtMs),
+    updatedAtMs: Number(parsed.updatedAtMs ?? current.updatedAtMs),
+    completedAtMs: parsed.completedAtMs === undefined
+      ? current.completedAtMs
+      : parsed.completedAtMs == null ? null : Number(parsed.completedAtMs),
+    metadataJson,
+  };
 }
 
 function requireJournalState(

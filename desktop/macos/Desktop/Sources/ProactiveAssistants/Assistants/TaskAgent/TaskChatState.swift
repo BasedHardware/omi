@@ -1,9 +1,35 @@
 import SwiftUI
 import Combine
 
+struct TaskChatOwnerLease: Equatable, Sendable {
+    let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    let generation: UInt64
+
+    var ownerID: String { authorizationSnapshot.ownerID }
+}
+
 /// Task-scoped UI projected over one kernel-owned workstream conversation.
 @MainActor
 class TaskChatState: ObservableObject {
+    typealias AttachJournalEventsOperation = (
+        _ workstreamId: String,
+        _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+        _ wake: @escaping @MainActor () -> Void
+    ) async throws -> UUID
+    typealias ListJournalTurnsOperation = (
+        _ workstreamId: String,
+        _ ownerID: String,
+        _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+        _ afterTurnSeq: Int,
+        _ limit: Int
+    ) async throws -> AgentRuntimeProcess.JournalOperationResult
+    typealias RecordJournalExchangeOperation = (
+        _ workstreamId: String,
+        _ ownerID: String,
+        _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+        _ turns: [KernelJournalTurnWrite]
+    ) async throws -> AgentRuntimeProcess.JournalOperationResult
+
     let workstreamId: String
     @Published private(set) var activeTaskId: String
 
@@ -11,7 +37,14 @@ class TaskChatState: ObservableObject {
     @Published var isSending = false
     @Published var isStopping = false
     @Published var draftText: String {
-        didSet { ChatDraftStore.shared.setText(draftText, for: .taskChat(workstreamId)) }
+        didSet {
+            guard !isOwnerInvalidated else { return }
+            ChatDraftStore.shared.setText(
+                draftText,
+                for: .taskChat(workstreamId),
+                ownerID: boundOwnerID
+            )
+        }
     }
     @Published var errorMessage: String?
     @Published var chatMode: ChatMode = .act
@@ -36,6 +69,14 @@ class TaskChatState: ObservableObject {
     private var isRefreshingJournal = false
     private var journalRefreshRequested = false
     private var journalUpdateTasks: [String: Task<Void, Never>] = [:]
+    private let boundOwnerID: String
+    private let boundAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+    private let ownerIDProvider: @MainActor () -> String?
+    private let attachJournalEventsOperation: AttachJournalEventsOperation
+    private let listJournalTurnsOperation: ListJournalTurnsOperation
+    private let recordJournalExchangeOperation: RecordJournalExchangeOperation
+    private var ownerGeneration: UInt64 = 0
+    private var isOwnerInvalidated = false
 
     // MARK: - Streaming Buffer
 
@@ -43,38 +84,172 @@ class TaskChatState: ObservableObject {
 
     private var hasLoadedJournal = false
 
-    init(taskId: String, workstreamId: String, workspacePath: String) {
+    init(
+        taskId: String,
+        workstreamId: String,
+        workspacePath: String,
+        authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+        ownerIDProvider: @escaping @MainActor () -> String? = {
+            RuntimeOwnerIdentity.currentOwnerId()
+        },
+        attachJournalEventsOperation: AttachJournalEventsOperation? = nil,
+        listJournalTurnsOperation: ListJournalTurnsOperation? = nil,
+        recordJournalExchangeOperation: RecordJournalExchangeOperation? = nil
+    ) {
+        let ownerID = Self.normalizedOwnerID(ownerIDProvider()) ?? ""
         self.activeTaskId = taskId
         self.workstreamId = workstreamId
         self.workspacePath = workspacePath
-        self.draftText = ChatDraftStore.shared.text(for: .taskChat(workstreamId))
+        self.boundOwnerID = ownerID
+        self.boundAuthorizationSnapshot = suppliedAuthorizationSnapshot
+            ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID)
+        self.ownerIDProvider = ownerIDProvider
+        self.attachJournalEventsOperation = attachJournalEventsOperation ?? {
+            workstreamId, authorizationSnapshot, wake in
+            try await TaskChatRuntime.attachJournalEvents(
+                workstreamId: workstreamId,
+                authorizationSnapshot: authorizationSnapshot,
+                wake: wake
+            )
+        }
+        self.listJournalTurnsOperation = listJournalTurnsOperation ?? {
+            workstreamId, ownerID, authorizationSnapshot, after, limit in
+            try await TaskChatRuntime.listJournalTurns(
+                workstreamId: workstreamId,
+                ownerID: ownerID,
+                authorizationSnapshot: authorizationSnapshot,
+                afterTurnSeq: after,
+                limit: limit
+            )
+        }
+        self.recordJournalExchangeOperation = recordJournalExchangeOperation ?? {
+            workstreamId, ownerID, authorizationSnapshot, turns in
+            try await TaskChatRuntime.recordJournalExchange(
+                workstreamId: workstreamId,
+                ownerID: ownerID,
+                authorizationSnapshot: authorizationSnapshot,
+                turns: turns
+            )
+        }
+        self.draftText = ChatDraftStore.shared.text(
+            for: .taskChat(workstreamId),
+            ownerID: ownerID
+        )
     }
 
     func selectTask(_ taskId: String) {
+        guard hasCurrentOwner else { return }
         activeTaskId = taskId
+    }
+
+    /// Synchronous account boundary. The coordinator calls this from the
+    /// MainActor owner-change notification before new-owner work is admitted.
+    /// Every suspended callback retains the previous generation and becomes a
+    /// no-op even if its bridge continuation resumes later.
+    func invalidateOwnerState() {
+        ownerGeneration &+= 1
+        isOwnerInvalidated = true
+        KernelJournalEventHub.shared.unsubscribe(journalEventToken)
+        journalEventToken = nil
+        runtimeProjectionCancellable?.cancel()
+        runtimeProjectionCancellable = nil
+        streamingBuffer.cancelPendingFlush()
+        for task in journalUpdateTasks.values { task.cancel() }
+        journalUpdateTasks.removeAll()
+        messages.removeAll()
+        surfacedFailureKeys.removeAll()
+        activeAssistantMessageId = nil
+        journalHighWater = 0
+        journalGeneration = 0
+        isRefreshingJournal = false
+        journalRefreshRequested = false
+        hasLoadedJournal = false
+        isSending = false
+        isStopping = false
+        errorMessage = nil
+        draftText = ""
+        onQueryCompleted = nil
+        onAuthRequired = nil
+        onAuthSuccess = nil
+    }
+
+    var ownerProjectionIsEmpty: Bool {
+        messages.isEmpty
+            && journalUpdateTasks.isEmpty
+            && activeAssistantMessageId == nil
+            && !isSending
+            && !isStopping
+            && errorMessage == nil
+            && draftText.isEmpty
+    }
+
+    private var hasCurrentOwner: Bool {
+        !isOwnerInvalidated
+            && !boundOwnerID.isEmpty
+            && Self.normalizedOwnerID(ownerIDProvider()) == boundOwnerID
+            && boundAuthorizationSnapshot.map(RuntimeOwnerIdentity.isAuthorizationCurrent) == true
+    }
+
+    private func captureOwnerLease() -> TaskChatOwnerLease? {
+        guard hasCurrentOwner, let boundAuthorizationSnapshot else { return nil }
+        return TaskChatOwnerLease(
+            authorizationSnapshot: boundAuthorizationSnapshot,
+            generation: ownerGeneration
+        )
+    }
+
+    private func isCurrent(_ lease: TaskChatOwnerLease) -> Bool {
+        hasCurrentOwner
+            && lease.ownerID == boundOwnerID
+            && lease.generation == ownerGeneration
+            && RuntimeOwnerIdentity.isAuthorizationCurrent(lease.authorizationSnapshot)
+    }
+
+    private static func normalizedOwnerID(_ ownerID: String?) -> String? {
+        guard let ownerID else { return nil }
+        let normalized = ownerID.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalized.isEmpty ? nil : normalized
     }
 
     // MARK: - Kernel journal projection
 
     func loadPersistedMessages() async {
+        guard let lease = captureOwnerLease() else { return }
         guard !hasLoadedJournal else { return }
         hasLoadedJournal = true
         do {
-            journalEventToken = try await TaskChatRuntime.attachJournalEvents(
-                workstreamId: workstreamId
+            let token = try await attachJournalEventsOperation(
+                workstreamId,
+                lease.authorizationSnapshot
             ) { [weak self] in
-                Task { @MainActor [weak self] in await self?.refreshJournal() }
+                Task { @MainActor [weak self] in
+                    guard let self, self.isCurrent(lease) else { return }
+                    await self.refreshJournal(lease: lease)
+                }
             }
+            guard isCurrent(lease) else {
+                KernelJournalEventHub.shared.unsubscribe(token)
+                return
+            }
+            journalEventToken = token
             observeRuntimeProjectionFailures()
-            await refreshJournal(reset: true)
+            await refreshJournal(reset: true, lease: lease)
+            guard isCurrent(lease) else { return }
             surfaceCurrentRuntimeFailureIfNeeded()
             log("TaskChatState[\(workstreamId)]: Loaded \(messages.count) kernel journal messages")
         } catch {
-            log("TaskChatState[\(workstreamId)]: journal load failed (code=journal_load_failed)")
+            if isCurrent(lease) {
+                hasLoadedJournal = false
+                log("TaskChatState[\(workstreamId)]: journal load failed (code=journal_load_failed)")
+            }
         }
     }
 
-    private func refreshJournal(reset: Bool = false) async {
+    private func refreshJournal(
+        reset: Bool = false,
+        lease expectedLease: TaskChatOwnerLease? = nil
+    ) async {
+        guard let lease = expectedLease ?? captureOwnerLease(), isCurrent(lease) else { return }
         if reset {
             journalHighWater = 0
             journalGeneration = 0
@@ -87,14 +262,20 @@ class TaskChatState: ObservableObject {
         isRefreshingJournal = true
         defer { isRefreshingJournal = false }
         repeat {
+            guard isCurrent(lease) else { return }
             journalRefreshRequested = false
             do {
                 var fetchNextPage = true
                 while fetchNextPage {
-                    let page = try await TaskChatRuntime.listJournalTurns(
-                        workstreamId: workstreamId,
-                        afterTurnSeq: journalHighWater
+                    guard isCurrent(lease) else { return }
+                    let page = try await listJournalTurnsOperation(
+                        workstreamId,
+                        lease.ownerID,
+                        lease.authorizationSnapshot,
+                        journalHighWater,
+                        100
                     )
+                    guard isCurrent(lease) else { return }
                     if journalGeneration != page.conversationGeneration {
                         journalGeneration = page.conversationGeneration
                         journalHighWater = page.generationBaseTurnSeq
@@ -106,6 +287,7 @@ class TaskChatState: ObservableObject {
                         after: journalHighWater
                     )
                     for turn in contiguousPage {
+                        guard isCurrent(lease) else { return }
                         projectJournalTurn(turn)
                         journalHighWater = turn.turnSeq
                     }
@@ -121,12 +303,15 @@ class TaskChatState: ObservableObject {
                     }
                 }
             } catch {
-                log("TaskChatState[\(workstreamId)]: range fetch failed (code=journal_range_fetch_failed)")
+                if isCurrent(lease) {
+                    log("TaskChatState[\(workstreamId)]: range fetch failed (code=journal_range_fetch_failed)")
+                }
             }
-        } while journalRefreshRequested
+        } while isCurrent(lease) && journalRefreshRequested
     }
 
     private func projectJournalTurn(_ turn: KernelJournalTurn) {
+        guard hasCurrentOwner else { return }
         guard turn.surfaceKind == "workstream", turn.externalRefId == workstreamId else { return }
         let projected = turn.chatMessage()
         let emptyFailure = turn.status == .failed
@@ -148,14 +333,38 @@ class TaskChatState: ObservableObject {
         }
     }
 
+    private func applyAcceptedExchange(
+        _ receipt: AgentRuntimeProcess.JournalOperationResult,
+        lease: TaskChatOwnerLease
+    ) {
+        guard isCurrent(lease) else { return }
+        if journalGeneration != receipt.conversationGeneration {
+            journalGeneration = receipt.conversationGeneration
+            journalHighWater = receipt.generationBaseTurnSeq
+            messages.removeAll()
+        }
+        for turn in receipt.turns.sorted(by: { $0.turnSeq < $1.turnSeq }) {
+            guard isCurrent(lease) else { return }
+            projectJournalTurn(turn)
+        }
+        let contiguous = KernelJournalReplay.contiguousTurns(
+            from: receipt.turns,
+            after: journalHighWater
+        )
+        if let last = contiguous.last { journalHighWater = last.turnSeq }
+    }
+
     private func scheduleJournalUpdate(messageId: String, status: KernelJournalTurnStatus? = nil) {
+        guard let lease = captureOwnerLease() else { return }
         guard let message = messages.first(where: { $0.id == messageId }) else { return }
         let previous = journalUpdateTasks[messageId]
         journalUpdateTasks[messageId] = Task { @MainActor [weak self] in
             _ = await previous?.value
-            guard let self else { return }
+            guard let self, self.isCurrent(lease) else { return }
             _ = try? await TaskChatRuntime.updateJournalMessage(
                 workstreamId: self.workstreamId,
+                ownerID: lease.ownerID,
+                authorizationSnapshot: lease.authorizationSnapshot,
                 message: message,
                 status: status
             )
@@ -164,21 +373,27 @@ class TaskChatState: ObservableObject {
 
     private func finishJournalUpdate(
         messageId: String,
-        status: KernelJournalTurnStatus
+        status: KernelJournalTurnStatus,
+        lease: TaskChatOwnerLease
     ) async {
         _ = await journalUpdateTasks.removeValue(forKey: messageId)?.value
+        guard isCurrent(lease) else { return }
         guard let message = messages.first(where: { $0.id == messageId }) else { return }
         _ = try? await TaskChatRuntime.updateJournalMessage(
             workstreamId: workstreamId,
+            ownerID: lease.ownerID,
+            authorizationSnapshot: lease.authorizationSnapshot,
             message: message,
             status: status
         )
-        await refreshJournal()
+        guard isCurrent(lease) else { return }
+        await refreshJournal(lease: lease)
     }
 
     // MARK: - Send Message
 
     func sendMessage(_ text: String, taskContext: String? = nil) async {
+        guard let lease = captureOwnerLease() else { return }
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
         guard !isSending else {
@@ -188,68 +403,81 @@ class TaskChatState: ObservableObject {
 
         isSending = true
         errorMessage = nil
-        // Signal local send for turn anchoring.
-        localSendToken = LocalSendToken(generation: localSendToken.generation + 1)
 
         let continuityKey = UUID().uuidString
+        let createdAt = Date()
         let userMessage = ChatMessage(
             id: UUID().uuidString,
             clientTurnId: continuityKey,
             text: trimmedText,
+            createdAt: createdAt,
             sender: .user,
             turnOwner: .taskChat(workstreamId)
         )
-        do {
-            _ = try await TaskChatRuntime.recordJournalMessage(
-                workstreamId: workstreamId,
-                message: userMessage,
-                status: .completed,
-                continuityKey: continuityKey
-            )
-            await refreshJournal()
-        } catch {
-            errorMessage = "Could not save this message. Try again."
-            isSending = false
-            return
-        }
-        if draftText == text {
-            draftText = ""
-        }
-
-        // Create placeholder AI message
         let aiMessageId = UUID().uuidString
         let aiMessage = ChatMessage(
             id: aiMessageId,
             clientTurnId: continuityKey,
             text: "",
+            createdAt: createdAt.addingTimeInterval(0.001),
             sender: .ai,
             isStreaming: true,
             turnOwner: .taskChat(workstreamId)
         )
         do {
-            _ = try await TaskChatRuntime.recordJournalMessage(
-                workstreamId: workstreamId,
-                message: aiMessage,
-                status: .streaming,
-                continuityKey: continuityKey
+            let writes = [
+                userMessage.journalWrite(
+                    origin: "workstream",
+                    status: .completed,
+                    delivery: .local,
+                    continuityKey: continuityKey,
+                    messageSource: "workstream"
+                ),
+                aiMessage.journalWrite(
+                    origin: "workstream",
+                    status: .streaming,
+                    delivery: .local,
+                    continuityKey: continuityKey,
+                    messageSource: "workstream"
+                ),
+            ]
+            let receipt = try await recordJournalExchangeOperation(
+                workstreamId,
+                lease.ownerID,
+                lease.authorizationSnapshot,
+                writes
             )
-            await refreshJournal()
+            guard isCurrent(lease) else { return }
+            guard receipt.operation == "record_exchange",
+                  receipt.turns.count == 2,
+                  Set(receipt.turns.map(\.turnId)) == Set(writes.map(\.turnId)) else {
+                throw BridgeError.agentError("Kernel returned an invalid task chat exchange receipt")
+            }
+            applyAcceptedExchange(receipt, lease: lease)
         } catch {
-            errorMessage = "Could not start this response. Try again."
-            isSending = false
+            if isCurrent(lease) {
+                errorMessage = "Could not save this message. Try again."
+                isSending = false
+            }
             return
         }
+        guard isCurrent(lease) else { return }
+        // Signal local send only after both canonical rows are accepted.
+        localSendToken = LocalSendToken(generation: localSendToken.generation + 1)
+        if draftText == text { draftText = "" }
         activeAssistantMessageId = aiMessageId
 
         do {
             let textDeltaHandler: @Sendable (String) -> Void = { [weak self] delta in
                 Task { @MainActor [weak self] in
-                    self?.appendToMessage(id: aiMessageId, text: delta)
+                    guard let self, self.isCurrent(lease) else { return }
+                    self.appendToMessage(id: aiMessageId, text: delta)
                 }
             }
             let toolActivityHandler: @Sendable (String, String, String?, [String: Any]?) -> Void = { [weak self] name, status, toolUseId, input in
                 Task { @MainActor [weak self] in
-                    self?.addToolActivity(
+                    guard let self, self.isCurrent(lease) else { return }
+                    self.addToolActivity(
                         messageId: aiMessageId,
                         toolName: name,
                         status: ToolCallStatus.fromBridgeStatus(status),
@@ -260,12 +488,14 @@ class TaskChatState: ObservableObject {
             }
             let thinkingDeltaHandler: @Sendable (String) -> Void = { [weak self] text in
                 Task { @MainActor [weak self] in
-                    self?.appendThinking(messageId: aiMessageId, text: text)
+                    guard let self, self.isCurrent(lease) else { return }
+                    self.appendThinking(messageId: aiMessageId, text: text)
                 }
             }
             let toolResultDisplayHandler: @Sendable (String, String, String) -> Void = { [weak self] toolUseId, name, output in
                 Task { @MainActor [weak self] in
-                    self?.addToolResult(messageId: aiMessageId, toolUseId: toolUseId, name: name, output: output)
+                    guard let self, self.isCurrent(lease) else { return }
+                    self.addToolResult(messageId: aiMessageId, toolUseId: toolUseId, name: name, output: output)
                 }
             }
 
@@ -275,6 +505,7 @@ class TaskChatState: ObservableObject {
                 workspacePath: workspacePath,
                 mode: chatMode.rawValue,
                 taskContext: taskContext,
+                authorizationSnapshot: lease.authorizationSnapshot,
                 onTextDelta: textDeltaHandler,
                 onToolActivity: toolActivityHandler,
                 onThinkingDelta: thinkingDeltaHandler,
@@ -282,6 +513,7 @@ class TaskChatState: ObservableObject {
                 onAuthRequired: onAuthRequired ?? { _, _ in },
                 onAuthSuccess: onAuthSuccess ?? { }
             )
+            guard isCurrent(lease) else { return }
 
             // Flush remaining streaming buffers
             streamingBuffer.cancelPendingFlush()
@@ -296,7 +528,7 @@ class TaskChatState: ObservableObject {
                         messages[currentIndex].isStreaming = false
                         messages[currentIndex].resources = queryResult.artifacts.map(ChatResource.artifact)
                         completeRemainingToolCalls(messageId: aiMessageId, terminalStatus: .failed)
-                        await finishJournalUpdate(messageId: aiMessageId, status: .failed)
+                        await finishJournalUpdate(messageId: aiMessageId, status: .failed, lease: lease)
                     }
                 } else {
                     let messageText = messages[index].text.isEmpty ? queryResult.text : messages[index].text
@@ -304,9 +536,10 @@ class TaskChatState: ObservableObject {
                     messages[index].isStreaming = false
                     messages[index].resources = queryResult.artifacts.map(ChatResource.artifact)
                     completeRemainingToolCalls(messageId: aiMessageId)
-                    await finishJournalUpdate(messageId: aiMessageId, status: .completed)
+                    await finishJournalUpdate(messageId: aiMessageId, status: .completed, lease: lease)
                 }
             }
+            guard isCurrent(lease) else { return }
 
             log("TaskChatState[\(workstreamId)]: response complete (cost=$\(queryResult.costUsd))")
             let terminalStatus = AgentRunProjectionStatus.fromWire(queryResult.terminalStatus) ?? .succeeded
@@ -318,8 +551,10 @@ class TaskChatState: ObservableObject {
                 errorMessage = failureText
             } else {
                 await onQueryCompleted?(queryResult, userMessage.id)
+                guard isCurrent(lease) else { return }
             }
         } catch {
+            guard isCurrent(lease) else { return }
             streamingBuffer.cancelPendingFlush()
             flushStreamingBuffer()
 
@@ -333,7 +568,7 @@ class TaskChatState: ObservableObject {
             if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
                 if failedByUserStop && messages[index].text.isEmpty && messages[index].contentBlocks.isEmpty {
                     messages[index].isStreaming = false
-                    await finishJournalUpdate(messageId: aiMessageId, status: .failed)
+                    await finishJournalUpdate(messageId: aiMessageId, status: .failed, lease: lease)
                 } else {
                     if !failedByUserStop {
                         Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: error.localizedDescription)
@@ -345,7 +580,8 @@ class TaskChatState: ObservableObject {
                     )
                     await finishJournalUpdate(
                         messageId: aiMessageId,
-                        status: failedByUserStop ? .completed : .failed
+                        status: failedByUserStop ? .completed : .failed,
+                        lease: lease
                     )
                 }
             }
@@ -356,6 +592,7 @@ class TaskChatState: ObservableObject {
             logError("TaskChatState[\(workstreamId)]: query failed", error: error)
         }
 
+        guard isCurrent(lease) else { return }
         activeAssistantMessageId = nil
         isSending = false
         isStopping = false
@@ -411,6 +648,7 @@ class TaskChatState: ObservableObject {
     }
 
     func surfaceRuntimeFailure(_ projection: AgentRunProjection, fallbackMessage: String? = nil) {
+        guard hasCurrentOwner else { return }
         guard projection.surface == .workstream(workstreamId: workstreamId) else { return }
         guard let errorText = AgentFailureTranscriptFormatter.errorText(for: projection) ?? fallbackMessage else { return }
         let failureKey = [
@@ -434,12 +672,14 @@ class TaskChatState: ObservableObject {
         runtimeProjectionCancellable = AgentRuntimeStatusStore.shared.$projectionsBySurface
             .dropFirst()
             .sink { [weak self] projections in
-                guard let self, let projection = projections[surface.key] else { return }
+                guard let self, self.hasCurrentOwner,
+                      let projection = projections[surface.key] else { return }
                 self.surfaceRuntimeFailure(projection)
             }
     }
 
     private func surfaceCurrentRuntimeFailureIfNeeded(fallbackMessage: String? = nil) {
+        guard hasCurrentOwner else { return }
         if let projection = AgentRuntimeStatusStore.shared.projection(for: .workstream(workstreamId: workstreamId)) {
             surfaceRuntimeFailure(projection, fallbackMessage: fallbackMessage)
         } else if let fallbackMessage {
@@ -449,6 +689,7 @@ class TaskChatState: ObservableObject {
     }
 
     private func appendFailureTranscriptMessage(_ errorText: String) {
+        guard let lease = captureOwnerLease() else { return }
         guard let failureText = AgentFailureTranscriptFormatter.transcriptText(for: errorText) else { return }
         if messages.contains(where: { message in
             message.sender == .ai
@@ -486,16 +727,21 @@ class TaskChatState: ObservableObject {
             turnOwner: .taskChat(workstreamId)
         )
         Task { @MainActor [weak self] in
-            guard let self else { return }
+            guard let self, self.isCurrent(lease) else { return }
             do {
                 _ = try await TaskChatRuntime.recordJournalMessage(
                     workstreamId: self.workstreamId,
+                    ownerID: lease.ownerID,
+                    authorizationSnapshot: lease.authorizationSnapshot,
                     message: failureMessage,
                     status: .failed
                 )
-                await self.refreshJournal()
+                guard self.isCurrent(lease) else { return }
+                await self.refreshJournal(lease: lease)
             } catch {
-                log("TaskChatState[\(self.workstreamId)]: failure transcript record failed (code=journal_record_failed)")
+                if self.isCurrent(lease) {
+                    log("TaskChatState[\(self.workstreamId)]: failure transcript record failed (code=journal_record_failed)")
+                }
             }
         }
     }
@@ -503,22 +749,28 @@ class TaskChatState: ObservableObject {
     // MARK: - Stop
 
     func stopAgent() {
+        guard let lease = captureOwnerLease() else { return }
         guard isSending else { return }
         isStopping = true
         Task {
-            await TaskChatRuntime.interrupt(workstreamId: workstreamId)
+            await TaskChatRuntime.interrupt(
+                workstreamId: workstreamId,
+                authorizationSnapshot: lease.authorizationSnapshot
+            )
         }
     }
 
     // MARK: - Streaming Helpers
 
     private func appendToMessage(id: String, text: String) {
+        guard hasCurrentOwner else { return }
         streamingBuffer.appendText(messageId: id, text: text) { [weak self] in
             self?.flushStreamingBuffer()
         }
     }
 
     private func flushStreamingBuffer() {
+        guard hasCurrentOwner else { return }
         streamingBuffer.flush(messages: &messages)
         if let activeAssistantMessageId {
             scheduleJournalUpdate(messageId: activeAssistantMessageId, status: .streaming)
@@ -526,6 +778,7 @@ class TaskChatState: ObservableObject {
     }
 
     private func addToolActivity(messageId: String, toolName: String, status: ToolCallStatus, toolUseId: String? = nil, input: [String: Any]? = nil) {
+        guard hasCurrentOwner else { return }
         streamingBuffer.applyToolActivity(
             messageId: messageId,
             toolName: toolName,
@@ -538,6 +791,7 @@ class TaskChatState: ObservableObject {
     }
 
     private func addToolResult(messageId: String, toolUseId: String, name: String, output: String) {
+        guard hasCurrentOwner else { return }
         streamingBuffer.applyToolResult(
             messageId: messageId,
             toolUseId: toolUseId,
@@ -549,6 +803,7 @@ class TaskChatState: ObservableObject {
     }
 
     private func appendThinking(messageId: String, text: String) {
+        guard hasCurrentOwner else { return }
         streamingBuffer.appendThinking(messageId: messageId, text: text) { [weak self] in
             self?.flushStreamingBuffer()
         }
@@ -557,6 +812,7 @@ class TaskChatState: ObservableObject {
     /// Matches any in-flight state (`.running`, `.slow`, `.stalled`) so
     /// detector-promoted blocks resolve when the turn ends.
     private func completeRemainingToolCalls(messageId: String, terminalStatus: ToolCallStatus = .completed) {
+        guard hasCurrentOwner else { return }
         streamingBuffer.completeRemainingToolCalls(
             messageId: messageId,
             terminalStatus: terminalStatus,

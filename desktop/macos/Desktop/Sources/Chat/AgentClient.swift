@@ -76,10 +76,6 @@ enum AgentClient {
       await bridge.stopAndWaitForExit()
     }
 
-    func clearOwnerState() async {
-      await bridge.clearOwnerState()
-    }
-
     func invalidateSurface(_ surface: AgentSurfaceReference) async {
       await bridge.invalidateSurface(surface)
     }
@@ -175,6 +171,18 @@ enum AgentClient {
       turn: KernelJournalTurnWrite
     ) async throws -> KernelJournalTurn {
       try await bridge.recordJournalTurn(surface: surface, ownerID: ownerID, turn: turn)
+    }
+
+    func recordJournalExchange(
+      surface: AgentSurfaceReference,
+      ownerID: String,
+      turns: [KernelJournalTurnWrite]
+    ) async throws -> AgentRuntimeProcess.JournalOperationResult {
+      try await bridge.recordJournalExchange(
+        surface: surface,
+        ownerID: ownerID,
+        turns: turns
+      )
     }
 
     func updateJournalTurn(
@@ -317,7 +325,7 @@ enum AgentClient {
   ) async throws -> QueryResult {
     let bridge = AgentClient.makeBridge(harnessMode: harnessMode)
     try await bridge.start()
-    defer { Task { await bridge.stop() } }
+    do {
 
     guard let requestedAdapter = AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) else {
       throw BridgeError.agentError("Unknown AI runtime mode: \(harnessMode)")
@@ -378,6 +386,12 @@ enum AgentClient {
       onAuthRequired: onAuthRequired,
       onAuthSuccess: onAuthSuccess
     )
-    return QueryResult(result)
+      let output = QueryResult(result)
+      await bridge.stop()
+      return output
+    } catch {
+      await bridge.stop()
+      throw error
+    }
   }
 }

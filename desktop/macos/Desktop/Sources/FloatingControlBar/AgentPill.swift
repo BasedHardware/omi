@@ -59,6 +59,7 @@ final class AgentPill: ObservableObject, Identifiable {
     let query: String
     let createdAt: Date
     let model: String
+    let ownerID: String
     let bridgeHarnessOverride: AgentHarnessMode?
     var canonicalSessionId: String?
     var canonicalRunId: String?
@@ -83,10 +84,17 @@ final class AgentPill: ObservableObject, Identifiable {
         (completedAt ?? Date()).timeIntervalSince(createdAt)
     }
 
-    init(id: UUID = UUID(), query: String, model: String, bridgeHarnessOverride: AgentHarnessMode? = nil) {
+    init(
+        id: UUID = UUID(),
+        query: String,
+        model: String,
+        bridgeHarnessOverride: AgentHarnessMode? = nil,
+        ownerID: String? = nil
+    ) {
         self.id = id
         self.query = query
         self.model = model
+        self.ownerID = ownerID ?? RuntimeOwnerIdentity.currentOwnerId() ?? ""
         self.bridgeHarnessOverride = bridgeHarnessOverride
         self.title = AgentPill.deriveTitle(from: query)
         self.createdAt = Date()
@@ -110,6 +118,12 @@ final class AgentPill: ObservableObject, Identifiable {
         }
         return joined.isEmpty ? "AGENT" : joined
     }
+}
+
+enum AgentOwnerBoundSpawnResult<Value> {
+    case rejectedBeforeDispatch
+    case staleReceipt(Value)
+    case accepted(Value)
 }
 
 /// Singleton that owns visible `AgentPill` projections. It never owns agent
@@ -145,6 +159,7 @@ final class AgentPillsManager: ObservableObject {
 
     private var projectionSyncCancellable: AnyCancellable?
     private var projectionRefreshTask: Task<Void, Never>?
+    private var ownerChangeCancellable: AnyCancellable?
 
     private init() {
         projectionSyncCancellable = AgentRuntimeStatusStore.shared.$projectionsBySurface
@@ -155,11 +170,62 @@ final class AgentPillsManager: ObservableObject {
         projectionRefreshTask = Task { @MainActor [weak self] in
             await self?.refreshProjectedPillsFromKernel()
         }
+        ownerChangeCancellable = NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)
+            .sink { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.resetOwnerProjection()
+                }
+            }
     }
+
+#if DEBUG
+    /// Hermetic tests that only exercise in-memory projection state must not
+    /// let the singleton's eager refresh start the real shared agent runtime.
+    func quiesceProjectionRefreshForTesting() {
+        projectionRefreshTask?.cancel()
+        projectionRefreshTask = nil
+    }
+#endif
 
     private struct PendingAgentFollowUp {
         let text: String
         let attachments: [ChatAttachment]
+    }
+
+    func resetOwnerProjection() {
+        projectionRefreshTask?.cancel()
+        projectionRefreshTask = nil
+        for task in runTasksByPill.values { task.cancel() }
+        for item in viewedExpirationWorkItemsByPill.values { item.cancel() }
+        if let recordingPillID {
+            PushToTalkManager.shared.cancelPillFollowUp(for: recordingPillID)
+        }
+        recordingPillID = nil
+        runTasksByPill.removeAll()
+        runAttemptGenerationByPill.removeAll()
+        viewedExpirationWorkItemsByPill.removeAll()
+        pendingFollowUpsByPill.removeAll()
+        producingJournalSurfaceByPill.removeAll()
+        pills.removeAll()
+        projectionRefreshTask = Task { @MainActor [weak self] in
+            await Task.yield()
+            await self?.refreshProjectedPillsFromKernel()
+        }
+    }
+
+    static func performOwnerBoundSpawn<Value>(
+        ownerID: String,
+        currentOwnerID: @escaping @MainActor () -> String? = {
+            RuntimeOwnerIdentity.currentOwnerId()
+        },
+        dispatch: () async throws -> Value
+    ) async rethrows -> AgentOwnerBoundSpawnResult<Value> {
+        guard !ownerID.isEmpty, currentOwnerID() == ownerID else {
+            return .rejectedBeforeDispatch
+        }
+        let value = try await dispatch()
+        guard currentOwnerID() == ownerID else { return .staleReceipt(value) }
+        return .accepted(value)
     }
 
     func bindProducingJournalSurface(
@@ -213,6 +279,9 @@ final class AgentPillsManager: ObservableObject {
     }
 
     struct ProviderDirective: Equatable {
+        /// Deterministic explicit-provider syntax only. This is an untrusted
+        /// proposal: `spawn_agent` still calls the kernel's route-and-apply
+        /// contract before it creates any session/run.
         let provider: DirectedProvider
         let rewrittenQuery: String
         let title: String
@@ -336,7 +405,13 @@ final class AgentPillsManager: ObservableObject {
         onAccepted: (@MainActor (Result<AgentPill, Error>) -> Void)? = nil
     ) -> AgentPill {
         let pillId = UUID()
-        let pill = AgentPill(id: pillId, query: query, model: model, bridgeHarnessOverride: bridgeHarnessOverride)
+        let spawnOwnerID = RuntimeOwnerIdentity.currentOwnerId() ?? ""
+        let pill = AgentPill(
+            id: pillId,
+            query: query,
+            model: model,
+            bridgeHarnessOverride: bridgeHarnessOverride,
+            ownerID: spawnOwnerID)
         if let preFetchedTitle, !preFetchedTitle.isEmpty {
             pill.title = preFetchedTitle
         }
@@ -374,6 +449,7 @@ final class AgentPillsManager: ObservableObject {
                 guard let pill else { return }
                 guard let result = await AgentPillsManager.generateTitleAndAck(for: pill.query) else { return }
                 await MainActor.run {
+                    guard RuntimeOwnerIdentity.currentOwnerId() == pill.ownerID else { return }
                     pill.title = result.title
                     if pill.latestActivity == "Warming up…" || pill.latestActivity == "Starting…" {
                         pill.latestActivity = result.ack
@@ -408,19 +484,40 @@ final class AgentPillsManager: ObservableObject {
                         title: pill.title
                     )
                 }
-                let accepted = try await DesktopCoordinatorService.shared.spawnAgent(
-                    objective: pill.query,
-                    title: pill.title,
-                    pillId: pill.id,
-                    originSurface: originSurface,
-                    provider: bridgeHarnessOverride?.rawValue,
-                    parentRunId: nil,
-                    visible: true,
-                    model: modelForSpawn,
-                    harnessMode: bridgeHarnessOverride,
-                    cwd: workingDirectory,
-                    producerJournal: producerJournal
-                )
+                let ownerBoundReceipt = try await Self.performOwnerBoundSpawn(
+                    ownerID: spawnOwnerID
+                ) {
+                    try await DesktopCoordinatorService.shared.spawnAgent(
+                        objective: pill.query,
+                        title: pill.title,
+                        pillId: pill.id,
+                        originSurface: originSurface,
+                        provider: bridgeHarnessOverride?.rawValue,
+                        parentRunId: nil,
+                        visible: true,
+                        model: modelForSpawn,
+                        harnessMode: bridgeHarnessOverride,
+                        cwd: workingDirectory,
+                        producerJournal: producerJournal
+                    )
+                }
+                let accepted: DesktopCoordinatorSpawnedAgent
+                switch ownerBoundReceipt {
+                case .accepted(let receipt):
+                    accepted = receipt
+                case .staleReceipt(let receipt):
+                    Task {
+                        _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(
+                            runId: receipt.runId)
+                    }
+                    self.removeRenderedProjection(pillID: pill.id)
+                    onAccepted?(.failure(AuthError.userChangedDuringRequest))
+                    return
+                case .rejectedBeforeDispatch:
+                    self.removeRenderedProjection(pillID: pill.id)
+                    onAccepted?(.failure(AuthError.userChangedDuringRequest))
+                    return
+                }
                 if Task.isCancelled || !self.isCurrentRunAttempt(pillID: pill.id, generation: generation) || !self.pills.contains(where: { $0.id == pill.id }) || pill.status.isFinished {
                     Task {
                         _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(runId: accepted.runId)
@@ -466,7 +563,10 @@ final class AgentPillsManager: ObservableObject {
                 await self.pollCanonicalRun(for: pill, generation: generation)
             } catch {
                 onAccepted?(.failure(error))
-                guard !Task.isCancelled, self.isCurrentRunAttempt(pillID: pill.id, generation: generation) else { return }
+                guard !Task.isCancelled,
+                      RuntimeOwnerIdentity.currentOwnerId() == spawnOwnerID,
+                      self.isCurrentRunAttempt(pillID: pill.id, generation: generation)
+                else { return }
                 AgentRuntimeStatusStore.shared.recordLocalFailure(
                     surface: surfaceRef,
                     error: error.localizedDescription
@@ -619,6 +719,7 @@ final class AgentPillsManager: ObservableObject {
             return false
         }
         return await FloatingControlBarManager.shared.recordPillTerminalCompletion(
+            ownerID: pill.ownerID,
             pillID: pill.id,
             producingSurface: pill.producingJournalSurface,
             runId: pill.canonicalRunId,
@@ -728,6 +829,7 @@ final class AgentPillsManager: ObservableObject {
         )
         Task {
             await FloatingControlBarManager.shared.recordPillTerminalCompletion(
+                ownerID: pill.ownerID,
                 pillID: pill.id,
                 producingSurface: pill.producingJournalSurface,
                 runId: runId,
@@ -915,8 +1017,10 @@ final class AgentPillsManager: ObservableObject {
     }
 
     func snapshots(limit: Int = 20) -> [Snapshot] {
+        let ownerID = RuntimeOwnerIdentity.currentOwnerId()
         let formatter = ISO8601DateFormatter()
         return pills
+            .filter { $0.ownerID == ownerID }
             .sorted { $0.createdAt > $1.createdAt }
             .prefix(limit)
             .map { pill in
@@ -933,10 +1037,13 @@ final class AgentPillsManager: ObservableObject {
     }
 
     func refreshProjectedPillsFromKernel() async {
+        guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
         do {
             let floating = try await DesktopCoordinatorService.shared.listFloatingAgentPills(limit: 50)
+            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
             mergeProjectedPills(from: floating)
         } catch {
+            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
             logError("AgentPills: failed to refresh projected pills from kernel", error: error)
             applyRuntimeProjections()
         }
@@ -951,6 +1058,7 @@ final class AgentPillsManager: ObservableObject {
         sessionId: String?,
         runId: String?
     ) async -> Bool {
+        guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return false }
         let preference = AgentTimelineHydratePreference.make(
             pillId: pillId,
             sessionId: sessionId,
@@ -966,11 +1074,12 @@ final class AgentPillsManager: ObservableObject {
         }
 
         await refreshProjectedPillsFromKernel()
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
         if findPill(matching: preference) != nil {
             return true
         }
 
-        let hydrated = await hydratePillFromKernel(preference: preference)
+        let hydrated = await hydratePillFromKernel(preference: preference, ownerID: ownerID)
         if hydrated {
             return findPill(matching: preference) != nil
         }
@@ -986,20 +1095,22 @@ final class AgentPillsManager: ObservableObject {
 
     /// Package-visible for hermetic preference-matching tests.
     func findPill(matching preference: AgentTimelineHydratePreference) -> AgentPill? {
+        let ownerID = RuntimeOwnerIdentity.currentOwnerId()
+        let ownedPills = pills.filter { $0.ownerID == ownerID }
         guard let matched = preference.firstMatchingKey(
-            runIdMatches: { runId in pills.contains(where: { $0.canonicalRunId == runId }) },
-            sessionIdMatches: { sessionId in pills.contains(where: { $0.canonicalSessionId == sessionId }) },
-            pillIdMatches: { pillId in pills.contains(where: { $0.id == pillId }) }
+            runIdMatches: { runId in ownedPills.contains(where: { $0.canonicalRunId == runId }) },
+            sessionIdMatches: { sessionId in ownedPills.contains(where: { $0.canonicalSessionId == sessionId }) },
+            pillIdMatches: { pillId in ownedPills.contains(where: { $0.id == pillId }) }
         ) else {
             return nil
         }
         switch matched {
         case .runId(let runId):
-            return pills.first(where: { $0.canonicalRunId == runId })
+            return ownedPills.first(where: { $0.canonicalRunId == runId })
         case .sessionId(let sessionId):
-            return pills.first(where: { $0.canonicalSessionId == sessionId })
+            return ownedPills.first(where: { $0.canonicalSessionId == sessionId })
         case .pillId(let pillId):
-            return pills.first(where: { $0.id == pillId })
+            return ownedPills.first(where: { $0.id == pillId })
         }
     }
 
@@ -1009,12 +1120,17 @@ final class AgentPillsManager: ObservableObject {
         objectWillChange.send()
     }
 
-    private func hydratePillFromKernel(preference: AgentTimelineHydratePreference) async -> Bool {
+    private func hydratePillFromKernel(
+        preference: AgentTimelineHydratePreference,
+        ownerID: String
+    ) async -> Bool {
         do {
             for key in preference.keys {
+                guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
                 switch key {
                 case .runId(let runId):
                     let inspection = try await DesktopCoordinatorService.shared.inspectAgentRun(runId: runId)
+                    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
                     if upsertHydratedPill(
                         pillId: preference.keys.compactMap { key -> UUID? in
                             if case .pillId(let id) = key { return id }
@@ -1030,6 +1146,7 @@ final class AgentPillsManager: ObservableObject {
                     }
                 case .sessionId(let sessionId):
                     let snapshot = await DesktopCoordinatorService.shared.awarenessSnapshot()
+                    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
                     if let session = snapshot.sessions.first(where: { $0.sessionId == sessionId }) {
                         let resolvedPillId =
                             (session.externalRefKind == "pill"
@@ -1051,6 +1168,7 @@ final class AgentPillsManager: ObservableObject {
                         }
                     }
                     let floating = try await DesktopCoordinatorService.shared.listFloatingAgentPills(limit: 50)
+                    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
                     if let entry = floating.first(where: {
                         canonicalString($0["sessionId"]) == sessionId
                     }) {
@@ -1059,11 +1177,13 @@ final class AgentPillsManager: ObservableObject {
                     }
                 case .pillId(let pillId):
                     let floating = try await DesktopCoordinatorService.shared.listFloatingAgentPills(limit: 50)
+                    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
                     if let entry = floating.first(where: { canonicalPillId(from: $0) == pillId }) {
                         mergeProjectedPills(from: [entry])
                         return findPill(matching: preference) != nil
                     }
                     let snapshot = await DesktopCoordinatorService.shared.awarenessSnapshot()
+                    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
                     if let session = snapshot.sessions.first(where: {
                         $0.externalRefKind == "pill" && $0.externalRefId == pillId.uuidString
                     }) {
@@ -1095,6 +1215,7 @@ final class AgentPillsManager: ObservableObject {
         title: String?,
         query: String?
     ) -> Bool {
+        guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return false }
         let trimmedSession = sessionId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let trimmedRun = runId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !trimmedSession.isEmpty || !trimmedRun.isEmpty || pillId != nil else {
@@ -1104,11 +1225,13 @@ final class AgentPillsManager: ObservableObject {
         let model = ShortcutSettings.shared.selectedModel.isEmpty
             ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
         let pill: AgentPill
-        if let existing = pills.first(where: { $0.id == id }) {
+        if let existing = pills.first(where: { $0.id == id && $0.ownerID == ownerID }) {
             pill = existing
         } else if let existing = pills.first(where: {
-            (!trimmedRun.isEmpty && $0.canonicalRunId == trimmedRun)
+            $0.ownerID == ownerID
+                && ((!trimmedRun.isEmpty && $0.canonicalRunId == trimmedRun)
                 || (!trimmedSession.isEmpty && $0.canonicalSessionId == trimmedSession)
+                )
         }) {
             pill = existing
         } else {
@@ -1116,7 +1239,8 @@ final class AgentPillsManager: ObservableObject {
                 id: id,
                 query: (query?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
                     ? query! : "Background agent",
-                model: model
+                model: model,
+                ownerID: ownerID
             )
             pills.append(pill)
         }
@@ -1151,13 +1275,18 @@ final class AgentPillsManager: ObservableObject {
         attemptId: String?,
         producingJournalSurface: AgentSurfaceReference? = nil
     ) {
+        guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
         let model = ShortcutSettings.shared.selectedModel.isEmpty
             ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
         let pill: AgentPill
-        if let existing = pills.first(where: { $0.id == id }) {
+        if let existing = pills.first(where: { $0.id == id && $0.ownerID == ownerID }) {
             pill = existing
         } else {
-            pill = AgentPill(id: id, query: query.isEmpty ? "Background agent" : query, model: model)
+            pill = AgentPill(
+                id: id,
+                query: query.isEmpty ? "Background agent" : query,
+                model: model,
+                ownerID: ownerID)
             pills.append(pill)
         }
         pill.title = title.isEmpty ? "Background agent" : title
@@ -1193,6 +1322,7 @@ final class AgentPillsManager: ObservableObject {
     }
 
     private func mergeProjectedPills(from floating: [[String: Any]]) {
+        guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
         var seen = Set<UUID>()
         for entry in floating {
             guard let pillId = canonicalPillId(from: entry),
@@ -1204,10 +1334,14 @@ final class AgentPillsManager: ObservableObject {
             let model = ShortcutSettings.shared.selectedModel.isEmpty
                 ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
             let pill: AgentPill
-            if let existing = pills.first(where: { $0.id == pillId }) {
+            if let existing = pills.first(where: { $0.id == pillId && $0.ownerID == ownerID }) {
                 pill = existing
             } else {
-                pill = AgentPill(id: pillId, query: query.isEmpty ? "Background agent" : query, model: model)
+                pill = AgentPill(
+                    id: pillId,
+                    query: query.isEmpty ? "Background agent" : query,
+                    model: model,
+                    ownerID: ownerID)
                 pills.append(pill)
             }
             pill.producingJournalSurface = producingJournalSurfaceByPill[pill.id]
@@ -1243,7 +1377,8 @@ final class AgentPillsManager: ObservableObject {
     }
 
     private func applyRuntimeProjections() {
-        for pill in pills {
+        guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
+        for pill in pills where pill.ownerID == ownerID {
             if let projection = AgentRuntimeStatusStore.shared.floatingPillProjection(pillId: pill.id) {
                 Self.apply(projection: projection, to: pill)
             } else if let runId = pill.canonicalRunId,
@@ -1352,6 +1487,7 @@ final class AgentPillsManager: ObservableObject {
             }
         }
         while !Task.isCancelled {
+            guard RuntimeOwnerIdentity.currentOwnerId() == pill.ownerID else { return }
             guard isCurrentRunAttempt(pillID: pill.id, generation: generation) else { return }
             guard pills.contains(where: { $0.id == pill.id }) else { return }
             guard let runId = pill.canonicalRunId, !runId.isEmpty else { return }
@@ -1360,6 +1496,7 @@ final class AgentPillsManager: ObservableObject {
                 let inspection = try await DesktopCoordinatorService.shared.inspectAgentRun(
                     runId: runId
                 )
+                guard RuntimeOwnerIdentity.currentOwnerId() == pill.ownerID else { return }
                 guard isCurrentRunAttempt(pillID: pill.id, generation: generation) else { return }
                 guard pill.canonicalRunId == runId else {
                     ScreenContextToolTelemetry.trackInvariant(
@@ -1449,6 +1586,7 @@ final class AgentPillsManager: ObservableObject {
             pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
             Task {
                 await FloatingControlBarManager.shared.recordPillTerminalCompletion(
+                    ownerID: pill.ownerID,
                     pillID: pill.id,
                     producingSurface: pill.producingJournalSurface,
                     runId: pill.canonicalRunId,
@@ -1496,6 +1634,7 @@ final class AgentPillsManager: ObservableObject {
         let terminalText = trimmed.isEmpty ? "Done." : trimmed
         Task {
             await FloatingControlBarManager.shared.recordPillTerminalCompletion(
+                ownerID: pill.ownerID,
                 pillID: pill.id,
                 producingSurface: pill.producingJournalSurface,
                 runId: pill.canonicalRunId,
@@ -1518,6 +1657,7 @@ final class AgentPillsManager: ObservableObject {
         pill.markContentChanged()
         Task {
             await FloatingControlBarManager.shared.recordPillTerminalCompletion(
+                ownerID: pill.ownerID,
                 pillID: pill.id,
                 producingSurface: pill.producingJournalSurface,
                 runId: pill.canonicalRunId,

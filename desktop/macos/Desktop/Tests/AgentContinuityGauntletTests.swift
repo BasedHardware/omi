@@ -110,7 +110,10 @@ final class AgentContinuityGauntletTests: XCTestCase {
     XCTAssertTrue(bridgeSource.contains("hold_busy_ms is disabled on production bundles"))
     XCTAssertTrue(driverSource.contains("continuity_contract_self_check_failures"))
     XCTAssertTrue(
-      driverSource.contains("testOptimisticTurnKeepsIdentityThroughJournalAcknowledgementAndReplay")
+      driverSource.contains("testRejectedJournalExchangeNeverCreatesAVisibleOrphan")
+    )
+    XCTAssertTrue(
+      driverSource.contains("testJournalAdmissionPublishesImmediateProjectionWithOneStableIdentity")
     )
     XCTAssertTrue(driverSource.contains("testStructuredBlocksResourcesAndContinuityMetadataSurviveProjection"))
     XCTAssertTrue(driverSource.contains("testHydratePreferencePrefersRunThenSessionThenPill"))

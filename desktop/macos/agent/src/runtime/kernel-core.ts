@@ -139,6 +139,7 @@ import type { SurfaceRef } from "./surface-session.js";
 import {
   RunToolCapabilityBroker,
   type AuthorizedRunToolInvocation,
+  type RunToolExecutionLease,
   type RunToolCapabilityRevocationReason,
 } from "./run-tool-capability.js";
 import type { ToolInvocationIdentity } from "./tool-invocation-ledger.js";
@@ -240,8 +241,16 @@ export class KernelCore {
     this.toolCapabilities.markInvocationDispatched(invocation);
   }
 
+  acquireRunToolExecutionLease(
+    invocation: AuthorizedRunToolInvocation,
+    activeOwnerId: () => string,
+  ): RunToolExecutionLease {
+    return this.toolCapabilities.acquireExecutionLease(invocation, activeOwnerId);
+  }
+
   completeRunToolInvocation(input: ToolInvocationIdentity & {
-    capabilityRef?: string;
+    capabilityRef: string;
+    activeOwnerId: string;
     outcome: "succeeded" | "failed";
     result: string;
   }): void {
@@ -767,6 +776,17 @@ export class KernelCore {
     accepted: { session: AgentSession; run: AgentRun; contextSnapshot: ContextSnapshotProjection }
   ): Promise<KernelRunResult> {
 
+    const assertExecutionAuthority = (): void => {
+      if (!input.authoritySignal?.aborted) return;
+      throw input.authoritySignal.reason instanceof Error
+        ? input.authoritySignal.reason
+        : new Error("Run execution authority was revoked");
+    };
+    assertExecutionAuthority();
+    input.authoritySignal?.addEventListener("abort", () => {
+      this.activeExecutions.get(accepted.run.runId)?.abortController.abort(input.authoritySignal?.reason);
+    }, { once: true });
+
     const adapterId = accepted.session.defaultAdapterId;
     input = {
       ...input,
@@ -796,6 +816,7 @@ export class KernelCore {
     const conversationId = conversationIdForSession(this.store, accepted.session.sessionId);
 
     for (let attemptNo = 1; attemptNo <= maxAttempts; attemptNo += 1) {
+      assertExecutionAuthority();
       const attempt = this.createAttempt({
         runId: accepted.run.runId,
         attemptNo,
@@ -841,6 +862,7 @@ export class KernelCore {
       let handle: AdapterBindingHandle;
       let bindingResolutionProtectedBindingId: string | null = null;
       try {
+        assertExecutionAuthority();
         const resolved = await this.withBindingResolutionLock(accepted.session.sessionId, adapterId, async () => {
           const existingBinding = this.readActiveBinding(accepted.session.sessionId, adapterId);
           const bindingQueueKey = existingBinding ? this.handleForExistingBinding(existingBinding) : undefined;
@@ -878,9 +900,28 @@ export class KernelCore {
         });
         binding = resolved.binding;
         handle = resolved.handle;
+        assertExecutionAuthority();
         bindingResolutionProtectedBindingId = pool.requiresPinnedWorkers ? (handle.bindingId ?? null) : null;
       } catch (error) {
         pool.unprotectPinnedBinding(bindingResolutionProtectedBindingId);
+        if (input.authoritySignal?.aborted) {
+          if (!this.isTerminalRun(accepted.run.runId)) {
+            const failure = failureFromError(error, {
+              code: "execution_authority_revoked",
+              source: "runtime",
+              adapterId: attempt.adapterId,
+              retryable: false,
+            });
+            this.failAttemptBeforeExecution(
+              attempt,
+              "execution_authority_revoked",
+              failure.userMessage,
+              false,
+              failure,
+            );
+          }
+          break;
+        }
         if (isStaleBindingError(error)) {
           const failure = failureFromError(error, {
             code: "stale_binding",
@@ -934,6 +975,7 @@ export class KernelCore {
 
       try {
         const result = await pool.runExclusiveQueued(handle, attempt.attemptId, async (worker) => {
+          assertExecutionAuthority();
           if (this.runStatus(accepted.run.runId) === "cancelling") {
             throw new Error("cancelled_before_adapter_dispatch");
           }
@@ -970,6 +1012,7 @@ export class KernelCore {
           );
         });
         this.activeExecutions.delete(accepted.run.runId);
+        assertExecutionAuthority();
         const completed = this.completeAttemptAndRun(
           accepted.session,
           accepted.run.runId,
@@ -984,6 +1027,21 @@ export class KernelCore {
         return { ...completed, completionDeltaArtifacts };
       } catch (error) {
         this.activeExecutions.delete(accepted.run.runId);
+        if (input.authoritySignal?.aborted) {
+          if (!this.isTerminalRun(accepted.run.runId)) {
+            this.finishAttemptAndRun({
+              sessionId: accepted.session.sessionId,
+              runId: accepted.run.runId,
+              attemptId: attempt.attemptId,
+              status: "cancelled",
+              finalText: null,
+              errorCode: "execution_authority_revoked",
+              errorMessage: "Run execution authority was revoked",
+              failure: null,
+            });
+          }
+          break;
+        }
         if (isStaleBindingError(error)) {
           this.markBindingStale(binding, attempt, messageFrom(error));
           const failure = failureFromError(error, {

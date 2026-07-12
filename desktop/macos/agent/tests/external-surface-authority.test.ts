@@ -19,6 +19,10 @@ import type { AuthorizedRunToolInvocation } from "../src/runtime/run-tool-capabi
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 import { resolveSurfaceSession } from "../src/runtime/surface-session.js";
 import { readToolInvocation } from "../src/runtime/tool-invocation-ledger.js";
+import {
+  establishRuntimeOwner,
+  runRuntimeOwnerRevocationBarrier,
+} from "../src/runtime/runtime-owner-authority.js";
 import { createKernelHarness, waitUntil } from "./kernel-fakes.js";
 
 const roots: string[] = [];
@@ -58,6 +62,113 @@ describe("external realtime surface authority", () => {
     fixture.store.close();
   });
 
+  it("owner revocation terminalizes externally-owned realtime runs and their pending tools", () => {
+    const fixture = createFixture();
+    const run = fixture.kernel.beginExternalSurfaceRun(beginInput(fixture.sessionId));
+    const invocation = fixture.kernel.authorizeExternalSurfaceToolInvocation({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      invocationId: "external-owner-revoked-tool",
+      toolName: "get_memories",
+      toolInput: {},
+      activeOwnerId: "owner",
+    });
+    fixture.kernel.markRunToolInvocationDispatched(invocation);
+
+    expect(fixture.kernel.revokeActiveRunsForOwner("owner", "owner_changed")).toEqual({
+      runIds: [run.runId],
+    });
+    expect(fixture.store.getRow(
+      "SELECT status, final_text FROM runs WHERE run_id = ?",
+      [run.runId],
+    )).toMatchObject({ status: "cancelled", final_text: null });
+    expect(fixture.store.getRow(
+      "SELECT status FROM run_attempts WHERE attempt_id = ?",
+      [run.attemptId],
+    ).status).toBe("cancelled");
+    expect(readToolInvocation(fixture.store, invocation.invocationId)).toMatchObject({
+      status: "outcome_unknown",
+      errorCode: "run_tool_attempt_terminal",
+    });
+    expectCode(() => fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      terminalStatus: "completed",
+    }), "run_terminal");
+    fixture.store.close();
+  });
+
+  it("terminalizes a lost-begin-response A run before owner B can become visible", () => {
+    const fixture = createFixture();
+    // Node committed this begin, but Swift's correlated response is deliberately
+    // treated as lost: the transition owns no ExternalSurfaceRunBinding.
+    const unknownToSwift = fixture.kernel.beginExternalSurfaceRun(beginInput(fixture.sessionId));
+    const pendingInvocation = fixture.kernel.authorizeExternalSurfaceToolInvocation({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: unknownToSwift.runId,
+      attemptId: unknownToSwift.attemptId,
+      invocationId: "lost-begin-owner-revoked-tool",
+      toolName: "get_memories",
+      toolInput: {},
+      activeOwnerId: "owner",
+    });
+    fixture.kernel.markRunToolInvocationDispatched(pendingInvocation);
+    let authority = establishRuntimeOwner(
+      { ownerId: "desktop-local-user", established: false },
+      "owner",
+    ).state;
+
+    const barrier = runRuntimeOwnerRevocationBarrier({
+      state: authority,
+      requestedOwnerId: "owner",
+      inertOwnerId: "desktop-local-user",
+      lastReceipt: null,
+      commitAuthority: (state) => { authority = state; },
+      revokeAndClear: (ownerId) => {
+        expect(authority).toEqual({ ownerId: "desktop-local-user", established: false });
+        // The production handler cannot interleave another stdin message here:
+        // every active A run/tool is terminal before this receipt becomes ACK.
+        const revoked = fixture.kernel.revokeActiveRunsForOwner(ownerId, "owner_changed");
+        const cleared = fixture.kernel.clearOwnerState(ownerId);
+        return {
+          ownerId,
+          revokedRunIds: revoked.runIds,
+          invalidatedBindingIds: cleared.invalidatedBindingIds,
+        };
+      },
+    });
+    authority = barrier.state;
+    expect(barrier.receipt.revokedRunIds).toContain(unknownToSwift.runId);
+    expect(fixture.store.getRow(
+      "SELECT status, final_text FROM runs WHERE run_id = ?",
+      [unknownToSwift.runId],
+    )).toMatchObject({ status: "cancelled", final_text: null });
+    expect(readToolInvocation(fixture.store, pendingInvocation.invocationId)).toMatchObject({
+      status: "outcome_unknown",
+      errorCode: "run_tool_attempt_terminal",
+    });
+
+    authority = establishRuntimeOwner(authority, "owner-b").state;
+    expect(authority).toEqual({ ownerId: "owner-b", established: true });
+    expectCode(() => fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: unknownToSwift.runId,
+      attemptId: unknownToSwift.attemptId,
+      terminalStatus: "completed",
+    }), "run_terminal");
+    expect(fixture.store.getRow(
+      "SELECT status, final_text FROM runs WHERE run_id = ?",
+      [unknownToSwift.runId],
+    )).toMatchObject({ status: "cancelled", final_text: null });
+    fixture.store.close();
+  });
+
   it("uses the canonical capability ledger, rejects replay, and revokes on terminal completion", () => {
     const fixture = createFixture();
     const run = fixture.kernel.beginExternalSurfaceRun(beginInput(fixture.sessionId));
@@ -82,6 +193,7 @@ describe("external realtime surface authority", () => {
     fixture.kernel.completeRunToolInvocation({
       ...invocationIdentity(invocation),
       capabilityRef: invocation.capabilityRef,
+      activeOwnerId: "owner",
       outcome: "succeeded",
       result: "{\"ok\":true}",
     });
@@ -364,6 +476,7 @@ describe("external realtime surface authority", () => {
       kernel.completeRunToolInvocation({
         ...invocationIdentity(invocation),
         capabilityRef: invocation.capabilityRef,
+        activeOwnerId: "owner",
         outcome: "succeeded",
         result: "{\"ok\":true}",
       });
@@ -412,6 +525,7 @@ describe("external realtime surface authority", () => {
     typed.kernel.completeRunToolInvocation({
       ...invocationIdentity(sqlInvocation),
       capabilityRef: sqlInvocation.capabilityRef,
+      activeOwnerId: "owner",
       outcome: "succeeded",
       result: "[]",
     });
@@ -539,6 +653,7 @@ describe("external realtime surface authority", () => {
     kernel.completeRunToolInvocation({
       ...invocationIdentity(authorized),
       capabilityRef: authorized.capabilityRef,
+      activeOwnerId: "owner",
       outcome: "succeeded",
       result: raw,
     });

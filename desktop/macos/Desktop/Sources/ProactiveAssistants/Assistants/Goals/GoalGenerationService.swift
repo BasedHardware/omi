@@ -28,9 +28,11 @@ class GoalGenerationService {
             log("GoalGenerationService: Auto-generation disabled, skipping")
             return
         }
-        Task {
-            await removeStaleGoals()
-            await checkDailyGeneration()
+        guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
+        Task { [ownerID] in
+            await removeStaleGoals(ownerID: ownerID)
+            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+            await checkDailyGeneration(ownerID: ownerID)
         }
     }
 
@@ -38,9 +40,11 @@ class GoalGenerationService {
 
     /// Complete (deactivate) AI-generated goals that haven't had any progress update in 3+ days.
     /// User-created goals are never auto-removed.
-    private func removeStaleGoals() async {
+    private func removeStaleGoals(ownerID: String) async {
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
         do {
             let goals = try await APIClient.shared.getGoals()
+            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
             let now = Date()
 
             for goal in goals where goal.isActive && Self.isAIGeneratedSource(goal.source) {
@@ -48,7 +52,9 @@ class GoalGenerationService {
                 if daysSinceUpdate >= staleGoalDays {
                     log("GoalGenerationService: Completing stale AI goal '\(goal.title)' — no update for \(Int(daysSinceUpdate / 86400)) days")
                     _ = try await APIClient.shared.completeGoal(id: goal.id)
+                    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
                     try? await GoalStorage.shared.markCompleted(backendId: goal.id)
+                    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
                     NotificationCenter.default.post(name: .goalAutoCreated, object: nil)
                 }
             }
@@ -65,12 +71,13 @@ class GoalGenerationService {
     // MARK: - Daily Generation Check
 
     /// Check if a new calendar day has started since last goal generation
-    private func checkDailyGeneration() async {
+    private func checkDailyGeneration(ownerID: String) async {
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
         let lastDate = UserDefaults.standard.object(forKey: Self.kLastGenerationDate) as? Date
 
         if lastDate == nil {
             log("GoalGenerationService: First run, generating immediately")
-            _ = await generateGoalIfNeeded()
+            _ = await generateGoalIfNeeded(ownerID: ownerID)
             return
         }
 
@@ -81,13 +88,15 @@ class GoalGenerationService {
         }
 
         log("GoalGenerationService: New day — last generation was \(lastDate), triggering generation")
-        _ = await generateGoalIfNeeded()
+        _ = await generateGoalIfNeeded(ownerID: ownerID)
     }
 
     /// Generate a goal if the user has room for more
-    private func generateGoalIfNeeded() async -> Bool {
+    private func generateGoalIfNeeded(ownerID: String) async -> Bool {
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
         do {
             let goals = try await APIClient.shared.getGoals()
+            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
             let activeGoals = goals.filter { $0.isActive }
 
             if activeGoals.count >= maxActiveGoals {
@@ -99,11 +108,13 @@ class GoalGenerationService {
             log("GoalGenerationService: User has \(activeGoals.count)/\(maxActiveGoals) goals, generating one...")
 
             let goal = try await GoalsAIService.shared.generateGoal()
+            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
 
             UserDefaults.standard.set(Date(), forKey: Self.kLastGenerationDate)
             log("GoalGenerationService: Successfully created goal '\(goal.title)'")
 
             NotificationService.shared.sendNotification(
+                ownerID: ownerID,
                 title: "New Goal",
                 message: goal.title,
                 assistantId: "goals"
@@ -120,11 +131,14 @@ class GoalGenerationService {
 
     /// Manual trigger that bypasses the daily check
     func generateNow() async {
+        guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
         log("GoalGenerationService: Manual generation triggered")
         await waitForPrerequisites()
-        await removeStaleGoals()
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+        await removeStaleGoals(ownerID: ownerID)
         for attempt in 0..<3 {
-            if await generateGoalIfNeeded() {
+            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+            if await generateGoalIfNeeded(ownerID: ownerID) {
                 return
             }
             guard attempt < 2 else { return }

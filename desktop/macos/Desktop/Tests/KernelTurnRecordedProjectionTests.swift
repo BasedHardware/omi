@@ -2,6 +2,42 @@ import XCTest
 
 @testable import Omi_Computer
 
+private actor SuspendedJournalListGate {
+  private var ownerAStarted = false
+  private var ownerAStartedWaiters: [CheckedContinuation<Void, Never>] = []
+  private var ownerAResult: CheckedContinuation<AgentRuntimeProcess.JournalOperationResult, Never>?
+  private let ownerBPage: AgentRuntimeProcess.JournalOperationResult
+
+  init(ownerBPage: AgentRuntimeProcess.JournalOperationResult) {
+    self.ownerBPage = ownerBPage
+  }
+
+  func fetch(
+    ownerID: String,
+    ownerAPage: AgentRuntimeProcess.JournalOperationResult
+  ) async -> AgentRuntimeProcess.JournalOperationResult {
+    guard ownerID == "owner-a" else { return ownerBPage }
+    ownerAStarted = true
+    for waiter in ownerAStartedWaiters { waiter.resume() }
+    ownerAStartedWaiters.removeAll()
+    return await withCheckedContinuation { continuation in
+      ownerAResult = continuation
+    }
+  }
+
+  func waitUntilOwnerAStarted() async {
+    guard !ownerAStarted else { return }
+    await withCheckedContinuation { continuation in
+      ownerAStartedWaiters.append(continuation)
+    }
+  }
+
+  func releaseOwnerA(with page: AgentRuntimeProcess.JournalOperationResult) {
+    ownerAResult?.resume(returning: page)
+    ownerAResult = nil
+  }
+}
+
 @MainActor
 final class KernelTurnRecordedProjectionTests: XCTestCase {
   func testRealtimeVoiceUsesDedicatedKernelSessionSurface() {
@@ -14,6 +50,8 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
   func testSpawnProjectionPinsItsProducingSurfaceAcrossLaterCompletion() throws {
     let provider = ChatProvider()
     let surface = provider.mainChatSurfaceReference()
+    let pillsManager = AgentPillsManager.shared
+    defer { pillsManager.quiesceProjectionRefreshForTesting() }
     let pillID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000043"))
     let spawn = ChatContentBlock.agentSpawn(
       id: KernelAgentLifecycleMutation.stableSpawnBlockID(pillID: pillID),
@@ -33,7 +71,7 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     ))
 
     XCTAssertEqual(
-      AgentPillsManager.shared.producingJournalSurface(for: pillID),
+      pillsManager.producingJournalSurface(for: pillID),
       surface
     )
   }
@@ -183,16 +221,121 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     XCTAssertFalse(provider.messages[0].isStreaming)
   }
 
-  func testOptimisticTurnKeepsIdentityThroughJournalAcknowledgementAndReplay() throws {
+  func testRejectedJournalExchangeNeverCreatesAVisibleOrphan() async {
+    let provider = ChatProvider()
+
+    let rejected = await provider.admitJournalExchange(
+      continuityKey: "typed-chat:rejected",
+      userText: "Do not orphan me",
+      assistantText: "Rejected",
+      recordCanonicalExchange: { false }
+    )
+
+    XCTAssertNil(rejected.user)
+    XCTAssertNil(rejected.assistant)
+    XCTAssertTrue(provider.messages.isEmpty)
+  }
+
+  func testRejectedStreamingExchangeKeepsBothRowsInvisible() async {
+    let provider = ChatProvider()
+    let continuityKey = "typed-chat:second-half-collision"
+    let user = ChatMessage(
+      id: "typed-user",
+      clientTurnId: continuityKey,
+      text: "Keep this atomic",
+      sender: .user
+    )
+    let assistant = ChatMessage(
+      id: "typed-assistant",
+      clientTurnId: continuityKey,
+      text: "",
+      sender: .ai,
+      isStreaming: true
+    )
+    var captured: [KernelTurnProjection.ExchangeTurn] = []
+
+    let admitted = await provider.admitStreamingJournalExchange(
+      userMessage: user,
+      assistantMessage: assistant
+    ) { turns in
+      captured = turns
+      // The kernel transaction rejected its second half. Node's journal
+      // behavioral test proves the first durable row rolls back; this surface
+      // seam proves Swift cannot expose either row on that rejection.
+      return nil
+    }
+
+    XCTAssertFalse(admitted)
+    XCTAssertEqual(captured.count, 2)
+    XCTAssertEqual(captured.map(\.status), [.completed, .streaming])
+    XCTAssertEqual(captured.map(\.message.id), ["typed-user", "typed-assistant"])
+    XCTAssertEqual(captured.last?.message.text, "")
+    XCTAssertTrue(provider.messages.isEmpty)
+  }
+
+  func testSuspendedOwnerAReplayCannotProjectAfterOwnerBInvalidation() async throws {
+    let provider = ChatProvider()
+    let surface = provider.mainChatSurfaceReference()
+    let ownerATurn = try turn(
+      surface: surface,
+      turnId: "owner-a-turn",
+      turnSeq: 1,
+      content: "Owner A private history"
+    )
+    let ownerBTurn = try turn(
+      surface: surface,
+      turnId: "owner-b-turn",
+      turnSeq: 1,
+      content: "Owner B history"
+    )
+    let ownerAPage = journalPage(conversationId: "conversation-a", turns: [ownerATurn])
+    let ownerBPage = journalPage(conversationId: "conversation-b", turns: [ownerBTurn])
+    let gate = SuspendedJournalListGate(ownerBPage: ownerBPage)
+    var ownerID = "owner-a"
+    let projection = KernelTurnProjection(
+      host: provider,
+      client: AgentClient.Session(harnessMode: "piMono"),
+      ownerIDProvider: { ownerID },
+      journalListOperation: { _, _, requestedOwnerID, _, _ in
+        await gate.fetch(ownerID: requestedOwnerID, ownerAPage: ownerAPage)
+      }
+    )
+
+    let ownerARefresh = Task { @MainActor in
+      await projection.refresh(surface: surface)
+    }
+    await gate.waitUntilOwnerAStarted()
+
+    ownerID = "owner-b"
+    projection.invalidateOwnerState()
+    await projection.refresh(surface: surface)
+    await gate.releaseOwnerA(with: ownerAPage)
+    await ownerARefresh.value
+
+    XCTAssertEqual(provider.messages.map(\.id), ["owner-b-turn"])
+    XCTAssertEqual(provider.messages.map(\.text), ["Owner B history"])
+  }
+
+  func testRuntimeOwnerNotificationSynchronouslyInvalidatesVisibleProjection() throws {
+    let provider = ChatProvider()
+    let surface = provider.mainChatSurfaceReference()
+    provider.projectJournalTurn(try turn(
+      surface: surface,
+      turnId: "owner-a-visible",
+      turnSeq: 1,
+      content: "Owner A history"
+    ))
+    XCTAssertEqual(provider.messages.map(\.id), ["owner-a-visible"])
+
+    NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+
+    XCTAssertTrue(provider.messages.isEmpty)
+  }
+
+  func testJournalAdmissionPublishesImmediateProjectionWithOneStableIdentity() async throws {
     let provider = ChatProvider()
     let surface = provider.mainChatSurfaceReference()
     let continuityKey = "typed-chat:request-9515"
-    let staged = provider.stageOptimisticTurn(
-      continuityKey: continuityKey,
-      userText: "Find one surprising memory insight",
-      assistantText: "I started an agent.",
-      origin: "typed_chat"
-    )
     let expectedUserID = KernelTurnProjection.stableTurnID(
       continuityKey: continuityKey,
       role: "user"
@@ -201,9 +344,6 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
       continuityKey: continuityKey,
       role: "assistant"
     )
-    XCTAssertEqual(staged.user?.id, expectedUserID)
-    XCTAssertEqual(staged.assistant?.id, expectedAssistantID)
-
     let userAck = try turn(
       surface: surface,
       turnId: expectedUserID,
@@ -217,8 +357,20 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
       turnSeq: 2,
       content: "I started an agent."
     )
-    provider.projectJournalTurn(userAck)
-    provider.projectJournalTurn(assistantAck)
+    let admitted = await provider.admitJournalExchange(
+      continuityKey: continuityKey,
+      userText: "Find one surprising memory insight",
+      assistantText: "I started an agent."
+    ) {
+      XCTAssertTrue(provider.messages.isEmpty, "no surface row may precede journal acceptance")
+      provider.projectJournalTurn(userAck)
+      provider.projectJournalTurn(assistantAck)
+      return true
+    }
+
+    XCTAssertEqual(admitted.user?.id, expectedUserID)
+    XCTAssertEqual(admitted.assistant?.id, expectedAssistantID)
+    XCTAssertEqual(provider.messages.map(\.id), [expectedUserID, expectedAssistantID])
     // A restart/replay of the same revisions is also replace-only.
     provider.projectJournalTurn(userAck)
     provider.projectJournalTurn(assistantAck)
@@ -519,6 +671,9 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     XCTAssertFalse(taskStorage.contains("PersistableRecord"))
     XCTAssertFalse(taskStorage.contains("func insert("))
     XCTAssertFalse(taskStorage.contains("func save("))
+    XCTAssertFalse(taskStorage.contains("func getMessages("))
+    XCTAssertFalse(taskStorage.contains("func getMessagesForWorkstream("))
+    XCTAssertFalse(taskStorage.contains("func search("))
     XCTAssertFalse(realtime.contains("RealtimeVoiceTurnOutbox"))
     XCTAssertFalse(runtime.contains("import_conversation_turns"))
     XCTAssertFalse(runtime.contains("record_surface_turn"))
@@ -528,7 +683,7 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     let floating = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
     let pills = try sourceFile("FloatingControlBar/AgentPill.swift")
     XCTAssertTrue(provider.contains("AgentPillsManager.shared.bindProducingJournalSurface("))
-    XCTAssertTrue(floating.contains("producingJournalSurface(for: pillID)"))
+    XCTAssertTrue(floating.contains("pill?.producingJournalSurface"))
     XCTAssertTrue(pills.contains("producingSurface: pill.producingJournalSurface"))
     for source in [projection, floating, pills] {
       XCTAssertFalse(source.contains("recordSurfaceTurn"))
@@ -579,6 +734,22 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
   private static func jsonArray(_ raw: String) -> [Any]? {
     guard let data = raw.data(using: .utf8) else { return nil }
     return try? JSONSerialization.jsonObject(with: data) as? [Any]
+  }
+
+  private func journalPage(
+    conversationId: String,
+    turns: [KernelJournalTurn]
+  ) -> AgentRuntimeProcess.JournalOperationResult {
+    AgentRuntimeProcess.JournalOperationResult(
+      operation: "list",
+      conversationId: conversationId,
+      turn: nil,
+      turns: turns,
+      clearedCount: 0,
+      highWaterTurnSeq: turns.map(\.turnSeq).max() ?? 0,
+      conversationGeneration: 1,
+      generationBaseTurnSeq: 0
+    )
   }
 
   private func sourceFile(_ relativePath: String) throws -> String {

@@ -124,6 +124,7 @@ extension AppState {
   /// This clears onboarding state without touching production data or system permissions.
   nonisolated func resetOnboardingAndRestart() {
     log("Resetting onboarding state for current app...")
+    let graphAuthorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
 
     // Update live @AppStorage-backed state on the main thread *before* clearing
     // UserDefaults. DesktopHomeView handles .resetOnboardingRequested by setting
@@ -163,8 +164,21 @@ extension AppState {
 
     Task { @MainActor [self] in
       // Clear knowledge graph (local + server) so the onboarding chart starts fresh
-      await KnowledgeGraphStorage.shared.clearAll()
-      log("Cleared local knowledge graph storage")
+      if let graphAuthorizationSnapshot {
+        let authorization = LocalMutationAuthorization {
+          RuntimeOwnerIdentity.isAuthorizationCurrent(graphAuthorizationSnapshot)
+        }
+        do {
+          try await KnowledgeGraphStorage.shared.clearAll(authorization: authorization)
+          log("Cleared local knowledge graph storage")
+        } catch LocalMutationAuthorizationError.revoked {
+          log("Skipped stale-owner local knowledge graph reset")
+        } catch {
+          logError("Failed to clear local knowledge graph during onboarding reset", error: error)
+        }
+      } else {
+        log("Skipped local knowledge graph reset without an authenticated owner")
+      }
       do {
         try await APIClient.shared.deleteKnowledgeGraph()
         log("Cleared server knowledge graph")

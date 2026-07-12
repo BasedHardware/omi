@@ -329,7 +329,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertFalse(source.contains("scheduleVoiceTurnOutboxDrain"))
     XCTAssertTrue(source.contains("importLegacyVoiceJournalIfNeeded"))
     XCTAssertTrue(source.contains("kernelVoiceContextSnapshot()"))
-    XCTAssertTrue(source.contains("stageRealtimeVoiceTurn("))
+    XCTAssertFalse(source.contains("stageRealtimeVoiceTurn("))
     XCTAssertTrue(source.contains("await self.awaitTurnPersistenceFence()"))
     XCTAssertTrue(source.contains("let interruptedContinuityTask = bargeInContinuityTask"))
     XCTAssertTrue(source.contains("await interruptedContinuityTask.value"))
@@ -384,7 +384,10 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertTrue(source.contains("let responseID = voiceResponseID"))
     XCTAssertTrue(source.contains("replacementAudioBuffer = pendingTurn"))
     XCTAssertTrue(source.contains("voiceResponseID = responseID"))
-    XCTAssertTrue(source.contains("startReplacementSessionForBargeIn(provider: alternate"))
+    XCTAssertTrue(source.contains("pendingBargeInOwnerScope = replacementOwnerScope"))
+    XCTAssertTrue(
+      source.contains(
+        "startReplacementSessionForBargeIn(\n        provider: alternate,"))
     XCTAssertTrue(source.contains("remintReplacementSessionForBargeIn(provider: alternate)"))
     XCTAssertTrue(source.contains("let replayedReplacementTurn = replacementAudioBuffer != nil"))
     XCTAssertTrue(
@@ -431,7 +434,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertTrue(source.contains("generation == self.bargeInReplacementGeneration"))
     XCTAssertTrue(source.contains("let currentProvider = pendingBargeInProvider"))
     XCTAssertGreaterThanOrEqual(
-      source.components(separatedBy: "redriveReplacementMintIfStale(generation: generation)").count - 1,
+      source.components(separatedBy: "self.redriveReplacementMintIfStale(").count - 1,
       5)
   }
 
@@ -543,6 +546,40 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
       RealtimeHubLifecyclePolicy.canStartGeneralWarmSession(replacementPending: false))
     XCTAssertFalse(
       RealtimeHubLifecyclePolicy.canStartGeneralWarmSession(replacementPending: true))
+  }
+
+  func testWarmSessionOwnedByACannotBeReusedAfterSwitchToB() {
+    let ownerA = RealtimeHubOwnerScope.capture(currentOwnerID: "owner-a")
+
+    XCTAssertTrue(
+      RealtimeHubOwnerFence.canReuseWarmSession(
+        sessionOwner: ownerA,
+        currentOwnerID: "owner-a"))
+    XCTAssertFalse(
+      RealtimeHubOwnerFence.canReuseWarmSession(
+        sessionOwner: ownerA,
+        currentOwnerID: "owner-b"))
+  }
+
+  func testBargeInRemintOwnedByACannotReplaceSessionAfterSwitchToB() {
+    let ownerA = RealtimeHubOwnerScope.capture(currentOwnerID: "owner-a")
+    let ownerB = RealtimeHubOwnerScope.capture(currentOwnerID: "owner-b")
+
+    XCTAssertTrue(
+      RealtimeHubOwnerFence.acceptsBargeInReplacement(
+        sessionOwner: ownerA,
+        replacementOwner: ownerA,
+        currentOwnerID: "owner-a"))
+    XCTAssertFalse(
+      RealtimeHubOwnerFence.acceptsBargeInReplacement(
+        sessionOwner: ownerA,
+        replacementOwner: ownerA,
+        currentOwnerID: "owner-b"))
+    XCTAssertFalse(
+      RealtimeHubOwnerFence.acceptsBargeInReplacement(
+        sessionOwner: ownerA,
+        replacementOwner: ownerB,
+        currentOwnerID: "owner-b"))
   }
 
   func testPrepareReplacementSessionPersistsInterruptedTurnBeforeSeedAndSession() async {

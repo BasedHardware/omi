@@ -174,6 +174,10 @@ struct LegacyMainChatSessionImportReceipt: Equatable, Sendable {
   }
 }
 
+private struct LegacyAliasDefaultsReference: @unchecked Sendable {
+  let value: UserDefaults
+}
+
 enum LegacyMainChatSessionAliasMigration {
   enum Outcome: Equatable, Sendable {
     case noAliases
@@ -196,11 +200,15 @@ enum LegacyMainChatSessionAliasMigration {
   static func migrate(
     ownerId: String,
     defaults: UserDefaults,
+    isAuthorizationCurrent: @escaping @Sendable () -> Bool = { true },
     importer: @Sendable ([LegacyMainChatSessionAliasEntry]) async throws ->
       LegacyMainChatSessionImportReceipt
   ) async -> Outcome {
     let ownerId = ownerId.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !ownerId.isEmpty else { return .retained(reason: "invalid_owner") }
+    guard isAuthorizationCurrent() else {
+      return .retained(reason: "owner_authorization_revoked")
+    }
     guard let rawMap = defaults.dictionary(forKey: defaultsKey), !rawMap.isEmpty else {
       return .noAliases
     }
@@ -242,18 +250,32 @@ enum LegacyMainChatSessionAliasMigration {
       return .retained(reason: "invalid_kernel_receipt")
     }
 
-    var latest = defaults.dictionary(forKey: defaultsKey) ?? [:]
-    var removedCount = 0
-    for alias in pending where latest[alias.defaultsKey] as? String == alias.storedSessionId {
-      latest.removeValue(forKey: alias.defaultsKey)
-      removedCount += 1
+    let authorization = LocalMutationAuthorization(isAuthorizationCurrent)
+    let defaultsReference = LegacyAliasDefaultsReference(value: defaults)
+    let pendingAliases = pending
+    do {
+      let removedCount = try await authorization.withCommitLease {
+        try authorization.require()
+        var latest = defaultsReference.value.dictionary(forKey: defaultsKey) ?? [:]
+        var removedCount = 0
+        for alias in pendingAliases
+        where latest[alias.defaultsKey] as? String == alias.storedSessionId {
+          latest.removeValue(forKey: alias.defaultsKey)
+          removedCount += 1
+        }
+        if latest.isEmpty {
+          defaultsReference.value.removeObject(forKey: defaultsKey)
+        } else {
+          defaultsReference.value.set(latest, forKey: defaultsKey)
+        }
+        return removedCount
+      }
+      return .acknowledged(removedCount: removedCount)
+    } catch LocalMutationAuthorizationError.revoked {
+      return .retained(reason: "owner_authorization_revoked")
+    } catch {
+      return .retained(reason: "defaults_commit_failed")
     }
-    if latest.isEmpty {
-      defaults.removeObject(forKey: defaultsKey)
-    } else {
-      defaults.set(latest, forKey: defaultsKey)
-    }
-    return .acknowledged(removedCount: removedCount)
   }
 }
 
@@ -550,14 +572,41 @@ actor AgentBridge {
     }
   }
 
+  private struct OwnerBoundQuota {
+    let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    let quota: APIClient.ChatUsageQuota
+  }
+
+  private enum LifecycleOperationKind {
+    case start
+    case restart
+  }
+
+  private struct LifecycleFlight {
+    let id: UUID
+    let kind: LifecycleOperationKind
+    let generation: UInt64
+    let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    var waiters: [CheckedContinuation<Void, Error>] = []
+  }
+
   let harnessMode: String
 
   private let clientId = UUID().uuidString
   private let runtime: AgentRuntimeProcess
   private var registered = false
+  private var synchronizedRuntimeAuthorityEpoch: UInt64?
+  private var synchronizedRuntimeAuthorityOwnerID: String?
   private var activeRequestId: String?
-  private var lastKnownQuota: APIClient.ChatUsageQuota?
+  private var lastKnownQuota: OwnerBoundQuota?
   private var tokenRefreshTask: Task<Void, Never>?
+  private var tokenRefreshTaskID: UUID?
+  private var tokenRefreshAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  private var stopTask: Task<Void, Never>?
+  private var lifecycleGeneration: UInt64 = 0
+  private var lifecycleFlight: LifecycleFlight?
+  private var globalAuthRequiredHandler: AuthRequiredHandler?
+  private var globalAuthSuccessHandler: AuthSuccessHandler?
 
   var isAlive: Bool {
     get async {
@@ -574,72 +623,398 @@ actor AgentBridge {
     AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) == AgentAdapterId.piMono.rawValue
   }
 
+  private func captureAuthorization(
+    expectedOwnerID: String? = nil
+  ) throws -> RuntimeOwnerAuthorizationSnapshot {
+    guard let snapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+      expectedOwnerID: expectedOwnerID)
+    else {
+      throw BridgeError.authMissing
+    }
+    return snapshot
+  }
+
+  private func resolveAuthorization(
+    _ supplied: RuntimeOwnerAuthorizationSnapshot?,
+    expectedOwnerID: String? = nil
+  ) throws -> RuntimeOwnerAuthorizationSnapshot {
+    guard let supplied else { return try captureAuthorization(expectedOwnerID: expectedOwnerID) }
+    guard (expectedOwnerID == nil || supplied.ownerID == expectedOwnerID),
+      RuntimeOwnerIdentity.isAuthorizationCurrent(supplied)
+    else {
+      throw BridgeError.authMissing
+    }
+    return supplied
+  }
+
   func setGlobalAuthHandlers(
     onAuthRequired: AuthRequiredHandler?,
     onAuthSuccess: AuthSuccessHandler?
   ) async {
-    await runtime.setGlobalAuthHandlers(
+    globalAuthRequiredHandler = onAuthRequired
+    globalAuthSuccessHandler = onAuthSuccess
+    guard registered else { return }
+    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+      _ = await runtime.setGlobalAuthHandlers(
+        clientId: clientId,
+        authorizationSnapshot: nil,
+        onAuthRequired: nil,
+        onAuthSuccess: nil)
+      return
+    }
+    let guardedAuthRequired: AuthRequiredHandler?
+    if let onAuthRequired {
+      guardedAuthRequired = { methods, authURL in
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
+        onAuthRequired(methods, authURL)
+      }
+    } else {
+      guardedAuthRequired = nil
+    }
+    let guardedAuthSuccess: AuthSuccessHandler?
+    if let onAuthSuccess {
+      guardedAuthSuccess = {
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
+        onAuthSuccess()
+      }
+    } else {
+      guardedAuthSuccess = nil
+    }
+    _ = await runtime.setGlobalAuthHandlers(
       clientId: clientId,
-      onAuthRequired: onAuthRequired,
-      onAuthSuccess: onAuthSuccess
+      authorizationSnapshot: authorization,
+      onAuthRequired: guardedAuthRequired,
+      onAuthSuccess: guardedAuthSuccess
     )
   }
 
   func start() async throws {
-    guard !registered else { return }
-    try await runtime.registerClient(clientId: clientId, harnessMode: harnessMode)
-    registered = true
-    await migrateLegacyMainChatSessionsIfNeeded()
+    let authorizationSnapshot = try captureAuthorization()
+    try await start(authorizationSnapshot: authorizationSnapshot)
+  }
 
-    if isPiMonoHarness {
-      ensureTokenRefreshTask()
-      _ = try? await refreshAuthToken()
+  private func start(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws {
+    try await runLifecycleOperation(
+      .start,
+      authorizationSnapshot: authorizationSnapshot)
+  }
+
+  private func runLifecycleOperation(
+    _ requestedKind: LifecycleOperationKind,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws {
+    while let flight = lifecycleFlight {
+      guard flight.authorizationSnapshot == authorizationSnapshot else {
+        throw BridgeError.authMissing
+      }
+      try await waitForLifecycleFlight(id: flight.id)
+      guard lifecycleGeneration == flight.generation, stopTask == nil,
+        RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+      else {
+        throw BridgeError.stopped
+      }
+      if requestedKind == .start || flight.kind == .restart { return }
+    }
+
+    guard stopTask == nil else { throw BridgeError.restarting }
+    let flightID = UUID()
+    let generation = lifecycleGeneration
+    lifecycleFlight = LifecycleFlight(
+      id: flightID,
+      kind: requestedKind,
+      generation: generation,
+      authorizationSnapshot: authorizationSnapshot)
+    do {
+      switch requestedKind {
+      case .start:
+        try await performStart(
+          authorizationSnapshot: authorizationSnapshot,
+          flightID: flightID,
+          generation: generation)
+      case .restart:
+        try await performRestart(
+          authorizationSnapshot: authorizationSnapshot,
+          flightID: flightID,
+          generation: generation)
+      }
+      finishLifecycleFlight(id: flightID, error: nil)
+    } catch {
+      finishLifecycleFlight(id: flightID, error: error)
+      throw error
+    }
+  }
+
+  private func performStart(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    flightID: UUID,
+    generation: UInt64
+  ) async throws {
+    let ownerID = authorizationSnapshot.ownerID
+    let processWasAlive = await runtime.isAlive
+    try assertLifecycleFlightCurrent(
+      id: flightID,
+      generation: generation,
+      authorizationSnapshot: authorizationSnapshot)
+    let registeredThisCall = !registered || !processWasAlive
+    var acquiredRegistration = false
+    do {
+    if registeredThisCall {
+      try await runtime.registerClient(
+        clientId: clientId,
+        harnessMode: harnessMode,
+        authorizationSnapshot: authorizationSnapshot)
+      acquiredRegistration = true
+      try assertLifecycleFlightCurrent(
+        id: flightID,
+        generation: generation,
+        authorizationSnapshot: authorizationSnapshot)
+    }
+    try await applyGlobalAuthHandlers(authorizationSnapshot: authorizationSnapshot)
+    try assertLifecycleFlightCurrent(
+      id: flightID,
+      generation: generation,
+      authorizationSnapshot: authorizationSnapshot)
+    let status = await runtime.runtimeOwnerAuthorityStatus()
+    try assertLifecycleFlightCurrent(
+      id: flightID,
+      generation: generation,
+      authorizationSnapshot: authorizationSnapshot)
+    let authorityNeedsSynchronization = !status.isSynchronized(
+      ownerID: ownerID,
+      requiresCredentials: isPiMonoHarness)
+      || synchronizedRuntimeAuthorityEpoch != status.epoch
+      || synchronizedRuntimeAuthorityOwnerID != ownerID
+    if authorityNeedsSynchronization {
+      await synchronizeRuntimeAuthority(authorizationSnapshot: authorizationSnapshot)
+      try assertLifecycleFlightCurrent(
+        id: flightID,
+        generation: generation,
+        authorizationSnapshot: authorizationSnapshot)
+      let synchronized = await runtime.runtimeOwnerAuthorityStatus()
+      try assertLifecycleFlightCurrent(
+        id: flightID,
+        generation: generation,
+        authorizationSnapshot: authorizationSnapshot)
+      guard synchronized.isSynchronized(
+        ownerID: ownerID,
+        requiresCredentials: isPiMonoHarness)
+      else {
+        throw BridgeError.authMissing
+      }
+      synchronizedRuntimeAuthorityEpoch = synchronized.epoch
+      synchronizedRuntimeAuthorityOwnerID = ownerID
+    }
+    if registeredThisCall || authorityNeedsSynchronization {
+      await migrateLegacyMainChatSessionsIfNeeded(
+        authorizationSnapshot: authorizationSnapshot)
+      try assertLifecycleFlightCurrent(
+        id: flightID,
+        generation: generation,
+        authorizationSnapshot: authorizationSnapshot)
+    }
+    registered = true
+    } catch {
+      if acquiredRegistration {
+        await runtime.unregisterClient(clientId: clientId)
+      }
+      throw error
     }
   }
 
   func restart() async throws {
-    try await runtime.restart(harnessMode: harnessMode)
+    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+      throw BridgeError.authMissing
+    }
+    try await runLifecycleOperation(
+      .restart,
+      authorizationSnapshot: authorizationSnapshot)
+  }
+
+  private func performRestart(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    flightID: UUID,
+    generation: UInt64
+  ) async throws {
+    let processIsAlive = await runtime.isAlive
+    try assertLifecycleFlightCurrent(
+      id: flightID,
+      generation: generation,
+      authorizationSnapshot: authorizationSnapshot)
+    guard registered, processIsAlive else {
+      try await performStart(
+        authorizationSnapshot: authorizationSnapshot,
+        flightID: flightID,
+        generation: generation)
+      return
+    }
+    try await runtime.restart(
+      clientId: clientId,
+      harnessMode: harnessMode,
+      authorizationSnapshot: authorizationSnapshot)
+    try assertLifecycleFlightCurrent(
+      id: flightID,
+      generation: generation,
+      authorizationSnapshot: authorizationSnapshot)
+    synchronizedRuntimeAuthorityEpoch = nil
+    synchronizedRuntimeAuthorityOwnerID = nil
+    try await applyGlobalAuthHandlers(authorizationSnapshot: authorizationSnapshot)
+    try assertLifecycleFlightCurrent(
+      id: flightID,
+      generation: generation,
+      authorizationSnapshot: authorizationSnapshot)
+    await synchronizeRuntimeAuthority(authorizationSnapshot: authorizationSnapshot)
+    try assertLifecycleFlightCurrent(
+      id: flightID,
+      generation: generation,
+      authorizationSnapshot: authorizationSnapshot)
+    let ownerID = authorizationSnapshot.ownerID
+    let status = await runtime.runtimeOwnerAuthorityStatus()
+    try assertLifecycleFlightCurrent(
+      id: flightID,
+      generation: generation,
+      authorizationSnapshot: authorizationSnapshot)
+    guard status.isSynchronized(
+      ownerID: ownerID,
+      requiresCredentials: isPiMonoHarness)
+    else {
+      throw BridgeError.authMissing
+    }
+    synchronizedRuntimeAuthorityEpoch = status.epoch
+    synchronizedRuntimeAuthorityOwnerID = ownerID
+    await migrateLegacyMainChatSessionsIfNeeded(
+      authorizationSnapshot: authorizationSnapshot)
+    try assertLifecycleFlightCurrent(
+      id: flightID,
+      generation: generation,
+      authorizationSnapshot: authorizationSnapshot)
     registered = true
+  }
+
+  private func assertLifecycleFlightCurrent(
+    id: UUID,
+    generation: UInt64,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) throws {
+    try Task.checkCancellation()
+    guard lifecycleFlight?.id == id, lifecycleGeneration == generation, stopTask == nil else {
+      throw BridgeError.stopped
+    }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+      throw BridgeError.authMissing
+    }
+  }
+
+  private func waitForLifecycleFlight(id: UUID) async throws {
+    try await withCheckedThrowingContinuation {
+      (continuation: CheckedContinuation<Void, Error>) in
+      guard var flight = lifecycleFlight, flight.id == id else {
+        continuation.resume(throwing: BridgeError.stopped)
+        return
+      }
+      flight.waiters.append(continuation)
+      lifecycleFlight = flight
+    }
+  }
+
+  private func finishLifecycleFlight(id: UUID, error: Error?) {
+    guard let flight = lifecycleFlight, flight.id == id else { return }
+    lifecycleFlight = nil
+    for waiter in flight.waiters {
+      if let error {
+        waiter.resume(throwing: error)
+      } else {
+        waiter.resume()
+      }
+    }
+  }
+
+  private func applyGlobalAuthHandlers(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+      throw BridgeError.authMissing
+    }
+    let guardedAuthRequired: AuthRequiredHandler?
+    if let globalAuthRequiredHandler {
+      guardedAuthRequired = { methods, authURL in
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+        globalAuthRequiredHandler(methods, authURL)
+      }
+    } else {
+      guardedAuthRequired = nil
+    }
+    let guardedAuthSuccess: AuthSuccessHandler?
+    if let globalAuthSuccessHandler {
+      guardedAuthSuccess = {
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+        globalAuthSuccessHandler()
+      }
+    } else {
+      guardedAuthSuccess = nil
+    }
+    let applied = await runtime.setGlobalAuthHandlers(
+      clientId: clientId,
+      authorizationSnapshot: authorizationSnapshot,
+      onAuthRequired: guardedAuthRequired,
+      onAuthSuccess: guardedAuthSuccess)
+    guard applied else { throw BridgeError.stopped }
   }
 
   /// Reset client registration after an unexpected process exit so `restart()`/`start()`
   /// can spawn a fresh Node bridge (the process is already gone).
   func prepareForCrashRecovery() {
+    lifecycleGeneration &+= 1
     tokenRefreshTask?.cancel()
     tokenRefreshTask = nil
+    tokenRefreshTaskID = nil
+    tokenRefreshAuthorizationSnapshot = nil
     registered = false
+    synchronizedRuntimeAuthorityEpoch = nil
+    synchronizedRuntimeAuthorityOwnerID = nil
     activeRequestId = nil
     lastKnownQuota = nil
   }
 
   func stopAndWaitForExit() async {
-    tokenRefreshTask?.cancel()
-    tokenRefreshTask = nil
-    let wasRegistered = registered
-    registered = false
-    activeRequestId = nil
-    lastKnownQuota = nil
-    guard wasRegistered else { return }
-    await runtime.unregisterClient(clientId: clientId)
+    await stop()
   }
 
-  func stop() {
+  func stop() async {
+    if let stopTask {
+      await stopTask.value
+      return
+    }
     tokenRefreshTask?.cancel()
     tokenRefreshTask = nil
-    let wasRegistered = registered
+    tokenRefreshTaskID = nil
+    tokenRefreshAuthorizationSnapshot = nil
+    lifecycleGeneration &+= 1
+    let flightID = lifecycleFlight?.id
     registered = false
+    synchronizedRuntimeAuthorityEpoch = nil
+    synchronizedRuntimeAuthorityOwnerID = nil
     activeRequestId = nil
     lastKnownQuota = nil
-    guard wasRegistered else { return }
-    Task {
+    let runtime = self.runtime
+    let clientId = self.clientId
+    let task = Task { [weak self] in
+      await runtime.unregisterClient(clientId: clientId)
+      if let flightID {
+        do {
+          try await self?.waitForLifecycleFlight(id: flightID)
+        } catch {
+          // Stop invalidated this flight; only its completion matters here.
+        }
+      }
+      // A second idempotent unregister closes the interval between the first
+      // unregister and a suspended registration attempt observing revocation.
       await runtime.unregisterClient(clientId: clientId)
     }
-  }
-
-  func authenticate(methodId: String) {
-    Task {
-      await runtime.authenticate(methodId: methodId)
-    }
+    stopTask = task
+    await task.value
+    stopTask = nil
   }
 
   func configureDefaultExecutionProfile(
@@ -648,31 +1023,42 @@ actor AgentBridge {
     workingDirectory: String,
     expectedPreferenceGeneration: Int? = nil
   ) async throws -> AgentDefaultExecutionProfile {
-    try await start()
+    let authorization = try captureAuthorization()
+    try await start(authorizationSnapshot: authorization)
     if adapterId == AgentAdapterId.piMono.rawValue {
-      ensureTokenRefreshTask()
-      _ = try? await refreshAuthToken()
+      ensureTokenRefreshTask(authorizationSnapshot: authorization)
+      _ = try? await refreshAuthToken(authorizationSnapshot: authorization)
+    }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+      throw BridgeError.authMissing
     }
     return try await runtime.configureDefaultExecutionProfile(
       clientId: clientId,
       adapterId: adapterId,
       modelProfile: modelProfile,
       workingDirectory: workingDirectory,
-      expectedPreferenceGeneration: expectedPreferenceGeneration
+      expectedPreferenceGeneration: expectedPreferenceGeneration,
+      authorizationSnapshot: authorization
     )
   }
 
   func resolveSurfaceSession(
     _ surface: AgentSurfaceReference,
     title: String? = nil,
-    creationProfile: AgentSessionCreationProfile? = nil
+    creationProfile: AgentSessionCreationProfile? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> AgentSurfaceSession {
-    try await start()
+    let authorization = try resolveAuthorization(authorizationSnapshot)
+    try await start(authorizationSnapshot: authorization)
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+      throw BridgeError.authMissing
+    }
     return try await runtime.resolveSurfaceSession(
       clientId: clientId,
       surface: surface,
       title: title,
-      creationProfile: creationProfile
+      creationProfile: creationProfile,
+      authorizationSnapshot: authorization
     )
   }
 
@@ -683,22 +1069,38 @@ actor AgentBridge {
     modelProfile: String?,
     workingDirectory: String
   ) async throws -> AgentSessionProfileMigration {
-    try await start()
+    let authorization = try captureAuthorization()
+    try await start(authorizationSnapshot: authorization)
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+      throw BridgeError.authMissing
+    }
     return try await runtime.migrateSessionExecutionProfile(
       clientId: clientId,
       sessionId: sessionId,
       expectedProfileGeneration: expectedProfileGeneration,
       adapterId: adapterId,
       modelProfile: modelProfile,
-      workingDirectory: workingDirectory
+      workingDirectory: workingDirectory,
+      authorizationSnapshot: authorization
     )
   }
 
-  func warmupSession(_ session: AgentSurfaceSession) async {
+  func warmupSession(
+    _ session: AgentSurfaceSession,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async {
+    guard let authorization = try? resolveAuthorization(authorizationSnapshot) else { return }
+    do {
+      try await start(authorizationSnapshot: authorization)
+    } catch {
+      return
+    }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
     await runtime.warmupSession(
       clientId: clientId,
       sessionId: session.sessionId,
-      profileGeneration: session.profile.profileGeneration
+      profileGeneration: session.profile.profileGeneration,
+      authorizationSnapshot: authorization
     )
   }
 
@@ -710,9 +1112,14 @@ actor AgentBridge {
     outcome: AgentContextSourceOutcome,
     capturedAtMs: Int,
     expiresAtMs: Int? = nil,
-    payload: [String: Any]
+    payload: [String: Any],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> AgentContextSourceUpdateReceipt {
-    try await start()
+    let authorization = try resolveAuthorization(authorizationSnapshot)
+    try await start(authorizationSnapshot: authorization)
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+      throw BridgeError.authMissing
+    }
     return try await runtime.updateContextSource(
       clientId: clientId,
       sessionId: sessionId,
@@ -722,55 +1129,108 @@ actor AgentBridge {
       outcome: outcome,
       capturedAtMs: capturedAtMs,
       expiresAtMs: expiresAtMs,
-      payload: payload
+      payload: payload,
+      authorizationSnapshot: authorization
     )
   }
 
-  func getContextSnapshot(sessionId: String, surfaceKind: String) async throws -> AgentContextSnapshot {
-    try await start()
+  func getContextSnapshot(
+    sessionId: String,
+    surfaceKind: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> AgentContextSnapshot {
+    let authorization = try resolveAuthorization(authorizationSnapshot)
+    try await start(authorizationSnapshot: authorization)
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+      throw BridgeError.authMissing
+    }
     return try await runtime.getContextSnapshot(
       clientId: clientId,
       sessionId: sessionId,
-      surfaceKind: surfaceKind)
+      surfaceKind: surfaceKind,
+      authorizationSnapshot: authorization)
   }
 
   func invalidateSurface(_ surface: AgentSurfaceReference) async {
-    await runtime.invalidateSurface(clientId: clientId, surface: surface)
-  }
-
-  func clearOwnerState() async {
-    await runtime.clearOwnerState(clientId: clientId)
+    guard let authorization = try? captureAuthorization() else { return }
+    do {
+      try await start(authorizationSnapshot: authorization)
+    } catch {
+      return
+    }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
+    await runtime.invalidateSurface(
+      clientId: clientId,
+      surface: surface,
+      authorizationSnapshot: authorization)
   }
 
   func importLegacyMainChatSessions(
-    _ entries: [LegacyMainChatSessionAliasEntry]
+    _ entries: [LegacyMainChatSessionAliasEntry],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> LegacyMainChatSessionImportReceipt {
-    try await runtime.importLegacyMainChatSessions(clientId: clientId, entries: entries)
+    let authorization = try resolveAuthorization(authorizationSnapshot)
+    try await start(authorizationSnapshot: authorization)
+    return try await runtime.importLegacyMainChatSessions(
+      clientId: clientId,
+      entries: entries,
+      authorizationSnapshot: authorization)
   }
 
   func recordJournalTurn(
     surface: AgentSurfaceReference,
     ownerID: String? = nil,
-    turn: KernelJournalTurnWrite
+    turn: KernelJournalTurnWrite,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> KernelJournalTurn {
-    try await runtime.recordJournalTurn(
+    let authorization = try resolveAuthorization(
+      authorizationSnapshot,
+      expectedOwnerID: ownerID)
+    try await start(authorizationSnapshot: authorization)
+    return try await runtime.recordJournalTurn(
       clientId: clientId,
       surface: surface,
       ownerID: ownerID,
-      turn: turn
+      turn: turn,
+      authorizationSnapshot: authorization
+    )
+  }
+
+  func recordJournalExchange(
+    surface: AgentSurfaceReference,
+    ownerID: String,
+    turns: [KernelJournalTurnWrite],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> AgentRuntimeProcess.JournalOperationResult {
+    let authorization = try resolveAuthorization(
+      authorizationSnapshot,
+      expectedOwnerID: ownerID)
+    try await start(authorizationSnapshot: authorization)
+    return try await runtime.recordJournalExchange(
+      clientId: clientId,
+      surface: surface,
+      ownerID: ownerID,
+      turns: turns,
+      authorizationSnapshot: authorization
     )
   }
 
   func updateJournalTurn(
     surface: AgentSurfaceReference,
     ownerID: String? = nil,
-    update: KernelJournalTurnUpdate
+    update: KernelJournalTurnUpdate,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> KernelJournalTurn {
-    try await runtime.updateJournalTurn(
+    let authorization = try resolveAuthorization(
+      authorizationSnapshot,
+      expectedOwnerID: ownerID)
+    try await start(authorizationSnapshot: authorization)
+    return try await runtime.updateJournalTurn(
       clientId: clientId,
       surface: surface,
       ownerID: ownerID,
-      update: update
+      update: update,
+      authorizationSnapshot: authorization
     )
   }
 
@@ -778,40 +1238,58 @@ actor AgentBridge {
     surface: AgentSurfaceReference,
     ownerID: String? = nil,
     afterTurnSeq: Int = 0,
-    limit: Int = 100
+    limit: Int = 100,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> AgentRuntimeProcess.JournalOperationResult {
-    try await runtime.listJournalTurns(
+    let authorization = try resolveAuthorization(
+      authorizationSnapshot,
+      expectedOwnerID: ownerID)
+    try await start(authorizationSnapshot: authorization)
+    return try await runtime.listJournalTurns(
       clientId: clientId,
       surface: surface,
       ownerID: ownerID,
       afterTurnSeq: afterTurnSeq,
-      limit: limit
+      limit: limit,
+      authorizationSnapshot: authorization
     )
   }
 
   func importRemoteJournalTurn(
     surface: AgentSurfaceReference,
     ownerID: String? = nil,
-    turn: KernelJournalRemoteTurn
+    turn: KernelJournalRemoteTurn,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> KernelJournalTurn {
-    try await runtime.importRemoteJournalTurn(
+    let authorization = try resolveAuthorization(
+      authorizationSnapshot,
+      expectedOwnerID: ownerID)
+    try await start(authorizationSnapshot: authorization)
+    return try await runtime.importRemoteJournalTurn(
       clientId: clientId,
       surface: surface,
       ownerID: ownerID,
-      turn: turn
+      turn: turn,
+      authorizationSnapshot: authorization
     )
   }
 
   func clearJournalTurns(
     surface: AgentSurfaceReference,
     ownerID: String? = nil,
-    expectedGeneration: Int? = nil
+    expectedGeneration: Int? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> Int {
-    try await runtime.clearJournalTurns(
+    let authorization = try resolveAuthorization(
+      authorizationSnapshot,
+      expectedOwnerID: ownerID)
+    try await start(authorizationSnapshot: authorization)
+    return try await runtime.clearJournalTurns(
       clientId: clientId,
       surface: surface,
       ownerID: ownerID,
-      expectedGeneration: expectedGeneration
+      expectedGeneration: expectedGeneration,
+      authorizationSnapshot: authorization
     )
   }
 
@@ -821,13 +1299,19 @@ actor AgentBridge {
     await runtime.setJournalTurnChangedHandler(handler)
   }
 
-  func controlTool(name: String, input: [String: Any]) async throws -> String {
-    try await start()
+  func controlTool(
+    name: String,
+    input: [String: Any],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> String {
+    let authorization = try resolveAuthorization(authorizationSnapshot)
+    try await start(authorizationSnapshot: authorization)
     return try await runtime.directControlTool(
       clientId: clientId,
       harnessMode: harnessMode,
       name: name,
-      input: input
+      input: input,
+      authorizationSnapshot: authorization
     )
   }
 
@@ -855,6 +1339,7 @@ actor AgentBridge {
     imageData: Data? = nil,
     attachments: [AgentQueryAttachment] = [],
     expectedContext: AgentContextFreshness? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     onTextDelta: @escaping TextDeltaHandler,
     onToolActivity: @escaping ToolActivityHandler,
     onThinkingDelta: @escaping ThinkingDeltaHandler = { _ in },
@@ -862,7 +1347,20 @@ actor AgentBridge {
     onAuthRequired: @escaping AuthRequiredHandler = { _, _ in },
     onAuthSuccess: @escaping AuthSuccessHandler = {}
   ) async throws -> QueryResult {
-    let session = try await resolveSurfaceSession(surface)
+    let authorization = try resolveAuthorization(authorizationSnapshot)
+    try await start(authorizationSnapshot: authorization)
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+      throw BridgeError.authMissing
+    }
+    let session = try await runtime.resolveSurfaceSession(
+      clientId: clientId,
+      surface: surface,
+      title: nil,
+      creationProfile: nil,
+      authorizationSnapshot: authorization)
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+      throw BridgeError.authMissing
+    }
     return try await query(
       prompt: prompt,
       session: session,
@@ -871,6 +1369,7 @@ actor AgentBridge {
       imageData: imageData,
       attachments: attachments,
       expectedContext: expectedContext,
+      authorizationSnapshot: authorization,
       onTextDelta: onTextDelta,
       onToolActivity: onToolActivity,
       onThinkingDelta: onThinkingDelta,
@@ -888,6 +1387,7 @@ actor AgentBridge {
     imageData: Data? = nil,
     attachments: [AgentQueryAttachment] = [],
     expectedContext: AgentContextFreshness? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     onTextDelta: @escaping TextDeltaHandler,
     onToolActivity: @escaping ToolActivityHandler,
     onThinkingDelta: @escaping ThinkingDeltaHandler = { _ in },
@@ -895,8 +1395,28 @@ actor AgentBridge {
     onAuthRequired: @escaping AuthRequiredHandler = { _, _ in },
     onAuthSuccess: @escaping AuthSuccessHandler = {}
   ) async throws -> QueryResult {
-    await setGlobalAuthHandlers(onAuthRequired: onAuthRequired, onAuthSuccess: onAuthSuccess)
-    try await start()
+    let authorization = try authorizationSnapshot ?? captureAuthorization()
+    try await start(authorizationSnapshot: authorization)
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+      throw BridgeError.authMissing
+    }
+    let guardedAuthRequired: AuthRequiredHandler = { methods, authURL in
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
+      onAuthRequired(methods, authURL)
+    }
+    let guardedAuthSuccess: AuthSuccessHandler = {
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
+      onAuthSuccess()
+    }
+    let handlersApplied = await runtime.setGlobalAuthHandlers(
+      clientId: clientId,
+      authorizationSnapshot: authorization,
+      onAuthRequired: guardedAuthRequired,
+      onAuthSuccess: guardedAuthSuccess)
+    guard handlersApplied else { throw BridgeError.stopped }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+      throw BridgeError.authMissing
+    }
 
     guard activeRequestId == nil else {
       throw BridgeError.requestAlreadyActive
@@ -904,7 +1424,7 @@ actor AgentBridge {
 
     let usesManagedCloud = session.profile.credentialScope == .managedCloud
     if usesManagedCloud {
-      if let cached = lastKnownQuota, !cached.allowed {
+      if let cached = currentQuota(for: authorization), !cached.allowed {
         QueryTracerContext.current?.mark("quota_check", metadata: ["result": "exceeded_cached"])
         throw BridgeError.quotaExceeded(
           plan: cached.plan,
@@ -915,9 +1435,12 @@ actor AgentBridge {
         )
       }
       QueryTracerContext.current?.mark("quota_check", metadata: ["mode": "optimistic"])
-      Task { [weak self] in
-        if let quota = await APIClient.shared.fetchChatUsageQuota() {
-          await self?.cacheQuota(quota)
+      Task { [weak self, authorization] in
+        if let quota = await APIClient.shared.fetchChatUsageQuota(
+          authorizationSnapshot: authorization)
+        {
+          guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
+          await self?.cacheQuota(quota, authorizationSnapshot: authorization)
         }
       }
     }
@@ -928,23 +1451,30 @@ actor AgentBridge {
 
     let bridgeOutputTracker = BridgeOutputTracker()
     let trackedTextDelta: TextDeltaHandler = { delta in
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
       if !delta.isEmpty { bridgeOutputTracker.markOutput() }
       onTextDelta(delta)
     }
     let trackedToolActivity: ToolActivityHandler = { name, status, toolUseId, input in
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
       bridgeOutputTracker.markOutput()
       onToolActivity(name, status, toolUseId, input)
     }
     let trackedThinkingDelta: ThinkingDeltaHandler = { delta in
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
       if !delta.isEmpty { bridgeOutputTracker.markOutput() }
       onThinkingDelta(delta)
     }
     let trackedToolResultDisplay: ToolResultDisplayHandler = { callId, name, output in
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
       bridgeOutputTracker.markOutput()
       onToolResultDisplay(callId, name, output)
     }
 
     do {
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+        throw BridgeError.authMissing
+      }
       return try await runtime.query(
         clientId: clientId,
         requestId: requestId,
@@ -955,24 +1485,28 @@ actor AgentBridge {
         imageData: imageData,
         attachments: attachments,
         expectedContext: expectedContext,
+        authorizationSnapshot: authorization,
         onTextDelta: trackedTextDelta,
         onToolActivity: trackedToolActivity,
         onThinkingDelta: trackedThinkingDelta,
         onToolResultDisplay: trackedToolResultDisplay,
-        onAuthRequired: onAuthRequired,
-        onAuthSuccess: onAuthSuccess
+        onAuthRequired: guardedAuthRequired,
+        onAuthSuccess: guardedAuthSuccess
       )
     } catch let error as BridgeError where usesManagedCloud && !bridgeOutputTracker.hasOutput && error.isSessionAuthenticationFailure {
       log("AgentBridge: session token rejected before output; refreshing token and retrying once")
       let refreshed: Bool
       do {
-        refreshed = try await refreshAuthToken()
+        refreshed = try await refreshAuthToken(authorizationSnapshot: authorization)
       } catch is CancellationError {
         throw CancellationError()
       } catch {
         throw BridgeError.authMissing
       }
       guard refreshed else {
+        throw BridgeError.authMissing
+      }
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
         throw BridgeError.authMissing
       }
       let retryRequestId = UUID().uuidString
@@ -987,49 +1521,168 @@ actor AgentBridge {
         imageData: imageData,
         attachments: attachments,
         expectedContext: expectedContext,
-        onTextDelta: onTextDelta,
-        onToolActivity: onToolActivity,
-        onThinkingDelta: onThinkingDelta,
-        onToolResultDisplay: onToolResultDisplay,
-        onAuthRequired: onAuthRequired,
-        onAuthSuccess: onAuthSuccess
+        authorizationSnapshot: authorization,
+        onTextDelta: trackedTextDelta,
+        onToolActivity: trackedToolActivity,
+        onThinkingDelta: trackedThinkingDelta,
+        onToolResultDisplay: trackedToolResultDisplay,
+        onAuthRequired: guardedAuthRequired,
+        onAuthSuccess: guardedAuthSuccess
       )
     }
   }
 
-  func interrupt() {
+  func interrupt(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async {
     guard let requestId = activeRequestId else { return }
-    Task {
-      await runtime.interrupt(clientId: clientId, requestId: requestId)
-    }
+    guard let authorization = try? resolveAuthorization(authorizationSnapshot) else { return }
+    await runtime.interrupt(
+      clientId: clientId,
+      requestId: requestId,
+      authorizationSnapshot: authorization)
   }
 
   @discardableResult
-  func refreshAuthToken() async throws -> Bool {
-    let authService = await MainActor.run { AuthService.shared }
-    let token: String
+  func refreshAuthToken(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> Bool {
     do {
-      token = try await authService.getIdToken(forceRefresh: true)
+      let runtime = self.runtime
+      let refreshed = try await Self.refreshOwnerBoundToken(
+        captureAuthorization: {
+          authorizationSnapshot ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+        },
+        authorizationOwnerId: { snapshot in
+          snapshot.ownerID
+        },
+        isAuthorizationCurrent: { snapshot in
+          RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot)
+        },
+        fetchAuthHeader: { expectedOwnerId in
+          try await AuthService.shared.getAuthHeader(
+            forceRefresh: true,
+            expectedUserId: expectedOwnerId
+          )
+        },
+        sendToken: { token, expectedOwnerId, snapshot in
+          await runtime.refreshAuthToken(
+            token,
+            expectedOwnerId: expectedOwnerId,
+            authorizationSnapshot: snapshot)
+        }
+      )
+      if !refreshed {
+        log("AgentBridge: refreshAuthToken owner changed or token was unavailable; skipping push")
+      }
+      return refreshed
     } catch {
       log("AgentBridge: refreshAuthToken failed: \(error.localizedDescription)")
       throw error
     }
-    guard !token.isEmpty else {
-      log("AgentBridge: refreshAuthToken got empty token; skipping push")
-      return false
-    }
-    await runtime.refreshAuthToken(token)
-    return true
   }
 
-  private func ensureTokenRefreshTask() {
-    guard tokenRefreshTask == nil else { return }
+  /// Fetches and sends one token under a single immutable owner identity.
+  /// The second owner read closes the suspension window around the credential
+  /// fetch; the runtime performs the same comparison again at the send boundary.
+  nonisolated static func refreshOwnerBoundToken<Authorization: Sendable>(
+    captureAuthorization: @escaping @Sendable () async -> Authorization?,
+    authorizationOwnerId: @escaping @Sendable (_ authorization: Authorization) -> String,
+    isAuthorizationCurrent: @escaping @Sendable (
+      _ authorization: Authorization
+    ) async -> Bool,
+    fetchAuthHeader: @escaping @Sendable (_ expectedOwnerId: String) async throws -> String,
+    sendToken: @escaping @Sendable (
+      _ token: String, _ expectedOwnerId: String, _ authorization: Authorization
+    ) async -> Bool
+  ) async throws -> Bool {
+    guard let authorization = await captureAuthorization() else {
+      return false
+    }
+    let expectedOwnerId = authorizationOwnerId(authorization)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !expectedOwnerId.isEmpty else { return false }
+    guard await isAuthorizationCurrent(authorization) else { return false }
+    let header = try await fetchAuthHeader(expectedOwnerId)
+    guard
+      let token = bearerToken(from: header),
+      await isAuthorizationCurrent(authorization)
+    else {
+      return false
+    }
+    return await sendToken(token, expectedOwnerId, authorization)
+  }
+
+  private nonisolated static func bearerToken(from header: String) -> String? {
+    let prefix = "Bearer "
+    guard header.hasPrefix(prefix) else { return nil }
+    let token = String(header.dropFirst(prefix.count))
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    return token.isEmpty ? nil : token
+  }
+
+  private func ensureTokenRefreshTask(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+    if tokenRefreshTask != nil,
+      tokenRefreshAuthorizationSnapshot == authorizationSnapshot
+    {
+      return
+    }
+    tokenRefreshTask?.cancel()
+    let taskID = UUID()
+    tokenRefreshTaskID = taskID
+    tokenRefreshAuthorizationSnapshot = authorizationSnapshot
     tokenRefreshTask = Task { [weak self] in
+      defer {
+        Task { [weak self] in
+          await self?.finishTokenRefreshTask(id: taskID)
+        }
+      }
       while !Task.isCancelled {
         try? await Task.sleep(nanoseconds: 45 * 60 * 1_000_000_000)
         guard !Task.isCancelled else { break }
-        _ = try? await self?.refreshAuthToken()
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { break }
+        let refreshed = try? await self?.refreshAuthToken(
+          authorizationSnapshot: authorizationSnapshot)
+        guard refreshed == true else { break }
       }
+    }
+  }
+
+  private func finishTokenRefreshTask(id: UUID) {
+    guard tokenRefreshTaskID == id else { return }
+    tokenRefreshTask = nil
+    tokenRefreshTaskID = nil
+    tokenRefreshAuthorizationSnapshot = nil
+  }
+
+  /// Node starts with a non-authoritative local placeholder owner. Every
+  /// harness must replace it before the first owner-scoped RPC; pi-mono also
+  /// receives the credential it needs, while local adapters use an owner-only
+  /// handshake and remain independent of managed-cloud token availability.
+  private func synchronizeRuntimeAuthority(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+    guard isPiMonoHarness else {
+      await runtime.refreshRuntimeOwner(
+        expectedOwnerId: authorizationSnapshot.ownerID,
+        authorizationSnapshot: authorizationSnapshot)
+      return
+    }
+    ensureTokenRefreshTask(authorizationSnapshot: authorizationSnapshot)
+    do {
+      if try await refreshAuthToken(authorizationSnapshot: authorizationSnapshot) == false {
+        await runtime.refreshRuntimeOwner(
+          expectedOwnerId: authorizationSnapshot.ownerID,
+          authorizationSnapshot: authorizationSnapshot)
+      }
+    } catch {
+      await runtime.refreshRuntimeOwner(
+        expectedOwnerId: authorizationSnapshot.ownerID,
+        authorizationSnapshot: authorizationSnapshot)
     }
   }
 
@@ -1053,23 +1706,50 @@ actor AgentBridge {
     return connected
   }
 
-  private func cacheQuota(_ quota: APIClient.ChatUsageQuota) {
-    lastKnownQuota = quota
+  private func currentQuota(
+    for authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) -> APIClient.ChatUsageQuota? {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+      lastKnownQuota = nil
+      return nil
+    }
+    guard lastKnownQuota?.authorizationSnapshot == authorizationSnapshot else {
+      lastKnownQuota = nil
+      return nil
+    }
+    return lastKnownQuota?.quota
   }
 
-  private func migrateLegacyMainChatSessionsIfNeeded() async {
-    let ownerId = await MainActor.run {
-      RuntimeOwnerIdentity.currentOwnerId()
-    }
-    guard let ownerId, !ownerId.isEmpty else { return }
+  private func cacheQuota(
+    _ quota: APIClient.ChatUsageQuota,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+    lastKnownQuota = OwnerBoundQuota(
+      authorizationSnapshot: authorizationSnapshot,
+      quota: quota)
+  }
+
+  private func migrateLegacyMainChatSessionsIfNeeded(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+    let ownerId = authorizationSnapshot.ownerID
     let runtime = self.runtime
     let clientId = self.clientId
     let outcome = await LegacyMainChatSessionAliasMigration.migrate(
       ownerId: ownerId,
-      defaults: .standard
+      defaults: .standard,
+      isAuthorizationCurrent: {
+        RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+      }
     ) { entries in
-      try await runtime.importLegacyMainChatSessions(clientId: clientId, entries: entries)
+      try await runtime.importLegacyMainChatSessions(
+        clientId: clientId,
+        entries: entries,
+        authorizationSnapshot: authorizationSnapshot)
     }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
     switch outcome {
     case .noAliases:
       break

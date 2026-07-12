@@ -73,15 +73,30 @@ final class TaskThreadLegacyMigrationTests: XCTestCase {
             let nextCursor = page.nextCursor else { break }
       cursor = nextCursor
     }
-    let legacyA = try await TaskChatMessageStorage.shared.getMessages(forTaskId: "legacy-task-a")
-    let legacyB = try await TaskChatMessageStorage.shared.getMessages(forTaskId: "legacy-task-b")
-    let workstream = try await TaskChatMessageStorage.shared.getMessages(forWorkstreamId: "workstream-1")
+    let (legacyA, legacyB, workstreamCount) = try await db.read { database in
+      let legacyA = try String.fetchAll(
+        database,
+        sql: "SELECT messageId FROM task_chat_messages WHERE taskId = ? ORDER BY createdAt, id",
+        arguments: ["legacy-task-a"]
+      )
+      let legacyB = try String.fetchAll(
+        database,
+        sql: "SELECT messageId FROM task_chat_messages WHERE taskId = ? ORDER BY createdAt, id",
+        arguments: ["legacy-task-b"]
+      )
+      let workstreamCount = try Int.fetchOne(
+        database,
+        sql: "SELECT COUNT(*) FROM task_chat_messages WHERE taskId = ?",
+        arguments: ["workstream-1"]
+      ) ?? 0
+      return (legacyA, legacyB, workstreamCount)
+    }
 
     XCTAssertEqual(pageSizes, [100, 100, 35])
     XCTAssertEqual(imported.map(\.messageId), (0..<235).map { "message-\($0)" })
-    XCTAssertEqual(legacyA.map(\.messageId), (0..<130).map { "message-\($0)" })
-    XCTAssertEqual(legacyB.map(\.messageId), (130..<235).map { "message-\($0)" })
-    XCTAssertTrue(workstream.isEmpty, "compatibility import must not re-key or mutate legacy rows")
+    XCTAssertEqual(legacyA, (0..<130).map { "message-\($0)" })
+    XCTAssertEqual(legacyB, (130..<235).map { "message-\($0)" })
+    XCTAssertEqual(workstreamCount, 0, "compatibility import must not re-key or mutate legacy rows")
     XCTAssertEqual(TaskChatLegacyCompatibilityMetadata.owner, "desktop-task-chat")
     XCTAssertFalse(TaskChatLegacyCompatibilityMetadata.removalCondition.isEmpty)
     XCTAssertEqual(TaskChatLegacyCompatibilityMetadata.removeBy, "2026-10-01")

@@ -33,6 +33,17 @@ extension Notification.Name {
   static let coreAudioCaptureRecoveryRequested = Notification.Name("coreAudioCaptureRecoveryRequested")
 }
 
+#if DEBUG
+struct PTTOwnerBoundarySnapshot: Equatable {
+  let activeTurnID: VoiceTurnID?
+  let hasCaptureDriver: Bool
+  let captureStartInFlight: Bool
+  let hasTranscriptionDriver: Bool
+  let hasOmniDriver: Bool
+  let captureGeneration: UInt64
+}
+#endif
+
 /// One delegate instance belongs to one reducer-issued transcription effect.
 /// Retiring the proxy when its physical service stops prevents a late callback
 /// from service A from reading service B's current turn identity.
@@ -273,7 +284,7 @@ class PushToTalkManager: ObservableObject {
       }
     case .terminal(let record):
       RealtimeHubController.shared.voiceTurnDidTerminate(turnID: record.turnID)
-      performTerminalCleanup()
+      performTerminalCleanup(discardBufferedAudio: record.reason == .ownerChanged)
     case .scheduleDeadline, .cancelDeadline, .cancelAllDeadlines,
          .staleEventDropped, .invalidTransition:
       break
@@ -513,7 +524,7 @@ class PushToTalkManager: ObservableObject {
     performTerminalCleanup()
   }
 
-  private func performTerminalCleanup() {
+  private func performTerminalCleanup(discardBufferedAudio: Bool = false) {
     // Always restore audio on teardown (cancel, error, cleanup) so we never leave it muted.
     SystemAudioMuteController.shared.restore()
     contextCaptureTask?.cancel()
@@ -523,7 +534,7 @@ class PushToTalkManager: ObservableObject {
       followUpPill = nil
       AgentPillsManager.shared.recordingPillID = nil
     }
-    stopAudioTranscription()
+    stopAudioTranscription(discardBufferedAudio: discardBufferedAudio)
     transcriptSegments = []
     seenFinalSegmentIDs.removeAll()
     lastInterimText = ""
@@ -537,6 +548,47 @@ class PushToTalkManager: ObservableObject {
     activeTracer = nil
     automationCaptureBypass = false
   }
+
+  /// Drain every previous-owner voice authority before the defaults/auth owner
+  /// mutation becomes visible. Logical termination enters through the reducer;
+  /// the remaining calls close idle/warm physical resources that have no active
+  /// turn and therefore cannot be represented by a reducer effect.
+  func quiesceForEffectiveOwnerTransition(
+    previousOwnerID: String?,
+    cleanupCapability: RuntimeOwnerTransitionCleanupCapability
+  ) async {
+    guard RuntimeOwnerIdentity.authorizesTransitionCleanup(
+      cleanupCapability,
+      previousOwnerID: previousOwnerID)
+    else {
+      assertionFailure("Push-to-talk owner cleanup capability mismatched")
+      return
+    }
+    let captureBeingStopped = audioCaptureService
+    _ = voiceTurnCoordinator.terminateForEffectiveOwnerTransition(
+      previousOwnerID: previousOwnerID)
+    // Setup is intentionally lazy. If no effect handler was installed, there
+    // cannot be a legitimate active capture, but fail closed and clear every
+    // driver anyway.
+    performTerminalCleanup(discardBufferedAudio: true)
+    FloatingBarVoicePlaybackService.shared.stop()
+    await captureBeingStopped?.waitForPhysicalStop()
+    await RealtimeHubController.shared.quiesceForEffectiveOwnerTransition(
+      previousOwnerID: previousOwnerID,
+      cleanupCapability: cleanupCapability)
+  }
+
+#if DEBUG
+  var ownerBoundarySnapshot: PTTOwnerBoundarySnapshot {
+    PTTOwnerBoundarySnapshot(
+      activeTurnID: currentVoiceTurnID,
+      hasCaptureDriver: audioCaptureService != nil,
+      captureStartInFlight: micCaptureStartInFlight,
+      hasTranscriptionDriver: transcriptionService != nil,
+      hasOmniDriver: realtimeOmniService != nil,
+      captureGeneration: micCaptureGeneration)
+  }
+#endif
 
   /// Cancel PTT without sending — used when conversation is closed mid-PTT.
   func cancelListening() {
@@ -1714,9 +1766,9 @@ class PushToTalkManager: ObservableObject {
     return true
   }
 
-  private func stopAudioTranscription() {
+  private func stopAudioTranscription(discardBufferedAudio: Bool = false) {
     stopMicCapture()
-    transcriptionService?.stop()
+    transcriptionService?.stop(discardBufferedAudio: discardBufferedAudio)
     transcriptionService = nil
     realtimeOmniService?.stop()
     realtimeOmniService = nil

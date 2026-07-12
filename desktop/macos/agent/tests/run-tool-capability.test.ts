@@ -105,6 +105,7 @@ describe("RunToolCapabilityBroker", () => {
       broker.completeInvocation({
         ...invocationIdentity(authorized),
         capabilityRef: authorized.capabilityRef,
+        activeOwnerId: session.ownerId,
         outcome: "succeeded",
         result: JSON.stringify({ ok: true, index }),
       });
@@ -147,6 +148,8 @@ describe("RunToolCapabilityBroker", () => {
     broker.markInvocationDispatched(authorized);
     expect(() => broker.completeInvocation({
       ...invocationIdentity(authorized),
+      capabilityRef: authorized.capabilityRef,
+      activeOwnerId: session.ownerId,
       manifestDigest: "sha256:stale",
       outcome: "succeeded",
       result: "wrong",
@@ -154,14 +157,52 @@ describe("RunToolCapabilityBroker", () => {
     expect(readToolInvocation(store, authorized.invocationId).status).toBe("dispatched");
     broker.completeInvocation({
       ...invocationIdentity(authorized),
+      capabilityRef: authorized.capabilityRef,
+      activeOwnerId: session.ownerId,
       outcome: "succeeded",
       result: "correct",
     });
     expect(() => broker.completeInvocation({
       ...invocationIdentity(authorized),
+      capabilityRef: authorized.capabilityRef,
+      activeOwnerId: session.ownerId,
       outcome: "succeeded",
       result: "duplicate",
-    })).toThrow(/stale, duplicated, or was never dispatched/);
+    })).toThrow(/no longer active at completion/);
+    store.close();
+  });
+
+  it("revalidates the active owner before accepting a durable completion", () => {
+    const { store, session, run, attempt } = fixture();
+    const broker = new RunToolCapabilityBroker({ store });
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    const authorized = broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "owner-switched-completion",
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolName: "get_memories",
+      toolInput: {},
+    });
+    broker.markInvocationDispatched(authorized);
+
+    expectCode(() => broker.completeInvocation({
+      ...invocationIdentity(authorized),
+      capabilityRef: authorized.capabilityRef,
+      activeOwnerId: "owner-2",
+      outcome: "succeeded",
+      result: JSON.stringify({ ok: true }),
+    }), "owner_mismatch");
+    expect(readToolInvocation(store, authorized.invocationId)).toMatchObject({
+      status: "outcome_unknown",
+      errorCode: "run_tool_owner_changed",
+    });
     store.close();
   });
 
@@ -224,6 +265,107 @@ describe("RunToolCapabilityBroker", () => {
       toolName: "get_memories",
       toolInput: {},
     }), "capability_revoked");
+    store.close();
+  });
+
+  it("aborts an acquired execution lease and revalidates persisted authority at effect boundaries", () => {
+    const { store, session, run, attempt } = fixture();
+    const broker = new RunToolCapabilityBroker({ store });
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    const authorized = broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "leased-control-effect",
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolName: "spawn_agent",
+      toolInput: { objective: "bounded effect" },
+    });
+    broker.markInvocationDispatched(authorized);
+    const lease = broker.acquireExecutionLease(authorized, () => session.ownerId);
+    lease.assertCurrentAuthority();
+    expect(lease.signal.aborted).toBe(false);
+
+    store.execute("UPDATE run_attempts SET status = 'cancelled' WHERE attempt_id = ?", [attempt.attemptId]);
+    expectCode(() => lease.assertCurrentAuthority(), "attempt_terminal");
+    expect(lease.signal.aborted).toBe(true);
+    expectCode(() => broker.completeInvocation({
+      ...invocationIdentity(authorized),
+      capabilityRef: authorized.capabilityRef,
+      activeOwnerId: session.ownerId,
+      outcome: "failed",
+      result: JSON.stringify({ ok: false, error: { code: "attempt_terminal" } }),
+    }), "attempt_terminal");
+    expect(readToolInvocation(store, authorized.invocationId)).toMatchObject({
+      status: "outcome_unknown",
+      errorCode: "run_tool_attempt_terminal",
+    });
+    store.close();
+  });
+
+  it("terminalizes every pending invocation and rejects late durable success after a run ends", () => {
+    const { store, session, run, attempt } = fixture();
+    const broker = new RunToolCapabilityBroker({ store });
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    const prepared = broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "terminal-prepared",
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolName: "get_memories",
+      toolInput: {},
+    });
+    const dispatched = broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "terminal-dispatched",
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolName: "get_memories",
+      toolInput: { limit: 1 },
+    });
+    broker.markInvocationDispatched(dispatched);
+    store.execute("UPDATE run_attempts SET status = 'succeeded' WHERE attempt_id = ?", [attempt.attemptId]);
+    store.execute("UPDATE runs SET status = 'succeeded' WHERE run_id = ?", [run.runId]);
+    broker.handleKernelEvent({
+      eventId: "evt-run-terminal",
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      type: "run.succeeded",
+      retentionClass: "core",
+      visibility: "internal",
+      payloadJson: "{}",
+      createdAtMs: 1,
+    });
+
+    expect(readToolInvocation(store, prepared.invocationId)).toMatchObject({
+      status: "failed",
+      errorCode: "run_tool_run_terminal",
+    });
+    expect(readToolInvocation(store, dispatched.invocationId)).toMatchObject({
+      status: "outcome_unknown",
+      errorCode: "run_tool_run_terminal",
+    });
+    expectCode(() => broker.completeInvocation({
+      ...invocationIdentity(dispatched),
+      capabilityRef: dispatched.capabilityRef,
+      activeOwnerId: session.ownerId,
+      outcome: "succeeded",
+      result: JSON.stringify({ ok: true }),
+    }), "run_terminal");
+    expect(readToolInvocation(store, dispatched.invocationId).status).toBe("outcome_unknown");
     store.close();
   });
 

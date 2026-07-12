@@ -63,22 +63,74 @@ private final class AuthRetryURLStub: URLProtocol, @unchecked Sendable {
   override func stopLoading() {}
 }
 
+private final class SuspendedOwnerBoundURLStub: URLProtocol, @unchecked Sendable {
+  private static let lock = NSLock()
+  private static var pending: SuspendedOwnerBoundURLStub?
+  private static var started = false
+
+  static func reset() {
+    lock.withLock {
+      pending = nil
+      started = false
+    }
+  }
+
+  static func waitUntilStarted() async {
+    while !lock.withLock({ started }) { await Task.yield() }
+  }
+
+  static var hasStarted: Bool { lock.withLock { started } }
+
+  static func release() {
+    let request = lock.withLock { () -> SuspendedOwnerBoundURLStub? in
+      defer { pending = nil }
+      return pending
+    }
+    request?.respond()
+  }
+
+  override class func canInit(with request: URLRequest) -> Bool { true }
+  override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+  override func startLoading() {
+    Self.lock.withLock {
+      Self.pending = self
+      Self.started = true
+    }
+  }
+
+  override func stopLoading() {}
+
+  private func respond() {
+    let response = HTTPURLResponse(
+      url: request.url!,
+      statusCode: 200,
+      httpVersion: nil,
+      headerFields: nil
+    )!
+    client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+    client?.urlProtocol(self, didLoad: Data(#"{"ok":true}"#.utf8))
+    client?.urlProtocolDidFinishLoading(self)
+  }
+}
+
 @MainActor
 final class APIClientAuthRetryTests: XCTestCase {
   override func setUp() {
     super.setUp()
     AuthRetryURLStub.reset()
     DesktopDiagnosticsManager.shared.resetForTests()
+    SuspendedOwnerBoundURLStub.reset()
   }
 
-  override func tearDown() {
+  override func tearDown() async throws {
     DesktopDiagnosticsManager.shared.resetForTests()
     let auth = AuthService.shared
-    auth.invalidateSession(reason: .manual)
+    await auth.invalidateSession(reason: .manual)
     auth.tokenStorageHooks = .live
     auth.tokenRefreshHooks = .live
     UserDefaults.standard.removeObject(forKey: .authUserId)
-    super.tearDown()
+    try await super.tearDown()
   }
 
   func testDeleteRetriesOnceAfter401() async throws {
@@ -105,7 +157,9 @@ final class APIClientAuthRetryTests: XCTestCase {
 
     auth.tokenRefreshHooks = AuthService.TokenRefreshHooks(
       dataForRequest: { _ in
-        let body = Data("{\"id_token\":\"new-id\",\"refresh_token\":\"new-refresh\",\"expires_in\":\"3600\",\"user_id\":\"user-1\"}".utf8)
+        let body = Data(
+          "{\"id_token\":\"new-id\",\"refresh_token\":\"new-refresh\",\"expires_in\":\"3600\",\"user_id\":\"user-1\"}"
+            .utf8)
         let response = HTTPURLResponse(
           url: URL(string: "https://securetoken.googleapis.com/v1/token")!,
           statusCode: 200,
@@ -128,6 +182,156 @@ final class APIClientAuthRetryTests: XCTestCase {
     XCTAssertEqual(snapshot["area"] as? String, "api_auth")
     XCTAssertEqual(snapshot["outcome"] as? String, "recovered")
     XCTAssertEqual(snapshot["retry_outcome"] as? String, "succeeded")
+  }
+
+  func testOwnerBoundResponseIsRejectedAfterSameUIDSessionGenerationChanges() async throws {
+    struct Response: Decodable { let ok: Bool }
+    let auth = AuthService.shared
+    auth.tokenStorageHooks = AuthService.TokenStorageHooks(
+      usesKeychainTokenStorage: { false },
+      allowsUserDefaultsFallback: { true },
+      readKeychainString: { _, _ in nil },
+      writeKeychainString: { _, _, _ in true },
+      deleteKeychainString: { _, _ in },
+      recordsFallbackTelemetry: false
+    )
+    try auth.saveTokens(
+      idToken: "id-token",
+      refreshToken: "refresh-token",
+      expiresIn: 3600,
+      userId: "same-owner"
+    )
+    UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+    UserDefaults.standard.set("same-owner", forKey: .authUserId)
+    let snapshot = try XCTUnwrap(
+      RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: "same-owner"))
+
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [SuspendedOwnerBoundURLStub.self]
+    let client = APIClient(session: URLSession(configuration: config))
+    await client.setTestAuthHeader("Bearer id-token")
+    let request = Task { () -> Result<Response, Error> in
+      do {
+        return .success(try await client.get(
+          "v1/owner-bound",
+          expectedOwnerId: "same-owner",
+          authorizationSnapshot: snapshot
+        ))
+      } catch {
+        return .failure(error)
+      }
+    }
+    await SuspendedOwnerBoundURLStub.waitUntilStarted()
+    await transitionOwnerForAuthTest(to: nil)
+    await transitionOwnerForAuthTest(to: "same-owner")
+    SuspendedOwnerBoundURLStub.release()
+
+    switch await request.value {
+    case .success:
+      XCTFail("A response from the prior same-UID session must not decode")
+    case .failure(let error):
+      guard let authError = error as? AuthError else {
+        return XCTFail("Expected same-UID generation rejection, got \(error)")
+      }
+      guard case .userChangedDuringRequest = authError else {
+        return XCTFail("Expected same-UID generation rejection, got \(authError)")
+      }
+    }
+  }
+
+  func testSnapshotOwnerDrivesHeaderAuthAndRejectsMismatchedFirebaseCredentialBeforeSend() async throws {
+    struct Response: Decodable { let ok: Bool }
+    let auth = AuthService.shared
+    auth.tokenStorageHooks = AuthService.TokenStorageHooks(
+      usesKeychainTokenStorage: { false },
+      allowsUserDefaultsFallback: { true },
+      readKeychainString: { _, _ in nil },
+      writeKeychainString: { _, _, _ in true },
+      deleteKeychainString: { _, _ in },
+      recordsFallbackTelemetry: false
+    )
+    try auth.saveTokens(
+      idToken: "owner-a-token",
+      refreshToken: "refresh-token",
+      expiresIn: 3600,
+      userId: "owner-a"
+    )
+    await transitionOwnerForAuthTest(to: "owner-b")
+    let snapshot = try XCTUnwrap(
+      RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: "owner-b"))
+
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [SuspendedOwnerBoundURLStub.self]
+    let client = APIClient(session: URLSession(configuration: config))
+    do {
+      let _: Response = try await client.get(
+        "v1/mismatched-owner",
+        expectedOwnerId: "owner-b",
+        authorizationSnapshot: snapshot
+      )
+      XCTFail("Snapshot owner B must not send owner A's Firebase credential")
+    } catch AuthError.notSignedIn {
+      // Expected: AuthService rejects and clears owner A's credential while
+      // constructing an owner B header, before transport can start.
+    } catch {
+      XCTFail("Unexpected error: \(error)")
+    }
+    XCTAssertFalse(SuspendedOwnerBoundURLStub.hasStarted)
+  }
+
+  func testExplicitExpectedOwnerCannotDisagreeWithAuthorizationSnapshot() async throws {
+    struct Response: Decodable { let ok: Bool }
+    let auth = AuthService.shared
+    auth.tokenStorageHooks = AuthService.TokenStorageHooks(
+      usesKeychainTokenStorage: { false },
+      allowsUserDefaultsFallback: { true },
+      readKeychainString: { _, _ in nil },
+      writeKeychainString: { _, _, _ in true },
+      deleteKeychainString: { _, _ in },
+      recordsFallbackTelemetry: false
+    )
+    try auth.saveTokens(
+      idToken: "owner-b-token",
+      refreshToken: "refresh-token",
+      expiresIn: 3600,
+      userId: "owner-b"
+    )
+    await transitionOwnerForAuthTest(to: "owner-b")
+    let snapshot = try XCTUnwrap(
+      RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: "owner-b"))
+
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [SuspendedOwnerBoundURLStub.self]
+    let client = APIClient(session: URLSession(configuration: config))
+    do {
+      let _: Response = try await client.get(
+        "v1/preflight-owner-mismatch",
+        expectedOwnerId: "owner-a",
+        authorizationSnapshot: snapshot
+      )
+      XCTFail("Mismatched dual owner authority must fail before token lookup or network I/O")
+    } catch AuthError.userChangedDuringRequest {
+      // Expected from the shared request-policy preflight.
+    } catch {
+      XCTFail("Unexpected error: \(error)")
+    }
+    XCTAssertFalse(SuspendedOwnerBoundURLStub.hasStarted)
+  }
+
+  private func transitionOwnerForAuthTest(to ownerID: String?) async {
+    _ = await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+      plannedNextOwner: { _, _ in ownerID },
+      quiesceVoice: { _, _ in },
+      retargetLocalStorage: { _, _ in },
+      ownerDidChange: {}
+    ) { defaults in
+      defaults.removeObject(forKey: .automationOwnerOverride)
+      if let ownerID {
+        defaults.set(ownerID, forKey: .authUserId)
+      } else {
+        defaults.removeObject(forKey: .authUserId)
+      }
+    }
   }
 
   func testTTSProvider401RetriesWithoutInvalidatingFirebaseSession() async throws {
@@ -164,7 +368,8 @@ final class APIClientAuthRetryTests: XCTestCase {
     auth.tokenRefreshHooks = AuthService.TokenRefreshHooks(
       dataForRequest: { _ in
         let body = Data(
-          "{\"id_token\":\"new-id\",\"refresh_token\":\"new-refresh\",\"expires_in\":\"3600\",\"user_id\":\"user-1\"}".utf8)
+          "{\"id_token\":\"new-id\",\"refresh_token\":\"new-refresh\",\"expires_in\":\"3600\",\"user_id\":\"user-1\"}"
+            .utf8)
         let response = HTTPURLResponse(
           url: URL(string: "https://securetoken.googleapis.com/v1/token")!,
           statusCode: 200,
@@ -230,7 +435,8 @@ final class APIClientAuthRetryTests: XCTestCase {
     auth.tokenRefreshHooks = AuthService.TokenRefreshHooks(
       dataForRequest: { _ in
         let body = Data(
-          "{\"id_token\":\"new-id\",\"refresh_token\":\"new-refresh\",\"expires_in\":\"3600\",\"user_id\":\"user-1\"}".utf8)
+          "{\"id_token\":\"new-id\",\"refresh_token\":\"new-refresh\",\"expires_in\":\"3600\",\"user_id\":\"user-1\"}"
+            .utf8)
         let response = HTTPURLResponse(
           url: URL(string: "https://securetoken.googleapis.com/v1/token")!,
           statusCode: 200,

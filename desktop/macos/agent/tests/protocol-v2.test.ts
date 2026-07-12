@@ -7,6 +7,7 @@ import type {
   AuthorizedToolExecutionMessage,
   AuthorizedToolExecutionResultMessage,
   CancelAckMessage,
+  ControlToolResultMessage,
   InboundMessage,
   OutboundMessage,
   QueryMessage,
@@ -18,6 +19,8 @@ import type {
   ExternalSurfaceRunCompleteResultMessage,
   ImportLegacyMainChatSessionsMessage,
   LegacyMainChatSessionsImportedMessage,
+  RevokeOwnerRuntimeMessage,
+  OwnerRuntimeRevokedMessage,
 } from "../src/protocol.js";
 import { PROTOCOL_VERSION } from "../src/protocol.js";
 import {
@@ -87,6 +90,53 @@ describe("protocol v2", () => {
       input: { limit: 10 },
     };
     expect(message.type).toBe("direct_control_tool");
+
+    const receipt: ControlToolResultMessage = {
+      type: "control_tool_result",
+      protocolVersion: PROTOCOL_VERSION,
+      requestId: message.requestId,
+      clientId: message.clientId,
+      ownerId: message.ownerId,
+      name: message.name,
+      result: JSON.stringify({ ok: false, error: { code: "direct_control_owner_revoked" } }),
+    };
+    expect((receipt as OutboundMessage).ownerId).toBe(message.ownerId);
+  });
+
+  it("bootstraps local runtimes with an owner-only handshake before owner-scoped RPCs", () => {
+    const message: InboundMessage = {
+      type: "refresh_owner",
+      ownerId: "signed-owner",
+    };
+    expect(message).toEqual({ type: "refresh_owner", ownerId: "signed-owner" });
+    expect(message).not.toHaveProperty("token");
+
+    const here = dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(join(here, "../src/index.ts"), "utf8");
+    expect(source).toContain('case "refresh_owner"');
+  });
+
+  it("defines a correlated exact-owner runtime revocation barrier", () => {
+    const request: RevokeOwnerRuntimeMessage = {
+      type: "revoke_owner_runtime",
+      protocolVersion: PROTOCOL_VERSION,
+      requestId: "revoke-a",
+      clientId: "runtime-owner-transition",
+      ownerId: "owner-a",
+    };
+    const receipt: OwnerRuntimeRevokedMessage = {
+      type: "owner_runtime_revoked",
+      protocolVersion: PROTOCOL_VERSION,
+      requestId: request.requestId,
+      clientId: request.clientId,
+      ownerId: request.ownerId,
+      ok: true,
+      duplicate: false,
+      revokedRunIds: ["run-a"],
+      invalidatedBindingIds: [],
+    };
+    expect((request as InboundMessage).ownerId).toBe("owner-a");
+    expect((receipt as OutboundMessage).requestId).toBe(request.requestId);
   });
 
   it("acknowledges legacy main-chat aliases only with correlated owner-scoped acceptance", () => {

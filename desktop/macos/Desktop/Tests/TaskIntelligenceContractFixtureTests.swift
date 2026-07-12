@@ -571,7 +571,11 @@ final class TaskIntelligenceSQLiteRoundTripTests: XCTestCase {
             from: JSONSerialization.data(withJSONObject: updateResponse)
         )
 
-        try await ActionItemStorage.shared.syncTaskActionItems([item])
+        // Fixture persistence is intentionally session-independent.
+        try await ActionItemStorage.shared.syncTaskActionItems(
+            [item],
+            authorization: .unrestricted
+        )
         let stored = try await ActionItemStorage.shared.getLocalActionItem(byBackendId: item.id)
         let restored = try XCTUnwrap(stored)
 

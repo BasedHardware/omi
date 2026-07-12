@@ -22,8 +22,9 @@ workstream resolves the same kernel conversation and artifact history.
 
 A bounded, decode-only upgrade reader may consume a store written by an older
 release. It must never accept new writes, must preserve the original canonical
-turn identity, must delete each entry only after journal acceptance, and must
-have a behavioral migration test. This is migration input, not a second store.
+turn identity, checkpoint an entry only after journal acceptance, and must have
+a behavioral migration test. It may retain the source read-only for the bounded
+rollback window; this is migration input, not a second store.
 
 ## Canonical journal contract
 
@@ -36,11 +37,15 @@ have a behavioral migration test. This is migration input, not a second store.
   The physical backend reader uses an owner/filter-validated Firestore document
   cursor, so a newer insertion between pages cannot shift or skip older turns.
   Backend rows preserve canonical client ID, structured blocks, and resources.
+  Outbox delivery uses the existing desktop-message wire shape with the
+  canonical turn ID in `client_message_id`, so a reverted release reads ordinary
+  backend history rather than an incompatible journal-only format.
 - Swift notifications are wakeups. `KernelTurnProjection` resumes from its
   contiguous sequence checkpoint, detects gaps, and replays by sequence.
 - Main chat, floating chat, realtime voice, and Task Chat record and update
-  through the same journal RPCs. Swift may stage an optimistic UI row, but it
-  cannot persist or acknowledge it.
+  through the same journal RPCs. Journal acceptance publishes the immediate
+  pending projection; Swift cannot append a pre-journal optimistic row, persist
+  it independently, or acknowledge it.
 - Pre-journal backend and Task Chat history have bounded, checkpointed one-time
   import paths. After migration, main-chat list/resolve and owner activation may
   request a cooldown-coalesced remote reconciliation; an idle timer never polls
@@ -49,6 +54,11 @@ have a behavioral migration test. This is migration input, not a second store.
   rows without immutable profiles and journal rows without sequence/producer/
   hash revisions. Orphaned pending/streaming turns terminalize once rather than
   rendering an immortal spinner or entering the backend outbox.
+- A logical surface exchange records its zero-to-two visible turns in one
+  kernel transaction. Swift projects only the committed receipt; rejection of
+  either half leaves neither a canonical row nor a visible orphan. Projection
+  replay is fenced by immutable owner identity plus a local epoch, so suspended
+  owner-A reads cannot mutate checkpoints or UI after owner B takes over.
 
 ## Surfaces
 

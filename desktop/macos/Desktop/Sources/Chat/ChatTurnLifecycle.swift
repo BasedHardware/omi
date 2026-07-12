@@ -96,6 +96,22 @@ struct ChatSendLockOwnership: Equatable, Sendable {
   }
 }
 
+/// Generation-keyed ownership for terminal side effects that can race a late
+/// adapter result (journal status/callback today). Claim removes the target
+/// atomically, so only one path can finalize it and an older path cannot consume
+/// a newer generation's work.
+struct ChatTerminalTargetRegistry<T> {
+  private var targets: [Int: T] = [:]
+
+  mutating func register(_ target: T, generation: Int) {
+    targets[generation] = target
+  }
+
+  mutating func claim(generation: Int) -> T? {
+    targets.removeValue(forKey: generation)
+  }
+}
+
 /// Collects bridge callbacks that were emitted before `query()` returned so
 /// ChatProvider can apply them before it finalizes the visible response.
 ///
@@ -104,10 +120,28 @@ struct ChatSendLockOwnership: Equatable, Sendable {
 /// hop and persist a response before its last delta or tool event is applied.
 final class ChatTurnCallbackQueue: @unchecked Sendable {
   private let lock = NSLock()
+  private let generation: Int
+  private let lifecycle: ChatTurnLifecycle
+  private let currentGeneration: @MainActor @Sendable () -> Int
   private var tasks: [Task<Void, Never>] = []
 
+  @MainActor
+  init(
+    generation: Int,
+    lifecycle: ChatTurnLifecycle,
+    currentGeneration: @escaping @MainActor @Sendable () -> Int
+  ) {
+    self.generation = generation
+    self.lifecycle = lifecycle
+    self.currentGeneration = currentGeneration
+  }
+
+  /// Every adapter callback crosses this one admission gate. Keeping the
+  /// generation and lifecycle checks here prevents a newly added callback from
+  /// accidentally bypassing stop/supersession authority.
   func submit(_ operation: @escaping @MainActor @Sendable () async -> Void) {
     let task = Task { @MainActor in
+      guard currentGeneration() == generation, lifecycle.acceptsResult else { return }
       await operation()
     }
     lock.withLock {
@@ -116,13 +150,16 @@ final class ChatTurnCallbackQueue: @unchecked Sendable {
   }
 
   func drain() async {
-    let pending = lock.withLock {
-      let snapshot = tasks
-      tasks.removeAll(keepingCapacity: true)
-      return snapshot
-    }
-    for task in pending {
-      await task.value
+    while true {
+      let pending = lock.withLock {
+        let snapshot = tasks
+        tasks.removeAll(keepingCapacity: true)
+        return snapshot
+      }
+      guard !pending.isEmpty else { return }
+      for task in pending {
+        await task.value
+      }
     }
   }
 }

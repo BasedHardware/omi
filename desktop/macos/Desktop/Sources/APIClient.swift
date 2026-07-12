@@ -68,52 +68,6 @@ actor APIClient {
     )
   }
 
-  /// Owner-bound transport for the realtime hub's higher-model escalation.
-  /// The body can contain the pinned turn's private transcript and about-user
-  /// context, so both the initial credential and any 401 refresh stay bound to
-  /// that same immutable owner. `performAuthenticatedData` also rejects a late
-  /// response after an account switch.
-  func askHigherModel(
-    body: [String: Any],
-    expectedOwnerID: String,
-    customBaseURL: String? = nil
-  ) async throws -> String {
-    let base = customBaseURL ?? rustBackendURL
-    guard !base.isEmpty else { throw APIError.invalidResponse }
-    let normalized = base.hasSuffix("/") ? base : base + "/"
-    guard let url = URL(string: normalized + "v2/chat/completions") else {
-      throw APIError.invalidResponse
-    }
-    guard JSONSerialization.isValidJSONObject(body) else {
-      throw APIError.invalidResponse
-    }
-
-    var request = URLRequest(url: url)
-    request.httpMethod = "POST"
-    request.timeoutInterval = 30
-    request.allHTTPHeaderFields = try await buildHeaders(
-      requireAuth: true,
-      expectedAuthOwnerId: expectedOwnerID)
-    request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-    let (data, response) = try await performAuthenticatedData(
-      for: request,
-      authPolicy: .ownerBound(expectedOwnerID))
-    guard (200..<300).contains(response.statusCode) else {
-      throw APIError.httpError(
-        statusCode: response.statusCode,
-        detail: OmiHTTPTransport.extractErrorDetail(from: data))
-    }
-    guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-      let choices = json["choices"] as? [[String: Any]],
-      let message = choices.first?["message"] as? [String: Any],
-      let text = message["content"] as? String
-    else {
-      throw APIError.invalidResponse
-    }
-    return text.trimmingCharacters(in: .whitespacesAndNewlines)
-  }
-
   // MARK: - HTTP Methods
 
   func get<T: Decodable>(
@@ -121,8 +75,14 @@ actor APIClient {
     requireAuth: Bool = true,
     customBaseURL: String? = nil,
     includeBYOK: Bool = true,
-    expectedOwnerId: String? = nil
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> T {
+    let authPolicy = try resolvedRequestAuthPolicy(
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+    let authOwnerId = authPolicy.expectedAuthOwnerId
+    try validateExpectedOwner(authPolicy)
     let base = customBaseURL ?? baseURL
     guard let url = URL(string: base + endpoint) else {
       throw APIError.invalidResponse
@@ -132,11 +92,12 @@ actor APIClient {
     request.allHTTPHeaderFields = try await buildHeaders(
       requireAuth: requireAuth,
       includeBYOK: includeBYOK,
-      expectedAuthOwnerId: expectedOwnerId)
+      expectedAuthOwnerId: authOwnerId)
+    try validateExpectedOwner(authPolicy)
 
     return try await performRequest(
       request,
-      authPolicy: expectedOwnerId.map { .ownerBound($0) } ?? .default)
+      authPolicy: authPolicy)
   }
 
   func post<T: Decodable, B: Encodable>(
@@ -145,8 +106,14 @@ actor APIClient {
     requireAuth: Bool = true,
     customBaseURL: String? = nil,
     includeBYOK: Bool = true,
-    expectedOwnerId: String? = nil
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> T {
+    let authPolicy = try resolvedRequestAuthPolicy(
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+    let authOwnerId = authPolicy.expectedAuthOwnerId
+    try validateExpectedOwner(authPolicy)
     let base = customBaseURL ?? baseURL
     guard let url = URL(string: base + endpoint) else {
       throw APIError.invalidResponse
@@ -157,12 +124,13 @@ actor APIClient {
     request.allHTTPHeaderFields = try await buildHeaders(
       requireAuth: requireAuth,
       includeBYOK: includeBYOK,
-      expectedAuthOwnerId: expectedOwnerId)
+      expectedAuthOwnerId: authOwnerId)
+    try validateExpectedOwner(authPolicy)
     request.httpBody = try transport.encoder.encode(body)
 
     return try await performRequest(
       request,
-      authPolicy: expectedOwnerId.map { .ownerBound($0) } ?? .default)
+      authPolicy: authPolicy)
   }
 
   func post<T: Decodable>(
@@ -170,8 +138,14 @@ actor APIClient {
     requireAuth: Bool = true,
     customBaseURL: String? = nil,
     includeBYOK: Bool = true,
-    expectedOwnerId: String? = nil
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> T {
+    let authPolicy = try resolvedRequestAuthPolicy(
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+    let authOwnerId = authPolicy.expectedAuthOwnerId
+    try validateExpectedOwner(authPolicy)
     let base = customBaseURL ?? baseURL
     guard let url = URL(string: base + endpoint) else {
       throw APIError.invalidResponse
@@ -181,20 +155,25 @@ actor APIClient {
     request.allHTTPHeaderFields = try await buildHeaders(
       requireAuth: requireAuth,
       includeBYOK: includeBYOK,
-      expectedAuthOwnerId: expectedOwnerId)
+      expectedAuthOwnerId: authOwnerId)
+    try validateExpectedOwner(authPolicy)
 
     return try await performRequest(
       request,
-      authPolicy: expectedOwnerId.map { .ownerBound($0) } ?? .default)
+      authPolicy: authPolicy)
   }
 
   /// Phase 2 realtime hub: ask the backend to mint a short-lived ephemeral token
   /// for `provider` ("openai"|"gemini"). The backend gates on auth + paywall.
   /// Credential failures are typed so the hub can recover deterministically instead
   /// of treating every failure as a silent fallback.
-  func mintRealtimeToken(provider: String) async throws -> String {
+  func mintRealtimeToken(
+    provider: String,
+    expectedOwnerID: String,
+    customBaseURL: String? = nil
+  ) async throws -> String {
     struct Resp: Decodable { let token: String }
-    let base = rustBackendURL
+    let base = customBaseURL ?? rustBackendURL
     guard !base.isEmpty else {
       throw CredentialHealthError.backendTransient(
         statusCode: nil,
@@ -206,18 +185,30 @@ actor APIClient {
     }
 
     let providerType = CredentialHealthManager.realtimeProvider(from: provider)
+    let authPolicy = RequestAuthPolicy.ownerBound(expectedOwnerID)
+    try validateExpectedOwner(authPolicy)
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true, includeBYOK: false)
+    request.allHTTPHeaderFields = try await buildHeaders(
+      requireAuth: true,
+      includeBYOK: false,
+      expectedAuthOwnerId: expectedOwnerID)
     request.httpBody = try JSONEncoder().encode(["provider": provider])
 
     do {
-      return try await performRealtimeMintRequest(request, provider: providerType, retriedAuth: false)
+      return try await performRealtimeMintRequest(
+        request,
+        provider: providerType,
+        authPolicy: authPolicy,
+        retriedAuth: false)
     } catch let error as RealtimeTokenMintError {
       log("APIClient: realtime token mint failed for \(provider): \(error.localizedDescription)")
       throw error
     } catch let error as CredentialHealthError {
       log("APIClient: realtime token mint failed for \(provider): \(error.localizedDescription)")
+      throw error
+    } catch let error as AuthError {
+      log("APIClient: realtime token mint rejected after owner change for \(provider)")
       throw error
     } catch {
       log("APIClient: realtime token mint failed for \(provider): \(error.localizedDescription)")
@@ -228,10 +219,13 @@ actor APIClient {
   private func performRealtimeMintRequest(
     _ request: URLRequest,
     provider: RealtimeHubProvider?,
+    authPolicy: RequestAuthPolicy,
     retriedAuth: Bool
   ) async throws -> String {
     struct Resp: Decodable { let token: String }
+    try validateExpectedOwner(authPolicy)
     let (data, response) = try await session.data(for: request)
+    try validateExpectedOwner(authPolicy)
     guard let httpResponse = response as? HTTPURLResponse else {
       throw CredentialHealthError.backendTransient(statusCode: nil, message: APIError.invalidResponse.localizedDescription)
     }
@@ -240,12 +234,16 @@ actor APIClient {
       guard let retry = try await authorizedRetryRequest(
         from: request,
         retriedAuth: false,
-        authPolicy: .default
+        authPolicy: authPolicy
       ) else {
         throw CredentialHealthError.requiresLogin(message: "Please sign in again to use voice responses.")
       }
       do {
-        let token = try await performRealtimeMintRequest(retry, provider: provider, retriedAuth: true)
+        let token = try await performRealtimeMintRequest(
+          retry,
+          provider: provider,
+          authPolicy: authPolicy,
+          retriedAuth: true)
         log("CredentialHealth: context=realtime_mint_auth_retry failure_class=retry_succeeded")
         return token
       } catch let error as RealtimeTokenMintError {
@@ -258,7 +256,9 @@ actor APIClient {
     }
 
     if httpResponse.statusCode == 401 {
-      await invalidateSessionAfterUnauthorized(endpoint: endpointLabel(for: request), signOutOn401: true)
+      await invalidateSessionAfterUnauthorized(
+        endpoint: endpointLabel(for: request),
+        signOutOn401: authPolicy.signOutOn401)
       throw CredentialHealthError.requiresLogin(message: "Please sign in again to use voice responses.")
     }
 
@@ -340,8 +340,15 @@ actor APIClient {
     customBaseURL: String? = nil,
     includeBYOK: Bool = true,
     authPolicy: RequestAuthPolicy = .default,
-    expectedAuthOwnerId: String? = nil
+    expectedAuthOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws {
+    let effectiveAuthPolicy = try resolvedRequestAuthPolicy(
+      expectedOwnerId: expectedAuthOwnerId,
+      authorizationSnapshot: authorizationSnapshot,
+      fallback: authPolicy)
+    let authOwnerId = effectiveAuthPolicy.expectedAuthOwnerId
+    try validateExpectedOwner(effectiveAuthPolicy)
     let base = customBaseURL ?? baseURL
     let url = URL(string: base + endpoint)!
     var request = URLRequest(url: url)
@@ -349,51 +356,22 @@ actor APIClient {
     request.allHTTPHeaderFields = try await buildHeaders(
       requireAuth: requireAuth,
       includeBYOK: includeBYOK,
-      expectedAuthOwnerId: expectedAuthOwnerId
+      expectedAuthOwnerId: authOwnerId
     )
+    try validateExpectedOwner(effectiveAuthPolicy)
 
-    try await performVoidRequest(request, authPolicy: authPolicy)
+    try await performVoidRequest(request, authPolicy: effectiveAuthPolicy)
   }
 
   // MARK: - Request Execution
 
-  /// When false, a post-refresh HTTP 401 throws `.unauthorized` without invalidating the
-  /// Firebase session (e.g. background polling that should not sign the user out).
-  struct RequestAuthPolicy: Sendable {
-    var signOutOn401: Bool
-    var recordsAuthRetryTelemetry: Bool = true
-    /// When true, a post-refresh HTTP 401 is returned to the caller instead of
-    /// throwing `.unauthorized`, so provider-shaped bodies can be inspected.
-    var returnsPersistent401Response: Bool = false
-    var expectedAuthOwnerId: String? = nil
-
-    static let `default` = RequestAuthPolicy(signOutOn401: true)
-    static let sessionPreserving = RequestAuthPolicy(signOutOn401: false)
-    static let providerCredentialBoundary = RequestAuthPolicy(
-      signOutOn401: false,
-      recordsAuthRetryTelemetry: false,
-      returnsPersistent401Response: true
-    )
-
-    static func ownerBound(_ ownerId: String) -> RequestAuthPolicy {
-      RequestAuthPolicy(
-        signOutOn401: false,
-        recordsAuthRetryTelemetry: true,
-        returnsPersistent401Response: false,
-        expectedAuthOwnerId: ownerId
-      )
-    }
-  }
-
   private func invalidateSessionAfterUnauthorized(endpoint: String, signOutOn401: Bool) async {
     guard signOutOn401 else { return }
-    await MainActor.run {
-      AuthSessionCoordinator.shared.handleHTTPUnauthorized(
-        endpoint: endpoint,
-        signOutOn401: true,
-        auth: AuthService.shared
-      )
-    }
+    await AuthSessionCoordinator.shared.handleHTTPUnauthorized(
+      endpoint: endpoint,
+      signOutOn401: true,
+      auth: AuthService.shared
+    )
   }
 
   private func endpointLabel(for request: URLRequest) -> String {
@@ -425,6 +403,7 @@ actor APIClient {
       } else {
         authHeader = try await authService.getAuthHeader(forceRefresh: true)
       }
+      try validateExpectedOwner(authPolicy)
       retry.setValue(authHeader, forHTTPHeaderField: "Authorization")
       return retry
     } catch AuthError.notSignedIn {
@@ -436,7 +415,7 @@ actor APIClient {
     }
   }
 
-  private func performAuthenticatedData(
+  func performAuthenticatedData(
     for request: URLRequest,
     authPolicy: RequestAuthPolicy = .default,
     retriedAuth: Bool = false
@@ -496,6 +475,12 @@ actor APIClient {
   /// accounts. The authorization header still belongs to the original owner,
   /// so never let that response flow into the new owner's local state.
   private nonisolated func validateExpectedOwner(_ authPolicy: RequestAuthPolicy) throws {
+    if let authorizationSnapshot = authPolicy.authorizationSnapshot {
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+        throw AuthError.userChangedDuringRequest
+      }
+      return
+    }
     guard let expectedOwnerId = authPolicy.expectedAuthOwnerId else { return }
     guard AuthorizedToolExecution.isOwnerCurrent(expectedOwnerId) else {
       throw AuthError.userChangedDuringRequest
@@ -519,7 +504,9 @@ actor APIClient {
     }
 
     do {
-      return try decoder.decode(T.self, from: data)
+      let decoded = try decoder.decode(T.self, from: data)
+      try validateExpectedOwner(authPolicy)
+      return decoded
     } catch let decodingError as DecodingError {
       // Log detailed decoding error for debugging
       switch decodingError {
@@ -2241,7 +2228,8 @@ extension APIClient {
     currentActivity: String? = nil,
     source: String? = nil,
     windowTitle: String? = nil,
-    headline: String? = nil
+    headline: String? = nil,
+    expectedOwnerId: String? = nil
   ) async throws -> CreateMemoryResponse {
     struct CreateRequest: Encodable {
       let content: String
@@ -2279,7 +2267,7 @@ extension APIClient {
       windowTitle: windowTitle,
       headline: headline
     )
-    return try await post("v3/memories", body: body)
+    return try await post("v3/memories", body: body, expectedOwnerId: expectedOwnerId)
   }
 
   /// Max memories per POST /v3/memories/batch call. Must match the
@@ -2402,20 +2390,27 @@ extension APIClient {
     body: B,
     requireAuth: Bool = true,
     customBaseURL: String? = nil,
-    expectedOwnerId: String? = nil
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> T {
+    let authPolicy = try resolvedRequestAuthPolicy(
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+    let authOwnerId = authPolicy.expectedAuthOwnerId
+    try validateExpectedOwner(authPolicy)
     let base = customBaseURL ?? baseURL
     let url = URL(string: base + endpoint)!
     var request = URLRequest(url: url)
     request.httpMethod = "PATCH"
     request.allHTTPHeaderFields = try await buildHeaders(
       requireAuth: requireAuth,
-      expectedAuthOwnerId: expectedOwnerId)
+      expectedAuthOwnerId: authOwnerId)
+    try validateExpectedOwner(authPolicy)
     request.httpBody = try JSONEncoder().encode(body)
 
     return try await performPatchRequest(
       request,
-      authPolicy: expectedOwnerId.map { .ownerBound($0) } ?? .default)
+      authPolicy: authPolicy)
   }
 
   private func performPatchRequest<T: Decodable>(
@@ -2631,61 +2626,20 @@ struct ActionItemsListResponse: Decodable {
 
 extension APIClient {
 
-  /// Fetches action items from the API with optional filtering and sorting
-  func getActionItems(
-    limit: Int = 100,
-    offset: Int = 0,
-    completed: Bool? = nil,
-    startDate: Date? = nil,
-    endDate: Date? = nil,
-    dueStartDate: Date? = nil,
-    dueEndDate: Date? = nil,
-    sortBy: String? = nil,
-    deleted: Bool? = nil
-  ) async throws -> ActionItemsListResponse {
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
-    var queryItems: [String] = [
-      "limit=\(limit)",
-      "offset=\(offset)",
-    ]
-
-    if let completed = completed {
-      queryItems.append("completed=\(completed)")
-    }
-
-    if let startDate = startDate {
-      queryItems.append("start_date=\(formatter.string(from: startDate))")
-    }
-
-    if let endDate = endDate {
-      queryItems.append("end_date=\(formatter.string(from: endDate))")
-    }
-
-    if let dueStartDate = dueStartDate {
-      queryItems.append("due_start_date=\(formatter.string(from: dueStartDate))")
-    }
-
-    if let dueEndDate = dueEndDate {
-      queryItems.append("due_end_date=\(formatter.string(from: dueEndDate))")
-    }
-
-    if let sortBy = sortBy {
-      queryItems.append("sort_by=\(sortBy)")
-    }
-
-    if let deleted = deleted {
-      queryItems.append("deleted=\(deleted)")
-    }
-
-    let endpoint = "v1/action-items?\(queryItems.joined(separator: "&"))"
-    return try await get(endpoint)
-  }
-
   /// Fetches one action item by backend ID.
   func getActionItem(id: String) async throws -> TaskActionItem {
-    try await get("v1/action-items/\(id)")
+    try await getActionItem(id: id, expectedOwnerId: nil)
+  }
+
+  func getActionItem(
+    id: String,
+    expectedOwnerId: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> TaskActionItem {
+    try await get(
+      "v1/action-items/\(id)",
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   /// Updates an action item
@@ -2712,7 +2666,8 @@ extension APIClient {
     relevanceScore: Int? = nil,
     recurrenceRule: String? = nil,
     recurrenceParentId: String? = nil,
-    expectedOwnerId: String? = nil
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> TaskActionItem {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -2754,15 +2709,21 @@ extension APIClient {
     return try await patch(
       "v1/action-items/\(id)",
       body: request,
-      expectedOwnerId: expectedOwnerId)
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   /// Deletes an action item
-  func deleteActionItem(id: String, expectedOwnerId: String? = nil) async throws {
+  func deleteActionItem(
+    id: String,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws {
     try await delete(
       "v1/action-items/\(id)",
       authPolicy: expectedOwnerId.map { .ownerBound($0) } ?? .default,
-      expectedAuthOwnerId: expectedOwnerId)
+      expectedAuthOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   /// Creates a new action item
@@ -2784,7 +2745,8 @@ extension APIClient {
     status: String? = nil,
     sortOrder: Int? = nil,
     indentLevel: Int? = nil,
-    expectedOwnerId: String? = nil
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> TaskActionItem {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -2831,7 +2793,8 @@ extension APIClient {
     return try await post(
       "v1/action-items",
       body: request,
-      expectedOwnerId: expectedOwnerId)
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   private func taskMutationBody<Wire: Encodable>(
@@ -2856,45 +2819,6 @@ extension APIClient {
     value.map(OmiAPI.OmiPatchField.value) ?? .omitted
   }
 
-  /// Batch update relevance scores for multiple action items
-  func batchUpdateScores(_ scores: [(id: String, score: Int)]) async throws {
-    struct ScoreUpdate: Encodable {
-      let id: String
-      let relevance_score: Int
-    }
-    struct BatchRequest: Encodable {
-      let scores: [ScoreUpdate]
-    }
-    struct StatusResponse: Decodable {
-      let status: String
-    }
-    let request = BatchRequest(
-      scores: scores.map { ScoreUpdate(id: $0.id, relevance_score: $0.score) })
-    let _: StatusResponse = try await patch("v1/action-items/batch-scores", body: request)
-  }
-
-  /// Batch update sort orders and indent levels for multiple action items
-  func batchUpdateSortOrders(_ updates: [(id: String, sortOrder: Int, indentLevel: Int)])
-    async throws
-  {
-    struct SortUpdate: Encodable {
-      let id: String
-      let sort_order: Int
-      let indent_level: Int
-    }
-    struct BatchRequest: Encodable {
-      let items: [SortUpdate]
-    }
-    struct StatusResponse: Decodable {
-      let status: String
-    }
-    let request = BatchRequest(
-      items: updates.map {
-        SortUpdate(id: $0.id, sort_order: $0.sortOrder, indent_level: $0.indentLevel)
-      })
-    let _: StatusResponse = try await patch("v1/action-items/batch", body: request)
-  }
-
   // MARK: - Task Sharing
 
   /// Shares tasks and returns a shareable URL
@@ -2915,6 +2839,18 @@ extension APIClient {
 extension APIClient {
   func getCandidateWorkflowControl() async throws -> OmiAPI.TaskWorkflowControl {
     try await get("v1/candidates/control")
+  }
+
+  func getCandidateWorkflowControl(
+    expectedOwnerId: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws
+    -> OmiAPI.TaskWorkflowControl
+  {
+    try await get(
+      "v1/candidates/control",
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   func createCanonicalCandidate(
@@ -2948,17 +2884,26 @@ extension APIClient {
     try await get("v1/candidates/\(candidateID)")
   }
 
-  private func taskIntelligenceMutation<Response: Decodable, Body: Encodable>(
+  func taskIntelligenceMutation<Response: Decodable, Body: Encodable>(
     endpoint: String,
     method: String,
     body: Body?,
     idempotencyKey: String?,
-    accountGeneration: Int?
+    accountGeneration: Int?,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> Response {
+    let authPolicy = try resolvedRequestAuthPolicy(
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+    let authOwnerId = authPolicy.expectedAuthOwnerId
+    try validateExpectedOwner(authPolicy)
     guard let url = URL(string: baseURL + endpoint) else { throw APIError.invalidResponse }
     var request = URLRequest(url: url)
     request.httpMethod = method
-    request.allHTTPHeaderFields = try await buildHeaders()
+    request.allHTTPHeaderFields = try await buildHeaders(
+      expectedAuthOwnerId: authOwnerId)
+    try validateExpectedOwner(authPolicy)
     if let accountGeneration {
       request.setValue(String(accountGeneration), forHTTPHeaderField: "X-Account-Generation")
     }
@@ -2966,7 +2911,9 @@ extension APIClient {
       request.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key")
     }
     if let body { request.httpBody = try JSONEncoder().encode(body) }
-    return try await performRequest(request)
+    return try await performRequest(
+      request,
+      authPolicy: authPolicy)
   }
 }
 
@@ -3055,26 +3002,34 @@ extension APIClient {
 
   func replaceTaskContextSnapshot(
     _ snapshot: OmiAPI.NormalizedContextSnapshot,
-    accountGeneration: Int
+    accountGeneration: Int,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> OmiAPI.SnapshotReceipt {
     try await taskIntelligenceMutation(
       endpoint: "v1/task-intelligence/context-snapshot",
       method: "PUT",
       body: snapshot,
       idempotencyKey: snapshot.snapshotId,
-      accountGeneration: accountGeneration
+      accountGeneration: accountGeneration,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot
     )
   }
 
   func evaluateWhatMattersNow(
-    _ request: OmiAPI.EvaluationRequest
+    _ request: OmiAPI.EvaluationRequest,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> OmiAPI.WhatMattersNowProjection {
     try await taskIntelligenceMutation(
       endpoint: "v1/what-matters-now/evaluate",
       method: "POST",
       body: request,
       idempotencyKey: nil,
-      accountGeneration: nil
+      accountGeneration: nil,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot
     )
   }
 
@@ -3173,89 +3128,6 @@ extension APIClient {
   }
 }
 
-// MARK: - Workstream-backed task threads
-
-extension APIClient {
-  func resolveTaskWorkIntent(
-    taskId: String,
-    title: String?,
-    objective: String?,
-    idempotencyKey: String,
-    accountGeneration: Int
-  ) async throws -> OmiAPI.WorkIntentReceipt {
-    try await taskIntelligenceMutation(
-      endpoint: "v1/work-intents",
-      method: "POST",
-      body: OmiAPI.TaskOriginWorkIntent(
-        objective: objective,
-        origin: "task",
-        taskId: taskId,
-        title: title
-      ),
-      idempotencyKey: idempotencyKey,
-      accountGeneration: accountGeneration
-    )
-  }
-
-  func resolveGoalWorkIntent(
-    goalId: String,
-    title: String,
-    objective: String,
-    anchorTaskDescription: String,
-    idempotencyKey: String,
-    accountGeneration: Int
-  ) async throws -> OmiAPI.WorkIntentReceipt {
-    try await taskIntelligenceMutation(
-      endpoint: "v1/work-intents",
-      method: "POST",
-      body: OmiAPI.GoalOriginWorkIntent(
-        anchorTaskDescription: anchorTaskDescription,
-        goalId: goalId,
-        objective: objective,
-        origin: "goal",
-        title: title
-      ),
-      idempotencyKey: idempotencyKey,
-      accountGeneration: accountGeneration
-    )
-  }
-
-  func getWorkstreamDetail(workstreamId: String) async throws -> OmiAPI.WorkstreamDetailProjection {
-    try await get("v1/workstreams/\(workstreamId)")
-  }
-
-  func createWorkstreamArtifact(
-    workstreamId: String,
-    artifact: OmiAPI.ArtifactDescriptorCreate,
-    idempotencyKey: String,
-    accountGeneration: Int
-  ) async throws -> OmiAPI.ArtifactDescriptor {
-    try await taskIntelligenceMutation(
-      endpoint: "v1/workstreams/\(workstreamId)/artifacts",
-      method: "POST",
-      body: artifact,
-      idempotencyKey: idempotencyKey,
-      accountGeneration: accountGeneration
-    )
-  }
-
-  func upsertWorkstreamCheckpoint(
-    workstreamId: String,
-    runtimeId: String,
-    checkpoint: OmiAPI.ContinuationCheckpointUpsert,
-    idempotencyKey: String,
-    accountGeneration: Int
-  ) async throws -> OmiAPI.ContinuationCheckpoint {
-    try await taskIntelligenceMutation(
-      endpoint: "v1/workstreams/\(workstreamId)/checkpoints/\(runtimeId)",
-      method: "PUT",
-      body: checkpoint,
-      idempotencyKey: idempotencyKey,
-      accountGeneration: accountGeneration
-    )
-  }
-}
-
 /// Response types for task sharing
 struct ShareTasksResponse: Codable {
   let url: String
@@ -3346,25 +3218,16 @@ extension APIClient {
   }
 
   /// Promotes the top-ranked staged task to action_items
-  func promoteTopStagedTask() async throws -> PromoteResponse {
-    return try await post("v1/staged-tasks/promote")
+  func promoteTopStagedTask(
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> PromoteResponse {
+    return try await post(
+      "v1/staged-tasks/promote",
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
-  /// One-time migration of existing AI tasks to staged_tasks
-  func migrateStagedTasks() async throws {
-    struct StatusResponse: Decodable { let status: String }
-    let _: StatusResponse = try await post("v1/staged-tasks/migrate")
-  }
-
-  /// Migrate conversation-extracted action items (no source field) to staged_tasks
-  func migrateConversationItemsToStaged() async throws {
-    struct MigrateResponse: Decodable {
-      let status: String
-      let migrated: Int
-      let deleted: Int
-    }
-    let _: MigrateResponse = try await post("v1/staged-tasks/migrate-conversation-items")
-  }
 }
 
 /// Response for staged task promotion
@@ -4407,7 +4270,8 @@ extension APIClient {
   @discardableResult
   func updateUserLanguage(
     _ language: String,
-    expectedOwnerId: String? = nil
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> SetUserLanguageResponse {
     struct UpdateRequest: Encodable {
       let language: String
@@ -4416,7 +4280,8 @@ extension APIClient {
     return try await patch(
       "v1/users/language",
       body: body,
-      expectedOwnerId: expectedOwnerId)
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   /// Fetches recording permission status
@@ -4485,7 +4350,8 @@ extension APIClient {
   func updateUserProfile(
     name: String? = nil, motivation: String? = nil, useCase: String? = nil, job: String? = nil,
     company: String? = nil,
-    expectedOwnerId: String? = nil
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws {
     struct UpdateRequest: Encodable {
       let name: String?
@@ -4499,7 +4365,8 @@ extension APIClient {
     let _: UserProfileResponse = try await patch(
       "v1/users/profile",
       body: body,
-      expectedOwnerId: expectedOwnerId)
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   /// Deletes the authenticated user's account and all server data.
@@ -6121,9 +5988,13 @@ extension APIClient {
     }
   }
 
-  func fetchChatUsageQuota() async -> ChatUsageQuota? {
+  func fetchChatUsageQuota(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async -> ChatUsageQuota? {
     do {
-      let res: ChatUsageQuota = try await get("v1/users/me/usage-quota")
+      let res: ChatUsageQuota = try await get(
+        "v1/users/me/usage-quota",
+        authorizationSnapshot: authorizationSnapshot)
       log(
         "APIClient: Quota plan=\(res.plan) unit=\(res.unit) used=\(res.used) limit=\(res.limit ?? -1) allowed=\(res.allowed)"
       )
@@ -6315,7 +6186,8 @@ extension APIClient {
     limit: Int = 20,
     offset: Int = 0,
     includeTranscript: Bool = true,
-    expectedOwnerId: String? = nil
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> ToolResponse {
     var params =
       "v1/tools/conversations?limit=\(limit)&offset=\(offset)&include_transcript=\(includeTranscript)"
@@ -6324,7 +6196,8 @@ extension APIClient {
     return try await get(
       params,
       customBaseURL: nil,
-      expectedOwnerId: expectedOwnerId)
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   func toolSearchConversations(
@@ -6333,7 +6206,8 @@ extension APIClient {
     endDate: String? = nil,
     limit: Int = 5,
     includeTranscript: Bool = true,
-    expectedOwnerId: String? = nil
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> ToolResponse {
     let body = SearchRequest(
       query: query, startDate: startDate, endDate: endDate, limit: limit,
@@ -6342,7 +6216,8 @@ extension APIClient {
       "v1/tools/conversations/search",
       body: body,
       customBaseURL: nil,
-      expectedOwnerId: expectedOwnerId)
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   func toolGetMemories(
@@ -6350,7 +6225,8 @@ extension APIClient {
     offset: Int = 0,
     startDate: String? = nil,
     endDate: String? = nil,
-    expectedOwnerId: String? = nil
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> ToolResponse {
     var params = "v1/tools/memories?limit=\(limit)&offset=\(offset)"
     if let sd = startDate { params += "&start_date=\(encodeQueryDate(sd))" }
@@ -6358,20 +6234,23 @@ extension APIClient {
     return try await get(
       params,
       customBaseURL: nil,
-      expectedOwnerId: expectedOwnerId)
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   func toolSearchMemories(
     query: String,
     limit: Int = 5,
-    expectedOwnerId: String? = nil
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> ToolResponse {
     let body = MemorySearchRequest(query: query, limit: limit)
     return try await post(
       "v1/tools/memories/search",
       body: body,
       customBaseURL: nil,
-      expectedOwnerId: expectedOwnerId)
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   func toolGetActionItems(
@@ -6382,7 +6261,8 @@ extension APIClient {
     endDate: String? = nil,
     dueStartDate: String? = nil,
     dueEndDate: String? = nil,
-    expectedOwnerId: String? = nil
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> ToolResponse {
     var params = "v1/tools/action-items?limit=\(limit)&offset=\(offset)"
     if let c = completed { params += "&completed=\(c)" }
@@ -6393,14 +6273,16 @@ extension APIClient {
     return try await get(
       params,
       customBaseURL: nil,
-      expectedOwnerId: expectedOwnerId)
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   func toolCreateActionItem(
     description: String,
     dueAt: String? = nil,
     conversationId: String? = nil,
-    expectedOwnerId: String? = nil
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> ToolResponse {
     let body = CreateActionItemRequest(
       description: description, dueAt: dueAt, conversationId: conversationId)
@@ -6408,7 +6290,8 @@ extension APIClient {
       "v1/tools/action-items",
       body: body,
       customBaseURL: nil,
-      expectedOwnerId: expectedOwnerId)
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   func toolUpdateActionItem(
@@ -6416,14 +6299,16 @@ extension APIClient {
     completed: Bool? = nil,
     description: String? = nil,
     dueAt: String? = nil,
-    expectedOwnerId: String? = nil
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> ToolResponse {
     let body = UpdateActionItemRequest(completed: completed, description: description, dueAt: dueAt)
     return try await patch(
       "v1/tools/action-items/\(id)",
       body: body,
       customBaseURL: nil,
-      expectedOwnerId: expectedOwnerId)
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   func toolCreateCalendarEvent(
@@ -6433,7 +6318,8 @@ extension APIClient {
     description: String? = nil,
     location: String? = nil,
     attendees: String? = nil,
-    expectedOwnerId: String? = nil
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> ToolResponse {
     let body = CreateCalendarEventRequest(
       title: title,
@@ -6447,7 +6333,8 @@ extension APIClient {
       "v1/tools/calendar-events",
       body: body,
       customBaseURL: nil,
-      expectedOwnerId: expectedOwnerId)
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   // MARK: - X (Twitter) Connector

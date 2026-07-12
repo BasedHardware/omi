@@ -103,6 +103,74 @@ enum RealtimeHubLifecyclePolicy {
   }
 }
 
+/// Immutable account identity attached to a realtime socket, its context, and
+/// every token mint that may create or replace it. `signedOut` is a real scope,
+/// distinct from the absence of a session, so a later sign-in cannot inherit a
+/// socket that was warmed from signed-out/BYOK state.
+enum RealtimeHubOwnerScope: Equatable, Sendable {
+  case authenticated(String)
+  case signedOut
+
+  static func capture(currentOwnerID: String?) -> RealtimeHubOwnerScope {
+    guard let ownerID = currentOwnerID?.trimmingCharacters(in: .whitespacesAndNewlines),
+      !ownerID.isEmpty
+    else { return .signedOut }
+    return .authenticated(ownerID)
+  }
+
+  var authenticatedOwnerID: String? {
+    guard case .authenticated(let ownerID) = self else { return nil }
+    return ownerID
+  }
+
+  func isCurrent(currentOwnerID: String?) -> Bool {
+    self == Self.capture(currentOwnerID: currentOwnerID)
+  }
+}
+
+#if DEBUG
+struct RealtimeHubOwnerBoundarySnapshot: Equatable {
+  let hasPhysicalSession: Bool
+  let physicalOwnerID: String?
+  let prefetchedOwnerID: String?
+  let prefetchedContextIsEmpty: Bool
+  let hasPendingOwnerWork: Bool
+  let hubConnected: Bool
+  let turnAudioByteCount: Int
+}
+#endif
+
+/// Shared owner policy used by warm reuse, delayed mint completion, and
+/// barge-in replacement. Keeping these three paths on one decision surface
+/// prevents a future reconnect path from accidentally weakening the fence.
+enum RealtimeHubOwnerFence {
+  static func canReuseWarmSession(
+    sessionOwner: RealtimeHubOwnerScope?,
+    currentOwnerID: String?
+  ) -> Bool {
+    guard let sessionOwner else { return false }
+    return sessionOwner.isCurrent(currentOwnerID: currentOwnerID)
+  }
+
+  static func acceptsMintCompletion(
+    mintOwner: RealtimeHubOwnerScope,
+    currentOwnerID: String?
+  ) -> Bool {
+    mintOwner.isCurrent(currentOwnerID: currentOwnerID)
+  }
+
+  static func acceptsBargeInReplacement(
+    sessionOwner: RealtimeHubOwnerScope?,
+    replacementOwner: RealtimeHubOwnerScope?,
+    currentOwnerID: String?
+  ) -> Bool {
+    guard let sessionOwner, let replacementOwner, sessionOwner == replacementOwner else {
+      return false
+    }
+    return replacementOwner.isCurrent(currentOwnerID: currentOwnerID)
+  }
+}
+
 enum RealtimeNativeAudioScheduleFailureAction: Equatable {
   case keepTextFallback
   case failTurnAfterPartialPlayback
@@ -512,7 +580,7 @@ enum RealtimeExternalRunTerminalPolicy {
     switch reason {
     case .success:
       return .completed
-    case .tooShort, .silentRejected, .cancelled, .interruptedByBargeIn,
+    case .tooShort, .silentRejected, .cancelled, .ownerChanged, .interruptedByBargeIn,
       .explicitInterrupt, .cleanup:
       return .cancelled
     case .permissionDenied, .captureFailed, .transcriptionFailed, .providerFailed,
@@ -687,6 +755,24 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var voiceResponseID: VoiceResponseID?
   private var sessionProvider: RealtimeHubProvider?
   private var sessionAuth: HubAuth?
+  /// Sessions detach from logical ownership synchronously, then close on their
+  /// transport queue. Retain them until that queue drains so an effective-owner
+  /// transition can await every teardown already initiated by reducer effects.
+  private var detachedSessionsAwaitingDrain: [ObjectIdentifier: RealtimeHubSession] = [:]
+  private struct PhysicalSessionOwnerBinding {
+    let sourceID: ObjectIdentifier
+    let ownerScope: RealtimeHubOwnerScope
+  }
+  /// Replaced atomically with each physical session. The identity fields are
+  /// immutable and the object identifier prevents a scope from drifting onto a
+  /// different socket through an independent property assignment.
+  private var sessionOwnerBinding: PhysicalSessionOwnerBinding?
+  private var sessionOwnerScope: RealtimeHubOwnerScope? {
+    guard let session, let binding = sessionOwnerBinding,
+      binding.sourceID == ObjectIdentifier(session)
+    else { return nil }
+    return binding.ownerScope
+  }
   private var pcmPlayer: StreamingPCMPlayer?
   private lazy var responseGlowGate = RealtimeResponseGlowGate { [weak self] active, lease in
     guard self != nil, let lease,
@@ -706,6 +792,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var prefetchedVoiceContextSessionID = ""
   private var prefetchedVoiceContextFreshnessIdentity = ""
   private var prefetchedVoiceContextTurnIDs: Set<String> = []
+  private var prefetchedVoiceContextOwnerScope: RealtimeHubOwnerScope?
   /// Typed snapshot identity baked into the current warm session's instructions.
   private var sessionVoiceContextFreshnessIdentity = ""
   private var voiceContextPrefetchTask: Task<Void, Never>?
@@ -733,6 +820,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var bargeInReplacementGeneration: UInt64 = 0
   private var pendingBargeInProvider: RealtimeHubProvider?
   private var pendingBargeInAuth: HubAuth?
+  private var pendingBargeInOwnerScope: RealtimeHubOwnerScope?
   /// Gemini input-transcription events do not carry a stable per-item ID. Once a
   /// turn completes, require a fresh provider session before accepting another PTT
   /// turn so a late event from A can never be attributed to B.
@@ -769,8 +857,25 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// live in `VoiceTurn`; each correlation returns the reducer-issued identity.
   private var toolEffectIdentityByTransportKey: [String: VoiceEffectIdentity] = [:]
   private struct ExternalRunAuthorityState {
+    let ownerID: String
     let turnID: VoiceTurnID
     let task: Task<ExternalSurfaceRunBinding, Error>
+  }
+  private struct ExternalRunTerminalizationResult: Sendable {
+    let binding: ExternalSurfaceRunBinding?
+    let cleanupCapability: RuntimeOwnerTransitionCleanupCapability?
+    let closed: Bool
+    let failureCode: String?
+  }
+  private enum ExternalRunBindingResolution: Sendable {
+    case bound(ExternalSurfaceRunBinding)
+    case failed(String)
+  }
+  private struct TrackedExternalRunTerminalization {
+    let ownerID: String
+    let terminalStatus: ExternalSurfaceRunTerminalStatus
+    let errorCode: String?
+    let task: Task<ExternalRunTerminalizationResult, Never>
   }
   private struct DeferredRealtimeToolInvocation {
     let source: RealtimeHubSession
@@ -784,6 +889,22 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private static let externalRunClientID = "omi-realtime-voice"
   private static let externalRunHarnessMode = "piMono"
   private var externalRunAuthorityState: ExternalRunAuthorityState?
+  private var externalRunTerminalizations: [UUID: TrackedExternalRunTerminalization] = [:]
+  /// The begin RPC itself is bounded to 10 seconds. Two seconds of scheduling
+  /// margin keeps owner replacement bounded without abandoning a request that
+  /// can still create a physical kernel run. A task still in process startup is
+  /// cancelled; AgentRuntimeProcess revalidates A immediately before its wire
+  /// mutation, so it cannot create a late run after B becomes visible.
+  private static let ownerTransitionExternalRunBindingTimeout: Duration = .seconds(12)
+#if DEBUG
+  private var ownerBoundaryExternalRunCompletion:
+    (@Sendable (
+      ExternalSurfaceRunBinding,
+      ExternalSurfaceRunTerminalStatus,
+      String?,
+      RuntimeOwnerTransitionCleanupCapability?
+    ) async throws -> Void)?
+#endif
   private var deferredRealtimeToolInvocations =
     RealtimeDeferredToolQueue<DeferredRealtimeToolInvocation>()
   private var authorizedRealtimeInvocations: [String: RealtimeAuthorizedToolInvocation] = [:]
@@ -802,6 +923,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// failure. Reset when a socket survives past the idle window or a turn completes.
   private var hubReconnectStrikes = 0
   private var pendingSessionRefreshReason: String?
+  /// Invalidates delayed reconnect callbacks admitted by a previous owner.
+  private var ownerBoundaryGeneration: UInt64 = 0
   /// After this many consecutive fast failures (e.g. a stale/revoked key failing auth),
   /// the hub stops re-warming so it doesn't hammer a dead endpoint.
   private static let maxReconnectStrikes = 5
@@ -858,6 +981,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   /// In-flight ephemeral mint guard (managed users).
   private var minting = false
+  private var mintGeneration: UInt64 = 0
+  private var mintOwnerScope: RealtimeHubOwnerScope?
   /// A Gemini active-reply barge-in replaces the whole session. Managed sessions
   /// need a fresh one-use token first, so hold early mic chunks/commit until the
   /// replacement session exists and can use its normal socket-open buffering.
@@ -891,6 +1016,323 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// it, otherwise the user/Auto-selected one.
   private var effectiveProvider: RealtimeHubProvider {
     fallbackProvider ?? RealtimeHubSettings.shared.provider
+  }
+
+  private var currentOwnerScope: RealtimeHubOwnerScope {
+    RealtimeHubOwnerScope.capture(currentOwnerID: RuntimeOwnerIdentity.currentOwnerId())
+  }
+
+  private func isOwnerScopeCurrent(_ scope: RealtimeHubOwnerScope) -> Bool {
+    scope.isCurrent(currentOwnerID: RuntimeOwnerIdentity.currentOwnerId())
+  }
+
+  /// Account replacement is a hard physical boundary: detach the old socket,
+  /// cancel any reducer turn still owned by it, and discard its rendered context
+  /// before the replacement account can warm a session.
+  private func discardSessionAfterOwnerChange() {
+    if let turnID = VoiceTurnCoordinator.shared.activeTurnID {
+      _ = VoiceTurnCoordinator.shared.requireCurrentOwner(for: turnID)
+    }
+    teardownSession()
+    prefetchedVoiceContext = ""
+    prefetchedVoiceContextSessionID = ""
+    prefetchedVoiceContextFreshnessIdentity = ""
+    prefetchedVoiceContextTurnIDs.removeAll()
+    prefetchedVoiceContextOwnerScope = nil
+  }
+
+  /// Hard physical owner boundary. Persisted defaults still name the previous
+  /// owner, but authorization is already revoked; transport queues drain before
+  /// defaults mutate to the replacement owner.
+  func quiesceForEffectiveOwnerTransition(
+    previousOwnerID: String?,
+    cleanupCapability: RuntimeOwnerTransitionCleanupCapability
+  ) async {
+    guard RuntimeOwnerIdentity.authorizesTransitionCleanup(
+      cleanupCapability,
+      previousOwnerID: previousOwnerID)
+    else {
+      assertionFailure("Realtime owner cleanup capability mismatched")
+      return
+    }
+    if let externalRunAuthorityState {
+      if externalRunAuthorityState.ownerID == previousOwnerID {
+        completeExternalRunAuthority(
+          turnID: externalRunAuthorityState.turnID,
+          reason: .ownerChanged)
+      } else {
+        assertionFailure("Realtime external run owner did not match transition cleanup owner")
+        externalRunAuthorityState.task.cancel()
+        self.externalRunAuthorityState = nil
+      }
+    }
+    ownerBoundaryGeneration &+= 1
+    voiceContextRefreshGeneration &+= 1
+    turnPersistenceGeneration &+= 1
+    turnEpoch &+= 1
+    realtimePlaybackEpoch &+= 1
+    mintGeneration &+= 1
+    minting = false
+    mintOwnerScope = nil
+
+    voiceContextPrefetchTask?.cancel()
+    voiceContextPrefetchTask = nil
+    turnPreparationTask?.cancel()
+    turnPreparationTask = nil
+    turnPersistenceTask?.cancel()
+    turnPersistenceTask = nil
+    legacyVoiceJournalImportTask?.cancel()
+    legacyVoiceJournalImportTask = nil
+    deferredSessionRefreshTask?.cancel()
+    deferredSessionRefreshTask = nil
+    canceledTurnRewarmTask?.cancel()
+    canceledTurnRewarmTask = nil
+    earlyLIDTask?.cancel()
+    earlyLIDTask = nil
+    fullLIDTask?.cancel()
+    fullLIDTask = nil
+
+    pcmPlayer?.stop()
+    responseGlowGate.clearImmediately()
+    pendingSessionRefreshReason = nil
+    reconnectPending = false
+    hubReconnectStrikes = 0
+    fallbackProvider = nil
+    pendingFailoverReason = nil
+    cancelContinuityFenceActive = false
+    cancelContinuityFenceTurnID = nil
+    inputTurnActivityStartPending = false
+    turnTranscript = ""
+    providerTranscriptFinalized = false
+    assistantText = ""
+    audioReceivedThisTurn = false
+    turnIdempotencyKey = ""
+    turnAudio16k.removeAll()
+    turnEarlyVerdictCode = nil
+    lastTurnDiagnostics.removeAll()
+    testProviderTranscriptOverride = nil
+    journalAcceptanceByContinuityKey.removeAll()
+    acceptedSpawnJournalReceiptByContinuityKey.removeAll()
+    pendingJournalContinuityKeys.removeAll()
+    prefetchedVoiceContext = ""
+    prefetchedVoiceContextSessionID = ""
+    prefetchedVoiceContextFreshnessIdentity = ""
+    prefetchedVoiceContextTurnIDs.removeAll()
+    prefetchedVoiceContextOwnerScope = nil
+
+    if let detachedSession = detachPhysicalSessionForTeardown() {
+      schedulePhysicalSessionTeardown(detachedSession)
+    }
+    let sessionsToDrain = Array(detachedSessionsAwaitingDrain.values)
+    for detachedSession in sessionsToDrain {
+      await detachedSession.stopAndWait()
+      detachedSessionsAwaitingDrain.removeValue(forKey: ObjectIdentifier(detachedSession))
+    }
+    await drainExternalRunTerminalizations(
+      previousOwnerID: previousOwnerID,
+      cleanupCapability: cleanupCapability)
+    log(
+      "RealtimeHub: drained physical session before replacing owner "
+        + (previousOwnerID == nil ? "signed_out" : "authenticated"))
+  }
+
+  private func drainExternalRunTerminalizations(
+    previousOwnerID: String?,
+    cleanupCapability: RuntimeOwnerTransitionCleanupCapability
+  ) async {
+    guard RuntimeOwnerIdentity.authorizesTransitionCleanup(
+      cleanupCapability,
+      previousOwnerID: previousOwnerID)
+    else {
+      assertionFailure("Realtime cleanup capability expired before external-run drain")
+      return
+    }
+    guard let previousOwnerID else {
+      if !externalRunTerminalizations.isEmpty {
+        assertionFailure("Signed-out cleanup found an owner-bound external run")
+      }
+      return
+    }
+
+    let matching = externalRunTerminalizations.filter { $0.value.ownerID == previousOwnerID }
+    for (id, tracked) in matching {
+      var result = await tracked.task.value
+      if !result.closed, let binding = result.binding {
+        result = await terminalizeExternalRun(
+          binding: binding,
+          terminalStatus: tracked.terminalStatus,
+          errorCode: tracked.errorCode,
+          cleanupCapability: cleanupCapability)
+      }
+      if let usedCapability = result.cleanupCapability,
+        usedCapability != cleanupCapability
+      {
+        assertionFailure("External-run cleanup used the wrong transition generation")
+      }
+      if !result.closed, result.binding != nil {
+        assertionFailure(
+          "External voice run remained active at owner boundary: "
+            + (result.failureCode ?? "unknown"))
+      }
+      removeTrackedExternalRunTerminalization(id)
+    }
+#if DEBUG
+    ownerBoundaryExternalRunCompletion = nil
+#endif
+  }
+
+#if DEBUG
+  /// Installs a detached, never-started physical session so owner-boundary
+  /// tests exercise the production controller without network or wall clocks.
+  func installOwnerBoundaryFixture(ownerID: String) {
+    teardownSession()
+    let ownerScope = RealtimeHubOwnerScope.authenticated(ownerID)
+    let fixtureSession = RealtimeHubSession(
+      provider: .openai,
+      auth: .byokKey("owner-boundary-fixture"),
+      instructions: "owner-boundary-fixture",
+      delegate: self)
+    session = fixtureSession
+    voiceSessionID = VoiceSessionID()
+    sessionProvider = .openai
+    sessionAuth = .byokKey("owner-boundary-fixture")
+    sessionOwnerBinding = PhysicalSessionOwnerBinding(
+      sourceID: ObjectIdentifier(fixtureSession),
+      ownerScope: ownerScope)
+    hubConnected = true
+    prefetchedVoiceContext = "owner-private-context"
+    prefetchedVoiceContextSessionID = "owner-session"
+    prefetchedVoiceContextFreshnessIdentity = "owner-freshness"
+    prefetchedVoiceContextTurnIDs = ["owner-turn"]
+    prefetchedVoiceContextOwnerScope = ownerScope
+    pendingSessionRefreshReason = "owner-fixture-refresh"
+    pendingJournalContinuityKeys = ["owner-fixture-journal"]
+    turnAudio16k = Data(repeating: 1, count: 16)
+  }
+
+  /// Hermetic kernel-side external-run seam. The supplied closure is the
+  /// physical daemon completion boundary; owner-transition tests suspend it to
+  /// prove persisted owner mutation waits for a terminal receipt.
+  func installOwnerBoundaryExternalRunFixture(
+    ownerID: String,
+    turnID: VoiceTurnID,
+    onComplete: @escaping @Sendable (
+      ExternalSurfaceRunBinding,
+      ExternalSurfaceRunTerminalStatus,
+      String?,
+      RuntimeOwnerTransitionCleanupCapability?
+    ) async throws -> Void
+  ) {
+    let binding = ExternalSurfaceRunBinding(
+      ownerID: ownerID,
+      sessionID: "owner-boundary-session",
+      turnID: turnID.rawValue.uuidString.lowercased(),
+      runID: "owner-boundary-run",
+      attemptID: "owner-boundary-attempt",
+      duplicate: false)
+    externalRunAuthorityState?.task.cancel()
+    externalRunAuthorityState = ExternalRunAuthorityState(
+      ownerID: ownerID,
+      turnID: turnID,
+      task: Task { binding })
+    ownerBoundaryExternalRunCompletion = onComplete
+  }
+
+  /// Installs a begin task that completed without a binding. This models the
+  /// conservative side of a lost/failed begin receipt: Swift cannot prove that
+  /// Node did not create a run, so transition tracking must retain the entry
+  /// until the owner-wide runtime revocation barrier completes.
+  func installOwnerBoundaryUnresolvedExternalRunFixture(
+    ownerID: String,
+    turnID: VoiceTurnID
+  ) {
+    externalRunAuthorityState?.task.cancel()
+    externalRunAuthorityState = ExternalRunAuthorityState(
+      ownerID: ownerID,
+      turnID: turnID,
+      task: Task<ExternalSurfaceRunBinding, Error> {
+        throw ExternalSurfaceAuthorityError(code: "owner_boundary_begin_receipt_lost")
+      })
+    ownerBoundaryExternalRunCompletion = nil
+  }
+
+  /// Deterministically awaits and reconciles every tracked terminalization so
+  /// tests inspect the same pruning policy as the production completion task.
+  func settleOwnerBoundaryExternalRunTerminalizations() async {
+    let tracked = externalRunTerminalizations
+    for (id, terminalization) in tracked {
+      let result = await terminalization.task.value
+      reconcileTrackedExternalRunTerminalization(id: id, result: result)
+    }
+  }
+
+  var ownerBoundarySnapshot: RealtimeHubOwnerBoundarySnapshot {
+    RealtimeHubOwnerBoundarySnapshot(
+      hasPhysicalSession: session != nil,
+      physicalOwnerID: sessionOwnerScope?.authenticatedOwnerID,
+      prefetchedOwnerID: prefetchedVoiceContextOwnerScope?.authenticatedOwnerID,
+      prefetchedContextIsEmpty: prefetchedVoiceContext.isEmpty,
+      hasPendingOwnerWork: pendingSessionRefreshReason != nil
+        || !pendingJournalContinuityKeys.isEmpty
+        || voiceContextPrefetchTask != nil
+        || turnPreparationTask != nil
+        || turnPersistenceTask != nil
+        || !detachedSessionsAwaitingDrain.isEmpty
+        || externalRunAuthorityState != nil
+        || !externalRunTerminalizations.isEmpty,
+      hubConnected: hubConnected,
+      turnAudioByteCount: turnAudio16k.count)
+  }
+#endif
+
+  @discardableResult
+  private func discardMismatchedSessionIfNeeded() -> Bool {
+    guard session != nil else { return false }
+    guard
+      !RealtimeHubOwnerFence.canReuseWarmSession(
+        sessionOwner: sessionOwnerScope,
+        currentOwnerID: RuntimeOwnerIdentity.currentOwnerId())
+    else { return false }
+    log("RealtimeHub: detaching physical session after authenticated owner changed")
+    discardSessionAfterOwnerChange()
+    return true
+  }
+
+  private func beginMint(ownerScope: RealtimeHubOwnerScope) -> UInt64? {
+    guard !minting else { return nil }
+    mintGeneration &+= 1
+    minting = true
+    mintOwnerScope = ownerScope
+    return mintGeneration
+  }
+
+  @discardableResult
+  private func releaseMint(generation: UInt64, ownerScope: RealtimeHubOwnerScope) -> Bool {
+    guard minting, mintGeneration == generation, mintOwnerScope == ownerScope else {
+      return false
+    }
+    minting = false
+    mintOwnerScope = nil
+    return true
+  }
+
+  private func acceptMintCompletionOrRewarm(
+    generation: UInt64,
+    ownerScope: RealtimeHubOwnerScope
+  ) -> Bool {
+    guard mintGeneration == generation, mintOwnerScope == ownerScope else { return false }
+    guard
+      RealtimeHubOwnerFence.acceptsMintCompletion(
+        mintOwner: ownerScope,
+        currentOwnerID: RuntimeOwnerIdentity.currentOwnerId())
+    else {
+      _ = releaseMint(generation: generation, ownerScope: ownerScope)
+      log("RealtimeHub: discarding token mint completed after authenticated owner changed")
+      clearBargeInReplacementState()
+      ensureWarm()
+      return false
+    }
+    return true
   }
 
   /// Switch to the other realtime provider after the current one fails to connect.
@@ -945,6 +1387,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   ) -> Bool {
     guard fallbackProvider == nil,
       let pendingTurn = replacementAudioBuffer,
+      let replacementOwnerScope = pendingBargeInOwnerScope,
+      isOwnerScopeCurrent(replacementOwnerScope),
       let responseID = voiceResponseID
     else { return false }
 
@@ -965,11 +1409,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     teardownSession()
     replacementAudioBuffer = pendingTurn
     voiceResponseID = responseID
+    pendingBargeInOwnerScope = replacementOwnerScope
 
     if let key = APIKeyService.byokKey(alternate.byokProvider) {
       pendingBargeInProvider = alternate
       pendingBargeInAuth = .byokKey(key)
-      startReplacementSessionForBargeIn(provider: alternate, auth: .byokKey(key))
+      startReplacementSessionForBargeIn(
+        provider: alternate,
+        auth: .byokKey(key),
+        ownerScope: replacementOwnerScope)
       return true
     }
     guard AuthService.shared.isSignedIn else { return false }
@@ -1018,7 +1466,19 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // reconnect, or a just-switched provider): PTT transparently uses the legacy cascade
     // instead, so a broken hub never costs the user a turn. The hub re-warms in the
     // background and flips this true once it connects.
-    hubConnected
+    guard
+      RealtimeHubOwnerFence.canReuseWarmSession(
+        sessionOwner: sessionOwnerScope,
+        currentOwnerID: RuntimeOwnerIdentity.currentOwnerId())
+    else {
+      if session != nil {
+        log("RealtimeHub: refusing warm socket owned by a previous authenticated user")
+        discardSessionAfterOwnerChange()
+        ensureWarm()
+      }
+      return false
+    }
+    return hubConnected
       && (sessionProvider == RealtimeHubSettings.shared.provider
         || sessionProvider == fallbackProvider)
   }
@@ -1212,13 +1672,19 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     forceTranscript: String?,
     textOnly: Bool
   ) async -> [String: String] {
+    guard !RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress else {
+      return ["error": "local-profile realtime transport unavailable during owner transition"]
+    }
     guard let forceTranscript, !forceTranscript.trimmingCharacters(
       in: .whitespacesAndNewlines).isEmpty
     else {
       return ["error": "local-profile ptt_test_turn requires a non-empty force_transcript"]
     }
 
-    guard await refreshVoiceContextSnapshot(), !prefetchedVoiceContextSessionID.isEmpty else {
+    guard await refreshVoiceContextSnapshot(),
+      !RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress,
+      !prefetchedVoiceContextSessionID.isEmpty
+    else {
       return ["error": "local-profile realtime voice context session is unavailable"]
     }
     guard
@@ -1230,8 +1696,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       return ["error": "local-profile realtime provider could not plan the test turn"]
     }
 
+    let localOwnerScope = currentOwnerScope
     teardownSession()
-    let context = voiceSessionContext()
+    let context = voiceSessionContext(for: localOwnerScope)
     sessionVoiceContextFreshnessIdentity = context.snapshotFreshnessIdentity
     let localSession = RealtimeHubSession(
       provider: .openai,
@@ -1244,6 +1711,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     voiceSessionID = VoiceSessionID()
     sessionProvider = .openai
     sessionAuth = .byokKey("omi-local-profile-stub")
+    sessionOwnerBinding = PhysicalSessionOwnerBinding(
+      sourceID: ObjectIdentifier(localSession),
+      ownerScope: localOwnerScope)
     localSession.markReadyForTesting()
     guard await waitUntilActive(timeout: min(3, max(1, timeout))) else {
       return ["error": "local-profile realtime transport did not become active"]
@@ -1427,7 +1897,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     resetFailoverForProviderSettingsChange()
     // Only reconnect if the provider actually changed — avoids redundant
     // teardown/recreate races on unrelated notifications.
-    if session != nil, sessionProvider == RealtimeHubSettings.shared.provider { return }
+    if session != nil, sessionProvider == RealtimeHubSettings.shared.provider,
+      RealtimeHubOwnerFence.canReuseWarmSession(
+        sessionOwner: sessionOwnerScope,
+        currentOwnerID: RuntimeOwnerIdentity.currentOwnerId())
+    {
+      return
+    }
     teardownSession()
     ensureWarm()
   }
@@ -1524,6 +2000,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// client-direct with the user's key. Otherwise, if signed in → mint a server-side
   /// ephemeral token and connect with it.
   func ensureWarm() {
+    guard !RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress else {
+      log("RealtimeHub: warm start denied during effective-owner transition")
+      return
+    }
     guard !cancelContinuityFenceActive else {
       log("RealtimeHub: general warm deferred behind canceled-turn continuity fence")
       return
@@ -1536,7 +2016,18 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       return
     }
     let provider = effectiveProvider
-    if session != nil, sessionProvider == provider { return }
+    let ownerScope = currentOwnerScope
+    if session != nil, sessionProvider == provider,
+      RealtimeHubOwnerFence.canReuseWarmSession(
+        sessionOwner: sessionOwnerScope,
+        currentOwnerID: RuntimeOwnerIdentity.currentOwnerId())
+    {
+      return
+    }
+    if session != nil, sessionOwnerScope != ownerScope {
+      log("RealtimeHub: rebuilding warm session after authenticated owner changed")
+      discardSessionAfterOwnerChange()
+    }
     if session != nil { teardownSession() }
 
     if let key = APIKeyService.byokKey(provider.byokProvider) {
@@ -1549,7 +2040,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         if failoverToAlternateProvider(reason: "auth") {
           return
         } else if AuthService.shared.isSignedIn {
-          mintAndConnect(provider: provider)
+          guard case .authenticated = ownerScope else { return }
+          mintAndConnect(provider: provider, ownerScope: ownerScope)
         } else {
           CredentialHealthManager.shared.recordProviderFailure(
             .providerAuthFailed(provider: provider, mode: .byok),
@@ -1560,9 +2052,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         }
         return
       }
-      startSession(provider: provider, auth: .byokKey(key))
+      startSession(provider: provider, auth: .byokKey(key), ownerScope: ownerScope)
     } else if AuthService.shared.isSignedIn {
-      mintAndConnect(provider: provider)
+      guard case .authenticated = ownerScope else {
+        log("RealtimeHub: signed-in state has no stable owner identity — hub unavailable")
+        return
+      }
+      mintAndConnect(provider: provider, ownerScope: ownerScope)
     } else {
       log("RealtimeHub: no BYOK key and not signed in — hub unavailable (cascade).")
     }
@@ -1579,21 +2075,144 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
     completedAuthorizedRealtimeInvocationIDs.removeAll()
     let terminalStatus = RealtimeExternalRunTerminalPolicy.status(for: reason)
-    Task {
-      do {
-        let binding = try await state.task.value
+    let errorCode = terminalStatus == .failed ? reason.rawValue : nil
+    let terminalizationID = UUID()
+    let task = Task { @MainActor [weak self] in
+      let resolution = await awaitWithTimeout(
+        Self.ownerTransitionExternalRunBindingTimeout
+      ) { () -> ExternalRunBindingResolution in
+        do {
+          return .bound(try await state.task.value)
+        } catch {
+          let code = (error as? ExternalSurfaceAuthorityError)?.code
+            ?? "external_surface_begin_failed"
+          return .failed(code)
+        }
+      }
+      switch resolution {
+      case .some(.bound(let binding)):
+        guard let self else {
+          return ExternalRunTerminalizationResult(
+            binding: binding,
+            cleanupCapability: nil,
+            closed: false,
+            failureCode: "realtime_controller_released")
+        }
+        return await self.terminalizeExternalRun(
+          binding: binding,
+          terminalStatus: terminalStatus,
+          errorCode: errorCode)
+      case .some(.failed(let code)):
+        log("RealtimeHub: external run completion failed code=\(code)")
+        return ExternalRunTerminalizationResult(
+          binding: nil,
+          cleanupCapability: nil,
+          closed: false,
+          failureCode: code)
+      case .none:
+        state.task.cancel()
+        log("RealtimeHub: external run begin drain timed out at owner boundary")
+        return ExternalRunTerminalizationResult(
+          binding: nil,
+          cleanupCapability: nil,
+          closed: false,
+          failureCode: "external_surface_begin_drain_timeout")
+      }
+    }
+    trackExternalRunTerminalization(
+      id: terminalizationID,
+      ownerID: state.ownerID,
+      terminalStatus: terminalStatus,
+      errorCode: errorCode,
+      task: task)
+  }
+
+  private func terminalizeExternalRun(
+    binding: ExternalSurfaceRunBinding,
+    terminalStatus: ExternalSurfaceRunTerminalStatus,
+    errorCode: String?,
+    cleanupCapability: RuntimeOwnerTransitionCleanupCapability? = nil
+  ) async -> ExternalRunTerminalizationResult {
+    let effectiveCleanupCapability = cleanupCapability
+      ?? RuntimeOwnerIdentity.transitionCleanupCapability(
+        forPreviousOwnerID: binding.ownerID)
+    do {
+#if DEBUG
+      if let ownerBoundaryExternalRunCompletion {
+        try await ownerBoundaryExternalRunCompletion(
+          binding,
+          terminalStatus,
+          errorCode,
+          effectiveCleanupCapability)
+      } else {
         _ = try await AgentRuntimeProcess.shared.completeExternalSurfaceRun(
           clientId: Self.externalRunClientID,
           harnessMode: Self.externalRunHarnessMode,
           binding: binding,
           terminalStatus: terminalStatus,
-          errorCode: terminalStatus == .failed ? reason.rawValue : nil)
-      } catch {
-        let code = (error as? ExternalSurfaceAuthorityError)?.code
-          ?? "external_surface_complete_failed"
-        log("RealtimeHub: external run completion failed code=\(code)")
+          errorCode: errorCode,
+          transitionCleanupCapability: effectiveCleanupCapability)
       }
+#else
+      _ = try await AgentRuntimeProcess.shared.completeExternalSurfaceRun(
+        clientId: Self.externalRunClientID,
+        harnessMode: Self.externalRunHarnessMode,
+        binding: binding,
+        terminalStatus: terminalStatus,
+        errorCode: errorCode,
+        transitionCleanupCapability: effectiveCleanupCapability)
+#endif
+      return ExternalRunTerminalizationResult(
+        binding: binding,
+        cleanupCapability: effectiveCleanupCapability,
+        closed: true,
+        failureCode: nil)
+    } catch {
+      let code = (error as? ExternalSurfaceAuthorityError)?.code
+        ?? "external_surface_complete_failed"
+      log("RealtimeHub: external run completion failed code=\(code)")
+      return ExternalRunTerminalizationResult(
+        binding: binding,
+        cleanupCapability: effectiveCleanupCapability,
+        closed: false,
+        failureCode: code)
     }
+  }
+
+  private func trackExternalRunTerminalization(
+    id: UUID,
+    ownerID: String,
+    terminalStatus: ExternalSurfaceRunTerminalStatus,
+    errorCode: String?,
+    task: Task<ExternalRunTerminalizationResult, Never>
+  ) {
+    externalRunTerminalizations[id] = TrackedExternalRunTerminalization(
+      ownerID: ownerID,
+      terminalStatus: terminalStatus,
+      errorCode: errorCode,
+      task: task)
+
+    Task { @MainActor [weak self] in
+      let result = await task.value
+      guard let self else { return }
+      self.reconcileTrackedExternalRunTerminalization(id: id, result: result)
+    }
+  }
+
+  private func reconcileTrackedExternalRunTerminalization(
+    id: UUID,
+    result: ExternalRunTerminalizationResult
+  ) {
+    // Only a confirmed ordinary close is safe to forget. A failed begin with
+    // no binding is unresolved, not proof that Node created no run; retain it
+    // until owner quiescence's correlated owner-wide revocation barrier.
+    if result.cleanupCapability == nil, result.closed {
+      removeTrackedExternalRunTerminalization(id)
+    }
+  }
+
+  private func removeTrackedExternalRunTerminalization(_ id: UUID) {
+    externalRunTerminalizations.removeValue(forKey: id)
   }
 
   func voiceTurnDidTerminate(turnID: VoiceTurnID) {
@@ -1619,18 +2238,29 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Managed users: fetch a short-lived ephemeral token from the backend (gated by
   /// auth + paywall there), then connect. On any failure (incl. 402 not-entitled),
   /// leave the session nil so PTT falls back to the cascade.
-  private func mintAndConnect(provider: RealtimeHubProvider) {
-    guard !minting else { return }
-    minting = true
+  private func mintAndConnect(
+    provider: RealtimeHubProvider,
+    ownerScope: RealtimeHubOwnerScope
+  ) {
+    guard case .authenticated(let ownerID) = ownerScope,
+      isOwnerScopeCurrent(ownerScope),
+      let mintGeneration = beginMint(ownerScope: ownerScope)
+    else { return }
     let providerParam = provider == .openai ? "openai" : "gemini"
     log("RealtimeHub: minting ephemeral \(provider.displayName) token (managed)")
     Task { [weak self] in
       guard let self else { return }
       let token: String
       do {
-        token = try await APIClient.shared.mintRealtimeToken(provider: providerParam)
+        token = try await APIClient.shared.mintRealtimeToken(
+          provider: providerParam,
+          expectedOwnerID: ownerID)
       } catch let error as RealtimeTokenMintError {
-        self.minting = false
+        guard self.acceptMintCompletionOrRewarm(
+          generation: mintGeneration,
+          ownerScope: ownerScope)
+        else { return }
+        _ = self.releaseMint(generation: mintGeneration, ownerScope: ownerScope)
         self.recordRealtimeMintFailure(
           error, provider: providerParam, phase: "warm", context: "realtime_mint")
         if error.healthError.failureClass.isAccountWide {
@@ -1642,7 +2272,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         }
         return
       } catch let error as CredentialHealthError {
-        self.minting = false
+        guard self.acceptMintCompletionOrRewarm(
+          generation: mintGeneration,
+          ownerScope: ownerScope)
+        else { return }
+        _ = self.releaseMint(generation: mintGeneration, ownerScope: ownerScope)
         CredentialHealthManager.shared.record(error, context: "realtime_mint")
         DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
           provider: providerParam,
@@ -1658,7 +2292,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         }
         return
       } catch {
-        self.minting = false
+        guard self.acceptMintCompletionOrRewarm(
+          generation: mintGeneration,
+          ownerScope: ownerScope)
+        else { return }
+        _ = self.releaseMint(generation: mintGeneration, ownerScope: ownerScope)
         let typed = CredentialHealthError.backendTransient(
           statusCode: nil, message: error.localizedDescription)
         CredentialHealthManager.shared.record(typed, context: "realtime_mint")
@@ -1671,20 +2309,42 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         }
         return
       }
-      self.minting = false
-      // Provider may have changed (picker/failover) while minting; only connect if still wanted.
-      guard self.effectiveProvider == provider, self.session == nil
+      guard self.acceptMintCompletionOrRewarm(
+        generation: mintGeneration,
+        ownerScope: ownerScope)
       else { return }
-      self.startSession(provider: provider, auth: .ephemeral(token))
+      _ = self.releaseMint(generation: mintGeneration, ownerScope: ownerScope)
+      // Provider may have changed (picker/failover) while minting; only connect if still wanted.
+      guard self.effectiveProvider == provider, self.session == nil else {
+        self.ensureWarm()
+        return
+      }
+      self.startSession(
+        provider: provider,
+        auth: .ephemeral(token),
+        ownerScope: ownerScope)
     }
   }
 
-  private func startSession(provider: RealtimeHubProvider, auth: HubAuth) {
+  private func startSession(
+    provider: RealtimeHubProvider,
+    auth: HubAuth,
+    ownerScope: RealtimeHubOwnerScope
+  ) {
+    guard !RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress else {
+      log("RealtimeHub: physical session start denied during effective-owner transition")
+      return
+    }
     guard !cancelContinuityFenceActive else {
       log("RealtimeHub: session start rejected behind canceled-turn continuity fence")
       return
     }
-    let topLevelContext = voiceSessionContext()
+    guard isOwnerScopeCurrent(ownerScope) else {
+      log("RealtimeHub: session start rejected after authenticated owner changed")
+      ensureWarm()
+      return
+    }
+    let topLevelContext = voiceSessionContext(for: ownerScope)
     sessionVoiceContextFreshnessIdentity = topLevelContext.snapshotFreshnessIdentity
     let instructions = RealtimeHubTools.systemInstruction(
       kernelContext: topLevelContext.rendered,
@@ -1697,6 +2357,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     voiceSessionID = VoiceSessionID()
     sessionProvider = provider
     sessionAuth = auth
+    sessionOwnerBinding = PhysicalSessionOwnerBinding(
+      sourceID: ObjectIdentifier(s),
+      ownerScope: ownerScope)
     // Both providers stream native spoken audio (24k PCM) → StreamingPCMPlayer;
     // selected app voice playback handles any no-audio fallback.
     if pcmPlayer == nil {
@@ -1715,7 +2378,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   /// Exact context material selected and rendered by the kernel for realtime.
-  private func voiceSessionContext() -> VoiceSessionContext {
+  private func voiceSessionContext(for ownerScope: RealtimeHubOwnerScope) -> VoiceSessionContext {
+    guard prefetchedVoiceContextOwnerScope == ownerScope else {
+      return VoiceSessionContext(rendered: "", snapshotFreshnessIdentity: "")
+    }
     return VoiceSessionContext(
       rendered: prefetchedVoiceContext,
       snapshotFreshnessIdentity: prefetchedVoiceContextFreshnessIdentity
@@ -1727,17 +2393,21 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     voiceContextPrefetchTask?.cancel()
     voiceContextRefreshGeneration &+= 1
     let refreshGeneration = voiceContextRefreshGeneration
+    let ownerScope = currentOwnerScope
     voiceContextPrefetchTask = Task { [weak self] in
       await self?.importLegacyVoiceJournalIfNeeded()
+      guard let self, self.isOwnerScopeCurrent(ownerScope) else { return }
       let resolvedSnapshot = await FloatingControlBarManager.shared.kernelVoiceContextSnapshot()
       await MainActor.run {
-        guard let self, !Task.isCancelled,
-          self.voiceContextRefreshGeneration == refreshGeneration
+        guard !Task.isCancelled,
+          self.voiceContextRefreshGeneration == refreshGeneration,
+          self.isOwnerScopeCurrent(ownerScope)
         else { return }
         self.prefetchedVoiceContext = resolvedSnapshot.context
         self.prefetchedVoiceContextSessionID = resolvedSnapshot.sessionId
         self.prefetchedVoiceContextFreshnessIdentity = resolvedSnapshot.freshnessIdentity
         self.prefetchedVoiceContextTurnIDs = resolvedSnapshot.turnIDs
+        self.prefetchedVoiceContextOwnerScope = ownerScope
       }
     }
   }
@@ -1745,20 +2415,24 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   @discardableResult
   private func refreshVoiceContextSnapshot() async -> Bool {
     guard !Task.isCancelled else { return false }
+    let ownerScope = currentOwnerScope
     await importLegacyVoiceJournalIfNeeded()
-    guard !Task.isCancelled else { return false }
+    guard !Task.isCancelled, isOwnerScopeCurrent(ownerScope) else { return false }
     voiceContextPrefetchTask?.cancel()
     voiceContextPrefetchTask = nil
     voiceContextRefreshGeneration &+= 1
     let refreshGeneration = voiceContextRefreshGeneration
     let resolvedSnapshot = await FloatingControlBarManager.shared.kernelVoiceContextSnapshot()
-    guard !Task.isCancelled, voiceContextRefreshGeneration == refreshGeneration else {
+    guard !Task.isCancelled, voiceContextRefreshGeneration == refreshGeneration,
+      isOwnerScopeCurrent(ownerScope)
+    else {
       return false
     }
     prefetchedVoiceContext = resolvedSnapshot.context
     prefetchedVoiceContextSessionID = resolvedSnapshot.sessionId
     prefetchedVoiceContextFreshnessIdentity = resolvedSnapshot.freshnessIdentity
     prefetchedVoiceContextTurnIDs = resolvedSnapshot.turnIDs
+    prefetchedVoiceContextOwnerScope = ownerScope
     return true
   }
 
@@ -1766,7 +2440,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// version, renderer fingerprint, and capability version are the sole fence.
   private func reconnectWarmSessionIfContextStale() {
     guard session != nil else { return }
-    let current = voiceSessionContext()
+    let current = voiceSessionContext(for: currentOwnerScope)
     guard RealtimeVoiceContextRefreshPolicy.requiresRefresh(
       currentSnapshotIdentity: current.snapshotFreshnessIdentity,
       sessionSnapshotIdentity: sessionVoiceContextFreshnessIdentity
@@ -1787,10 +2461,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   ) -> Task<Bool, Never> {
     let previous = turnPersistenceTask
     turnPersistenceGeneration &+= 1
+    let persistenceGeneration = turnPersistenceGeneration
     pendingJournalContinuityKeys.insert(idempotencyKey)
     let task = Task { @MainActor in
       if let previous { _ = await previous.value }
       let accepted = await operation()
+      guard persistenceGeneration == turnPersistenceGeneration else { return false }
       if idempotencyKey == turnIdempotencyKey {
         journalAcceptanceByContinuityKey[idempotencyKey] = accepted
       }
@@ -1824,10 +2500,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       return AuthorizedToolExecution.isOwnerCurrent(ownerID)
     }
     guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
-    FloatingControlBarManager.shared.stageRealtimeVoiceTurn(
-      userText: userText,
-      assistantText: assistantText,
-      idempotencyKey: idempotencyKey)
     for attempt in 0..<2 {
       guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
       let accepted = await FloatingControlBarManager.shared.recordExchange(
@@ -1932,16 +2604,17 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
   }
 
-  private func teardownSession() {
+  private func detachPhysicalSessionForTeardown() -> RealtimeHubSession? {
+    let detachedSession = session
     // Detach first so a socket we're dropping can't deliver a late error/close to us
     // and tear down the fresh session we're about to create.
-    session?.detach()
-    session?.stop()
+    detachedSession?.detach()
     session = nil
     voiceSessionID = nil
     voiceResponseID = nil
     sessionProvider = nil
     sessionAuth = nil
+    sessionOwnerBinding = nil
     hubConnected = false  // no live session → PTT falls back to the cascade until re-warm
     sessionVoiceContextFreshnessIdentity = ""
     geminiSessionNeedsTurnBoundary = false
@@ -1950,6 +2623,23 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     pendingCompletedAgentDeltaAckIds.removeAll()
     pendingCompletedAgentDeltaHighWaterMs = nil
     clearRealtimeToolTracking()
+    return detachedSession
+  }
+
+  private func teardownSession() {
+    guard let detachedSession = detachPhysicalSessionForTeardown() else { return }
+    schedulePhysicalSessionTeardown(detachedSession)
+  }
+
+  private func schedulePhysicalSessionTeardown(_ detachedSession: RealtimeHubSession) {
+    let sessionID = ObjectIdentifier(detachedSession)
+    guard detachedSessionsAwaitingDrain[sessionID] == nil else { return }
+    detachedSessionsAwaitingDrain[sessionID] = detachedSession
+    Task { @MainActor [weak self, weak detachedSession] in
+      guard let detachedSession else { return }
+      await detachedSession.stopAndWait()
+      self?.detachedSessionsAwaitingDrain.removeValue(forKey: sessionID)
+    }
   }
 
   private func clearBargeInReplacementState() {
@@ -1957,6 +2647,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     replacementAudioBuffer = nil
     pendingBargeInProvider = nil
     pendingBargeInAuth = nil
+    pendingBargeInOwnerScope = nil
     bargeInContinuityTask?.cancel()
     bargeInContinuityTask = nil
   }
@@ -1965,16 +2656,26 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private func prepareBargeInReplacement() -> Bool {
     guard let provider = sessionProvider ?? pendingBargeInProvider,
       let auth = sessionAuth ?? pendingBargeInAuth,
+      let ownerScope = sessionOwnerScope ?? pendingBargeInOwnerScope,
+      RealtimeHubOwnerFence.acceptsBargeInReplacement(
+        sessionOwner: ownerScope,
+        replacementOwner: ownerScope,
+        currentOwnerID: RuntimeOwnerIdentity.currentOwnerId()),
       let turnID = VoiceTurnCoordinator.shared.activeTurnID,
+      VoiceTurnCoordinator.shared.activeTurn?.ownerID == ownerScope.authenticatedOwnerID,
       let responseID = voiceResponseID,
       let identity = VoiceTurnCoordinator.shared.reserveEffectIdentity()
     else { return false }
-    session?.detach()
-    session?.stop()
+    let interruptedSession = session
+    interruptedSession?.detach()
     session = nil
     sessionProvider = nil
     sessionAuth = nil
+    sessionOwnerBinding = nil
     hubConnected = false
+    if let interruptedSession {
+      schedulePhysicalSessionTeardown(interruptedSession)
+    }
     replacementAudioBuffer = RealtimeReplacementAudioBuffer(
       turnID: turnID,
       responseID: responseID,
@@ -1987,12 +2688,20 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         nextResponseID: responseID))
     pendingBargeInProvider = provider
     pendingBargeInAuth = auth
+    pendingBargeInOwnerScope = ownerScope
     return true
   }
 
   private func completeBargeInReplacementAfterContinuity(
     interruptedTurnTask: Task<InterruptedTurnPayload?, Never>?
   ) {
+    guard let replacementOwnerScope = pendingBargeInOwnerScope,
+      isOwnerScopeCurrent(replacementOwnerScope)
+    else {
+      clearBargeInReplacementState()
+      ensureWarm()
+      return
+    }
     bargeInContinuityTask?.cancel()
     bargeInReplacementGeneration &+= 1
     let generation = bargeInReplacementGeneration
@@ -2000,12 +2709,17 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       guard let self else { return }
       await RealtimeHubBargeInContinuity.prepareReplacementSession(
         resolveInterruptedTurn: {
-          guard generation == self.bargeInReplacementGeneration else { return nil }
+          guard generation == self.bargeInReplacementGeneration,
+            self.isOwnerScopeCurrent(replacementOwnerScope)
+          else { return nil }
           guard let interruptedTurnTask else { return nil }
           return await interruptedTurnTask.value
         },
         recordInterruptedTurn: { [weak self] turn in
-          guard let self, generation == self.bargeInReplacementGeneration else { return }
+          guard let self, generation == self.bargeInReplacementGeneration,
+            self.isOwnerScopeCurrent(replacementOwnerScope),
+            turn.ownerID == replacementOwnerScope.authenticatedOwnerID
+          else { return }
           let task = self.enqueueTurnPersistence(idempotencyKey: turn.idempotencyKey) {
             [weak self] in
             await self?.persistTurnDirectlyToKernel(
@@ -2018,20 +2732,29 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           _ = await task.value
         },
         refreshVoiceContext: { [weak self] in
-          guard let self, generation == self.bargeInReplacementGeneration else { return false }
+          guard let self, generation == self.bargeInReplacementGeneration,
+            self.isOwnerScopeCurrent(replacementOwnerScope)
+          else { return false }
           await self.awaitTurnPersistenceFence()
-          guard generation == self.bargeInReplacementGeneration else { return false }
+          guard generation == self.bargeInReplacementGeneration,
+            self.isOwnerScopeCurrent(replacementOwnerScope)
+          else { return false }
           return await self.refreshVoiceContextSnapshot()
         },
         startReplacementSession: { [weak self] in
           guard let self,
             generation == self.bargeInReplacementGeneration,
+            self.isOwnerScopeCurrent(replacementOwnerScope),
+            self.pendingBargeInOwnerScope == replacementOwnerScope,
             let provider = self.pendingBargeInProvider,
             let auth = self.pendingBargeInAuth
           else { return }
           switch auth {
           case .byokKey:
-            self.startReplacementSessionForBargeIn(provider: provider, auth: auth)
+            self.startReplacementSessionForBargeIn(
+              provider: provider,
+              auth: auth,
+              ownerScope: replacementOwnerScope)
           case .ephemeral:
             self.remintReplacementSessionForBargeIn(provider: provider)
           }
@@ -2050,35 +2773,52 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   private func remintReplacementSessionForBargeIn(provider: RealtimeHubProvider) {
-    guard !minting else {
+    guard let ownerScope = pendingBargeInOwnerScope,
+      case .authenticated(let ownerID) = ownerScope,
+      isOwnerScopeCurrent(ownerScope)
+    else {
+      clearBargeInReplacementState()
+      ensureWarm()
+      return
+    }
+    guard let mintGeneration = beginMint(ownerScope: ownerScope) else {
       log(
         "RealtimeHub[\(provider.displayName)]: barge-in replacement queued behind existing token mint"
       )
       return
     }
-    let generation = bargeInReplacementGeneration
-    minting = true
+    let replacementGeneration = bargeInReplacementGeneration
     let providerParam = provider == .openai ? "openai" : "gemini"
     log("RealtimeHub[\(provider.displayName)]: minting fresh token for barge-in replacement")
     Task { [weak self] in
       guard let self else { return }
-      if self.redriveReplacementMintIfStale(generation: generation) { return }
+      if self.redriveReplacementMintIfStale(
+        replacementGeneration: replacementGeneration,
+        mintGeneration: mintGeneration,
+        ownerScope: ownerScope)
+      { return }
       guard self.replacementAudioBuffer != nil else {
-        self.minting = false
+        _ = self.releaseMint(generation: mintGeneration, ownerScope: ownerScope)
         return
       }
       guard self.effectiveProvider == provider, self.session == nil else {
-        self.minting = false
+        _ = self.releaseMint(generation: mintGeneration, ownerScope: ownerScope)
         self.clearBargeInReplacementState()
         self.ensureWarm()
         return
       }
       let token: String
       do {
-        token = try await APIClient.shared.mintRealtimeToken(provider: providerParam)
+        token = try await APIClient.shared.mintRealtimeToken(
+          provider: providerParam,
+          expectedOwnerID: ownerID)
       } catch let error as RealtimeTokenMintError {
-        if self.redriveReplacementMintIfStale(generation: generation) { return }
-        self.minting = false
+        if self.redriveReplacementMintIfStale(
+          replacementGeneration: replacementGeneration,
+          mintGeneration: mintGeneration,
+          ownerScope: ownerScope)
+        { return }
+        guard self.releaseMint(generation: mintGeneration, ownerScope: ownerScope) else { return }
         self.recordRealtimeMintFailure(
           error,
           provider: providerParam,
@@ -2097,8 +2837,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         }
         return
       } catch let error as CredentialHealthError {
-        if self.redriveReplacementMintIfStale(generation: generation) { return }
-        self.minting = false
+        if self.redriveReplacementMintIfStale(
+          replacementGeneration: replacementGeneration,
+          mintGeneration: mintGeneration,
+          ownerScope: ownerScope)
+        { return }
+        guard self.releaseMint(generation: mintGeneration, ownerScope: ownerScope) else { return }
         CredentialHealthManager.shared.record(error, context: "realtime_barge_in_mint")
         DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
           provider: providerParam,
@@ -2118,8 +2862,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         }
         return
       } catch {
-        if self.redriveReplacementMintIfStale(generation: generation) { return }
-        self.minting = false
+        if self.redriveReplacementMintIfStale(
+          replacementGeneration: replacementGeneration,
+          mintGeneration: mintGeneration,
+          ownerScope: ownerScope)
+        { return }
+        guard self.releaseMint(generation: mintGeneration, ownerScope: ownerScope) else { return }
         DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
           provider: providerParam,
           reason: "backend_transient",
@@ -2131,9 +2879,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         log("⚠️ RealtimeHub[\(provider.displayName)]: barge-in replacement token mint failed")
         return
       }
-      self.minting = false
-      if self.redriveReplacementMintIfStale(generation: generation) { return }
-      self.startReplacementSessionForBargeIn(provider: provider, auth: .ephemeral(token))
+      if self.redriveReplacementMintIfStale(
+        replacementGeneration: replacementGeneration,
+        mintGeneration: mintGeneration,
+        ownerScope: ownerScope)
+      { return }
+      guard self.releaseMint(generation: mintGeneration, ownerScope: ownerScope) else { return }
+      self.startReplacementSessionForBargeIn(
+        provider: provider,
+        auth: .ephemeral(token),
+        ownerScope: ownerScope)
     }
   }
 
@@ -2141,17 +2896,43 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Stale success and failure callbacks may only release the mint slot and
   /// redrive the newest generation; they must not mutate that generation's state.
   @discardableResult
-  private func redriveReplacementMintIfStale(generation: UInt64) -> Bool {
-    guard generation != bargeInReplacementGeneration else { return false }
-    minting = false
-    if replacementAudioBuffer != nil, let currentProvider = pendingBargeInProvider {
+  private func redriveReplacementMintIfStale(
+    replacementGeneration: UInt64,
+    mintGeneration: UInt64,
+    ownerScope: RealtimeHubOwnerScope
+  ) -> Bool {
+    guard self.mintGeneration == mintGeneration, mintOwnerScope == ownerScope else { return true }
+    let generationChanged = replacementGeneration != bargeInReplacementGeneration
+    let ownerChanged = !isOwnerScopeCurrent(ownerScope)
+      || pendingBargeInOwnerScope != ownerScope
+    guard generationChanged || ownerChanged else { return false }
+    _ = releaseMint(generation: mintGeneration, ownerScope: ownerScope)
+    if ownerChanged {
+      log("RealtimeHub: discarding barge-in remint after authenticated owner changed")
+      clearBargeInReplacementState()
+      ensureWarm()
+    } else if replacementAudioBuffer != nil, let currentProvider = pendingBargeInProvider {
       remintReplacementSessionForBargeIn(provider: currentProvider)
     }
     return true
   }
 
-  private func startReplacementSessionForBargeIn(provider: RealtimeHubProvider, auth: HubAuth) {
-    startSession(provider: provider, auth: auth)
+  private func startReplacementSessionForBargeIn(
+    provider: RealtimeHubProvider,
+    auth: HubAuth,
+    ownerScope: RealtimeHubOwnerScope
+  ) {
+    guard
+      RealtimeHubOwnerFence.acceptsBargeInReplacement(
+        sessionOwner: ownerScope,
+        replacementOwner: pendingBargeInOwnerScope,
+        currentOwnerID: RuntimeOwnerIdentity.currentOwnerId())
+    else {
+      clearBargeInReplacementState()
+      ensureWarm()
+      return
+    }
+    startSession(provider: provider, auth: auth, ownerScope: ownerScope)
   }
 
   private func finishBargeInReplacementAfterSessionReady() {
@@ -2159,6 +2940,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     replacementAudioBuffer = nil
     pendingBargeInProvider = nil
     pendingBargeInAuth = nil
+    pendingBargeInOwnerScope = nil
     guard let voiceSessionID else { return }
     VoiceTurnCoordinator.shared.send(
       .providerReplacementReady(
@@ -2352,6 +3134,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   /// PTT-down: make sure the socket is warm and reset per-turn state.
   func beginTurn(turnID requestedTurnID: VoiceTurnID? = nil) {
+    if discardMismatchedSessionIfNeeded() { ensureWarm() }
     turnPreparationTask?.cancel()
     turnPreparationTask = nil
     // Barge-in: was a reply from the previous turn still in flight when the user
@@ -2562,6 +3345,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   /// Mic chunk (16 kHz PCM16 mono) → resample to the provider's rate → session.
   func feedAudio(_ pcm16k: Data, turnID requestedTurnID: VoiceTurnID? = nil) {
+    if discardMismatchedSessionIfNeeded() { ensureWarm() }
     if let requestedTurnID {
       guard requestedTurnID == VoiceTurnCoordinator.shared.activeTurnID,
         VoiceAudioIngressOwnership.accepts(
@@ -2664,8 +3448,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   /// PTT-up: end the turn; the model now responds (and may call tools).
   func commitTurn() -> RealtimeHubCommitResult {
-    // (The screen frame is sent at turn START — see beginTurn — so it has time to
-    // upload/decode before the model answers. Nothing to attach here.)
+    if discardMismatchedSessionIfNeeded() { ensureWarm() }
+    // Screen pixels are captured only by the kernel-authorized screenshot tool;
+    // ordinary voice commits never attach an ambient frame.
     let candidates = AssistantSettings.shared.voiceBaseLanguages
     guard let turnID = VoiceTurnCoordinator.shared.activeTurnID,
       VoiceTurnCoordinator.shared.canCommitHubTurn(turnID),
@@ -2880,7 +3665,18 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   // MARK: - RealtimeHubSessionDelegate
 
   private func isCurrentSession(_ source: RealtimeHubSession) -> Bool {
-    source === session
+    guard source === session else { return false }
+    guard
+      RealtimeHubOwnerFence.canReuseWarmSession(
+        sessionOwner: sessionOwnerScope,
+        currentOwnerID: RuntimeOwnerIdentity.currentOwnerId())
+    else {
+      log("RealtimeHub: dropping socket callback after authenticated owner changed")
+      discardSessionAfterOwnerChange()
+      ensureWarm()
+      return false
+    }
+    return true
   }
 
   private func acceptsTurnEvent(
@@ -2953,27 +3749,30 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
     let normalizedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
     let sessionID = prefetchedVoiceContextSessionID
+    let capturedOwnerID = RuntimeOwnerIdentity.currentOwnerId() ?? ""
     let task = Task<ExternalSurfaceRunBinding, Error> {
-      guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else {
+      guard !capturedOwnerID.isEmpty,
+        RuntimeOwnerIdentity.currentOwnerId() == capturedOwnerID
+      else {
         throw ExternalSurfaceAuthorityError(code: "external_surface_owner_unavailable")
       }
       guard !sessionID.isEmpty else {
         throw ExternalSurfaceAuthorityError(code: "realtime_voice_session_unavailable")
       }
       let runtime = AgentRuntimeProcess.shared
-      try await runtime.registerClient(
-        clientId: Self.externalRunClientID,
-        harnessMode: Self.externalRunHarnessMode)
       return try await runtime.beginExternalSurfaceRun(
         clientId: Self.externalRunClientID,
         harnessMode: Self.externalRunHarnessMode,
-        ownerID: ownerID,
+        ownerID: capturedOwnerID,
         sessionID: sessionID,
         turnID: turnID.rawValue.uuidString.lowercased(),
         prompt: normalizedPrompt,
         mode: .act)
     }
-    externalRunAuthorityState = .init(turnID: turnID, task: task)
+    externalRunAuthorityState = .init(
+      ownerID: capturedOwnerID,
+      turnID: turnID,
+      task: task)
     return task
   }
 
@@ -3747,8 +4546,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     guard !reconnectPending, hubReconnectStrikes < Self.maxReconnectStrikes else { return }
     hubReconnectStrikes += 1
     reconnectPending = true
+    let reconnectOwnerBoundaryGeneration = ownerBoundaryGeneration
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
       guard let self else { return }
+      guard self.ownerBoundaryGeneration == reconnectOwnerBoundaryGeneration else { return }
       self.reconnectPending = false
       if self.session == nil { self.ensureWarm() }
     }

@@ -19,6 +19,11 @@ import { AdapterRegistry } from "../src/runtime/adapter-registry.js";
 import { AgentRuntimeKernel } from "../src/runtime/kernel.js";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 import { toolNamesForAdapter } from "../src/runtime/omi-tool-manifest.js";
+import {
+  RunToolCapabilityBroker,
+  type AuthorizedRunToolInvocation,
+} from "../src/runtime/run-tool-capability.js";
+import { readToolInvocation } from "../src/runtime/tool-invocation-ledger.js";
 import { baseRunInput, createKernelHarness, FakeRuntimeAdapter, waitUntil } from "./kernel-fakes.js";
 
 const createdDirs: string[] = [];
@@ -172,6 +177,114 @@ describe("agent control tools", () => {
       store.getRow("SELECT COUNT(*) AS count FROM desktop_artifact_deliveries WHERE delivery_status = 'cancelled'")
         .count,
     ).toBe(1);
+  });
+
+  it("revalidates workstream authority between commits and ledgers revocation without later writes", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const caller = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "fake",
+      executionRole: "coordinator",
+    });
+    const parent = store.insertRun({
+      sessionId: caller.sessionId,
+      clientId: "workstream-lease-client",
+      requestId: "workstream-lease-parent",
+      status: "running",
+      mode: "act",
+    });
+    const attempt = store.insertAttempt({
+      runId: parent.runId,
+      attemptNo: 1,
+      status: "running",
+      adapterId: "fake",
+      adapterInstanceId: "workstream-lease-worker",
+    });
+    const broker = new RunToolCapabilityBroker({ store });
+    const capability = broker.register({
+      ownerId: "owner",
+      sessionId: caller.sessionId,
+      runId: parent.runId,
+      attemptId: attempt.attemptId,
+    });
+    const authorized = broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "lease-workstream-commits",
+      runId: parent.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: "owner",
+      toolName: "spawn_agent",
+      toolInput: { objective: "persist guarded workstream state" },
+    });
+    broker.markInvocationDispatched(authorized);
+    const lease = broker.acquireExecutionLease(authorized, () => "owner");
+    let assertionCount = 0;
+    let entered!: () => void;
+    let resume!: () => void;
+    const enteredSecondCommit = new Promise<void>((resolve) => { entered = resolve; });
+    const resumeSecondCommit = new Promise<void>((resolve) => { resume = resolve; });
+    const resultPromise = handleAgentControlToolCall({
+      ...ownerContext(kernel),
+      callerSessionId: caller.sessionId,
+      executionLease: {
+        signal: lease.signal,
+        assertCurrentAuthority: async () => {
+          assertionCount += 1;
+          if (assertionCount === 3) {
+            entered();
+            await resumeSecondCommit;
+          }
+          lease.assertCurrentAuthority();
+        },
+      },
+    }, "persist_workstream_continuity", {
+      workstreamId: "guarded-workstream",
+      context: {
+        canonicalSummary: "Guard each durable write",
+        latestEventSequence: 1,
+        selectedEvents: [],
+        artifactHeads: [],
+        provenance: {
+          snapshotVersion: "guarded:1",
+          fetchedAtMs: 10,
+          source: "canonical_backend",
+        },
+      },
+      artifacts: [{
+        logicalKey: "guarded-report",
+        evidenceRefs: [{ kind: "conversation", id: "conversation-guarded", scope: "canonical" }],
+        kind: "markdown",
+        role: "result",
+        uri: "file:///tmp/guarded-report.md",
+        contentHash: "sha256:guarded-report",
+        sourceArtifactId: "source-guarded-report",
+      }],
+    });
+
+    await enteredSecondCommit;
+    broker.revokeForOwner("owner", "owner_changed");
+    const atRevocation = workstreamWriteSnapshot(store);
+    resume();
+    const result = parseToolResult(await resultPromise);
+    expect(result).toMatchObject({ ok: false, error: { code: "owner_mismatch" } });
+    expect(workstreamWriteSnapshot(store)).toEqual(atRevocation);
+    expect(atRevocation.contextPackets).toHaveLength(1);
+    expect(atRevocation.artifactVersions).toHaveLength(0);
+    expect(atRevocation.deliveries).toHaveLength(0);
+    lease.release();
+    expect(() => broker.completeInvocation({
+      ...invocationIdentityForTest(authorized),
+      capabilityRef: authorized.capabilityRef,
+      activeOwnerId: "owner",
+      outcome: "failed",
+      result: JSON.stringify(result),
+    })).toThrow(/completion authority was revoked/);
+    expect(readToolInvocation(store, authorized.invocationId)).toMatchObject({
+      status: "outcome_unknown",
+      errorCode: "run_tool_owner_changed",
+    });
+    store.close();
   });
 
   it("persists prepared artifacts only with a scoped live grant and without replacing context", async () => {
@@ -1669,6 +1782,258 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  it("leases authority before the first control effect and fails the invocation with zero effects after revocation", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const caller = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "fake",
+      executionRole: "coordinator",
+    });
+    const parent = store.insertRun({
+      sessionId: caller.sessionId,
+      clientId: "lease-client",
+      requestId: "lease-parent",
+      status: "running",
+      mode: "act",
+    });
+    const attempt = store.insertAttempt({
+      runId: parent.runId,
+      attemptNo: 1,
+      status: "running",
+      adapterId: "fake",
+      adapterInstanceId: "lease-worker",
+    });
+    const broker = new RunToolCapabilityBroker({ store });
+    const capability = broker.register({
+      ownerId: "owner",
+      sessionId: caller.sessionId,
+      runId: parent.runId,
+      attemptId: attempt.attemptId,
+    });
+    const authorized = broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "lease-before-first-effect",
+      runId: parent.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: "owner",
+      toolName: "spawn_agent",
+      toolInput: { objective: "must not start" },
+    });
+    broker.markInvocationDispatched(authorized);
+    const lease = broker.acquireExecutionLease(authorized, () => "owner");
+    let entered!: () => void;
+    let resume!: () => void;
+    const enteredEffectBoundary = new Promise<void>((resolve) => { entered = resolve; });
+    const resumeEffectBoundary = new Promise<void>((resolve) => { resume = resolve; });
+    const resultPromise = handleAgentControlToolCall({
+      ...ownerContext(kernel),
+      callerSessionId: caller.sessionId,
+      executionLease: {
+        signal: lease.signal,
+        assertCurrentAuthority: async () => {
+          entered();
+          await resumeEffectBoundary;
+          lease.assertCurrentAuthority();
+        },
+      },
+    }, "spawn_agent", {
+      objective: "must not start",
+      requestedAgentCount: 1,
+      visible: true,
+      adapterId: "fake",
+      requestId: "lease-before-first-effect",
+    });
+    await enteredEffectBoundary;
+    broker.revokeForOwner("owner", "owner_changed");
+    resume();
+    const result = parseToolResult(await resultPromise);
+    expect(result).toMatchObject({ ok: false, error: { code: "owner_mismatch" } });
+    expect(store.getRow("SELECT COUNT(*) AS count FROM runs").count).toBe(1);
+    lease.release();
+    expect(() => broker.completeInvocation({
+      ...invocationIdentityForTest(authorized),
+      capabilityRef: authorized.capabilityRef,
+      activeOwnerId: "owner",
+      outcome: "failed",
+      result: JSON.stringify(result),
+    })).toThrow(/completion authority was revoked/);
+    expect(readToolInvocation(store, authorized.invocationId)).toMatchObject({
+      status: "outcome_unknown",
+      errorCode: "run_tool_owner_changed",
+    });
+    store.close();
+  });
+
+  it("revalidates the lease between sibling effects and records the partial invocation as failed", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const caller = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "fake",
+      executionRole: "coordinator",
+    });
+    const parent = store.insertRun({
+      sessionId: caller.sessionId,
+      clientId: "sibling-lease-client",
+      requestId: "sibling-lease-parent",
+      status: "running",
+      mode: "act",
+    });
+    const attempt = store.insertAttempt({
+      runId: parent.runId,
+      attemptNo: 1,
+      status: "running",
+      adapterId: "fake",
+      adapterInstanceId: "sibling-lease-worker",
+    });
+    const broker = new RunToolCapabilityBroker({ store });
+    const capability = broker.register({
+      ownerId: "owner",
+      sessionId: caller.sessionId,
+      runId: parent.runId,
+      attemptId: attempt.attemptId,
+    });
+    const authorized = broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "lease-between-siblings",
+      runId: parent.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: "owner",
+      toolName: "spawn_agent",
+      toolInput: { objective: "start one only", requestedAgentCount: 2 },
+    });
+    broker.markInvocationDispatched(authorized);
+    const lease = broker.acquireExecutionLease(authorized, () => "owner");
+    let assertionCount = 0;
+    let entered!: () => void;
+    let resume!: () => void;
+    const enteredSecondSibling = new Promise<void>((resolve) => { entered = resolve; });
+    const resumeSecondSibling = new Promise<void>((resolve) => { resume = resolve; });
+    const resultPromise = handleAgentControlToolCall({
+      ...ownerContext(kernel),
+      callerSessionId: caller.sessionId,
+      executionLease: {
+        signal: lease.signal,
+        assertCurrentAuthority: async () => {
+          assertionCount += 1;
+          if (assertionCount === 3) {
+            entered();
+            await resumeSecondSibling;
+          }
+          lease.assertCurrentAuthority();
+        },
+      },
+    }, "spawn_agent", {
+      objective: "start one only",
+      requestedAgentCount: 2,
+      visible: true,
+      adapterId: "fake",
+      requestId: "lease-between-siblings",
+    });
+    await enteredSecondSibling;
+    broker.revokeForOwner("owner", "owner_changed");
+    resume();
+    const result = parseToolResult(await resultPromise);
+    expect(result).toMatchObject({ ok: false, error: { code: "owner_mismatch" } });
+    expect(store.getRow("SELECT COUNT(*) AS count FROM runs").count).toBe(2);
+    lease.release();
+    expect(() => broker.completeInvocation({
+      ...invocationIdentityForTest(authorized),
+      capabilityRef: authorized.capabilityRef,
+      activeOwnerId: "owner",
+      outcome: "failed",
+      result: JSON.stringify(result),
+    })).toThrow(/completion authority was revoked/);
+    expect(readToolInvocation(store, authorized.invocationId)).toMatchObject({
+      status: "outcome_unknown",
+      errorCode: "run_tool_owner_changed",
+    });
+    store.close();
+  });
+
+  it("aborts an in-flight send when its parent invocation authority is revoked", async () => {
+    const { store, kernel, adapter } = createKernelHarness(newDatabasePath());
+    const caller = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "fake",
+      executionRole: "coordinator",
+    });
+    const parent = store.insertRun({
+      sessionId: caller.sessionId,
+      clientId: "send-lease-client",
+      requestId: "send-lease-parent",
+      status: "running",
+      mode: "act",
+    });
+    const parentAttempt = store.insertAttempt({
+      runId: parent.runId,
+      attemptNo: 1,
+      status: "running",
+      adapterId: "fake",
+      adapterInstanceId: "send-lease-worker",
+    });
+    const target = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "background_agent",
+      defaultAdapterId: "fake",
+      executionRole: "leaf",
+    });
+    const broker = new RunToolCapabilityBroker({ store });
+    const capability = broker.register({
+      ownerId: "owner",
+      sessionId: caller.sessionId,
+      runId: parent.runId,
+      attemptId: parentAttempt.attemptId,
+    });
+    const authorized = broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "lease-inflight-send",
+      runId: parent.runId,
+      attemptId: parentAttempt.attemptId,
+      activeOwnerId: "owner",
+      toolName: "send_agent_message",
+      toolInput: { sessionId: target.sessionId, prompt: "continue" },
+    });
+    broker.markInvocationDispatched(authorized);
+    const lease = broker.acquireExecutionLease(authorized, () => "owner");
+    adapter.deferResult();
+    const resultPromise = handleAgentControlToolCall({
+      ...ownerContext(kernel),
+      callerSessionId: caller.sessionId,
+      executionLease: lease,
+    }, "send_agent_message", {
+      sessionId: target.sessionId,
+      prompt: "continue only while authorized",
+      mode: "act",
+      requestId: "lease-inflight-send",
+      clientId: "send-lease-client",
+    });
+    await waitUntil(() => adapter.executed.length === 1);
+    broker.revokeForOwner("owner", "owner_changed");
+    adapter.resolveDeferred({ terminalStatus: "succeeded", text: "late result" });
+    const result = parseToolResult(await resultPromise);
+    expect(result).toMatchObject({ ok: false, error: { code: "owner_mismatch" } });
+    expect(store.getRow(
+      "SELECT status FROM runs WHERE session_id = ? ORDER BY created_at_ms DESC LIMIT 1",
+      [target.sessionId],
+    ).status).toBe("cancelled");
+    lease.release();
+    expect(() => broker.completeInvocation({
+      ...invocationIdentityForTest(authorized),
+      capabilityRef: authorized.capabilityRef,
+      activeOwnerId: "owner",
+      outcome: "failed",
+      result: JSON.stringify(result),
+    })).toThrow(/completion authority was revoked/);
+    expect(readToolInvocation(store, authorized.invocationId)).toMatchObject({
+      status: "outcome_unknown",
+      errorCode: "run_tool_owner_changed",
+    });
+    store.close();
+  });
+
   it("cannot promote a persisted leaf caller with a coordinator origin surface", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const leaf = store.insertSession({
@@ -2790,6 +3155,42 @@ describe("agent control tools", () => {
 
 function parseToolResult(result: string): any {
   return JSON.parse(result);
+}
+
+function invocationIdentityForTest(invocation: AuthorizedRunToolInvocation) {
+  return {
+    invocationId: invocation.invocationId,
+    ownerId: invocation.ownerId,
+    sessionId: invocation.sessionId,
+    runId: invocation.runId,
+    attemptId: invocation.attemptId,
+    profileGeneration: invocation.profileGeneration,
+    manifestVersion: invocation.manifestVersion,
+    manifestDigest: invocation.manifestDigest,
+    daemonBootEpoch: invocation.daemonBootEpoch,
+    executionGeneration: invocation.executionGeneration,
+    inputHash: invocation.inputHash,
+  };
+}
+
+function workstreamWriteSnapshot(store: SqliteAgentStore) {
+  return {
+    sessions: store.allRows("SELECT * FROM sessions ORDER BY session_id"),
+    surfaceConversations: store.allRows(
+      "SELECT * FROM surface_conversations ORDER BY owner_id, surface_kind, external_ref_kind, external_ref_id",
+    ),
+    contextPackets: store.allRows("SELECT * FROM desktop_context_packets ORDER BY packet_id"),
+    contextAccessLogs: store.allRows("SELECT * FROM desktop_context_access_log ORDER BY access_id"),
+    artifactVersions: store.allRows(
+      "SELECT * FROM workstream_artifact_versions ORDER BY session_id, logical_key, version",
+    ),
+    artifacts: store.allRows("SELECT * FROM artifacts ORDER BY artifact_id"),
+    checkpoints: store.allRows(
+      "SELECT * FROM workstream_continuation_checkpoints ORDER BY owner_id, workstream_id",
+    ),
+    deliveries: store.allRows("SELECT * FROM desktop_artifact_deliveries ORDER BY delivery_id"),
+    events: store.allRows("SELECT * FROM events ORDER BY event_id"),
+  };
 }
 
 function newDatabasePath(): string {

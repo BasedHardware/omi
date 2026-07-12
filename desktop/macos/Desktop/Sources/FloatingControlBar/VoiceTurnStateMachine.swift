@@ -181,6 +181,7 @@ enum VoiceTurnTerminalReason: String, Equatable, Sendable, CaseIterable {
   case tooShort = "too_short"
   case silentRejected = "silent_rejected"
   case cancelled
+  case ownerChanged = "owner_changed"
   case interruptedByBargeIn = "interrupted_by_barge_in"
   case permissionDenied = "permission_denied"
   case captureFailed = "capture_failed"
@@ -1423,8 +1424,8 @@ struct VoiceTurnReducer {
       terminalHint = "Voice response failed — try again"
     case .playbackFailed:
       terminalHint = "Audio playback failed"
-    case .success, .silentRejected, .cancelled, .interruptedByBargeIn, .explicitInterrupt,
-      .permissionDenied, .hubWarmTimeout, .cleanup:
+    case .success, .silentRejected, .cancelled, .ownerChanged, .interruptedByBargeIn,
+      .explicitInterrupt, .permissionDenied, .hubWarmTimeout, .cleanup:
       terminalHint = nil
     }
     if let terminalHint {

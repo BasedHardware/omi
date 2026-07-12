@@ -3,6 +3,52 @@ import XCTest
 @testable import Omi_Computer
 
 final class KernelContractWireTests: XCTestCase {
+  func testJournalExchangeWireCarriesBothTurnsInOneOwnerBoundRequest() throws {
+    let turns = [
+      KernelJournalTurnWrite(
+        turnId: "turn-user",
+        role: "user",
+        origin: "typed_chat",
+        status: .completed,
+        content: "Question",
+        contentBlocksJSON: "[]",
+        resourcesJSON: "[]",
+        producingRunId: nil,
+        metadataJSON: "{}",
+        delivery: .backend,
+        createdAtMs: 1
+      ),
+      KernelJournalTurnWrite(
+        turnId: "turn-assistant",
+        role: "assistant",
+        origin: "typed_chat",
+        status: .completed,
+        content: "Answer",
+        contentBlocksJSON: "[]",
+        resourcesJSON: "[]",
+        producingRunId: nil,
+        metadataJSON: "{}",
+        delivery: .backend,
+        createdAtMs: 2
+      ),
+    ]
+    let message = AgentRuntimeProcess.journalOperationWireMessage(
+      type: "journal_record_exchange",
+      operation: "record_exchange",
+      clientId: "client",
+      requestId: "request",
+      ownerId: "owner-a",
+      surface: .mainChat(chatId: "default"),
+      payload: ["turns": turns.map(\.dictionary)]
+    )
+
+    XCTAssertEqual(message["type"] as? String, "journal_record_exchange")
+    XCTAssertEqual(message["operation"] as? String, "record_exchange")
+    XCTAssertEqual(message["ownerId"] as? String, "owner-a")
+    let encodedTurns = try XCTUnwrap(message["turns"] as? [[String: Any]])
+    XCTAssertEqual(encodedTurns.map { $0["turnId"] as? String }, ["turn-user", "turn-assistant"])
+  }
+
   func testQueryWireContainsOnlyTracingSessionAndDataInputs() throws {
     let message = AgentRuntimeProcess.queryWireMessage(
       clientId: "client-1",

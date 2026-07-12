@@ -70,6 +70,7 @@ export interface ControlToolRequestMessage extends ProtocolEnvelope {
 
 export interface DirectControlToolRequestMessage extends ProtocolEnvelope {
   type: "direct_control_tool";
+  ownerId: string;
   name: string;
   input: Record<string, unknown>;
 }
@@ -119,19 +120,19 @@ export interface InvalidateSessionMessage extends ProtocolEnvelope {
   externalRefId: string;
 }
 
-export interface ClearOwnerStateMessage extends ProtocolEnvelope {
-  type: "clear_owner_state";
+/**
+ * Pre-visibility owner barrier. Swift sends this only while holding the exact
+ * previous-owner transition cleanup capability and waits for the correlated
+ * receipt before exposing the replacement owner.
+ */
+export interface RevokeOwnerRuntimeMessage extends ProtocolEnvelope {
+  type: "revoke_owner_runtime";
+  ownerId: string;
 }
 
 export interface ImportLegacyMainChatSessionsMessage extends ProtocolEnvelope {
   type: "import_legacy_main_chat_sessions";
   entries: Array<{ chatId: string; agentSessionId: string }>;
-}
-
-/** Swift tells the bridge which auth method the user chose */
-export interface AuthenticateMessage {
-  type: "authenticate";
-  methodId: string;
 }
 
 /** A warmup can identify a pinned session/profile, but cannot configure it. */
@@ -210,6 +211,14 @@ export interface JournalRecordTurnMessage extends ProtocolEnvelope {
   turn: Record<string, unknown>;
 }
 
+export interface JournalRecordExchangeMessage extends ProtocolEnvelope {
+  type: "journal_record_exchange";
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
+  turns: Record<string, unknown>[];
+}
+
 export interface JournalUpdateTurnMessage extends ProtocolEnvelope {
   type: "journal_update_turn";
   surfaceKind: string;
@@ -286,7 +295,13 @@ export interface JournalBackendReconcileResultMessage extends ProtocolEnvelope {
 export interface RefreshTokenMessage {
   type: "refresh_token";
   token: string;
-  ownerId?: string;
+  ownerId: string;
+}
+
+/** Swift establishes the signed-in owner even when a local adapter needs no Firebase token. */
+export interface RefreshOwnerMessage {
+  type: "refresh_owner";
+  ownerId: string;
 }
 
 export type InboundMessage =
@@ -300,9 +315,8 @@ export type InboundMessage =
   | StopMessage
   | InterruptMessage
   | InvalidateSessionMessage
-  | ClearOwnerStateMessage
+  | RevokeOwnerRuntimeMessage
   | ImportLegacyMainChatSessionsMessage
-  | AuthenticateMessage
   | WarmupMessage
   | ConfigureDefaultExecutionProfileMessage
   | ResolveSurfaceSessionMessage
@@ -310,6 +324,7 @@ export type InboundMessage =
   | ContextSourceUpdateMessage
   | GetContextSnapshotMessage
   | JournalRecordTurnMessage
+  | JournalRecordExchangeMessage
   | JournalUpdateTurnMessage
   | JournalListTurnsMessage
   | JournalClearTurnsMessage
@@ -317,7 +332,8 @@ export type InboundMessage =
   | JournalBackendSyncResultMessage
   | JournalBackendDeleteResultMessage
   | JournalBackendReconcileResultMessage
-  | RefreshTokenMessage;
+  | RefreshTokenMessage
+  | RefreshOwnerMessage;
 
 // === Bridge → Swift (stdout) ===
 
@@ -425,6 +441,16 @@ export interface ExternalSurfaceRunCompleteResultMessage extends OutboundEnvelop
   error?: ExternalAuthorityError;
 }
 
+export interface OwnerRuntimeRevokedMessage extends OutboundEnvelope {
+  type: "owner_runtime_revoked";
+  ownerId: string;
+  ok: boolean;
+  duplicate: boolean;
+  revokedRunIds: string[];
+  invalidatedBindingIds: string[];
+  error?: ExternalAuthorityError;
+}
+
 export interface ResultMessage extends QueryScopedOutbound {
   type: "result";
   text: string;
@@ -523,6 +549,8 @@ export interface CancelAckMessage extends QueryScopedOutbound {
 
 export interface ControlToolResultMessage extends OutboundEnvelope {
   type: "control_tool_result";
+  /** Required for direct desktop control; legacy rejection receipts omit it. */
+  ownerId?: string;
   name: string;
   result: string;
 }
@@ -669,7 +697,7 @@ export interface AgentSpawnJournalEnsuredMessage extends OutboundEnvelope {
 
 export interface JournalOperationResultMessage extends OutboundEnvelope {
   type: "journal_operation_result";
-  operation: "record" | "update" | "list" | "clear";
+  operation: "record" | "record_exchange" | "update" | "list" | "clear";
   conversationId: string;
   surfaceKind: string;
   externalRefKind: string;
@@ -755,6 +783,7 @@ export type OutboundMessage =
   | ExternalSurfaceRunBeginResultMessage
   | ExternalSurfaceToolResultMessage
   | ExternalSurfaceRunCompleteResultMessage
+  | OwnerRuntimeRevokedMessage
   | ControlToolResultMessage
   | DefaultExecutionProfileConfiguredMessage
   | SurfaceSessionResolvedMessage
@@ -790,6 +819,7 @@ export type OutboundMessageDraft =
   | DraftEnvelope<ExternalSurfaceRunBeginResultMessage>
   | DraftEnvelope<ExternalSurfaceToolResultMessage>
   | DraftEnvelope<ExternalSurfaceRunCompleteResultMessage>
+  | DraftEnvelope<OwnerRuntimeRevokedMessage>
   | DraftEnvelope<ControlToolResultMessage>
   | DraftEnvelope<DefaultExecutionProfileConfiguredMessage>
   | DraftEnvelope<SurfaceSessionResolvedMessage>

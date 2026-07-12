@@ -805,6 +805,9 @@ final class DesktopAutomationActionRegistry {
       summary: "Evaluate a synthetic bounded recommendation through the real interruption gate",
       params: ["can_wait", "expires_in_seconds"]
     ) { params in
+      guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+        return ["error": "runtime_owner_unavailable"]
+      }
       let nonce = UUID().uuidString.lowercased()
       let trace = NotificationService.shared.sendContextualTaskInterruption(
         TaskInterruptionCandidate(
@@ -817,7 +820,8 @@ final class DesktopAutomationActionRegistry {
           expiresAt: Date().addingTimeInterval(TimeInterval(
             intParam(params["expires_in_seconds"], default: 300))),
           canWait: boolParam(params["can_wait"], default: false)
-        )
+        ),
+        authorizationSnapshot: authorizationSnapshot
       )
       return [
         "reason": trace.reason.rawValue,
@@ -1360,9 +1364,7 @@ final class DesktopAutomationActionRegistry {
       guard AuthState.shared.isSignedIn else {
         return ["signed_out": "true", "was_signed_in": "false"]
       }
-      try await MainActor.run {
-        try AuthService.shared.signOut()
-      }
+      try await AuthService.shared.signOut()
       return [
         "signed_out": "true",
         "was_signed_in": "true",

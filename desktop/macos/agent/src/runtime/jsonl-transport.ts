@@ -75,6 +75,8 @@ interface ActiveRequestContext {
   attemptId?: string;
   adapterSessionId?: string;
   isRunning?: boolean;
+  authorityController?: AbortController;
+  revoked?: boolean;
 }
 
 const TERMINAL_RUN_EVENT_STATUSES = new Set([
@@ -143,12 +145,16 @@ export class JsonlTransport {
     if (this.activeByRequest.has(key)) {
       throw new Error("Request context already active for clientId/requestId");
     }
+    const authorityController = new AbortController();
+    input.authoritySignal = authorityController.signal;
     const context: ActiveRequestContext = {
       requestId: input.requestId,
       clientId: input.clientId,
       ownerId: input.ownerId,
       adapterId: input.adapterId ?? this.defaultAdapterId,
       sessionId: input.sessionId,
+      authorityController,
+      revoked: false,
     };
     this.activeByRequest.set(key, context);
 
@@ -158,6 +164,7 @@ export class JsonlTransport {
       context.runId = result.run.runId;
       context.attemptId = result.attempt.attemptId;
       context.adapterSessionId = result.adapterSessionId ?? undefined;
+      if (context.revoked) return;
 
       if (result.terminalStatus === "failed") {
         const failure = failureFromResultJson(result.run.resultJson);
@@ -188,6 +195,7 @@ export class JsonlTransport {
       };
       this.send(this.withCorrelation(resultMessage, context));
     } catch (error) {
+      if (context.revoked) return;
       const failure = failureFromError(error, {
         code: "runtime_query_failed",
         source: "runtime",
@@ -213,6 +221,27 @@ export class JsonlTransport {
         }
       }
     }
+  }
+
+  /**
+   * Revokes every foreground request admitted for one immutable owner. Kernel
+   * terminalization is synchronous, so a new owner is never admitted while an
+   * old owner's deferred adapter can still claim success.
+   */
+  revokeOwner(ownerId: string, reason: "owner_changed" | "owner_state_cleared"): string[] {
+    const normalizedOwnerId = ownerId.trim();
+    if (!normalizedOwnerId) return [];
+    const error = new Error(`Foreground query authority was revoked: ${reason}`);
+    const contexts = new Set(
+      [...this.activeByRequest.values()].filter((context) => context.ownerId === normalizedOwnerId),
+    );
+    for (const context of contexts) {
+      context.revoked = true;
+      if (context.authorityController && !context.authorityController.signal.aborted) {
+        context.authorityController.abort(error);
+      }
+    }
+    return this.kernel.revokeActiveRunsForOwner(normalizedOwnerId, reason).runIds;
   }
 
   async handleInterrupt(message: {
@@ -252,7 +281,7 @@ export class JsonlTransport {
     const activeRequestContext = requestId
       ? this.activeByRequest.get(this.activeRequestKey(requestId, effectiveClientId))
       : undefined;
-    const ownerId = this.activeOwnerId();
+    const ownerId = this.requireActiveOwner(message.ownerId);
     if (requestId && !activeRequestContext && !message.runId && !message.attemptId) {
       const cancelAck = {
         type: "cancel_ack" as const,
@@ -345,7 +374,7 @@ export class JsonlTransport {
   }
 
   handleWarmup(message: WarmupMessage): void {
-    const ownerId = message.ownerId?.trim() || this.ownerId;
+    const ownerId = this.requireActiveOwner(message.ownerId);
     const profile = this.kernel.sessionExecutionProfile(message.sessionId, ownerId);
     if (profile.generation !== message.profileGeneration) {
       throw new Error("Warmup profileGeneration does not match the pinned session profile");
@@ -354,8 +383,9 @@ export class JsonlTransport {
   }
 
   handleInvalidateSession(message: InvalidateSessionMessage): void {
+    const ownerId = this.requireActiveOwner(message.ownerId);
     const result = this.kernel.invalidateBindings({
-      ownerId: message.ownerId ?? this.ownerId,
+      ownerId,
       surfaceKind: message.surfaceKind,
       externalRefKind: message.externalRefKind,
       externalRefId: message.externalRefId,
@@ -381,7 +411,7 @@ export class JsonlTransport {
     if (!clientId) {
       throw new Error("query requires clientId");
     }
-    const ownerId = message.ownerId ?? this.ownerId;
+    const ownerId = this.requireActiveOwner(message.ownerId);
     const sessionId = message.sessionId.trim();
     if (!sessionId) throw new Error("query requires sessionId");
     const surfaceKind = message.surfaceKind.trim();
@@ -514,6 +544,7 @@ export class JsonlTransport {
         this.latestRunByOwner.delete(context.ownerId);
       }
     }
+    if (context.revoked) return;
     if (!isAdapterPayloadEvent(event.type)) return;
 
     const adapterEvent = payload as Partial<OutboundMessage> & { adapterSessionId?: string };
@@ -578,6 +609,15 @@ export class JsonlTransport {
 
   private latestRunByClientKey(ownerId: string, clientId: string): string {
     return JSON.stringify([ownerId, clientId]);
+  }
+
+  private requireActiveOwner(requestedOwnerId: string | undefined): string {
+    const activeOwnerId = this.activeOwnerId();
+    const requested = requestedOwnerId?.trim() || activeOwnerId;
+    if (!requested || requested !== activeOwnerId) {
+      throw new Error("owner_mismatch: transport mutation owner is not active");
+    }
+    return requested;
   }
 
   private activeRequestKey(requestId: string, clientId: string): string {

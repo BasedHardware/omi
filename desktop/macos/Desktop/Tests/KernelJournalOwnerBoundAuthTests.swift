@@ -48,13 +48,13 @@ final class KernelJournalOwnerBoundAuthTests: XCTestCase {
     InitialGreetingOwnerURLStub.reset()
   }
 
-  override func tearDown() {
+  override func tearDown() async throws {
     let auth = AuthService.shared
-    auth.invalidateSession(reason: .manual)
+    await auth.invalidateSession(reason: .manual)
     auth.tokenStorageHooks = .live
     auth.tokenRefreshHooks = .live
     UserDefaults.standard.removeObject(forKey: .authUserId)
-    super.tearDown()
+    try await super.tearDown()
   }
 
   func testTokenOwnerExtractionAcceptsFirebaseUserIDAndSubject() throws {

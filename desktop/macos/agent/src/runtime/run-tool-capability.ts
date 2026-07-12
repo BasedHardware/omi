@@ -16,6 +16,8 @@ import {
   markToolInvocationDispatched,
   markToolInvocationOutcomeUnknown,
   prepareToolInvocation,
+  readToolInvocation,
+  terminalizeRevokedToolInvocation,
   type ToolInvocationEffectClass,
   type ToolInvocationIdentity,
   type ToolInvocationRetryPolicy,
@@ -132,6 +134,12 @@ export interface AuthorizedRunToolInvocation {
   tool: OmiToolManifestEntry;
 }
 
+export interface RunToolExecutionLease {
+  readonly signal: AbortSignal;
+  assertCurrentAuthority(): void;
+  release(): void;
+}
+
 export interface RunToolCapabilityBrokerOptions {
   store: AgentStore;
   nowMs?: () => number;
@@ -152,8 +160,22 @@ export interface RunToolCapabilityBrokerOptions {
 interface CapabilityState {
   capability: RunToolCapability;
   revoked: boolean;
+  revocationReason: RunToolCapabilityRevocationReason | null;
   activeInvocationIds: Set<string>;
   completedInvocationIds: Set<string>;
+  executionLeases: Map<string, AbortController>;
+}
+
+function rejectCodeForRevocation(reason: RunToolCapabilityRevocationReason): RunToolCapabilityRejectCode {
+  switch (reason) {
+    case "owner_changed": return "owner_mismatch";
+    case "run_terminal": return "run_terminal";
+    case "attempt_terminal": return "attempt_terminal";
+    case "attempt_superseded": return "attempt_superseded";
+    case "runtime_stopped":
+    case "explicit":
+      return "capability_revoked";
+  }
 }
 
 function relayAdapterId(adapterId: string): OmiToolAdapterId {
@@ -280,8 +302,10 @@ export class RunToolCapabilityBroker {
     this.states.set(capability.capabilityRef, {
       capability,
       revoked: false,
+      revocationReason: null,
       activeInvocationIds: new Set(),
       completedInvocationIds: new Set(),
+      executionLeases: new Map(),
     });
     this.activeByAttempt.set(capability.attemptId, capability.capabilityRef);
     const runRefs = this.activeByRun.get(capability.runId) ?? new Set<string>();
@@ -432,17 +456,54 @@ export class RunToolCapabilityBroker {
     markToolInvocationDispatched(this.store, this.ledgerIdentity(invocation), this.nowMs());
   }
 
+  acquireExecutionLease(
+    invocation: AuthorizedRunToolInvocation,
+    activeOwnerId: () => string,
+  ): RunToolExecutionLease {
+    this.assertCurrentExecutionAuthority(invocation, activeOwnerId());
+    const state = this.states.get(invocation.capabilityRef)!;
+    const existing = state.executionLeases.get(invocation.invocationId);
+    if (existing) this.reject("invocation_replayed", "Tool invocation already has an execution lease");
+    const controller = new AbortController();
+    state.executionLeases.set(invocation.invocationId, controller);
+    let released = false;
+    return {
+      signal: controller.signal,
+      assertCurrentAuthority: () => {
+        if (released) this.reject("capability_revoked", "Tool execution lease has been released");
+        this.assertCurrentExecutionAuthority(invocation, activeOwnerId());
+      },
+      release: () => {
+        if (released) return;
+        released = true;
+        const active = this.states.get(invocation.capabilityRef);
+        if (active?.executionLeases.get(invocation.invocationId) === controller) {
+          active.executionLeases.delete(invocation.invocationId);
+        }
+      },
+    };
+  }
+
   completeInvocation(input: ToolInvocationIdentity & {
-    capabilityRef?: string;
+    capabilityRef: string;
+    activeOwnerId: string;
     outcome: "succeeded" | "failed";
     result: string;
   }): void {
-    completeToolInvocation(this.store, { ...input, nowMs: this.nowMs() });
-    if (input.capabilityRef) {
-      const state = this.states.get(input.capabilityRef);
-      state?.activeInvocationIds.delete(input.invocationId);
-      state?.completedInvocationIds.add(input.invocationId);
+    const state = this.states.get(input.capabilityRef);
+    if (!state) this.reject("capability_missing", "Unknown run tool capability at completion");
+    if (state.revoked) {
+      const code = rejectCodeForRevocation(state.revocationReason ?? "explicit");
+      this.reject(code, `Run tool completion authority was revoked: ${state.revocationReason ?? "explicit"}`);
     }
+    if (!state.activeInvocationIds.has(input.invocationId)) {
+      this.reject("invocation_replayed", "Run tool invocation is no longer active at completion");
+    }
+    this.assertLiveCapabilityAuthority(state, input.activeOwnerId);
+    completeToolInvocation(this.store, { ...input, nowMs: this.nowMs() });
+    state.activeInvocationIds.delete(input.invocationId);
+    state.completedInvocationIds.add(input.invocationId);
+    state.executionLeases.delete(input.invocationId);
   }
 
   markInvocationOutcomeUnknown(
@@ -453,12 +514,33 @@ export class RunToolCapabilityBroker {
     const state = this.states.get(invocation.capabilityRef);
     state?.activeInvocationIds.delete(invocation.invocationId);
     state?.completedInvocationIds.add(invocation.invocationId);
+    state?.executionLeases.delete(invocation.invocationId);
   }
 
   revoke(capabilityRef: string, reason: RunToolCapabilityRevocationReason = "explicit"): boolean {
     const state = this.states.get(capabilityRef);
     if (!state || state.revoked) return false;
     state.revoked = true;
+    state.revocationReason = reason;
+    for (const controller of state.executionLeases.values()) {
+      controller.abort(new RunToolCapabilityRejectedError(
+        rejectCodeForRevocation(reason),
+        `Run tool execution authority was revoked: ${reason}`,
+      ));
+    }
+    state.executionLeases.clear();
+    for (const invocationId of state.activeInvocationIds) {
+      const invocation = readToolInvocation(this.store, invocationId);
+      if (invocation.status === "prepared" || invocation.status === "dispatched") {
+        terminalizeRevokedToolInvocation(
+          this.store,
+          invocation,
+          `run_tool_${reason}`,
+          this.nowMs(),
+        );
+      }
+      state.completedInvocationIds.add(invocationId);
+    }
     state.activeInvocationIds.clear();
     if (this.activeByAttempt.get(state.capability.attemptId) === capabilityRef) {
       this.activeByAttempt.delete(state.capability.attemptId);
@@ -522,6 +604,58 @@ export class RunToolCapabilityBroker {
       if (!state.revoked && predicate(state.capability) && this.revoke(ref, reason)) count += 1;
     }
     return count;
+  }
+
+  private assertCurrentExecutionAuthority(
+    invocation: AuthorizedRunToolInvocation,
+    activeOwnerId: string,
+  ): void {
+    const state = this.states.get(invocation.capabilityRef);
+    if (!state) this.reject("capability_missing", "Unknown run tool capability");
+    if (state.revoked) {
+      const code = rejectCodeForRevocation(state.revocationReason ?? "explicit");
+      this.reject(code, `Run tool execution authority was revoked: ${state.revocationReason ?? "explicit"}`);
+    }
+    if (!state.activeInvocationIds.has(invocation.invocationId)) {
+      this.reject("invocation_replayed", "Run tool invocation is no longer active");
+    }
+    this.assertLiveCapabilityAuthority(state, activeOwnerId);
+  }
+
+  private assertLiveCapabilityAuthority(
+    state: CapabilityState,
+    activeOwnerId: string,
+  ): void {
+    const capability = state.capability;
+    if (capability.ownerId !== activeOwnerId) {
+      this.revoke(capability.capabilityRef, "owner_changed");
+      this.reject("owner_mismatch", "Run tool execution no longer belongs to the active owner");
+    }
+    const persisted = this.persistedState(capability.runId, capability.attemptId);
+    if (persisted.ownerId !== capability.ownerId) {
+      this.revoke(capability.capabilityRef, "owner_changed");
+      this.reject("owner_mismatch", "Persisted run owner no longer matches the execution lease");
+    }
+    if (!ACTIVE_RUN_STATUSES.has(persisted.runStatus)) {
+      this.revoke(capability.capabilityRef, "run_terminal");
+      this.reject("run_terminal", "Run became terminal during tool execution");
+    }
+    if (!ACTIVE_ATTEMPT_STATUSES.has(persisted.attemptStatus)) {
+      this.revoke(capability.capabilityRef, "attempt_terminal");
+      this.reject("attempt_terminal", "Attempt became terminal during tool execution");
+    }
+    if (persisted.currentAttemptId !== capability.attemptId) {
+      this.revoke(capability.capabilityRef, "attempt_superseded");
+      this.reject("attempt_superseded", "Attempt was superseded during tool execution");
+    }
+    if (
+      persisted.profile.generation !== capability.profileGeneration
+      || persisted.profile.adapterId !== capability.adapterId
+      || persisted.profile.executionRole !== capability.executionRole
+    ) {
+      this.revoke(capability.capabilityRef, "explicit");
+      this.reject("profile_changed", "Execution profile changed during tool execution");
+    }
   }
 
   private persistedState(runId: string, attemptId: string): {

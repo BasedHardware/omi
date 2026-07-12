@@ -3259,7 +3259,8 @@ def continuity_contract_self_check_failures() -> list[str]:
 
     projection = (tests_dir / "KernelTurnRecordedProjectionTests.swift").read_text(encoding="utf-8")
     for needle in (
-        "func testOptimisticTurnKeepsIdentityThroughJournalAcknowledgementAndReplay(",
+        "func testRejectedJournalExchangeNeverCreatesAVisibleOrphan(",
+        "func testJournalAdmissionPublishesImmediateProjectionWithOneStableIdentity(",
         "func testJournalProjectionUpsertsMutationByCanonicalTurnID(",
         "func testJournalChangedHandlerIsReplaceOnly(",
         "func testAgentCompletionEnrichesProducingSpawnTurnIdempotently(",

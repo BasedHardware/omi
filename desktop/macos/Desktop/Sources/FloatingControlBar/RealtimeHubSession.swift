@@ -231,31 +231,45 @@ final class RealtimeHubSession: NSObject {
 
   func stop() {
     q.async { [weak self] in
-      guard let self else { return }
-      self.task?.cancel(with: .goingAway, reason: nil)
-      self.task = nil
-      self.rawWS?.close()
-      self.rawWS = nil
-      self.isOpen = false
-      self.pendingAudio.removeAll()
-      self.pendingVideo.removeAll()
-      self.pendingTextInputs.removeAll()
-      self.pendingCommit = false
-      self.openAIFunctionNames.removeAll()
-      self.dispatchedToolItems.removeAll()
-      self.activityOpen = false
-      self.pendingActivityStart = false
-      self.openAIResponseActive = false
-      self.openAIResponseCreatePending = false
-      self.openAIActiveResponseID = nil
-      self.openAIPendingResponseIdentities.removeAll()
-      self.openAIResponseIdentities.removeAll()
-      self.openAIPendingInputIdentities.removeAll()
-      self.openAIInputItemIdentities.removeAll()
-      self.geminiResponsePending = false
-      self.activeEventIdentity = nil
-      self.completedGeminiEventIdentity = nil
+      self?.stopOnQueue()
     }
+  }
+
+  /// Close the transport and drain its serialization queue before returning.
+  /// Owner replacement awaits this before the replacement owner becomes visible.
+  func stopAndWait() async {
+    await withCheckedContinuation { continuation in
+      q.async { [weak self] in
+        self?.stopOnQueue()
+        continuation.resume()
+      }
+    }
+  }
+
+  private func stopOnQueue() {
+    task?.cancel(with: .goingAway, reason: nil)
+    task = nil
+    rawWS?.close()
+    rawWS = nil
+    isOpen = false
+    pendingAudio.removeAll()
+    pendingVideo.removeAll()
+    pendingTextInputs.removeAll()
+    pendingCommit = false
+    openAIFunctionNames.removeAll()
+    dispatchedToolItems.removeAll()
+    activityOpen = false
+    pendingActivityStart = false
+    openAIResponseActive = false
+    openAIResponseCreatePending = false
+    openAIActiveResponseID = nil
+    openAIPendingResponseIdentities.removeAll()
+    openAIResponseIdentities.removeAll()
+    openAIPendingInputIdentities.removeAll()
+    openAIInputItemIdentities.removeAll()
+    geminiResponsePending = false
+    activeEventIdentity = nil
+    completedGeminiEventIdentity = nil
   }
 
   private func notifyError(_ message: String) {

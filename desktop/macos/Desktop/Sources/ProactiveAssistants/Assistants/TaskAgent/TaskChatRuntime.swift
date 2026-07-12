@@ -4,16 +4,26 @@ import Foundation
 /// execution truth live in the kernel; this bridge is transport only.
 @MainActor
 enum TaskChatRuntime {
+    struct QueryRouting: Equatable, Sendable {
+        let adapterId: String
+        let modelProfile: String?
+        let workingDirectory: String
+        let runMode: String
+    }
+
     private static var agentBridge: AgentBridge?
-    private static var bridgeStarted = false
     private static var activeWorkstreamId: String?
 
     static func attachJournalEvents(
         workstreamId: String,
+        authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
         wake: @escaping @MainActor () -> Void
     ) async throws -> UUID {
+        try requireCurrent(authorizationSnapshot)
         let bridge = try await sharedBridge()
+        try requireCurrent(authorizationSnapshot)
         await KernelJournalEventHub.shared.attach(bridge: bridge)
+        try requireCurrent(authorizationSnapshot)
         return KernelJournalEventHub.shared.subscribe(
             surface: .workstream(workstreamId: workstreamId),
             wake: wake
@@ -22,50 +32,87 @@ enum TaskChatRuntime {
 
     static func listJournalTurns(
         workstreamId: String,
+        ownerID: String,
+        authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
         afterTurnSeq: Int,
         limit: Int = 100
     ) async throws -> AgentRuntimeProcess.JournalOperationResult {
+        try requireCurrent(authorizationSnapshot, expectedOwnerID: ownerID)
         let bridge = try await sharedBridge()
+        try requireCurrent(authorizationSnapshot, expectedOwnerID: ownerID)
         return try await bridge.listJournalTurns(
             surface: .workstream(workstreamId: workstreamId),
+            ownerID: ownerID,
             afterTurnSeq: afterTurnSeq,
-            limit: limit
+            limit: limit,
+            authorizationSnapshot: authorizationSnapshot
+        )
+    }
+
+    static func recordJournalExchange(
+        workstreamId: String,
+        ownerID: String,
+        authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+        turns: [KernelJournalTurnWrite]
+    ) async throws -> AgentRuntimeProcess.JournalOperationResult {
+        try requireCurrent(authorizationSnapshot, expectedOwnerID: ownerID)
+        let bridge = try await sharedBridge()
+        try requireCurrent(authorizationSnapshot, expectedOwnerID: ownerID)
+        return try await bridge.recordJournalExchange(
+            surface: .workstream(workstreamId: workstreamId),
+            ownerID: ownerID,
+            turns: turns,
+            authorizationSnapshot: authorizationSnapshot
         )
     }
 
     static func recordJournalMessage(
         workstreamId: String,
+        ownerID: String,
+        authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
         message: ChatMessage,
         status: KernelJournalTurnStatus,
         continuityKey: String? = nil
     ) async throws -> KernelJournalTurn {
+        try requireCurrent(authorizationSnapshot, expectedOwnerID: ownerID)
         let bridge = try await sharedBridge()
+        try requireCurrent(authorizationSnapshot, expectedOwnerID: ownerID)
         return try await bridge.recordJournalTurn(
             surface: .workstream(workstreamId: workstreamId),
+            ownerID: ownerID,
             turn: message.journalWrite(
                 origin: "workstream",
                 status: status,
                 delivery: .local,
                 continuityKey: continuityKey,
                 messageSource: "workstream"
-            )
+            ),
+            authorizationSnapshot: authorizationSnapshot
         )
     }
 
     static func updateJournalMessage(
         workstreamId: String,
+        ownerID: String,
+        authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
         message: ChatMessage,
         status: KernelJournalTurnStatus? = nil
     ) async throws -> KernelJournalTurn {
+        try requireCurrent(authorizationSnapshot, expectedOwnerID: ownerID)
         let bridge = try await sharedBridge()
+        try requireCurrent(authorizationSnapshot, expectedOwnerID: ownerID)
         return try await bridge.updateJournalTurn(
             surface: .workstream(workstreamId: workstreamId),
-            update: message.journalUpdate(status: status)
+            ownerID: ownerID,
+            update: message.journalUpdate(status: status),
+            authorizationSnapshot: authorizationSnapshot
         )
     }
 
     static func importLegacyMessages(
         workstreamId: String,
+        ownerID: String,
+        authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
         messages: [ChatMessage]
     ) async throws {
         guard !messages.isEmpty else { return }
@@ -75,6 +122,8 @@ enum TaskChatRuntime {
         for message in messages {
             _ = try await recordJournalMessage(
                 workstreamId: workstreamId,
+                ownerID: ownerID,
+                authorizationSnapshot: authorizationSnapshot,
                 message: message,
                 status: .completed
             )
@@ -87,6 +136,7 @@ enum TaskChatRuntime {
         workspacePath: String,
         mode: String,
         taskContext: String?,
+        authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
         onTextDelta: @escaping AgentBridge.TextDeltaHandler,
         onToolActivity: @escaping AgentBridge.ToolActivityHandler,
         onThinkingDelta: @escaping AgentBridge.ThinkingDeltaHandler,
@@ -94,7 +144,9 @@ enum TaskChatRuntime {
         onAuthRequired: @escaping AgentBridge.AuthRequiredHandler,
         onAuthSuccess: @escaping AgentBridge.AuthSuccessHandler
     ) async throws -> AgentBridge.QueryResult {
+        try requireCurrent(authorizationSnapshot)
         let bridge = try await sharedBridge()
+        try requireCurrent(authorizationSnapshot)
         if activeWorkstreamId != nil {
             throw BridgeError.requestAlreadyActive
         }
@@ -105,26 +157,27 @@ enum TaskChatRuntime {
             }
         }
         let surface = AgentSurfaceReference.workstream(workstreamId: workstreamId)
-        let mode = UserDefaults.standard.string(forKey: .chatBridgeMode) ?? "piMono"
-        let harness = ChatProvider.harnessMode(for: ChatProvider.BridgeMode(rawValue: mode) ?? .piMono)
-        guard let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: harness) else {
-            throw BridgeError.agentError("Unknown AI runtime mode: \(harness)")
-        }
-        let usesNativeModelChoice = harness == "hermes" || harness == "openclaw"
+        let bridgePreference = UserDefaults.standard.string(forKey: .chatBridgeMode)
+        let routing = try queryRouting(
+            bridgePreference: bridgePreference,
+            runMode: mode,
+            workspacePath: workspacePath
+        )
         let creationProfile = AgentSessionCreationProfile(
-            adapterId: adapterId,
-            modelProfile: usesNativeModelChoice ? nil : ModelQoS.Claude.chat,
-            workingDirectory: workspacePath.isEmpty
-                ? AgentRuntimeProcess.defaultArtifactsDirectory()
-                : workspacePath
+            adapterId: routing.adapterId,
+            modelProfile: routing.modelProfile,
+            workingDirectory: routing.workingDirectory
         )
         let session = try await bridge.resolveSurfaceSession(
             surface,
-            creationProfile: creationProfile
+            creationProfile: creationProfile,
+            authorizationSnapshot: authorizationSnapshot
         )
+        try requireCurrent(authorizationSnapshot)
         var snapshot = try await bridge.getContextSnapshot(
             sessionId: session.sessionId,
-            surfaceKind: surface.surfaceKind
+            surfaceKind: surface.surfaceKind,
+            authorizationSnapshot: authorizationSnapshot
         )
         let contextInputs: [(AgentContextSource, AgentContextSourceOutcome, [String: Any])] = [
             (
@@ -148,20 +201,28 @@ enum TaskChatRuntime {
                 sourceRevision: revision,
                 outcome: outcome,
                 capturedAtMs: Int(Date().timeIntervalSince1970 * 1_000),
-                payload: payload
+                payload: payload,
+                authorizationSnapshot: authorizationSnapshot
             )
+            try requireCurrent(authorizationSnapshot)
             snapshot = try await bridge.getContextSnapshot(
                 sessionId: session.sessionId,
-                surfaceKind: surface.surfaceKind
+                surfaceKind: surface.surfaceKind,
+                authorizationSnapshot: authorizationSnapshot
             )
         }
-        await bridge.warmupSession(session)
+        await bridge.warmupSession(
+            session,
+            authorizationSnapshot: authorizationSnapshot
+        )
+        try requireCurrent(authorizationSnapshot)
         return try await bridge.query(
             prompt: prompt,
             session: session,
             surface: surface,
-            mode: mode,
+            mode: routing.runMode,
             expectedContext: snapshot.freshness,
+            authorizationSnapshot: authorizationSnapshot,
             onTextDelta: onTextDelta,
             onToolActivity: onToolActivity,
             onThinkingDelta: onThinkingDelta,
@@ -171,14 +232,76 @@ enum TaskChatRuntime {
         )
     }
 
-    static func interrupt(workstreamId: String) async {
+    nonisolated static func queryRouting(
+        bridgePreference: String?,
+        runMode: String,
+        workspacePath: String
+    ) throws -> QueryRouting {
+        let preference = ChatProvider.BridgeMode(rawValue: bridgePreference ?? "piMono") ?? .piMono
+        let harness = ChatProvider.harnessMode(for: preference)
+        guard let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: harness) else {
+            throw BridgeError.agentError("Unknown AI runtime mode: \(harness)")
+        }
+        let usesNativeModelChoice = harness == "hermes" || harness == "openclaw"
+        return QueryRouting(
+            adapterId: adapterId,
+            modelProfile: usesNativeModelChoice ? nil : ModelQoS.Claude.chat,
+            workingDirectory: workspacePath.isEmpty
+                ? AgentRuntimeProcess.defaultArtifactsDirectory()
+                : workspacePath,
+            runMode: runMode
+        )
+    }
+
+    static func interrupt(
+        workstreamId: String,
+        authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    ) async {
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
         guard activeWorkstreamId == workstreamId else { return }
-        await agentBridge?.interrupt()
+        await agentBridge?.interrupt(authorizationSnapshot: authorizationSnapshot)
     }
 
     static func controlTool(name: String, input: [String: Any]) async throws -> String {
+        guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+            throw LocalMutationAuthorizationError.revoked
+        }
+        return try await controlTool(
+            name: name,
+            input: input,
+            authorizationSnapshot: authorizationSnapshot
+        )
+    }
+
+    static func controlTool(
+        name: String,
+        input: [String: Any],
+        authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    ) async throws -> String {
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+            throw LocalMutationAuthorizationError.revoked
+        }
         let bridge = try await sharedBridge()
-        return try await bridge.controlTool(name: name, input: input)
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+            throw LocalMutationAuthorizationError.revoked
+        }
+        return try await bridge.controlTool(
+            name: name,
+            input: input,
+            authorizationSnapshot: authorizationSnapshot
+        )
+    }
+
+    private nonisolated static func requireCurrent(
+        _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+        expectedOwnerID: String? = nil
+    ) throws {
+        if let expectedOwnerID, authorizationSnapshot.ownerID != expectedOwnerID {
+            throw LocalMutationAuthorizationError.revoked
+        }
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+            throw LocalMutationAuthorizationError.revoked
+        }
     }
 
 #if DEBUG
@@ -209,24 +332,13 @@ enum TaskChatRuntime {
 #endif
 
     private static func sharedBridge() async throws -> AgentBridge {
-        if bridgeStarted {
-            let alive = await agentBridge?.isAlive ?? false
-            if !alive {
-                log("TaskChatRuntime: bridge process died, will restart")
-                bridgeStarted = false
-            }
-        }
-        if let bridge = agentBridge, bridgeStarted {
-            return bridge
-        }
+        if let agentBridge { return agentBridge }
 
         let mode = UserDefaults.standard.string(forKey: .chatBridgeMode) ?? "piMono"
         let harness = ChatProvider.harnessMode(for: ChatProvider.BridgeMode(rawValue: mode) ?? .piMono)
         let bridge = AgentClient.makeBridge(harnessMode: harness)
-        try await bridge.start()
         agentBridge = bridge
-        bridgeStarted = true
-        log("TaskChatRuntime: shared task-chat bridge started")
+        log("TaskChatRuntime: shared task-chat bridge initialized")
         return bridge
     }
 }

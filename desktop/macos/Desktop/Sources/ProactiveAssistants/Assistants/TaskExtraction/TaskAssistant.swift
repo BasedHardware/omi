@@ -392,11 +392,22 @@ actor TaskAssistant: ProactiveAssistant {
             sourceSubcategory: taskResult.task?.sourceSubcategory,
             createdAt: Date()
         )
+        let observationAuthorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
         Task {
+            guard let observationAuthorizationSnapshot else { return }
             do {
-                try await ActionItemStorage.shared.insertObservation(observation)
+                try await ActionItemStorage.shared.insertObservation(
+                    observation,
+                    authorization: LocalMutationAuthorization {
+                        RuntimeOwnerIdentity.isAuthorizationCurrent(
+                            observationAuthorizationSnapshot
+                        )
+                    }
+                )
             } catch {
-                logError("Task: Failed to insert observation", error: error)
+                if RuntimeOwnerIdentity.isAuthorizationCurrent(observationAuthorizationSnapshot) {
+                    logError("Task: Failed to insert observation", error: error)
+                }
             }
         }
 

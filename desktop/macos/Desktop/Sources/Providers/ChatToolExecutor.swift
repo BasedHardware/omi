@@ -4,10 +4,61 @@ import Foundation
 import GRDB
 import UserNotifications
 
+private enum ChatToolOwnerAuthorization {
+  @TaskLocal static var snapshot: RuntimeOwnerAuthorizationSnapshot?
+}
+
+/// Bridges callback-based macOS permission APIs into structured concurrency.
+/// Cancellation wins exactly once and late TCC callbacks are ignored, so an
+/// owner transition never waits indefinitely for a user to answer an OS prompt.
+private final class CancellablePermissionContinuation<Value: Sendable>: @unchecked Sendable {
+  private let lock = NSLock()
+  private var continuation: CheckedContinuation<Value?, Never>?
+  private var isFinished = false
+  private var result: Value?
+
+  func install(_ continuation: CheckedContinuation<Value?, Never>) {
+    let completedResult: Value?
+    let shouldResume: Bool
+    lock.lock()
+    if isFinished {
+      completedResult = result
+      shouldResume = true
+    } else {
+      self.continuation = continuation
+      completedResult = nil
+      shouldResume = false
+    }
+    lock.unlock()
+    if shouldResume {
+      continuation.resume(returning: completedResult)
+    }
+  }
+
+  func finish(_ value: Value?) {
+    let continuationToResume: CheckedContinuation<Value?, Never>?
+    lock.lock()
+    guard !isFinished else {
+      lock.unlock()
+      return
+    }
+    isFinished = true
+    result = value
+    continuationToResume = continuation
+    continuation = nil
+    lock.unlock()
+    continuationToResume?.resume(returning: value)
+  }
+}
+
 /// Executes tool calls from Gemini and returns results
 /// Tools: execute_sql (read/write SQL on omi.db), semantic_search (vector similarity)
 @MainActor
 class ChatToolExecutor {
+
+  nonisolated static var currentOwnerAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? {
+    ChatToolOwnerAuthorization.snapshot
+  }
 
   // MARK: - Onboarding State
 
@@ -31,7 +82,6 @@ class ChatToolExecutor {
   static var calendarInsightsText: String?
 
   private static var fileScanFileCount = 0
-  private static var followupContinuation: CheckedContinuation<String, Never>?
 
   nonisolated static let onboardingPermissionTypes = [
     "screen_recording",
@@ -76,11 +126,6 @@ class ChatToolExecutor {
     let summaryText: String
   }
 
-  static func resumeFollowup(with reply: String) {
-    followupContinuation?.resume(returning: reply)
-    followupContinuation = nil
-  }
-
   /// Execute a tool call and return the result as a string
   static func execute(
     _ toolCall: ToolCall,
@@ -91,6 +136,7 @@ class ChatToolExecutor {
     originatingUserText: String? = nil,
     isOnboardingSurface: Bool = false,
     expectedOwnerID: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     backendAPIClient: APIClient = .shared
   ) async -> String {
     let pinnedOwnerID = expectedOwnerID ?? RuntimeOwnerIdentity.currentOwnerId()
@@ -99,22 +145,37 @@ class ChatToolExecutor {
     guard pinnedOwnerID != nil || allowsSignedOutOnboardingPermission else {
       return authorizedOwnerChangedResult()
     }
-    guard isExpectedOwnerCurrent(pinnedOwnerID) else {
+    let pinnedAuthorization: RuntimeOwnerAuthorizationSnapshot?
+    if let pinnedOwnerID {
+      guard let authorization = authorizationSnapshot
+        ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: pinnedOwnerID),
+        authorization.ownerID == pinnedOwnerID,
+        RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
+      else {
+        return authorizedOwnerChangedResult()
+      }
+      pinnedAuthorization = authorization
+    } else {
+      pinnedAuthorization = nil
+    }
+    guard isExpectedOwnerCurrent(pinnedOwnerID, authorizationSnapshot: pinnedAuthorization) else {
       return authorizedOwnerChangedResult()
     }
-    let result = await executeUnchecked(
-      toolCall,
-      originatingChatMode: originatingChatMode,
-      originatingClientScope: originatingClientScope,
-      originatingSurfaceRef: originatingSurfaceRef,
-      originatingRunId: originatingRunId,
-      isOnboardingSurface: isOnboardingSurface,
-      expectedOwnerID: pinnedOwnerID,
-      backendAPIClient: backendAPIClient)
-    guard isExpectedOwnerCurrent(pinnedOwnerID) else {
-      return authorizedOwnerChangedResult()
+    return await ChatToolOwnerAuthorization.$snapshot.withValue(pinnedAuthorization) {
+      let result = await executeUnchecked(
+        toolCall,
+        originatingChatMode: originatingChatMode,
+        originatingClientScope: originatingClientScope,
+        originatingSurfaceRef: originatingSurfaceRef,
+        originatingRunId: originatingRunId,
+        isOnboardingSurface: isOnboardingSurface,
+        expectedOwnerID: pinnedOwnerID,
+        backendAPIClient: backendAPIClient)
+      guard isExpectedOwnerCurrent(pinnedOwnerID) else {
+        return authorizedOwnerChangedResult()
+      }
+      return result
     }
-    return result
   }
 
   private static func executeUnchecked(
@@ -173,16 +234,27 @@ class ChatToolExecutor {
     // Onboarding tools
     case .requestPermission:
       let isOnboardingRequest = isOnboardingSurface
+      let permissionAuthorization = currentOwnerAuthorizationSnapshot
       guard
         let result = await performOwnerBoundAsyncPhysicalEffect(
           expectedOwnerID: expectedOwnerID,
+          authorizationSnapshot: permissionAuthorization,
+          ownerIsCurrent: {
+            isPermissionAuthorizationCurrent(
+              $0,
+              authorizationSnapshot: permissionAuthorization)
+          },
           effect: {
             await executeRequestPermission(
               toolCall.arguments,
-              expectedOwnerID: expectedOwnerID)
+              expectedOwnerID: expectedOwnerID,
+              authorizationSnapshot: permissionAuthorization)
           })
       else { return authorizedOwnerChangedResult() }
-      guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
+      guard isPermissionAuthorizationCurrent(
+        expectedOwnerID,
+        authorizationSnapshot: permissionAuthorization)
+      else { return authorizedOwnerChangedResult() }
       let permType = toolCall.arguments["type"] as? String ?? "unknown"
       let granted = permissionToolResultGranted(result)
       if isOnboardingRequest {
@@ -190,16 +262,28 @@ class ChatToolExecutor {
           tool: "request_permission",
           properties: ["permission": permType, "result": granted ? "granted" : "pending"])
         if !granted {
-          DispatchQueue.main.async { onPermissionPending?(permType) }
+          let callback = onPermissionPending
+          DispatchQueue.main.async {
+            publishPermissionPendingIfCurrent(
+              permType,
+              expectedOwnerID: expectedOwnerID,
+              authorizationSnapshot: permissionAuthorization,
+              callback: callback)
+          }
         }
       }
       return result
 
     case .checkPermissionStatus:
+      let permissionAuthorization = currentOwnerAuthorizationSnapshot
       let result = await executeCheckPermissionStatus(
         toolCall.arguments,
-        expectedOwnerID: expectedOwnerID)
-      guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: permissionAuthorization)
+      guard isPermissionAuthorizationCurrent(
+        expectedOwnerID,
+        authorizationSnapshot: permissionAuthorization)
+      else { return authorizedOwnerChangedResult() }
       AnalyticsManager.shared.onboardingChatToolUsed(tool: "check_permission_status")
       return result
 
@@ -309,9 +393,59 @@ class ChatToolExecutor {
     }
   }
 
-  nonisolated static func isExpectedOwnerCurrent(_ expectedOwnerID: String?) -> Bool {
+  nonisolated static func isExpectedOwnerCurrent(
+    _ expectedOwnerID: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) -> Bool {
+    if let authorization = authorizationSnapshot ?? ChatToolOwnerAuthorization.snapshot {
+      return (expectedOwnerID == nil || authorization.ownerID == expectedOwnerID)
+        && RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
+    }
     guard let expectedOwnerID else { return true }
     return AuthorizedToolExecution.isOwnerCurrent(expectedOwnerID)
+  }
+
+  /// Permission onboarding is the one authorized signed-out tool path. A nil
+  /// owner therefore needs its own fail-closed rule instead of the generic
+  /// "no expected owner" behavior: it remains valid only while still signed
+  /// out and outside an effective-owner transition.
+  nonisolated static func isPermissionAuthorizationCurrent(
+    _ expectedOwnerID: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) -> Bool {
+    guard !Task.isCancelled else { return false }
+    if let authorizationSnapshot {
+      return (expectedOwnerID == nil || authorizationSnapshot.ownerID == expectedOwnerID)
+        && RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+    }
+    if let expectedOwnerID {
+      return AuthorizedToolExecution.isOwnerCurrent(expectedOwnerID)
+    }
+    return !RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress
+      && RuntimeOwnerIdentity.currentOwnerId() == nil
+  }
+
+  /// Cancellation-aware adapter used by TCC callback APIs. The callback may
+  /// still arrive after cancellation, but it can no longer resume or publish
+  /// into the revoked owner-bound task.
+  nonisolated static func awaitCancellablePermissionRequest<Value: Sendable>(
+    _ register: @escaping @Sendable (@escaping @Sendable (Value) -> Void) -> Void
+  ) async -> Value? {
+    let state = CancellablePermissionContinuation<Value>()
+    return await withTaskCancellationHandler {
+      await withCheckedContinuation { continuation in
+        state.install(continuation)
+        guard !Task.isCancelled else {
+          state.finish(nil)
+          return
+        }
+        register { value in
+          state.finish(value)
+        }
+      }
+    } onCancel: {
+      state.finish(nil)
+    }
   }
 
   nonisolated static func authorizedOwnerChangedResult() -> String {
@@ -331,13 +465,17 @@ class ChatToolExecutor {
   @MainActor
   static func performOwnerBoundAsyncPhysicalEffect<T>(
     expectedOwnerID: String?,
-    ownerIsCurrent: (String?) -> Bool = { isExpectedOwnerCurrent($0) },
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    ownerIsCurrent: ((String?) -> Bool)? = nil,
     prepare: () async -> Void = {},
     effect: () async -> T
   ) async -> T? {
-    guard ownerIsCurrent(expectedOwnerID) else { return nil }
+    let validateOwner = ownerIsCurrent ?? {
+      isExpectedOwnerCurrent($0, authorizationSnapshot: authorizationSnapshot)
+    }
+    guard validateOwner(expectedOwnerID) else { return nil }
     await prepare()
-    guard ownerIsCurrent(expectedOwnerID) else { return nil }
+    guard validateOwner(expectedOwnerID) else { return nil }
     return await effect()
   }
 
@@ -740,19 +878,32 @@ class ChatToolExecutor {
   }
 
   /// Execute a write (INSERT/UPDATE/DELETE) query
-  private static func executeWriteQuery(
+  static func executeWriteQuery(
     _ query: String,
     dbQueue: DatabasePool,
-    expectedOwnerID: String?
+    expectedOwnerID: String?,
+    ownerIsCurrent: @escaping @Sendable (String?) -> Bool = { isExpectedOwnerCurrent($0) }
   ) async throws
     -> String
   {
-    guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
-    let changes = try await dbQueue.write { db -> Int in
-      try db.execute(sql: query)
-      return db.changesCount
+    guard ownerIsCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
+    let authorization = LocalMutationAuthorization {
+      ownerIsCurrent(expectedOwnerID)
     }
-    guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
+    let changes: Int
+    do {
+      changes = try await authorization.withCommitLease {
+        try await dbQueue.write { db -> Int in
+          try authorization.require()
+          try db.execute(sql: query)
+          try authorization.require()
+          return db.changesCount
+        }
+      }
+    } catch LocalMutationAuthorizationError.revoked {
+      return authorizedOwnerChangedResult()
+    }
+    guard ownerIsCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
 
     log("Tool execute_sql write: \(changes) row(s) affected")
 
@@ -762,12 +913,15 @@ class ChatToolExecutor {
       query: query,
       expectedOwnerID: expectedOwnerID,
       reloadTasks: {
-        await TasksStore.shared.reloadFromLocalCache(expectedOwnerID: expectedOwnerID)
+        await TasksStore.shared.reloadFromLocalCache(
+          expectedOwnerID: expectedOwnerID,
+          authorizationSnapshot: currentOwnerAuthorizationSnapshot)
       },
       retryUnsyncedTasks: {
         await TasksStore.shared.retryUnsyncedItems(
           includeRecent: true,
-          expectedOwnerID: expectedOwnerID)
+          expectedOwnerID: expectedOwnerID,
+          authorizationSnapshot: currentOwnerAuthorizationSnapshot)
       })
     guard completedPostCommitEffects else { return authorizedOwnerChangedResult() }
 
@@ -1334,7 +1488,10 @@ class ChatToolExecutor {
         return "OK: task '\(task.description)' is already completed"
       }
 
-      await TasksStore.shared.toggleTask(task, expectedOwnerID: expectedOwnerID)
+      await TasksStore.shared.toggleTask(
+        task,
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: currentOwnerAuthorizationSnapshot)
 
       guard isExpectedOwnerCurrent(expectedOwnerID) else {
         return authorizedOwnerChangedResult()
@@ -1373,7 +1530,10 @@ class ChatToolExecutor {
         return "Error: task '\(task.description)' is already deleted"
       }
 
-      await TasksStore.shared.deleteTask(task, expectedOwnerID: expectedOwnerID)
+      await TasksStore.shared.deleteTask(
+        task,
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: currentOwnerAuthorizationSnapshot)
 
       guard isExpectedOwnerCurrent(expectedOwnerID) else {
         return authorizedOwnerChangedResult()
@@ -1392,9 +1552,13 @@ class ChatToolExecutor {
   /// Request a specific macOS permission
   private static func executeRequestPermission(
     _ args: [String: Any],
-    expectedOwnerID: String?
+    expectedOwnerID: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
   ) async -> String {
-    guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
+    guard isPermissionAuthorizationCurrent(
+      expectedOwnerID,
+      authorizationSnapshot: authorizationSnapshot)
+    else { return authorizedOwnerChangedResult() }
     guard let type = permissionType(from: args) else {
       return permissionJSON([
         "ok": false,
@@ -1409,15 +1573,47 @@ class ChatToolExecutor {
 
     switch type {
     case "screen_recording":
-      guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
+      guard isPermissionAuthorizationCurrent(
+        expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot)
+      else { return authorizedOwnerChangedResult() }
       appState?.screenRecordingGrantAttempts += 1
-      appState?.triggerScreenRecordingPermission()
-      ScreenCaptureService.openScreenRecordingPreferences()
+      let requestResult = await awaitCancellablePermissionRequest { completion in
+        Task { @MainActor in
+          guard isPermissionAuthorizationCurrent(
+            expectedOwnerID,
+            authorizationSnapshot: authorizationSnapshot)
+          else {
+            completion(false)
+            return
+          }
+          let granted = await ScreenCaptureService
+            .requestAllScreenCapturePermissionsAwaitingScreenCaptureKit()
+          guard isPermissionAuthorizationCurrent(
+            expectedOwnerID,
+            authorizationSnapshot: authorizationSnapshot)
+          else {
+            completion(false)
+            return
+          }
+          completion(granted)
+        }
+      }
+      guard requestResult != nil,
+        isPermissionAuthorizationCurrent(
+          expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
+      else { return authorizedOwnerChangedResult() }
+      _ = openPermissionPrivacySettings(
+        pane: "Privacy_ScreenCapture",
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot)
       try? await Task.sleep(nanoseconds: 2_000_000_000)
-      guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
+      guard isPermissionAuthorizationCurrent(
+        expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot)
+      else { return authorizedOwnerChangedResult() }
       appState?.checkScreenRecordingPermission()
-      try? await Task.sleep(nanoseconds: 500_000_000)
-      guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
       return permissionRequestResult(
         type: type,
         granted: ScreenCaptureService.checkPermission(),
@@ -1427,56 +1623,69 @@ class ChatToolExecutor {
       )
 
     case "microphone":
-      guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
-      if let appState {
-        appState.requestMicrophonePermission()
-      } else {
-        _ = await requestMicrophonePermissionDirectly()
+      guard isPermissionAuthorizationCurrent(
+        expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot)
+      else { return authorizedOwnerChangedResult() }
+      NSApp.activate()
+      guard let granted = await requestMicrophonePermissionDirectly(),
+        isPermissionAuthorizationCurrent(
+          expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
+      else { return authorizedOwnerChangedResult() }
+      appState?.hasMicrophonePermission = granted
+      if granted, let appState, appState.hasCompletedOnboarding {
+        guard isPermissionAuthorizationCurrent(
+          expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
+        else { return authorizedOwnerChangedResult() }
+        appState.startTranscription()
       }
-      guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
-      try? await Task.sleep(nanoseconds: 3_000_000_000)
-      guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
-      appState?.checkMicrophonePermission()
       return permissionRequestResult(
         type: type,
-        granted: AudioCaptureService.checkPermission(),
+        granted: granted,
         pendingMessage: "User needs to allow microphone access in the system dialog.",
         requiresRestart: false
       )
 
     case "notifications":
-      guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
-      if let appState {
-        appState.requestNotificationPermission()
-      } else {
-        _ = await requestNotificationPermissionDirectly()
+      guard isPermissionAuthorizationCurrent(
+        expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot)
+      else { return authorizedOwnerChangedResult() }
+      guard let granted = await requestNotificationPermissionDirectly(),
+        isPermissionAuthorizationCurrent(
+          expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
+      else { return authorizedOwnerChangedResult() }
+      appState?.hasNotificationPermission = granted
+      if !granted {
+        _ = openNotificationPrivacySettings(
+          expectedOwnerID: expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
       }
-      guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
-      try? await Task.sleep(nanoseconds: 3_000_000_000)
-      guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
-      appState?.checkNotificationPermission()
-      try? await Task.sleep(nanoseconds: 500_000_000)
-      guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
       return permissionRequestResult(
         type: type,
-        granted: await notificationPermissionGranted(),
+        granted: granted,
         pendingMessage:
           "User needs to allow notifications in the system dialog or enable Omi in System Settings > Notifications.",
         requiresRestart: false
       )
 
     case "accessibility":
-      guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
-      if let appState {
-        appState.triggerAccessibilityPermission()
-      } else {
-        requestAccessibilityPermissionDirectly()
-      }
+      guard isPermissionAuthorizationCurrent(
+        expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot)
+      else { return authorizedOwnerChangedResult() }
+      requestAccessibilityPermissionDirectly(
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot)
       try? await Task.sleep(nanoseconds: 2_000_000_000)
-      guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
+      guard isPermissionAuthorizationCurrent(
+        expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot)
+      else { return authorizedOwnerChangedResult() }
       appState?.checkAccessibilityPermission()
-      try? await Task.sleep(nanoseconds: 500_000_000)
-      guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
       return permissionRequestResult(
         type: type,
         granted: AXIsProcessTrusted(),
@@ -1485,38 +1694,47 @@ class ChatToolExecutor {
       )
 
     case "automation":
-      guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
-      appState?.triggerAutomationPermission()
-      if appState == nil {
-        triggerAutomationPermissionDirectly(expectedOwnerID: expectedOwnerID)
+      guard let status = await triggerAutomationPermissionDirectly(
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot),
+        isPermissionAuthorizationCurrent(
+          expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
+      else { return authorizedOwnerChangedResult() }
+      let granted = status == noErr
+      appState?.hasAutomationPermission = granted
+      appState?.automationPermissionError = automationPermissionError(for: status)
+      if !granted {
+        _ = openAutomationPrivacySettings(
+          expectedOwnerID: expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
       }
-      try? await Task.sleep(nanoseconds: 3_000_000_000)
-      guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
-      appState?.checkAutomationPermission()
-      try? await Task.sleep(nanoseconds: 500_000_000)
-      guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
       return permissionRequestResult(
         type: type,
-        granted: AppState.queryAutomationPermissionStatus() == noErr,
+        granted: granted,
         pendingMessage: "User needs to toggle Automation for Omi in System Settings.",
         requiresRestart: false
       )
 
     case "full_disk_access":
-      guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
-      if let url = URL(
-        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
-      {
-        NSWorkspace.shared.open(url)
-      }
+      guard isPermissionAuthorizationCurrent(
+        expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot)
+      else { return authorizedOwnerChangedResult() }
+      _ = openPermissionPrivacySettings(
+        pane: "Privacy_AllFiles",
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot)
       try? await Task.sleep(nanoseconds: 3_000_000_000)
-      guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
-      appState?.checkFullDiskAccess()
-      try? await Task.sleep(nanoseconds: 500_000_000)
-      guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
+      guard isPermissionAuthorizationCurrent(
+        expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot)
+      else { return authorizedOwnerChangedResult() }
+      let granted = checkFullDiskAccessDirectly()
+      appState?.hasFullDiskAccess = granted
       return permissionRequestResult(
         type: type,
-        granted: appState?.hasFullDiskAccess ?? checkFullDiskAccessDirectly(),
+        granted: granted,
         pendingMessage:
           "User needs to toggle Full Disk Access for Omi in System Settings > Privacy & Security > Full Disk Access.",
         requiresRestart: false
@@ -1536,17 +1754,23 @@ class ChatToolExecutor {
   /// Check status of all macOS permissions
   private static func executeCheckPermissionStatus(
     _ args: [String: Any],
-    expectedOwnerID: String?
+    expectedOwnerID: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
   ) async -> String {
-    guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
+    guard isPermissionAuthorizationCurrent(
+      expectedOwnerID,
+      authorizationSnapshot: authorizationSnapshot)
+    else { return authorizedOwnerChangedResult() }
     let appState = onboardingAppState ?? AppState.current
-    guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
-    appState?.checkAllPermissions()
-    try? await Task.sleep(nanoseconds: 500_000_000)
-    guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
-
-    let statuses = await currentPermissionStatuses(appState: appState)
-    guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
+    guard let statuses = await currentPermissionStatuses(
+      appState: appState,
+      expectedOwnerID: expectedOwnerID,
+      authorizationSnapshot: authorizationSnapshot)
+    else { return authorizedOwnerChangedResult() }
+    guard isPermissionAuthorizationCurrent(
+      expectedOwnerID,
+      authorizationSnapshot: authorizationSnapshot)
+    else { return authorizedOwnerChangedResult() }
     if let type = permissionType(from: args), onboardingPermissionTypes.contains(type) {
       return permissionJSON([
         "ok": true,
@@ -1599,65 +1823,117 @@ class ChatToolExecutor {
     return status == "granted"
   }
 
-  private static func currentPermissionStatuses(appState: AppState?) async -> [String: String] {
-    let notificationsGranted = await notificationPermissionGranted()
+  private static func currentPermissionStatuses(
+    appState: AppState?,
+    expectedOwnerID: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async -> [String: String]? {
+    guard let notificationsGranted = await notificationPermissionGranted(),
+      isPermissionAuthorizationCurrent(
+        expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot)
+    else { return nil }
+
+    let screenRecordingGranted = ScreenCaptureService.checkPermission()
+    let microphoneGranted = AudioCaptureService.checkPermission()
+    let accessibilityGranted = AXIsProcessTrusted()
+    let automationStatus = AppState.queryAutomationPermissionStatus()
+    let fullDiskAccessGranted = checkFullDiskAccessDirectly()
+    guard isPermissionAuthorizationCurrent(
+      expectedOwnerID,
+      authorizationSnapshot: authorizationSnapshot)
+    else { return nil }
+
+    appState?.hasScreenRecordingPermission = ScreenRecordingPermissionPolicy.uiPermissionGranted(
+      tccGranted: screenRecordingGranted)
+    appState?.hasMicrophonePermission = microphoneGranted
+    appState?.hasNotificationPermission = notificationsGranted
+    appState?.hasAccessibilityPermission = accessibilityGranted
+    appState?.hasAutomationPermission = automationStatus == noErr
+    appState?.automationPermissionError = automationPermissionError(for: automationStatus)
+    appState?.hasFullDiskAccess = fullDiskAccessGranted
+
     return onboardingPermissionStatusPayload(
-      screenRecording: ScreenCaptureService.checkPermission(),
-      microphone: AudioCaptureService.checkPermission(),
+      screenRecording: screenRecordingGranted,
+      microphone: microphoneGranted,
       notifications: notificationsGranted,
-      accessibility: AXIsProcessTrusted(),
-      automation: AppState.queryAutomationPermissionStatus() == noErr,
-      fullDiskAccess: appState?.hasFullDiskAccess ?? checkFullDiskAccessDirectly()
+      accessibility: accessibilityGranted,
+      automation: automationStatus == noErr,
+      fullDiskAccess: fullDiskAccessGranted
     )
   }
 
-  private static func requestMicrophonePermissionDirectly() async -> Bool {
-    await withCheckedContinuation { continuation in
+  private static func requestMicrophonePermissionDirectly() async -> Bool? {
+    await awaitCancellablePermissionRequest { completion in
       AVCaptureDevice.requestAccess(for: .audio) { granted in
-        continuation.resume(returning: granted)
+        completion(granted)
       }
     }
   }
 
-  private static func notificationPermissionGranted() async -> Bool {
-    await withCheckedContinuation { continuation in
+  private static func notificationPermissionGranted() async -> Bool? {
+    await awaitCancellablePermissionRequest { completion in
       UNUserNotificationCenter.current().getNotificationSettings { settings in
-        continuation.resume(returning: settings.authorizationStatus == .authorized)
+        completion(settings.authorizationStatus == .authorized)
       }
     }
   }
 
-  private static func requestNotificationPermissionDirectly() async -> Bool {
-    await withCheckedContinuation { continuation in
-      UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
-        continuation.resume(returning: granted)
+  private static func requestNotificationPermissionDirectly() async -> Bool? {
+    await awaitCancellablePermissionRequest { completion in
+      UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) {
+        granted, _ in
+        completion(granted)
       }
     }
   }
 
-  private static func requestAccessibilityPermissionDirectly() {
+  private static func requestAccessibilityPermissionDirectly(
+    expectedOwnerID: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) {
+    guard isPermissionAuthorizationCurrent(
+      expectedOwnerID,
+      authorizationSnapshot: authorizationSnapshot)
+    else { return }
     let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-    _ = AXIsProcessTrustedWithOptions(options)
-    if let url = URL(
-      string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-    {
-      NSWorkspace.shared.open(url)
+    let granted = AXIsProcessTrustedWithOptions(options)
+    if !granted {
+      _ = openPermissionPrivacySettings(
+        pane: "Privacy_Accessibility",
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot)
     }
   }
 
-  private static func triggerAutomationPermissionDirectly(expectedOwnerID: String?) {
-    Task.detached {
-      // NSAppleScript is main-thread-only — build+execute each script on the main
-      // actor; the delay between them stays off-main.
-      await MainActor.run {
-        guard isExpectedOwnerCurrent(expectedOwnerID) else { return }
+  private static func triggerAutomationPermissionDirectly(
+    expectedOwnerID: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async -> OSStatus? {
+    await awaitCancellablePermissionRequest { completion in
+      // The synchronous AppleScript call is the OS permission request and may
+      // outlive cancellation while the TCC prompt is visible. Keep that narrow
+      // request outside the tracked parent, but fence every step and route its
+      // completion through the once-resume cancellation adapter above.
+      Task { @MainActor in
+        guard isPermissionAuthorizationCurrent(
+          expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
+        else {
+          completion(OSStatus(errAEEventNotPermitted))
+          return
+        }
         let launchScript = NSAppleScript(source: "launch application \"System Events\"")
         var launchError: NSDictionary?
         launchScript?.executeAndReturnError(&launchError)
-      }
-      try? await Task.sleep(nanoseconds: 500_000_000)
-      await MainActor.run {
-        guard isExpectedOwnerCurrent(expectedOwnerID) else { return }
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        guard isPermissionAuthorizationCurrent(
+          expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
+        else {
+          completion(OSStatus(errAEEventNotPermitted))
+          return
+        }
         let script = NSAppleScript(
           source: """
             tell application "System Events"
@@ -1666,15 +1942,83 @@ class ChatToolExecutor {
             """)
         var error: NSDictionary?
         script?.executeAndReturnError(&error)
-      }
-      if let url = URL(
-        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")
-      {
-        _ = await MainActor.run {
-          NSWorkspace.shared.open(url)
+        guard isPermissionAuthorizationCurrent(
+          expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
+        else {
+          completion(OSStatus(errAEEventNotPermitted))
+          return
         }
+        completion(AppState.queryAutomationPermissionStatus())
       }
     }
+  }
+
+  private nonisolated static func automationPermissionError(for status: OSStatus) -> OSStatus {
+    (status == noErr || status == -1743 || status == -1744) ? 0 : status
+  }
+
+  @MainActor
+  private static func openPermissionPrivacySettings(
+    pane: String,
+    expectedOwnerID: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?,
+    open: (URL) -> Bool = { NSWorkspace.shared.open($0) }
+  ) -> Bool {
+    guard isPermissionAuthorizationCurrent(
+      expectedOwnerID,
+      authorizationSnapshot: authorizationSnapshot),
+      let url = URL(
+        string: "x-apple.systempreferences:com.apple.preference.security?\(pane)")
+    else { return false }
+    return open(url)
+  }
+
+  @MainActor
+  private static func openNotificationPrivacySettings(
+    expectedOwnerID: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?,
+    open: (URL) -> Bool = { NSWorkspace.shared.open($0) }
+  ) -> Bool {
+    guard isPermissionAuthorizationCurrent(
+      expectedOwnerID,
+      authorizationSnapshot: authorizationSnapshot)
+    else { return false }
+    let bundleID = Bundle.main.bundleIdentifier ?? "com.omi.computer-macos"
+    guard let url = URL(
+      string: "x-apple.systempreferences:com.apple.preference.notifications?id=\(bundleID)")
+    else { return false }
+    return open(url)
+  }
+
+  @MainActor
+  static func openAutomationPrivacySettings(
+    expectedOwnerID: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    ownerIsCurrent: ((String?) -> Bool)? = nil,
+    open: (URL) -> Bool = { NSWorkspace.shared.open($0) }
+  ) -> Bool {
+    let validateOwner = ownerIsCurrent ?? {
+      isPermissionAuthorizationCurrent($0, authorizationSnapshot: authorizationSnapshot)
+    }
+    guard validateOwner(expectedOwnerID) else { return false }
+    guard let url = URL(
+      string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")
+    else { return false }
+    return open(url)
+  }
+
+  @MainActor
+  static func publishPermissionPendingIfCurrent(
+    _ permissionType: String,
+    expectedOwnerID: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?,
+    callback: ((String) -> Void)?
+  ) {
+    guard isPermissionAuthorizationCurrent(
+      expectedOwnerID,
+      authorizationSnapshot: authorizationSnapshot) else { return }
+    callback?(permissionType)
   }
 
   private static func checkFullDiskAccessDirectly() -> Bool {
@@ -1997,7 +2341,8 @@ class ChatToolExecutor {
       if let expectedOwnerID {
         _ = try? await api.updateUserLanguage(
           normalizedLanguage,
-          expectedOwnerId: expectedOwnerID)
+          expectedOwnerId: expectedOwnerID,
+          authorizationSnapshot: currentOwnerAuthorizationSnapshot)
         guard isExpectedOwnerCurrent(expectedOwnerID) else {
           return authorizedOwnerChangedResult()
         }
@@ -2005,11 +2350,6 @@ class ChatToolExecutor {
       AssistantSettings.shared.transcriptionLanguage = normalizedLanguage
       let supportsMulti = AssistantSettings.supportsAutoDetect(normalizedLanguage)
       AssistantSettings.shared.transcriptionAutoDetect = supportsMulti
-      if expectedOwnerID == nil {
-        Task {
-          _ = try? await api.updateUserLanguage(normalizedLanguage)
-        }
-      }
       results.append("Language set to \(normalizedLanguage)")
     }
 
@@ -2017,7 +2357,10 @@ class ChatToolExecutor {
       guard isExpectedOwnerCurrent(expectedOwnerID) else {
         return authorizedOwnerChangedResult()
       }
-      await AuthService.shared.updateGivenName(name, expectedOwnerID: expectedOwnerID)
+      await AuthService.shared.updateGivenName(
+        name,
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: currentOwnerAuthorizationSnapshot)
       guard isExpectedOwnerCurrent(expectedOwnerID) else {
         return authorizedOwnerChangedResult()
       }
@@ -2114,7 +2457,12 @@ class ChatToolExecutor {
       guard isExpectedOwnerCurrent(expectedOwnerID) else {
         return authorizedOwnerChangedResult()
       }
-      try await KnowledgeGraphStorage.shared.mergeGraph(nodes: nodeRecords, edges: edgeRecords)
+      try await KnowledgeGraphStorage.shared.mergeGraph(
+        nodes: nodeRecords,
+        edges: edgeRecords,
+        authorization: LocalMutationAuthorization {
+          isExpectedOwnerCurrent(expectedOwnerID)
+        })
       guard isExpectedOwnerCurrent(expectedOwnerID) else {
         return authorizedOwnerChangedResult()
       }
@@ -2122,6 +2470,8 @@ class ChatToolExecutor {
       onKnowledgeGraphUpdated?()
       return
         "OK: saved \(nodeRecords.count) nodes and \(edgeRecords.count) edges to local knowledge graph"
+    } catch LocalMutationAuthorizationError.revoked {
+      return authorizedOwnerChangedResult()
     } catch {
       logError("Tool save_knowledge_graph failed", error: error)
       return "Error: \(error.localizedDescription)"
@@ -2243,7 +2593,8 @@ class ChatToolExecutor {
           limit: args["limit"] as? Int ?? 20,
           offset: args["offset"] as? Int ?? 0,
           includeTranscript: args["include_transcript"] as? Bool ?? true,
-          expectedOwnerId: expectedOwnerID
+          expectedOwnerId: expectedOwnerID,
+          authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
         return resp.resultText
 
@@ -2257,7 +2608,8 @@ class ChatToolExecutor {
           endDate: validatedEndDate,
           limit: args["limit"] as? Int ?? 5,
           includeTranscript: args["include_transcript"] as? Bool ?? true,
-          expectedOwnerId: expectedOwnerID
+          expectedOwnerId: expectedOwnerID,
+          authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
         return resp.resultText
 
@@ -2267,7 +2619,8 @@ class ChatToolExecutor {
           offset: args["offset"] as? Int ?? 0,
           startDate: validatedStartDate,
           endDate: validatedEndDate,
-          expectedOwnerId: expectedOwnerID
+          expectedOwnerId: expectedOwnerID,
+          authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
         return resp.resultText
 
@@ -2278,7 +2631,8 @@ class ChatToolExecutor {
         let resp = try await api.toolSearchMemories(
           query: query,
           limit: args["limit"] as? Int ?? 5,
-          expectedOwnerId: expectedOwnerID
+          expectedOwnerId: expectedOwnerID,
+          authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
         return resp.resultText
 
@@ -2303,7 +2657,8 @@ class ChatToolExecutor {
           endDate: validatedEndDate,
           dueStartDate: validatedDueStart,
           dueEndDate: validatedDueEnd,
-          expectedOwnerId: expectedOwnerID
+          expectedOwnerId: expectedOwnerID,
+          authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
         return resp.resultText
 
@@ -2321,7 +2676,8 @@ class ChatToolExecutor {
           description: desc,
           dueAt: validatedDueAt,
           conversationId: args["conversation_id"] as? String,
-          expectedOwnerId: expectedOwnerID
+          expectedOwnerId: expectedOwnerID,
+          authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
         return resp.resultText
 
@@ -2340,7 +2696,8 @@ class ChatToolExecutor {
           completed: args["completed"] as? Bool,
           description: args["description"] as? String,
           dueAt: validatedUpdateDueAt,
-          expectedOwnerId: expectedOwnerID
+          expectedOwnerId: expectedOwnerID,
+          authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
         return resp.resultText
 
@@ -2369,7 +2726,8 @@ class ChatToolExecutor {
           description: args["description"] as? String,
           location: args["location"] as? String,
           attendees: args["attendees"] as? String,
-          expectedOwnerId: expectedOwnerID
+          expectedOwnerId: expectedOwnerID,
+          authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
         return resp.resultText
 

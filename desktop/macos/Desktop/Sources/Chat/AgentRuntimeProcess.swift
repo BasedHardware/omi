@@ -1,6 +1,54 @@
 import Foundation
 import OmiSupport
 
+/// Shares one asynchronous runtime launch across every client admitted while
+/// that launch is suspended. The key is deliberately exact (owner-session
+/// authorization plus authority epoch), so work admitted under a newer owner
+/// generation never joins an older credential-bearing launch.
+actor AgentRuntimeStartupSingleFlight<Key: Equatable & Sendable, Output: Sendable> {
+  private struct Attempt {
+    let id: UUID
+    let key: Key
+    let task: Task<Output, Error>
+  }
+
+  private var attempt: Attempt?
+  private var participantCount = 0
+
+  func run(
+    key: Key,
+    operation: @escaping @Sendable () async throws -> Output
+  ) async throws -> Output {
+    participantCount += 1
+    defer { participantCount -= 1 }
+    if let attempt {
+      guard attempt.key == key else { throw BridgeError.restarting }
+      return try await attempt.task.value
+    }
+
+    let id = UUID()
+    let task = Task { try await operation() }
+    attempt = Attempt(id: id, key: key, task: task)
+    do {
+      let output = try await task.value
+      clearAttempt(id: id)
+      return output
+    } catch {
+      clearAttempt(id: id)
+      throw error
+    }
+  }
+
+  func participantCountForTesting() -> Int {
+    participantCount
+  }
+
+  private func clearAttempt(id: UUID) {
+    guard attempt?.id == id else { return }
+    attempt = nil
+  }
+}
+
 /// Thread-safe, actor-independent holder for the debug suspend/resume (SIGSTOP /
 /// SIGCONT) state used by the non-prod stall harness.
 ///
@@ -81,6 +129,19 @@ final class DebugSuspendControl: @unchecked Sendable {
 
 actor AgentRuntimeProcess {
   static let shared = AgentRuntimeProcess()
+  private static let ownerTransitionClientID = "runtime-owner-transition"
+
+  struct RuntimeOwnerAuthorityStatus: Equatable, Sendable {
+    let epoch: UInt64
+    let ownerID: String?
+    let credentialOwnerID: String?
+    let processRunning: Bool
+
+    func isSynchronized(ownerID: String, requiresCredentials: Bool) -> Bool {
+      processRunning && self.ownerID == ownerID
+        && (!requiresCredentials || credentialOwnerID == ownerID)
+    }
+  }
 
   nonisolated static func shouldEnablePlaywrightExtension(
     useExtension: Bool,
@@ -131,6 +192,7 @@ actor AgentRuntimeProcess {
       case externalSurfaceRunBeginResult
       case externalSurfaceToolResult
       case externalSurfaceRunCompleteResult
+      case ownerRuntimeRevoked
       case unknown(String)
     }
 
@@ -190,15 +252,47 @@ actor AgentRuntimeProcess {
       case "external_surface_run_begin_result": return .externalSurfaceRunBeginResult
       case "external_surface_tool_result": return .externalSurfaceToolResult
       case "external_surface_run_complete_result": return .externalSurfaceRunCompleteResult
+      case "owner_runtime_revoked": return .ownerRuntimeRevoked
       default: return .unknown(type)
       }
     }
   }
 
   private struct ClientRegistration {
+    var registrationID: UUID
     var harnessMode: String
+    var authAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
     var onAuthRequired: AgentBridge.AuthRequiredHandler?
     var onAuthSuccess: AgentBridge.AuthSuccessHandler?
+
+    init(
+      registrationID: UUID = UUID(),
+      harnessMode: String,
+      authAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+      onAuthRequired: AgentBridge.AuthRequiredHandler? = nil,
+      onAuthSuccess: AgentBridge.AuthSuccessHandler? = nil
+    ) {
+      self.registrationID = registrationID
+      self.harnessMode = harnessMode
+      self.authAuthorizationSnapshot = authAuthorizationSnapshot
+      self.onAuthRequired = onAuthRequired
+      self.onAuthSuccess = onAuthSuccess
+    }
+  }
+
+  private struct StartupKey: Equatable, Sendable {
+    let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    let admissionAuthorityEpoch: UInt64
+  }
+
+  private struct StartupReceipt: Equatable, Sendable {
+    let authorityEpoch: UInt64
+    let processGeneration: UInt64
+  }
+
+  private struct StopFlight {
+    let id: UUID
+    var waiters: [CheckedContinuation<Void, Never>] = []
   }
 
   private struct ActiveRequest {
@@ -212,6 +306,7 @@ actor AgentRuntimeProcess {
     let onToolResultDisplay: AgentBridge.ToolResultDisplayHandler
     let onAuthRequired: AgentBridge.AuthRequiredHandler
     let onAuthSuccess: AgentBridge.AuthSuccessHandler
+    let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
     let continuation: CheckedContinuation<AgentBridge.QueryResult, Error>
     var isInterrupted = false
     var cancelAck: RuntimeMessage?
@@ -220,12 +315,16 @@ actor AgentRuntimeProcess {
   private struct ActiveControlRequest {
     let clientId: String
     let requestId: String
+    let expectedOwnerId: String
+    let expectedOwnerEpoch: UInt64
+    let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
     let continuation: CheckedContinuation<String, Error>
   }
 
   private struct ActiveJournalRequest {
     let clientId: String
     let requestId: String
+    let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
     let continuation: CheckedContinuation<JournalOperationResult, Error>
   }
 
@@ -233,6 +332,7 @@ actor AgentRuntimeProcess {
     let clientId: String
     let requestId: String
     let expectedKind: RuntimeMessage.Kind
+    let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
     let continuation: CheckedContinuation<[String: Any], Error>
   }
 
@@ -258,6 +358,11 @@ actor AgentRuntimeProcess {
   private var stdoutLineBuffer = Data()
   private var isRunning = false
   private var processGeneration: UInt64 = 0
+  private var runtimeOwnerAuthorityEpoch: UInt64 = 0
+  private var synchronizedRuntimeOwnerID: String?
+  private var synchronizedRuntimeCredentialOwnerID: String?
+  private var directControlOwnerEpoch: UInt64 = 0
+  private var observedDirectControlOwnerId: String?
 
   /// Debug suspend/resume state, held off-actor so SIGCONT never deadlocks behind
   /// an actor blocked writing to the frozen process. See DebugSuspendControl.
@@ -268,6 +373,7 @@ actor AgentRuntimeProcess {
   private var activeControlRequests: [RuntimeMessage.RequestKey: ActiveControlRequest] = [:]
   private var activeJournalRequests: [RuntimeMessage.RequestKey: ActiveJournalRequest] = [:]
   private var activeKernelContractRequests: [RuntimeMessage.RequestKey: ActiveKernelContractRequest] = [:]
+  private var activeAuthorizedToolExecutionTasks: [UUID: Task<Void, Never>] = [:]
   private var journalTurnChangedHandler: JournalTurnChangedHandler?
   private var authorizedRealtimeToolHandler: AuthorizedRealtimeToolHandler?
   private var initContinuations: [CheckedContinuation<Void, Error>] = []
@@ -275,7 +381,11 @@ actor AgentRuntimeProcess {
   private var receivedInit = false
   private var advertisedAgentControlTools: Set<String> = []
   private var isRestarting = false
+  private var isStopping = false
+  private var stopFlight: StopFlight?
   private var expectedCancelledRequests: Set<RuntimeMessage.RequestKey> = []
+  private let startupSingleFlight =
+    AgentRuntimeStartupSingleFlight<StartupKey, StartupReceipt>()
 
   var isAlive: Bool {
     let processRunning = process?.isRunning ?? false
@@ -293,6 +403,15 @@ actor AgentRuntimeProcess {
     return isRunning && processRunning
   }
 
+  func runtimeOwnerAuthorityStatus() -> RuntimeOwnerAuthorityStatus {
+    RuntimeOwnerAuthorityStatus(
+      epoch: runtimeOwnerAuthorityEpoch,
+      ownerID: synchronizedRuntimeOwnerID,
+      credentialOwnerID: synchronizedRuntimeCredentialOwnerID,
+      processRunning: isRunning && (process?.isRunning ?? false)
+    )
+  }
+
   static func adapterId(forHarnessMode harnessMode: String) -> String? {
     guard let harness = AgentRuntimeRouting.harnessMode(from: harnessMode) else {
       return nil
@@ -300,20 +419,55 @@ actor AgentRuntimeProcess {
     return AgentRuntimeRouting.adapterId(for: harness).rawValue
   }
 
-  func registerClient(clientId: String, harnessMode: String) async throws {
-    guard !isRestarting else {
+  func registerClient(
+    clientId: String,
+    harnessMode: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws {
+    guard !isRestarting, !isStopping else {
       throw BridgeError.restarting
     }
-    var registration = clients[clientId] ?? ClientRegistration(harnessMode: harnessMode)
+    guard let authorizationSnapshot = authorizationSnapshot
+      ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+    else {
+      throw BridgeError.authMissing
+    }
+    let admissionAuthorityEpoch = runtimeOwnerAuthorityEpoch
+    try assertStartupAuthority(
+      authorizationSnapshot,
+      expectedAuthorityEpoch: admissionAuthorityEpoch)
+    let previousRegistration = clients[clientId]
+    let registrationID = UUID()
+    var registration = previousRegistration ?? ClientRegistration(harnessMode: harnessMode)
+    registration.registrationID = registrationID
     registration.harnessMode = harnessMode
     clients[clientId] = registration
+    do {
+      if isRunning {
+        try await waitForInit(timeout: 30.0)
+        try assertStartupAuthority(
+          authorizationSnapshot,
+          expectedAuthorityEpoch: admissionAuthorityEpoch)
+        try assertClientRegistration(clientId: clientId, registrationID: registrationID)
+        return
+      }
 
-    if isRunning {
-      try await waitForInit(timeout: 30.0)
-      return
+      try await startProcess(
+        preferredHarnessMode: harnessMode,
+        authorizationSnapshot: authorizationSnapshot,
+        admissionAuthorityEpoch: admissionAuthorityEpoch)
+      try assertAuthorization(authorizationSnapshot)
+      try assertClientRegistration(clientId: clientId, registrationID: registrationID)
+    } catch {
+      if clients[clientId]?.registrationID == registrationID {
+        if let previousRegistration {
+          clients[clientId] = previousRegistration
+        } else {
+          clients.removeValue(forKey: clientId)
+        }
+      }
+      throw error
     }
-
-    try await startProcess(preferredHarnessMode: harnessMode)
   }
 
   func unregisterClient(clientId: String) async {
@@ -337,22 +491,33 @@ actor AgentRuntimeProcess {
     }
 
     if clients.isEmpty {
-      await stopProcess(resumeRequestsWith: BridgeError.stopped)
+      await stopProcessSingleFlight(resumeRequestsWith: BridgeError.stopped)
     }
   }
 
   func setGlobalAuthHandlers(
     clientId: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?,
     onAuthRequired: AgentBridge.AuthRequiredHandler?,
     onAuthSuccess: AgentBridge.AuthSuccessHandler?
-  ) {
-    var registration = clients[clientId] ?? ClientRegistration(harnessMode: "piMono")
+  ) -> Bool {
+    // Handler configuration is not registration. Creating a client here lets a
+    // handler-before-start call survive a failed/cancelled admission and keep
+    // the shared daemon alive as a ghost client.
+    guard var registration = clients[clientId] else { return false }
+    registration.authAuthorizationSnapshot = authorizationSnapshot
     registration.onAuthRequired = onAuthRequired
     registration.onAuthSuccess = onAuthSuccess
     clients[clientId] = registration
+    return true
   }
 
-  func restart(harnessMode: String) async throws {
+  func restart(
+    clientId: String,
+    harnessMode: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws {
+    guard !isRestarting, !isStopping else { throw BridgeError.restarting }
     guard activeRequests.isEmpty, activeControlRequests.isEmpty else {
       log(
         "AgentRuntimeProcess: shared restart blocked while \(activeRequests.count) request(s) and \(activeControlRequests.count) control request(s) are active"
@@ -361,22 +526,101 @@ actor AgentRuntimeProcess {
     }
     isRestarting = true
     defer { isRestarting = false }
-    await stopProcess(resumeRequestsWith: BridgeError.stopped)
-    try await startProcess(preferredHarnessMode: harnessMode)
+    guard let registrationID = clients[clientId]?.registrationID else {
+      throw BridgeError.stopped
+    }
+    await stopProcessSingleFlight(resumeRequestsWith: BridgeError.stopped)
+    try Task.checkCancellation()
+    try assertClientRegistration(clientId: clientId, registrationID: registrationID)
+    guard let authorizationSnapshot = authorizationSnapshot
+      ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+    else {
+      throw BridgeError.authMissing
+    }
+    try await startProcess(
+      preferredHarnessMode: harnessMode,
+      authorizationSnapshot: authorizationSnapshot,
+      admissionAuthorityEpoch: runtimeOwnerAuthorityEpoch)
+    try assertAuthorization(authorizationSnapshot)
+    try assertClientRegistration(clientId: clientId, registrationID: registrationID)
   }
 
-  func authenticate(methodId: String) {
-    sendJson([
-      "type": "authenticate",
-      "methodId": methodId,
-    ])
+  private func assertStartupAuthority(
+    _ snapshot: RuntimeOwnerAuthorizationSnapshot,
+    expectedAuthorityEpoch: UInt64
+  ) throws {
+    guard !isStopping,
+      runtimeOwnerAuthorityEpoch == expectedAuthorityEpoch,
+      RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot)
+    else {
+      throw BridgeError.authMissing
+    }
   }
 
-  func warmupSession(clientId: String, sessionId: String, profileGeneration: Int) {
+  private func stopProcessSingleFlight(resumeRequestsWith error: BridgeError) async {
+    if let flight = stopFlight {
+      await waitForStopFlight(id: flight.id)
+      return
+    }
+
+    let id = UUID()
+    stopFlight = StopFlight(id: id)
+    isStopping = true
+    await stopProcess(resumeRequestsWith: error)
+    isStopping = false
+    finishStopFlight(id: id)
+  }
+
+  private func waitForStopFlight(id: UUID) async {
+    await withCheckedContinuation { continuation in
+      guard var flight = stopFlight, flight.id == id else {
+        continuation.resume()
+        return
+      }
+      flight.waiters.append(continuation)
+      stopFlight = flight
+    }
+  }
+
+  private func finishStopFlight(id: UUID) {
+    guard let flight = stopFlight, flight.id == id else { return }
+    stopFlight = nil
+    flight.waiters.forEach { $0.resume() }
+  }
+
+  private func assertClientRegistration(
+    clientId: String,
+    registrationID: UUID
+  ) throws {
+    guard clients[clientId]?.registrationID == registrationID else {
+      throw BridgeError.stopped
+    }
+  }
+
+  private func assertAuthorization(
+    _ snapshot: RuntimeOwnerAuthorizationSnapshot,
+    expectedOwnerID: String? = nil
+  ) throws {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot) else {
+      throw BridgeError.authMissing
+    }
+    if let expectedOwnerID {
+      let normalized = expectedOwnerID.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard normalized == snapshot.ownerID else { throw BridgeError.authMissing }
+    }
+  }
+
+  func warmupSession(
+    clientId: String,
+    sessionId: String,
+    profileGeneration: Int,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
     sendJson(Self.warmupWireMessage(
       clientId: clientId,
       requestId: UUID().uuidString,
-      ownerId: currentOwnerId(),
+      ownerId: authorizationSnapshot.ownerID,
       sessionId: sessionId,
       profileGeneration: profileGeneration
     ))
@@ -387,12 +631,14 @@ actor AgentRuntimeProcess {
     adapterId: String,
     modelProfile: String?,
     workingDirectory: String,
-    expectedPreferenceGeneration: Int?
+    expectedPreferenceGeneration: Int?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> AgentDefaultExecutionProfile {
+    try assertAuthorization(authorizationSnapshot)
     let payload = Self.configureDefaultExecutionProfileWireMessage(
       clientId: clientId,
       requestId: UUID().uuidString,
-      ownerId: currentOwnerId(),
+      ownerId: authorizationSnapshot.ownerID,
       adapterId: adapterId,
       modelProfile: modelProfile,
       workingDirectory: workingDirectory,
@@ -400,7 +646,8 @@ actor AgentRuntimeProcess {
     )
     let result = try await kernelContractRequest(
       payload: payload,
-      expectedKind: .defaultExecutionProfileConfigured
+      expectedKind: .defaultExecutionProfileConfigured,
+      authorizationSnapshot: authorizationSnapshot
     )
     guard let profile = AgentDefaultExecutionProfile(dictionary: result) else {
       throw BridgeError.agentError("Kernel returned an invalid default execution profile")
@@ -412,17 +659,22 @@ actor AgentRuntimeProcess {
     clientId: String,
     surface: AgentSurfaceReference,
     title: String?,
-    creationProfile: AgentSessionCreationProfile?
+    creationProfile: AgentSessionCreationProfile?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> AgentSurfaceSession {
+    try assertAuthorization(authorizationSnapshot)
     let payload = Self.resolveSurfaceSessionWireMessage(
       clientId: clientId,
       requestId: UUID().uuidString,
-      ownerId: currentOwnerId(),
+      ownerId: authorizationSnapshot.ownerID,
       surface: surface,
       title: title,
       creationProfile: creationProfile
     )
-    let result = try await kernelContractRequest(payload: payload, expectedKind: .surfaceSessionResolved)
+    let result = try await kernelContractRequest(
+      payload: payload,
+      expectedKind: .surfaceSessionResolved,
+      authorizationSnapshot: authorizationSnapshot)
     guard let session = AgentSurfaceSession(dictionary: result) else {
       throw BridgeError.agentError("Kernel returned an invalid surface session")
     }
@@ -435,12 +687,14 @@ actor AgentRuntimeProcess {
     expectedProfileGeneration: Int,
     adapterId: String,
     modelProfile: String?,
-    workingDirectory: String
+    workingDirectory: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> AgentSessionProfileMigration {
+    try assertAuthorization(authorizationSnapshot)
     let payload = Self.migrateSessionExecutionProfileWireMessage(
       clientId: clientId,
       requestId: UUID().uuidString,
-      ownerId: currentOwnerId(),
+      ownerId: authorizationSnapshot.ownerID,
       sessionId: sessionId,
       expectedProfileGeneration: expectedProfileGeneration,
       adapterId: adapterId,
@@ -449,7 +703,8 @@ actor AgentRuntimeProcess {
     )
     let result = try await kernelContractRequest(
       payload: payload,
-      expectedKind: .sessionExecutionProfileMigrated
+      expectedKind: .sessionExecutionProfileMigrated,
+      authorizationSnapshot: authorizationSnapshot
     )
     guard let migration = AgentSessionProfileMigration(dictionary: result) else {
       throw BridgeError.agentError("Kernel returned an invalid session execution profile migration")
@@ -466,12 +721,14 @@ actor AgentRuntimeProcess {
     outcome: AgentContextSourceOutcome,
     capturedAtMs: Int,
     expiresAtMs: Int?,
-    payload: [String: Any]
+    payload: [String: Any],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> AgentContextSourceUpdateReceipt {
+    try assertAuthorization(authorizationSnapshot)
     let message = Self.contextSourceUpdateWireMessage(
       clientId: clientId,
       requestId: UUID().uuidString,
-      ownerId: currentOwnerId(),
+      ownerId: authorizationSnapshot.ownerID,
       sessionId: sessionId,
       surfaceKind: surfaceKind,
       source: source,
@@ -481,7 +738,10 @@ actor AgentRuntimeProcess {
       expiresAtMs: expiresAtMs,
       payload: payload
     )
-    let result = try await kernelContractRequest(payload: message, expectedKind: .contextSourceUpdated)
+    let result = try await kernelContractRequest(
+      payload: message,
+      expectedKind: .contextSourceUpdated,
+      authorizationSnapshot: authorizationSnapshot)
     guard let receipt = AgentContextSourceUpdateReceipt(dictionary: result) else {
       throw BridgeError.agentError("Kernel returned an invalid context source receipt")
     }
@@ -491,16 +751,21 @@ actor AgentRuntimeProcess {
   func getContextSnapshot(
     clientId: String,
     sessionId: String,
-    surfaceKind: String
+    surfaceKind: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> AgentContextSnapshot {
+    try assertAuthorization(authorizationSnapshot)
     let message = Self.getContextSnapshotWireMessage(
       clientId: clientId,
       requestId: UUID().uuidString,
-      ownerId: currentOwnerId(),
+      ownerId: authorizationSnapshot.ownerID,
       sessionId: sessionId,
       surfaceKind: surfaceKind
     )
-    let result = try await kernelContractRequest(payload: message, expectedKind: .contextSnapshot)
+    let result = try await kernelContractRequest(
+      payload: message,
+      expectedKind: .contextSnapshot,
+      authorizationSnapshot: authorizationSnapshot)
     guard
       let dictionary = result["snapshot"] as? [String: Any],
       let snapshot = AgentContextSnapshot(dictionary: dictionary)
@@ -514,6 +779,90 @@ actor AgentRuntimeProcess {
     authorizedRealtimeToolHandler = handler
   }
 
+  /// Correlated pre-visibility owner barrier. This method never registers a
+  /// client or starts Node: an absent child already proves no process-local work
+  /// can survive. Any malformed/nack/timeout path kills and confirms exit before
+  /// returning to the owner transition.
+  func revokeOwnerRuntime(
+    previousOwnerID: String,
+    cleanupCapability: RuntimeOwnerTransitionCleanupCapability
+  ) async {
+    let ownerID = previousOwnerID.trimmingCharacters(in: .whitespacesAndNewlines)
+    do {
+      try assertTransitionCleanupAuthority(
+        cleanupCapability,
+        previousOwnerID: ownerID)
+    } catch {
+      log("AgentRuntimeProcess: owner revoke rejected invalid cleanup capability")
+      if isRunning {
+        await stopProcessSingleFlight(resumeRequestsWith: .stopped)
+      } else {
+        markRuntimeOwnerAuthorityDirty()
+      }
+      return
+    }
+    await cancelAndDrainAuthorizedToolExecutionTasks()
+    guard !ownerID.isEmpty else {
+      if isRunning { await stopProcessSingleFlight(resumeRequestsWith: .stopped) }
+      return
+    }
+    guard isRunning else {
+      markRuntimeOwnerAuthorityDirty()
+      return
+    }
+
+    do {
+      let requestId = UUID().uuidString
+      let result = try await kernelContractRequest(
+        payload: Self.revokeOwnerRuntimeWireMessage(
+          clientId: Self.ownerTransitionClientID,
+          requestId: requestId,
+          ownerId: ownerID),
+        expectedKind: .ownerRuntimeRevoked,
+        authorizationSnapshot: nil,
+        timeoutNanoseconds: 10_000_000_000
+      )
+      try assertTransitionCleanupAuthority(
+        cleanupCapability,
+        previousOwnerID: ownerID)
+      guard result["ok"] as? Bool == true else {
+        throw ExternalSurfaceAuthorityError.from(
+          result,
+          fallback: "owner_runtime_revoke_failed")
+      }
+      guard
+        result["ownerId"] as? String == ownerID,
+        result["revokedRunIds"] as? [String] != nil,
+        result["invalidatedBindingIds"] as? [String] != nil
+      else {
+        throw ExternalSurfaceAuthorityError(code: "malformed_owner_runtime_revoked")
+      }
+      // Account replacement is intentionally a hard process boundary. The ACK
+      // proves every durable A run/tool is terminal; stopping next guarantees no
+      // adapter credential or process-local memory can survive into B.
+      await stopProcessSingleFlight(resumeRequestsWith: .stopped)
+    } catch {
+      log(
+        "AgentRuntimeProcess: owner revoke barrier failed; stopping child before owner visibility "
+          + "(error=\(error.localizedDescription))")
+      await stopProcessSingleFlight(resumeRequestsWith: .stopped)
+    }
+  }
+
+  nonisolated static func revokeOwnerRuntimeWireMessage(
+    clientId: String,
+    requestId: String,
+    ownerId: String
+  ) -> [String: Any] {
+    [
+      "type": "revoke_owner_runtime",
+      "protocolVersion": 2,
+      "requestId": requestId,
+      "clientId": clientId,
+      "ownerId": ownerId,
+    ]
+  }
+
   func beginExternalSurfaceRun(
     clientId: String,
     harnessMode: String,
@@ -523,8 +872,29 @@ actor AgentRuntimeProcess {
     prompt: String,
     mode: ExternalSurfaceRunMode
   ) async throws -> ExternalSurfaceRunBinding {
+    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+      expectedOwnerID: ownerID)
+    else {
+      throw ExternalSurfaceAuthorityError(code: "external_surface_owner_changed")
+    }
     try assertCurrentExternalOwner(ownerID)
-    try await registerClient(clientId: clientId, harnessMode: harnessMode)
+    try await registerClient(
+      clientId: clientId,
+      harnessMode: harnessMode,
+      authorizationSnapshot: authorizationSnapshot)
+    // Process startup/initialization may suspend for up to its bounded init
+    // timeout. Revalidate immediately before the begin mutation so cancelling a
+    // pending owner-A task during an A→B transition cannot create a late run.
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+      throw ExternalSurfaceAuthorityError(code: "external_surface_owner_changed")
+    }
+    try assertCurrentExternalOwner(ownerID)
+    try ensureRuntimeOwnerAuthority(
+      expectedOwnerID: ownerID,
+      authorizationSnapshot: authorizationSnapshot)
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+      throw ExternalSurfaceAuthorityError(code: "external_surface_owner_changed")
+    }
     let requestId = UUID().uuidString
     let result = try await kernelContractRequest(
       payload: Self.externalSurfaceRunBeginWireMessage(
@@ -537,6 +907,7 @@ actor AgentRuntimeProcess {
         mode: mode
       ),
       expectedKind: .externalSurfaceRunBeginResult,
+      authorizationSnapshot: authorizationSnapshot,
       timeoutNanoseconds: 10_000_000_000
     )
     guard result["ok"] as? Bool == true else {
@@ -572,8 +943,19 @@ actor AgentRuntimeProcess {
     toolName: String,
     input: [String: Any]
   ) async throws -> String {
+    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+      expectedOwnerID: binding.ownerID)
+    else {
+      throw ExternalSurfaceAuthorityError(code: "external_surface_owner_changed")
+    }
     try assertCurrentExternalOwner(binding.ownerID)
-    try await registerClient(clientId: clientId, harnessMode: harnessMode)
+    try await registerClient(
+      clientId: clientId,
+      harnessMode: harnessMode,
+      authorizationSnapshot: authorizationSnapshot)
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+      throw ExternalSurfaceAuthorityError(code: "external_surface_owner_changed")
+    }
     let requestId = UUID().uuidString
     let result = try await kernelContractRequest(
       payload: Self.externalSurfaceToolInvokeWireMessage(
@@ -585,6 +967,7 @@ actor AgentRuntimeProcess {
         input: input
       ),
       expectedKind: .externalSurfaceToolResult,
+      authorizationSnapshot: authorizationSnapshot,
       timeoutNanoseconds: 180_000_000_000
     )
     guard result["ok"] as? Bool == true else {
@@ -609,10 +992,42 @@ actor AgentRuntimeProcess {
     harnessMode: String,
     binding: ExternalSurfaceRunBinding,
     terminalStatus: ExternalSurfaceRunTerminalStatus,
-    errorCode: String? = nil
+    errorCode: String? = nil,
+    transitionCleanupCapability: RuntimeOwnerTransitionCleanupCapability? = nil
   ) async throws -> ExternalSurfaceRunCompletion {
-    try assertCurrentExternalOwner(binding.ownerID)
-    try await registerClient(clientId: clientId, harnessMode: harnessMode)
+    let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+    if let transitionCleanupCapability {
+      try assertTransitionCleanupAuthority(
+        transitionCleanupCapability,
+        previousOwnerID: binding.ownerID)
+      // A cleanup capability may close only a run that already exists in the
+      // live daemon. It must never start a new daemon or establish an owner.
+      guard isRunning else {
+        throw ExternalSurfaceAuthorityError(code: "external_surface_runtime_unavailable")
+      }
+      authorizationSnapshot = nil
+    } else {
+      guard let captured = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+        expectedOwnerID: binding.ownerID)
+      else {
+        throw ExternalSurfaceAuthorityError(code: "external_surface_owner_changed")
+      }
+      authorizationSnapshot = captured
+      try assertCurrentExternalOwner(binding.ownerID)
+      try await registerClient(
+        clientId: clientId,
+        harnessMode: harnessMode,
+        authorizationSnapshot: captured)
+    }
+    // Revalidate after any actor suspension and immediately before the wire
+    // mutation. A later transition generation cannot reuse this capability.
+    if let transitionCleanupCapability {
+      try assertTransitionCleanupAuthority(
+        transitionCleanupCapability,
+        previousOwnerID: binding.ownerID)
+    } else {
+      try assertCurrentExternalOwner(binding.ownerID)
+    }
     let requestId = UUID().uuidString
     let result = try await kernelContractRequest(
       payload: Self.externalSurfaceRunCompleteWireMessage(
@@ -623,6 +1038,7 @@ actor AgentRuntimeProcess {
         errorCode: errorCode
       ),
       expectedKind: .externalSurfaceRunCompleteResult,
+      authorizationSnapshot: authorizationSnapshot,
       timeoutNanoseconds: 10_000_000_000
     )
     guard result["ok"] as? Bool == true else {
@@ -651,6 +1067,38 @@ actor AgentRuntimeProcess {
   private func assertCurrentExternalOwner(_ ownerID: String) throws {
     guard !ownerID.isEmpty, currentOwnerId() == ownerID else {
       throw ExternalSurfaceAuthorityError(code: "external_surface_owner_changed")
+    }
+  }
+
+  private func ensureRuntimeOwnerAuthority(
+    expectedOwnerID: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) throws {
+    let normalized = expectedOwnerID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !normalized.isEmpty,
+      authorizationSnapshot.ownerID == normalized,
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+    else {
+      throw ExternalSurfaceAuthorityError(code: "external_surface_owner_changed")
+    }
+    if synchronizedRuntimeOwnerID == normalized { return }
+    guard refreshRuntimeOwner(
+      expectedOwnerId: normalized,
+      authorizationSnapshot: authorizationSnapshot) else {
+      throw ExternalSurfaceAuthorityError(code: "external_surface_owner_handshake_failed")
+    }
+  }
+
+  private func assertTransitionCleanupAuthority(
+    _ capability: RuntimeOwnerTransitionCleanupCapability,
+    previousOwnerID: String
+  ) throws {
+    guard RuntimeOwnerIdentity.authorizesTransitionCleanup(
+      capability,
+      previousOwnerID: previousOwnerID)
+    else {
+      throw ExternalSurfaceAuthorityError(
+        code: "external_surface_transition_cleanup_revoked")
     }
   }
 
@@ -921,9 +1369,13 @@ actor AgentRuntimeProcess {
   private func kernelContractRequest(
     payload: [String: Any],
     expectedKind: RuntimeMessage.Kind,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?,
     timeoutNanoseconds: UInt64 = 5_000_000_000
   ) async throws -> [String: Any] {
     guard isRunning else { throw BridgeError.stopped }
+    if let authorizationSnapshot {
+      try assertAuthorization(authorizationSnapshot)
+    }
     guard
       let clientId = payload["clientId"] as? String,
       let requestId = payload["requestId"] as? String
@@ -936,6 +1388,7 @@ actor AgentRuntimeProcess {
         clientId: clientId,
         requestId: requestId,
         expectedKind: expectedKind,
+        authorizationSnapshot: authorizationSnapshot,
         continuation: continuation
       )
       guard sendJson(payload) else {
@@ -952,7 +1405,12 @@ actor AgentRuntimeProcess {
     }
   }
 
-  func invalidateSurface(clientId: String, surface: AgentSurfaceReference) {
+  func invalidateSurface(
+    clientId: String,
+    surface: AgentSurfaceReference,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
     var dict: [String: Any] = [
       "type": "invalidate_session",
       "protocolVersion": 2,
@@ -962,22 +1420,7 @@ actor AgentRuntimeProcess {
       "externalRefKind": surface.externalRefKind,
       "externalRefId": surface.externalRefId,
     ]
-    if let ownerId = currentOwnerId() {
-      dict["ownerId"] = ownerId
-    }
-    sendJson(dict)
-  }
-
-  func clearOwnerState(clientId: String) {
-    var dict: [String: Any] = [
-      "type": "clear_owner_state",
-      "protocolVersion": 2,
-      "requestId": UUID().uuidString,
-      "clientId": clientId,
-    ]
-    if let ownerId = currentOwnerId() {
-      dict["ownerId"] = ownerId
-    }
+    dict["ownerId"] = authorizationSnapshot.ownerID
     sendJson(dict)
   }
 
@@ -985,11 +1428,11 @@ actor AgentRuntimeProcess {
   // participates in runtime routing after canonical surface identity exists.
   func importLegacyMainChatSessions(
     clientId: String,
-    entries: [LegacyMainChatSessionAliasEntry]
+    entries: [LegacyMainChatSessionAliasEntry],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> LegacyMainChatSessionImportReceipt {
-    guard let ownerId = currentOwnerId(), !ownerId.isEmpty else {
-      throw BridgeError.authMissing
-    }
+    try assertAuthorization(authorizationSnapshot)
+    let ownerId = authorizationSnapshot.ownerID
     let payload = Self.importLegacyMainChatSessionsWireMessage(
       clientId: clientId,
       requestId: UUID().uuidString,
@@ -998,7 +1441,8 @@ actor AgentRuntimeProcess {
     )
     let result = try await kernelContractRequest(
       payload: payload,
-      expectedKind: .legacyMainChatSessionsImported
+      expectedKind: .legacyMainChatSessionsImported,
+      authorizationSnapshot: authorizationSnapshot
     )
     guard
       let receipt = LegacyMainChatSessionImportReceipt(dictionary: result),
@@ -1027,7 +1471,8 @@ actor AgentRuntimeProcess {
     clientId: String,
     surface: AgentSurfaceReference,
     ownerID: String? = nil,
-    turn: KernelJournalTurnWrite
+    turn: KernelJournalTurnWrite,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> KernelJournalTurn {
     let result = try await journalOperation(
       type: "journal_record_turn",
@@ -1035,7 +1480,8 @@ actor AgentRuntimeProcess {
       clientId: clientId,
       surface: surface,
       ownerID: ownerID,
-      payload: ["turn": turn.dictionary]
+      payload: ["turn": turn.dictionary],
+      authorizationSnapshot: authorizationSnapshot
     )
     guard let recorded = result.turn else {
       throw BridgeError.agentError("Kernel journal record returned no turn")
@@ -1043,11 +1489,30 @@ actor AgentRuntimeProcess {
     return recorded
   }
 
+  func recordJournalExchange(
+    clientId: String,
+    surface: AgentSurfaceReference,
+    ownerID: String,
+    turns: [KernelJournalTurnWrite],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> JournalOperationResult {
+    try await journalOperation(
+      type: "journal_record_exchange",
+      operation: "record_exchange",
+      clientId: clientId,
+      surface: surface,
+      ownerID: ownerID,
+      payload: ["turns": turns.map(\.dictionary)],
+      authorizationSnapshot: authorizationSnapshot
+    )
+  }
+
   func updateJournalTurn(
     clientId: String,
     surface: AgentSurfaceReference,
     ownerID: String? = nil,
-    update: KernelJournalTurnUpdate
+    update: KernelJournalTurnUpdate,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> KernelJournalTurn {
     let result = try await journalOperation(
       type: "journal_update_turn",
@@ -1055,7 +1520,8 @@ actor AgentRuntimeProcess {
       clientId: clientId,
       surface: surface,
       ownerID: ownerID,
-      payload: ["update": update.dictionary]
+      payload: ["update": update.dictionary],
+      authorizationSnapshot: authorizationSnapshot
     )
     guard let updated = result.turn else {
       throw BridgeError.agentError("Kernel journal update returned no turn")
@@ -1068,7 +1534,8 @@ actor AgentRuntimeProcess {
     surface: AgentSurfaceReference,
     ownerID: String? = nil,
     afterTurnSeq: Int = 0,
-    limit: Int = 100
+    limit: Int = 100,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> JournalOperationResult {
     return try await journalOperation(
       type: "journal_list_turns",
@@ -1079,7 +1546,8 @@ actor AgentRuntimeProcess {
       payload: [
         "afterTurnSeq": max(0, afterTurnSeq),
         "limit": max(1, min(limit, 100)),
-      ]
+      ],
+      authorizationSnapshot: authorizationSnapshot
     )
   }
 
@@ -1087,7 +1555,8 @@ actor AgentRuntimeProcess {
     clientId: String,
     surface: AgentSurfaceReference,
     ownerID: String? = nil,
-    turn: KernelJournalRemoteTurn
+    turn: KernelJournalRemoteTurn,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> KernelJournalTurn {
     let result = try await journalOperation(
       type: "journal_import_remote_turn",
@@ -1095,7 +1564,8 @@ actor AgentRuntimeProcess {
       clientId: clientId,
       surface: surface,
       ownerID: ownerID,
-      payload: ["turn": turn.dictionary]
+      payload: ["turn": turn.dictionary],
+      authorizationSnapshot: authorizationSnapshot
     )
     guard let imported = result.turn else {
       throw BridgeError.agentError("Kernel journal import returned no turn")
@@ -1107,7 +1577,8 @@ actor AgentRuntimeProcess {
     clientId: String,
     surface: AgentSurfaceReference,
     ownerID: String? = nil,
-    expectedGeneration: Int? = nil
+    expectedGeneration: Int? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> Int {
     var payload: [String: Any] = [:]
     if let expectedGeneration { payload["expectedGeneration"] = expectedGeneration }
@@ -1117,7 +1588,8 @@ actor AgentRuntimeProcess {
       clientId: clientId,
       surface: surface,
       ownerID: ownerID,
-      payload: payload
+      payload: payload,
+      authorizationSnapshot: authorizationSnapshot
     ).clearedCount
   }
 
@@ -1127,27 +1599,27 @@ actor AgentRuntimeProcess {
     clientId: String,
     surface: AgentSurfaceReference,
     ownerID: String?,
-    payload: [String: Any]
+    payload: [String: Any],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> JournalOperationResult {
+    try assertAuthorization(authorizationSnapshot, expectedOwnerID: ownerID)
     guard isRunning else { throw BridgeError.stopped }
     let requestId = UUID().uuidString
     let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
-    var dictionary: [String: Any] = [
-      "type": type,
-      "operation": operation,
-      "protocolVersion": 2,
-      "requestId": requestId,
-      "clientId": clientId,
-      "surfaceKind": surface.surfaceKind,
-      "externalRefKind": surface.externalRefKind,
-      "externalRefId": surface.externalRefId,
-    ]
-    if let ownerId = ownerID ?? currentOwnerId() { dictionary["ownerId"] = ownerId }
-    for (key, value) in payload { dictionary[key] = value }
+    let dictionary = Self.journalOperationWireMessage(
+      type: type,
+      operation: operation,
+      clientId: clientId,
+      requestId: requestId,
+      ownerId: authorizationSnapshot.ownerID,
+      surface: surface,
+      payload: payload
+    )
     return try await withCheckedThrowingContinuation { continuation in
       activeJournalRequests[requestKey] = ActiveJournalRequest(
         clientId: clientId,
         requestId: requestId,
+        authorizationSnapshot: authorizationSnapshot,
         continuation: continuation
       )
       guard sendJson(dictionary) else {
@@ -1164,33 +1636,166 @@ actor AgentRuntimeProcess {
     }
   }
 
+  static func journalOperationWireMessage(
+    type: String,
+    operation: String,
+    clientId: String,
+    requestId: String,
+    ownerId: String?,
+    surface: AgentSurfaceReference,
+    payload: [String: Any]
+  ) -> [String: Any] {
+    var dictionary: [String: Any] = [
+      "type": type,
+      "operation": operation,
+      "protocolVersion": 2,
+      "requestId": requestId,
+      "clientId": clientId,
+      "surfaceKind": surface.surfaceKind,
+      "externalRefKind": surface.externalRefKind,
+      "externalRefId": surface.externalRefId,
+    ]
+    if let ownerId { dictionary["ownerId"] = ownerId }
+    for (key, value) in payload { dictionary[key] = value }
+    return dictionary
+  }
 
-  func refreshAuthToken(_ token: String) {
-    var dict: [String: Any] = [
+
+  private func markRuntimeOwnerAuthorityDirty() {
+    cancelAuthorizedToolExecutionTasks()
+    runtimeOwnerAuthorityEpoch &+= 1
+    synchronizedRuntimeOwnerID = nil
+    synchronizedRuntimeCredentialOwnerID = nil
+    for clientID in Array(clients.keys) {
+      clients[clientID]?.authAuthorizationSnapshot = nil
+      clients[clientID]?.onAuthRequired = nil
+      clients[clientID]?.onAuthSuccess = nil
+    }
+  }
+
+  private func markRuntimeOwnerAuthoritySynchronized(
+    ownerID: String,
+    includesCredentials: Bool
+  ) {
+    let normalized = ownerID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !normalized.isEmpty else { return }
+    if synchronizedRuntimeOwnerID != normalized
+      && synchronizedRuntimeCredentialOwnerID != normalized
+    {
+      synchronizedRuntimeCredentialOwnerID = nil
+    }
+    synchronizedRuntimeOwnerID = normalized
+    if includesCredentials {
+      synchronizedRuntimeCredentialOwnerID = normalized
+    }
+  }
+
+  @discardableResult
+  func refreshAuthToken(
+    _ token: String,
+    expectedOwnerId: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) -> Bool {
+    if let authorizationSnapshot,
+      !RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+    {
+      return false
+    }
+    let activeOwnerId = currentOwnerId()
+    guard
+      let message = Self.refreshTokenWireMessage(
+        token: token,
+        expectedOwnerId: expectedOwnerId,
+        currentOwnerId: activeOwnerId
+      )
+    else {
+      _ = observeDirectControlOwner(activeOwnerId)
+      return false
+    }
+    let authorizedOwnerID = message["ownerId"] as? String ?? expectedOwnerId
+    _ = observeDirectControlOwner(authorizedOwnerID)
+    let sent = sendJson(message)
+    if sent {
+      markRuntimeOwnerAuthoritySynchronized(
+        ownerID: authorizedOwnerID,
+        includesCredentials: true)
+    }
+    return sent
+  }
+
+  nonisolated static func refreshTokenWireMessage(
+    token: String,
+    expectedOwnerId: String,
+    currentOwnerId: String?
+  ) -> [String: Any]? {
+    let expected = expectedOwnerId.trimmingCharacters(in: .whitespacesAndNewlines)
+    let current = currentOwnerId?.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !token.isEmpty, !expected.isEmpty, current == expected else { return nil }
+    return [
       "type": "refresh_token",
       "token": token,
+      "ownerId": expected,
     ]
-    if let ownerId = currentOwnerId() {
-      dict["ownerId"] = ownerId
+  }
+
+  /// Establishes daemon owner authority for local adapters that do not consume
+  /// a Firebase token. This must precede every owner-scoped session/journal RPC.
+  @discardableResult
+  func refreshRuntimeOwner(
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) -> Bool {
+    if let authorizationSnapshot,
+      !RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+    {
+      _ = observeDirectControlOwner(nil)
+      return false
     }
-    sendJson(dict)
+    guard let ownerId = authorizationSnapshot?.ownerID ?? currentOwnerId(), !ownerId.isEmpty,
+      expectedOwnerId == nil
+        || expectedOwnerId?.trimmingCharacters(in: .whitespacesAndNewlines) == ownerId
+    else {
+      _ = observeDirectControlOwner(nil)
+      return false
+    }
+    _ = observeDirectControlOwner(ownerId)
+    let sent = sendJson(Self.runtimeOwnerHandshakeWireMessage(ownerId: ownerId))
+    if sent {
+      markRuntimeOwnerAuthoritySynchronized(
+        ownerID: ownerId,
+        includesCredentials: false)
+    }
+    return sent
+  }
+
+  static func runtimeOwnerHandshakeWireMessage(ownerId: String) -> [String: Any] {
+    [
+      "type": "refresh_owner",
+      "ownerId": ownerId,
+    ]
   }
 
   func directControlTool(
     clientId: String,
     harnessMode: String,
     name: String,
-    input: [String: Any]
+    input: [String: Any],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> String {
-    guard let ownerId = currentOwnerId() else {
-      throw BridgeError.agentError("Agent control requires a signed-in owner")
+    guard let authorizationSnapshot = authorizationSnapshot
+      ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+    else {
+      throw BridgeError.authMissing
     }
+    try assertAuthorization(authorizationSnapshot)
+    let ownerId = authorizationSnapshot.ownerID
     return try await sendDirectControlTool(
       clientId: clientId,
       harnessMode: harnessMode,
       name: name,
       input: input,
-      ownerId: ownerId
+      ownerId: ownerId,
+      authorizationSnapshot: authorizationSnapshot
     )
   }
 
@@ -1210,7 +1815,9 @@ actor AgentRuntimeProcess {
       harnessMode: harnessMode,
       name: name,
       input: input,
-      ownerId: ownerId
+      ownerId: ownerId,
+      authorizationSnapshot: RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+        expectedOwnerID: ownerId)
     )
   }
 #endif
@@ -1220,35 +1827,64 @@ actor AgentRuntimeProcess {
     harnessMode: String,
     name: String,
     input: [String: Any],
-    ownerId: String
+    ownerId: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
   ) async throws -> String {
-    try await registerClient(clientId: clientId, harnessMode: harnessMode)
+    guard let authorizationSnapshot else {
+      throw BridgeError.authMissing
+    }
+    try await registerClient(
+      clientId: clientId,
+      harnessMode: harnessMode,
+      authorizationSnapshot: authorizationSnapshot)
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+      throw BridgeError.authMissing
+    }
     guard advertisedAgentControlTools.contains(name) else {
       throw BridgeError.agentError("Agent runtime does not advertise direct control tool \(name)")
     }
 
     let requestId = UUID().uuidString
     let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
+    let ownerEpoch = observeDirectControlOwner(ownerId)
     return try await withCheckedThrowingContinuation { continuation in
       activeControlRequests[requestKey] = ActiveControlRequest(
         clientId: clientId,
         requestId: requestId,
+        expectedOwnerId: ownerId,
+        expectedOwnerEpoch: ownerEpoch,
+        authorizationSnapshot: authorizationSnapshot,
         continuation: continuation
       )
-      let dict: [String: Any] = [
-        "type": "direct_control_tool",
-        "protocolVersion": 2,
-        "requestId": requestId,
-        "clientId": clientId,
-        "name": name,
-        "input": input,
-        "ownerId": ownerId,
-      ]
+      let dict = Self.directControlToolWireMessage(
+        clientId: clientId,
+        requestId: requestId,
+        ownerId: ownerId,
+        name: name,
+        input: input)
       let sent = sendJson(dict)
       if !sent, let request = activeControlRequests.removeValue(forKey: requestKey) {
         request.continuation.resume(throwing: BridgeError.agentError("Failed to send direct control tool request"))
       }
     }
+  }
+
+  static func directControlToolWireMessage(
+    clientId: String,
+    requestId: String,
+    ownerId: String,
+    name: String,
+    input: [String: Any]
+  ) -> [String: Any] {
+    [
+      "type": "direct_control_tool",
+      "protocolVersion": 2,
+      "requestId": requestId,
+      "clientId": clientId,
+      "ownerId": ownerId,
+      "name": name,
+      "input": input,
+    ]
   }
 
   // MARK: - Automation stall hook (non-production only)
@@ -1303,9 +1939,15 @@ actor AgentRuntimeProcess {
     return ["resumed": "true", "pid": "\(pid)"]
   }
 
-  func interrupt(clientId: String, requestId: String) {
+  func interrupt(
+    clientId: String,
+    requestId: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
     let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
     guard var request = activeRequests[requestKey] else { return }
+    guard request.authorizationSnapshot == authorizationSnapshot else { return }
     request.isInterrupted = true
     activeRequests[requestKey] = request
     var dict: [String: Any] = [
@@ -1314,9 +1956,7 @@ actor AgentRuntimeProcess {
       "requestId": requestId,
       "clientId": clientId,
     ]
-    if let ownerId = currentOwnerId() {
-      dict["ownerId"] = ownerId
-    }
+    dict["ownerId"] = authorizationSnapshot.ownerID
     guard sendJson(dict) else {
       activeRequests.removeValue(forKey: requestKey)
       request.continuation.resume(throwing: BridgeError.stopped)
@@ -1337,6 +1977,7 @@ actor AgentRuntimeProcess {
     imageData: Data?,
     attachments: [AgentQueryAttachment],
     expectedContext: AgentContextFreshness?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     onTextDelta: @escaping AgentBridge.TextDeltaHandler,
     onToolActivity: @escaping AgentBridge.ToolActivityHandler,
     onThinkingDelta: @escaping AgentBridge.ThinkingDeltaHandler,
@@ -1345,6 +1986,7 @@ actor AgentRuntimeProcess {
     onAuthSuccess: @escaping AgentBridge.AuthSuccessHandler
   ) async throws -> AgentBridge.QueryResult {
     guard isRunning else { throw BridgeError.stopped }
+    try assertAuthorization(authorizationSnapshot)
 
     return try await withCheckedThrowingContinuation { continuation in
       let surfaceRef = surface
@@ -1359,6 +2001,7 @@ actor AgentRuntimeProcess {
         onToolResultDisplay: onToolResultDisplay,
         onAuthRequired: onAuthRequired,
         onAuthSuccess: onAuthSuccess,
+        authorizationSnapshot: authorizationSnapshot,
         continuation: continuation
       )
       activeRequests[RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)] = request
@@ -1369,7 +2012,7 @@ actor AgentRuntimeProcess {
       let queryDict = Self.queryWireMessage(
         clientId: clientId,
         requestId: requestId,
-        ownerId: currentOwnerId(),
+        ownerId: authorizationSnapshot.ownerID,
         sessionId: sessionId,
         prompt: prompt,
         mode: mode,
@@ -1381,8 +2024,61 @@ actor AgentRuntimeProcess {
     }
   }
 
-  private func startProcess(preferredHarnessMode: String) async throws {
-    guard !isRunning else { return }
+  private func startProcess(
+    preferredHarnessMode: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    admissionAuthorityEpoch: UInt64
+  ) async throws {
+    if isRunning {
+      try await waitForInit(timeout: 30.0)
+      try assertAuthorization(authorizationSnapshot)
+      return
+    }
+    let key = StartupKey(
+      authorizationSnapshot: authorizationSnapshot,
+      admissionAuthorityEpoch: admissionAuthorityEpoch)
+    let receipt = try await startupSingleFlight.run(key: key) { [weak self] in
+      guard let self else { throw BridgeError.stopped }
+      return try await self.performStartProcess(
+        preferredHarnessMode: preferredHarnessMode,
+        authorizationSnapshot: authorizationSnapshot,
+        admissionAuthorityEpoch: admissionAuthorityEpoch)
+    }
+    guard isRunning, process?.isRunning == true,
+      processGeneration == receipt.processGeneration,
+      runtimeOwnerAuthorityEpoch == receipt.authorityEpoch,
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+    else {
+      throw BridgeError.authMissing
+    }
+  }
+
+  private func performStartProcess(
+    preferredHarnessMode: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    admissionAuthorityEpoch: UInt64
+  ) async throws -> StartupReceipt {
+    guard !isRunning else {
+      try await waitForInit(timeout: 30.0)
+      try assertAuthorization(authorizationSnapshot)
+      return StartupReceipt(
+        authorityEpoch: runtimeOwnerAuthorityEpoch,
+        processGeneration: processGeneration)
+    }
+    // A previous process may have exited while a non-cooperative physical tool
+    // task was still unwinding. Never launch/re-authorize a replacement daemon
+    // until every old-owner Swift execution has actually returned.
+    await cancelAndDrainAuthorizedToolExecutionTasks()
+    if isRunning {
+      try await waitForInit(timeout: 30.0)
+      try assertAuthorization(authorizationSnapshot)
+      return StartupReceipt(
+        authorityEpoch: runtimeOwnerAuthorityEpoch,
+        processGeneration: processGeneration)
+    }
+    try assertStartupAuthority(
+      authorizationSnapshot,
+      expectedAuthorityEpoch: admissionAuthorityEpoch)
     guard let preferredHarness = AgentRuntimeRouting.harnessMode(from: preferredHarnessMode) else {
       log("AgentRuntimeProcess: refusing unknown harness mode \(preferredHarnessMode)")
       throw BridgeError.agentError("Unknown AI runtime mode: \(preferredHarnessMode)")
@@ -1431,6 +2127,9 @@ actor AgentRuntimeProcess {
     applyLocalAgentEnvironment(to: &env)
 
     let rustBase = await APIClient.shared.rustBackendURL
+    try assertStartupAuthority(
+      authorizationSnapshot,
+      expectedAuthorityEpoch: admissionAuthorityEpoch)
     if !rustBase.isEmpty {
       env["OMI_API_BASE_URL"] = rustBase.hasSuffix("/") ? "\(rustBase)v2" : "\(rustBase)/v2"
     } else if preferredAdapterId == .piMono {
@@ -1440,6 +2139,9 @@ actor AgentRuntimeProcess {
 
     Self.removeInheritedBYOKEnvironment(from: &env)
     let byok = await Self.usableBYOKEnvironment()
+    try assertStartupAuthority(
+      authorizationSnapshot,
+      expectedAuthorityEpoch: admissionAuthorityEpoch)
     for (key, value) in byok.values {
       env[key] = value
     }
@@ -1456,7 +2158,15 @@ actor AgentRuntimeProcess {
 
     let authService = await MainActor.run { AuthService.shared }
     let forceRefreshToken = preferredAdapterId == .piMono && !DesktopLocalProfile.isEnabled
-    if let token = try? await authService.getIdToken(forceRefresh: forceRefreshToken), !token.isEmpty {
+    let authHeader = try? await authService.getAuthHeader(
+      forceRefresh: forceRefreshToken,
+      expectedUserId: authorizationSnapshot.ownerID)
+    try assertStartupAuthority(
+      authorizationSnapshot,
+      expectedAuthorityEpoch: admissionAuthorityEpoch)
+    if let authHeader,
+      let token = Self.bearerToken(from: authHeader)
+    {
       env["OMI_AUTH_TOKEN"] = token
     } else if preferredAdapterId == .piMono && env["OMI_AGENT_ALLOW_CONTROL_ONLY"] != "1" {
       log("AgentRuntimeProcess: pi-mono start refused, Firebase ID token is missing")
@@ -1493,6 +2203,9 @@ actor AgentRuntimeProcess {
       env.removeValue(forKey: "PLAYWRIGHT_MCP_EXTENSION_TOKEN")
     }
 
+    try assertStartupAuthority(
+      authorizationSnapshot,
+      expectedAuthorityEpoch: admissionAuthorityEpoch)
     proc.environment = env
 
     let stdin = Pipe()
@@ -1530,12 +2243,23 @@ actor AgentRuntimeProcess {
       }
     }
 
-    try proc.run()
-    isRunning = true
-    startReadingStdout()
-
     do {
+      try proc.run()
+      isRunning = true
+      markRuntimeOwnerAuthorityDirty()
+      let launchedAuthorityEpoch = runtimeOwnerAuthorityEpoch
+      if env["OMI_AUTH_TOKEN"]?.isEmpty == false {
+        synchronizedRuntimeCredentialOwnerID = authorizationSnapshot.ownerID
+      }
+      startReadingStdout()
+
       try await waitForInit(timeout: 30.0)
+      try assertStartupAuthority(
+        authorizationSnapshot,
+        expectedAuthorityEpoch: launchedAuthorityEpoch)
+      return StartupReceipt(
+        authorityEpoch: launchedAuthorityEpoch,
+        processGeneration: expectedGeneration)
     } catch {
       await cleanupFailedStart(process: proc, error: error)
       throw error
@@ -1633,6 +2357,14 @@ actor AgentRuntimeProcess {
     return "\(shellQuote(openClawPath)) acp"
   }
 
+  private nonisolated static func bearerToken(from header: String) -> String? {
+    let prefix = "Bearer "
+    guard header.hasPrefix(prefix) else { return nil }
+    let token = String(header.dropFirst(prefix.count))
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    return token.isEmpty ? nil : token
+  }
+
   private static func shellQuote(_ value: String) -> String {
     "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
   }
@@ -1658,6 +2390,9 @@ actor AgentRuntimeProcess {
       }
       if failedProcess.isRunning {
         kill(failedProcess.processIdentifier, SIGKILL)
+        while failedProcess.isRunning {
+          try? await Task.sleep(nanoseconds: 20_000_000)
+        }
       }
     }
     if let currentProcess = process, currentProcess === failedProcess {
@@ -1665,6 +2400,8 @@ actor AgentRuntimeProcess {
     }
     closePipes()
     isRunning = false
+    await cancelAndDrainAuthorizedToolExecutionTasks()
+    markRuntimeOwnerAuthorityDirty()
     receivedInit = false
     advertisedAgentControlTools.removeAll()
     resumeAllRequests(throwing: BridgeError.stopped)
@@ -1707,6 +2444,8 @@ actor AgentRuntimeProcess {
 
   private func stopProcess(resumeRequestsWith error: BridgeError) async {
     let proc = process
+    await cancelAndDrainAuthorizedToolExecutionTasks()
+    markRuntimeOwnerAuthorityDirty()
     processGeneration &+= 1
     lastExitWasOOM = false
     oomDiagnosticLatch.reset(generation: processGeneration)
@@ -1723,7 +2462,9 @@ actor AgentRuntimeProcess {
       if proc.isRunning && pid > 0 {
         log("AgentRuntimeProcess: process \(pid) still alive after 3s, sending SIGKILL")
         kill(pid, SIGKILL)
-        try? await Task.sleep(nanoseconds: 200_000_000)
+        while proc.isRunning {
+          try? await Task.sleep(nanoseconds: 20_000_000)
+        }
       }
     }
 
@@ -1788,6 +2529,9 @@ actor AgentRuntimeProcess {
   private func handleMessage(_ message: RuntimeMessage) {
     if let request = routedRequest(for: message), let surfaceRef = request.surfaceRef {
       Task { @MainActor in
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(request.authorizationSnapshot) else {
+          return
+        }
         AgentRuntimeStatusStore.shared.ingest(message: message, surface: surfaceRef)
       }
     }
@@ -1805,8 +2549,12 @@ actor AgentRuntimeProcess {
       let authUrl = message.payload["authUrl"] as? String
       if let request = routedRequest(for: message) {
         request.onAuthRequired(methods, authUrl)
-      } else {
-        for client in clients.values {
+      } else if message.requestKey == nil {
+        let eventOwnerID = message.payload["ownerId"] as? String
+        for client in clients.values where client.authAuthorizationSnapshot.map({ snapshot in
+          RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot)
+            && (eventOwnerID == nil || snapshot.ownerID == eventOwnerID)
+        }) == true {
           client.onAuthRequired?(methods, authUrl)
         }
       }
@@ -1814,8 +2562,12 @@ actor AgentRuntimeProcess {
     case .authSuccess:
       if let request = routedRequest(for: message) {
         request.onAuthSuccess()
-      } else {
-        for client in clients.values {
+      } else if message.requestKey == nil {
+        let eventOwnerID = message.payload["ownerId"] as? String
+        for client in clients.values where client.authAuthorizationSnapshot.map({ snapshot in
+          RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot)
+            && (eventOwnerID == nil || snapshot.ownerID == eventOwnerID)
+        }) == true {
           client.onAuthSuccess?()
         }
       }
@@ -1847,6 +2599,13 @@ actor AgentRuntimeProcess {
       break
 
     case .authorizedToolExecution:
+      guard messageOwnerIsCurrentlyAuthorized(message) else {
+        completeAuthorizedToolExecution(
+          payload: message.payload,
+          outcome: "failed",
+          result: Self.authorizedToolExecutionError(.ownerChangedDuringExecution))
+        return
+      }
       handleAuthorizedToolExecution(message)
 
     case .cancelAck:
@@ -1862,24 +2621,24 @@ actor AgentRuntimeProcess {
       completeJournalRequest(message)
 
     case .journalTurnChanged:
-      if let turn = journalTurn(from: message) {
+      if messageOwnerIsCurrentlyAuthorized(message), let turn = journalTurn(from: message) {
         journalTurnChangedHandler?(turn)
       }
 
     case .journalBackendSync:
-      handleJournalBackendSync(message)
+      if messageOwnerIsCurrentlyAuthorized(message) { handleJournalBackendSync(message) }
 
     case .journalBackendDelete:
-      handleJournalBackendDelete(message)
+      if messageOwnerIsCurrentlyAuthorized(message) { handleJournalBackendDelete(message) }
 
     case .journalBackendReconcile:
-      handleJournalBackendReconcile(message)
+      if messageOwnerIsCurrentlyAuthorized(message) { handleJournalBackendReconcile(message) }
 
     case .defaultExecutionProfileConfigured, .surfaceSessionResolved,
       .sessionExecutionProfileMigrated, .contextSourceUpdated, .contextSnapshot,
       .legacyMainChatSessionsImported,
       .externalSurfaceRunBeginResult, .externalSurfaceToolResult,
-      .externalSurfaceRunCompleteResult:
+      .externalSurfaceRunCompleteResult, .ownerRuntimeRevoked:
       completeKernelContractRequest(message)
 
     case .result:
@@ -1895,9 +2654,18 @@ actor AgentRuntimeProcess {
 
   private func routedRequest(for message: RuntimeMessage) -> ActiveRequest? {
     if let requestKey = message.requestKey {
-      return activeRequests[requestKey]
+      guard let request = activeRequests[requestKey],
+        RuntimeOwnerIdentity.isAuthorizationCurrent(request.authorizationSnapshot)
+      else { return nil }
+      return request
     }
     return nil
+  }
+
+  private func messageOwnerIsCurrentlyAuthorized(_ message: RuntimeMessage) -> Bool {
+    guard let ownerID = message.payload["ownerId"] as? String else { return false }
+    return RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+      expectedOwnerID: ownerID) != nil
   }
 
   private func completeKernelContractRequest(_ message: RuntimeMessage) {
@@ -1911,6 +2679,12 @@ actor AgentRuntimeProcess {
       request.continuation.resume(
         throwing: BridgeError.agentError("Kernel contract response type did not match its request")
       )
+      return
+    }
+    if let authorizationSnapshot = request.authorizationSnapshot,
+      !RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+    {
+      request.continuation.resume(throwing: BridgeError.authMissing)
       return
     }
     request.continuation.resume(returning: message.payload)
@@ -1938,7 +2712,19 @@ actor AgentRuntimeProcess {
       return
     }
 
-    Task {
+    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+      expectedOwnerID: command.ownerID)
+    else {
+      completeAuthorizedToolExecution(
+        command: command,
+        executionResult: .failed(
+          Self.authorizedToolExecutionError(.ownerChangedDuringExecution)))
+      return
+    }
+
+    let executionID = UUID()
+    let executionTask = Task {
+      defer { activeAuthorizedToolExecutionTasks.removeValue(forKey: executionID) }
       let executionResult: AuthorizedRealtimeToolExecutionResult
       switch command.executor {
       case .chatToolExecutor:
@@ -1961,12 +2747,14 @@ actor AgentRuntimeProcess {
           originatingRunId: command.runID,
           originatingUserText: command.originatingUserText,
           isOnboardingSurface: command.surfaceKind == "onboarding",
-          expectedOwnerID: command.ownerID)
-        if AuthorizedToolExecution.isOwnerCurrent(command.ownerID) {
+          expectedOwnerID: command.ownerID,
+          authorizationSnapshot: authorizationSnapshot)
+        if !Task.isCancelled,
+          RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+        {
           executionResult = .succeeded(result)
         } else {
-          executionResult = .failed(
-            Self.authorizedToolExecutionError(.ownerChangedDuringExecution))
+          return
         }
       case .realtimeHub:
         guard let handler = authorizedRealtimeToolHandler else {
@@ -1978,13 +2766,9 @@ actor AgentRuntimeProcess {
         }
         executionResult = await handler(command)
       }
-      guard AuthorizedToolExecution.isOwnerCurrent(command.ownerID) else {
-        completeAuthorizedToolExecution(
-          command: command,
-          executionResult: .failed(
-            Self.authorizedToolExecutionError(.ownerChangedDuringExecution)))
-        return
-      }
+      guard !Task.isCancelled,
+        RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+      else { return }
       if command.policyRecovery == .permissionDelegationToNative,
         case .succeeded = executionResult
       {
@@ -1999,6 +2783,26 @@ actor AgentRuntimeProcess {
         command: command,
         executionResult: executionResult)
     }
+    activeAuthorizedToolExecutionTasks[executionID] = executionTask
+  }
+
+  private func cancelAuthorizedToolExecutionTasks() {
+    activeAuthorizedToolExecutionTasks.values.forEach { $0.cancel() }
+  }
+
+  private func cancelAndDrainAuthorizedToolExecutionTasks() async {
+    let tasks = Array(activeAuthorizedToolExecutionTasks.values)
+    await Self.cancelAndAwaitPhysicalExecutionTasks(tasks)
+  }
+
+  /// Shared linearization primitive: cancellation requests revocation, while
+  /// awaiting every task proves no non-cooperative physical effect can outlive
+  /// the owner transition that is about to expose a replacement account.
+  nonisolated static func cancelAndAwaitPhysicalExecutionTasks(
+    _ tasks: [Task<Void, Never>]
+  ) async {
+    tasks.forEach { $0.cancel() }
+    for task in tasks { await task.value }
   }
 
   private static func authorizedToolExecutionError(
@@ -2092,6 +2896,10 @@ actor AgentRuntimeProcess {
       log("AgentRuntimeProcess: dropping unroutable result")
       return
     }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(request.authorizationSnapshot) else {
+      request.continuation.resume(throwing: BridgeError.authMissing)
+      return
+    }
     if terminalStatus == "cancelled" {
       request.continuation.resume(throwing: BridgeError.stopped)
       return
@@ -2114,7 +2922,48 @@ actor AgentRuntimeProcess {
       log("AgentRuntimeProcess: dropping unroutable control tool result")
       return
     }
+    let activeOwnerId = currentOwnerId()
+    let activeOwnerEpoch = observeDirectControlOwner(activeOwnerId)
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(request.authorizationSnapshot),
+      Self.isDirectControlResultOwnerCurrent(
+      expectedOwnerId: request.expectedOwnerId,
+      expectedOwnerEpoch: request.expectedOwnerEpoch,
+      resultOwnerId: message.payload["ownerId"] as? String,
+      currentOwnerId: activeOwnerId,
+      currentOwnerEpoch: activeOwnerEpoch)
+    else {
+      log("AgentRuntimeProcess: rejecting stale direct control result for owner transition")
+      request.continuation.resume(
+        throwing: BridgeError.agentError("direct_control_owner_revoked"))
+      return
+    }
     request.continuation.resume(returning: message.payload["result"] as? String ?? "")
+  }
+
+  static func isDirectControlResultOwnerCurrent(
+    expectedOwnerId: String,
+    expectedOwnerEpoch: UInt64,
+    resultOwnerId: String?,
+    currentOwnerId: String?,
+    currentOwnerEpoch: UInt64
+  ) -> Bool {
+    guard !expectedOwnerId.isEmpty,
+      resultOwnerId == expectedOwnerId,
+      currentOwnerId == expectedOwnerId,
+      currentOwnerEpoch == expectedOwnerEpoch
+    else {
+      return false
+    }
+    return true
+  }
+
+  @discardableResult
+  private func observeDirectControlOwner(_ ownerId: String?) -> UInt64 {
+    if observedDirectControlOwnerId != ownerId {
+      directControlOwnerEpoch &+= 1
+      observedDirectControlOwnerId = ownerId
+    }
+    return directControlOwnerEpoch
   }
 
   private func completeJournalRequest(_ message: RuntimeMessage) {
@@ -2122,6 +2971,10 @@ actor AgentRuntimeProcess {
       let request = activeJournalRequests.removeValue(forKey: requestKey)
     else {
       log("AgentRuntimeProcess: dropping unroutable journal result")
+      return
+    }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(request.authorizationSnapshot) else {
+      request.continuation.resume(throwing: BridgeError.authMissing)
       return
     }
     guard message.payload["ok"] as? Bool != false else {
@@ -2434,6 +3287,10 @@ actor AgentRuntimeProcess {
     if let requestKey = message.requestKey,
       let controlRequest = activeControlRequests.removeValue(forKey: requestKey)
     {
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(controlRequest.authorizationSnapshot) else {
+        controlRequest.continuation.resume(throwing: BridgeError.authMissing)
+        return
+      }
       log("AgentRuntimeProcess: control tool error (raw): \(raw)")
       controlRequest.continuation.resume(throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw))
       return
@@ -2441,6 +3298,10 @@ actor AgentRuntimeProcess {
     if let requestKey = message.requestKey,
       let journalRequest = activeJournalRequests.removeValue(forKey: requestKey)
     {
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(journalRequest.authorizationSnapshot) else {
+        journalRequest.continuation.resume(throwing: BridgeError.authMissing)
+        return
+      }
       log("AgentRuntimeProcess: journal operation failed (code-only)")
       journalRequest.continuation.resume(
         throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw)
@@ -2450,6 +3311,12 @@ actor AgentRuntimeProcess {
     if let requestKey = message.requestKey,
       let contractRequest = activeKernelContractRequests.removeValue(forKey: requestKey)
     {
+      if let authorizationSnapshot = contractRequest.authorizationSnapshot,
+        !RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+      {
+        contractRequest.continuation.resume(throwing: BridgeError.authMissing)
+        return
+      }
       log("AgentRuntimeProcess: kernel contract request failed (code-only)")
       contractRequest.continuation.resume(
         throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw)
@@ -2458,6 +3325,10 @@ actor AgentRuntimeProcess {
     }
     guard let requestKey = message.requestKey, let request = activeRequests.removeValue(forKey: requestKey) else {
       log("AgentRuntimeProcess: dropping unroutable error")
+      return
+    }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(request.authorizationSnapshot) else {
+      request.continuation.resume(throwing: BridgeError.authMissing)
       return
     }
     log("AgentRuntimeProcess: agent error (raw): \(raw)")
@@ -2544,6 +3415,7 @@ actor AgentRuntimeProcess {
     )
     log("AgentRuntimeProcess: process terminated (code=\(exitCode), error=\(error))")
     isRunning = false
+    markRuntimeOwnerAuthorityDirty()
     receivedInit = false
     advertisedAgentControlTools.removeAll()
     closePipes()
@@ -2642,9 +3514,59 @@ actor AgentRuntimeProcess {
       .path
   }
 
+  /// Resource lookup must be optional at this boundary. `Bundle.resourceBundle`
+  /// intentionally traps when an app bundle is malformed, but SwiftPM test
+  /// executables have no app-style `Contents/Resources` root and must be able to
+  /// fall through to the system Node candidates without crashing the process.
+  nonisolated static func runtimeResourceExecutableCandidates(
+    named resourceName: String,
+    bundleURLs: [URL],
+    executableURL: URL?
+  ) -> [String] {
+    let bundleName = "Omi Computer_Omi Computer.bundle"
+    var candidates: [String] = []
+    var seen = Set<String>()
+    func append(_ url: URL) {
+      let path = url.standardizedFileURL.path
+      if seen.insert(path).inserted { candidates.append(path) }
+    }
+    for bundleURL in bundleURLs {
+      append(
+        bundleURL
+          .appendingPathComponent("Contents/Resources")
+          .appendingPathComponent(bundleName)
+          .appendingPathComponent(resourceName))
+      append(
+        bundleURL
+          .appendingPathComponent(bundleName)
+          .appendingPathComponent(resourceName))
+      append(
+        bundleURL.deletingLastPathComponent()
+          .appendingPathComponent(bundleName)
+          .appendingPathComponent(resourceName))
+    }
+    if let executableDirectory = executableURL?.deletingLastPathComponent() {
+      append(
+        executableDirectory
+          .appendingPathComponent(bundleName)
+          .appendingPathComponent(resourceName))
+      append(
+        executableDirectory.deletingLastPathComponent()
+          .appendingPathComponent(bundleName)
+          .appendingPathComponent(resourceName))
+    }
+    return candidates
+  }
+
   private func findNodeBinary() -> String? {
-    let bundledNode = Bundle.resourceBundle.path(forResource: "node", ofType: nil)
-    if let bundledNode, FileManager.default.isExecutableFile(atPath: bundledNode) {
+    let bundleURLs = [Bundle.main.bundleURL]
+      + Bundle.allBundles.map(\.bundleURL)
+      + Bundle.allFrameworks.map(\.bundleURL)
+    for bundledNode in Self.runtimeResourceExecutableCandidates(
+      named: "node",
+      bundleURLs: bundleURLs,
+      executableURL: Bundle.main.executableURL
+    ) where FileManager.default.isExecutableFile(atPath: bundledNode) {
       return bundledNode
     }
 

@@ -201,6 +201,47 @@ export function markToolInvocationOutcomeUnknown(
   return readToolInvocation(store, identity.invocationId);
 }
 
+/**
+ * Revoke an invocation that can no longer finish under live run authority.
+ * Work that never crossed the dispatch boundary is deterministically failed;
+ * dispatched work is outcome-unknown because the physical executor may already
+ * have committed an effect even when its late receipt must be ignored.
+ */
+export function terminalizeRevokedToolInvocation(
+  store: AgentStore,
+  identity: ToolInvocationIdentity,
+  errorCode: string,
+  nowMs: number,
+): ToolInvocationLedgerRecord {
+  if (!/^[A-Za-z0-9_.:-]{1,128}$/.test(errorCode)) throw new Error("Tool invocation error code is unbounded");
+  const changed = store.execute(
+    `UPDATE tool_invocation_ledger
+     SET status = CASE status WHEN 'prepared' THEN 'failed' ELSE 'outcome_unknown' END,
+         error_code = ?, completed_at_ms = ?, updated_at_ms = ?
+     WHERE invocation_id = ? AND owner_id = ? AND session_id = ? AND run_id = ? AND attempt_id = ?
+       AND profile_generation = ? AND manifest_version = ? AND manifest_digest = ? AND daemon_boot_epoch = ?
+       AND execution_generation = ? AND input_hash = ? AND status IN ('prepared', 'dispatched')`,
+    [
+      errorCode,
+      nowMs,
+      nowMs,
+      identity.invocationId,
+      identity.ownerId,
+      identity.sessionId,
+      identity.runId,
+      identity.attemptId,
+      identity.profileGeneration,
+      identity.manifestVersion,
+      identity.manifestDigest,
+      identity.daemonBootEpoch,
+      identity.executionGeneration,
+      identity.inputHash,
+    ],
+  );
+  if (changed !== 1) throw new Error("Tool invocation cannot be terminalized after authority revocation");
+  return readToolInvocation(store, identity.invocationId);
+}
+
 export function readToolInvocation(store: AgentStore, invocationId: string): ToolInvocationLedgerRecord {
   return toolInvocationFromRow(store.getRow(
     "SELECT * FROM tool_invocation_ledger WHERE invocation_id = ?",

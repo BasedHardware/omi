@@ -168,6 +168,27 @@ struct KernelJournalTurnUpdate: Sendable {
   let producingRunId: String?
   let metadataJSON: String?
 
+  /// A terminal lifecycle update that deliberately carries no response
+  /// payload. This is used after stop/supersession when the visible projection
+  /// may already have removed its empty placeholder: the existing journal row
+  /// still becomes terminal, but a late adapter result cannot be copied into it.
+  static func statusOnly(
+    turnId: String,
+    status: KernelJournalTurnStatus
+  ) -> KernelJournalTurnUpdate {
+    KernelJournalTurnUpdate(
+      turnId: turnId,
+      status: status,
+      content: nil,
+      contentBlocksJSON: nil,
+      appendContentBlocksJSON: nil,
+      resourcesJSON: nil,
+      appendResourcesJSON: nil,
+      producingRunId: nil,
+      metadataJSON: nil
+    )
+  }
+
   var dictionary: [String: Any] {
     var value: [String: Any] = ["turnId": turnId]
     if let status { value["status"] = status.rawValue }

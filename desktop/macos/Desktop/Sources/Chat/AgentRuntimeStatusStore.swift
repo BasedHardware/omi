@@ -316,7 +316,7 @@ final class AgentRuntimeStatusStore: ObservableObject {
       .sessionExecutionProfileMigrated, .contextSourceUpdated, .contextSnapshot,
       .legacyMainChatSessionsImported,
       .externalSurfaceRunBeginResult, .externalSurfaceToolResult,
-      .externalSurfaceRunCompleteResult,
+      .externalSurfaceRunCompleteResult, .ownerRuntimeRevoked,
       .unknown:
       break
     }

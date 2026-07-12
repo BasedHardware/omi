@@ -314,6 +314,22 @@ final class VoiceTurnCoordinator {
     return ownerID
   }
 
+  /// Revokes the complete logical voice capability before an effective owner
+  /// mutation becomes visible. This enters through the reducer so capture,
+  /// provider, playback, deadline, and terminal cleanup effects keep one owner.
+  @discardableResult
+  func terminateForEffectiveOwnerTransition(previousOwnerID: String?) -> Bool {
+    guard let turn = activeTurn else { return false }
+    if let previousOwnerID, turn.ownerID != previousOwnerID {
+      log(
+        "VoiceTurnCoordinator: active turn owner did not match the owner being replaced; "
+          + "revoking the turn fail-closed")
+    }
+    send(.cancel(turnID: turn.id, reason: .ownerChanged))
+    return model.lastTerminal?.turnID == turn.id
+      && model.lastTerminal?.reason == .ownerChanged
+  }
+
   func send(_ event: VoiceTurnEvent) {
     pendingEvents.append(event)
     guard !isDrainingEvents else { return }

@@ -34,7 +34,9 @@ final class ActionItemsFTSRepairTests: XCTestCase {
 
   func testLocalInsertRepairsMissingActionItemsFTSWithoutDroppingDurableRows() async throws {
     let existing = try await ActionItemStorage.shared.insertLocalActionItem(
-      ActionItemRecord(description: "preserve existing durable row", source: "test"))
+      ActionItemRecord(description: "preserve existing durable row", source: "test"),
+      // This isolated repair fixture deliberately has no runtime owner.
+      authorization: .unrestricted)
     XCTAssertNotNil(existing.id)
 
     guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
@@ -46,7 +48,8 @@ final class ActionItemsFTSRepairTests: XCTestCase {
     }
 
     let repaired = try await ActionItemStorage.shared.insertLocalActionItem(
-      ActionItemRecord(description: "insert after fts repair", source: "test"))
+      ActionItemRecord(description: "insert after fts repair", source: "test"),
+      authorization: .unrestricted)
     XCTAssertNotNil(repaired.id)
 
     let durableDescriptions = try await dbQueue.read { db in
@@ -75,7 +78,9 @@ final class ActionItemsFTSRepairTests: XCTestCase {
 
   func testRepairRebuildsDroppedActionItemsFTSFromDurableRows() async throws {
     let existing = try await ActionItemStorage.shared.insertLocalActionItem(
-      ActionItemRecord(description: "direct repair durable row", source: "test"))
+      ActionItemRecord(description: "direct repair durable row", source: "test"),
+      // This isolated repair fixture deliberately has no runtime owner.
+      authorization: .unrestricted)
     XCTAssertNotNil(existing.id)
 
     guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {

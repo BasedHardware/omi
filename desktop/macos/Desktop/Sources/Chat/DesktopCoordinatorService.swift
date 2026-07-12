@@ -9,7 +9,21 @@ protocol DesktopCoordinatorRuntimeControlling {
   ) async throws -> String
 }
 
-extension AgentRuntimeProcess: DesktopCoordinatorRuntimeControlling {}
+extension AgentRuntimeProcess: DesktopCoordinatorRuntimeControlling {
+  func directControlTool(
+    clientId: String,
+    harnessMode: String,
+    name: String,
+    input: [String: Any]
+  ) async throws -> String {
+    try await directControlTool(
+      clientId: clientId,
+      harnessMode: harnessMode,
+      name: name,
+      input: input,
+      authorizationSnapshot: nil)
+  }
+}
 
 enum DesktopCoordinatorOriginSurface: String, CaseIterable, Sendable {
   case mainChat = "main_chat"

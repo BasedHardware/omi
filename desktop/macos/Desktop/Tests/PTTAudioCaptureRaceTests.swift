@@ -18,6 +18,21 @@ import XCTest
 /// runtime on a named bundle in the default (hub) config — see
 /// `.omi-hardening/slices/003-ptt-empty-batch/`.
 final class PTTAudioCaptureRaceTests: XCTestCase {
+  func testDeferredCoreAudioReconfigurationCannotRestartAfterOwnerTeardown() {
+    XCTAssertTrue(
+      AudioCaptureService.shouldRunDeferredReconfiguration(
+        isCapturing: true,
+        isReconfiguring: true))
+    XCTAssertFalse(
+      AudioCaptureService.shouldRunDeferredReconfiguration(
+        isCapturing: false,
+        isReconfiguring: true))
+    XCTAssertFalse(
+      AudioCaptureService.shouldRunDeferredReconfiguration(
+        isCapturing: true,
+        isReconfiguring: false))
+  }
+
   func testAllModeGatesRouteTooShortTurnsToHint() throws {
     let source = try managerSource()
 

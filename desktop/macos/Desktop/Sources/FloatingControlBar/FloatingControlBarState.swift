@@ -120,6 +120,9 @@ enum FloatingBarNotificationAction: Equatable {
 /// A custom in-app notification rendered directly below the floating bar.
 struct FloatingBarNotification: Identifiable, Equatable {
     let id = UUID()
+    /// Immutable owner provenance captured before the workflow that produced
+    /// this notification crossed an async boundary.
+    let ownerID: String
     let title: String
     let message: String
     let assistantId: String
@@ -129,6 +132,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
     let screenshotData: Data?
 
     init(
+        ownerID: String,
         title: String,
         message: String,
         assistantId: String,
@@ -136,6 +140,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
         action: FloatingBarNotificationAction? = nil,
         screenshotData: Data? = nil
     ) {
+        self.ownerID = ownerID
         self.title = title
         self.message = message
         self.assistantId = assistantId

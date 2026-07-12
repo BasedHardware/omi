@@ -155,59 +155,124 @@ enum KernelAgentLifecycleMutation {
 /// are wakeups only; every mutation is replayed in contiguous turnSeq order.
 @MainActor
 final class KernelTurnProjection {
+  private struct OwnerLease: Equatable {
+    let ownerID: String
+    let epoch: UInt64
+  }
+
+  struct ExchangeTurn {
+    let message: ChatMessage
+    let status: KernelJournalTurnStatus
+  }
+
+  typealias JournalListOperation = (
+    _ client: AgentClient.Session,
+    _ surface: AgentSurfaceReference,
+    _ ownerID: String,
+    _ afterTurnSeq: Int,
+    _ limit: Int
+  ) async throws -> AgentRuntimeProcess.JournalOperationResult
+
   private weak var host: ChatProvider?
   private var client: AgentClient.Session?
   private var eventToken: UUID?
+  private let ownerIDProvider: () -> String?
+  private let journalListOperation: JournalListOperation?
+  private var projectionEpoch: UInt64 = 0
+  private var boundOwnerID: String?
   private var highWaterByConversation: [String: Int] = [:]
   private var generationByConversation: [String: Int] = [:]
   private var conversationBySurface: [String: String] = [:]
-  private var refreshingSurfaces = Set<String>()
-  private var refreshRequestedSurfaces = Set<String>()
+  private var refreshingSurfaceEpochs: [String: UInt64] = [:]
+  private var refreshRequestedSurfaceEpochs: [String: UInt64] = [:]
 
-  init(host: ChatProvider) {
+  init(
+    host: ChatProvider,
+    client: AgentClient.Session? = nil,
+    ownerIDProvider: @escaping () -> String? = { RuntimeOwnerIdentity.currentOwnerId() },
+    journalListOperation: JournalListOperation? = nil
+  ) {
     self.host = host
+    self.client = client
+    self.ownerIDProvider = ownerIDProvider
+    self.journalListOperation = journalListOperation
   }
 
   func attachClient(_ client: AgentClient.Session) async {
     self.client = client
+    guard let lease = captureOwnerLease() else { return }
     KernelJournalEventHub.shared.unsubscribe(eventToken)
     await KernelJournalEventHub.shared.attach(client: client)
+    guard isCurrent(lease) else { return }
     eventToken = KernelJournalEventHub.shared.subscribe(surface: nil) { [weak self] in
-      guard let self, let surface = self.host?.mainChatSurfaceReference() else { return }
-      Task { @MainActor [weak self] in await self?.refresh(surface: surface) }
+      Task { @MainActor [weak self] in
+        guard let self, let surface = self.host?.mainChatSurfaceReference() else { return }
+        await self.refresh(surface: surface)
+      }
     }
     if let surface = host?.mainChatSurfaceReference() {
-      await refresh(surface: surface)
+      await refresh(surface: surface, lease: lease)
+    }
+  }
+
+  /// Synchronous owner teardown. Suspended work retains its old epoch and can
+  /// neither mutate checkpoints nor project owner A rows after owner B starts.
+  func invalidateOwnerState() {
+    projectionEpoch &+= 1
+    boundOwnerID = nil
+    highWaterByConversation.removeAll()
+    generationByConversation.removeAll()
+    conversationBySurface.removeAll()
+    refreshingSurfaceEpochs.removeAll()
+    refreshRequestedSurfaceEpochs.removeAll()
+    if let host {
+      host.resetJournalProjection(surface: host.mainChatSurfaceReference())
     }
   }
 
   /// Ordered replay. A gap never advances the checkpoint: the next page starts
   /// from the last contiguous turnSeq, so out-of-order wakeups cannot drop data.
   func refresh(surface: AgentSurfaceReference) async {
-    guard let client else { return }
+    guard let lease = captureOwnerLease() else { return }
+    await refresh(surface: surface, lease: lease)
+  }
+
+  private func refresh(surface: AgentSurfaceReference, lease: OwnerLease) async {
+    guard isCurrent(lease), let client else { return }
     let surfaceKey = surface.key
-    if refreshingSurfaces.contains(surfaceKey) {
-      refreshRequestedSurfaces.insert(surfaceKey)
+    if refreshingSurfaceEpochs[surfaceKey] == lease.epoch {
+      refreshRequestedSurfaceEpochs[surfaceKey] = lease.epoch
       return
     }
-    refreshingSurfaces.insert(surfaceKey)
-    defer { refreshingSurfaces.remove(surfaceKey) }
+    refreshingSurfaceEpochs[surfaceKey] = lease.epoch
+    defer {
+      if refreshingSurfaceEpochs[surfaceKey] == lease.epoch {
+        refreshingSurfaceEpochs.removeValue(forKey: surfaceKey)
+      }
+    }
 
     repeat {
-      refreshRequestedSurfaces.remove(surfaceKey)
+      guard isCurrent(lease) else { return }
+      if refreshRequestedSurfaceEpochs[surfaceKey] == lease.epoch {
+        refreshRequestedSurfaceEpochs.removeValue(forKey: surfaceKey)
+      }
       var shouldContinue = true
       while shouldContinue {
+        guard isCurrent(lease) else { return }
         let knownConversation = conversationBySurface[surfaceKey]
         let knownCheckpoint = knownConversation.map {
           checkpointKeyFor(conversationId: $0, surface: surface)
         }
         let after = knownCheckpoint.flatMap { highWaterByConversation[$0] } ?? 0
         do {
-          let page = try await client.listJournalTurns(
+          let page = try await listJournalTurns(
+            client: client,
             surface: surface,
+            ownerID: lease.ownerID,
             afterTurnSeq: after,
             limit: 100
           )
+          guard isCurrent(lease) else { return }
           let conversationId = page.conversationId
           guard !conversationId.isEmpty else {
             shouldContinue = false
@@ -219,6 +284,7 @@ final class KernelTurnProjection {
           if currentGeneration != page.conversationGeneration {
             highWaterByConversation[checkpointKey] = page.generationBaseTurnSeq
             generationByConversation[checkpointKey] = page.conversationGeneration
+            guard isCurrent(lease) else { return }
             host?.resetJournalProjection(surface: surface)
           }
           generationByConversation[checkpointKey] = page.conversationGeneration
@@ -228,6 +294,7 @@ final class KernelTurnProjection {
             after: contiguous
           )
           for turn in contiguousPage {
+            guard isCurrent(lease) else { return }
             host?.projectJournalTurn(turn)
             contiguous = turn.turnSeq
             highWaterByConversation[checkpointKey] = contiguous
@@ -249,22 +316,26 @@ final class KernelTurnProjection {
             break
           }
         } catch {
-          log("KernelTurnProjection: journal replay failed (code=journal_range_fetch_failed)")
+          if isCurrent(lease) {
+            log("KernelTurnProjection: journal replay failed (code=journal_range_fetch_failed)")
+          }
           shouldContinue = false
         }
       }
-    } while refreshRequestedSurfaces.remove(surfaceKey) != nil
+    } while isCurrent(lease) && refreshRequestedSurfaceEpochs[surfaceKey] == lease.epoch
   }
 
   func reload(surface: AgentSurfaceReference) async {
+    guard let lease = captureOwnerLease(), isCurrent(lease) else { return }
     let surfaceKey = surface.key
     if let conversationId = conversationBySurface.removeValue(forKey: surfaceKey) {
       let key = checkpointKeyFor(conversationId: conversationId, surface: surface)
       highWaterByConversation.removeValue(forKey: key)
       generationByConversation.removeValue(forKey: key)
     }
+    guard isCurrent(lease) else { return }
     host?.resetJournalProjection(surface: surface)
-    await refresh(surface: surface)
+    await refresh(surface: surface, lease: lease)
   }
 
   @discardableResult
@@ -281,11 +352,12 @@ final class KernelTurnProjection {
     messageSource: String? = nil,
     ownerID: String? = nil
   ) async -> KernelJournalTurn? {
-    guard let host, await host.ensureBridgeStartedForKernel(), let client else { return nil }
+    guard let lease = captureOwnerLease(ownerID: ownerID), let host else { return nil }
+    guard await host.ensureBridgeStartedForKernel(), isCurrent(lease), let client else { return nil }
     do {
       let turn = try await client.recordJournalTurn(
         surface: surface,
-        ownerID: ownerID,
+        ownerID: lease.ownerID,
         turn: message.journalWrite(
           origin: origin,
           status: status,
@@ -297,7 +369,9 @@ final class KernelTurnProjection {
           messageSource: messageSource
         )
       )
-      await refresh(surface: surface)
+      guard isCurrent(lease) else { return nil }
+      await refresh(surface: surface, lease: lease)
+      guard isCurrent(lease) else { return nil }
       return turn
     } catch {
       log("KernelTurnProjection: journal record failed (code=journal_record_failed)")
@@ -313,17 +387,48 @@ final class KernelTurnProjection {
     producingRunId: String? = nil,
     ownerID: String? = nil
   ) async -> KernelJournalTurn? {
-    guard let host, await host.ensureBridgeStartedForKernel(), let client else { return nil }
+    guard let lease = captureOwnerLease(ownerID: ownerID), let host else { return nil }
+    guard await host.ensureBridgeStartedForKernel(), isCurrent(lease), let client else { return nil }
     do {
       let turn = try await client.updateJournalTurn(
         surface: surface,
-        ownerID: ownerID,
+        ownerID: lease.ownerID,
         update: message.journalUpdate(status: status, producingRunId: producingRunId)
       )
-      await refresh(surface: surface)
+      guard isCurrent(lease) else { return nil }
+      await refresh(surface: surface, lease: lease)
+      guard isCurrent(lease) else { return nil }
       return turn
     } catch {
       log("KernelTurnProjection: journal update failed (code=journal_update_failed)")
+      return nil
+    }
+  }
+
+  /// Terminalize an existing turn without sourcing payload from the current UI
+  /// projection. Stopped turns can legitimately have no visible placeholder;
+  /// lifecycle durability must not depend on one being present.
+  @discardableResult
+  func updateTurnStatus(
+    surface: AgentSurfaceReference,
+    turnId: String,
+    status: KernelJournalTurnStatus,
+    ownerID: String? = nil
+  ) async -> KernelJournalTurn? {
+    guard let lease = captureOwnerLease(ownerID: ownerID), let host else { return nil }
+    guard await host.ensureBridgeStartedForKernel(), isCurrent(lease), let client else { return nil }
+    do {
+      let turn = try await client.updateJournalTurn(
+        surface: surface,
+        ownerID: lease.ownerID,
+        update: .statusOnly(turnId: turnId, status: status)
+      )
+      guard isCurrent(lease) else { return nil }
+      await refresh(surface: surface, lease: lease)
+      guard isCurrent(lease) else { return nil }
+      return turn
+    } catch {
+      log("KernelTurnProjection: journal status update failed (code=journal_status_update_failed)")
       return nil
     }
   }
@@ -344,25 +449,24 @@ final class KernelTurnProjection {
   ) async -> Bool {
     let delivery: KernelJournalDelivery = ["task_chat", "workstream"].contains(surface.surfaceKind)
       ? .local : .backend
-    var succeeded = true
+    let baseDate = Date()
+    var writes: [KernelJournalTurnWrite] = []
     if !userText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
       let user = ChatMessage(
         id: Self.stableTurnID(continuityKey: continuityKey, role: "user"),
         clientTurnId: continuityKey,
         text: userText,
+        createdAt: baseDate,
         sender: .user
       )
-      succeeded = await recordTurn(
-        surface: surface,
-        message: user,
+      writes.append(user.journalWrite(
         origin: origin,
         status: .completed,
         delivery: delivery,
         continuityKey: continuityKey,
         producingRunId: producingRunId,
-        messageSource: origin,
-        ownerID: ownerID
-      ) != nil
+        messageSource: origin
+      ))
     }
     if !assistantText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       || !assistantContentBlocks.isEmpty || !resources.isEmpty
@@ -371,23 +475,97 @@ final class KernelTurnProjection {
         id: Self.stableTurnID(continuityKey: continuityKey, role: "assistant"),
         clientTurnId: continuityKey,
         text: assistantText.isEmpty ? "Done." : assistantText,
+        createdAt: baseDate.addingTimeInterval(0.001),
         sender: .ai,
         contentBlocks: assistantContentBlocks,
         resources: resources
       )
-      succeeded = await recordTurn(
-        surface: surface,
-        message: assistant,
+      writes.append(assistant.journalWrite(
         origin: origin,
         status: .completed,
         delivery: delivery,
         continuityKey: continuityKey,
         producingRunId: producingRunId,
-        messageSource: origin,
-        ownerID: ownerID
-      ) != nil && succeeded
+        messageSource: origin
+      ))
     }
-    return succeeded
+
+    return await recordExchange(
+      surface: surface,
+      writes: writes,
+      ownerID: ownerID
+    ) != nil
+  }
+
+  /// Admit prebuilt visible turns under one journal transaction. This is the
+  /// canonical typed/task-chat entry point because it preserves caller-owned
+  /// message IDs, attachments, and a deliberately empty streaming placeholder.
+  @discardableResult
+  func recordExchange(
+    surface: AgentSurfaceReference,
+    turns: [ExchangeTurn],
+    origin: String,
+    delivery: KernelJournalDelivery,
+    continuityKey: String,
+    producingRunId: String? = nil,
+    appId: String? = nil,
+    sessionId: String? = nil,
+    messageSource: String,
+    ownerID: String? = nil
+  ) async -> [KernelJournalTurn]? {
+    let writes = turns.map { entry in
+      entry.message.journalWrite(
+        origin: origin,
+        status: entry.status,
+        delivery: delivery,
+        continuityKey: continuityKey,
+        producingRunId: producingRunId,
+        appId: appId,
+        sessionId: sessionId,
+        messageSource: messageSource
+      )
+    }
+    return await recordExchange(surface: surface, writes: writes, ownerID: ownerID)
+  }
+
+  @discardableResult
+  private func recordExchange(
+    surface: AgentSurfaceReference,
+    writes: [KernelJournalTurnWrite],
+    ownerID: String?
+  ) async -> [KernelJournalTurn]? {
+    guard !writes.isEmpty, writes.count <= 2 else { return nil }
+    let roles = writes.map(\.role)
+    guard roles == ["user"] || roles == ["assistant"]
+      || roles == ["user", "assistant"]
+    else { return nil }
+    guard let lease = captureOwnerLease(ownerID: ownerID), let host else { return nil }
+    guard await host.ensureBridgeStartedForKernel(), isCurrent(lease), let client else { return nil }
+
+    do {
+      let result = try await client.recordJournalExchange(
+        surface: surface,
+        ownerID: lease.ownerID,
+        turns: writes
+      )
+      guard isCurrent(lease), result.operation == "record_exchange" else { return nil }
+      let expectedTurnIDs = Set(writes.map(\.turnId))
+      guard
+        result.turns.count == writes.count,
+        Set(result.turns.map(\.turnId)) == expectedTurnIDs,
+        !result.conversationId.isEmpty
+      else {
+        log("KernelTurnProjection: journal exchange returned an invalid receipt")
+        return nil
+      }
+      applyAcceptedExchange(result, surface: surface, lease: lease)
+      return isCurrent(lease) ? result.turns : nil
+    } catch {
+      if isCurrent(lease) {
+        log("KernelTurnProjection: journal exchange failed (code=journal_exchange_failed)")
+      }
+      return nil
+    }
   }
 
   /// Append one deterministic terminal block to the assistant turn that
@@ -408,15 +586,18 @@ final class KernelTurnProjection {
     maxLookupAttempts: Int = 8,
     retryDelayNanoseconds: UInt64 = 150_000_000
   ) async -> KernelJournalTurn? {
-    guard let host, await host.ensureBridgeStartedForKernel(), let client else { return nil }
+    guard let lease = captureOwnerLease(ownerID: ownerID), let host else { return nil }
+    guard await host.ensureBridgeStartedForKernel(), isCurrent(lease), let client else { return nil }
     let attempts = max(1, min(maxLookupAttempts, 8))
     for attempt in 0..<attempts {
+      guard isCurrent(lease) else { return nil }
       do {
         let revisions = try await journalRevisions(
           client: client,
           surface: surface,
-          ownerID: ownerID
+          lease: lease
         )
+        guard isCurrent(lease) else { return nil }
         if let mutation = KernelAgentLifecycleMutation.completion(
           in: revisions,
           pillID: pillID,
@@ -430,17 +611,22 @@ final class KernelTurnProjection {
         ) {
           let turn = try await client.updateJournalTurn(
             surface: surface,
-            ownerID: ownerID,
+            ownerID: lease.ownerID,
             update: KernelAgentLifecycleMutation.atomicAppendUpdate(mutation)
           )
-          await refresh(surface: surface)
+          guard isCurrent(lease) else { return nil }
+          await refresh(surface: surface, lease: lease)
+          guard isCurrent(lease) else { return nil }
           return turn
         }
       } catch {
-        log("KernelTurnProjection: agent completion update failed (code=journal_agent_completion_failed)")
+        if isCurrent(lease) {
+          log("KernelTurnProjection: agent completion update failed (code=journal_agent_completion_failed)")
+        }
       }
       if attempt + 1 < attempts, retryDelayNanoseconds > 0 {
         try? await Task.sleep(nanoseconds: retryDelayNanoseconds)
+        guard isCurrent(lease) else { return nil }
       }
     }
     log("KernelTurnProjection: matching agent spawn unavailable (code=journal_agent_spawn_missing)")
@@ -448,7 +634,8 @@ final class KernelTurnProjection {
   }
 
   func clear(surface: AgentSurfaceReference, ownerID: String? = nil) async -> Bool {
-    guard let host, await host.ensureBridgeStartedForKernel(), let client else { return false }
+    guard let lease = captureOwnerLease(ownerID: ownerID), let host else { return false }
+    guard await host.ensureBridgeStartedForKernel(), isCurrent(lease), let client else { return false }
     do {
       let checkpointKey = conversationBySurface[surface.key].map {
         checkpointKeyFor(conversationId: $0, surface: surface)
@@ -456,9 +643,10 @@ final class KernelTurnProjection {
       let expectedGeneration = checkpointKey.flatMap { generationByConversation[$0] }
       _ = try await client.clearJournalTurns(
         surface: surface,
-        ownerID: ownerID,
+        ownerID: lease.ownerID,
         expectedGeneration: expectedGeneration
       )
+      guard isCurrent(lease) else { return false }
       for key in highWaterByConversation.keys where key.hasSuffix("|\(surface.key)") {
         highWaterByConversation.removeValue(forKey: key)
         generationByConversation.removeValue(forKey: key)
@@ -482,14 +670,15 @@ final class KernelTurnProjection {
     turn: KernelJournalRemoteTurn,
     ownerID: String? = nil
   ) async -> Bool {
-    guard let host, await host.ensureBridgeStartedForKernel(), let client else { return false }
+    guard let lease = captureOwnerLease(ownerID: ownerID), let host else { return false }
+    guard await host.ensureBridgeStartedForKernel(), isCurrent(lease), let client else { return false }
     do {
       _ = try await client.importRemoteJournalTurn(
         surface: surface,
-        ownerID: ownerID,
+        ownerID: lease.ownerID,
         turn: turn
       )
-      return true
+      return isCurrent(lease)
     } catch {
       log("KernelTurnProjection: bounded legacy import failed (code=journal_legacy_import_failed)")
       return false
@@ -499,14 +688,19 @@ final class KernelTurnProjection {
   func fetchVoiceContextSnapshot(
     surface: AgentSurfaceReference
   ) async -> KernelVoiceContextSnapshot {
-    guard let host, await host.ensureBridgeStartedForKernel(), let client else {
+    guard let lease = captureOwnerLease(), let host else {
+      return .empty
+    }
+    guard await host.ensureBridgeStartedForKernel(), isCurrent(lease), let client else {
       return .empty
     }
     do {
       let session = try await client.resolveSurfaceSession(surface)
+      guard isCurrent(lease) else { return .empty }
       let snapshot = try await client.getContextSnapshot(
         sessionId: session.sessionId,
         surfaceKind: surface.surfaceKind)
+      guard isCurrent(lease) else { return .empty }
       return Self.voiceContextSnapshot(from: snapshot, sessionId: session.sessionId)
     } catch {
       log("KernelTurnProjection: voice context snapshot fetch failed: \(error.localizedDescription)")
@@ -518,14 +712,18 @@ final class KernelTurnProjection {
     surface: AgentSurfaceReference,
     limit: Int = 8
   ) async -> KernelAutomationTurnRange? {
-    guard let host, await host.ensureBridgeStartedForKernel(), let client else { return nil }
+    guard let lease = captureOwnerLease(), let host else { return nil }
+    guard await host.ensureBridgeStartedForKernel(), isCurrent(lease), let client else { return nil }
     do {
       let boundedLimit = max(1, min(limit, 100))
-      var page = try await client.listJournalTurns(
+      var page = try await listJournalTurns(
+        client: client,
         surface: surface,
+        ownerID: lease.ownerID,
         afterTurnSeq: 0,
         limit: 1
       )
+      guard isCurrent(lease) else { return nil }
       guard !page.conversationId.isEmpty else {
         return KernelAutomationTurnRange(conversationId: "", turns: [])
       }
@@ -538,11 +736,14 @@ final class KernelTurnProjection {
           page.generationBaseTurnSeq,
           page.highWaterTurnSeq - boundedLimit
         )
-        page = try await client.listJournalTurns(
+        page = try await listJournalTurns(
+          client: client,
           surface: surface,
+          ownerID: lease.ownerID,
           afterTurnSeq: afterTurnSeq,
           limit: 100
         )
+        guard isCurrent(lease) else { return nil }
         let current = page.turns
           .filter { $0.conversationGeneration == page.conversationGeneration }
           .sorted { $0.turnSeq < $1.turnSeq }
@@ -575,25 +776,121 @@ final class KernelTurnProjection {
     "\(conversationId)|\(surface.key)"
   }
 
+  private func applyAcceptedExchange(
+    _ result: AgentRuntimeProcess.JournalOperationResult,
+    surface: AgentSurfaceReference,
+    lease: OwnerLease
+  ) {
+    guard isCurrent(lease), let host else { return }
+    let surfaceKey = surface.key
+    conversationBySurface[surfaceKey] = result.conversationId
+    let checkpointKey = checkpointKeyFor(
+      conversationId: result.conversationId,
+      surface: surface
+    )
+    if let generation = generationByConversation[checkpointKey],
+      generation != result.conversationGeneration
+    {
+      highWaterByConversation[checkpointKey] = result.generationBaseTurnSeq
+      generationByConversation[checkpointKey] = result.conversationGeneration
+      guard isCurrent(lease) else { return }
+      host.resetJournalProjection(surface: surface)
+    } else if generationByConversation[checkpointKey] == nil {
+      highWaterByConversation[checkpointKey] = result.generationBaseTurnSeq
+      generationByConversation[checkpointKey] = result.conversationGeneration
+    }
+
+    for turn in result.turns.sorted(by: { $0.turnSeq < $1.turnSeq }) {
+      guard isCurrent(lease) else { return }
+      host.projectJournalTurn(turn)
+    }
+
+    let checkpoint = highWaterByConversation[checkpointKey]
+      ?? result.generationBaseTurnSeq
+    let contiguous = KernelJournalReplay.contiguousTurns(
+      from: result.turns,
+      after: checkpoint
+    )
+    if let last = contiguous.last {
+      highWaterByConversation[checkpointKey] = last.turnSeq
+    }
+  }
+
+  private func listJournalTurns(
+    client: AgentClient.Session,
+    surface: AgentSurfaceReference,
+    ownerID: String,
+    afterTurnSeq: Int,
+    limit: Int
+  ) async throws -> AgentRuntimeProcess.JournalOperationResult {
+    if let journalListOperation {
+      return try await journalListOperation(
+        client,
+        surface,
+        ownerID,
+        afterTurnSeq,
+        limit
+      )
+    }
+    return try await client.listJournalTurns(
+      surface: surface,
+      ownerID: ownerID,
+      afterTurnSeq: afterTurnSeq,
+      limit: limit
+    )
+  }
+
+  private func captureOwnerLease(ownerID: String? = nil) -> OwnerLease? {
+    guard let currentOwnerID = Self.normalizedOwnerID(ownerIDProvider()) else {
+      return nil
+    }
+    if let ownerID {
+      guard
+        let requestedOwnerID = Self.normalizedOwnerID(ownerID),
+        requestedOwnerID == currentOwnerID
+      else { return nil }
+    }
+    if let boundOwnerID, boundOwnerID != currentOwnerID {
+      invalidateOwnerState()
+    }
+    boundOwnerID = currentOwnerID
+    return OwnerLease(ownerID: currentOwnerID, epoch: projectionEpoch)
+  }
+
+  private func isCurrent(_ lease: OwnerLease) -> Bool {
+    projectionEpoch == lease.epoch
+      && boundOwnerID == lease.ownerID
+      && Self.normalizedOwnerID(ownerIDProvider()) == lease.ownerID
+  }
+
+  nonisolated private static func normalizedOwnerID(_ ownerID: String?) -> String? {
+    guard let ownerID else { return nil }
+    let normalized = ownerID.trimmingCharacters(in: .whitespacesAndNewlines)
+    return normalized.isEmpty ? nil : normalized
+  }
+
   /// Reads one immutable 100-revision page at a time. If clear/reset advances
   /// the generation mid-read, restart from that generation's base rather than
   /// mixing two histories into the lifecycle match.
   private func journalRevisions(
     client: AgentClient.Session,
     surface: AgentSurfaceReference,
-    ownerID: String?
+    lease: OwnerLease
   ) async throws -> [KernelJournalTurn] {
     var revisions: [KernelJournalTurn] = []
     var afterTurnSeq = 0
     var expectedGeneration: Int?
     var generationRestarts = 0
     while true {
-      let page = try await client.listJournalTurns(
+      guard isCurrent(lease) else { throw CancellationError() }
+      let page = try await listJournalTurns(
+        client: client,
         surface: surface,
-        ownerID: ownerID,
+        ownerID: lease.ownerID,
         afterTurnSeq: afterTurnSeq,
         limit: 100
       )
+      guard isCurrent(lease) else { throw CancellationError() }
       if let currentGeneration = expectedGeneration,
         currentGeneration != page.conversationGeneration
       {

@@ -18,6 +18,8 @@ import {
   importRemoteJournalTurn,
   journalTurnChangedWakes,
   listJournalTurns,
+  migrateJournalConversation,
+  recordJournalExchange,
   recordJournalTurn,
   settleClearedBackendTurnClaim,
   updateJournalTurn,
@@ -32,6 +34,279 @@ afterEach(() => {
 });
 
 describe("kernel conversation journal", () => {
+  it("rolls back the first visible turn when the second exchange turn is rejected", () => {
+    const fixture = newSurface("main_chat", "chat", "atomic-exchange");
+    recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-assistant-collision",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "completed",
+      content: "Original canonical answer",
+      contentBlocks: [],
+      delivery: "backend",
+      createdAtMs: 1,
+    });
+
+    expect(() => recordJournalExchange(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turns: [
+        {
+          turnId: "turn-user-must-rollback",
+          role: "user",
+          surfaceKind: "main_chat",
+          origin: "typed_chat",
+          status: "completed",
+          content: "This must not survive alone",
+          contentBlocks: [],
+          delivery: "backend",
+          createdAtMs: 2,
+        },
+        {
+          turnId: "turn-assistant-collision",
+          role: "assistant",
+          surfaceKind: "main_chat",
+          origin: "typed_chat",
+          status: "completed",
+          content: "Conflicting answer",
+          contentBlocks: [],
+          delivery: "backend",
+          createdAtMs: 3,
+        },
+      ],
+    })).toThrow(/identity collision/i);
+
+    const visible = listJournalTurns(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      afterTurnSeq: 0,
+      limit: 100,
+    });
+    expect(visible.turns.map((turn) => turn.turnId)).toEqual(["turn-assistant-collision"]);
+    expect(drainBackendTurnOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      limit: 100,
+      nowMs: 10,
+    }).map((delivery) => delivery.turnId)).toEqual(["turn-assistant-collision"]);
+    fixture.store.close();
+  });
+
+  it("atomically migrates the complete typed revision graph, outbox identity, and runtime visibility", () => {
+    const databasePath = newDatabasePath();
+    let store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false });
+    const source = insertSurface(store, "main_chat", "chat", "legacy-task");
+    const destination = insertSurface(store, "main_chat", "chat", "canonical-workstream");
+    recordCompletedTextTurn(destination, "turn-existing", "Existing canonical turn", 10);
+    recordJournalTurn(store, {
+      ownerId: source.ownerId,
+      conversationId: source.conversationId,
+      turnId: "turn-migrated",
+      producerId: "producer:migrated",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "agent_runtime",
+      status: "streaming",
+      content: "Drafting",
+      contentBlocks: [
+        { type: "text", id: "migrated:text", text: "Drafting" },
+        {
+          type: "agentSpawn",
+          id: "migrated:spawn",
+          sessionId: "ses-child",
+          runId: "run-child",
+          title: "Researcher",
+          objective: "Inspect the evidence",
+        },
+      ],
+      resources: [{
+        id: "resource:migrated",
+        origin: "generatedArtifact",
+        title: "Draft report",
+        state: "retained",
+        mimeType: "text/markdown",
+        uri: "file:///tmp/draft.md",
+        artifactId: "artifact-draft",
+        runId: "run-child",
+      }],
+      metadataJson: JSON.stringify({ marker: "preserve-me" }),
+      delivery: "backend",
+      createdAtMs: 20,
+    });
+    updateJournalTurn(store, {
+      ownerId: source.ownerId,
+      conversationId: source.conversationId,
+      turnId: "turn-migrated",
+      status: "completed",
+      content: "Draft complete",
+      appendContentBlocks: [{ type: "text", id: "migrated:final", text: "Draft complete" }],
+      appendResources: [{
+        id: "resource:final",
+        origin: "generatedArtifact",
+        title: "Final report",
+        state: "retained",
+        mimeType: "text/markdown",
+        uri: "file:///tmp/final.md",
+        artifactId: "artifact-final",
+        runId: "run-child",
+      }],
+      nowMs: 21,
+    });
+    store.execute(
+      `UPDATE backend_turn_outbox
+       SET status = 'retrying', attempt_count = 2, delivery_generation = 3,
+           available_at_ms = 99, last_error_code = 'transient'
+       WHERE turn_id = 'turn-migrated'`,
+    );
+
+    const result = migrateJournalConversation(store, {
+      ownerId: source.ownerId,
+      sourceConversationId: source.conversationId,
+      destinationConversationId: destination.conversationId,
+      nowMs: 30,
+    });
+
+    expect(result).toMatchObject({ movedTurnCount: 1, movedRevisionCount: 2, movedOutboxCount: 1 });
+    expect(store.getRow(
+      "SELECT COUNT(*) AS count FROM conversation_turns WHERE conversation_id = ?",
+      [source.conversationId],
+    ).count).toBe(0);
+    const current = store.getRow(
+      `SELECT status, content, content_blocks_json, resources_json, metadata_json, turn_seq
+       FROM conversation_turns WHERE conversation_id = ? AND turn_id = 'turn-migrated'`,
+      [destination.conversationId],
+    );
+    expect(current).toMatchObject({ status: "completed", content: "Draft complete" });
+    expect(JSON.parse(String(current.content_blocks_json))).toHaveLength(3);
+    expect(JSON.parse(String(current.resources_json))).toHaveLength(2);
+    expect(JSON.parse(String(current.metadata_json))).toMatchObject({ marker: "preserve-me" });
+    expect(store.getRow(
+      `SELECT conversation_id, status, attempt_count, delivery_generation,
+              conversation_generation, available_at_ms, last_error_code
+       FROM backend_turn_outbox WHERE turn_id = 'turn-migrated'`,
+    )).toMatchObject({
+      conversation_id: destination.conversationId,
+      status: "retrying",
+      attempt_count: 2,
+      delivery_generation: 3,
+      conversation_generation: result.destinationGeneration,
+      available_at_ms: 99,
+      last_error_code: "transient",
+    });
+    const visible = listJournalTurns(store, {
+      ownerId: source.ownerId,
+      conversationId: destination.conversationId,
+      limit: 20,
+    });
+    expect(visible.turns.map((turn) => turn.turnId)).toEqual([
+      "turn-existing",
+      "turn-migrated",
+      "turn-migrated",
+    ]);
+    expect(visible.turns.at(-1)).toMatchObject({
+      conversationId: destination.conversationId,
+      turnId: "turn-migrated",
+      status: "completed",
+      contentBlocks: expect.arrayContaining([{ type: "text", id: "migrated:final", text: "Draft complete" }]),
+      resources: expect.arrayContaining([expect.objectContaining({ id: "resource:final" })]),
+    });
+
+    store.close();
+    store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false });
+    const afterRestart = listJournalTurns(store, {
+      ownerId: source.ownerId,
+      conversationId: destination.conversationId,
+      limit: 20,
+    });
+    expect(afterRestart.turns).toEqual(visible.turns);
+    expect(store.getRow(
+      "SELECT conversation_id FROM conversation_turns WHERE turn_id = 'turn-migrated'",
+    ).conversation_id).toBe(destination.conversationId);
+    store.close();
+  });
+
+  it("rolls back a destination identity collision without changing either journal byte-for-byte", () => {
+    const store = new SqliteAgentStore({ databasePath: newDatabasePath(), reconcileOnOpen: false });
+    const source = insertSurface(store, "main_chat", "chat", "collision-source");
+    const destination = insertSurface(store, "main_chat", "chat", "collision-destination");
+    recordJournalTurn(store, {
+      ownerId: source.ownerId,
+      conversationId: source.conversationId,
+      turnId: "turn-collision-source",
+      producerId: "producer:destination-collision",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "agent_runtime",
+      status: "streaming",
+      content: "Source draft",
+      contentBlocks: [{ type: "text", id: "source:draft", text: "Source draft" }],
+      resources: [{
+        id: "source:resource",
+        origin: "generatedArtifact",
+        title: "Source artifact",
+        state: "retained",
+        mimeType: "text/plain",
+        uri: "file:///tmp/source-artifact.txt",
+        artifactId: "artifact-source",
+      }],
+      delivery: "backend",
+      createdAtMs: 10,
+    });
+    updateJournalTurn(store, {
+      ownerId: source.ownerId,
+      conversationId: source.conversationId,
+      turnId: "turn-collision-source",
+      status: "completed",
+      content: "Source complete",
+      appendContentBlocks: [{ type: "text", id: "source:complete", text: "Source complete" }],
+      nowMs: 11,
+    });
+    recordJournalTurn(store, {
+      ownerId: destination.ownerId,
+      conversationId: destination.conversationId,
+      turnId: "turn-collision-destination",
+      producerId: "producer:destination-collision",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "completed",
+      content: "Destination canonical turn",
+      contentBlocks: [{ type: "text", id: "destination:text", text: "Destination canonical turn" }],
+      delivery: "backend",
+      createdAtMs: 12,
+    });
+    store.execute(
+      `UPDATE backend_turn_outbox
+       SET status = 'retrying', attempt_count = 4, delivery_generation = 2,
+           available_at_ms = 44, last_error_code = 'preserve_on_rollback'
+       WHERE turn_id = 'turn-collision-source'`,
+    );
+    const before = journalStorageSnapshot(store);
+
+    expect(() => migrateJournalConversation(store, {
+      ownerId: source.ownerId,
+      sourceConversationId: source.conversationId,
+      destinationConversationId: destination.conversationId,
+      nowMs: 100,
+    })).toThrow(/producer identity collision/i);
+
+    expect(journalStorageSnapshot(store)).toEqual(before);
+    expect(store.getRow(
+      "SELECT COUNT(*) AS count FROM conversation_turn_revisions WHERE conversation_id = ?",
+      [source.conversationId],
+    ).count).toBe(2);
+    expect(store.getRow(
+      "SELECT status FROM backend_turn_outbox WHERE turn_id = 'turn-collision-source'",
+    ).status).toBe("retrying");
+    expect(store.getRow(
+      "SELECT content FROM conversation_turns WHERE conversation_id = ? AND turn_id = 'turn-collision-destination'",
+      [destination.conversationId],
+    ).content).toBe("Destination canonical turn");
+    store.close();
+  });
+
   it("deduplicates retries by stable producer identity even when turn IDs differ", () => {
     const fixture = newSurface("main_chat", "chat", "default");
     const input = {
@@ -1201,6 +1476,23 @@ function recordCompletedTextTurn(
     delivery: "backend",
     createdAtMs,
   });
+}
+
+function journalStorageSnapshot(store: SqliteAgentStore) {
+  return {
+    turns: store.allRows(
+      "SELECT * FROM conversation_turns ORDER BY conversation_id, turn_seq, turn_id",
+    ),
+    revisions: store.allRows(
+      "SELECT * FROM conversation_turn_revisions ORDER BY conversation_id, generation, turn_seq",
+    ),
+    outbox: store.allRows(
+      "SELECT * FROM backend_turn_outbox ORDER BY conversation_id, turn_id",
+    ),
+    state: store.allRows(
+      "SELECT * FROM conversation_journal_state ORDER BY conversation_id",
+    ),
+  };
 }
 
 function remoteTurn(remoteId: string, createdAtMs: number) {

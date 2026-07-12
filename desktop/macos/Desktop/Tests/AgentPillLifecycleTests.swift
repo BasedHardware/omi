@@ -70,7 +70,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("reconcileProjectedPillRun(entryStatus: projectedStatus, pill: pill)"))
     XCTAssertTrue(source.contains("removeRenderedProjection(pillID: pill.id)"))
     XCTAssertTrue(source.contains("func resolveAndPresentAgent("))
-    XCTAssertTrue(source.contains("hydratePillFromKernel(preference: preference)"))
+    XCTAssertTrue(source.contains("hydratePillFromKernel(preference: preference, ownerID: ownerID)"))
     XCTAssertTrue(source.contains("inspectAgentRun(runId: runId)"))
     XCTAssertFalse(source.contains("stablePillUUID"))
     XCTAssertFalse(source.contains("UUID(uuidString: idString) ??"))
@@ -872,8 +872,8 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(hubSource.contains("private func restartSessionForBargeIn("))
     XCTAssertTrue(hubSource.contains("interruptedTurnTask: Task<InterruptedTurnPayload?, Never>?"))
     XCTAssertTrue(hubSource.contains("case .ephemeral:\n            self.remintReplacementSessionForBargeIn(provider: provider)"))
-    XCTAssertTrue(hubSource.contains("token = try await APIClient.shared.mintRealtimeToken(provider: providerParam)"))
-    XCTAssertTrue(hubSource.contains("startReplacementSessionForBargeIn(provider: provider, auth: .ephemeral(token))"))
+    XCTAssertTrue(hubSource.contains("expectedOwnerID: ownerID"))
+    XCTAssertTrue(hubSource.contains("ownerScope: ownerScope"))
     XCTAssertTrue(hubSource.contains("barge-in replacement queued behind existing token mint"))
     XCTAssertTrue(hubSource.contains("finishBargeInReplacementAfterSessionReady()"))
     XCTAssertTrue(hubSource.contains("replacementAudioBuffer?.appendAudio(pcm16k)"))
@@ -973,7 +973,9 @@ final class AgentPillLifecycleTests: XCTestCase {
       apiSource.contains("} catch AuthError.notSignedIn {\n      await invalidateSessionAfterUnauthorized"),
       "Only definitive not-signed-in refresh failures should invalidate and require login")
     XCTAssertTrue(
-      hubSource.contains("self.minting = false\n        CredentialHealthManager.shared.record(error, context: \"realtime_mint\")"),
+      hubSource.contains("self.releaseMint(generation: mintGeneration, ownerScope: ownerScope)")
+        && hubSource.contains(
+          "CredentialHealthManager.shared.record(error, context: \"realtime_mint\")"),
       "Mint failure must clear minting before failover starts the alternate provider")
     XCTAssertTrue(
       hubSource.contains("if case .providerAuthFailed = credentialFailureClass {\n      if aliveFor < 10, failoverToAlternateProvider(reason: \"auth\") { return }"),

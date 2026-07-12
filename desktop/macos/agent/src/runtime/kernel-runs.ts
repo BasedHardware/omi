@@ -127,6 +127,64 @@ export class KernelRuns extends KernelCore {
     return this.executeAcceptedRun(input, accepted);
   }
 
+  revokeActiveRunsForOwner(
+    ownerId: string,
+    reason: "owner_changed" | "owner_state_cleared",
+  ): { runIds: string[] } {
+    const rows = this.store.allRows(
+      `SELECT r.run_id, r.session_id
+       FROM runs r
+       JOIN sessions s ON s.session_id = r.session_id
+       WHERE s.owner_id = ? AND r.status IN (${placeholders(ACTIVE_STATUSES.length)})
+       ORDER BY r.created_at_ms ASC, r.run_id ASC`,
+      [ownerId, ...ACTIVE_STATUSES],
+    );
+    const runIds: string[] = [];
+    for (const row of rows) {
+      const runId = String(row.run_id);
+      const sessionId = String(row.session_id);
+      runIds.push(runId);
+      this.activeExecutions.get(runId)?.abortController.abort(
+        new Error(`Run owner authority was revoked: ${reason}`),
+      );
+      const attempt = this.readActiveAttempt(runId);
+      this.withTransaction(() => {
+        if (this.isTerminalRun(runId)) return;
+        if (attempt && !this.isTerminalAttempt(attempt.attemptId)) {
+          this.finishAttemptAndRun({
+            sessionId,
+            runId,
+            attemptId: attempt.attemptId,
+            status: "cancelled",
+            finalText: null,
+            errorCode: "owner_authority_revoked",
+            errorMessage: `Run owner authority was revoked: ${reason}`,
+            failure: null,
+          });
+          return;
+        }
+        const now = Date.now();
+        this.updateRun(runId, {
+          status: "cancelled",
+          finalText: null,
+          resultJson: null,
+          errorCode: "owner_authority_revoked",
+          errorMessage: `Run owner authority was revoked: ${reason}`,
+          completedAtMs: now,
+          updatedAtMs: now,
+        });
+        this.appendEvent({
+          sessionId,
+          runId,
+          attemptId: null,
+          type: "run.cancelled",
+          payload: { runId, status: "cancelled", reason },
+        });
+      });
+    }
+    return { runIds };
+  }
+
   async sendAgentMessage(input: SendAgentMessageInput): Promise<KernelRunResult> {
     const session = this.readSession(input.sessionId);
     if (input.adapterId !== undefined && input.adapterId !== session.defaultAdapterId) {
@@ -155,6 +213,7 @@ export class KernelRuns extends KernelCore {
       maxAttempts: input.maxAttempts,
       recoverAfterError: input.recoverAfterError,
       metadata: input.metadata,
+      authoritySignal: input.authoritySignal,
     });
   }
 
@@ -202,6 +261,7 @@ export class KernelRuns extends KernelCore {
         spawnKind: "background_agent",
       },
       admittedContextSnapshot: input.admittedContextSnapshot,
+      authoritySignal: input.authoritySignal,
     };
     const accepted = this.createAcceptedRun(runInput);
     const producerJournal = ensureAgentSpawnJournalIfPresent(this.store, {
@@ -288,6 +348,7 @@ export class KernelRuns extends KernelCore {
         maxDepth: input.maxDepth ?? DEFAULT_DELEGATION_MAX_DEPTH,
         maxBudgetUsd: input.maxBudgetUsd ?? DEFAULT_DELEGATION_MAX_BUDGET_USD,
       },
+      authoritySignal: input.authoritySignal,
     };
     const created = this.createDelegatedRun(parentSession, parentRun, childRunInput, input);
     const producerJournal = ensureAgentSpawnJournalIfPresent(this.store, {

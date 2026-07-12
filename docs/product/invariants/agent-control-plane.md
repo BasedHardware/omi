@@ -40,9 +40,35 @@ must name the invariant they affect and update the matching guard test.
   and transitions it to `dispatched`. Restart changes `prepared` to `failed`
   and `dispatched` to `outcome_unknown`; non-idempotent writes are never
   automatically replayed.
+- An accepted control invocation holds a kernel execution lease, not request
+  lifetime authority. The lease revalidates owner, live run/attempt, and pinned
+  execution profile at each physical effect boundary, propagates abort to
+  in-flight adapter work, and terminalizes revocation as `failed` before
+  dispatch or `outcome_unknown` after dispatch. A multi-agent control call
+  revalidates between siblings, retains every admitted child, and immediately
+  cancels admitted siblings if a later admission fails; cleanup failures expose
+  the admitted run IDs instead of leaving invisible work.
+- Every local runtime harness establishes the signed-in owner before its first
+  owner-scoped RPC, even when the adapter needs no Firebase token. Query,
+  interrupt, warmup, and session-invalidation transport mutations reject a
+  caller owner that differs from the active runtime owner.
+- Owner replacement is a correlated pre-visibility barrier. Node first makes
+  the previous owner inert, synchronously terminalizes its foreground/external
+  runs, pending tool claims, and session bindings, then returns an exact-owner
+  receipt. Swift fully drains physical tool tasks and stops the child process
+  before the replacement owner can become visible; a missing, malformed, or
+  timed-out receipt also fails closed by confirming process exit.
+- Swift owner-scoped work carries an immutable owner plus authorization
+  generation through startup, wire admission, response routing, callbacks,
+  credentials, and local/API mutations. Signing out and back into the same uid
+  is a new generation and cannot revive an earlier continuation.
 - Swift validates and executes only `authorized_tool_execution`, echoing the
   complete immutable claim tuple and generated manifest digest. Ordinary
   `tool_use` events are display-only.
+- Workstream consolidation moves task-scoped history through the canonical
+  journal migration transaction, preserving typed payloads, revisions, outbox
+  state, sequencing, and restart visibility; it never inserts or deletes turn
+  rows directly.
 
 ## Surfaces
 

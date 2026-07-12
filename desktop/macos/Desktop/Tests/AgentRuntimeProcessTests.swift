@@ -2,6 +2,103 @@ import XCTest
 
 @testable import Omi_Computer
 
+private struct TokenRefreshAuthorization: Equatable, Sendable {
+  let ownerID: String
+  let generation: UInt64
+}
+
+private actor DelayedOwnerBoundTokenRefreshHarness {
+  private var ownerId: String? = "owner-a"
+  private var generation: UInt64 = 0
+  private var fetchStarted = false
+  private var fetchStartedWaiter: CheckedContinuation<Void, Never>?
+  private var pendingFetch: CheckedContinuation<String, Error>?
+  private(set) var fetchedOwnerIds: [String] = []
+  private(set) var sentToken: String?
+  private(set) var sentOwnerId: String?
+
+  func captureAuthorization() -> TokenRefreshAuthorization? {
+    guard let ownerId else { return nil }
+    return TokenRefreshAuthorization(ownerID: ownerId, generation: generation)
+  }
+
+  func isAuthorizationCurrent(_ authorization: TokenRefreshAuthorization) -> Bool {
+    ownerId == authorization.ownerID && generation == authorization.generation
+  }
+
+  func fetchAuthHeader(expectedOwnerId: String) async throws -> String {
+    fetchedOwnerIds.append(expectedOwnerId)
+    return try await withCheckedThrowingContinuation { continuation in
+      pendingFetch = continuation
+      fetchStarted = true
+      fetchStartedWaiter?.resume()
+      fetchStartedWaiter = nil
+    }
+  }
+
+  func waitUntilFetchStarted() async {
+    if fetchStarted { return }
+    await withCheckedContinuation { continuation in
+      fetchStartedWaiter = continuation
+    }
+  }
+
+  func replaceOwnerASessionAndCompleteFetch(header: String) -> Bool {
+    ownerId = nil
+    generation &+= 1
+    ownerId = "owner-a"
+    generation &+= 1
+    guard let pendingFetch else { return false }
+    self.pendingFetch = nil
+    pendingFetch.resume(returning: header)
+    return true
+  }
+
+  func recordSend(token: String, ownerId: String) -> Bool {
+    sentToken = token
+    sentOwnerId = ownerId
+    return true
+  }
+
+  func snapshot() -> (fetchedOwnerIds: [String], sentToken: String?, sentOwnerId: String?) {
+    (fetchedOwnerIds, sentToken, sentOwnerId)
+  }
+}
+
+private actor GatedRuntimeStartupHarness {
+  private var launchCount = 0
+  private var launchStarted = false
+  private var launchStartedWaiter: CheckedContinuation<Void, Never>?
+  private var releaseContinuation: CheckedContinuation<Void, Never>?
+
+  func launch(receipt: UInt64) async -> UInt64 {
+    launchCount += 1
+    launchStarted = true
+    launchStartedWaiter?.resume()
+    launchStartedWaiter = nil
+    await withCheckedContinuation { continuation in
+      releaseContinuation = continuation
+    }
+    return receipt
+  }
+
+  func waitUntilLaunchStarted() async {
+    if launchStarted { return }
+    await withCheckedContinuation { continuation in
+      launchStartedWaiter = continuation
+    }
+  }
+
+  func release() -> Bool {
+    guard let releaseContinuation else { return false }
+    self.releaseContinuation = nil
+    releaseContinuation.resume()
+    return true
+  }
+
+  func launches() -> Int { launchCount }
+}
+
 final class AgentRuntimeProcessTests: XCTestCase {
   // MARK: - CHAT-02 agent stall hook
 
@@ -94,13 +191,241 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
   func testControlToolResultRoutesByRequestId() {
     let message = AgentRuntimeProcess.RuntimeMessage.parse(
-      #"{"type":"control_tool_result","protocolVersion":2,"requestId":"control-1","clientId":"client-1","name":"inspect_agent_artifacts","result":"{\"ok\":true,\"artifacts\":[]}"}"#
+      #"{"type":"control_tool_result","protocolVersion":2,"requestId":"control-1","clientId":"client-1","ownerId":"owner-1","name":"inspect_agent_artifacts","result":"{\"ok\":true,\"artifacts\":[]}"}"#
     )
 
     XCTAssertEqual(message?.kind, .controlToolResult)
     XCTAssertEqual(message?.requestKey, AgentRuntimeProcess.RuntimeMessage.RequestKey(clientId: "client-1", requestId: "control-1"))
+    XCTAssertEqual(message?.payload["ownerId"] as? String, "owner-1")
     XCTAssertEqual(message?.payload["name"] as? String, "inspect_agent_artifacts")
     XCTAssertEqual(message?.payload["result"] as? String, #"{"ok":true,"artifacts":[]}"#)
+  }
+
+  func testDirectControlWireAndResultValidationAreOwnerBound() {
+    let request = AgentRuntimeProcess.directControlToolWireMessage(
+      clientId: "client-1",
+      requestId: "control-1",
+      ownerId: "owner-a",
+      name: "spawn_agent",
+      input: ["objective": "Inspect memories"])
+
+    XCTAssertEqual(request["type"] as? String, "direct_control_tool")
+    XCTAssertEqual(request["ownerId"] as? String, "owner-a")
+    XCTAssertTrue(AgentRuntimeProcess.isDirectControlResultOwnerCurrent(
+      expectedOwnerId: "owner-a",
+      expectedOwnerEpoch: 1,
+      resultOwnerId: "owner-a",
+      currentOwnerId: "owner-a",
+      currentOwnerEpoch: 1))
+    XCTAssertFalse(AgentRuntimeProcess.isDirectControlResultOwnerCurrent(
+      expectedOwnerId: "owner-a",
+      expectedOwnerEpoch: 1,
+      resultOwnerId: nil,
+      currentOwnerId: "owner-a",
+      currentOwnerEpoch: 1))
+    XCTAssertFalse(AgentRuntimeProcess.isDirectControlResultOwnerCurrent(
+      expectedOwnerId: "owner-a",
+      expectedOwnerEpoch: 1,
+      resultOwnerId: "owner-b",
+      currentOwnerId: "owner-a",
+      currentOwnerEpoch: 1))
+    XCTAssertFalse(AgentRuntimeProcess.isDirectControlResultOwnerCurrent(
+      expectedOwnerId: "owner-a",
+      expectedOwnerEpoch: 1,
+      resultOwnerId: "owner-a",
+      currentOwnerId: "owner-b",
+      currentOwnerEpoch: 2))
+    XCTAssertFalse(AgentRuntimeProcess.isDirectControlResultOwnerCurrent(
+      expectedOwnerId: "owner-a",
+      expectedOwnerEpoch: 1,
+      resultOwnerId: "owner-a",
+      currentOwnerId: "owner-a",
+      currentOwnerEpoch: 3))
+  }
+
+  func testLocalProviderRuntimeOwnerHandshakePrecedesOwnerScopedStartupWork() throws {
+    let handshake = AgentRuntimeProcess.runtimeOwnerHandshakeWireMessage(ownerId: "signed-in-owner")
+    XCTAssertEqual(handshake["type"] as? String, "refresh_owner")
+    XCTAssertEqual(handshake["ownerId"] as? String, "signed-in-owner")
+    XCTAssertNil(handshake["token"])
+
+    // omi-test-quality: source-inspection -- static contract: every harness must synchronize daemon owner authority before owner-scoped legacy migration; wire and resource-layout behavior are tested directly beside this ordering guard
+    let bridgeSource = try sourceFile("Chat/AgentBridge.swift")
+    let startRange = try XCTUnwrap(bridgeSource.range(
+      of: "private func start(\n    authorizationSnapshot:"))
+    let restartRange = try XCTUnwrap(bridgeSource.range(
+      of: "\n  func restart() async throws",
+      range: startRange.upperBound..<bridgeSource.endIndex))
+    let startBody = String(bridgeSource[startRange.lowerBound..<restartRange.lowerBound])
+    let handshakeRange = try XCTUnwrap(startBody.range(
+      of: "await synchronizeRuntimeAuthority(authorizationSnapshot: authorizationSnapshot)"))
+    let migrationRange = try XCTUnwrap(startBody.range(
+      of: "await migrateLegacyMainChatSessionsIfNeeded("))
+    XCTAssertLessThan(handshakeRange.lowerBound, migrationRange.lowerBound)
+    XCTAssertTrue(bridgeSource.contains("guard isPiMonoHarness else"))
+    XCTAssertTrue(bridgeSource.contains("await runtime.refreshRuntimeOwner("))
+  }
+
+  func testRuntimeStartupSingleFlightLaunchesExactlyOnceForConcurrentSameKey() async throws {
+    let singleFlight = AgentRuntimeStartupSingleFlight<String, UInt64>()
+    let harness = GatedRuntimeStartupHarness()
+    let first = Task {
+      try await singleFlight.run(key: "owner-a:generation-1") {
+        await harness.launch(receipt: 41)
+      }
+    }
+    await harness.waitUntilLaunchStarted()
+    let second = Task {
+      try await singleFlight.run(key: "owner-a:generation-1") {
+        await harness.launch(receipt: 99)
+      }
+    }
+
+    var observedTwoParticipants = false
+    for _ in 0..<10_000 {
+      if await singleFlight.participantCountForTesting() == 2 {
+        observedTwoParticipants = true
+        break
+      }
+      await Task.yield()
+    }
+    XCTAssertTrue(observedTwoParticipants)
+    let launchesBeforeRelease = await harness.launches()
+    let released = await harness.release()
+    XCTAssertEqual(launchesBeforeRelease, 1)
+    XCTAssertTrue(released)
+
+    let firstReceipt = try await first.value
+    let secondReceipt = try await second.value
+    XCTAssertEqual(firstReceipt, 41)
+    XCTAssertEqual(secondReceipt, 41)
+    let finalLaunches = await harness.launches()
+    XCTAssertEqual(finalLaunches, 1)
+  }
+
+  func testRuntimeStartupSingleFlightRejectsDifferentOwnerGenerationWhileSuspended() async throws {
+    let singleFlight = AgentRuntimeStartupSingleFlight<String, UInt64>()
+    let harness = GatedRuntimeStartupHarness()
+    let first = Task {
+      try await singleFlight.run(key: "owner-a:generation-1") {
+        await harness.launch(receipt: 7)
+      }
+    }
+    await harness.waitUntilLaunchStarted()
+
+    do {
+      _ = try await singleFlight.run(key: "owner-a:generation-2") { 8 }
+      XCTFail("new owner generation must not join an older credential-bearing launch")
+    } catch BridgeError.restarting {
+      // Expected: caller retries only after the exact older flight terminates.
+    } catch {
+      XCTFail("unexpected mismatch error: \(error)")
+    }
+
+    let launchesBeforeRelease = await harness.launches()
+    let released = await harness.release()
+    XCTAssertEqual(launchesBeforeRelease, 1)
+    XCTAssertTrue(released)
+    let receipt = try await first.value
+    XCTAssertEqual(receipt, 7)
+  }
+
+  func testOwnerBoundTokenRefreshDropsDelayedTokenAcrossSameOwnerSessionReplacement() async throws {
+    let harness = DelayedOwnerBoundTokenRefreshHarness()
+    let refreshTask = Task {
+      try await AgentBridge.refreshOwnerBoundToken(
+        captureAuthorization: {
+          await harness.captureAuthorization()
+        },
+        authorizationOwnerId: { authorization in
+          authorization.ownerID
+        },
+        isAuthorizationCurrent: { authorization in
+          await harness.isAuthorizationCurrent(authorization)
+        },
+        fetchAuthHeader: { expectedOwnerId in
+          try await harness.fetchAuthHeader(expectedOwnerId: expectedOwnerId)
+        },
+        sendToken: { token, expectedOwnerId, _ in
+          await harness.recordSend(token: token, ownerId: expectedOwnerId)
+        }
+      )
+    }
+
+    await harness.waitUntilFetchStarted()
+    let resumed = await harness.replaceOwnerASessionAndCompleteFetch(
+      header: "Bearer owner-a-token")
+    XCTAssertTrue(resumed)
+    let refreshed = try await refreshTask.value
+    XCTAssertFalse(refreshed)
+
+    let snapshot = await harness.snapshot()
+    XCTAssertEqual(snapshot.fetchedOwnerIds, ["owner-a"])
+    XCTAssertNil(snapshot.sentToken, "stale owner-A token must never reach the runtime sender")
+    XCTAssertNil(snapshot.sentOwnerId, "stale refresh must not mutate runtime owner credentials")
+  }
+
+  func testRuntimeRefreshTokenWireRequiresCapturedOwnerToRemainCurrent() {
+    let authorized = AgentRuntimeProcess.refreshTokenWireMessage(
+      token: "owner-a-token",
+      expectedOwnerId: "owner-a",
+      currentOwnerId: "owner-a"
+    )
+
+    XCTAssertEqual(authorized?["type"] as? String, "refresh_token")
+    XCTAssertEqual(authorized?["token"] as? String, "owner-a-token")
+    XCTAssertEqual(authorized?["ownerId"] as? String, "owner-a")
+    XCTAssertNil(AgentRuntimeProcess.refreshTokenWireMessage(
+      token: "owner-a-token",
+      expectedOwnerId: "owner-a",
+      currentOwnerId: "owner-b"
+    ))
+    XCTAssertNil(AgentRuntimeProcess.refreshTokenWireMessage(
+      token: "owner-a-token",
+      expectedOwnerId: "owner-a",
+      currentOwnerId: nil
+    ))
+  }
+
+  func testOwnerRuntimeRevocationWireAndCorrelatedReceiptShape() {
+    let wire = AgentRuntimeProcess.revokeOwnerRuntimeWireMessage(
+      clientId: "runtime-owner-transition",
+      requestId: "revoke-1",
+      ownerId: "owner-a")
+    XCTAssertEqual(wire["type"] as? String, "revoke_owner_runtime")
+    XCTAssertEqual(wire["protocolVersion"] as? Int, 2)
+    XCTAssertEqual(wire["requestId"] as? String, "revoke-1")
+    XCTAssertEqual(wire["clientId"] as? String, "runtime-owner-transition")
+    XCTAssertEqual(wire["ownerId"] as? String, "owner-a")
+
+    let receipt = AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"owner_runtime_revoked","protocolVersion":2,"requestId":"revoke-1","clientId":"runtime-owner-transition","ownerId":"owner-a","ok":true,"duplicate":false,"revokedRunIds":["run-1"],"invalidatedBindingIds":["binding-1"]}"#)
+    XCTAssertEqual(receipt?.kind, .ownerRuntimeRevoked)
+    XCTAssertEqual(
+      receipt?.requestKey,
+      AgentRuntimeProcess.RuntimeMessage.RequestKey(
+        clientId: "runtime-owner-transition",
+        requestId: "revoke-1"))
+    XCTAssertEqual(receipt?.payload["ownerId"] as? String, "owner-a")
+    XCTAssertEqual(receipt?.payload["revokedRunIds"] as? [String], ["run-1"])
+    XCTAssertEqual(receipt?.payload["invalidatedBindingIds"] as? [String], ["binding-1"])
+  }
+
+  func testRuntimeNodeResourceLookupSupportsAppAndSwiftPMTestLayoutsWithoutFatalAccessor() {
+    let appBundle = URL(fileURLWithPath: "/Applications/omi-test.app")
+    let testBundle = URL(fileURLWithPath: "/tmp/debug/Omi ComputerPackageTests.xctest")
+    let executable = testBundle
+      .appendingPathComponent("Contents/MacOS/Omi ComputerPackageTests")
+    let candidates = AgentRuntimeProcess.runtimeResourceExecutableCandidates(
+      named: "node",
+      bundleURLs: [appBundle, testBundle],
+      executableURL: executable)
+
+    XCTAssertTrue(candidates.contains(
+      "/Applications/omi-test.app/Contents/Resources/Omi Computer_Omi Computer.bundle/node"))
+    XCTAssertTrue(candidates.contains(
+      "/tmp/debug/Omi Computer_Omi Computer.bundle/node"))
+    XCTAssertFalse(candidates.isEmpty)
   }
 
   func testLegacyMainChatAliasReceiptRoutesByRequestAndOwner() {
@@ -195,9 +520,10 @@ final class AgentRuntimeProcessTests: XCTestCase {
     let bridgeSource = try String(contentsOf: bridgeSourceURL, encoding: .utf8)
 
     XCTAssertTrue(bridgeSource.contains("AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) == AgentAdapterId.piMono.rawValue"))
-    XCTAssertTrue(bridgeSource.contains("if isPiMonoHarness {"))
+    XCTAssertTrue(bridgeSource.contains("guard isPiMonoHarness else"))
     XCTAssertTrue(bridgeSource.contains("if adapterId == AgentAdapterId.piMono.rawValue"))
-    XCTAssertTrue(bridgeSource.contains("ensureTokenRefreshTask()"))
+    XCTAssertTrue(bridgeSource.contains(
+      "ensureTokenRefreshTask(authorizationSnapshot: authorizationSnapshot)"))
     XCTAssertFalse(bridgeSource.contains("guard isPiMonoHarness else { return false }"))
     XCTAssertFalse(bridgeSource.contains(#"harnessMode == "piMono""#))
   }
@@ -411,7 +737,9 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains("Self.removeInheritedBYOKEnvironment(from: &env)"))
     XCTAssertTrue(source.contains("let byok = await Self.usableBYOKEnvironment()"))
     XCTAssertTrue(source.contains("let forceRefreshToken = preferredAdapterId == .piMono && !DesktopLocalProfile.isEnabled"))
-    XCTAssertTrue(source.contains("getIdToken(forceRefresh: forceRefreshToken)"))
+    XCTAssertTrue(source.contains("getAuthHeader("))
+    XCTAssertTrue(source.contains("forceRefresh: forceRefreshToken"))
+    XCTAssertTrue(source.contains("expectedUserId: authorizationSnapshot.ownerID"))
     XCTAssertFalse(source.contains("log(\"AgentRuntimeProcess: pi-mono BYOK active, forwarding \\(BYOKProvider.allCases.count) user keys\")"))
     XCTAssertTrue(source.contains("forwarding \\(byok.values.count) usable user keys"))
   }
@@ -486,7 +814,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     XCTAssertTrue(source.contains("guard activeRequests.isEmpty, activeControlRequests.isEmpty else"))
     XCTAssertTrue(source.contains("isRestarting = true"))
-    XCTAssertTrue(source.contains("guard !isRestarting else"))
+    XCTAssertTrue(source.contains("guard !isRestarting, !isStopping else"))
     XCTAssertTrue(source.contains("BridgeError.restarting"))
     XCTAssertTrue(source.contains("BridgeError.requestAlreadyActive"))
   }
@@ -498,8 +826,11 @@ final class AgentRuntimeProcessTests: XCTestCase {
       .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-    XCTAssertTrue(source.contains("if isRunning {\n      try await waitForInit(timeout: 30.0)\n      return\n    }"))
+    XCTAssertTrue(source.contains("if isRunning {"))
     XCTAssertTrue(source.contains("try await waitForInit(timeout: 30.0)"))
+    XCTAssertTrue(source.contains("try assertStartupAuthority("))
+    XCTAssertTrue(source.contains(
+      "try assertClientRegistration(clientId: clientId, registrationID: registrationID)"))
     XCTAssertTrue(source.contains("case .initMessage:"))
     XCTAssertTrue(source.contains("resolveInitContinuations()"))
   }
@@ -529,11 +860,17 @@ final class AgentRuntimeProcessTests: XCTestCase {
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
     XCTAssertTrue(source.contains("func directControlTool("))
-    XCTAssertTrue(source.contains("Agent control requires a signed-in owner"))
+    XCTAssertTrue(source.contains("RuntimeOwnerIdentity.captureAuthorizationSnapshot()"))
+    XCTAssertTrue(source.contains("try assertAuthorization(authorizationSnapshot)"))
     XCTAssertTrue(source.contains("advertisedAgentControlTools.contains(name)"))
     XCTAssertTrue(source.contains("Agent runtime does not advertise direct control tool"))
     XCTAssertTrue(source.contains(#""type": "direct_control_tool""#))
     XCTAssertTrue(source.contains(#""ownerId": ownerId"#))
+    XCTAssertTrue(source.contains("let expectedOwnerId: String"))
+    XCTAssertTrue(source.contains("let expectedOwnerEpoch: UInt64"))
+    XCTAssertTrue(source.contains("resultOwnerId == expectedOwnerId"))
+    XCTAssertTrue(source.contains("currentOwnerId == expectedOwnerId"))
+    XCTAssertTrue(source.contains("currentOwnerEpoch == expectedOwnerEpoch"))
   }
 
   func testAuthorizedToolResultsEchoExactLedgerTupleWithoutRequestScope() throws {
@@ -627,13 +964,19 @@ final class AgentRuntimeProcessTests: XCTestCase {
       .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-    XCTAssertTrue(source.contains("""
-  private func stopProcess(resumeRequestsWith error: BridgeError) async {
-    let proc = process
-    processGeneration &+= 1
-    lastExitWasOOM = false
-    oomDiagnosticLatch.reset(generation: processGeneration)
-"""))
+    let stopStart = try XCTUnwrap(source.range(
+      of: "private func stopProcess(resumeRequestsWith error: BridgeError) async"))
+    let stopEnd = try XCTUnwrap(source.range(
+      of: "private func startReadingStdout()",
+      range: stopStart.upperBound..<source.endIndex))
+    let stopBody = String(source[stopStart.lowerBound..<stopEnd.lowerBound])
+    XCTAssertTrue(stopBody.contains("await cancelAndDrainAuthorizedToolExecutionTasks()"))
+    XCTAssertTrue(stopBody.contains("markRuntimeOwnerAuthorityDirty()"))
+    let generationAdvance = try XCTUnwrap(stopBody.range(of: "processGeneration &+= 1"))
+    let gracefulStop = try XCTUnwrap(stopBody.range(of: "sendJson([\"type\": \"stop\"])"))
+    let terminate = try XCTUnwrap(stopBody.range(of: "proc?.terminate()"))
+    XCTAssertLessThan(generationAdvance.lowerBound, gracefulStop.lowerBound)
+    XCTAssertLessThan(generationAdvance.lowerBound, terminate.lowerBound)
   }
 
   func testIsAliveRequiresUnderlyingProcessRunning() throws {
