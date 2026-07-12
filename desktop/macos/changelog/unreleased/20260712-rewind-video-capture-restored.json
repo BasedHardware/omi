@@ -1,3 +1,0 @@
-{
-  "change": "Fixed Rewind capturing no video (every recorded chunk was discarded), restoring the Rewind timeline"
-}

@@ -1,3 +1,0 @@
-{
-    "change": "Fixed a rare crash when stopping or restarting a running task agent while it was being polled for progress"
-}
