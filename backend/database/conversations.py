@@ -599,38 +599,50 @@ def update_conversation_segment_text(uid: str, conversation_id: str, segment_id:
     """
     Update a single segment's text in a conversation.
 
+    The read-modify-write runs in a Firestore transaction so concurrent edits
+    (e.g. the same conversation open in two tabs) can't lose-update each other.
+    Without it, two edits that both read the pre-edit transcript_segments array
+    and each rewrite the whole array clobber one another — the later write wins
+    and silently drops the earlier edit.
+
     Returns:
         'ok' on success, 'not_found' if conversation missing, 'locked' if conversation is locked,
         'segment_not_found' if segment_id not found.
     """
     doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
-    doc_snapshot = doc_ref.get()
-    if not doc_snapshot.exists:
-        return 'not_found'
+    transaction = db.transaction()
 
-    raw_data = doc_snapshot.to_dict()
-    if raw_data.get('is_locked', False):
-        return 'locked'
+    @firestore.transactional
+    def _update_segment_text(transaction) -> str:
+        doc_snapshot = doc_ref.get(transaction=transaction)
+        if not doc_snapshot.exists:
+            return 'not_found'
 
-    conversation_data = _prepare_conversation_for_read(raw_data, uid)
-    if not conversation_data:
-        return 'not_found'
+        raw_data = doc_snapshot.to_dict()
+        if raw_data.get('is_locked', False):
+            return 'locked'
 
-    segments = conversation_data.get('transcript_segments', [])
-    found = False
-    for segment in segments:
-        if isinstance(segment, dict) and segment.get('id') == segment_id:
-            segment['text'] = text
-            found = True
-            break
+        conversation_data = _prepare_conversation_for_read(raw_data, uid)
+        if not conversation_data:
+            return 'not_found'
 
-    if not found:
-        return 'segment_not_found'
+        segments = conversation_data.get('transcript_segments', [])
+        found = False
+        for segment in segments:
+            if isinstance(segment, dict) and segment.get('id') == segment_id:
+                segment['text'] = text
+                found = True
+                break
 
-    doc_level = conversation_data.get('data_protection_level', 'standard')
-    prepared_payload = _prepare_conversation_for_write({'transcript_segments': segments}, uid, doc_level)
-    doc_ref.update(prepared_payload)
-    return 'ok'
+        if not found:
+            return 'segment_not_found'
+
+        doc_level = conversation_data.get('data_protection_level', 'standard')
+        prepared_payload = _prepare_conversation_for_write({'transcript_segments': segments}, uid, doc_level)
+        transaction.update(doc_ref, prepared_payload)
+        return 'ok'
+
+    return _update_segment_text(transaction)
 
 
 def delete_conversation_photos(uid: str, conversation_id: str) -> int:
