@@ -1,4 +1,5 @@
 import Combine
+import CryptoKit
 import Foundation
 import OmiSupport
 import OmiWAL
@@ -11,6 +12,30 @@ enum WALPersistenceState: Equatable {
     case degraded(reason: String)
 }
 
+private final class WALMetadataWriteState: @unchecked Sendable {
+    private let lock = NSLock()
+    var latestPersistedRevision = 0
+    private var preserveValidatedBackup = false
+
+    func markValidatedBackupLoaded() {
+        lock.lock()
+        preserveValidatedBackup = true
+        lock.unlock()
+    }
+
+    func writeMode() -> WALService.MetadataWriteMode {
+        lock.lock()
+        defer { lock.unlock() }
+        return preserveValidatedBackup ? .preserveBackup : .rotateBackup
+    }
+
+    func markPrimaryWriteSucceeded() {
+        lock.lock()
+        preserveValidatedBackup = false
+        lock.unlock()
+    }
+}
+
 // MARK: - WAL Service
 
 /// Main coordinator for Write-Ahead Log sync operations
@@ -18,6 +43,61 @@ enum WALPersistenceState: Equatable {
 /// Ported from: omi/app/lib/services/wals/wal_service.dart
 @MainActor
 final class WALService: ObservableObject {
+
+    struct FrameRecoveryRecord: Codable, @unchecked Sendable {
+        let wal: WALEntry
+        let fileName: String
+        let expectedAudioBytes: Int
+        let expectedAudioSHA256: String
+    }
+
+    struct FramePersistenceRequest: @unchecked Sendable {
+        let fileURL: URL
+        let recoveryURL: URL
+        let wal: WALEntry
+        let frames: [Data]
+    }
+
+    enum MetadataWriteMode: Equatable, Sendable {
+        case rotateBackup
+        case preserveBackup
+    }
+
+    typealias FrameWriter = @Sendable (FramePersistenceRequest) async throws -> FrameRecoveryRecord
+    typealias MetadataWriter = @Sendable (
+        _ data: Data,
+        _ file: URL,
+        _ backup: URL,
+        _ mode: MetadataWriteMode
+    ) throws -> Void
+    typealias TimestampProvider = @Sendable () -> Int
+
+    private struct ActiveFrameBuffer {
+        let device: String
+        let codec: String
+        var startTime: Int
+        var frames: [Data] = []
+        var syncFlags: [Bool] = []
+    }
+
+    private struct PendingFrameBatch {
+        let id: UUID
+        let device: String
+        let codec: String
+        let startTime: Int
+        let frames: [Data]
+        let syncFlags: [Bool]
+        var recoveryRecord: FrameRecoveryRecord?
+        var recoveryURL: URL?
+    }
+
+    private struct MetadataWriteRequest: @unchecked Sendable {
+        let revision: Int
+        let data: Data
+        let file: URL
+        let backup: URL
+        let mode: MetadataWriteMode
+    }
 
     // MARK: - Singleton
 
@@ -66,19 +146,16 @@ final class WALService: ObservableObject {
     private let fileManager = FileManager.default
     private let apiClient: APIClient
     private let reconciler: WALSyncReconciler
+    private let frameWriter: FrameWriter
+    private let metadataWriter: MetadataWriter
+    private let timestampProvider: TimestampProvider
     private let walMetadataWriteQueue = DispatchQueue(label: "me.omi.desktop.wal.metadata.write")
-    private var frameWriteInProgress = false
+    private let walMetadataWriteState = WALMetadataWriteState()
+    private var walMetadataRevision = 0
+    private var frameWriteTask: Task<Void, Never>?
 
     /// Test seam — when set, bypasses `APIClient.uploadLocalFilesV2`.
     var uploadLocalFilesHandler: ((URL) async throws -> UploadLocalFilesResult)?
-
-    /// Test-only: point WAL I/O at a temp directory.
-    func setWalDirectoryForTesting(_ url: URL?) {
-        walDirectory = url
-        if url != nil {
-            persistenceState = .ready
-        }
-    }
 
     func setWalsForTesting(_ entries: [WALEntry]) {
         wals = entries
@@ -100,8 +177,42 @@ final class WALService: ObservableObject {
         createWalFromCurrentFrames()
     }
 
+    func waitForFrameWriteForTesting() async {
+        while let task = frameWriteTask {
+            await task.value
+        }
+    }
+
     var currentFrameCountForTesting: Int {
-        currentFrames.count
+        currentFramesForTesting.count
+    }
+
+    var currentFramesForTesting: [Data] {
+        pendingFrameBatches.flatMap(\.frames) + (activeFrameBuffer?.frames ?? [])
+    }
+
+    var currentFramesSyncedForTesting: [Bool] {
+        pendingFrameBatches.flatMap(\.syncFlags) + (activeFrameBuffer?.syncFlags ?? [])
+    }
+
+    var recordingStartTimeForTesting: Int? {
+        pendingFrameBatches.first?.startTime ?? activeFrameBuffer?.startTime
+    }
+
+    var pendingFrameBatchCountForTesting: Int {
+        pendingFrameBatches.count
+    }
+
+    var activeDeviceForTesting: String? {
+        activeFrameBuffer?.device
+    }
+
+    var activeCodecForTesting: String? {
+        activeFrameBuffer?.codec
+    }
+
+    var activeStartTimeForTesting: Int? {
+        activeFrameBuffer?.startTime
     }
 
     private var walDirectory: URL?
@@ -110,22 +221,38 @@ final class WALService: ObservableObject {
     private var flushTimer: Timer?
     private var chunkTimer: Timer?
 
-    // In-memory frame buffer for current recording
-    private var currentFrames: [Data] = []
-    private var currentFramesSynced: [Bool] = []
-    private var currentDevice: String?
-    private var currentCodec: String?
-    private var recordingStartTime: Int?
+    // Active capture and frozen persistence batches have separate immutable
+    // identities so a failed device-A write can never absorb device-B frames.
+    private var activeFrameBuffer: ActiveFrameBuffer?
+    private var pendingFrameBatches: [PendingFrameBatch] = []
 
     // MARK: - Initialization
 
     init(
         apiClient: APIClient = .shared,
-        reconciler: WALSyncReconciler? = nil
+        reconciler: WALSyncReconciler? = nil,
+        frameWriter: FrameWriter? = nil,
+        metadataWriter: MetadataWriter? = nil,
+        walDirectoryForTesting: URL? = nil,
+        walDirectoryUnavailableForTesting: Bool = false,
+        timestampProvider: TimestampProvider? = nil
     ) {
         self.apiClient = apiClient
         self.reconciler = reconciler ?? .shared
-        setupWalDirectory()
+        self.frameWriter = frameWriter ?? { request in
+            try await Self.writeFrameTransaction(request)
+        }
+        self.metadataWriter = metadataWriter ?? { data, file, backup, mode in
+            try Self.writeMetadataFiles(data: data, file: file, backup: backup, mode: mode)
+        }
+        self.timestampProvider = timestampProvider ?? { Int(Date().timeIntervalSince1970) }
+        if walDirectoryUnavailableForTesting {
+            walDirectory = nil
+        } else if let walDirectoryForTesting {
+            attemptWalDirectorySetup(at: walDirectoryForTesting)
+        } else {
+            setupWalDirectory()
+        }
         loadWals()
     }
 
@@ -179,8 +306,13 @@ final class WALService: ObservableObject {
 
     /// Load WALs from disk
     private func loadWals() {
-        guard let file = walMetadataFile, fileManager.fileExists(atPath: file.path) else {
+        guard let file = walMetadataFile else { return }
+        guard fileManager.fileExists(atPath: file.path) else {
             logger.info("No existing WAL metadata found")
+            if loadFromBackup() {
+                restorePrimaryFromValidatedBackup()
+            }
+            recoverFrameTransactions()
             return
         }
 
@@ -192,56 +324,185 @@ final class WALService: ObservableObject {
             logger.info("Loaded \(self.wals.count) WALs from disk")
         } catch {
             logger.error("Failed to load WALs: \(error.localizedDescription)")
-            // Try backup
-            loadFromBackup()
+            if loadFromBackup() {
+                restorePrimaryFromValidatedBackup()
+            }
         }
+        recoverFrameTransactions()
     }
 
-    private func loadFromBackup() {
+    @discardableResult
+    private func loadFromBackup() -> Bool {
         guard let backup = walBackupFile, fileManager.fileExists(atPath: backup.path) else {
-            return
+            return false
         }
 
         do {
             let data = try Data(contentsOf: backup)
             let metadata = try JSONDecoder().decode(WALMetadata.self, from: data)
             wals = metadata.wals
+            walMetadataWriteState.markValidatedBackupLoaded()
             updatePendingWals()
             logger.info("Loaded \(self.wals.count) WALs from backup")
+            return true
         } catch {
             logger.error("Failed to load WALs from backup: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    private func restorePrimaryFromValidatedBackup() {
+        guard let file = walMetadataFile, let backup = walBackupFile else { return }
+        do {
+            walMetadataRevision += 1
+            let data = try JSONEncoder().encode(WALMetadata(wals: wals))
+            try metadataWriter(data, file, backup, .preserveBackup)
+            walMetadataWriteState.latestPersistedRevision = walMetadataRevision
+            walMetadataWriteState.markPrimaryWriteSucceeded()
+        } catch {
+            logger.error("Failed to restore WAL metadata primary: \(error.localizedDescription)")
         }
     }
 
     /// Save WALs to disk with backup (file I/O runs on background thread)
     func saveWals() {
-        guard let file = walMetadataFile, let backup = walBackupFile else { return }
-
         do {
-            // Encode on main thread (accesses @Published wals)
-            let metadata = WALMetadata(wals: wals)
-            let data = try JSONEncoder().encode(metadata)
-
-            // Write to disk on a serial background queue so older snapshots cannot
-            // finish after newer snapshots and roll metadata backward across restart.
-            walMetadataWriteQueue.async {
-                do {
-                    // Create backup first
-                    if FileManager.default.fileExists(atPath: file.path) {
-                        try? FileManager.default.removeItem(at: backup)
-                        try FileManager.default.copyItem(at: file, to: backup)
-                    }
-
-                    try data.write(to: file, options: .atomic)
-                } catch {
+            let request = try makeMetadataWriteRequest(for: wals)
+            enqueueMetadataWrite(request) { result in
+                if case .failure(let error) = result {
                     log("WALService: Failed to save WALs: \(error.localizedDescription)")
                 }
             }
-
             logger.debug("Saved \(self.wals.count) WALs to disk")
         } catch {
             logger.error("Failed to encode WALs: \(error.localizedDescription)")
         }
+    }
+
+    private func makeMetadataWriteRequest(for entries: [WALEntry]) throws -> MetadataWriteRequest {
+        guard let file = walMetadataFile, let backup = walBackupFile else {
+            throw WALError.fileNotFound
+        }
+        walMetadataRevision += 1
+        return MetadataWriteRequest(
+            revision: walMetadataRevision,
+            data: try JSONEncoder().encode(WALMetadata(wals: entries)),
+            file: file,
+            backup: backup,
+            mode: walMetadataWriteState.writeMode()
+        )
+    }
+
+    private func enqueueMetadataWrite(
+        _ request: MetadataWriteRequest,
+        completion: @escaping @Sendable (Result<Void, Error>) -> Void
+    ) {
+        let writer = metadataWriter
+        let state = walMetadataWriteState
+        walMetadataWriteQueue.async {
+            guard request.revision >= state.latestPersistedRevision else {
+                completion(.success(()))
+                return
+            }
+            do {
+                try writer(request.data, request.file, request.backup, request.mode)
+                state.latestPersistedRevision = request.revision
+                state.markPrimaryWriteSucceeded()
+                completion(.success(()))
+            } catch {
+                completion(.failure(error))
+            }
+        }
+    }
+
+    private func persistCurrentWalMetadata() async throws {
+        let request = try makeMetadataWriteRequest(for: wals)
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            enqueueMetadataWrite(request) { result in
+                continuation.resume(with: result)
+            }
+        }
+    }
+
+    nonisolated static func writeMetadataFiles(
+        data: Data,
+        file: URL,
+        backup: URL,
+        mode: MetadataWriteMode
+    ) throws {
+        if mode == .rotateBackup, FileManager.default.fileExists(atPath: file.path) {
+            try? FileManager.default.removeItem(at: backup)
+            try FileManager.default.copyItem(at: file, to: backup)
+        }
+        try data.write(to: file, options: .atomic)
+    }
+
+    private func recoverFrameTransactions() {
+        guard let walDirectory,
+              let recoveryFiles = try? fileManager.contentsOfDirectory(
+                at: walDirectory,
+                includingPropertiesForKeys: [.fileSizeKey],
+                options: [.skipsHiddenFiles]
+              )
+        else { return }
+
+        let candidates = recoveryFiles.filter { $0.lastPathComponent.hasSuffix(".wal-pending.json") }
+        var recoveredFiles: [URL] = []
+        for recoveryURL in candidates {
+            do {
+                let record = try JSONDecoder().decode(
+                    FrameRecoveryRecord.self,
+                    from: Data(contentsOf: recoveryURL)
+                )
+                let audioURL = walDirectory.appendingPathComponent(record.fileName)
+                let audioData = try Data(contentsOf: audioURL)
+                guard audioData.count == record.expectedAudioBytes,
+                      Self.sha256Hex(audioData) == record.expectedAudioSHA256
+                else {
+                    try? fileManager.removeItem(at: recoveryURL)
+                    continue
+                }
+                mergeRecoveredWal(record.wal)
+                recoveredFiles.append(recoveryURL)
+            } catch {
+                logger.warning("Ignoring incomplete WAL recovery record: \(recoveryURL.lastPathComponent)")
+                try? fileManager.removeItem(at: recoveryURL)
+            }
+        }
+
+        guard !recoveredFiles.isEmpty,
+              let file = walMetadataFile,
+              let backup = walBackupFile
+        else { return }
+        updatePendingWals()
+        do {
+            walMetadataRevision += 1
+            let data = try JSONEncoder().encode(WALMetadata(wals: wals))
+            let mode = walMetadataWriteState.writeMode()
+            try metadataWriter(data, file, backup, mode)
+            walMetadataWriteState.latestPersistedRevision = walMetadataRevision
+            walMetadataWriteState.markPrimaryWriteSucceeded()
+            for recoveryURL in recoveredFiles {
+                try? fileManager.removeItem(at: recoveryURL)
+            }
+        } catch {
+            logger.error("Failed to commit recovered WAL metadata: \(error.localizedDescription)")
+        }
+    }
+
+    private func mergeRecoveredWal(_ recovered: WALEntry) {
+        guard let index = wals.firstIndex(where: { $0.id == recovered.id }) else {
+            wals.append(recovered)
+            return
+        }
+        var merged = wals[index]
+        if recovered.totalFrames > merged.totalFrames {
+            merged.totalFrames = recovered.totalFrames
+            merged.status = .miss
+        }
+        merged.storage = .disk
+        merged.filePath = recovered.filePath
+        wals[index] = merged
     }
 
     private func updatePendingWals() {
@@ -255,52 +516,38 @@ final class WALService: ObservableObject {
 
     /// Start recording frames from a device
     func startRecording(device: String, codec: String) {
-        // Best-effort flush of frames retained after a prior degraded stop.
-        // If the retry fails again, preserve the frames in-memory rather than
-        // silently dropping them — they'll be retried on the next flush.
-        if !currentFrames.isEmpty {
-            _ = createWalFromCurrentFrames()
-        }
-
-        currentDevice = device
-        currentCodec = codec
-        // Only clear the frame buffer if the retained flush succeeded (or there
-        // were none to flush). Dropping frames on a failed retry would lose audio.
-        if currentFrames.isEmpty {
-            currentFrames = []
-            currentFramesSynced = []
-        }
-        recordingStartTime = Int(Date().timeIntervalSince1970)
+        freezeActiveFrameBuffer()
+        activeFrameBuffer = ActiveFrameBuffer(
+            device: device,
+            codec: codec,
+            startTime: timestampProvider()
+        )
 
         startTimers()
+        startFramePersistenceIfNeeded()
         logger.info("Started recording from device: \(device), codec: \(codec)")
     }
 
     /// Add a frame to the current recording
     func addFrame(_ frame: Data, synced: Bool = false) {
-        currentFrames.append(frame)
-        currentFramesSynced.append(synced)
+        guard activeFrameBuffer != nil else {
+            logger.warning("Ignoring frame received without an active recording identity")
+            return
+        }
+        activeFrameBuffer?.frames.append(frame)
+        activeFrameBuffer?.syncFlags.append(synced)
     }
 
     /// Stop recording and create final WAL
     func stopRecording() {
         stopTimers()
+        freezeActiveFrameBuffer()
+        activeFrameBuffer = nil
+        startFramePersistenceIfNeeded()
 
-        // Create WAL for remaining frames. On write failure, frames stay in
-        // `currentFrames` so a later start/retry can persist them — do not clear.
-        if !currentFrames.isEmpty {
-            _ = createWalFromCurrentFrames()
-        }
-
-        if currentFrames.isEmpty {
-            currentDevice = nil
-            currentCodec = nil
-            currentFramesSynced = []
-            recordingStartTime = nil
-        } else {
+        if !pendingFrameBatches.isEmpty {
             log(
-                "WALService: stopRecording retained \(currentFrames.count) in-memory frames "
-                    + "(failure_class=wal_write_failed recovery_action=retain_frames recovery_result=degraded)")
+                "WALService: stopRecording retained \(currentFrameCountForTesting) frames in persistence batches")
         }
 
         logger.info("Stopped recording")
@@ -333,7 +580,7 @@ final class WALService: ObservableObject {
 
     private func checkAndChunk() {
         // Check if we have enough unsynced frames to create a WAL
-        let unsyncedCount = currentFramesSynced.filter { !$0 }.count
+        let unsyncedCount = activeFrameBuffer?.syncFlags.filter { !$0 }.count ?? 0
 
         if unsyncedCount >= Self.lossesThresholdFrames {
             createWalFromCurrentFrames()
@@ -341,6 +588,9 @@ final class WALService: ObservableObject {
     }
 
     private func flushToDisk() {
+        // Retry the oldest immutable frame batch without coalescing it with the
+        // active capture buffer.
+        startFramePersistenceIfNeeded()
         // Write any in-memory WALs to disk
         for i in 0..<wals.count {
             if wals[i].storage == .memory {
@@ -352,12 +602,51 @@ final class WALService: ObservableObject {
 
     @discardableResult
     private func createWalFromCurrentFrames() -> Bool {
-        guard let device = currentDevice,
-              let codec = currentCodec,
-              let startTime = recordingStartTime,
-              !currentFrames.isEmpty else { return true }
-        guard !frameWriteInProgress else { return true }
+        freezeActiveFrameBuffer()
+        return startFramePersistenceIfNeeded()
+    }
 
+    private func freezeActiveFrameBuffer() {
+        guard var active = activeFrameBuffer, !active.frames.isEmpty else { return }
+        precondition(active.frames.count == active.syncFlags.count)
+        let timerStart = reserveTimerStart(device: active.device, proposed: active.startTime)
+        pendingFrameBatches.append(
+            PendingFrameBatch(
+                id: UUID(),
+                device: active.device,
+                codec: active.codec,
+                startTime: timerStart,
+                frames: active.frames,
+                syncFlags: active.syncFlags
+            )
+        )
+        active.frames = []
+        active.syncFlags = []
+        active.startTime = timestampProvider()
+        activeFrameBuffer = active
+    }
+
+    private func reserveTimerStart(device: String, proposed: Int) -> Int {
+        let occupied = Set(
+            wals.lazy
+            .filter { $0.device == device }
+            .map(\.timerStart)
+        ).union(
+            pendingFrameBatches.lazy
+                .filter { $0.device == device }
+                .map(\.startTime)
+        )
+        var candidate = proposed
+        while occupied.contains(candidate) {
+            precondition(candidate < Int.max, "WAL timerStart reservation exhausted")
+            candidate += 1
+        }
+        return candidate
+    }
+
+    @discardableResult
+    private func startFramePersistenceIfNeeded() -> Bool {
+        guard frameWriteTask == nil, !pendingFrameBatches.isEmpty else { return true }
         guard walDirectory != nil else {
             let reason = "wal_directory_unavailable"
             persistenceState = .degraded(reason: reason)
@@ -373,73 +662,166 @@ final class WALService: ObservableObject {
             return false
         }
 
-        // Calculate actual duration based on frames
-        let framesPerSecond = codec == "opus_fs320" ? 50 : 100
-        let seconds = max(1, currentFrames.count / framesPerSecond)
+        frameWriteTask = Task { [weak self] in
+            guard let self else { return }
+            await self.persistHeadFrameBatch()
+        }
+        return true
+    }
 
-        let wal = WALEntry(
-            timerStart: startTime,
-            codec: codec,
-            status: .miss,
-            storage: .memory,
-            seconds: seconds,
-            device: device,
-            deviceModel: device,
-            totalFrames: currentFrames.count
-        )
-
-        // Check for duplicate. Two chunks can share a WAL id ("device_second", 1s
-        // resolution) when a second chunk is created within the same wall-clock
-        // second as a prior successful write. They share generateFileName(), so the
-        // duplicate write MUST extend the existing file (append: true below), not
-        // atomically overwrite it — overwriting truncated the earlier ~60s of audio
-        // to just the new buffer while totalFrames claimed the sum.
-        let existingIndex = wals.firstIndex(where: { $0.id == wal.id })
-        if let existingIndex {
-            wals[existingIndex].totalFrames += currentFrames.count
-            logger.debug("Appended \(self.currentFrames.count) frames to existing WAL")
-        } else {
-            wals.append(wal)
-            logger.info("Created new WAL: \(wal.id) with \(self.currentFrames.count) frames")
+    private func persistHeadFrameBatch() async {
+        guard let batch = pendingFrameBatches.first else {
+            frameWriteTask = nil
+            return
         }
 
-        let framesToWrite = currentFrames
-        let syncedToWrite = currentFramesSynced
-        frameWriteInProgress = true
-        writeFramesToDiskAsync(frames: framesToWrite, wal: wal, append: existingIndex != nil) {
-            [weak self] wrote in
-            guard let self else { return }
-            self.frameWriteInProgress = false
-            guard wrote else {
-                self.errorMessage = "Failed to save audio backup. Recording continues in memory."
-                log(
-                    "WALService: frame write failed — retaining \(framesToWrite.count) in-memory frames "
-                        + "(failure_class=wal_write_failed recovery_action=retain_frames recovery_result=degraded)")
-                // writeFramesToDiskAsync already recorded the health event via
-                // recordFrameWriteFailure — do not duplicate it here.
-                self.updatePendingWals()
+        if batch.recoveryRecord == nil {
+            guard let request = makeFramePersistenceRequest(for: batch) else {
+                frameWriteTask = nil
+                recordFrameWriteFailure(walId: walID(for: batch), reason: "wal_identity_collision")
                 return
             }
-
-            // Clear only the frames that were durably written (#9240). New frames
-            // may have arrived while the off-main write was in flight.
-            let writtenCount = framesToWrite.count
-            if self.currentFrames.count >= writtenCount {
-                self.currentFrames.removeFirst(writtenCount)
-            } else {
-                self.currentFrames = []
+            do {
+                let record = try await frameWriter(request)
+                guard pendingFrameBatches.first?.id == batch.id else {
+                    frameWriteTask = nil
+                    return
+                }
+                pendingFrameBatches[0].recoveryRecord = record
+                pendingFrameBatches[0].recoveryURL = request.recoveryURL
+                applyPersistedWal(record.wal)
+                updatePendingWals()
+            } catch {
+                frameWriteTask = nil
+                let reason = error.localizedDescription
+                log(
+                    "WALService: Failed to write frames to disk "
+                        + "(failure_class=wal_write_failed recovery_action=retain_batch recovery_result=degraded): "
+                        + reason)
+                recordFrameWriteFailure(walId: walID(for: batch), reason: reason)
+                return
             }
-            let syncedCount = min(syncedToWrite.count, self.currentFramesSynced.count)
-            if syncedCount > 0 {
-                self.currentFramesSynced.removeFirst(syncedCount)
-            }
-            self.recordingStartTime = Int(Date().timeIntervalSince1970)
-            self.updatePendingWals()
-            self.saveWals()
+        } else if let record = batch.recoveryRecord {
+            // Reassert the durable audio identity before every metadata retry.
+            // Status changes on an equal/newer in-memory entry are preserved.
+            applyPersistedWal(record.wal)
+            updatePendingWals()
         }
 
-        updatePendingWals()
-        return true
+        do {
+            // The in-memory WAL is applied before this awaited write. Any
+            // concurrent saveWals snapshot therefore includes the audio, and all
+            // metadata writes share one revisioned serial queue.
+            try await persistCurrentWalMetadata()
+        } catch {
+            frameWriteTask = nil
+            let reason = error.localizedDescription
+            persistenceState = .degraded(reason: reason)
+            errorMessage = "Failed to save audio backup metadata. Audio remains recoverable."
+            DesktopDiagnosticsManager.shared.recordWalPersistenceDegraded(
+                reason: reason,
+                recoveryAction: "retain_batch",
+                recoveryResult: "degraded"
+            )
+            return
+        }
+
+        guard pendingFrameBatches.first?.id == batch.id else {
+            frameWriteTask = nil
+            return
+        }
+        let recoveryURL = pendingFrameBatches[0].recoveryURL
+        pendingFrameBatches.removeFirst()
+        if let recoveryURL {
+            await Self.removeRecoveryFile(recoveryURL)
+        }
+        persistenceState = .ready
+        errorMessage = nil
+        frameWriteTask = nil
+        startFramePersistenceIfNeeded()
+    }
+
+    private func makeFramePersistenceRequest(for batch: PendingFrameBatch) -> FramePersistenceRequest? {
+        guard let walDirectory else { return nil }
+        let framesPerSecond = batch.codec == "opus_fs320" ? 50 : 100
+        var wal = WALEntry(
+            timerStart: batch.startTime,
+            codec: batch.codec,
+            status: .miss,
+            storage: .disk,
+            seconds: max(1, batch.frames.count / framesPerSecond),
+            device: batch.device,
+            deviceModel: batch.device,
+            totalFrames: batch.frames.count
+        )
+        guard !wals.contains(where: { $0.id == wal.id }) else { return nil }
+        let fileName = wal.generateFileName()
+        wal.filePath = fileName
+        return FramePersistenceRequest(
+            fileURL: walDirectory.appendingPathComponent(fileName),
+            recoveryURL: walDirectory.appendingPathComponent(fileName + ".wal-pending.json"),
+            wal: wal,
+            frames: batch.frames
+        )
+    }
+
+    private func applyPersistedWal(_ persisted: WALEntry) {
+        guard let index = wals.firstIndex(where: { $0.id == persisted.id }) else {
+            wals.append(persisted)
+            logger.info("Created new WAL: \(persisted.id) with \(persisted.totalFrames) frames")
+            return
+        }
+        var merged = wals[index]
+        if persisted.totalFrames > merged.totalFrames {
+            merged.totalFrames = persisted.totalFrames
+            merged.status = .miss
+        }
+        merged.seconds = max(merged.seconds, persisted.seconds)
+        merged.storage = .disk
+        merged.filePath = persisted.filePath
+        wals[index] = merged
+        logger.debug("Committed persisted WAL \(persisted.id) with \(persisted.totalFrames) frames")
+    }
+
+    private func walID(for batch: PendingFrameBatch) -> String {
+        "\(batch.device)_\(batch.startTime)"
+    }
+
+    nonisolated static func writeFrameTransaction(
+        _ request: FramePersistenceRequest
+    ) async throws -> FrameRecoveryRecord {
+        try await Task.detached(priority: .utility) {
+            let fileData = encodeFrames(request.frames)
+            let record = FrameRecoveryRecord(
+                wal: request.wal,
+                fileName: request.fileURL.lastPathComponent,
+                expectedAudioBytes: fileData.count,
+                expectedAudioSHA256: sha256Hex(fileData)
+            )
+            let recoveryData = try JSONEncoder().encode(record)
+            try recoveryData.write(to: request.recoveryURL, options: .atomic)
+            // Foundation traps when `.atomic` and `.withoutOverwriting` are
+            // combined. Write an exclusive temporary file in the destination
+            // directory, then atomically rename it into place instead.
+            let temporaryURL = request.fileURL
+                .deletingLastPathComponent()
+                .appendingPathComponent(".\(request.fileURL.lastPathComponent).\(UUID().uuidString).tmp")
+            defer { try? FileManager.default.removeItem(at: temporaryURL) }
+            try fileData.write(to: temporaryURL, options: .withoutOverwriting)
+            try FileManager.default.moveItem(at: temporaryURL, to: request.fileURL)
+            log("WALService: Wrote \(request.frames.count) frames to \(request.fileURL.lastPathComponent)")
+            return record
+        }.value
+    }
+
+    nonisolated private static func removeRecoveryFile(_ recoveryURL: URL) async {
+        _ = await Task.detached(priority: .utility) {
+            try? FileManager.default.removeItem(at: recoveryURL)
+        }.value
+    }
+
+    nonisolated private static func sha256Hex(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
     /// Length-prefix encode frames into the on-disk WAL chunk byte layout
@@ -454,72 +836,6 @@ final class WALService: ObservableObject {
             fileData.append(frame)
         }
         return fileData
-    }
-
-    /// Bytes to write for a WAL chunk. When `append` is set and the file already
-    /// has content, the new frames EXTEND it — a duplicate WAL id (same
-    /// device+second) must never atomically overwrite the earlier frames, which
-    /// destroyed the previously-recorded audio.
-    nonisolated static func frameFileBytes(existing: Data?, frames: [Data], append: Bool) -> Data {
-        let encoded = encodeFrames(frames)
-        if append, let existing, !existing.isEmpty {
-            return existing + encoded
-        }
-        return encoded
-    }
-
-    private func writeFramesToDiskAsync(
-        frames: [Data],
-        wal: WALEntry,
-        append: Bool = false,
-        completion: @escaping @MainActor (Bool) -> Void
-    ) {
-        guard let walDir = walDirectory else {
-            recordFrameWriteFailure(walId: wal.id, reason: "wal_directory_unavailable")
-            completion(false)
-            return
-        }
-
-        let fileName = wal.generateFileName()
-        let fileUrl = walDir.appendingPathComponent(fileName)
-        let walId = wal.id
-
-        let frameCount = frames.count
-        DispatchQueue.global(qos: .utility).async { [weak self, frames] in
-            // On a duplicate-id append, read the already-persisted frames off the
-            // main thread and extend them; a failed atomic write leaves the prior
-            // file untouched.
-            let existing = append ? try? Data(contentsOf: fileUrl) : nil
-            let fileData = Self.frameFileBytes(existing: existing, frames: frames, append: append)
-            let succeeded: Bool
-            let failureReason: String?
-            do {
-                try fileData.write(to: fileUrl, options: .atomic)
-                log("WALService: Wrote \(frameCount) frames to \(fileName)")
-                succeeded = true
-                failureReason = nil
-            } catch {
-                let reason = error.localizedDescription
-                log(
-                    "WALService: Failed to write frames to disk "
-                        + "(failure_class=wal_write_failed recovery_action=retain_frames recovery_result=degraded): "
-                        + reason)
-                succeeded = false
-                failureReason = reason
-            }
-
-            DispatchQueue.main.async {
-                guard let self else { return }
-                if succeeded, let index = self.wals.firstIndex(where: { $0.id == walId }) {
-                    self.wals[index].storage = .disk
-                    self.wals[index].filePath = fileName
-                    completion(true)
-                } else {
-                    self.recordFrameWriteFailure(walId: walId, reason: failureReason ?? "frame_write_failed")
-                    completion(false)
-                }
-            }
-        }
     }
 
     private func writeFramesToDisk(frames: [Data], wal: WALEntry) {
@@ -664,7 +980,7 @@ final class WALService: ObservableObject {
         currentOffset: Int,
         fileNum: Int = 1
     ) -> WALEntry {
-        let timerStart = Int(Date().timeIntervalSince1970)
+        let timerStart = reserveTimerStart(device: device, proposed: timestampProvider())
         let framesPerSecond = codec == "opus_fs320" ? 50 : 100
         let bytesPerFrame = codec == "opus_fs320" ? 160 : 80
         let totalFrames = totalBytes / bytesPerFrame
