@@ -75,6 +75,10 @@ metrics:
     interval: "15s"
     labels:
       release: prod-omi-kube-prometheus-stack
+  prometheusRule:
+    enabled: true
+    labels:
+      release: prod-omi-kube-prometheus-stack
 
 autoscaling:
   enabled: true

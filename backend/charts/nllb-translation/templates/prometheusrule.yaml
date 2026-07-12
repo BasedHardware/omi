@@ -1,0 +1,101 @@
+{{- if and .Values.metrics.enabled .Values.metrics.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "nllb-translation.fullname" . }}
+  labels:
+    {{- include "nllb-translation.labels" . | nindent 4 }}
+    {{- with .Values.metrics.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: nllb-translation.rules
+      rules:
+        - alert: NLLBModelDown
+          expr: nllb_model_loaded == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "NLLB model not loaded"
+            description: "NLLB translation model has been unloaded for >1m. All translations will fall back to Google."
+
+        - alert: NLLBErrorRateHigh
+          expr: >-
+            sum(rate(nllb_requests_total{status!="ok"}[5m]))
+            / sum(rate(nllb_requests_total[5m])) > 0.01
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "NLLB error rate >1%"
+            description: "NLLB translation error rate has exceeded 1% for 5 minutes."
+
+        - alert: NLLBLatencyP99High
+          expr: >-
+            histogram_quantile(0.99,
+              sum(rate(nllb_translation_latency_seconds_bucket[5m])) by (le)
+            ) > 2
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "NLLB p99 latency >2s"
+            description: "NLLB translation p99 latency has exceeded 2 seconds for 5 minutes."
+
+        - alert: NLLBFallbackRateHigh
+          expr: >-
+            sum(rate(omi_translation_requests_total{provider="google"}[10m]))
+            / sum(rate(omi_translation_requests_total[10m])) > 0.05
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "NLLB→Google fallback rate >5%"
+            description: "More than 5% of translations are falling back to Google for 10 minutes."
+
+        - alert: NLLBMemoryPressure
+          expr: >-
+            process_resident_memory_bytes{job=~".*nllb.*"}
+            / 17179869184 > 0.85
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "NLLB memory usage >85% of limit"
+            description: "NLLB pod memory usage has exceeded 85% of the 16Gi limit."
+
+        - alert: NLLBCPUSaturation
+          expr: >-
+            rate(process_cpu_seconds_total{job=~".*nllb.*"}[5m]) / 4 > 0.9
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "NLLB CPU usage >90% of limit"
+            description: "NLLB pod CPU utilization has exceeded 90% of 4 cores for 10 minutes."
+
+        - alert: NLLBSLOBurnRateFast
+          expr: >-
+            (sum(rate(nllb_requests_total{status!="ok"}[5m]))
+            / sum(rate(nllb_requests_total[5m]))) / 0.005 > 14.4
+            AND
+            (sum(rate(nllb_requests_total{status!="ok"}[1h]))
+            / sum(rate(nllb_requests_total[1h]))) / 0.005 > 14.4
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "NLLB SLO burn rate critical (fast burn)"
+            description: "NLLB error budget is burning at >14.4x rate over both 5m and 1h windows. At this rate, the monthly error budget will be exhausted in hours."
+
+        - alert: NLLBConcurrencyHigh
+          expr: nllb_active_requests > 8
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "NLLB concurrent requests >8"
+            description: "NLLB has sustained >8 concurrent requests for 5 minutes, approaching capacity."
+{{- end }}
