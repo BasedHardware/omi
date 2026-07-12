@@ -37,6 +37,11 @@ The implementation MUST introduce a durable runtime kernel above the existing ha
 13. Phase 1 MUST NOT create another in-memory session authority alongside the kernel.
 14. Owner authority for control operations comes from Omi request context. Tool-supplied `ownerId` values are guards only; they may reject a request but MUST NOT become the active owner.
 15. Request-scoped control and tool-relay paths MUST carry `clientId` and `requestId` together. A bare `requestId` is not globally unique under concurrent clients.
+16. Request and client IDs are correlation, never execution authority; physical tool execution requires a persisted run/attempt invocation claim.
+17. A session's adapter, model profile, working directory, credential scope, and execution role are one immutable, generation-numbered profile. Defaults apply only to future sessions.
+18. Every accepted run pins one kernel-rendered ContextSnapshot. Swift supplies typed source data, not prompt policy or capability authority.
+19. Every canonical conversation has one sequence-addressed kernel journal. Swift is a projection/physical transport. Backend chat is a downstream mirror and an event-triggered feed for genuinely remote turns; stable-ID reconciliation may propose imports, but only the journal mutates canonical history.
+20. Voice lifecycle state changes only through `VoiceTurnCoordinator` and its reducer; microphone, provider, playback, and journal objects are physical drivers.
 
 ## 3. Pre-Phase-1 findings and Phase 1 baseline
 
@@ -81,6 +86,8 @@ flowchart TB
     Pi[pi-mono adapter pool]
     Future[Hermes / OpenClaw / AgentVM / A2A adapters]
     Broker[Omi capability broker and MCP]
+    Journal[Conversation journal and backend outbox]
+    Context[Execution profiles and context snapshots]
 
     UI --> SwiftClient
     SwiftClient --> SharedProcess
@@ -88,6 +95,8 @@ flowchart TB
     Kernel --> Store
     Kernel --> Events
     Kernel --> Scheduler
+    Kernel --> Journal
+    Kernel --> Context
     Scheduler --> ACP
     Scheduler --> Pi
     Scheduler --> Future

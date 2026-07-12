@@ -14,9 +14,41 @@ workstream resolves the same kernel conversation and artifact history.
   “temporarily during migration”).
 - Build per-surface continuity rings, early-bubble reconciliation, or
   sync-by-mirroring between notch and main chat.
-- Treat backend message rows as authoritative for agent context or continuity
-  (backend chat may be a downstream projection/export only).
+- Treat backend message rows as authoritative for agent context or continuity.
+  Backend chat is the journal's downstream mirror plus an event-triggered import
+  feed for genuinely remote client turns; imported rows become canonical only
+  after the kernel accepts their stable remote/canonical identity.
 - Let Swift own session identity, model context assembly, or run truth.
+
+A bounded, decode-only upgrade reader may consume a store written by an older
+release. It must never accept new writes, must preserve the original canonical
+turn identity, must delete each entry only after journal acceptance, and must
+have a behavioral migration test. This is migration input, not a second store.
+
+## Canonical journal contract
+
+- `conversation_turns` is the current turn projection; the monotonic
+  `(conversationGeneration, turnSeq)` revision stream is the replay contract.
+- Journal mutations and backend-outbox insertion commit atomically. Backend chat
+  writes are a downstream projection with a payload hash. Event-triggered remote
+  reconciliation reads owner-scoped pages, deduplicates by stable remote and
+  canonical turn IDs, and advances a durable ID frontier—never a timestamp.
+  The physical backend reader uses an owner/filter-validated Firestore document
+  cursor, so a newer insertion between pages cannot shift or skip older turns.
+  Backend rows preserve canonical client ID, structured blocks, and resources.
+- Swift notifications are wakeups. `KernelTurnProjection` resumes from its
+  contiguous sequence checkpoint, detects gaps, and replays by sequence.
+- Main chat, floating chat, realtime voice, and Task Chat record and update
+  through the same journal RPCs. Swift may stage an optimistic UI row, but it
+  cannot persist or acknowledge it.
+- Pre-journal backend and Task Chat history have bounded, checkpointed one-time
+  import paths. After migration, main-chat list/resolve and owner activation may
+  request a cooldown-coalesced remote reconciliation; an idle timer never polls
+  backend history. The kernel journal remains the sole mutation owner.
+- For one rollback-readable release, daemon startup repairs old-binary session
+  rows without immutable profiles and journal rows without sequence/producer/
+  hash revisions. Orphaned pending/streaming turns terminalize once rather than
+  rendering an immortal spinner or entering the backend outbox.
 
 ## Surfaces
 
@@ -35,6 +67,10 @@ workstream resolves the same kernel conversation and artifact history.
   per workstream, compatibility migration, minimized continuation
 - `desktop/macos/agent/tests/chat-continuity-invariant.test.ts` — ratchet against
   a second authoritative transcript store and per-surface history APIs
+- `desktop/macos/agent/tests/conversation-journal.test.ts` — monotonic replay,
+  generation fencing, idempotent producers, and atomic backend delivery
+- `desktop/macos/agent/tests/convergence-authority-ratchet.test.ts` — no Swift
+  transcript writer, voice outbox, or timestamp cursor can return
 - Continuity gauntlet (manual / harness): typed → PTT → typed follow-up → spawn →
   status (`desktop/macos/scripts/agent-continuity-gauntlet.sh` when present)
 

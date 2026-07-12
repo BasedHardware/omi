@@ -18,6 +18,31 @@ must name the invariant they affect and update the matching guard test.
 - Select an adapter outside the session's persisted provider boundary.
 - Grant leaf workers agent-management tools or nested-agent authority.
 - Persist a successful run while a required control operation remains failed.
+- Let request/client correlation, a Swift callback, or possession of an opaque
+  capability reference authorize a physical tool invocation.
+- Mutate a live session's adapter/model/cwd because the default preference
+  changed; defaults apply to new sessions and migration is explicit.
+- Assemble policy or model context from Swift-supplied prompt fragments.
+
+## Converged authority contract
+
+- The kernel routes a typed intent proposal and applies the resulting control
+  action in one boundary. Swift does not run a second semantic classifier.
+- Each session pins an immutable, generation-numbered execution profile. An
+  idle session can migrate only through an expected-generation transaction;
+  active runs reject migration.
+- Each accepted run pins one versioned, generation-numbered ContextSnapshot.
+  Source updates declare `available`, `empty`, `unavailable`, or `redacted`;
+  kernel policy, renderer version, recent turns, and capability projection are
+  not caller-selected prompt text.
+- Run/attempt capability checks stay inside the kernel. Before Swift sees a
+  physical command, the kernel persists a single-use invocation as `prepared`
+  and transitions it to `dispatched`. Restart changes `prepared` to `failed`
+  and `dispatched` to `outcome_unknown`; non-idempotent writes are never
+  automatically replayed.
+- Swift validates and executes only `authorized_tool_execution`, echoing the
+  complete immutable claim tuple and generated manifest digest. Ordinary
+  `tool_use` events are display-only.
 
 ## Surfaces
 
@@ -35,6 +60,12 @@ Documented per-invariant in the canonical invariants doc, including:
 - `desktop/macos/agent/tests/control-tools.test.ts`
 - `desktop/macos/agent/tests/sqlite-store.test.ts`
 - `desktop/macos/agent/tests/workstream-continuity.test.ts`
+- `desktop/macos/agent/tests/desktop-intent-router.test.ts`
+- `desktop/macos/agent/tests/session-execution-profile.test.ts`
+- `desktop/macos/agent/tests/run-tool-capability.test.ts`
+- `desktop/macos/agent/tests/convergence-authority-ratchet.test.ts`
+- `desktop/macos/Desktop/Tests/AuthorizedToolExecutionTests.swift`
+- `desktop/macos/Desktop/Tests/KernelContractWireTests.swift`
 
 ## Path globs
 
