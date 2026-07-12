@@ -183,7 +183,7 @@ impl RedisService {
                 // from reconnecting in lockstep without introducing an unbounded
                 // retry loop.
                 let jitter_ms =
-                    20 + ((self.jitter_seed ^ state.generation ^ attempt as u64 * 17) % 31);
+                    20 + ((self.jitter_seed ^ state.generation ^ (attempt as u64 * 17)) % 31);
                 tokio::time::sleep(Duration::from_millis(jitter_ms)).await;
             }
 

@@ -84,7 +84,7 @@ fn readiness_from_probe(
             StatusCode::SERVICE_UNAVAILABLE,
             RedisReadiness {
                 status: "not_configured",
-                failure_class: Some("auth_config"),
+                failure_class: Some("not_configured"),
             },
         ),
         Some(result) => match result {
@@ -133,7 +133,7 @@ mod tests {
         let (status, redis) = readiness_from_probe(None);
         assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(redis.status, "not_configured");
-        assert_eq!(redis.failure_class, Some("auth_config"));
+        assert_eq!(redis.failure_class, Some("not_configured"));
 
         let (status, redis) = readiness_from_probe(Some(Ok(true)));
         assert_eq!(status, StatusCode::OK);
