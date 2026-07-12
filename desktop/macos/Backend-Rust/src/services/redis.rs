@@ -8,7 +8,15 @@ use tokio::sync::RwLock;
 /// Redis service for conversation visibility and sharing
 pub struct RedisService {
     client: Client,
-    connection: Arc<RwLock<Option<redis::aio::MultiplexedConnection>>>,
+    // Cache a `ConnectionManager` rather than a raw `MultiplexedConnection`.
+    // A `MultiplexedConnection` is never re-established after a transport
+    // failure, so a single broken pipe (observed on prod desktop-backend after
+    // ~31h of uptime, issue #9524) makes every metered path — TTS, rate limits —
+    // fail-closed forever until the process restarts. `ConnectionManager`
+    // transparently reconnects on the next command; it does NOT retry the
+    // in-flight command, so non-idempotent ops (INCR/ZADD rate limits) are never
+    // duplicated.
+    connection: Arc<RwLock<Option<redis::aio::ConnectionManager>>>,
 }
 
 /// Review data stored in Redis
@@ -49,8 +57,12 @@ impl RedisService {
         })
     }
 
-    /// Get or create a connection
-    async fn get_connection(&self) -> Result<redis::aio::MultiplexedConnection, redis::RedisError> {
+    /// Get or create a self-healing connection.
+    ///
+    /// The returned `ConnectionManager` is cheap to clone (it shares an inner
+    /// `Arc`) and reconnects on its own after a dropped/broken connection, so a
+    /// stale cache no longer requires a process restart to recover.
+    async fn get_connection(&self) -> Result<redis::aio::ConnectionManager, redis::RedisError> {
         // Check if we have a cached connection
         {
             let conn = self.connection.read().await;
@@ -60,7 +72,7 @@ impl RedisService {
         }
 
         // Create new connection
-        let conn = self.client.get_multiplexed_async_connection().await?;
+        let conn = redis::aio::ConnectionManager::new(self.client.clone()).await?;
 
         // Cache it
         {

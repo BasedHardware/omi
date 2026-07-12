@@ -1,0 +1,3 @@
+{
+  "change": "Fixed text-to-speech and other rate-limited features failing until the app backend restarted after a dropped Redis connection"
+}
