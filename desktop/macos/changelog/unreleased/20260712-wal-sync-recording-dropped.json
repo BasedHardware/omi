@@ -1,3 +1,0 @@
-{
-  "change": "Fixed a rare race where a recording started during a cloud sync could be dropped and never uploaded"
-}
