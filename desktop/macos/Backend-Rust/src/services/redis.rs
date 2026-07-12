@@ -1,6 +1,7 @@
 // Redis service for conversation visibility
 // Mirrors the Python backend's redis_db.py functionality for sharing conversations
 
+use redis::aio::ConnectionManager;
 use redis::{AsyncCommands, Client, ConnectionAddr, ConnectionInfo, RedisConnectionInfo};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -8,7 +9,11 @@ use tokio::sync::RwLock;
 /// Redis service for conversation visibility and sharing
 pub struct RedisService {
     client: Client,
-    connection: Arc<RwLock<Option<redis::aio::MultiplexedConnection>>>,
+    // ConnectionManager (not a bare MultiplexedConnection) so a dropped link
+    // reconnects internally. A cached MultiplexedConnection stayed broken forever
+    // once the Redis link dropped, so every later command errored — which made the
+    // rate limiter fail open (unmetered) permanently until process restart.
+    connection: Arc<RwLock<Option<ConnectionManager>>>,
 }
 
 /// Review data stored in Redis
@@ -49,9 +54,13 @@ impl RedisService {
         })
     }
 
-    /// Get or create a connection
-    async fn get_connection(&self) -> Result<redis::aio::MultiplexedConnection, redis::RedisError> {
-        // Check if we have a cached connection
+    /// Get or create a connection.
+    ///
+    /// Returns a clone of a shared `ConnectionManager`, which transparently
+    /// re-establishes the underlying link after a transient failure, so a dropped
+    /// Redis connection recovers on the next command instead of erroring forever.
+    async fn get_connection(&self) -> Result<ConnectionManager, redis::RedisError> {
+        // Check if we have a cached connection manager
         {
             let conn = self.connection.read().await;
             if let Some(c) = conn.as_ref() {
@@ -59,12 +68,15 @@ impl RedisService {
             }
         }
 
-        // Create new connection
-        let conn = self.client.get_multiplexed_async_connection().await?;
+        // Create a new connection manager
+        let conn = ConnectionManager::new(self.client.clone()).await?;
 
-        // Cache it
+        // Cache it (double-check under the write lock in case another task raced us)
         {
             let mut cached = self.connection.write().await;
+            if let Some(existing) = cached.as_ref() {
+                return Ok(existing.clone());
+            }
             *cached = Some(conn.clone());
         }
 
