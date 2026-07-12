@@ -51,6 +51,20 @@ final class ChatToolExecutorPolicyTests: XCTestCase {
     }
   }
 
+  @MainActor
+  func testPermissionRequestNeedsCurrentTurnAuthorizationOutsideOnboarding() async {
+    let savedOnboardingAppState = ChatToolExecutor.onboardingAppState
+    defer { ChatToolExecutor.onboardingAppState = savedOnboardingAppState }
+    ChatToolExecutor.onboardingAppState = AppState()
+    let result = await ChatToolExecutor.execute(
+      ToolCall(name: "request_permission", arguments: ["type": "screen_recording"], thoughtSignature: nil),
+      isOnboardingSurface: false)
+
+    XCTAssertTrue(result.hasPrefix("POLICY_DENIED:"), "request_permission returned: \(result)")
+    XCTAssertTrue(result.contains("\"code\":\"explicit_user_permission_required\""), "request_permission returned: \(result)")
+    XCTAssertTrue(result.contains("\"capability\":\"desktop.permissions.request\""), "request_permission returned: \(result)")
+  }
+
   // MARK: - Chat screenshot sharing (regression: chat screen vision was hard-denied
   // with no approval path from 2026-06-29 until the Screen Sharing in Chat setting)
 

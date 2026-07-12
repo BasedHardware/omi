@@ -197,7 +197,12 @@ class FloatingControlBarState: NSObject, ObservableObject {
     private var aiDraftRevision: UInt64 = 0
     private var submittedAIDraft: (key: ChatDraftKey, text: String, revision: UInt64)?
 
-    override init() {
+    override convenience init() {
+        self.init(delayedActionScheduler: TaskDelayedActionScheduler())
+    }
+
+    init(delayedActionScheduler: DelayedActionScheduling) {
+        self.delayedActionScheduler = delayedActionScheduler
         super.init()
         isRestoringAIDraft = true
         aiInputText = ChatDraftStore.shared.text(for: activeAIDraftKey)
@@ -309,8 +314,9 @@ class FloatingControlBarState: NSObject, ObservableObject {
     /// whether voice responses should play for this particular query.
     @Published var currentQueryFromVoice: Bool = false
 
-    private var voiceResponseWatchdogWorkItem: DispatchWorkItem?
-    private var thinkingWatchdogWorkItem: DispatchWorkItem?
+    private let delayedActionScheduler: DelayedActionScheduling
+    private var voiceResponseWatchdogCancellation: DelayedActionCancellation?
+    private var thinkingWatchdogCancellation: DelayedActionCancellation?
 
     // Model selection
     @Published var selectedModel: String = ModelQoS.Claude.defaultSelection
@@ -702,35 +708,31 @@ class FloatingControlBarState: NSObject, ObservableObject {
     }
 
     private func updateVoiceResponseWatchdog() {
-        voiceResponseWatchdogWorkItem?.cancel()
-        voiceResponseWatchdogWorkItem = nil
+        voiceResponseWatchdogCancellation?.cancel()
+        voiceResponseWatchdogCancellation = nil
         guard isVoiceResponseGlowActive else { return }
 
-        let workItem = DispatchWorkItem { [weak self] in
+        voiceResponseWatchdogCancellation = delayedActionScheduler.schedule(
+            after: Self.voiceResponseWatchdogDelay
+        ) { [weak self] in
             guard let self, self.isVoiceResponseGlowActive else { return }
+            self.voiceResponseWatchdogCancellation = nil
             self.clearVoiceResponseState()
         }
-        voiceResponseWatchdogWorkItem = workItem
-        DispatchQueue.main.asyncAfter(
-            deadline: .now() + Self.voiceResponseWatchdogDelay,
-            execute: workItem
-        )
     }
 
     private func updateThinkingWatchdog() {
-        thinkingWatchdogWorkItem?.cancel()
-        thinkingWatchdogWorkItem = nil
+        thinkingWatchdogCancellation?.cancel()
+        thinkingWatchdogCancellation = nil
         guard isThinking else { return }
 
-        let workItem = DispatchWorkItem { [weak self] in
+        thinkingWatchdogCancellation = delayedActionScheduler.schedule(
+            after: Self.thinkingWatchdogDelay
+        ) { [weak self] in
             guard let self, self.isThinking else { return }
+            self.thinkingWatchdogCancellation = nil
             self.isThinking = false
         }
-        thinkingWatchdogWorkItem = workItem
-        DispatchQueue.main.asyncAfter(
-            deadline: .now() + Self.thinkingWatchdogDelay,
-            execute: workItem
-        )
     }
 }
 

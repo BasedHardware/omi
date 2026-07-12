@@ -1,5 +1,6 @@
-import SwiftUI
 import Combine
+import OmiSupport
+import SwiftUI
 
 /// Shared store for all tasks - single source of truth
 /// Both Dashboard and Tasks tab observe this store
@@ -441,9 +442,8 @@ class TasksStore: ObservableObject {
     /// to @Published property, preventing unnecessary objectWillChange notifications).
     static func mergeWithoutAdding(source: [TaskActionItem], current: [TaskActionItem]) -> [TaskActionItem] {
         // The source list can contain duplicate ids (local sync/reconciliation races),
-        // so build the lookup with last-write-wins. `Dictionary(uniqueKeysWithValues:)`
-        // traps on a duplicate key and crashes the app (same crash class as #6506).
-        let sourceById = Dictionary(source.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
+        // so build the lookup with last-write-wins.
+        let sourceById = Dictionary(lastWriteWins: source.map { ($0.id, $0) })
         let sourceIds = Set(source.map { $0.id })
 
         var result = current

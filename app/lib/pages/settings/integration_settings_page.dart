@@ -37,6 +37,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
     final provider = context.read<TaskIntegrationProvider>();
     final navigator = Navigator.of(context);
     final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -84,7 +85,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
       }
       provider.refresh();
       scaffoldMessenger.showSnackBar(
-        SnackBar(content: Text(context.l10n.disconnectedFrom(widget.appName)), duration: const Duration(seconds: 2)),
+        SnackBar(content: Text(l10n.disconnectedFrom(widget.appName)), duration: const Duration(seconds: 2)),
       );
       navigator.pop();
     }

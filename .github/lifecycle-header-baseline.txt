@@ -1,0 +1,20 @@
+# Existing designated files without lifecycle headers. This list is a frozen
+# debt census: edits to any listed file must add a valid header instead.
+backend/scripts/app_key_memory_grant_assignment_readiness.py
+backend/scripts/firestore_rules_iam_proof.py
+backend/scripts/first_user_memory_e2e_proof.py
+backend/scripts/mcp_api_key_scope_readiness.py
+backend/scripts/p1_3_v3_archive_short_term_visibility_readiness.py
+backend/scripts/p1_5_tools_fastapi_testclient_readiness.py
+backend/scripts/pinecone_repair_validation_readiness.py
+backend/scripts/rollout_schema_readiness.py
+backend/scripts/shared_ns2_legacy_isolation_readiness.py
+backend/scripts/v3_dev_cloud_readiness.py
+backend/scripts/vector_repair_outbox_oidc_iam_proof.py
+backend/scripts/vector_search_provider_readiness.py
+backend/utils/memory/default_read_rollout.py
+backend/utils/memory/memory_read_rollout_core.py
+backend/utils/memory/v3/compatibility.py
+backend/utils/memory/v3/limited_rollout_config.py
+backend/utils/memory_ingestion/rollout.py
+backend/utils/memory_ingestion/rollout_cli.py

@@ -171,21 +171,25 @@ Future<bool> setPrivateCloudSyncEnabled(bool value) async {
   return data.status == 'ok';
 }
 
-Future<bool> getPrivateCloudSyncEnabled() async {
+/// Returns the server's private-cloud-sync flag, or `null` when the value
+/// could not be fetched (no response / non-200). Never coerce a fetch failure
+/// into `false` — callers must preserve the last known state instead of
+/// silently flipping the toggle off on a transient network error.
+Future<bool?> getPrivateCloudSyncEnabled() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/private-cloud-sync',
     headers: {},
     method: 'GET',
     body: '',
   );
-  if (response == null) return false;
+  if (response == null) return null;
   Logger.debug('getPrivateCloudSyncEnabled response: ${response.body}');
   if (response.statusCode == 200) {
     return wire.GeneratedPrivateCloudSyncResponse.fromJson(
       jsonDecode(response.body) as Map<String, dynamic>,
     ).privateCloudSyncEnabled;
   }
-  return false;
+  return null;
 }
 
 Future<Person?> createPerson(String name) async {

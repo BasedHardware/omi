@@ -177,11 +177,13 @@ class _AppOwnerReviewCardState extends State<AppOwnerReviewCard> {
                                               replyController.text,
                                               widget.review.uid,
                                             );
-                                            context.read<AppProvider>().updateLocalAppReviewResponse(
-                                                  widget.appId,
-                                                  replyController.text,
-                                                  widget.review.uid,
-                                                );
+                                            if (context.mounted) {
+                                              context.read<AppProvider>().updateLocalAppReviewResponse(
+                                                    widget.appId,
+                                                    replyController.text,
+                                                    widget.review.uid,
+                                                  );
+                                            }
                                             setState(() {
                                               widget.review.response = replyController.text;
                                               isLoading = false;

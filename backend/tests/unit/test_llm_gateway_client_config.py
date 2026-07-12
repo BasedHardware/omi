@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 from typing import Any
+import uuid
 
 from langchain_core.callbacks.manager import CallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel
@@ -216,15 +217,14 @@ def test_get_llm_feature_gateway_mode_falls_back_on_transport_failure(monkeypatc
 
     assert result.content == 'legacy response'
     assert len(legacy.calls) == 1
-    assert recorded == [
-        {
-            'feature': 'conv_discard',
-            'outcome': 'fallback',
-            'reason': 'request_error',
-            'route': feature_auto_lane_id('conv_discard'),
-            'mode': 'fallback',
-        }
-    ]
+    assert len(recorded) == 1
+    assert recorded[0]['feature'] == 'conv_discard'
+    assert recorded[0]['outcome'] == 'fallback'
+    assert recorded[0]['reason'] == 'request_error'
+    assert recorded[0]['route'] == feature_auto_lane_id('conv_discard')
+    assert recorded[0]['mode'] == 'fallback'
+    assert recorded[0]['credential_source'] == 'omi_managed'
+    assert str(uuid.UUID(recorded[0]['request_id'])) == recorded[0]['request_id']
 
 
 def test_gateway_serving_does_not_fallback_on_non_transport_errors():

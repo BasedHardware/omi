@@ -1,9 +1,6 @@
 import Foundation
 
-@MainActor
-protocol VoiceTurnDeadlineCancellation: AnyObject {
-  func cancel()
-}
+typealias VoiceTurnDeadlineCancellation = DelayedActionCancellation
 
 @MainActor
 protocol VoiceTurnDeadlineScheduling {
@@ -16,21 +13,13 @@ protocol VoiceTurnDeadlineScheduling {
 }
 
 @MainActor
-private final class TaskVoiceTurnDeadlineCancellation: VoiceTurnDeadlineCancellation {
-  private var task: Task<Void, Never>?
-
-  init(task: Task<Void, Never>) {
-    self.task = task
-  }
-
-  func cancel() {
-    task?.cancel()
-    task = nil
-  }
-}
-
-@MainActor
 final class TaskVoiceTurnDeadlineScheduler: VoiceTurnDeadlineScheduling {
+  private let scheduler: DelayedActionScheduling
+
+  init(scheduler: DelayedActionScheduling? = nil) {
+    self.scheduler = scheduler ?? TaskDelayedActionScheduler()
+  }
+
   func schedule(
     deadline: VoiceTurnDeadline,
     after interval: TimeInterval,
@@ -39,16 +28,7 @@ final class TaskVoiceTurnDeadlineScheduler: VoiceTurnDeadlineScheduling {
     -> VoiceTurnDeadlineCancellation
   {
     _ = deadline
-    let task = Task { @MainActor in
-      do {
-        try await Task.sleep(nanoseconds: UInt64(max(0, interval) * 1_000_000_000))
-      } catch {
-        return
-      }
-      guard !Task.isCancelled else { return }
-      action()
-    }
-    return TaskVoiceTurnDeadlineCancellation(task: task)
+    return scheduler.schedule(after: interval, action: action)
   }
 }
 
@@ -127,6 +107,8 @@ final class VoiceTurnCoordinator {
   private var timeline: [VoiceTurnTimelineEntry] = []
   private let timelineLimit: Int
   private var timelineSequence: UInt64 = 0
+  private var pendingEvents: [VoiceTurnEvent] = []
+  private var isDrainingEvents = false
 
   private(set) var model: VoiceTurnModel
 
@@ -170,6 +152,30 @@ final class VoiceTurnCoordinator {
   }
 
   func send(_ event: VoiceTurnEvent) {
+    pendingEvents.append(event)
+    guard !isDrainingEvents else { return }
+
+    isDrainingEvents = true
+    defer {
+      pendingEvents.removeAll(keepingCapacity: true)
+      isDrainingEvents = false
+    }
+
+    var nextEventIndex = 0
+    while nextEventIndex < pendingEvents.count {
+      let nextEvent = pendingEvents[nextEventIndex]
+      nextEventIndex += 1
+      apply(nextEvent)
+    }
+  }
+
+  /// Applies one event atomically before any callback can advance the machine.
+  ///
+  /// Effect and snapshot handlers are allowed to synchronously call `send`.
+  /// Those nested events join `pendingEvents` and are drained FIFO after this
+  /// event has finished publishing, instead of recursively reducing against a
+  /// half-published transition.
+  private func apply(_ event: VoiceTurnEvent) {
     let before = model
     let reduction = reducer.reduce(model, event)
     model = reduction.model

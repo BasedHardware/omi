@@ -350,7 +350,7 @@ async def _stream_handler(
 
     set_byok_keys(extract_byok_from_websocket(websocket))
 
-    if is_trial_paywalled(uid, source):
+    if await run_blocking(db_executor, is_trial_paywalled, uid, source):
         logger.info("trial paywall: closing desktop WS uid=%s session=%s reason=trial_expired", uid, session_id)
         try:
             await websocket.send_json(

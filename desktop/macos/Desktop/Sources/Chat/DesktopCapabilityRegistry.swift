@@ -145,12 +145,12 @@ enum DesktopCapabilityRegistry {
       when: !available(screenshotTools).isEmpty
     )
     append(
-      "If a screen tool reports permission_required, tell the user Omi cannot access that capability yet, then call request_permission with the returned permission type.",
+      "If a screen tool reports permission_required, tell the user Omi cannot access that capability yet and ask whether they want to grant it. Call request_permission with the returned permission type only after explicit current-turn consent.",
       when: has("request_permission")
     )
     let permissionTools = ["check_permission_status", "request_permission"]
     append(
-      "User asks to grant/check app permissions -> \(toolList(permissionTools)).",
+      "User explicitly asks to grant/check app permissions -> \(toolList(permissionTools)).",
       when: !available(permissionTools).isEmpty
     )
     append("What the user did today/yesterday/this week -> get_daily_recap.", when: has("get_daily_recap"))

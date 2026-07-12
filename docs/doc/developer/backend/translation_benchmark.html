@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Translation Benchmark Report — NLLB vs Google Cloud Translation</title>
+<style>
+  :root { --bg: #ffffff; --fg: #1a1a2e; --accent: #0f3460; --border: #e0e0e0; --highlight: #e8f4f8; --green: #27ae60; --orange: #f39c12; --red: #e74c3c; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 960px; margin: 0 auto; padding: 2rem 1rem; color: var(--fg); line-height: 1.6; background: var(--bg); }
+  h1 { color: var(--accent); border-bottom: 3px solid var(--accent); padding-bottom: 0.5rem; }
+  h2 { color: var(--accent); margin-top: 2.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+  h3 { color: var(--accent); margin-top: 1.5rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.95rem; }
+  th, td { border: 1px solid var(--border); padding: 0.5rem 0.75rem; text-align: left; }
+  th { background: var(--accent); color: white; font-weight: 600; }
+  tr:nth-child(even) { background: #f8f9fa; }
+  tr:hover { background: var(--highlight); }
+  .best { font-weight: 700; color: var(--green); }
+  .moderate { color: var(--orange); }
+  .weak { color: var(--red); }
+  .recommendation { background: var(--highlight); border-left: 4px solid var(--accent); padding: 1rem 1.5rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+  .recommendation strong { color: var(--accent); }
+  code { background: #f4f4f4; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9em; }
+  pre { background: #1a1a2e; color: #e0e0e0; padding: 1rem; border-radius: 6px; overflow-x: auto; font-size: 0.85rem; line-height: 1.5; }
+  pre code { background: none; padding: 0; color: inherit; }
+  .chart { display: flex; align-items: flex-end; gap: 2px; height: 200px; margin: 1rem 0; padding: 0 1rem; }
+  .chart-group { display: flex; flex-direction: column; align-items: center; flex: 1; }
+  .chart-bars { display: flex; align-items: flex-end; gap: 2px; height: 180px; }
+  .bar { width: 18px; border-radius: 2px 2px 0 0; position: relative; min-height: 2px; transition: opacity 0.2s; }
+  .bar:hover { opacity: 0.8; }
+  .bar-600 { background: #a8d8ea; }
+  .bar-1_3 { background: #3498db; }
+  .bar-3_3 { background: #2c3e50; }
+  .bar-google { background: var(--green); }
+  .chart-label { font-size: 0.75rem; margin-top: 4px; color: #666; }
+  .legend { display: flex; gap: 1.5rem; margin: 0.5rem 0 1rem 1rem; font-size: 0.85rem; }
+  .legend-item { display: flex; align-items: center; gap: 4px; }
+  .legend-swatch { width: 14px; height: 14px; border-radius: 2px; }
+  .meta { color: #666; font-size: 0.9rem; margin-bottom: 2rem; }
+  .metric-note { font-size: 0.85rem; color: #666; font-style: italic; margin-top: 0.5rem; }
+  @media (max-width: 600px) { body { padding: 1rem 0.5rem; } table { font-size: 0.8rem; } th, td { padding: 0.3rem 0.5rem; } }
+</style>
+</head>
+<body>
+
+<h1>Translation Benchmark Report</h1>
+<p class="meta">NLLB-200 (600M / 1.3B / 3.3B) vs Google Cloud Translation V3 &mdash; WMT24 test sets, 997 sentences per language pair</p>
+
+<h2>Results: chrF++ Quality Relative to Google</h2>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-swatch" style="background:#a8d8ea"></div> 600M</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#3498db"></div> 1.3B</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#2c3e50"></div> 3.3B</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#27ae60"></div> Google</div>
+</div>
+
+<div class="chart">
+  <div class="chart-group">
+    <div class="chart-bars">
+      <div class="bar bar-600" style="height:151px" title="600M: 84%"></div>
+      <div class="bar bar-1_3" style="height:162px" title="1.3B: 90%"></div>
+      <div class="bar bar-3_3" style="height:169px" title="3.3B: 94%"></div>
+      <div class="bar bar-google" style="height:180px" title="Google: 100%"></div>
+    </div>
+    <div class="chart-label">German</div>
+  </div>
+  <div class="chart-group">
+    <div class="chart-bars">
+      <div class="bar bar-600" style="height:135px" title="600M: 75%"></div>
+      <div class="bar bar-1_3" style="height:146px" title="1.3B: 81%"></div>
+      <div class="bar bar-3_3" style="height:155px" title="3.3B: 86%"></div>
+      <div class="bar bar-google" style="height:180px" title="Google: 100%"></div>
+    </div>
+    <div class="chart-label">Russian</div>
+  </div>
+  <div class="chart-group">
+    <div class="chart-bars">
+      <div class="bar bar-600" style="height:124px" title="600M: 69%"></div>
+      <div class="bar bar-1_3" style="height:133px" title="1.3B: 74%"></div>
+      <div class="bar bar-3_3" style="height:146px" title="3.3B: 81%"></div>
+      <div class="bar bar-google" style="height:180px" title="Google: 100%"></div>
+    </div>
+    <div class="chart-label">Ukrainian</div>
+  </div>
+  <div class="chart-group">
+    <div class="chart-bars">
+      <div class="bar bar-600" style="height:115px" title="600M: 64%"></div>
+      <div class="bar bar-1_3" style="height:121px" title="1.3B: 67%"></div>
+      <div class="bar bar-3_3" style="height:117px" title="3.3B: 65%"></div>
+      <div class="bar bar-google" style="height:180px" title="Google: 100%"></div>
+    </div>
+    <div class="chart-label">Japanese</div>
+  </div>
+  <div class="chart-group">
+    <div class="chart-bars">
+      <div class="bar bar-600" style="height:101px" title="600M: 56%"></div>
+      <div class="bar bar-1_3" style="height:106px" title="1.3B: 59%"></div>
+      <div class="bar bar-3_3" style="height:113px" title="3.3B: 63%"></div>
+      <div class="bar bar-google" style="height:180px" title="Google: 100%"></div>
+    </div>
+    <div class="chart-label">Chinese</div>
+  </div>
+</div>
+<p class="metric-note">chrF++ is the primary metric &mdash; character-level, robust for all scripts including CJK. Hover bars for exact percentages.</p>
+
+<table>
+  <thead>
+    <tr><th>Language</th><th>Tier</th><th>600M</th><th>1.3B</th><th>3.3B</th><th>Google</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>German</td><td>High</td><td>84%</td><td>90%</td><td class="best">94%</td><td>100%</td></tr>
+    <tr><td>Russian</td><td>High</td><td>75%</td><td>81%</td><td class="best">86%</td><td>100%</td></tr>
+    <tr><td>Ukrainian</td><td>Medium</td><td class="moderate">69%</td><td>74%</td><td class="best">81%</td><td>100%</td></tr>
+    <tr><td>Japanese</td><td>High</td><td class="moderate">64%</td><td class="moderate">67%</td><td class="moderate">65%</td><td>100%</td></tr>
+    <tr><td>Chinese</td><td>High</td><td class="weak">56%</td><td class="moderate">59%</td><td class="moderate">63%</td><td>100%</td></tr>
+  </tbody>
+</table>
+
+<h2>Key Findings</h2>
+
+<h3>European / Cyrillic Languages</h3>
+<ul>
+  <li><strong>German</strong>: 3.3B achieves 94% of Google &mdash; near-parity for production use</li>
+  <li><strong>Russian</strong>: Steady improvement from 75% &rarr; 86%, usable at 1.3B+</li>
+  <li><strong>Ukrainian</strong> (medium resource): Largest per-step improvement, 69% &rarr; 81%</li>
+</ul>
+
+<h3>CJK Languages</h3>
+<ul>
+  <li><strong>Japanese</strong>: Plateaus around 65% chrF++ across all sizes</li>
+  <li><strong>Chinese</strong>: Modest improvement from 56% &rarr; 63%</li>
+  <li>For CJK parity with Google, evaluate dedicated models (MADLAD-400-3B, fine-tuned variants)</li>
+</ul>
+
+<h2>Latency Comparison</h2>
+
+<table>
+  <thead>
+    <tr><th>Model</th><th>Avg per Language (997 sentences)</th><th>Throughput</th><th>GPU Memory</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>600M</td><td>~55s</td><td>~3,300 chars/sec</td><td>~2 GB</td></tr>
+    <tr><td>1.3B</td><td>~71s</td><td>~2,600 chars/sec</td><td>~3 GB</td></tr>
+    <tr><td>3.3B</td><td>~126s</td><td>~1,500 chars/sec</td><td>~5 GB</td></tr>
+    <tr><td>Google API</td><td>~6s</td><td>N/A (cloud)</td><td>N/A</td></tr>
+  </tbody>
+</table>
+
+<h2>Recommendation</h2>
+
+<div class="recommendation">
+  <strong>1.3B is the sweet spot</strong> for production deployment:
+  <ul>
+    <li>Fits on a single L4 GPU (24GB VRAM) with ample headroom</li>
+    <li>Achieves 74&ndash;90% of Google quality on European/Cyrillic languages</li>
+    <li>Only ~30% slower than 600M, but significantly better quality</li>
+    <li>3.3B is marginally better on most languages but 2x slower &mdash; diminishing returns</li>
+  </ul>
+</div>
+
+<h2>Cost-Quality Trade-off</h2>
+
+<table>
+  <thead>
+    <tr><th>Model</th><th>GPU Memory</th><th>European Quality</th><th>Latency</th><th>Best For</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>600M</td><td>~2 GB</td><td>76% of Google</td><td>Fast</td><td>Shadow comparison, prototyping</td></tr>
+    <tr><td><strong>1.3B</strong></td><td><strong>~3 GB</strong></td><td><strong>82% of Google</strong></td><td><strong>Moderate</strong></td><td><strong>Production (European languages)</strong></td></tr>
+    <tr><td>3.3B</td><td>~5 GB</td><td>87% of Google</td><td>Slow (2x)</td><td>Quality-critical applications</td></tr>
+  </tbody>
+</table>
+
+<h2>Methodology</h2>
+
+<h3>Corpus</h3>
+<p><strong>WMT24 test sets</strong> via <a href="https://github.com/mjpost/sacrebleu">sacrebleu</a> &mdash; 997 sentence pairs per language pair, no authentication required. WMT (Workshop on Machine Translation) test sets are the standard benchmark corpus for MT research.</p>
+
+<h3>Metrics</h3>
+<table>
+  <thead>
+    <tr><th>Metric</th><th>Role</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>chrF++</strong></td><td>Primary</td><td>Character 6-grams + word bigrams. Robust for CJK, morphologically rich languages.</td></tr>
+    <tr><td><strong>BLEU</strong></td><td>Secondary</td><td>Corpus-level via sacrebleu (13a tokenizer). Widely understood but struggles with CJK.</td></tr>
+    <tr><td><strong>COMET</strong></td><td>Optional</td><td>Neural metric (wmt22-comet-da). Highest human-judgment correlation, requires GPU.</td></tr>
+  </tbody>
+</table>
+
+<h3>Models Tested</h3>
+<table>
+  <thead>
+    <tr><th>Model</th><th>Parameters</th><th>Quantization</th><th>HuggingFace Repo</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>NLLB-200-distilled-600M</td><td>600M</td><td>INT8</td><td><code>JustFrederik/nllb-200-distilled-600M-ct2-int8</code></td></tr>
+    <tr><td>NLLB-200-distilled-1.3B</td><td>1.3B</td><td>INT8</td><td><code>JustFrederik/nllb-200-distilled-1.3B-ct2-int8</code></td></tr>
+    <tr><td>NLLB-200-3.3B</td><td>3.3B</td><td>INT8</td><td><code>OpenNMT/nllb-200-3.3B-ct2-int8</code></td></tr>
+  </tbody>
+</table>
+<p>All models run on NVIDIA L4 GPU (24GB VRAM) via CTranslate2 with INT8 quantization.</p>
+
+<h3>Reproducibility</h3>
+<ul>
+  <li>Google API responses cached (SHA-256 keyed) &mdash; no re-billing across runs</li>
+  <li><code>--model-name</code> flag labels per-model output files</li>
+  <li>Dry-run mode validates dependencies before incurring costs</li>
+  <li>Script: <code>backend/scripts/benchmark_translation.py</code></li>
+</ul>
+
+<h3>Running</h3>
+<pre><code># Prerequisites
+pip install sacrebleu httpx google-cloud-translate
+
+# Benchmark a single model
+python3 backend/scripts/benchmark_translation.py \
+    --nllb-url http://localhost:10150 \
+    --model-name nllb-200-distilled-1.3B \
+    --languages de,zh,ja,ru,uk \
+    --output-dir /tmp/benchmark-results \
+    --skip-comet
+
+# Compare all 3 model sizes
+for model in "nllb-200-distilled-600M" "nllb-200-distilled-1.3B" "nllb-200-3.3B"; do
+    python3 backend/scripts/benchmark_translation.py \
+        --nllb-url http://localhost:10150 \
+        --model-name "$model" \
+        --output-dir /tmp/benchmark-results \
+        --skip-comet
+done</code></pre>
+
+<hr>
+<p class="meta">Generated from benchmark runs on dev-omi-gke cluster. All NLLB models deployed with Helm chart <code>backend/charts/nllb-translation/</code>.</p>
+
+</body>
+</html>

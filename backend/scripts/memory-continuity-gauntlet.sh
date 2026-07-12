@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# LIFECYCLE: permanent
 # Memory continuity gauntlet — standing INV-MEM smoke test for canonical memory tiers.
 #
 # HERMETIC pipeline rules (capture→promote→recall, archive exclusion, surface

@@ -1,8 +1,10 @@
+import logging
 import os
 import wave as _wave
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from io import BytesIO
+from threading import RLock
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import fal_client
@@ -10,18 +12,24 @@ import httpx
 import numpy as np
 from deepgram import DeepgramClient, DeepgramClientOptions
 
+from config.prerecorded_stt import (
+    PrerecordedSTTConfigurationError as _PrerecordedSTTConfigurationError,
+    PrerecordedSTTService,
+    get_prerecorded_models,
+    require_provider_environment,
+)
 from models.transcript_segment import TranscriptSegment
 from utils.byok import get_byok_key
 from utils.other.endpoints import timeit
 from utils.stt.speaker_embedding import SPEAKER_MATCH_THRESHOLD, compare_embeddings, extract_embedding_from_bytes
-import logging
 
 _DG_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
 _MODULATE_TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)
 
 logger = logging.getLogger(__name__)
 
-stt_prerecorded_models = os.getenv('STT_PRERECORDED_MODEL', 'dg-nova-3').split(',')
+# Public compatibility export used by chat/router boundaries.
+PrerecordedSTTConfigurationError = _PrerecordedSTTConfigurationError
 
 _parakeet_languages = {
     'multi',
@@ -87,21 +95,6 @@ class PrerecordedSTTProvider(ABC):
     ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]: ...
 
 
-class PrerecordedSTTService:
-    DEEPGRAM = 'deepgram'
-    MODULATE = 'modulate'
-    PARAKEET = 'parakeet'
-
-
-class PrerecordedSTTConfigurationError(RuntimeError):
-    """A selected pre-recorded STT provider is not configured on this runtime."""
-
-    def __init__(self, provider: str, missing_env: str):
-        self.provider = provider
-        self.missing_env = missing_env
-        super().__init__(f'{provider} pre-recorded STT requires {missing_env}')
-
-
 def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Optional[str], str]:
     """Route pre-recorded STT based on STT_PRERECORDED_MODEL env var.
 
@@ -109,7 +102,7 @@ def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Option
     First model that supports the language wins; falls back to Deepgram nova-3.
     """
     base_lang = language.split('-')[0].split('_')[0].lower() if language else 'en'
-    for m in stt_prerecorded_models:
+    for m in get_prerecorded_models():
         m = m.strip()
         if m.startswith('dg-'):
             dg_model = m.replace('dg-', '', 1)
@@ -126,18 +119,38 @@ def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Option
     return PrerecordedSTTService.DEEPGRAM, language, 'nova-3'
 
 
-# Initialize Deepgram client for pre-recorded transcription
-# WARN: the pre-recorded transcription is available on deepgram cloud
-_deepgram_options = DeepgramClientOptions(options={"keepalive": "true"})
-_deepgram_client = DeepgramClient(os.getenv('DEEPGRAM_API_KEY') or '', _deepgram_options)
+# Lazily initialized because constructing the SDK client at import makes every
+# backend consumer credential-dependent, including schema export and unit discovery.
+_deepgram_options: Optional[DeepgramClientOptions] = None
+_deepgram_client: Optional[DeepgramClient] = None
+_deepgram_client_lock = RLock()
+
+
+def _get_deepgram_options() -> DeepgramClientOptions:
+    global _deepgram_options
+    if _deepgram_options is None:
+        with _deepgram_client_lock:
+            if _deepgram_options is None:
+                _deepgram_options = DeepgramClientOptions(options={"keepalive": "true"})
+    return _deepgram_options
+
+
+def _get_deepgram_client() -> DeepgramClient:
+    global _deepgram_client
+    if _deepgram_client is None:
+        with _deepgram_client_lock:
+            if _deepgram_client is None:
+                require_provider_environment(PrerecordedSTTService.DEEPGRAM)
+                _deepgram_client = DeepgramClient(os.environ['DEEPGRAM_API_KEY'], _get_deepgram_options())
+    return _deepgram_client
 
 
 def _deepgram_client_for_request() -> DeepgramClient:
     """Route to BYOK Deepgram key when set; otherwise use the process-wide client."""
     byok = get_byok_key('deepgram')
     if byok:
-        return DeepgramClient(byok, _deepgram_options)
-    return _deepgram_client
+        return DeepgramClient(byok, _get_deepgram_options())
+    return _get_deepgram_client()
 
 
 # Languages supported by nova-3
@@ -551,9 +564,8 @@ def modulate_prerecorded_from_bytes(
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     logger.info(f'modulate_prerecorded_from_bytes bytes_len={len(audio_bytes)} {sample_rate} {diarize} {attempts}')
 
-    api_key = os.getenv('MODULATE_API_KEY')
-    if not api_key:
-        raise ValueError('MODULATE_API_KEY environment variable is not set')
+    require_provider_environment(PrerecordedSTTService.MODULATE)
+    api_key = os.environ['MODULATE_API_KEY']
 
     try:
         url = 'https://modulate-developer-apis.com/api/velma-2-stt-batch'
@@ -762,9 +774,8 @@ def parakeet_prerecorded_from_bytes(
         f'parakeet_prerecorded_from_bytes bytes_len={len(audio_bytes)} {sample_rate} {diarize} {attempts} encoding={encoding}'
     )
 
-    api_url = os.getenv('HOSTED_PARAKEET_API_URL')
-    if not api_url:
-        raise PrerecordedSTTConfigurationError(PrerecordedSTTService.PARAKEET, 'HOSTED_PARAKEET_API_URL')
+    require_provider_environment(PrerecordedSTTService.PARAKEET)
+    api_url = os.environ['HOSTED_PARAKEET_API_URL']
 
     try:
         if encoding:
@@ -986,7 +997,7 @@ class ParakeetPrerecordedProvider(PrerecordedSTTProvider):
 def get_prerecorded_provider(language: str = 'en') -> PrerecordedSTTProvider:
     """Factory: return the active provider based on STT_PRERECORDED_MODEL with language fallback."""
     base_lang = language.split('-')[0].split('_')[0].lower() if language else 'en'
-    for m in stt_prerecorded_models:
+    for m in get_prerecorded_models():
         m = m.strip()
         if m == 'modulate-velma-2':
             return ModulatePrerecordedProvider()

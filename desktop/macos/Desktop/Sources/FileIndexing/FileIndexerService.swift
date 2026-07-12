@@ -146,6 +146,11 @@ actor FileIndexerService {
         // For incremental scans, load existing index for O(1) lookup
         let existingIndex: [String: Date?] = incremental ? loadExistingIndex(from: db) : [:]
         var scannedPaths = Set<String>()
+        // ~-relative prefixes of directories whose enumeration FAILED (permission
+        // revoked, transient I/O). Files under these were not scanned, but that is
+        // a read error — not deletion — so they must be excluded from the retention
+        // diff (otherwise a single unreadable folder purges its whole index subtree).
+        var failedDirectories = Set<String>()
 
         if incremental {
             log("FileIndexer: Loaded \(existingIndex.count) existing paths for incremental scan")
@@ -178,7 +183,8 @@ actor FileIndexerService {
                 totalFiles: &totalFiles,
                 db: db,
                 existingIndex: existingIndex,
-                scannedPaths: &scannedPaths
+                scannedPaths: &scannedPaths,
+                failedDirectories: &failedDirectories
             )
         }
 
@@ -189,7 +195,12 @@ actor FileIndexerService {
 
         // For incremental scans, remove files that no longer exist on disk
         if incremental && !existingIndex.isEmpty {
-            deleteRemovedFiles(scannedPaths: scannedPaths, existingPaths: Set(existingIndex.keys), db: db)
+            deleteRemovedFiles(
+                scannedPaths: scannedPaths,
+                existingPaths: Set(existingIndex.keys),
+                protectedPrefixes: failedDirectories,
+                db: db
+            )
         }
 
         return totalFiles
@@ -206,7 +217,8 @@ actor FileIndexerService {
         totalFiles: inout Int,
         db: DatabasePool,
         existingIndex: [String: Date?],
-        scannedPaths: inout Set<String>
+        scannedPaths: inout Set<String>,
+        failedDirectories: inout Set<String>
     ) {
         guard scanPolicy.shouldScanDirectory(atDepth: depth) else { return }
 
@@ -218,6 +230,10 @@ actor FileIndexerService {
                 options: [.skipsHiddenFiles]
             )
         } catch {
+            // Enumeration failure is a read error, not deletion. Record this
+            // directory so its previously-indexed files are NOT purged by the
+            // retention diff (see deleteRemovedFiles / failedDirectories).
+            failedDirectories.insert(scanPolicy.relativePath(for: url, homePath: homePath))
             log("FileIndexer: Cannot read \(url.lastPathComponent): \(error.localizedDescription)")
             return
         }
@@ -269,7 +285,8 @@ actor FileIndexerService {
                         totalFiles: &totalFiles,
                         db: db,
                         existingIndex: existingIndex,
-                        scannedPaths: &scannedPaths
+                        scannedPaths: &scannedPaths,
+                        failedDirectories: &failedDirectories
                     )
                     continue
                 }
@@ -357,8 +374,32 @@ actor FileIndexerService {
     }
 
     /// Delete files from the index that no longer exist on disk
-    private func deleteRemovedFiles(scannedPaths: Set<String>, existingPaths: Set<String>, db: DatabasePool) {
-        let removed = existingPaths.subtracting(scannedPaths)
+    /// Paths that are genuinely gone from disk (present in the index, not seen this
+    /// scan, and NOT under a directory whose enumeration failed). Pure + static so
+    /// the retention diff can be tested without a database or filesystem.
+    static func pathsToDelete(
+        scannedPaths: Set<String>,
+        existingPaths: Set<String>,
+        protectedPrefixes: Set<String>
+    ) -> Set<String> {
+        existingPaths.subtracting(scannedPaths).filter { path in
+            !protectedPrefixes.contains { prefix in
+                path == prefix || path.hasPrefix(prefix + "/")
+            }
+        }
+    }
+
+    private func deleteRemovedFiles(
+        scannedPaths: Set<String>,
+        existingPaths: Set<String>,
+        protectedPrefixes: Set<String>,
+        db: DatabasePool
+    ) {
+        let removed = Self.pathsToDelete(
+            scannedPaths: scannedPaths,
+            existingPaths: existingPaths,
+            protectedPrefixes: protectedPrefixes
+        )
         guard !removed.isEmpty else { return }
 
         log("FileIndexer: Removing \(removed.count) deleted files from index")
