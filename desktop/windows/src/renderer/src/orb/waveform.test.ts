@@ -111,6 +111,11 @@ describe('waveBars', () => {
     const barW = ((2 * halfW) / 1) * WAVE.barRadiusFrac
     expect(silent.halfH).toBeLessThan(barW)
     expect(silent.halfH).toBeCloseTo(barW * WAVE.restRadiusFrac, 6)
+    // The dot must stay a "comfortably visible dot" — not a speck (user, live
+    // tune 2026-07-12: 0.5 read "way too thin/tiny") and not a full bar. Pins the
+    // deliberate 0.7 in a guarded band so a future edit can't silently regress it.
+    expect(WAVE.restRadiusFrac).toBeGreaterThanOrEqual(0.65)
+    expect(WAVE.restRadiusFrac).toBeLessThanOrEqual(0.8)
   })
 
   it('bars are evenly spaced, centered on the row, and within bounds', () => {

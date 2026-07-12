@@ -30,11 +30,13 @@ export const WAVE = {
   /** Bar half-width (the rounded cap radius) as a fraction of the pitch. Sets the
    *  bar:gap ratio. */
   barRadiusFrac: 0.36,
-  /** RESTING (silence) dot radius as a fraction of the bar half-width — a small
-   *  round dot, clearly shorter than a bar (user: "shorten the default
-   *  no-speaking bars"). Width ramps up to the full bar quickly (see widthLevel)
-   *  so actual speech bars stay a uniform width; only near-silence reads as a dot. */
-  restRadiusFrac: 0.5,
+  /** RESTING (silence) dot radius as a fraction of the bar half-width — a round
+   *  dot, clearly shorter than a bar (user: "shorten the default no-speaking
+   *  bars") yet comfortably visible (user, live tune 2026-07-12: 0.5 read "way
+   *  too thin/tiny — a tad bit vertically thicker"). Width ramps up to the full
+   *  bar quickly (see widthLevel) so actual speech bars stay a uniform width;
+   *  only near-silence reads as a dot. */
+  restRadiusFrac: 0.7,
   /** Level by which a slot reaches its full bar WIDTH (height keeps growing past
    *  it). Keeps all speaking bars uniform-width while silence stays a slim dot. */
   widthLevel: 0.22,
