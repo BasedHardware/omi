@@ -115,6 +115,41 @@ body.bar-body {
     transform 190ms cubic-bezier(0.3, 0.8, 0.3, 1) 120ms;
 }
 
+/* ONE persistent orb, hoisted ABOVE both cross-dissolving content layers and the
+   box morph. It never remounts, never fades, and never changes canvas size or
+   preset — any of those rebuilds the WebGL animator (Orb.tsx: build effect keyed
+   on cssW/cssH/preset), which blinks the logo. Instead it GLIDES from its pill
+   seat to its panel-header seat on a transform-only FLIP (translate + CSS-scale
+   of the single 34px canvas), so open/close/view-swap read as one logo that
+   never flickers. pointer-events:none so the pill's click-to-expand passes
+   through the orb sitting over it. z-index keeps it over the content fade. */
+.bar-orb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+.bar-orb-wrap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 34px;
+  height: 34px;
+  transform-origin: top left;
+  /* Pill seat: the 26px pill orb sat at left:10 top:5 (10px pad, centered in the
+     36px row). Scale the 34px canvas by 26/34 to match — downscale stays crisp. */
+  transform: translate(10px, 5px) scale(0.7647);
+  transition: transform 170ms cubic-bezier(0.3, 0.8, 0.3, 1);
+  will-change: transform;
+}
+.bar-surface-expanded .bar-orb-wrap {
+  /* Panel-header seat: horizontally centered in the 336px panel, pt-3 (12px) down.
+     Matches the surface's own expand timing (240ms) so orb and box move together. */
+  transform: translate(151px, 12px) scale(1);
+  transition: transform 240ms cubic-bezier(0.3, 0.8, 0.3, 1);
+}
+
 /* Inner view swap (chat list ⇄ inline conversation) morphs in place — a gentle
    grow-and-fade seated at the top, never a fresh sheet sliding down from the
    edge. Keyed remount in BarChatSurface replays this on every view change.
@@ -165,7 +200,9 @@ body.bar-body {
   .bar-surface,
   .bar-surface.bar-surface-expanded,
   .bar-content,
-  .bar-content.bar-content-active {
+  .bar-content.bar-content-active,
+  .bar-orb-wrap,
+  .bar-surface-expanded .bar-orb-wrap {
     transition: none;
   }
   .bar-content {

@@ -312,14 +312,9 @@ export function BarApp(): React.JSX.Element {
             onClick={() => window.omiBar.expand()}
           >
             <div className="bar-pill">
-              <Orb
-                size={26}
-                preset="compact"
-                state={orbState}
-                amplitudeSource={amplitudeSource}
-                genesisNonce={genesisNonce}
-                visible={mode !== null}
-              />
+              {/* Slot reserving the pill orb's footprint; the real orb is the ONE
+                  persistent mount below, overlaid here so the label stays put. */}
+              <div className="h-[26px] w-[26px] shrink-0" aria-hidden />
               <span className="bar-pill-label">{pillText}</span>
             </div>
           </div>
@@ -328,15 +323,10 @@ export function BarApp(): React.JSX.Element {
               Always mounted so it's ready to cross-dissolve on expand. */}
           <div className={`bar-content ${expanded ? 'bar-content-active' : ''}`}>
             <div ref={panelInnerRef}>
-              {/* pt-3: give the orb breathing room from the flush top edge. */}
+              {/* pt-3: reserve the orb header's height (the real orb is the ONE
+                  persistent mount below, overlaid over this slot). */}
               <div className="relative flex items-center justify-center pt-3">
-                <Orb
-                  size={34}
-                  state={orbState}
-                  amplitudeSource={amplitudeSource}
-                  genesisNonce={genesisNonce}
-                  visible={mode !== null && expanded}
-                />
+                <div className="h-[34px] w-[34px]" aria-hidden />
               </div>
               <div className="bar-zoom">
                 {!ready ? (
@@ -362,6 +352,24 @@ export function BarApp(): React.JSX.Element {
                   />
                 )}
               </div>
+            </div>
+          </div>
+
+          {/* THE orb — one persistent mount, hoisted above both cross-dissolving
+              content layers and the box morph. It never remounts, fades, or
+              changes size/preset (which rebuild the WebGL animator = a blink); it
+              glides between its pill seat and panel-header seat via a transform-
+              only FLIP (see .bar-orb / .bar-orb-wrap). This is why the logo no
+              longer flashes on expand/collapse. */}
+          <div className="bar-orb" aria-hidden>
+            <div className="bar-orb-wrap">
+              <Orb
+                size={34}
+                state={orbState}
+                amplitudeSource={amplitudeSource}
+                genesisNonce={genesisNonce}
+                visible={mode !== null}
+              />
             </div>
           </div>
         </div>
