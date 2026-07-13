@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 import subprocess
 
@@ -7,6 +8,21 @@ CHANGED_FILES = ROOT / 'scripts/changed-files'
 
 def _git(repo: Path, *args: str) -> str:
     return subprocess.check_output(['git', *args], cwd=repo, text=True).strip()
+
+
+def _find_git_bash(git_exec_path: Path) -> Path:
+    for parent in git_exec_path.parents:
+        for relative_path in ('bin/bash.exe', 'usr/bin/bash.exe'):
+            candidate = parent / relative_path
+            if candidate.is_file():
+                return candidate
+    raise FileNotFoundError(f'Git Bash was not found above {git_exec_path}')
+
+
+def _bash() -> str:
+    if os.name != 'nt':
+        return 'bash'
+    return str(_find_git_bash(Path(_git(ROOT, '--exec-path'))))
 
 
 def _commit(repo: Path, message: str) -> str:
@@ -40,7 +56,7 @@ def test_changed_files_reports_delete_rename_and_file_type_change(tmp_path):
     changed_type.symlink_to('target.py')
     head = _commit(repo, 'move delete and change type')
 
-    changed = set(subprocess.check_output([str(CHANGED_FILES), base, head], cwd=repo, text=True).splitlines())
+    changed = set(subprocess.check_output([_bash(), str(CHANGED_FILES), base, head], cwd=repo, text=True).splitlines())
 
     assert changed == {
         'backend/routers/deleted.py',
@@ -58,3 +74,14 @@ def test_changed_files_helper_is_not_hidden_by_repository_ignore_rules():
     )
 
     assert result.returncode == 1
+
+
+def test_git_bash_resolution_uses_the_git_installation(tmp_path):
+    git_root = tmp_path / 'Git'
+    git_exec_path = git_root / 'mingw64/libexec/git-core'
+    git_exec_path.mkdir(parents=True)
+    git_bash = git_root / 'bin/bash.exe'
+    git_bash.parent.mkdir()
+    git_bash.touch()
+
+    assert _find_git_bash(git_exec_path) == git_bash
