@@ -109,6 +109,8 @@ checks:
     reason: "desktop Swift production or test structure changed"
 
 exempt:
+  - path: ".github/scripts/check_pr_scope.py"
+    reason: "needs pull_request label context from the workflow event, not available to manifest lanes"
   - path: ".github/scripts/check-desktop-auto-beta-candidate.py"
     reason: "release pipeline check requires published candidate artifacts and workflow inputs"
   - path: ".github/scripts/check-desktop-prod-promotion-policy.py"
