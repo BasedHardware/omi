@@ -428,6 +428,12 @@ environments:
               secret: PINECONE_API_KEY
               version: latest
         memory-maintenance-job:
+          # Keep the known-good dev maintenance capacity in the checked-in deploy contract.
+          # These must not rely on a prior Cloud Run revision retaining live-only patches.
+          flags:
+            --task-timeout: 3600s
+            --cpu: '2'
+            --memory: 2Gi
           env:
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
@@ -455,6 +461,9 @@ environments:
               category: memory_rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
+              category: memory_rollout
+            TYPESENSE_HOST_PORT:
+              value: '443'
               category: memory_rollout
             PINECONE_INDEX_NAME:
               value: memories-backend-dev

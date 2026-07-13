@@ -745,6 +745,14 @@ def _validate_cloud_run_workflows(
                 actual=actual_secrets,
             )
         )
+        errors.extend(
+            _validate_workflow_flags(
+                scope=f'cloud_run_workflow/{job}',
+                expected=_as_config_dict(job_config.get('flags')) or {},
+                actual=_substitute_values(job_state.get('flags', {}), variables=workflow_vars),
+                strict_provisional=strict_provisional,
+            )
+        )
     return errors
 
 
@@ -1098,6 +1106,7 @@ def _rendered_runtime_env_outputs(workflow: ConfigDict, *, env: str, manifest: C
             if job_config is None:
                 continue
             output_prefix = job.replace('-', '_')
+            outputs[f'{output_prefix}_flags'] = _render_cloud_run_flags(job_config.get('flags', {}))
             outputs[f'{output_prefix}_env_vars'] = _render_cloud_run_env_vars(job_config.get('env', {}))
             outputs[f'{output_prefix}_secrets'] = _render_cloud_run_secrets(job_config.get('secrets', {}))
     return outputs

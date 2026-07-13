@@ -1103,7 +1103,10 @@ def test_memory_maintenance_auto_dev_workflow_is_listed_and_targets_job():
     assert "backend/**" in text
     assert 'Dockerfile.memory_maintenance_job' in text
     assert "id-token: 'write'" not in text
-    assert 'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }}' in text
+    assert (
+        'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} '
+        '${{ steps.runtime-env.outputs.memory_maintenance_job_flags }}'
+    ) in text
     manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'))
     assert (
         '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml'
