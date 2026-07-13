@@ -81,6 +81,8 @@ pub enum AgentEvent {
         input_tokens: u32,
         #[serde(rename = "outputTokens", default)]
         output_tokens: u32,
+        #[serde(rename = "fromVoice", default)]
+        from_voice: bool,
     },
     Error {
         message: String,
@@ -155,6 +157,7 @@ impl AgentRuntime {
         &self,
         messages: Vec<(String, String)>, // (role, content) — full history
         system_prompt: &str,
+        from_voice: bool,
         cfg: &crate::config::AppConfig,
     ) -> Result<()> {
         let session_id = uuid::Uuid::new_v4().to_string();
@@ -266,6 +269,7 @@ impl AgentRuntime {
             session_id,
             input_tokens: 0,
             output_tokens,
+            from_voice,
         });
 
         Ok(())
@@ -281,12 +285,12 @@ impl AgentRuntime {
                 let _ = self.inner.event_tx.send(AgentEvent::HitlRequest { thread_id, message });
             }
             Some(crate::mcp_bridge::McpResponse::Text(text)) => {
-                // Return result to the UI
                 let _ = self.inner.event_tx.send(AgentEvent::Result {
                     text,
                     session_id,
                     input_tokens: 0,
                     output_tokens: 0,
+                    from_voice: false,
                 });
             }
             None => {
