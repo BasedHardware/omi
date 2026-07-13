@@ -93,6 +93,10 @@ jobs:
         working-directory: backend
         run: bash scripts/typecheck.sh
 
+      - name: Check unit test discovery
+        working-directory: backend
+        run: python scripts/check_unit_test_discovery.py
+
       - name: Select backend unit tests
         id: select-tests
         working-directory: backend
