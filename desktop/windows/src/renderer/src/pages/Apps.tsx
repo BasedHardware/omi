@@ -13,13 +13,8 @@ import {
 import { omiApi } from '../lib/apiClient'
 import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
+import { popularityScore, rankSearchResults } from '../lib/appRanking'
 import type { App as AppEntry } from '../lib/omiApi.generated'
-
-// Ranks an app by rating weighted by install count (log-damped). Used to order
-// both category rows and search results so the most relevant apps surface first.
-function popularityScore(a: AppEntry): number {
-  return (a.rating_avg ?? 0) * Math.log((a.installs ?? 1) + 1)
-}
 
 // Turns raw API categories like "chat-assistants" into "Chat Assistants".
 function formatCategory(raw: string): string {
@@ -167,45 +162,56 @@ export function Apps(): React.JSX.Element {
     setRefreshing(false)
   }
 
-  // Stable identity (only changes when busy/enabled change, not on every keystroke)
-  // so memoized AppCards skip reconciliation while the user types in search.
-  const toggle = useCallback(
-    async (a: AppEntry): Promise<void> => {
-      if (busy.has(a.id)) return
-      setBusy((s) => new Set(s).add(a.id))
-      const wasEnabled = enabled.has(a.id)
-      // Optimistic
+  // Latest-value refs so `toggle` can read current busy/enabled without listing
+  // them as deps. `busy`/`enabled` are new Sets on every toggle, so depending on
+  // them would give `toggle` a fresh identity each time and re-render every
+  // memoized AppCard. Synced in an effect (never during render) and read only from
+  // the click handler, so `toggle` can keep empty deps and a stable identity.
+  const busyRef = useRef(busy)
+  const enabledRef = useRef(enabled)
+  useEffect(() => {
+    busyRef.current = busy
+  }, [busy])
+  useEffect(() => {
+    enabledRef.current = enabled
+  }, [enabled])
+
+  // Stable identity (empty deps) so memoized AppCards skip reconciliation while the
+  // user types in search or toggles another app.
+  const toggle = useCallback(async (a: AppEntry): Promise<void> => {
+    if (busyRef.current.has(a.id)) return
+    setBusy((s) => new Set(s).add(a.id))
+    const wasEnabled = enabledRef.current.has(a.id)
+    // Optimistic
+    setEnabled((s) => {
+      const next = new Set(s)
+      if (wasEnabled) next.delete(a.id)
+      else next.add(a.id)
+      return next
+    })
+    try {
+      if (wasEnabled) {
+        await omiApi.post('/v1/apps/disable', null, { params: { app_id: a.id } })
+      } else {
+        await omiApi.post('/v1/apps/enable', null, { params: { app_id: a.id } })
+      }
+    } catch (e) {
+      console.error('Toggle app failed:', e)
+      // Revert
       setEnabled((s) => {
         const next = new Set(s)
-        if (wasEnabled) next.delete(a.id)
-        else next.add(a.id)
+        if (wasEnabled) next.add(a.id)
+        else next.delete(a.id)
         return next
       })
-      try {
-        if (wasEnabled) {
-          await omiApi.post('/v1/apps/disable', null, { params: { app_id: a.id } })
-        } else {
-          await omiApi.post('/v1/apps/enable', null, { params: { app_id: a.id } })
-        }
-      } catch (e) {
-        console.error('Toggle app failed:', e)
-        // Revert
-        setEnabled((s) => {
-          const next = new Set(s)
-          if (wasEnabled) next.add(a.id)
-          else next.delete(a.id)
-          return next
-        })
-      } finally {
-        setBusy((s) => {
-          const next = new Set(s)
-          next.delete(a.id)
-          return next
-        })
-      }
-    },
-    [busy, enabled]
-  )
+    } finally {
+      setBusy((s) => {
+        const next = new Set(s)
+        next.delete(a.id)
+        return next
+      })
+    }
+  }, [])
 
   const LIMIT_PER_CATEGORY = 7
   // Cap rendered search results so a broad query (e.g. "a") can't mount the whole
@@ -236,20 +242,10 @@ export function Apps(): React.JSX.Element {
     }
 
     if (debouncedQuery.trim()) {
-      const q = debouncedQuery.trim().toLowerCase()
-      return {
-        // Sort by relevance (popularity) before the render-time SEARCH_LIMIT cap so
-        // the shown matches are the most useful ones, not just catalog order.
-        search: base
-          .filter(
-            (a) =>
-              a.name?.toLowerCase().includes(q) ||
-              a.description?.toLowerCase().includes(q) ||
-              a.category?.toLowerCase().includes(q) ||
-              a.author?.toLowerCase().includes(q)
-          )
-          .sort((a, b) => popularityScore(b) - popularityScore(a))
-      }
+      // Rank matches by name-relevance then popularity before the render-time
+      // SEARCH_LIMIT cap, so a user's specific app (searched by name) is never
+      // pushed past the cap by more-popular substring matches. See rankSearchResults.
+      return { search: rankSearchResults(base, debouncedQuery) }
     }
 
     const categories: Record<string, AppEntry[]> = {}
