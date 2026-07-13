@@ -754,17 +754,15 @@ async fn chat_completions(
         );
         byok_key.to_string()
     } else {
-        match route.provider {
-            Provider::Anthropic => state
-                .config
-                .anthropic_api_key
-                .as_ref()
-                .ok_or_else(|| {
-                    tracing::error!("chat_completions: ANTHROPIC_API_KEY not configured");
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?
-                .clone(),
-        }
+        state
+            .config
+            .anthropic_api_key
+            .as_ref()
+            .ok_or_else(|| {
+                tracing::error!("chat_completions: ANTHROPIC_API_KEY not configured");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
+            .clone()
     };
 
     // Translate request
@@ -1344,7 +1342,6 @@ mod tests {
         let route = resolve_model("omi-sonnet").unwrap();
         assert_eq!(route.public_model, "omi-sonnet");
         assert_eq!(route.upstream_model, "claude-sonnet-4-6");
-        assert_eq!(route.provider, Provider::Anthropic);
     }
 
     #[test]
