@@ -988,6 +988,44 @@ def test_memory_maintenance_job_contract_passes_for_repo_manifest():
     assert validator.validate_runtime_env(env='prod') == []
 
 
+def test_memory_maintenance_job_contract_rejects_missing_dev_capacity_flag(tmp_path):
+    validator = load_validator()
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    job = manifest['environments']['dev']['cloud_run']['jobs']['memory-maintenance-job']
+    del job['flags']['--memory']
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+
+    errors = validator.validate_runtime_env(env='dev', manifest_path=path)
+
+    assert (
+        validator.ValidationError(
+            'dev/cloud_run/jobs/memory-maintenance-job',
+            'missing required dev Cloud Run flag --memory',
+        )
+        in errors
+    )
+
+
+def test_memory_maintenance_job_contract_rejects_wrong_dev_capacity_value(tmp_path):
+    validator = load_validator()
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    job = manifest['environments']['dev']['cloud_run']['jobs']['memory-maintenance-job']
+    job['flags']['--cpu'] = '1'
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+
+    errors = validator.validate_runtime_env(env='dev', manifest_path=path)
+
+    assert (
+        validator.ValidationError(
+            'dev/cloud_run/jobs/memory-maintenance-job',
+            "dev Cloud Run flag --cpu must be '2'",
+        )
+        in errors
+    )
+
+
 def test_memory_maintenance_job_contract_rejects_notifications_job_maintenance_config(tmp_path):
     validator = load_validator()
     manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
