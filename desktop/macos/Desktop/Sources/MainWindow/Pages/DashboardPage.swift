@@ -2166,6 +2166,7 @@ private struct HomeAskBar: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(attachments.count >= kMaxChatAttachments)
+                .omiPointerCursor(isEnabled: attachments.count < kMaxChatAttachments)
                 .help("Attach files")
 
                 TextField(
@@ -2178,6 +2179,7 @@ private struct HomeAskBar: View {
                 .foregroundStyle(HomePalette.ink)
                 .focused(focus)
                 .onSubmit(handleSubmit)
+                .omiIBeamCursor()
 
                 actionButton
             }
@@ -2311,6 +2313,7 @@ private struct HomeAskBar: View {
         }
         .buttonStyle(.plain)
         .disabled(isStopping)
+        .omiPointerCursor(isEnabled: !isStopping)
         .help("Stop")
         .accessibilityLabel("Stop response")
     }
@@ -2348,6 +2351,7 @@ private struct HomeSendButtonStyle: ButtonStyle {
             .omiAnimation(.easeOut(duration: 0.10), value: configuration.isPressed)
             .omiAnimation(.easeOut(duration: 0.15), value: isHovering)
             .onHover(perform: updateHover)
+            .omiPointerCursor()
     }
 
     private func updateHover(_ hovering: Bool) {
@@ -2406,6 +2410,7 @@ private struct HomeAskBarConnectButton: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
+        .omiPointerCursor()
         .help("Connect data & use omi anywhere")
         .accessibilityLabel(isActive ? "Close connect" : "Connect")
     }
@@ -2450,6 +2455,7 @@ private struct HomeSuggestionRow: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
+        .omiPointerCursor()
         .accessibilityLabel(text)
     }
 }
@@ -3372,6 +3378,7 @@ private struct HomeStatRibbonCell: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
+        .omiPointerCursor()
         .accessibilityLabel("\(item.title), \(item.value)")
     }
 }
