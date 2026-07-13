@@ -246,9 +246,12 @@ export function ConversationDetail({
       if (item.id) {
         await omiApi.patch(`/v1/action-items/${item.id}/completed`, { completed: next })
       } else if (id) {
+        // Embedded action items on a conversation never carry an `id` (the backend's
+        // embedded model has none) — this is the only path ever taken in practice.
+        // The backend requires parallel arrays, not a single-item shape.
         await omiApi.patch(`/v1/conversations/${id}/action-items`, {
-          action_item_idx: idx,
-          completed: next
+          items_idx: [idx],
+          values: [next]
         })
       }
     } catch (e) {
