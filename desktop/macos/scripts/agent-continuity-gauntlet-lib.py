@@ -18,9 +18,11 @@ import sqlite3
 import struct
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -322,28 +324,126 @@ def sine_pcm16k(seconds: float = 0.75, frequency: float = 220.0, amplitude: floa
     return b"".join(chunks)
 
 
-def trace_line_count() -> int:
-    if not TRACE_LOG.exists():
-        return 0
-    with TRACE_LOG.open("r", encoding="utf-8", errors="replace") as handle:
-        return sum(1 for line in handle if line.strip())
+@dataclass(frozen=True)
+class TraceCursor:
+    device: int | None
+    inode: int | None
+    offset: int
+    line_count: int
 
 
-def read_new_traces(since_line: int) -> list[dict[str, Any]]:
-    if not TRACE_LOG.exists():
-        return []
+@dataclass(frozen=True)
+class TraceLogLine:
+    source: str
+    line_number: int
+    text: str
+
+
+def capture_trace_cursor(trace_log: Path = TRACE_LOG) -> TraceCursor:
+    try:
+        with trace_log.open("rb") as handle:
+            stat = os.fstat(handle.fileno())
+            remaining = stat.st_size
+            line_count = 0
+            bytes_read = 0
+            last_complete_offset = 0
+            while remaining > 0:
+                chunk = handle.read(min(1024 * 1024, remaining))
+                if not chunk:
+                    break
+                line_count += chunk.count(b"\n")
+                final_newline = chunk.rfind(b"\n")
+                if final_newline >= 0:
+                    last_complete_offset = bytes_read + final_newline + 1
+                bytes_read += len(chunk)
+                remaining -= len(chunk)
+            return TraceCursor(stat.st_dev, stat.st_ino, last_complete_offset, line_count)
+    except FileNotFoundError:
+        return TraceCursor(None, None, 0, 0)
+
+
+def _opened_trace_file(path: Path):
+    try:
+        handle = path.open("rb")
+    except FileNotFoundError:
+        return None
+    stat = os.fstat(handle.fileno())
+    return handle, (stat.st_dev, stat.st_ino), stat.st_size
+
+
+def _read_trace_file_lines(
+    opened: tuple[Any, tuple[int, int], int],
+    *,
+    offset: int,
+    first_line_number: int,
+    source: str,
+) -> list[TraceLogLine]:
+    handle, _, size = opened
+    effective_offset = offset if 0 <= offset <= size else 0
+    handle.seek(effective_offset)
+    text = handle.read().decode("utf-8", errors="replace")
+    return [
+        TraceLogLine(source=source, line_number=first_line_number + index, text=line)
+        for index, line in enumerate(text.splitlines())
+    ]
+
+
+def _new_trace_lines(cursor: TraceCursor, trace_log: Path = TRACE_LOG) -> list[TraceLogLine]:
+    backup_log = trace_log.with_name("traces.1.jsonl")
+    active = _opened_trace_file(trace_log)
+    backup = _opened_trace_file(backup_log)
+    cursor_identity = (cursor.device, cursor.inode)
+    try:
+        if active is not None and active[1] == cursor_identity:
+            if active[2] >= cursor.offset:
+                return _read_trace_file_lines(
+                    active,
+                    offset=cursor.offset,
+                    first_line_number=cursor.line_count + 1,
+                    source=trace_log.name,
+                )
+            return _read_trace_file_lines(
+                active,
+                offset=0,
+                first_line_number=1,
+                source=trace_log.name,
+            )
+
+        lines: list[TraceLogLine] = []
+        if backup is not None and backup[1] == cursor_identity:
+            lines.extend(_read_trace_file_lines(
+                backup,
+                offset=cursor.offset,
+                first_line_number=cursor.line_count + 1,
+                source=backup_log.name,
+            ))
+        if active is not None:
+            lines.extend(_read_trace_file_lines(
+                active,
+                offset=0,
+                first_line_number=1,
+                source=trace_log.name,
+            ))
+        return lines
+    finally:
+        if active is not None:
+            active[0].close()
+        if backup is not None:
+            backup[0].close()
+
+
+def read_new_traces(cursor: TraceCursor, trace_log: Path = TRACE_LOG) -> list[dict[str, Any]]:
     traces: list[dict[str, Any]] = []
-    with TRACE_LOG.open("r", encoding="utf-8", errors="replace") as handle:
-        for line_number, line in enumerate(handle, start=1):
-            if line_number <= since_line:
-                continue
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                traces.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
+    for line in _new_trace_lines(cursor, trace_log):
+        raw = line.text.strip()
+        if not raw:
+            continue
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            traces.append(parsed)
     return traces
 
 
@@ -364,7 +464,8 @@ def read_all_traces() -> list[dict[str, Any]]:
 
 
 def read_new_trace_diagnostics(
-    since_line: int,
+    cursor: TraceCursor,
+    trace_log: Path = TRACE_LOG,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Return new QueryTracer rows plus any malformed JSONL evidence.
 
@@ -372,38 +473,35 @@ def read_new_trace_diagnostics(
     line. The convergence acceptance step cannot: malformed frames are one of its
     explicit zero-count gates, so it records line numbers and a bounded preview.
     """
-    if not TRACE_LOG.exists():
-        return [], []
     traces: list[dict[str, Any]] = []
     malformed: list[dict[str, Any]] = []
-    with TRACE_LOG.open("r", encoding="utf-8", errors="replace") as handle:
-        for line_number, line in enumerate(handle, start=1):
-            if line_number <= since_line:
-                continue
-            raw = line.strip()
-            if not raw:
-                continue
-            try:
-                parsed = json.loads(raw)
-            except json.JSONDecodeError as exc:
-                malformed.append(
-                    {
-                        "line": line_number,
-                        "error": exc.msg,
-                        "preview": raw[:400],
-                    }
-                )
-                continue
-            if not isinstance(parsed, dict):
-                malformed.append(
-                    {
-                        "line": line_number,
-                        "error": "top-level JSONL value is not an object",
-                        "preview": raw[:400],
-                    }
-                )
-                continue
-            traces.append(parsed)
+    for line in _new_trace_lines(cursor, trace_log):
+        raw = line.text.strip()
+        if not raw:
+            continue
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            malformed.append(
+                {
+                    "source": line.source,
+                    "line": line.line_number,
+                    "error": exc.msg,
+                    "preview": raw[:400],
+                }
+            )
+            continue
+        if not isinstance(parsed, dict):
+            malformed.append(
+                {
+                    "source": line.source,
+                    "line": line.line_number,
+                    "error": "top-level JSONL value is not an object",
+                    "preview": raw[:400],
+                }
+            )
+            continue
+        traces.append(parsed)
     return traces, malformed
 
 
@@ -609,19 +707,24 @@ def run_terminal_event_count(payload: dict[str, Any], run_id: str, status: str) 
 
 
 def wait_for_new_traces(
-    since_line: int,
+    cursor: TraceCursor,
     *,
     min_count: int = 1,
     timeout_sec: float = 8.0,
     poll_sec: float = 0.25,
+    query_text: str | None = None,
+    trace_log: Path = TRACE_LOG,
 ) -> list[dict[str, Any]]:
     deadline = time.monotonic() + timeout_sec
     while time.monotonic() < deadline:
-        traces = read_new_traces(since_line)
+        traces = read_new_traces(cursor, trace_log)
+        if query_text is not None:
+            traces = traces_for_query(traces, query_text)
         if len(traces) >= min_count:
             return traces
         time.sleep(poll_sec)
-    return read_new_traces(since_line)
+    traces = read_new_traces(cursor, trace_log)
+    return traces_for_query(traces, query_text) if query_text is not None else traces
 
 
 def traces_for_query(traces: list[dict[str, Any]], query_text: str) -> list[dict[str, Any]]:
@@ -1203,7 +1306,7 @@ class GauntletRunner:
         )
 
     def ask_floating_and_wait(self, query: str, timeout_ms: int) -> tuple[dict[str, Any], dict[str, str], list[dict[str, Any]]]:
-        trace_start = trace_line_count()
+        trace_start = capture_trace_cursor()
         send = self.bridge_act("ask", {"query": query})
         if send.get("ok") is False:
             raise SystemExit(f"ask (floating) failed: {send.get('error', send)}")
@@ -1685,7 +1788,7 @@ class GauntletRunner:
         return selected
 
     def send_and_wait(self, query: str, timeout_ms: int) -> tuple[dict[str, Any], dict[str, str], list[dict[str, Any]]]:
-        trace_start = trace_line_count()
+        trace_start = capture_trace_cursor()
         send = self.bridge_act( "ask_main_chat", {"query": query})
         if send.get("ok") is False:
             raise SystemExit(f"ask_main_chat failed: {send.get('error', send)}")
@@ -1725,7 +1828,7 @@ class GauntletRunner:
         timeout_ms: int,
     ) -> tuple[dict[str, Any], dict[str, str], list[dict[str, Any]]]:
         """Main-chat send path for resilience probes; capture failures instead of aborting."""
-        trace_start = trace_line_count()
+        trace_start = capture_trace_cursor()
         send = self.bridge_act("ask_main_chat", {"query": query})
         detail = send.get("result", {}).get("detail", {}) if isinstance(send, dict) else {}
         if send.get("ok") is False or detail.get("error"):
@@ -1885,7 +1988,7 @@ class GauntletRunner:
             f"In our push-to-talk exchange, remember this marker exactly: {self.markers['ptt']}. "
             "Reply briefly acknowledging it."
         )
-        trace_start = trace_line_count()
+        trace_start = capture_trace_cursor()
         ptt = self.bridge_act(
             "ptt_test_turn",
             {
@@ -1985,7 +2088,7 @@ class GauntletRunner:
         baseline_session_ids = awareness_session_ids(baseline)
 
         step_log_offset = self.log_path.stat().st_size if self.log_path.exists() else 0
-        trace_start = trace_line_count()
+        trace_start = capture_trace_cursor()
         ptt = self.bridge_act(
             "ptt_test_turn",
             {
@@ -2272,7 +2375,7 @@ class GauntletRunner:
             f"Objective: track marker {self.markers['spawn']} and wait silently. "
             "Do not ask follow-up questions."
         )
-        trace_start = trace_line_count()
+        trace_start = capture_trace_cursor()
         send, snapshot, traces = self.send_and_wait(spawn_query, self.args.turn_timeout_ms)
         # R8: only a real spawn_agent execution carrying the objective marker
         # counts. list_agent_sessions and coordinator awareness are evidence,
@@ -2436,7 +2539,7 @@ class GauntletRunner:
         ptt_assistant = ""
         ptt_get_convos: list[dict[str, Any]] = []
         for attempt in range(3):
-            trace_start = trace_line_count()
+            trace_start = capture_trace_cursor()
             ptt = self.bridge_act(
                 "ptt_test_turn",
                 {
@@ -2545,7 +2648,7 @@ class GauntletRunner:
             "Reply with the single word PROBE only. "
             "Do not reference any prior GAUNTLET continuity markers."
         )
-        trace_start = trace_line_count()
+        trace_start = capture_trace_cursor()
         swap = self.bridge_act(
             "swap_test_owner",
             {"owner_b": owner_b_id, "query": probe_query},
@@ -2597,7 +2700,12 @@ class GauntletRunner:
 
         snapshot = self.bridge_act("main_chat_snapshot", {"limit": "80"})
         snapshot_detail = snapshot.get("result", {}).get("detail", snapshot_detail)
-        traces = wait_for_new_traces(trace_start, min_count=1, timeout_sec=10.0)
+        traces = wait_for_new_traces(
+            trace_start,
+            min_count=1,
+            timeout_sec=10.0,
+            query_text=probe_query,
+        )
         if not traces:
             self.fail("owner-switch: owner-B probe produced no QueryTracer evidence")
 
@@ -3104,7 +3212,7 @@ class GauntletRunner:
             f"Objective: track marker {marker} and wait silently. "
             "Do not ask follow-up questions."
         )
-        trace_start = trace_line_count()
+        trace_start = capture_trace_cursor()
         send, snapshot, traces = self.send_and_wait_resilience(spawn_query, self.args.turn_timeout_ms)
         spawn_tools: list[dict[str, Any]] = []
         settle_deadline = time.monotonic() + 10.0
@@ -3277,6 +3385,134 @@ def run_owner_switch_kernel_check() -> tuple[bool, str]:
     return True, "kernel surface_conversations isolates owners per surface"
 
 
+def trace_cursor_self_check_failures() -> list[str]:
+    """Exercise append, rotation, truncation, and replacement cursor semantics."""
+    failures: list[str] = []
+
+    def trace_row(trace_id: str, *, padding: str = "", query_text: str = "") -> str:
+        return json.dumps(
+            {"trace_id": trace_id, "padding": padding, "query_text": query_text}
+        ) + "\n"
+
+    def trace_ids(traces: list[dict[str, Any]]) -> list[str]:
+        return [str(trace.get("trace_id", "")) for trace in traces]
+
+    with tempfile.TemporaryDirectory(prefix="omi-trace-cursor-") as temporary_directory:
+        active = Path(temporary_directory) / "traces.jsonl"
+        backup = active.with_name("traces.1.jsonl")
+
+        active.write_text(trace_row("append-base"), encoding="utf-8")
+        cursor = capture_trace_cursor(active)
+        with active.open("a", encoding="utf-8") as handle:
+            handle.write(trace_row("append-new"))
+        append_ids = trace_ids(read_new_traces(cursor, active))
+        if append_ids != ["append-new"]:
+            failures.append(f"append expected ['append-new'], got {append_ids}")
+
+        complete_prefix = trace_row("partial-base")
+        active.write_text(complete_prefix + '{"trace_id":"partial', encoding="utf-8")
+        cursor = capture_trace_cursor(active)
+        if cursor.offset != len(complete_prefix.encode("utf-8")):
+            failures.append("partial append cursor did not stop at the last complete newline")
+        with active.open("a", encoding="utf-8") as handle:
+            handle.write('","padding":"","query_text":""}\n')
+        partial_ids = trace_ids(read_new_traces(cursor, active))
+        if partial_ids != ["partial"]:
+            failures.append(f"partial append expected ['partial'], got {partial_ids}")
+
+        active.write_text(trace_row("rotate-base"), encoding="utf-8")
+        cursor = capture_trace_cursor(active)
+        with active.open("a", encoding="utf-8") as handle:
+            handle.write(trace_row("before-rotate"))
+        active.replace(backup)
+        active.write_text(trace_row("after-rotate") + "{malformed\n", encoding="utf-8")
+        rotated_traces, malformed = read_new_trace_diagnostics(cursor, active)
+        rotated_ids = trace_ids(rotated_traces)
+        if rotated_ids != ["before-rotate", "after-rotate"]:
+            failures.append(
+                "rotation expected ['before-rotate', 'after-rotate'], "
+                f"got {rotated_ids}"
+            )
+        if len(malformed) != 1 or malformed[0].get("source") != active.name:
+            failures.append(f"rotation malformed diagnostics lost source identity: {malformed}")
+
+        backup.unlink()
+        active.write_text(trace_row("truncate-base", padding="x" * 512), encoding="utf-8")
+        cursor = capture_trace_cursor(active)
+        with active.open("r+b") as handle:
+            handle.seek(0)
+            handle.truncate()
+            handle.write(trace_row("after-truncate").encode("utf-8"))
+        truncated_ids = trace_ids(read_new_traces(cursor, active))
+        if truncated_ids != ["after-truncate"]:
+            failures.append(f"truncation expected ['after-truncate'], got {truncated_ids}")
+
+        active.write_text(trace_row("identity-base"), encoding="utf-8")
+        cursor = capture_trace_cursor(active)
+        replacement = active.with_name("replacement.jsonl")
+        replacement.write_text(trace_row("after-identity-change"), encoding="utf-8")
+        os.replace(replacement, active)
+        replacement_ids = trace_ids(read_new_traces(cursor, active))
+        if replacement_ids != ["after-identity-change"]:
+            failures.append(
+                "identity change expected ['after-identity-change'], "
+                f"got {replacement_ids}"
+            )
+
+        active.write_text(trace_row("query-base"), encoding="utf-8")
+        cursor = capture_trace_cursor(active)
+        with active.open("a", encoding="utf-8") as handle:
+            handle.write(trace_row("unrelated", query_text="other query"))
+            handle.write(trace_row("exact", query_text="owner probe"))
+        exact_ids = trace_ids(
+            wait_for_new_traces(
+                cursor,
+                timeout_sec=0,
+                query_text="owner probe",
+                trace_log=active,
+            )
+        )
+        if exact_ids != ["exact"]:
+            failures.append(f"exact-query wait expected ['exact'], got {exact_ids}")
+
+    return failures
+
+
+def owner_trace_gate_self_check_failures(driver_source: str) -> list[str]:
+    tree = ast.parse(driver_source)
+    runner = next(
+        (node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "GauntletRunner"),
+        None,
+    )
+    owner_suite = next(
+        (
+            node
+            for node in (runner.body if runner is not None else [])
+            if isinstance(node, ast.FunctionDef) and node.name == "run_owner_suite"
+        ),
+        None,
+    )
+    if owner_suite is None:
+        return ["run_owner_suite missing"]
+    waits = [
+        node
+        for node in ast.walk(owner_suite)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "wait_for_new_traces"
+    ]
+    has_exact_query_gate = any(
+        any(
+            keyword.arg == "query_text"
+            and isinstance(keyword.value, ast.Name)
+            and keyword.value.id == "probe_query"
+            for keyword in call.keywords
+        )
+        for call in waits
+    )
+    return [] if has_exact_query_gate else ["owner probe does not wait on query_text=probe_query"]
+
+
 def self_check() -> int:
     script = SCRIPT_DIR / "agent-continuity-gauntlet.sh"
     bridge_actions = {
@@ -3309,6 +3545,13 @@ def self_check() -> int:
     if not script.is_file():
         print("self-check failed: agent-continuity-gauntlet.sh missing", file=sys.stderr)
         return 1
+    trace_cursor_failures = trace_cursor_self_check_failures()
+    if trace_cursor_failures:
+        print(
+            f"self-check failed: rotation-aware trace cursor {trace_cursor_failures}",
+            file=sys.stderr,
+        )
+        return 1
     source = (DESKTOP_DIR / "Desktop/Sources/Providers/ChatProvider.swift").read_text(encoding="utf-8")
     if "resetSessionStateForAuthChange()" not in source:
         print(
@@ -3323,6 +3566,13 @@ def self_check() -> int:
         )
         return 1
     driver_source = (SCRIPT_DIR / "agent-continuity-gauntlet-lib.py").read_text(encoding="utf-8")
+    owner_trace_gate_failures = owner_trace_gate_self_check_failures(driver_source)
+    if owner_trace_gate_failures:
+        print(
+            f"self-check failed: owner trace acceptance {owner_trace_gate_failures}",
+            file=sys.stderr,
+        )
+        return 1
     missing_auth_checks = bridge_auth_self_check_failures(driver_source)
     if missing_auth_checks:
         print(f"self-check failed: bridge auth wiring missing {missing_auth_checks}", file=sys.stderr)
@@ -3385,7 +3635,8 @@ def self_check() -> int:
     print(
         "self-check passed "
         "(R3 race actions + resilience wiring + exact voice authority + "
-        "query-specific terminal evidence + INV-6 hermetic contract gates + owner-switch)"
+        "query-specific terminal evidence + rotation-aware trace cursor + "
+        "INV-6 hermetic contract gates + owner-switch)"
     )
     return 0
 
