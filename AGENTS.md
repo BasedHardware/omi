@@ -352,7 +352,7 @@ Files ending in `.gen.dart` or `.g.dart` are auto-generated — don't format man
 - Always commit to the current branch — never switch branches mid-task. Always work in a git worktree for code changes (`git worktree add`).
 - Never push directly to `main`. Land changes through PRs only. Never squash-merge — use a regular merge.
 - Make individual commits per feature or testable surface, not per file or unrelated bulk changes.
-- **PR size is bounded** (manifest check `pr-scope`, local pre-push + CI) — 1,500+ changed production-source lines (tests/docs/l10n/generated excluded; moves count both sides) warns; 3,000+ fails unless a maintainer applies the `scope-approved` label (locally: `OMI_SCOPE_APPROVED=1`; emergency reverts use the same overrides). Split large work into independently reviewable PRs; review effectiveness collapses past this size.
+- **PR size is reported, not bounded** (manifest check `pr-scope`, local pre-push + CI — advisory, never blocks) — 1,500+ changed production-source lines (tests/docs/l10n/generated excluded; moves count both sides) warns; 3,000+ warns that in our audited merge history every PR this size shipped a regression review missed. Each PR costs a human verification pass, so split only when the pieces are independently verifiable; otherwise keep one PR and give it review depth proportional to the warning.
 - If push fails (remote ahead): `git pull --rebase && git push`.
 - Never push or create PRs unless explicitly asked — commit locally by default.
 

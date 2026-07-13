@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import subprocess
 import sys
@@ -178,7 +177,6 @@ def main() -> int:
         ]
         if skip_changelog:
             command.append("--skip-changelog")
-        command.extend(["--labels-json", json.dumps(sorted(labels))])
         result = subprocess.run(command, cwd=root, check=False)
 
     elapsed = time.monotonic() - started

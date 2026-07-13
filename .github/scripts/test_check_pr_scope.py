@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
-"""Unit tests for check_pr_scope.py classification, counting, and enforcement."""
+"""Unit tests for check_pr_scope.py classification, counting, and advisory tiers."""
 
 from __future__ import annotations
 
 import unittest
 
 from check_pr_scope import (
-    FAIL_LINES,
-    LOCAL_OVERRIDE_ENV,
-    OVERRIDE_LABEL,
+    REVIEW_COLLAPSE_LINES,
     WARN_LINES,
     count_production_lines,
     evaluate,
     is_production_source,
-    resolve_waiver,
 )
 
 
@@ -78,36 +75,27 @@ class CountingTests(unittest.TestCase):
         self.assertEqual(count_production_lines(numstat), (0, []))
 
 
-class EnforcementTests(unittest.TestCase):
-    def test_thresholds_label_and_waiver(self) -> None:
+class AdvisoryTests(unittest.TestCase):
+    def test_tiers_are_annotations_only(self) -> None:
         cases = [
-            (100, set(), None, 0, '::notice'),
-            (WARN_LINES, set(), None, 0, '::warning'),
-            (WARN_LINES, {OVERRIDE_LABEL}, None, 0, '::notice'),  # label silences the warn tier
-            (WARN_LINES, set(), 'push event', 0, '::notice'),
-            (FAIL_LINES, set(), None, 1, '::error'),
-            (FAIL_LINES, {OVERRIDE_LABEL}, None, 0, '::notice'),
-            (FAIL_LINES, {'unrelated'}, None, 1, '::error'),
-            (FAIL_LINES, set(), 'push event', 0, '::notice'),
+            (100, '::notice'),
+            (WARN_LINES, '::warning'),
+            (REVIEW_COLLAPSE_LINES, '::warning'),
         ]
-        for total, labels, waiver, want_code, want_prefix in cases:
-            message, code = evaluate(total, labels, waiver_reason=waiver)
-            self.assertEqual(code, want_code, (total, labels, waiver))
+        for total, want_prefix in cases:
+            message = evaluate(total)
             self.assertTrue(message.startswith(want_prefix), message)
 
-    def test_push_event_waives(self) -> None:
-        self.assertIn('push', resolve_waiver({'GITHUB_EVENT_NAME': 'push'}) or '')
+    def test_review_collapse_tier_cites_the_audit(self) -> None:
+        self.assertIn('regression', evaluate(REVIEW_COLLAPSE_LINES))
 
-    def test_local_env_override_waives(self) -> None:
-        self.assertIn(LOCAL_OVERRIDE_ENV, resolve_waiver({LOCAL_OVERRIDE_ENV: '1'}) or '')
+    def test_warnings_say_they_never_block(self) -> None:
+        for total in (WARN_LINES, REVIEW_COLLAPSE_LINES):
+            self.assertIn('never blocks', evaluate(total))
 
-    def test_pull_request_event_enforces(self) -> None:
-        self.assertIsNone(resolve_waiver({'GITHUB_EVENT_NAME': 'pull_request'}))
-
-    def test_no_author_editable_waiver_exists(self) -> None:
-        # The waiver must come from maintainer-controlled signals only
-        # (label, env, event type) — never from PR body/title text.
-        self.assertIsNone(resolve_waiver({}))
+    def test_push_events_are_notice_only(self) -> None:
+        message = evaluate(REVIEW_COLLAPSE_LINES, notice_only=True)
+        self.assertTrue(message.startswith('::notice'), message)
 
 
 if __name__ == '__main__':

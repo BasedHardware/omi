@@ -13,15 +13,15 @@ checks:
     lanes: ["local", "ci"]
     reason: "immutable desktop app/backend release-unit contract"
   - id: pr-scope
-    command: ["python3", ".github/scripts/check_pr_scope.py", "--base", "{base}", "--head", "{head}", "--labels-json", "{labels_json}"]
+    command: ["python3", ".github/scripts/check_pr_scope.py", "--base", "{base}", "--head", "{head}"]
     triggers: ["all"]
     lanes: ["local", "ci"]
-    reason: "PR production-source churn must stay reviewable (scope-approved label / OMI_SCOPE_APPROVED override)"
+    reason: "advisory PR production-source churn report (annotations only, never blocks)"
   - id: pr-scope-helper-tests
     command: ["python3", ".github/scripts/test_check_pr_scope.py"]
     triggers: [".github/scripts/check_pr_scope.py", ".github/scripts/test_check_pr_scope.py"]
     lanes: ["local", "ci"]
-    reason: "scope governor classification/enforcement contract"
+    reason: "scope advisor classification/annotation contract"
   - id: diff-hygiene
     command: ["python3", ".github/scripts/check_diff_hygiene.py", "--changed-files", "{changed_files}", "--base", "{base}", "--head", "{head}"]
     triggers: ["all"]

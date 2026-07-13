@@ -12,7 +12,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 
-from run_checks import Check, command_for_check, execute_checks, load_manifest, resolve_checks, validate_manifest
+from run_checks import Check, execute_checks, load_manifest, resolve_checks, validate_manifest
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -104,26 +104,6 @@ class RunnerBehaviorTests(unittest.TestCase):
         for lane in ("local", "ci"):
             selected = {check.id for check in resolve_checks(manifest, changed, lane)}
             self.assertIn("backend-route-policy-baseline", selected)
-
-    def test_labels_json_placeholder_is_substituted(self) -> None:
-        check = Check(
-            "labels",
-            ("python3", "x.py", "--labels-json", "{labels_json}", "--base", "{base}"),
-            ("all",),
-            ("ci",),
-            "fixture",
-        )
-        command = command_for_check(
-            check,
-            changed_files_path=Path("cf.txt"),
-            base="abc123",
-            head="HEAD",
-            pr_body_file=Path("body.txt"),
-            skip_changelog=False,
-            labels_json='["scope-approved"]',
-        )
-        self.assertEqual(command[3], '["scope-approved"]')
-        self.assertEqual(command[5], "abc123")
 
     def test_failure_is_propagated(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
