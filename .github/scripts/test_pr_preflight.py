@@ -59,6 +59,21 @@ class MetadataTests(unittest.TestCase):
 
 
 class SelectionTests(unittest.TestCase):
+    def test_make_preflight_resolves_pr_metadata_before_running_checks(self) -> None:
+        result = subprocess.run(
+            ["make", "-n", "preflight"],
+            cwd=REPO_ROOT,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn(
+            "python3 .github/scripts/pr_preflight.py --lane local --base origin/main",
+            result.stdout,
+        )
+
     def test_9402_equivalent_diff_selects_invariants_changelog_and_e2e(self) -> None:
         checks = select_checks(
             [
