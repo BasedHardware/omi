@@ -78,3 +78,21 @@ trustworthy click test is a physical one (or the GetAsyncKeyState path itself).
   the desktop (GDI window capture) with DOM opacity pinned to 1.
 - Regression suites that pin the mechanisms: `src/main/bar/watchdog.test.ts`,
   `bar.orb.test.ts`, `BarChatSurface.test.tsx`, `barDisplay.test.ts`, `e2e/bar.spec.mjs`.
+
+## Shell panels: `display:none` makes ResizeObserver read 0 (not bar-specific)
+
+Not a bar trap, but the same "hidden→shown paints wrong for a frame" family, so it
+lives here. `MainViews` keeps every page mounted and hides the inactive ones with a
+`hidden` class (`display:none`, see `panelClass`). A `display:none` ancestor makes a
+`ResizeObserver` fire a 0×0 rect and `offsetHeight`/`clientWidth` read 0. If a size
+cache stores that 0, the next time the page is shown React paints with the stale 0 and
+then snaps to the real size a frame later — the intermittent home-card / Rewind-timeline
+glitch on nav return.
+
+**Standing fix:** never write a non-positive measurement into a cached size. Route every
+ResizeObserver/`offsetHeight`/`clientWidth` cache through `keepLastPositive(prev, measured)`
+(`src/renderer/src/lib/measure.ts`) so a re-shown panel renders at its last real size up
+front. Callers keep their own pre-measure fallback (e.g. `useElementWidth(ref) || 600`)
+for the genuine first-paint-before-layout window. Pinned by `lib/measure.test.ts`; live
+by navigating Home → another tab → back and confirming the widget row does not snap from
+48px.
