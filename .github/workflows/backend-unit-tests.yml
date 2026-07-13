@@ -69,6 +69,10 @@ jobs:
         with:
           python-version-file: backend/.python-version
 
+      - name: Check unit test discovery
+        working-directory: backend
+        run: python scripts/check_unit_test_discovery.py
+
       - name: Set up uv
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
         with:
@@ -92,10 +96,6 @@ jobs:
       - name: Type-check backend typed boundary
         working-directory: backend
         run: bash scripts/typecheck.sh
-
-      - name: Check unit test discovery
-        working-directory: backend
-        run: python scripts/check_unit_test_discovery.py
 
       - name: Select backend unit tests
         id: select-tests
