@@ -15,7 +15,11 @@ async function fetchPrimarySourceId(): Promise<string | null> {
     types: ['screen'],
     thumbnailSize: { width: 0, height: 0 } // ids only — no screen bitmap
   })
-  return sources[0]?.id ?? null
+  const firstSource = sources[0]
+  if (!firstSource) return null
+
+  const primaryDisplayId = String(screen.getPrimaryDisplay().id)
+  return sources.find((source) => source.display_id === primaryDisplayId)?.id ?? firstSource.id
 }
 
 /** Cached primary-screen source id; computes it (slowly) once, then reuses it. */
