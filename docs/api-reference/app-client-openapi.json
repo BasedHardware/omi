@@ -29133,6 +29133,23 @@
             }
           },
           {
+            "in": "query",
+            "name": "surface",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "suggested",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Surface"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,

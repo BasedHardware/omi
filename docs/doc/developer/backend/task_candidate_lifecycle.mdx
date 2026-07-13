@@ -17,6 +17,51 @@ Every Candidate write requires an idempotency key and account generation. The ro
 both compare that generation with the per-user control record, and `off`/`shadow` modes reject visible writes.
 List and point reads expose only the current account generation, including legacy staged by-ID projections, so
 an identifier retained across an account reset cannot retrieve prior evidence.
+
+Capture quality is enforced at the shared boundary, before a Candidate can become product noise. Direct requests,
+inferred next steps, and silently accepted commitments must name a concrete deliverable owned by the user and carry
+both capture and ownership confidence of at least `0.8`. Vague commitments are ignored. A concrete first-person
+commitment below that floor may remain as an internal pending sidecar, but it cannot enter a user-facing projection.
+Transcript and screen capture use the same `capture.v2` fixture contract for these decisions; the version is also
+stamped on new screen evidence so pre-floor and post-floor captures remain distinguishable during rollout analysis.
+
+Pending task-create Candidates also have a conservative semantic claim in addition to caller idempotency. The claim
+includes normalized description, owner, exact due instant, recurrence, goal, and workstream; it deliberately excludes
+evidence, source, confidence annotations, due confidence, and priority. Concurrent captures of that exact work merge
+into one pending Candidate with stable, deduplicated evidence and maximum confidence values. Caller keys still replay
+their original result indefinitely. A pending semantic claimant is reused only within the same 14-day product window;
+a fresh capture after that window starts a new Candidate so stale low-confidence sidecars cannot bury current work.
+An accepted Candidate continues to absorb exact cross-source captures and enrich
+its task while that deterministic task remains active and still matches the claimed description, owner, due date,
+recurrence, goal, and workstream. Completion, cancellation, deletion, a semantic edit, or a non-accepted terminal
+Candidate releases the claim so the work may recur as a new Candidate.
+
+`GET /v1/candidates?surface=suggested` is the product projection for Suggested Tasks. It is enabled only by the
+composed task-intelligence rollout decision: compatible workflow control **and** canonical-memory cohort eligibility.
+Outside that cohort it returns `404`, which clients treat as a calm disabled state. Inside the cohort it returns at
+most five pending, routeable creates from the current generation that are no more than 14 days old, have evidence,
+and meet both confidence floors. Exact duplicate creates are collapsed. Generic Candidate CRUD remains available
+under the universal contract and is not redefined by this product projection. Active Later/Dismiss attention
+overrides use the same bounded Candidate key as What Matters Now and are removed before the five-card cap, so they
+remain suppressed across devices without under-filling the lane. Accepted or rejected representatives also hide
+exact pending siblings that predate their resolution, preventing a terminal action from immediately resurrecting a
+historical duplicate while still allowing a genuinely new post-resolution occurrence. The route rechecks the composed
+rollout and account generation after its reads, so an account reset cannot publish a prior-generation Candidate.
+
+What Matters Now uses the same composed rollout gate and a typed-attention shortlist. Overdue work, blockers, near
+deadlines, matched local context, review/decision loops, and recent explicit manual intent may enter; recency or topic
+overlap alone may not. The deterministic layer builds a stable kind/workstream-balanced recall set of at most 20,
+then one holistic judgment returns zero to three recommendations. Typed tier reservations prevent an overdue flood
+from erasing due/context/review recall, and only the original creation time makes a manual task "recent"—metadata
+edits do not revive old work. Empty is a valid default. Opaque raw-context hints do not invalidate the projection
+cache; normalized subject IDs, typed match signals, displayed fields, and evidence identities do. Desktop requests
+use the full header-bound client device ID for both snapshot and evaluation calls. Cache identity also includes the
+prompt, policy, fact-definition, and live-model versions, so any judgment-contract change forces a fresh decision.
+What Matters Now GET, evaluate, and debug reads recheck the composed rollout and generation before returning. Desktop
+async projection, feedback, and contextual-resurfacing work is owner-fenced across account switches; queued local
+events are discarded rather than attributed to the next owner. Merely opening a recommendation or accepting a
+Candidate never fabricates a downstream workstream-success outcome.
+
 Task acceptance uses a Firestore transaction and a deterministic task ID, so concurrent retries create or mutate
 one task and return the same receipt. Reusing an idempotency key with a different proposal is a conflict.
 When a Candidate mutates an existing task, the task's creation `source` remains authoritative and its provenance
@@ -39,10 +84,13 @@ The per-user universal-contract mode controls compatibility behavior:
 
 ## Single-user Smart Tasks dogfood activation
 
-The task-intelligence control remains independently scoped from the canonical-memory cohort. The approved
-dogfood account is already the only active canonical-memory whitelist member; to make Smart Tasks fully active,
-an operator must explicitly create `users/{uid}/task_intelligence_control/state` in `read` mode. Do not change
-the canonical-memory list, runtime cohort environment, or any other user's control as part of this operation.
+The universal Candidate contract and task-intelligence control remain operationally independent from the
+canonical-memory cohort. The user-facing Smart Tasks surfaces do not: they require the composed rollout decision
+described above. The approved dogfood account is already the only active canonical-memory whitelist member; to make
+Smart Tasks fully active, an operator must explicitly create `users/{uid}/task_intelligence_control/state` in `read`
+mode. Do not change the canonical-memory list, runtime cohort environment, or any other user's control as part of
+this operation. As canonical memory expands, this composition expands Smart Tasks with it instead of maintaining a
+second product whitelist.
 
 Use the repo-tracked operator tool from a checkout containing the merged activation change. It defaults to a
 dry-run and is permanently restricted to the approved dogfood UID. First inspect the existing state and record

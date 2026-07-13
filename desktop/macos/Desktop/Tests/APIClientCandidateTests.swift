@@ -93,7 +93,7 @@ final class APIClientCandidateTests: XCTestCase {
             id: "screen-42",
             kind: .local_screen,
             scope: .device_local,
-            version: "capture.v1"
+            version: "capture.v2"
           )
         ],
         goalId: nil,
@@ -140,6 +140,27 @@ final class APIClientCandidateTests: XCTestCase {
     XCTAssertNil(json["screenshot"])
     XCTAssertNil(json["window_title"])
     XCTAssertNil(json["source_app"])
+  }
+
+  func testSuggestedCandidateListMarksTheProductSurface() async throws {
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [CandidateURLCapture.self]
+    let client = APIClient(session: URLSession(configuration: config))
+    await client.setTestAuthHeader("Bearer test-token")
+
+    _ = try? await client.listCanonicalCandidates(status: "pending", limit: 5)
+
+    let request = try XCTUnwrap(CandidateURLCapture.captured())
+    XCTAssertEqual(request.url.path, "/v1/candidates")
+    XCTAssertEqual(request.method, "GET")
+    let query = Dictionary(
+      lastWriteWins: (URLComponents(url: request.url, resolvingAgainstBaseURL: false)?.queryItems ?? [])
+        .compactMap { item in item.value.map { (item.name, $0) } }
+    )
+    XCTAssertEqual(query["status"], "pending")
+    XCTAssertEqual(query["limit"], "5")
+    XCTAssertEqual(query["offset"], "0")
+    XCTAssertEqual(query["surface"], "suggested")
   }
 
   func testSuggestedFeedbackSendsStableIdempotencyAndGenerationHeaders() async throws {

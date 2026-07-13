@@ -2858,7 +2858,7 @@ extension APIClient {
   func listCanonicalCandidates(status: String, limit: Int) async throws -> [OmiAPI.CandidateRecord] {
     let encodedStatus = status.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? status
     let response: OmiAPI.CandidateListResponse = try await get(
-      "v1/candidates?status=\(encodedStatus)&limit=\(limit)&offset=0")
+      "v1/candidates?status=\(encodedStatus)&limit=\(limit)&offset=0&surface=suggested")
     return response.candidates
   }
 

@@ -33,13 +33,14 @@ def _fake_candidates_db(stream):
     return fake_db
 
 
-def test_list_candidates_skips_malformed(monkeypatch):
+def test_list_candidates_skips_malformed_without_logging_private_input(monkeypatch, caplog):
+    secret = "private launch description 8427"
     good = MagicMock()
     good.id = "good"
     good.to_dict.return_value = {"ok": True}
     bad = MagicMock()
     bad.id = "bad"
-    bad.to_dict.return_value = {"bad": True}
+    bad.to_dict.return_value = {"bad": True, "description": secret, secret: "private-value"}
 
     def fake_from_storage(data):
         if data.get("bad"):
@@ -53,6 +54,9 @@ def test_list_candidates_skips_malformed(monkeypatch):
         result = candidates_db.list_candidates("u1")
 
     assert result == [{"ok": True}]  # malformed candidate skipped, good one kept
+    assert "bad" in caplog.text
+    assert "validation_types=" in caplog.text
+    assert secret not in caplog.text
 
 
 def test_list_candidates_does_not_swallow_unexpected_error(monkeypatch):
