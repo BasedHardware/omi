@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from io import BytesIO
 from threading import RLock
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, cast
 
 import fal_client
 import httpx
@@ -798,16 +798,17 @@ def parakeet_prerecorded_from_bytes(
                 response = client.post(url, files={'file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')})
                 use_v2 = False
         response.raise_for_status()
-        result: Dict[str, Any] = response.json()
+        payload: Any = response.json()
 
         # A Parakeet result always carries both keys, even for silence ({"text": "",
         # "segments": []}). A 200 body with neither key is a degraded or foreign
         # responder (misrouted ILB, proxy error shell), not a no-speech verdict. Raise
         # so the sync job stays truthful and clients keep the audio as retry material
         # instead of marking the WAL synced and discarding it. See #9586.
-        if not isinstance(result, dict) or ('segments' not in result and 'text' not in result):
+        if not isinstance(payload, dict) or ('segments' not in payload and 'text' not in payload):
             raise RuntimeError('Parakeet response contained neither segments nor text')
 
+        result: Dict[str, Any] = cast(Dict[str, Any], payload)
         raw_segments = result.get('segments', [])
         segments: List[Dict[str, Any]] = list(raw_segments) if isinstance(raw_segments, list) else []  # type: ignore[reportUnknownArgumentType]  # untyped external JSON
         full_text = (result.get('text') or '').strip()
