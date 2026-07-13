@@ -1025,11 +1025,11 @@ extension SettingsContentView {
             .frame(width: 24, height: 24)
 
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-            Text("Use old Home design")
+            Text("Use legacy Home design")
               .scaledFont(size: OmiType.subheading, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
 
-            Text("Show the previous chat-first dashboard instead of the simplified Home")
+            Text("Temporary fallback during the redesigned Home rollout")
               .scaledFont(size: OmiType.body)
               .foregroundColor(OmiColors.textTertiary)
           }
