@@ -12,18 +12,31 @@ import XCTest
 final class RealtimeOmniPendingAudioBoundTests: XCTestCase {
     private func chunk(_ n: Int) -> Data { Data(repeating: 0, count: n) }
 
+    /// A 30-byte chunk whose first byte marks its append order, so we can assert
+    /// *which* chunks survive (not just how many) — distinguishing drop-oldest from
+    /// an accidental drop-newest that would keep the count identical.
+    private func markedChunk(_ index: Int) -> Data {
+        var c = Data(repeating: 0, count: 30)
+        c[c.startIndex] = UInt8(index)
+        return c
+    }
+
     func testDropsOldestWhenExceedingCap() {
         var buffer: [Data] = []
         var bytes = 0
         let maxBytes = 100
-        // Append 10 chunks of 30 bytes each = 300 bytes; cap is 100.
-        for _ in 0..<10 {
-            RealtimeOmniService.appendBoundedAudio(chunk(30), to: &buffer, bytes: &bytes, maxBytes: maxBytes)
+        // Append 10 distinctly-marked 30-byte chunks = 300 bytes; cap is 100.
+        for i in 0..<10 {
+            RealtimeOmniService.appendBoundedAudio(markedChunk(i), to: &buffer, bytes: &bytes, maxBytes: maxBytes)
         }
         XCTAssertLessThanOrEqual(bytes, maxBytes)
         XCTAssertEqual(bytes, buffer.reduce(0) { $0 + $1.count }, "tracked bytes must match buffer contents")
-        // 100 / 30 → keeps the newest 3 chunks (90 bytes).
+        // 100 / 30 → keeps the newest 3 chunks (90 bytes): the ones marked 7, 8, 9.
         XCTAssertEqual(buffer.count, 3)
+        XCTAssertEqual(
+            buffer.compactMap { $0.first }, [7, 8, 9],
+            "must retain the NEWEST chunks (drop-oldest), not merely the right count"
+        )
     }
 
     func testKeepsAtLeastNewestChunkEvenIfItAloneExceedsCap() {

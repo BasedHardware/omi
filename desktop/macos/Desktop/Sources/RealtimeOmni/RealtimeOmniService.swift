@@ -52,10 +52,12 @@ final class RealtimeOmniService: NSObject {
     private var terminated = false  // fire omniDidError at most once per turn
     private var pendingAudio: [Data] = []
     private var pendingAudioBytes = 0
-    /// Cap on audio buffered while the relay session is still connecting, matching the
-    /// hub's `maxBufferedAudioBytes` (120 s @ 16 kHz s16le). Without a bound, a relay
-    /// that stalls open (connecting but never `session.created`) during a multi-minute
-    /// locked-mode hold would grow `pendingAudio` unboundedly.
+    /// Byte cap on audio buffered while the relay session is still connecting, matching the
+    /// hub's byte-based `maxBufferedAudioBytes`. `sendAudio` queues PCM already resampled to
+    /// the provider's `requiredInputSampleRate`, so the covered duration depends on that rate
+    /// (~120 s at 16 kHz, ~80 s at 24 kHz s16le). Without a bound, a relay that stalls open
+    /// (connecting but never `session.created`) during a multi-minute locked-mode hold would
+    /// grow `pendingAudio` unboundedly.
     private static let maxPendingAudioBytes = 3_840_000
     private var pendingCommit = false  // turn ended before the session opened; commit after activityStart
 
