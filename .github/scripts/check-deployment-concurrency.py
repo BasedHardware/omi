@@ -13,7 +13,6 @@ import argparse
 from dataclasses import dataclass
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
 
@@ -38,13 +37,16 @@ LOCK_CONTRACTS = {
     "gcp_apps_js.yml": LockContract(
         "deploy-cloud-run-apps-js-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
     ),
-    "gcp_backend.yml": LockContract("deploy-backend-stack-${{ github.event.inputs.environment }}"),
+    "gcp_backend.yml": LockContract(
+        "deploy-backend-stack-${{ github.event.inputs.environment }}"
+    ),
     "gcp_backend_agent_proxy.yml": LockContract(
         "deploy-gke-agent-proxy-${{ github.event.inputs.environment }}"
     ),
-    "gcp_backend_agent_proxy_auto_deploy.yml": LockContract("deploy-gke-agent-proxy-development"),
+    "gcp_backend_agent_proxy_auto_deploy.yml": LockContract(
+        "deploy-gke-agent-proxy-development"
+    ),
     "gcp_backend_auto_dev.yml": LockContract("deploy-backend-stack-development"),
-    "dev_backend_deployment_acceptance.yml": LockContract("deploy-backend-stack-development"),
     "gcp_backend_listen_helm.yml": LockContract(
         "deploy-backend-stack-${{ github.event.inputs.environment || 'development' }}"
     ),
@@ -52,11 +54,15 @@ LOCK_CONTRACTS = {
         "${{ (github.event.inputs.service || 'pusher') == 'llm-gateway' && format('deploy-backend-stack-{0}', github.event.inputs.environment) || format('deploy-gke-pusher-{0}', github.event.inputs.environment) }}"
     ),
     "gcp_backend_pusher_auto_deploy.yml": LockContract("deploy-gke-pusher-development"),
-    "gcp_diarizer.yml": LockContract("deploy-gke-diarizer-${{ github.event.inputs.environment }}"),
+    "gcp_diarizer.yml": LockContract(
+        "deploy-gke-diarizer-${{ github.event.inputs.environment }}"
+    ),
     "gcp_frontend.yml": LockContract(
         "deploy-cloud-run-frontend-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
     ),
-    "gcp_llm_gateway.yml": LockContract("deploy-backend-stack-${{ github.event.inputs.environment }}"),
+    "gcp_llm_gateway.yml": LockContract(
+        "deploy-backend-stack-${{ github.event.inputs.environment }}"
+    ),
     "gcp_llm_gateway_auto_dev.yml": LockContract("deploy-backend-stack-development"),
     "gcp_memory_maintenance_job.yml": LockContract(
         "deploy-cloud-run-memory-maintenance-job-${{ github.event.inputs.environment }}"
@@ -64,18 +70,24 @@ LOCK_CONTRACTS = {
     "gcp_memory_maintenance_job_auto_dev.yml": LockContract(
         "deploy-cloud-run-memory-maintenance-job-development"
     ),
-    "gcp_models.yml": LockContract("deploy-gke-vad-${{ github.event.inputs.environment }}"),
+    "gcp_models.yml": LockContract(
+        "deploy-gke-vad-${{ github.event.inputs.environment }}"
+    ),
     "gcp_nllb_translation.yml": LockContract(
         "deploy-gke-nllb-translation-${{ github.event.inputs.environment }}"
     ),
     "gcp_notifications_job.yml": LockContract(
         "deploy-cloud-run-notifications-job-${{ github.event.inputs.environment }}"
     ),
-    "gcp_parakeet.yml": LockContract("deploy-gke-parakeet-${{ github.event.inputs.environment }}"),
+    "gcp_parakeet.yml": LockContract(
+        "deploy-gke-parakeet-${{ github.event.inputs.environment }}"
+    ),
     "gcp_personas.yml": LockContract(
         "deploy-cloud-run-omi-web-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
     ),
-    "gcp_plugins.yml": LockContract("deploy-cloud-run-plugins-${{ github.event.inputs.environment }}"),
+    "gcp_plugins.yml": LockContract(
+        "deploy-cloud-run-plugins-${{ github.event.inputs.environment }}"
+    ),
 }
 
 
@@ -115,7 +127,9 @@ def parse_top_level_concurrency(text: str) -> dict[str, str] | None:
 
     lines = text.splitlines()
     try:
-        start = next(index for index, line in enumerate(lines) if line == "concurrency:")
+        start = next(
+            index for index, line in enumerate(lines) if line == "concurrency:"
+        )
     except StopIteration:
         return None
 
@@ -132,6 +146,23 @@ def parse_top_level_concurrency(text: str) -> dict[str, str] | None:
     return fields
 
 
+def job_block(text: str, job: str) -> list[str] | None:
+    """Return one top-level job's YAML lines using its fixed indentation."""
+
+    lines = text.splitlines()
+    try:
+        start = next(index for index, line in enumerate(lines) if line == f"  {job}:")
+    except StopIteration:
+        return None
+
+    block: list[str] = []
+    for line in lines[start + 1 :]:
+        if line and not line.startswith("    "):
+            break
+        block.append(line)
+    return block
+
+
 def validate_lock(name: str, text: str, contract: LockContract) -> list[str]:
     errors: list[str] = []
     concurrency = parse_top_level_concurrency(text)
@@ -140,9 +171,43 @@ def validate_lock(name: str, text: str, contract: LockContract) -> list[str]:
 
     actual_group = concurrency.get("group")
     if actual_group != contract.group:
-        errors.append(f"{name}: concurrency group must be {contract.group!r}, got {actual_group!r}")
+        errors.append(
+            f"{name}: concurrency group must be {contract.group!r}, got {actual_group!r}"
+        )
     if concurrency.get("cancel-in-progress") != "false":
         errors.append(f"{name}: deploy locks must use cancel-in-progress: false")
+    return errors
+
+
+def auto_deploy_acceptance_is_eligible(deploy_result: str) -> bool:
+    """Model the integrated acceptance job's `needs: deploy` success guard."""
+
+    return deploy_result == "success"
+
+
+def validate_auto_deploy_acceptance(text: str) -> list[str]:
+    """Keep acceptance inside the source deploy workflow's mutation lock."""
+
+    block = job_block(text, "verify")
+    if block is None:
+        return ["gcp_backend_auto_dev.yml: missing integrated verify job"]
+    required_markers = (
+        "needs: deploy",
+        "if: needs.deploy.result == 'success'",
+        "backend/scripts/verify_dev_backend_deployment.py",
+        '--commit-sha "${{ github.sha }}"',
+        '--deploy-run-id "${{ github.run_id }}"',
+        '--deploy-run-attempt "${{ github.run_attempt }}"',
+    )
+    errors = [
+        f"gcp_backend_auto_dev.yml: integrated verify job missing {marker!r}"
+        for marker in required_markers
+        if not any(marker in line for line in block)
+    ]
+    if any("concurrency:" in line for line in block):
+        errors.append(
+            "gcp_backend_auto_dev.yml: integrated verify must inherit the workflow mutation lock"
+        )
     return errors
 
 
@@ -157,7 +222,9 @@ def resolve_environment(group: str, environment: str) -> str:
 
 
 def development_group(name: str, group: str) -> str:
-    return DEVELOPMENT_GROUP_OVERRIDES.get(name, resolve_environment(group, "development"))
+    return DEVELOPMENT_GROUP_OVERRIDES.get(
+        name, resolve_environment(group, "development")
+    )
 
 
 def validate_shared_families(groups: dict[str, str]) -> list[str]:
@@ -193,8 +260,12 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
         "gcp_plugins.yml",
     )
     for name in environment_scoped:
-        if resolve_environment(groups[name], "development") == resolve_environment(groups[name], "prod"):
-            errors.append(f"{name}: development and prod must resolve to different lock groups")
+        if resolve_environment(groups[name], "development") == resolve_environment(
+            groups[name], "prod"
+        ):
+            errors.append(
+                f"{name}: development and prod must resolve to different lock groups"
+            )
 
     return errors
 
@@ -207,12 +278,18 @@ def check_repository() -> list[str]:
         for path in WORKFLOWS.glob(pattern)
     }
 
-    detected = {name for name, text in workflow_text.items() if is_persistent_writer(text)}
+    detected = {
+        name for name, text in workflow_text.items() if is_persistent_writer(text)
+    }
     expected = set(LOCK_CONTRACTS) | set(RUN_SCOPED_EXEMPTIONS)
     for name in sorted(detected - expected):
-        errors.append(f"{name}: persistent Cloud Run/GKE writer is missing from the lock policy")
+        errors.append(
+            f"{name}: persistent Cloud Run/GKE writer is missing from the lock policy"
+        )
     for name in sorted(expected - detected):
-        errors.append(f"{name}: lock policy entry no longer contains a recognized deploy writer")
+        errors.append(
+            f"{name}: lock policy entry no longer contains a recognized deploy writer"
+        )
 
     groups: dict[str, str] = {}
     for name, contract in LOCK_CONTRACTS.items():
@@ -231,17 +308,32 @@ def check_repository() -> list[str]:
     for name, marker in RUN_SCOPED_EXEMPTIONS.items():
         text = workflow_text.get(name, "")
         if marker not in text:
-            errors.append(f"{name}: run-scoped deploy-lock exemption lost required marker {marker!r}")
+            errors.append(
+                f"{name}: run-scoped deploy-lock exemption lost required marker {marker!r}"
+            )
 
     identity_markers = (
         'SHORT_SHA="$(git rev-parse --short=7 HEAD)"',
-        'revision_suffix=${SHORT_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}',
+        "revision_suffix=${SHORT_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}",
     )
     for name in ("gcp_backend.yml", "gcp_backend_auto_dev.yml"):
         text = workflow_text.get(name, "")
         for marker in identity_markers:
             if marker not in text:
-                errors.append(f"{name}: backend revision identity must include {marker!r}")
+                errors.append(
+                    f"{name}: backend revision identity must include {marker!r}"
+                )
+
+    auto_deploy = workflow_text.get("gcp_backend_auto_dev.yml", "")
+    errors.extend(validate_auto_deploy_acceptance(auto_deploy))
+    separate_acceptance_workflows = sorted(
+        name
+        for name, text in workflow_text.items()
+        if name != "gcp_backend_auto_dev.yml"
+        and "backend/scripts/verify_dev_backend_deployment.py" in text
+    )
+    for name in separate_acceptance_workflows:
+        errors.append(f"{name}: acceptance must remain inside the source deploy workflow")
 
     return errors
 
@@ -266,16 +358,49 @@ jobs:
       group: deploy-fixture-development
       cancel-in-progress: false
 """
-    if not any("workflow-level" in error for error in validate_lock("fixture.yml", job_only, contract)):
+    if not any(
+        "workflow-level" in error
+        for error in validate_lock("fixture.yml", job_only, contract)
+    ):
         raise PolicyError("job-level-only lock satisfied the workflow-level contract")
 
     wrong_group = good.replace("deploy-fixture-development", "deploy-other-development")
-    if not any("group must be" in error for error in validate_lock("fixture.yml", wrong_group, contract)):
+    if not any(
+        "group must be" in error
+        for error in validate_lock("fixture.yml", wrong_group, contract)
+    ):
         raise PolicyError("mismatched group satisfied the contract")
 
     canceling = good.replace("cancel-in-progress: false", "cancel-in-progress: true")
-    if not any("cancel-in-progress" in error for error in validate_lock("fixture.yml", canceling, contract)):
+    if not any(
+        "cancel-in-progress" in error
+        for error in validate_lock("fixture.yml", canceling, contract)
+    ):
         raise PolicyError("cancel-in-progress: true satisfied the deploy contract")
+
+    integrated_acceptance = """name: fixture
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+  verify:
+    needs: deploy
+    if: needs.deploy.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - run: >-
+          python3 backend/scripts/verify_dev_backend_deployment.py
+          --commit-sha "${{ github.sha }}"
+          --deploy-run-id "${{ github.run_id }}"
+          --deploy-run-attempt "${{ github.run_attempt }}"
+"""
+    if validate_auto_deploy_acceptance(integrated_acceptance):
+        raise PolicyError("valid integrated acceptance job was rejected")
+    if auto_deploy_acceptance_is_eligible("cancelled"):
+        raise PolicyError("cancelled deployment made integrated acceptance eligible")
+    if not auto_deploy_acceptance_is_eligible("success"):
+        raise PolicyError(
+            "successful deployment did not make integrated acceptance eligible"
+        )
 
 
 def main() -> int:

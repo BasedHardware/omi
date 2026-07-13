@@ -412,7 +412,6 @@
         ".github/workflows/gcp_memory_maintenance_job.yml",
         ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml",
         ".github/workflows/gcp_notifications_job.yml",
-        ".github/workflows/dev_backend_deployment_acceptance.yml",
         "backend/deploy/runtime_env.yaml",
         "backend/scripts/preflight-cloud-run-deploy.py",
         "backend/scripts/resolve_cloud_run_tagged_url.py",
