@@ -520,10 +520,12 @@ struct OnboardingChatView: View {
 
   /// Open System Settings to the correct pane for a permission type
   private func openSettingsForPermission(_ type: String) {
+    if type == "screen_recording" {
+      ScreenCaptureService.openScreenRecordingPreferences()
+      return
+    }
     let urlString: String? = {
       switch type {
-      case "screen_recording":
-        return "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
       case "microphone":
         return "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
       case "accessibility":

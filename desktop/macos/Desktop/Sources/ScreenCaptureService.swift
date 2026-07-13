@@ -96,6 +96,17 @@ final class ScreenCaptureService: Sendable {
     return true
   }
 
+  enum ScreenRecordingRequestDestination: Equatable {
+    case alreadyGranted
+    case systemSettings
+  }
+
+  static func screenRecordingRequestDestination(
+    hasPermissionNow: Bool
+  ) -> ScreenRecordingRequestDestination {
+    hasPermissionNow ? .alreadyGranted : .systemSettings
+  }
+
   /// Legacy synchronous permission probe. Keep this as a TCC preflight wrapper
   /// so callers cannot accidentally make the UI depend on a child CLI process.
   static func testCapturePermission() -> Bool {
@@ -111,6 +122,8 @@ final class ScreenCaptureService: Sendable {
 
   /// Open System Preferences to Screen Recording settings
   static func openScreenRecordingPreferences() {
+    Task { await ScreenRecordingGrantGuidance.presentDragToGrantHelper() }
+
     if let url = URL(
       string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
     {
@@ -226,6 +239,10 @@ final class ScreenCaptureService: Sendable {
       }
     }
 
+    if !CGPreflightScreenCaptureAccess() {
+      Task { await ScreenRecordingGrantGuidance.presentDragToGrantHelper() }
+    }
+
     // Note: callers are responsible for opening System Settings
     // (removed duplicate open that conflicted with caller's own open call)
   }
@@ -252,8 +269,13 @@ final class ScreenCaptureService: Sendable {
   /// never appeared in the list. Mirrors MemoryExportExecutor.requestScreenRecordingApprovalForCloudSetup, the existing register-while-frontmost path.
   @MainActor
   static func requestScreenRecordingAccessAndOpenSettings() {
-    requestAllScreenCapturePermissions()
-    openScreenRecordingPreferences()
+    switch screenRecordingRequestDestination(hasPermissionNow: checkPermission()) {
+    case .alreadyGranted:
+      NSApp.activate()
+    case .systemSettings:
+      requestAllScreenCapturePermissions()
+      openScreenRecordingPreferences()
+    }
   }
 
   /// Test if ScreenCaptureKit specifically works (macOS 14+)

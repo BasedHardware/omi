@@ -2383,6 +2383,14 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "preview_screen_recording_drag_helper",
+      summary: "Open Screen Recording settings and show the drag-to-enable helper"
+    ) { _ in
+      await MainActor.run { ScreenCaptureService.openScreenRecordingPreferences() }
+      return CloudConnectorGuidanceOverlay.shared.automationState()
+    }
+
+    register(
       name: "open_conversation",
       summary: "Open a conversation detail view (same path as POST /conversation/open)",
       params: ["conversationId", "showTranscript", "timeoutMs"]
