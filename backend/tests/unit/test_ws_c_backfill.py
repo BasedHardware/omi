@@ -661,6 +661,10 @@ def test_remediation_archives_only_planned_noise_through_apply_and_repairs_proje
         lambda archived, **_: projection_calls.append(("keyword", archived.tier.value)) or True,
     )
     monkeypatch.setattr(
+        "utils.memory.legacy_backfill.delete_canonical_memory_vector",
+        lambda uid, memory_id: projection_calls.append(("vector_delete", memory_id)) or True,
+    )
+    monkeypatch.setattr(
         "utils.memory.legacy_backfill.sync_canonical_memory_vector",
         lambda archived, **_: projection_calls.append(("vector", archived.tier.value)) or True,
     )
@@ -683,7 +687,12 @@ def test_remediation_archives_only_planned_noise_through_apply_and_repairs_proje
     assert archived.status == MemoryItemStatus.active
     assert archived.item_revision == item.item_revision + 1
     assert archived.promotion["remediation"]["action"] == "archive"
-    assert projection_calls == [("keyword", "archive"), ("vector", "archive"), ("kg", item.memory_id)]
+    assert projection_calls == [
+        ("keyword", "archive"),
+        ("vector_delete", item.memory_id),
+        ("vector", "archive"),
+        ("kg", item.memory_id),
+    ]
     assert any(
         path.startswith(f"users/{LEGACY_UID}/memory_commits/") for path in db.docs
     ), "remediation must use the canonical apply ledger"

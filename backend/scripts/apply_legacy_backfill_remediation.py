@@ -67,7 +67,14 @@ def main(argv: list[str] | None = None) -> int:
         operator_context=args.operator_context or getpass.getuser(),
     )
     print(json.dumps(asdict(report), default=str, indent=2, sort_keys=True))
-    return 1 if report.cohort_gated or report.errors else 0
+    derived_sync_failed = any(
+        (
+            report.vector_sync_failures,
+            report.keyword_sync_failures,
+            report.kg_invalidation_failures,
+        )
+    )
+    return 1 if report.cohort_gated or report.errors or derived_sync_failed else 0
 
 
 if __name__ == "__main__":

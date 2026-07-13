@@ -41,7 +41,7 @@ from models.product_memory import MemoryItemStatus, MemoryLayer, ProcessingState
 from utils.memory.atom_keyword_index import sync_atom_keyword_index_for_item
 from utils.memory.canonical_memory_adapter import extraction_memory_id, invalidate_kg_for_memory_retraction
 from utils.memory.canonical_kg_promotion import extract_kg_for_promoted_memory
-from utils.memory.canonical_vector_sync import sync_canonical_memory_vector
+from utils.memory.canonical_vector_sync import delete_canonical_memory_vector, sync_canonical_memory_vector
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
 from utils.memory.required_promotion import (
@@ -642,7 +642,13 @@ def _archive_legacy_backfill_item_via_apply(
         vector_sync_failed = True
 
     keyword_sync_succeeded = sync_atom_keyword_index_for_item(archived, db_client=db_client)
-    sync_canonical_memory_vector(archived, on_hard_failure=_record_vector_sync_failure)
+    # The existing long-term vector is eligible for default retrieval. Remove it
+    # before publishing the archive vector so an upsert failure fails closed for
+    # default access rather than leaving stale long-term metadata queryable.
+    deleted_prior_vector = delete_canonical_memory_vector(uid, archived.memory_id)
+    synced_archive_vector = sync_canonical_memory_vector(archived, on_hard_failure=_record_vector_sync_failure)
+    if not deleted_prior_vector and not synced_archive_vector:
+        _record_vector_sync_failure()
     kg_invalidation_failed = False
     try:
         invalidate_kg_for_memory_retraction(uid, [archived.memory_id], db_client=db_client)
