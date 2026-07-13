@@ -1,0 +1,3 @@
+{
+  "change": "Suggested tasks list now always shows the newest candidates first, independent of backend return order"
+}
