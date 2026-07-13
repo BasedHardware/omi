@@ -7,7 +7,7 @@
 // while the InferenceSession persists for the whole process.
 import { makePipelineHandle } from './pipelineHandle'
 import { createPcmPipeline as createWorkletPipeline } from './pcmPipeline'
-import { VadGate as PureVadGate } from './vadGate'
+import { VadGate as PureVadGate, type VadGateMode } from './vadGate'
 import { createSileroDetector, SILERO_FRAME_SAMPLES, type SileroDetector } from './vadModel'
 import { SpeechHysteresis, Float32Reblocker } from './speechTicker'
 import { classifyVadFailure } from './vadFallback'
@@ -19,6 +19,11 @@ export type VadMode = 'gated' | 'fallback'
 export type VadGateConfig = {
   /** Audio that passed the gate (or ALL audio while falling open) — forward to WS. */
   onVoiced: (pcm: Int16Array) => void
+  /** Gate behavior. 'gated' (default) drops silence via Silero; 'passthrough'
+   *  forwards every frame (the user disabled the local VAD gate in Settings, or a
+   *  lane that must never gate). Resolved from prefs by the caller at session start
+   *  via resolveVadGateMode (in ./vadGate). */
+  mode?: VadGateMode
 }
 export type VadGate = { push: (pcm: Int16Array) => void; stop: () => void }
 
@@ -62,7 +67,7 @@ export function createVadGate(config: VadGateConfig): VadGate {
   const gate = new PureVadGate({
     preSpeechPadMs: PRE_SPEECH_PAD_MS,
     redemptionMs: REDEMPTION_MS,
-    mode: 'gated'
+    mode: config.mode ?? 'gated'
   })
   const reblock = new Float32Reblocker(SILERO_FRAME_SAMPLES)
   const hysteresis = new SpeechHysteresis()

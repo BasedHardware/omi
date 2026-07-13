@@ -18,6 +18,13 @@ import { PcmRing } from './pcmRing'
 
 export type VadGateMode = 'gated' | 'passthrough'
 
+/** Map the `vadGateEnabled` preference (undefined = enabled) to a gate mode.
+ *  Pure + colocated with the mode type so the Settings→capture plumbing is
+ *  unit-testable without importing the onnx-backed audio engine. */
+export function resolveVadGateMode(vadGateEnabled: boolean | undefined): VadGateMode {
+  return vadGateEnabled === false ? 'passthrough' : 'gated'
+}
+
 export type VadGateConfig = {
   /** Audio prepended before the speech-start point (from the pre-roll ring). */
   preSpeechPadMs: number

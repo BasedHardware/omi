@@ -49,6 +49,12 @@ export type Preferences = {
   // users consent inline during onboarding instead, so this stays undefined for
   // them and the interstitial never fires (it's gated on onboardingCompletedAt).
   backgroundConsentAt?: number
+  // Local VAD gate: when the on-device voice-activity gate runs, silence is
+  // dropped before audio reaches the transcription backend (saves cost). Applies
+  // to the always-on / ambient capture lanes (read at session start in
+  // AudioSessionHost); PTT is passthrough regardless. Undefined = enabled
+  // (gated), the macOS-faithful default. Set false to send all audio ungated.
+  vadGateEnabled?: boolean
   // Launch commands for the external coding agents (OpenClaw/Hermes/Codex).
   // Set in Settings → Agents; undefined = not connected (the matching
   // OMI_*_ADAPTER_COMMAND env var still works as a power-user override).

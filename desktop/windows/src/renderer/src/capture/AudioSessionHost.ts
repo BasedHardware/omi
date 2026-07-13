@@ -5,6 +5,8 @@ import {
   type PcmPipeline,
   type VadGate
 } from '../lib/capture/captureEngine'
+import { resolveVadGateMode } from '../lib/capture/vadGate'
+import { getPreferences } from '../lib/preferences'
 import { getSystemAudioStream } from '../lib/capture/systemAudio'
 import {
   createLoopbackMusicFilter,
@@ -88,7 +90,12 @@ async function startAudioSession(
     session.musicFilter = filter
     onVoiced = filter.push
   }
-  const gate = createVadGate({ onVoiced })
+  // Read the local-VAD-gate preference at session start (Settings → Transcription).
+  // Disabled → passthrough, so every frame reaches the backend ungated.
+  const gate = createVadGate({
+    onVoiced,
+    mode: resolveVadGateMode(getPreferences().vadGateEnabled)
+  })
   session.gate = gate
   // Echo gate (Phase 6): while Omi's voice plays, drop frames BEFORE the VAD
   // gate so Omi's speech never enters the pre-roll ring either. Applies to both
