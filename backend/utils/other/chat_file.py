@@ -37,7 +37,7 @@ def _safe_file_chats(files_data: List[Dict[str, Any]]) -> List[FileChat]:
         except ValidationError as e:
             logger.warning(
                 "Skipping malformed chat file %s: %s",
-                f.get('id') if isinstance(f, dict) else None,
+                f.get('id'),
                 [err['loc'][0] for err in e.errors()],
             )
     return files
