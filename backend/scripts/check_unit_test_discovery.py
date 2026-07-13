@@ -7,12 +7,14 @@ CI while the files stayed in the tree; the gap was only noticed weeks later.
 This check makes that failure mode impossible to repeat quietly:
 
 1. Every ``test_*.py`` / ``*_test.py`` under ``backend/tests/`` and
-   ``backend/testing/`` must be either selected by
-   ``scripts/select_backend_unit_tests.py --all`` or matched by an entry in
-   ``KNOWN_OTHER_RUNNERS`` (suites that run outside the unit lane on purpose).
-2. ``LEGACY_UNLISTED_TESTS`` (the selector's known-orphan allowlist) is a
-   no-increase ratchet: entries may be removed, never added, and every entry
-   must still exist on disk so deletions clean the list up.
+   ``backend/testing/`` must be selected by
+   ``scripts/select_backend_unit_tests.py --all``, verified against a
+   dedicated runner workflow (``WORKFLOW_COVERED_PREFIXES`` — the workflow
+   file must exist and actually reference the tree or the individual file),
+   excluded by written policy (``POLICY_EXCLUDED_PREFIXES``), or allowlisted.
+2. Allowlists only shrink: ``LEGACY_UNLISTED_TESTS`` (the selector's
+   known-orphan set) is pinned to a frozen baseline in both directions, and
+   ``MANUAL_ONLY_TESTS`` entries must exist on disk.
 
 Run from ``backend/``: ``python3 scripts/check_unit_test_discovery.py``
 """
@@ -23,19 +25,39 @@ import sys
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
+REPO_DIR = BACKEND_DIR.parent
+WORKFLOWS_DIR = REPO_DIR / '.github' / 'workflows'
 
-# Test trees that intentionally run outside the unit suite. Every prefix must
-# name the runner that owns it so a reader can verify coverage in one hop.
-KNOWN_OTHER_RUNNERS = {
-    'testing/e2e/': 'backend-hermetic-e2e.yml (hermetic E2E harness)',
-    'testing/contracts/': 'desktop-backend-contracts.yml (cross-language contracts)',
-    'tests/container/': 'parakeet_gpu_tests.yml (nightly GPU suite)',
+sys.path.insert(0, str(BACKEND_DIR))
+
+from scripts.select_backend_unit_tests import LEGACY_UNLISTED_TESTS, discover_unit_tests  # noqa: E402
+
+# Test trees run by a dedicated workflow. mode='directory': the workflow runs
+# the whole tree (its text must reference the prefix); mode='explicit': the
+# workflow lists files one by one (each file must appear by name, so a file
+# missing from the list is an orphan even though the directory is "covered").
+WORKFLOW_COVERED_PREFIXES = {
+    'testing/e2e/': ('backend-hermetic-e2e.yml', 'directory'),
+    'testing/contracts/': ('desktop-backend-contracts.yml', 'directory'),
+    'tests/container/': ('parakeet_gpu_tests.yml', 'explicit'),
+}
+
+# Excluded from CI by written policy (AGENTS.md Testing: live-service tests
+# stay out of the CI suite). No workflow to verify against.
+POLICY_EXCLUDED_PREFIXES = {
     'tests/integration/': 'live-service tests; excluded from CI by policy (AGENTS.md Testing)',
     'tests/eval/': 'live-LLM evals; excluded from CI by policy (AGENTS.md Testing)',
 }
 
-# Frozen copy of the selector's LEGACY_UNLISTED_TESTS. The ratchet direction is
-# shrink-only: fixing one of these means deleting it here AND in the selector.
+# On-demand harnesses deliberately outside every scheduled runner. Entries
+# must exist on disk; additions are a reviewed diff of this checker itself.
+MANUAL_ONLY_TESTS = {
+    'tests/container/test_parakeet_vram_stress.py': 'manual GPU stress harness; not in the nightly explicit list',
+}
+
+# Frozen copy of the selector's LEGACY_UNLISTED_TESTS. Pinned in both
+# directions: the selector's set may not grow past this baseline, and fixing
+# an entry means deleting it in the selector AND here in the same PR.
 LEGACY_UNLISTED_BASELINE = frozenset(
     {
         'tests/test_cache_manager.py',
@@ -56,16 +78,56 @@ def discover_test_files(backend_dir: Path) -> set[str]:
     return files
 
 
-def covered_by_other_runner(path: str) -> bool:
-    return any(path.startswith(prefix) for prefix in KNOWN_OTHER_RUNNERS)
+def load_workflow_texts(workflows_dir: Path) -> dict[str, str]:
+    texts: dict[str, str] = {}
+    for workflow_file, _mode in WORKFLOW_COVERED_PREFIXES.values():
+        path = workflows_dir / workflow_file
+        texts[workflow_file] = path.read_text(encoding='utf-8') if path.is_file() else ''
+    return texts
 
 
-def find_orphans(all_files: set[str], selected: set[str], legacy_unlisted: set[str]) -> list[str]:
-    return sorted(
-        path
-        for path in all_files
-        if path not in selected and path not in legacy_unlisted and not covered_by_other_runner(path)
-    )
+def workflow_map_errors(workflow_texts: dict[str, str]) -> list[str]:
+    """The runner map must describe reality: workflows exist and run their trees."""
+    errors = []
+    for prefix, (workflow_file, mode) in WORKFLOW_COVERED_PREFIXES.items():
+        text = workflow_texts.get(workflow_file, '')
+        if not text:
+            errors.append(
+                f'WORKFLOW_COVERED_PREFIXES maps {prefix} to .github/workflows/{workflow_file}, '
+                'which does not exist. Update the map to the real runner.'
+            )
+        elif mode == 'directory' and prefix.rstrip('/') not in text:
+            errors.append(
+                f'.github/workflows/{workflow_file} no longer references {prefix.rstrip("/")}; '
+                f'it cannot be credited with running that tree. Update WORKFLOW_COVERED_PREFIXES.'
+            )
+    return errors
+
+
+def find_orphans(
+    all_files: set[str],
+    selected: set[str],
+    legacy_unlisted: set[str],
+    workflow_texts: dict[str, str],
+) -> list[str]:
+    orphans = []
+    for path in sorted(all_files):
+        if path in selected or path in legacy_unlisted or path in MANUAL_ONLY_TESTS:
+            continue
+        if any(path.startswith(prefix) for prefix in POLICY_EXCLUDED_PREFIXES):
+            continue
+        covered = False
+        for prefix, (workflow_file, mode) in WORKFLOW_COVERED_PREFIXES.items():
+            if not path.startswith(prefix):
+                continue
+            text = workflow_texts.get(workflow_file, '')
+            # directory mode: the tree reference was validated by
+            # workflow_map_errors; explicit mode: this very file must be named.
+            covered = bool(text) and (mode == 'directory' or path in text)
+            break
+        if not covered:
+            orphans.append(path)
+    return orphans
 
 
 def check_legacy_ratchet(current_legacy: set[str], all_files: set[str]) -> list[str]:
@@ -77,33 +139,40 @@ def check_legacy_ratchet(current_legacy: set[str], all_files: set[str]) -> list[
             + ', '.join(grown)
             + '. Make the test discoverable by the unit runner instead of allowlisting it.'
         )
+    shrunk_without_baseline_update = sorted(LEGACY_UNLISTED_BASELINE - current_legacy)
+    if shrunk_without_baseline_update:
+        errors.append(
+            'LEGACY_UNLISTED_TESTS shrank — good. Also remove from LEGACY_UNLISTED_BASELINE in '
+            'scripts/check_unit_test_discovery.py: ' + ', '.join(shrunk_without_baseline_update)
+        )
     stale = sorted(entry for entry in current_legacy if entry not in all_files)
+    stale += sorted(entry for entry in MANUAL_ONLY_TESTS if entry not in all_files)
     if stale:
         errors.append(
-            'LEGACY_UNLISTED_TESTS lists files that no longer exist: '
+            'Allowlists reference files that no longer exist: '
             + ', '.join(stale)
-            + '. Remove them from the selector and from LEGACY_UNLISTED_BASELINE here.'
+            + '. Remove them from the selector/checker allowlists.'
         )
     return errors
 
 
 def main() -> int:
-    sys.path.insert(0, str(BACKEND_DIR))
-    from scripts.select_backend_unit_tests import LEGACY_UNLISTED_TESTS, discover_unit_tests
-
     all_files = discover_test_files(BACKEND_DIR)
     selected = set(discover_unit_tests())
+    workflow_texts = load_workflow_texts(WORKFLOWS_DIR)
     errors: list[str] = []
 
-    orphans = find_orphans(all_files, selected, set(LEGACY_UNLISTED_TESTS))
+    errors.extend(workflow_map_errors(workflow_texts))
+
+    orphans = find_orphans(all_files, selected, set(LEGACY_UNLISTED_TESTS), workflow_texts)
     if orphans:
-        runner_map = '; '.join(f'{prefix} -> {runner}' for prefix, runner in KNOWN_OTHER_RUNNERS.items())
+        runner_map = '; '.join(f'{prefix} -> {wf} ({mode})' for prefix, (wf, mode) in WORKFLOW_COVERED_PREFIXES.items())
         errors.append(
             'Test files exist but no runner discovers them (they would silently never run):\n  '
             + '\n  '.join(orphans)
             + '\nEither place them under a directory the unit selector discovers '
-            + '(see FULL_TEST_ROOTS in scripts/select_backend_unit_tests.py) or, for suites '
-            + f'with a dedicated runner, extend KNOWN_OTHER_RUNNERS. Known runners: {runner_map}'
+            + '(see FULL_TEST_ROOTS in scripts/select_backend_unit_tests.py), add them to their '
+            + f'dedicated runner workflow, or extend the maps in this checker. Known runners: {runner_map}'
         )
 
     errors.extend(check_legacy_ratchet(set(LEGACY_UNLISTED_TESTS), all_files))
@@ -115,7 +184,7 @@ def main() -> int:
 
     print(
         f'unit test discovery OK: {len(selected)} selected, '
-        f'{len(all_files) - len(selected)} covered by other runners/allowlist, 0 orphans'
+        f'{len(all_files) - len(selected)} covered by other runners/policy/allowlists, 0 orphans'
     )
     return 0
 
