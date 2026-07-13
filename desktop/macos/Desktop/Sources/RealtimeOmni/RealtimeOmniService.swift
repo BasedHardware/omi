@@ -51,6 +51,12 @@ final class RealtimeOmniService: NSObject {
     private var isOpen = false
     private var terminated = false  // fire omniDidError at most once per turn
     private var pendingAudio: [Data] = []
+    private var pendingAudioBytes = 0
+    /// Cap on audio buffered while the relay session is still connecting, matching the
+    /// hub's `maxBufferedAudioBytes` (120 s @ 16 kHz s16le). Without a bound, a relay
+    /// that stalls open (connecting but never `session.created`) during a multi-minute
+    /// locked-mode hold would grow `pendingAudio` unboundedly.
+    private static let maxPendingAudioBytes = 3_840_000
     private var pendingCommit = false  // turn ended before the session opened; commit after activityStart
 
     // Gemini's Live endpoint resets BOTH of Apple's WebSocket stacks
@@ -117,6 +123,7 @@ final class RealtimeOmniService: NSObject {
         nw = nil
         isOpen = false
         pendingAudio.removeAll()
+        pendingAudioBytes = 0
         pendingCommit = false
     }
 
@@ -176,6 +183,21 @@ final class RealtimeOmniService: NSObject {
 
     /// Feed mic PCM16 mono at `requiredInputSampleRate`. Caller is responsible for
     /// resampling to that rate (16k mic → 24k for OpenAI).
+    /// Appends `chunk` to `buffer` (tracking total bytes in `bytes`), dropping the
+    /// oldest chunks so the buffered total never exceeds `maxBytes` (unless a single
+    /// chunk alone exceeds it, in which case that one chunk is kept). Bounds memory
+    /// while the relay is still connecting. `nonisolated static` so it is unit-testable.
+    nonisolated static func appendBoundedAudio(
+        _ chunk: Data, to buffer: inout [Data], bytes: inout Int, maxBytes: Int
+    ) {
+        buffer.append(chunk)
+        bytes += chunk.count
+        while bytes > maxBytes, buffer.count > 1 {
+            let dropped = buffer.removeFirst()
+            bytes -= dropped.count
+        }
+    }
+
     func sendAudio(_ pcm: Data) {
         // Buffer until the session is open. PTT starts the mic immediately and
         // streams chunks during the connect handshake (plus a pre-connect buffer
@@ -184,7 +206,10 @@ final class RealtimeOmniService: NSObject {
         // ("invalid argument") — markReady() sends activityStart and *then* flushes
         // pendingAudio, so queuing here preserves that ordering. (The test harness
         // only sends after omniDidConnect, so it never exercised this race.)
-        guard isOpen else { pendingAudio.append(pcm); return }
+        guard isOpen else {
+            Self.appendBoundedAudio(pcm, to: &pendingAudio, bytes: &pendingAudioBytes, maxBytes: Self.maxPendingAudioBytes)
+            return
+        }
         let b64 = pcm.base64EncodedString()
         switch provider {
         case .gptRealtime2:
@@ -383,6 +408,7 @@ final class RealtimeOmniService: NSObject {
         }
         for chunk in pendingAudio { sendAudio(chunk) }
         pendingAudio.removeAll()
+        pendingAudioBytes = 0
         if pendingCommit {
             pendingCommit = false
             commitInputTurn()
