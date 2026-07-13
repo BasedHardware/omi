@@ -251,6 +251,10 @@ final class SuggestedTasksStore: ObservableObject {
     let visible =
       pendingRecords
       .filter { suppressions[$0.candidateId] == nil }
+      // Defense-in-depth: sort newest-first by createdAt so the top-N slice is
+      // deterministic regardless of the API return order (backend ranks server-side,
+      // but a regression there must not silently show stale candidates).
+      .sorted { $0.createdAt > $1.createdAt }
       .compactMap { record in Self.project(record).map { (record: record, candidate: $0) } }
       .prefix(Self.maxVisibleCandidates)
     recordsByID = Dictionary(lastWriteWins: visible.map { ($0.record.candidateId, $0.record) })
