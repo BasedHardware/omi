@@ -5,6 +5,7 @@
 // module routes those channels to the bar.
 import { ipcMain, BrowserWindow } from 'electron'
 import { hideBar, setBarEnabled, setSummonGestureAccelerator } from '../bar/window'
+import { setAppSettings } from '../appSettings'
 import {
   setOverlayAccelerator,
   suspendOverlayShortcut,
@@ -30,11 +31,17 @@ export function registerOverlayHandlers(focusMain: () => void): void {
   // Rebind the global summon accelerator. Returns whether the new accelerator
   // was claimed (false → it's taken; main rolled back to the previous binding).
   // On success the bar's gesture machine is rebuilt so tap/hold detection
-  // samples the NEW chord's key.
+  // samples the NEW chord's key, and the persisted appSettings.summonHotkey is
+  // updated too — this is the only rebind path onboarding's ShortcutSetupStep
+  // uses, so without this write a chord set during onboarding would appear to
+  // work for the session but revert to the stale default on the next launch.
   ipcMain.handle('overlay:setAccelerator', (_e, accelerator: string): boolean => {
     if (typeof accelerator !== 'string' || !accelerator.trim()) return false
     const ok = setOverlayAccelerator(accelerator)
-    if (ok) setSummonGestureAccelerator(getOverlayAccelerator())
+    if (ok) {
+      setSummonGestureAccelerator(getOverlayAccelerator())
+      setAppSettings({ summonHotkey: getOverlayAccelerator() })
+    }
     return ok
   })
   // Release/re-claim the accelerator so the renderer can read raw keys while
