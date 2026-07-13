@@ -104,6 +104,8 @@ checks:
     reason: "desktop Swift production or test structure changed"
 
 exempt:
+  - path: ".github/scripts/check-desktop-auto-beta-candidate.py"
+    reason: "release pipeline check requires published candidate artifacts and workflow inputs"
   - path: ".github/scripts/check-desktop-prod-promotion-policy.py"
     reason: "release-policy full-tree check, not diff-scoped"
   - path: ".github/scripts/check-desktop-release-promotion.py"
