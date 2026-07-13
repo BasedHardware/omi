@@ -1,6 +1,21 @@
 import { resolve } from 'path'
 import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
+import { resolveDevInstance } from './src/main/devInstance'
+
+// Resolve THIS checkout's dev instance from the worktree it lives in. The primary
+// checkout stays on 5179 with the default profile (zero change). A linked worktree
+// derives its own renderer port so several `pnpm dev` sessions coexist. We also
+// stamp the instance into the env so the spawned Electron main process applies the
+// matching CDP port + window-title suffix + userData profile; the main process
+// re-derives from its own cwd as a fallback, so correctness never depends on this.
+const devInstance = resolveDevInstance()
+process.env.OMI_INSTANCE = devInstance.name
+process.env.OMI_DEV_CDP_PORT = String(devInstance.cdpPort)
+if (!devInstance.isPrimary && !process.env.OMI_SANDBOX) {
+  // Auto-isolate the linked worktree's userData (dev/bench.ts reads OMI_SANDBOX).
+  process.env.OMI_SANDBOX = devInstance.name
+}
 
 export default defineConfig({
   main: {
@@ -18,14 +33,16 @@ export default defineConfig({
   },
   preload: {},
   renderer: {
-    // Pin the dev server to a fixed port so the renderer's origin
-    // (http://localhost:5179) — and therefore its localStorage (onboarding flag,
-    // preferences, Firebase session) — stays stable across launches. Without a
-    // pinned port, a second worktree holding 5173 pushes this one to 5174, which
-    // is a different origin and silently drops all saved state (re-onboarding).
-    // strictPort fails fast instead of drifting to a new origin.
+    // Pin the dev server to this instance's port so the renderer's origin — and
+    // therefore its localStorage (onboarding flag, preferences, Firebase session)
+    // — stays stable across launches. The PRIMARY checkout keeps 5179; a linked
+    // worktree derives its own port (5180–5279) from its folder name so parallel
+    // `pnpm dev` sessions never share an origin (which would silently drop saved
+    // state) or fight over one port. strictPort fails LOUD on a collision instead
+    // of drifting to a new origin. Override with OMI_DEV_PORT / OMI_INSTANCE.
+    // See src/main/devInstance.ts + docs/multi-worktree-dev.md.
     server: {
-      port: 5179,
+      port: devInstance.rendererPort,
       strictPort: true
     },
     resolve: {

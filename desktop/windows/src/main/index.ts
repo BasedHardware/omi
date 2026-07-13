@@ -351,6 +351,10 @@ function createWindow(): BrowserWindow {
   })
   perfMark('window:created')
 
+  // Dev only: tag the window title with the worktree instance (e.g. " — fix-orb")
+  // so overlapping parallel dev windows are tellable apart. No-op on primary.
+  if (import.meta.env.DEV) devBench.applyDevWindowTitleSuffix(mainWindow)
+
   // Everything window.open()ed routes to the system browser — there is no
   // embedded OAuth popup anymore (Google blocks webview OAuth; sign-in runs the
   // backend PKCE flow in the system browser via src/main/ipc/auth.ts).
