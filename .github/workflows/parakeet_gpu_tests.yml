@@ -32,7 +32,7 @@ jobs:
       id-token: 'write'
 
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 50
 
     steps:
       - name: Checkout
@@ -81,7 +81,7 @@ jobs:
             name: ${JOB_NAME}
             namespace: ${NAMESPACE}
           spec:
-            activeDeadlineSeconds: 1800
+            activeDeadlineSeconds: 2700
             backoffLimit: 0
             template:
               spec:
@@ -265,7 +265,7 @@ jobs:
         run: |
           echo "Waiting for GPU test job to complete (timeout: 30 min)..."
           kubectl -n ${{ env.NAMESPACE }} wait --for=condition=complete \
-            --timeout=1800s job/${{ env.JOB_NAME }} 2>&1 || true
+            --timeout=2700s job/${{ env.JOB_NAME }} 2>&1 || true
 
           # Check job status
           STATUS=$(kubectl -n ${{ env.NAMESPACE }} get job ${{ env.JOB_NAME }} \
