@@ -414,11 +414,11 @@ def main() -> None:
     if output:
         output += '\n'
     if args.output:
-        args.output.write_text(output)
+        args.output.write_text(output, encoding='utf-8', newline='\n')
     else:
         print(output, end='')
     if args.reason_output:
-        args.reason_output.write_text(reason + '\n')
+        args.reason_output.write_text(reason + '\n', encoding='utf-8', newline='\n')
 
 
 if __name__ == '__main__':
