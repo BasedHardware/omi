@@ -120,6 +120,7 @@ struct OnboardingNotificationStepView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(OmiColors.backgroundPrimary)
         .onAppear {
+            let ownerID = RuntimeOwnerIdentity.currentOwnerId()
             FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
             FloatingControlBarManager.shared.showTemporarily()
 
@@ -130,12 +131,15 @@ struct OnboardingNotificationStepView: View {
                 }
 
                 // Send a real macOS notification
-                NotificationService.shared.sendNotification(
-                    title: insightHeadline,
-                    message: insightText,
-                    assistantId: "onboarding",
-                    respectFrequency: false
-                )
+                if let ownerID {
+                    NotificationService.shared.sendNotification(
+                        ownerID: ownerID,
+                        title: insightHeadline,
+                        message: insightText,
+                        assistantId: "onboarding",
+                        respectFrequency: false
+                    )
+                }
 
                 // Show "notification sent" + continue after a beat
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {

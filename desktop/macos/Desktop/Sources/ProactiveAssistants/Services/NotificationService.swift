@@ -50,7 +50,7 @@ enum NotificationSound {
 
 @MainActor
 class NotificationService: NSObject, UNUserNotificationCenterDelegate {
-    static let shared = NotificationService()
+    static let shared = NotificationService(registerWithSystemNotificationCenter: true)
 
     /// Category ID for notifications that track dismissal
     private static let trackableCategoryId = "omi.trackable"
@@ -92,9 +92,15 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     /// Proactive notifications are OFF by default — users opt in via the Settings slider.
     private static let defaultFrequencyLevel = 0
 
-    /// Stores metadata for sent notifications so we can retrieve it in delegate callbacks
-    /// Key: notification identifier, Value: (title, assistantId)
-    private var notificationMetadata: [String: (title: String, assistantId: String)] = [:]
+    private struct NotificationMetadata {
+        let title: String
+        let assistantId: String
+        let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    }
+
+    /// Interaction provenance is bound to the exact authorization generation
+    /// that delivered the banner, not only to a reusable user ID.
+    private var notificationMetadata: [String: NotificationMetadata] = [:]
 
     /// Insertion order of `notificationMetadata` keys, used to evict the oldest entries.
     /// Metadata is only removed on user interaction (`didReceive`); a functional banner
@@ -124,18 +130,42 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     /// Last proactive-notification timestamp across all assistants. Used by the
     /// frequency throttle as a global rate limit.
     private var lastNotificationAtGlobal: Date?
+    private var throttleOwnerSnapshot: RuntimeOwnerAuthorizationSnapshot?
+    private var ownerChangeObserver: NSObjectProtocol?
 
-    private let proactiveTaskGate = ProactiveTaskInterruptionGate()
-
-    private override init() {
+    /// The system notification center raises an Objective-C exception when
+    /// constructed from SwiftPM's command-line test host. Owner-bound policy
+    /// tests inject `false`; production always uses the shared `true` instance.
+    init(registerWithSystemNotificationCenter: Bool) {
         super.init()
-        // Set ourselves as the delegate to show notifications even when app is in foreground
-        UNUserNotificationCenter.current().delegate = self
-        // Set up notification categories for tracking
-        setupNotificationCategories()
-        // Track that delegate is ready
-        AnalyticsManager.shared.notificationDelegateReady()
-        log("NotificationService: Delegate initialized and ready")
+        if registerWithSystemNotificationCenter {
+            // Set ourselves as the delegate to show notifications even when app is in foreground
+            UNUserNotificationCenter.current().delegate = self
+            // Set up notification categories for tracking
+            setupNotificationCategories()
+        }
+        ownerChangeObserver = NotificationCenter.default.addObserver(
+            forName: .runtimeOwnerDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.resetOwnerScopedState()
+            }
+        }
+        if registerWithSystemNotificationCenter {
+            // Track that delegate is ready
+            AnalyticsManager.shared.notificationDelegateReady()
+            log("NotificationService: Delegate initialized and ready")
+        }
+    }
+
+    private func resetOwnerScopedState() {
+        notificationMetadata.removeAll()
+        notificationMetadataOrder.removeAll()
+        lastNotificationAt.removeAll()
+        lastNotificationAtGlobal = nil
+        throttleOwnerSnapshot = nil
     }
 
     /// Set up notification categories to enable dismiss tracking
@@ -173,19 +203,26 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        // Track that willPresent was called (confirms delegate is working)
         let notificationId = notification.request.identifier
         let title = notification.request.content.title
+        // Resolve owner provenance before presenting an already-scheduled banner;
+        // an OS callback may arrive after the originating session signed out.
         Task { @MainActor in
+            guard let metadata = self.notificationMetadata[notificationId],
+                  RuntimeOwnerIdentity.isAuthorizationCurrent(metadata.authorizationSnapshot) else {
+                self.notificationMetadata.removeValue(forKey: notificationId)
+                self.notificationMetadataOrder.removeAll { $0 == notificationId }
+                completionHandler([])
+                return
+            }
             AnalyticsManager.shared.notificationWillPresent(notificationId: notificationId, title: title)
+            // Show banner and badge; only include .sound if the notification has a sound attached.
+            var options: UNNotificationPresentationOptions = [.banner, .badge]
+            if notification.request.content.sound != nil {
+                options.insert(.sound)
+            }
+            completionHandler(options)
         }
-        // Show banner and badge; only include .sound if the notification has a sound attached
-        // (custom focus sounds are played via NSSound, so their content.sound is nil)
-        var options: UNNotificationPresentationOptions = [.banner, .badge]
-        if notification.request.content.sound != nil {
-            options.insert(.sound)
-        }
-        completionHandler(options)
     }
 
     // Handle notification interactions (click or dismiss)
@@ -197,8 +234,14 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         Task { @MainActor in
             // Retrieve stored metadata
             let metadata = self.notificationMetadata[notificationId]
-            let title = metadata?.title ?? response.notification.request.content.title
-            let assistantId = metadata?.assistantId ?? "unknown"
+            guard let metadata,
+                  RuntimeOwnerIdentity.isAuthorizationCurrent(metadata.authorizationSnapshot) else {
+                self.notificationMetadata.removeValue(forKey: notificationId)
+                self.notificationMetadataOrder.removeAll { $0 == notificationId }
+                return
+            }
+            let title = metadata.title
+            let assistantId = metadata.assistantId
 
             switch response.actionIdentifier {
             case UNNotificationDefaultActionIdentifier:
@@ -267,6 +310,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     /// still surface as a system banner — they either have no floating-bar equivalent
     /// or must reach the user even when the floating bar is hidden/snoozed.
     func sendNotification(
+        ownerID: String,
         title: String,
         message: String,
         assistantId: String = "default",
@@ -275,8 +319,18 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         action: FloatingBarNotificationAction? = nil,
         screenshotData: Data? = nil,
         deliverSystemBanner: Bool = false,
-        respectFrequency: Bool = true
+        respectFrequency: Bool = true,
+        authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
     ) {
+        guard !ownerID.isEmpty,
+              let authorizationSnapshot = suppliedAuthorizationSnapshot
+                ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID),
+              authorizationSnapshot.ownerID == ownerID,
+              RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+            log("NotificationService: rejecting notification from stale runtime owner")
+            return
+        }
+        prepareOwnerScopedState(for: authorizationSnapshot)
         // Rate-limit the screen-capture reset notification to one per broken-capture
         // episode. The recovery loop in ProactiveAssistantsPlugin.attemptAutoReset
         // re-fires this on every session (soft-recovery + app restart), which buried
@@ -316,8 +370,16 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         // Proactive notifications honor the user's frequency setting. Functional
         // notifications (Crisp support replies, screen-recording permission prompts,
         // onboarding test) pass `respectFrequency: false` to bypass the gate.
-        if respectFrequency && !shouldAllowProactiveNotification(assistantId: assistantId) {
+        if respectFrequency && !shouldAllowProactiveNotification(
+            assistantId: assistantId,
+            authorizationSnapshot: authorizationSnapshot
+        ) {
             log("NotificationService: throttled \(assistantId) notification (frequency=\(Self.currentFrequencyLevel()))")
+            return
+        }
+
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+            log("NotificationService: owner changed before notification presentation")
             return
         }
 
@@ -329,6 +391,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         }
 
         FloatingControlBarManager.shared.showNotification(
+            ownerID: ownerID,
             title: title,
             message: message,
             assistantId: assistantId,
@@ -344,6 +407,10 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
         UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
             Task { @MainActor in
+                guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+                    log("NotificationService: dropping stale-owner system notification")
+                    return
+                }
                 guard settings.authorizationStatus == .authorized else {
                     log("Notification skipped (auth=\(settings.authorizationStatus.rawValue)): \(title)")
 
@@ -366,7 +433,13 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
                     return
                 }
 
-                self?.deliverNotification(title: title, message: message, assistantId: assistantId, sound: sound)
+                self?.deliverNotification(
+                    title: title,
+                    message: message,
+                    assistantId: assistantId,
+                    sound: sound,
+                    authorizationSnapshot: authorizationSnapshot
+                )
             }
         }
     }
@@ -376,15 +449,26 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     @discardableResult
     func sendContextualTaskInterruption(
         _ candidate: TaskInterruptionCandidate,
+        authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
         now: Date = Date(),
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        ledgerPersistence: (any TaskInterruptionLedgerPersisting)? = nil
     ) -> TaskInterruptionGateTrace {
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+            return Self.staleOwnerGateTrace(candidate: candidate, now: now)
+        }
+        let ownerID = authorizationSnapshot.ownerID
+        prepareOwnerScopedState(for: authorizationSnapshot)
         let configuration = ProactiveTaskInterruptionSettings.load()
         let environment = TaskInterruptionEnvironment(
             cohort: ProactiveTaskCohort.current,
             masterNotificationsEnabled: Self.areNotificationsEnabled(),
             frequencyEnabled: Self.currentFrequencyLevel() > 0,
-            ambientFrequencyEligible: isProactiveNotificationEligible(assistantId: "task", now: now),
+            ambientFrequencyEligible: isProactiveNotificationEligible(
+                assistantId: "task",
+                now: now,
+                authorizationSnapshot: authorizationSnapshot
+            ),
             taskNotificationsEnabled: TaskAssistantSettings.shared.notificationsEnabled,
             focusSuppressed: FocusStorage.shared.currentStatus == .focused
                 || ProactiveTaskInterruptionSettings.isFocusSuppressed,
@@ -392,11 +476,20 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             now: now,
             calendar: calendar
         )
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+            return Self.staleOwnerGateTrace(candidate: candidate, now: now)
+        }
+        let proactiveTaskGate = ProactiveTaskInterruptionGate(
+            persistence: ledgerPersistence ?? TaskInterruptionLedgerDefaults(ownerID: ownerID)
+        )
         let trace = proactiveTaskGate.evaluate(
             candidate: candidate,
             configuration: configuration,
             environment: environment
         )
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+            return Self.staleOwnerGateTrace(candidate: candidate, now: now)
+        }
         AnalyticsManager.shared.proactiveTaskGateEvaluated(trace)
         guard trace.reason == .allowed else {
             log(
@@ -417,16 +510,46 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             detail: "recommendation_id=\(candidate.recommendationID)"
         )
         sendNotification(
+            ownerID: ownerID,
             title: candidate.headline,
             message: "\(candidate.whyNow) · \(candidate.recommendedAction)",
             assistantId: "task",
             context: context,
-            action: .openWhatMattersNow(recommendationID: candidate.recommendationID)
+            action: .openWhatMattersNow(recommendationID: candidate.recommendationID),
+            authorizationSnapshot: authorizationSnapshot
         )
         return trace
     }
 
-    private func deliverNotification(title: String, message: String, assistantId: String, sound: NotificationSound) {
+    private static func staleOwnerGateTrace(
+        candidate: TaskInterruptionCandidate,
+        now: Date
+    ) -> TaskInterruptionGateTrace {
+        TaskInterruptionGateTrace(
+            candidate: candidate,
+            environment: TaskInterruptionEnvironment(
+                cohort: ProactiveTaskCohort.current,
+                masterNotificationsEnabled: false,
+                frequencyEnabled: false,
+                ambientFrequencyEligible: false,
+                taskNotificationsEnabled: false,
+                focusSuppressed: false,
+                snoozed: false,
+                now: now,
+                calendar: .current
+            ),
+            reason: .staleOwner
+        )
+    }
+
+    private func deliverNotification(
+        title: String,
+        message: String,
+        assistantId: String,
+        sound: NotificationSound,
+        authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    ) {
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = message
@@ -448,12 +571,11 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
         // Store metadata for later retrieval in delegate callbacks, capping growth so
         // never-interacted banners cannot leak entries unboundedly.
-        notificationMetadata[notificationId] = (title: title, assistantId: assistantId)
-        notificationMetadataOrder.append(notificationId)
-        Self.evictOldestMetadata(
-            order: &notificationMetadataOrder,
-            store: &notificationMetadata,
-            max: Self.maxNotificationMetadata
+        storeNotificationMetadata(
+            id: notificationId,
+            title: title,
+            assistantId: assistantId,
+            authorizationSnapshot: authorizationSnapshot
         )
 
         // Play custom sound manually (SPM resources aren't found by UNNotificationSound)
@@ -473,6 +595,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
                 print("Notification sent successfully")
                 // Track notification sent
                 Task { @MainActor in
+                    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
                     AnalyticsManager.shared.notificationSent(
                         notificationId: notificationId,
                         title: title,
@@ -545,15 +668,98 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     /// Records the timestamp when allowed so subsequent calls within the window are
     /// suppressed. Per-assistant + global limits combine so a chatty assistant cannot
     /// starve another.
-    private func shouldAllowProactiveNotification(assistantId: String) -> Bool {
-        let now = Date()
-        guard isProactiveNotificationEligible(assistantId: assistantId, now: now) else { return false }
+    private func prepareOwnerScopedState(
+        for authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    ) {
+        if let throttleOwnerSnapshot,
+           RuntimeOwnerIdentity.isAuthorizationCurrent(throttleOwnerSnapshot),
+           throttleOwnerSnapshot == authorizationSnapshot {
+            return
+        }
+        lastNotificationAt.removeAll()
+        lastNotificationAtGlobal = nil
+        throttleOwnerSnapshot = authorizationSnapshot
+    }
+
+    private func shouldAllowProactiveNotification(
+        assistantId: String,
+        authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+        now: Date = Date()
+    ) -> Bool {
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return false }
+        prepareOwnerScopedState(for: authorizationSnapshot)
+        guard isProactiveNotificationEligible(
+            assistantId: assistantId,
+            now: now,
+            authorizationSnapshot: authorizationSnapshot
+        ) else { return false }
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return false }
         lastNotificationAt[assistantId] = now
         lastNotificationAtGlobal = now
         return true
     }
 
-    private func isProactiveNotificationEligible(assistantId: String, now: Date) -> Bool {
+    private func storeNotificationMetadata(
+        id: String,
+        title: String,
+        assistantId: String,
+        authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    ) {
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+        notificationMetadata[id] = NotificationMetadata(
+            title: title,
+            assistantId: assistantId,
+            authorizationSnapshot: authorizationSnapshot
+        )
+        notificationMetadataOrder.append(id)
+        Self.evictOldestMetadata(
+            order: &notificationMetadataOrder,
+            store: &notificationMetadata,
+            max: Self.maxNotificationMetadata
+        )
+    }
+
+    func recordNotificationMetadataForTesting(
+        id: String,
+        authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    ) {
+        storeNotificationMetadata(
+            id: id,
+            title: "test",
+            assistantId: "test",
+            authorizationSnapshot: authorizationSnapshot
+        )
+    }
+
+    func hasCurrentNotificationMetadataForTesting(id: String) -> Bool {
+        guard let metadata = notificationMetadata[id],
+              RuntimeOwnerIdentity.isAuthorizationCurrent(metadata.authorizationSnapshot) else {
+            notificationMetadata.removeValue(forKey: id)
+            notificationMetadataOrder.removeAll { $0 == id }
+            return false
+        }
+        return true
+    }
+
+    func allowProactiveNotificationForTesting(
+        assistantId: String,
+        authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+        now: Date
+    ) -> Bool {
+        shouldAllowProactiveNotification(
+            assistantId: assistantId,
+            authorizationSnapshot: authorizationSnapshot,
+            now: now
+        )
+    }
+
+    private func isProactiveNotificationEligible(
+        assistantId: String,
+        now: Date,
+        authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    ) -> Bool {
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return false }
+        prepareOwnerScopedState(for: authorizationSnapshot)
         let level = Self.currentFrequencyLevel()
         guard let interval = Self.minInterval(forLevel: level) else {
             return true  // Maximum

@@ -285,6 +285,22 @@ final class APIClientRoutingTests: XCTestCase {
     }
 
     func testRealtimeMintStructuredFailurePreservesDiagnostics() async throws {
+        let previousOwner = UserDefaults.standard.object(forKey: .authUserId)
+        let previousOverride = UserDefaults.standard.object(forKey: .automationOwnerOverride)
+        UserDefaults.standard.set("realtime-routing-owner", forKey: .authUserId)
+        UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+        defer {
+            if let previousOwner {
+                UserDefaults.standard.set(previousOwner, forKey: .authUserId)
+            } else {
+                UserDefaults.standard.removeObject(forKey: .authUserId)
+            }
+            if let previousOverride {
+                UserDefaults.standard.set(previousOverride, forKey: .automationOwnerOverride)
+            } else {
+                UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+            }
+        }
         let body = Data(
             """
             {
@@ -301,7 +317,9 @@ final class APIClientRoutingTests: XCTestCase {
         let client = await makeTestClient()
 
         do {
-            _ = try await client.mintRealtimeToken(provider: "openai")
+            _ = try await client.mintRealtimeToken(
+                provider: "openai",
+                expectedOwnerID: "realtime-routing-owner")
             XCTFail("Expected structured realtime mint failure")
         } catch let error as RealtimeTokenMintError {
             XCTAssertEqual(error.statusCode, 429)

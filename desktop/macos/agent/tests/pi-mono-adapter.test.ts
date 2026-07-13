@@ -63,6 +63,7 @@ function makeAttemptContext(overrides: AttemptContextOverrides = {}): AdapterAtt
     clientId: overrides.clientId ?? "client-runtime",
     runId: overrides.runId ?? "run_runtime",
     attemptId,
+    toolCapabilityRef: overrides.toolCapabilityRef ?? `cap_${attemptId}`,
     binding: {
       bindingId: "bind-runtime",
       sessionId,
@@ -125,6 +126,7 @@ describe("PiMonoAdapter prompt correlation", () => {
       clientId: "client-runtime",
       runId: "run_runtime",
       attemptId: "att_runtime",
+      toolCapabilityRef: "cap_runtime",
       binding: {
         bindingId: "bind-runtime",
         sessionId: "ses_runtime",
@@ -143,17 +145,7 @@ describe("PiMonoAdapter prompt correlation", () => {
 
     const execution = runtime.executeAttempt(attemptContext, () => {}, new AbortController().signal);
     const relayContext = JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8"));
-    expect(relayContext).toMatchObject({
-      adapterId: "pi-mono",
-      protocolVersion: 2,
-      requestId: "request-runtime",
-      clientId: "client-runtime",
-      sessionId: "ses_runtime",
-      runId: "run_runtime",
-      attemptId: "att_runtime",
-      adapterSessionId: "session-1",
-      disableSwiftBackedTools: true,
-    });
+    expect(relayContext).toEqual({ capabilityRef: "cap_runtime" });
 
     (adapter as any).handleTurnEnd(makeTurnEndEvent("done"));
     await expect(execution).resolves.toMatchObject({ terminalStatus: "succeeded" });
@@ -183,7 +175,7 @@ describe("PiMonoAdapter prompt correlation", () => {
     const attemptContext = makeAttemptContext({ attemptId: "att_abort" });
 
     const execution = runtime.executeAttempt(attemptContext, () => {}, controller.signal);
-    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).attemptId).toBe("att_abort");
+    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).capabilityRef).toBe("cap_att_abort");
     controller.abort();
 
     await expect(execution).resolves.toMatchObject({ terminalStatus: "cancelled" });
@@ -200,7 +192,7 @@ describe("PiMonoAdapter prompt correlation", () => {
       () => {},
       new AbortController().signal
     );
-    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).attemptId).toBe("att_first");
+    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).capabilityRef).toBe("cap_att_first");
 
     const second = runtime.executeAttempt(
       makeAttemptContext({ attemptId: "att_second", binding: { adapterNativeSessionId: "session-2" } }),
@@ -209,7 +201,7 @@ describe("PiMonoAdapter prompt correlation", () => {
     );
 
     await expect(second).rejects.toThrow("pi-mono prompt already in flight");
-    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).attemptId).toBe("att_first");
+    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).capabilityRef).toBe("cap_att_first");
 
     (adapter as any).handleTurnEnd(makeTurnEndEvent("first done"));
     await expect(first).resolves.toMatchObject({ terminalStatus: "succeeded" });
@@ -226,7 +218,7 @@ describe("PiMonoAdapter prompt correlation", () => {
       () => {},
       new AbortController().signal
     );
-    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).attemptId).toBe("att_exit");
+    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).capabilityRef).toBe("cap_att_exit");
 
     (adapter as any).process.emit("exit", 7);
 
@@ -238,7 +230,7 @@ describe("PiMonoAdapter prompt correlation", () => {
     const { adapter } = createAdapter();
     writeFileSync((adapter as any).contextFilePath, "{invalid json");
 
-    (adapter as any).clearRelayContextForAttempt("att_invalid");
+    (adapter as any).clearRelayContextForCapability("cap_invalid");
 
     expect(existsSync((adapter as any).contextFilePath)).toBe(false);
   });
@@ -254,6 +246,7 @@ describe("PiMonoAdapter prompt correlation", () => {
       clientId: "client-runtime",
       runId: "run_runtime",
       attemptId: "att_runtime",
+      toolCapabilityRef: "cap_runtime",
       binding: {
         bindingId: "bind-runtime",
         sessionId: "ses_runtime",

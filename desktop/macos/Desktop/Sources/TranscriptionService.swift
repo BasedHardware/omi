@@ -260,15 +260,22 @@ class TranscriptionService {
     }
 
     /// Stop the transcription service
-    func stop() {
+    func stop(discardBufferedAudio: Bool = false) {
         shouldReconnect = false
         reconnectTask?.cancel()
         reconnectTask = nil
         watchdogTask?.cancel()
         watchdogTask = nil
 
-        // Flush any remaining audio
-        flushAudioBuffer()
+        if discardBufferedAudio {
+            audioBufferLock.lock()
+            audioBuffer = Data()
+            audioBufferLock.unlock()
+        } else {
+            // Ordinary turn finalization flushes its final partial chunk. Owner
+            // replacement revokes that authority and discards it instead.
+            flushAudioBuffer()
+        }
 
         disconnect()
     }

@@ -230,6 +230,20 @@ final class ScreenCaptureService: Sendable {
     // (removed duplicate open that conflicted with caller's own open call)
   }
 
+  /// Structured variant for owner-bound tool execution. It keeps the
+  /// ScreenCaptureKit request attached to the permission request lifetime so
+  /// the caller can fence every state or Settings publication after the await.
+  @MainActor
+  static func requestAllScreenCapturePermissionsAwaitingScreenCaptureKit() async -> Bool {
+    ensureLaunchServicesRegistration()
+    NSApp.activate()
+    let tccGranted = CGRequestScreenCaptureAccess()
+    if #available(macOS 14.0, *) {
+      _ = await requestScreenCaptureKitPermission()
+    }
+    return tccGranted || checkPermission()
+  }
+
   /// Guided grant flow (PERM-02 / BL-050): register the screen-recording TCC row
   /// **while Omi is frontmost**, then open System Settings so the user lands on a
   /// list that already contains Omi. Opening Settings first backgrounded the app

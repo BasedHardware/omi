@@ -15,8 +15,8 @@ struct AIResponseView: View {
 
     let userInput: String
     let chatHistory: [FloatingChatExchange]
-    @Binding var isVoiceFollowUp: Bool
-    @Binding var voiceFollowUpTranscript: String
+    let isVoiceFollowUp: Bool
+    let voiceFollowUpTranscript: String
     var canClearVisibleConversation: Bool = false
     var showsHeader: Bool = true
 

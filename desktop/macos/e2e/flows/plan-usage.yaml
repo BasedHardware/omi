@@ -8,6 +8,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+BillingHelpers.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/BillingWebFlow.swift
   - desktop/macos/Desktop/Sources/UsageLimitPopupView.swift
+  - desktop/macos/Desktop/Sources/TrialBannerService.swift
 preconditions:
   - automation_bridge_ready
 

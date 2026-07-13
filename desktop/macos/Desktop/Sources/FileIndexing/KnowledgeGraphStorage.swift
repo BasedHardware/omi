@@ -49,67 +49,60 @@ actor KnowledgeGraphStorage {
         }
     }
 
-    /// Save nodes and edges (clears existing data first)
-    func saveGraph(nodes: [LocalKGNodeRecord], edges: [LocalKGEdgeRecord]) async throws {
-        let db = try await ensureDB()
-
-        try await db.write { database in
-            try database.execute(sql: "DELETE FROM local_kg_edges")
-            try database.execute(sql: "DELETE FROM local_kg_nodes")
-
-            for node in nodes {
-                let record = node
-                try record.insert(database)
-            }
-            for edge in edges {
-                let record = edge
-                try record.insert(database)
-            }
-        }
-
-        log("KnowledgeGraphStorage: Saved \(nodes.count) nodes, \(edges.count) edges")
-    }
-
     /// Merge nodes and edges into existing data (upsert, no delete)
-    func mergeGraph(nodes: [LocalKGNodeRecord], edges: [LocalKGEdgeRecord]) async throws {
+    func mergeGraph(
+        nodes: [LocalKGNodeRecord],
+        edges: [LocalKGEdgeRecord],
+        authorization: LocalMutationAuthorization
+    ) async throws {
+        try authorization.require()
         let db = try await ensureDB()
 
-        try await db.write { database in
-            for node in nodes {
-                try database.execute(
-                    sql: """
-                        INSERT OR REPLACE INTO local_kg_nodes (nodeId, label, nodeType, aliasesJson, sourceFileIds, createdAt, updatedAt)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                        """,
-                    arguments: [node.nodeId, node.label, node.nodeType, node.aliasesJson, node.sourceFileIds, node.createdAt, node.updatedAt]
-                )
-            }
-            for edge in edges {
-                try database.execute(
-                    sql: """
-                        INSERT OR REPLACE INTO local_kg_edges (edgeId, sourceNodeId, targetNodeId, label, createdAt)
-                        VALUES (?, ?, ?, ?, ?)
-                        """,
-                    arguments: [edge.edgeId, edge.sourceNodeId, edge.targetNodeId, edge.label, edge.createdAt]
-                )
+        try await authorization.withCommitLease {
+            try await db.write { database in
+                try authorization.require()
+                for node in nodes {
+                    try database.execute(
+                        sql: """
+                            INSERT OR REPLACE INTO local_kg_nodes (nodeId, label, nodeType, aliasesJson, sourceFileIds, createdAt, updatedAt)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """,
+                        arguments: [node.nodeId, node.label, node.nodeType, node.aliasesJson, node.sourceFileIds, node.createdAt, node.updatedAt]
+                    )
+                }
+                for edge in edges {
+                    try database.execute(
+                        sql: """
+                            INSERT OR REPLACE INTO local_kg_edges (edgeId, sourceNodeId, targetNodeId, label, createdAt)
+                            VALUES (?, ?, ?, ?, ?)
+                            """,
+                        arguments: [edge.edgeId, edge.sourceNodeId, edge.targetNodeId, edge.label, edge.createdAt]
+                    )
+                }
+                // Throwing here rolls the transaction back if ownership changed
+                // while a larger graph was being applied.
+                try authorization.require()
             }
         }
 
         log("KnowledgeGraphStorage: Merged \(nodes.count) nodes, \(edges.count) edges")
     }
 
-    /// Delete all local knowledge graph data
-    func clearAll() async {
-        guard let db = try? await ensureDB() else { return }
-        do {
+    /// Delete all local knowledge graph data under an explicit owner lease.
+    func clearAll(authorization: LocalMutationAuthorization) async throws {
+        try authorization.require()
+        let db = try await ensureDB()
+
+        try await authorization.withCommitLease {
             try await db.write { database in
+                try authorization.require()
                 try database.execute(sql: "DELETE FROM local_kg_edges")
                 try database.execute(sql: "DELETE FROM local_kg_nodes")
+                try authorization.require()
             }
-            log("KnowledgeGraphStorage: Cleared all graph data")
-        } catch {
-            log("KnowledgeGraphStorage: Failed to clear graph: \(error.localizedDescription)")
         }
+
+        log("KnowledgeGraphStorage: Cleared all graph data")
     }
 
     /// Check if the local graph has any data

@@ -40,6 +40,22 @@ Guard surface:
 - `run-attempt-lifecycle.test.ts` and `adapter-binding.test.ts` cover stale
   binding retry, compatibility changes, and request-scoped MCP env stripping.
 
+### Session execution profiles are immutable generations
+
+Every session resolves one persisted `SessionExecutionProfile` containing its
+adapter, credential scope, model profile, working directory, execution role,
+and generation. Global preferences create the profile for future sessions only.
+An explicit user migration must carry the expected generation, must run in one
+transaction, and must reject a session with an active run. Migration creates a
+new profile generation and stales prior adapter bindings; it does not restart
+the shared daemon or mutate the session ID.
+
+Guard surface:
+
+- `session-execution-profile.ts` owns default preferences and profile migration.
+- `session-execution-profile.test.ts` covers next-session defaults, stale
+  generation rejection, active-run rejection, binding invalidation, and restart.
+
 ### Workstream identity is the reusable task-work boundary
 
 For durable task work, the kernel resolves `surface_kind=workstream`,
@@ -79,10 +95,99 @@ control and relay maps must use `(clientId, requestId)`.
 
 Guard surface:
 
-- `compatibility-facade.ts` stores active request state by
-  `JSON.stringify([clientId, requestId])`.
-- `tool-relay.test.ts`, `tool-correlation.test.ts`, `control-tools.test.ts`, and
-  `compatibility-facade.test.ts` cover concurrent clients and missing client IDs.
+- `jsonl-transport.ts` stores adapter request correlation by
+  `JSON.stringify([clientId, requestId])`; the kernel never treats that map as a
+  tool grant.
+- `tool-relay.test.ts`, `control-tools.test.ts`, and the external-surface
+  authority tests cover concurrent clients, missing client IDs, and run-bound
+  execution.
+
+Request/client IDs are correlation only. Cancellation resolves the durable run
+and active owner in the kernel; it cannot derive authority from a matching
+request map or a caller-supplied owner.
+
+### Intent routing and control application are one kernel boundary
+
+Surfaces submit a typed proposal and syntax facts to `route_intent`. The kernel
+returns a typed decision and atomically applies any required control action.
+Swift does not classify the same text, infer dispatch from keywords, or repair a
+decision with a second resolver.
+
+Guard surface:
+
+- `desktop-intent-router.test.ts` covers all surfaces, typed validation,
+  deterministic syntax facts, and route-and-apply atomicity.
+- `convergence-authority-ratchet.test.ts` forbids the retired Swift classifiers.
+
+### Physical tool authority is run/attempt scoped and single use
+
+The kernel's capability reference is process-local input to authorization, not
+a bearer exported to Swift. Authorization re-reads durable owner, session, run,
+attempt, profile generation, role, and manifest policy. It then persists the
+invocation claim before emitting `authorized_tool_execution` to Swift.
+
+The ledger transition is `prepared → dispatched → succeeded|failed`. On daemon
+restart, `prepared → failed` and `dispatched → outcome_unknown`. A
+non-idempotent write has `never_auto_retry`; no result may be accepted unless it
+echoes the complete immutable claim tuple, input hash, and generated manifest
+digest. Ordinary adapter `tool_use` events are display-only in Swift.
+
+Guard surface:
+
+- `run-tool-capability.test.ts` covers revocation, owner/attempt/profile checks,
+  replay denial, manifest policy, restart reconciliation, and exact result claims.
+- `AuthorizedToolExecutionTests.swift` covers the physical executor boundary and
+  cross-language canonical input hash.
+
+### Conversation durability has one sequence owner
+
+The kernel journal is the only canonical conversation writer. A record/update,
+its monotonic sequence revision, and any backend outbox row commit together.
+Swift may stage presentation immediately and perform owner-bound HTTP, but it
+cannot acknowledge, reorder, or durably mutate a turn.
+
+Backend chat is a rollback-readable mirror in the existing message format. It
+is also an event-triggered import feed for genuinely remote client turns. The
+kernel reads owner-scoped bounded pages, deduplicates stable remote and
+canonical turn IDs, and advances a durable ID frontier. It never uses a
+timestamp or offset cursor. Swift uses the additive desktop reconciliation
+endpoint, whose Firestore document-ID cursor is validated inside the
+authenticated owner and requested app/session filter; the rollback message
+shape retains `client_message_id`, structured metadata, and resources. The idle
+outbox timer never polls backend history.
+
+Guard surface:
+
+- `conversation-journal.test.ts` covers producer idempotency, ordered replay,
+  owner-scoped delivery/deletion, paged remote import, restart, and exact claims.
+- `KernelTurnRecordedProjectionTests.swift` covers sequence projection and the
+  single Swift physical sync boundary.
+- `KernelJournalBackendReconcileTests.swift` and backend desktop-migration tests
+  cover exact cursor wire shape, insertion between pages, reported-row scans,
+  canonical identity, and structured metadata.
+- `convergence-authority-ratchet.test.ts` forbids direct writers and timestamp
+  reconciliation cursors.
+
+### Context snapshots are kernel-selected and pinned per run
+
+Swift can update typed source data with a revision and one of `available`,
+`empty`, `unavailable`, or `redacted`. It cannot send a system prompt, model,
+cwd, surface prompt JSON, or capability policy in a query. The kernel builds a
+session-scoped `ContextSnapshot` with content version, monotonic generation,
+renderer-policy version/fingerprint, recent journal turns, explicit source
+outcomes, active runs, and a non-bearer capability projection.
+
+Admission pins the snapshot used by the logical run. Queue delay and retries do
+not rebuild it from newer sources. An A→B→A content sequence may reuse content
+version A but must have a higher generation. Voice socket refresh identity uses
+content version plus renderer/capability fingerprints, not the monotonic audit
+generation, so unchanged material does not churn a warm provider session.
+
+Guard surface:
+
+- `session-execution-profile.test.ts` covers source outcomes, renderer policy,
+  A→B→A generation, irrelevant-source selection, and admission/dispatch races.
+- `KernelContractWireTests.swift` forbids request-supplied runtime authority.
 
 ## Lifecycle
 
@@ -111,7 +216,10 @@ Guard surface:
 
 - `reconcileStartup()` updates active attempts to `orphaned`, marks
   non-resumable active bindings stale, and creates recovery dispatches for
-  interrupted delegations.
+  interrupted delegations. It also repairs rows written during a one-release
+  downgrade window (missing immutable profiles or journal sequence metadata)
+  and terminalizes orphaned pending/streaming journal turns with a bounded
+  observable repair code. Every repair is idempotent across repeated opens.
 - `sqlite-store.test.ts` and `run-attempt-lifecycle.test.ts` cover startup
   reconciliation and idempotent recovery dispatch behavior.
 
@@ -130,10 +238,11 @@ Guard surface:
 
 ## Binding Compatibility
 
-### Compatibility is determined by stable adapter-effective inputs
+### Compatibility is determined by stable kernel-effective inputs
 
-The kernel hashes cwd, system prompt, and stable MCP server configuration to
-decide whether a binding is reusable. If an adapter mutates MCP servers before
+The kernel hashes the pinned profile generation, kernel policy, working
+directory, and stable MCP server configuration to decide whether a binding is
+reusable. If an adapter mutates MCP servers before
 passing them to its native runtime, it must implement `effectiveMcpServers` so
 the hash reflects what the adapter actually saw.
 

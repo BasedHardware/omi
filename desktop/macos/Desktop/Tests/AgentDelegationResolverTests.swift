@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Omi_Computer
 
-final class AgentDelegationResolverTests: XCTestCase {
+final class AgentDelegationBoundaryTests: XCTestCase {
   func testBriefValidatorRejectsVagueDelegationBriefs() {
     XCTAssertFalse(DelegationBriefValidator.isStructurallyAcceptable(
       brief: "Perform a new search for the user.",
@@ -24,46 +24,37 @@ final class AgentDelegationResolverTests: XCTestCase {
       rawIntent: nil))
   }
 
-  func testResolverPromptRequiresSelfContainedChildBriefsAndStructuredAgentContext() throws {
-    let source = try sourceFile("FloatingControlBar/AgentDelegationResolver.swift")
-
-    XCTAssertTrue(source.contains("Child-agent briefs must be self-contained"))
-    XCTAssertTrue(source.contains("If context is insufficient to reconstruct a concrete task, return clarify."))
-    XCTAssertTrue(source.contains("\"action\":\"chat\"|\"clarify\"|\"spawn\""))
-    XCTAssertTrue(source.contains("Current and recent background agents:"))
-  }
-
-  func testExplicitSelfContainedDelegationBypassesResolverModel() throws {
-    let source = try sourceFile("FloatingControlBar/AgentDelegationResolver.swift")
-
-    XCTAssertTrue(source.contains("deterministicExplicitDecision(for: request)"))
-    XCTAssertTrue(source.contains("guard request.explicitDelegationRequested else { return nil }"))
-    XCTAssertTrue(source.contains("DelegationBriefValidator.isStructurallyAcceptable(brief: brief, rawIntent: request.userText)"))
-    XCTAssertTrue(source.contains(#"reason: "explicit self-contained delegation""#))
-  }
-
-  func testDelegationExecutorIsOnlyProductionSpawnBoundaryForTopLevelSurfaces() throws {
+  func testKernelControlPlaneIsOnlyProductionSpawnBoundaryForTopLevelSurfaces() throws {
+    // omi-test-quality: source-inspection -- static contract: no Swift semantic router or pre-loop spawn boundary may return
     let realtime = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
     let floating = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
+    let pills = try sourceFile("FloatingControlBar/AgentPill.swift")
     let executor = try sourceFile("FloatingControlBar/AgentDelegationExecutor.swift")
+    let coordinator = try sourceFile("Chat/DesktopCoordinatorService.swift")
 
     XCTAssertFalse(realtime.contains("AgentPillsManager.shared.spawnFromUserQuery("))
     XCTAssertFalse(floating.contains("AgentPillsManager.shared.spawnFromUserQuery("))
-    XCTAssertTrue(realtime.contains("AgentDelegationResolver.shared.resolve"))
-    XCTAssertTrue(floating.contains("AgentDelegationResolver.shared.resolve"))
-    XCTAssertTrue(realtime.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation"))
+    XCTAssertFalse(realtime.contains("AgentDelegationResolver"))
+    XCTAssertFalse(floating.contains("AgentDelegationResolver"))
+    XCTAssertFalse(pills.contains("static func classify("))
+    XCTAssertFalse(realtime.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation"))
+    XCTAssertTrue(realtime.contains("invokeExternallyAuthorizedTool("))
     XCTAssertTrue(floating.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation"))
-    XCTAssertTrue(executor.contains("AgentPillsManager.shared.spawnFromUserQuery("))
+    XCTAssertFalse(executor.contains("AgentPillsManager.shared.spawnFromUserQuery("))
+    XCTAssertTrue(executor.contains("AgentPillsManager.shared.spawn("))
+    XCTAssertTrue(pills.contains("DesktopCoordinatorService.shared.spawnAgent("))
+    XCTAssertTrue(coordinator.contains(#"static let spawnAgent = "spawn_agent""#))
   }
 
-  func testTopLevelDelegationSurfacesPassStructuredAgentSnapshotsToResolver() throws {
-    let realtime = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
-    let floating = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
+  func testLegacySemanticRouterSourcesAreDeleted() throws {
+    let sourcesRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar")
 
-    XCTAssertTrue(realtime.contains("agentStatusSummary: AgentPillsManager.shared.snapshotJSON(limit: 8)"))
-    XCTAssertTrue(floating.contains("agentStatusSummary: AgentPillsManager.shared.snapshotJSON(limit: 8)"))
-    XCTAssertFalse(realtime.contains("agentStatusSummary: AgentPillsManager.shared.statusSummary()"))
-    XCTAssertFalse(floating.contains("agentStatusSummary: AgentPillsManager.shared.statusSummary()"))
+    XCTAssertFalse(
+      FileManager.default.fileExists(
+        atPath: sourcesRoot.appendingPathComponent("AgentDelegationResolver.swift").path))
   }
 
   private func sourceFile(_ relativePath: String) throws -> String {
