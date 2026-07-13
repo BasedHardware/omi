@@ -34,9 +34,6 @@ LOCK_CONTRACTS = {
     "gcp_app.yml": LockContract(
         "deploy-cloud-run-omi-web-app-${{ github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
     ),
-    "gcp_apps_js.yml": LockContract(
-        "deploy-cloud-run-apps-js-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
-    ),
     "gcp_backend.yml": LockContract(
         "deploy-backend-stack-${{ github.event.inputs.environment }}"
     ),
