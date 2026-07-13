@@ -43,6 +43,20 @@ def _safe_file_chats(files_data: List[Dict[str, Any]]) -> List[FileChat]:
     return files
 
 
+def _openai_file_ids(files_data: List[Dict[str, Any]]) -> List[str]:
+    """Collect openai_file_id values from raw file docs without Pydantic validation.
+
+    Cleanup must delete provider objects even when a legacy doc fails FileChat validation
+    (e.g. missing mime_type/created_at) — otherwise Firestore wipe orphans the OpenAI file.
+    """
+    ids: List[str] = []
+    for f in files_data:
+        openai_file_id = f.get('openai_file_id')
+        if isinstance(openai_file_id, str) and openai_file_id:
+            ids.append(openai_file_id)
+    return ids
+
+
 _async_openai: AsyncOpenAI | None = None
 
 
@@ -401,17 +415,15 @@ class FileChatTool:
         """Cleanup chat session files, thread, and assistant"""
         logger.info("start cleanup thread chat with file")
         files = chat_db.get_chat_files(self.uid)
-        # delete file in db
         if files:
-            chat_db.delete_multi_files(self.uid, files)
-
-            file_objs = _safe_file_chats(files)
-            # clear file in openai
-            for file in file_objs:
+            # Delete OpenAI objects from raw docs first — do not gate on FileChat validation,
+            # or a malformed doc with openai_file_id leaks after Firestore delete (#9608 follow-up).
+            for openai_file_id in _openai_file_ids(files):
                 try:
-                    openai.files.delete(file.openai_file_id, timeout=30.0)
+                    openai.files.delete(openai_file_id, timeout=30.0)
                 except Exception as e:
-                    logger.error(f"Failed to delete file {file.openai_file_id}: {e}")
+                    logger.error(f"Failed to delete file {openai_file_id}: {e}")
+            chat_db.delete_multi_files(self.uid, files)
 
         if self.thread_id:
             try:
