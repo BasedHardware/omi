@@ -816,7 +816,7 @@ struct DashboardPage: View {
             .font(.system(size: 58, weight: .bold, design: .rounded))
             .foregroundStyle(HomePalette.ink)
             .lineLimit(1)
-            .shadow(color: HomePalette.stageGlow.opacity(0.46), radius: 26)
+            .shadow(color: HomePalette.jewelGlow.opacity(0.22), radius: 24)
             .frame(maxWidth: .infinity, alignment: .center)
     }
 
@@ -911,7 +911,7 @@ struct DashboardPage: View {
                     LinearGradient(
                         colors: [
                             Color.white.opacity(0.018),
-                            HomePalette.stageGlow.opacity(0.014),
+                            Color.white.opacity(0.009),
                             Color.white.opacity(0.006),
                         ],
                         startPoint: .top,
@@ -921,11 +921,9 @@ struct DashboardPage: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
-                .stroke(HomePalette.stageGlow.opacity(0.10), lineWidth: 1)
-                .blur(radius: 2.5)
-                .opacity(0.65)
+                .stroke(HomePalette.hairline.opacity(0.50), lineWidth: 1)
         )
-        .shadow(color: HomePalette.stageGlow.opacity(0.055), radius: 28, y: 8)
+        .shadow(color: .black.opacity(0.24), radius: 28, y: 8)
         .frame(width: homeStagePanelWidth(for: stageWidth))
     }
 
@@ -2044,8 +2042,9 @@ private enum HomePalette {
     static let faint = Color(red: 0.36, green: 0.35, blue: 0.33)
     static let hairline = Color(red: 0.155, green: 0.155, blue: 0.172)
     static let green = Color(red: 0.17, green: 0.78, blue: 0.38)
-    static let stageGlow = Color(red: 0.48, green: 0.30, blue: 0.95)
-    static let glow = stageGlow
+    /// The Home jewel is intentionally neutral: one soft light shared only by
+    /// the wordmark and focused ask bar, never by secondary cards or states.
+    static let jewelGlow = OmiColors.accent
 }
 
 private enum HomeRowStatus {
@@ -2194,11 +2193,20 @@ private struct HomeAskBar: View {
                     .stroke(Color.white.opacity(0.42), lineWidth: 1)
             } else {
                 RoundedRectangle(cornerRadius: 29, style: .continuous)
-                    .stroke(HomePalette.stageGlow.opacity(isFocused ? 0.16 : 0.08), lineWidth: 1)
+                    .stroke(
+                        isFocused
+                            ? HomePalette.jewelGlow.opacity(0.18)
+                            : HomePalette.hairline.opacity(0.72),
+                        lineWidth: 1
+                    )
                     .blur(radius: 1.8)
             }
         }
-        .shadow(color: HomePalette.stageGlow.opacity(isFocused ? 0.11 : 0.045), radius: isFocused ? 22 : 16, y: 8)
+        .shadow(
+            color: HomePalette.jewelGlow.opacity(isFocused ? 0.08 : 0),
+            radius: isFocused ? 22 : 0,
+            y: 8
+        )
         .shadow(color: .black.opacity(isFocused ? 0.45 : 0.34), radius: 24, y: 10)
         .contentShape(.rect(cornerRadius: 29))
         .onTapGesture {
@@ -2419,20 +2427,6 @@ private struct HomeCanvasBackground: View {
             )
 
             RadialGradient(
-                colors: [HomePalette.stageGlow.opacity(0.075), .clear],
-                center: UnitPoint(x: 0.48, y: 0.24),
-                startRadius: 0,
-                endRadius: 680
-            )
-
-            RadialGradient(
-                colors: [HomePalette.stageGlow.opacity(0.040), .clear],
-                center: UnitPoint(x: 0.20, y: 0.78),
-                startRadius: 100,
-                endRadius: 560
-            )
-
-            RadialGradient(
                 colors: [.clear, HomePalette.paper.opacity(0.88), Color.black.opacity(0.62)],
                 center: UnitPoint(x: 0.50, y: 0.48),
                 startRadius: 470,
@@ -2442,7 +2436,6 @@ private struct HomeCanvasBackground: View {
             LinearGradient(
                 stops: [
                     .init(color: .clear, location: 0.50),
-                    .init(color: HomePalette.stageGlow.opacity(0.026), location: 0.78),
                     .init(color: Color.white.opacity(0.014), location: 0.90),
                     .init(color: .clear, location: 1.0),
                 ],
@@ -2645,9 +2638,9 @@ private struct HomeSourceIconTile: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 17, style: .continuous)
-                    .stroke(isHovering ? HomePalette.glow.opacity(0.58) : HomePalette.hairline.opacity(0.9), lineWidth: 1)
+                    .stroke(isHovering ? HomePalette.ink.opacity(0.26) : HomePalette.hairline.opacity(0.9), lineWidth: 1)
             )
-            .shadow(color: isHovering ? HomePalette.glow.opacity(0.16) : .clear, radius: 14)
+            .shadow(color: isHovering ? .black.opacity(0.20) : .clear, radius: 14, y: 6)
             .contentShape(.rect(cornerRadius: 17))
         }
         .buttonStyle(.plain)
@@ -2797,9 +2790,9 @@ private struct HomeDataSourceCard: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .stroke(isHovering ? HomePalette.glow.opacity(0.5) : HomePalette.hairline.opacity(0.9), lineWidth: 1)
+                    .stroke(isHovering ? HomePalette.ink.opacity(0.24) : HomePalette.hairline.opacity(0.9), lineWidth: 1)
             )
-            .shadow(color: isHovering ? HomePalette.glow.opacity(0.12) : .clear, radius: 12)
+            .shadow(color: isHovering ? .black.opacity(0.18) : .clear, radius: 12, y: 5)
             .contentShape(.rect(cornerRadius: 15))
         }
         .buttonStyle(.plain)
@@ -3379,7 +3372,7 @@ private struct HomeMemoryMetricCard: View {
 
                 Image(systemName: "arrow.up.right")
                     .scaledFont(size: OmiType.micro, weight: .bold)
-                    .foregroundStyle(isHovering ? HomePalette.glow : HomePalette.faint)
+                    .foregroundStyle(isHovering ? HomePalette.ink : HomePalette.faint)
             }
             .padding(.horizontal, OmiSpacing.md)
             .frame(height: 76)
@@ -3390,7 +3383,7 @@ private struct HomeMemoryMetricCard: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 17, style: .continuous)
-                    .stroke(isHovering ? HomePalette.glow.opacity(0.56) : HomePalette.hairline.opacity(0.86), lineWidth: 1)
+                    .stroke(isHovering ? HomePalette.ink.opacity(0.26) : HomePalette.hairline.opacity(0.86), lineWidth: 1)
             )
             .contentShape(.rect(cornerRadius: 17))
         }
