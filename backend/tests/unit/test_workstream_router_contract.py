@@ -14,6 +14,7 @@ import routers.goals as goals_router
 import routers.task_recommendations as task_recommendations_router
 import routers.workstreams as workstreams_router
 from models.goal import GoalCreate, GoalFocusRequest, GoalUpdate
+from models.task_recommendation import NormalizedContextSnapshot, OpenLoopSnapshot, SnapshotReceipt
 from models.workstream import TaskOriginWorkIntent, WorkIntentReceipt, WorkstreamUpdate
 
 
@@ -102,6 +103,61 @@ def test_task_intelligence_device_scope_rejects_another_device():
 
     assert error.value.status_code == 403
     assert error.value.detail == 'Device scope mismatch'
+
+
+@pytest.mark.parametrize(
+    ('route_name', 'snapshot_factory'),
+    [
+        (
+            'replace_context_snapshot',
+            lambda now: NormalizedContextSnapshot(
+                device_id='abcdef12',
+                snapshot_id='snapshot-1',
+                generated_at=now,
+                expires_at=now.replace(hour=now.hour + 1),
+            ),
+        ),
+        (
+            'replace_open_loop_snapshot',
+            lambda now: OpenLoopSnapshot(
+                device_id='abcdef12',
+                owner='u1',
+                runtime_id='runtime-1',
+                workstream_id='workstream-1',
+                conversation_id='conversation-1',
+                context_packet_version='packet-1',
+                generated_at=now,
+                expires_at=now.replace(hour=now.hour + 1),
+            ),
+        ),
+    ],
+)
+def test_task_intelligence_snapshot_writes_canonicalize_accepted_legacy_device_id(
+    monkeypatch, route_name, snapshot_factory
+):
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    captured = {}
+    monkeypatch.setattr(
+        task_recommendations_router,
+        '_rollout',
+        lambda _uid: SimpleNamespace(intelligence_evaluation_enabled=True, account_generation=8),
+    )
+    monkeypatch.setattr(
+        task_recommendations_router.recommendations,
+        'ingest_context_snapshot' if route_name == 'replace_context_snapshot' else 'ingest_open_loop_snapshot',
+        lambda _uid, snapshot, **_kwargs: captured.setdefault('device_id', snapshot.device_id)
+        or SnapshotReceipt(snapshot_id='snapshot-1', replaced=True, expires_at=now),
+    )
+
+    getattr(task_recommendations_router, route_name)(
+        request=snapshot_factory(now),
+        request_context=_device_request(),
+        idempotency_key='snapshot-1',
+        account_generation=8,
+        uid='u1',
+    )
+
+    assert captured['device_id'] == 'macos_abcdef12'
 
 
 @pytest.mark.parametrize('surface', ['get', 'evaluate', 'debug'])

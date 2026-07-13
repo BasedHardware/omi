@@ -189,7 +189,9 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(source.contains("RealtimeHubTools.permissionExecutorRoute("))
     XCTAssertTrue(source.contains("name: executorRoute.toolName"))
     XCTAssertTrue(source.contains("originatingUserText: originatingUserText"))
-    XCTAssertTrue(source.contains("PermissionRequestAuthorization.authorizePTTPermissionRequest"))
+    XCTAssertTrue(source.contains("PermissionRequestAuthorization.authorize("))
+    XCTAssertTrue(source.contains("userMessage: originatingUserText"))
+    XCTAssertFalse(source.contains("authorizePTTPermissionRequest"))
     XCTAssertTrue(source.contains("permissionAuthorization: permissionAuthorization"))
   }
 

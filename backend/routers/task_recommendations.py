@@ -219,11 +219,11 @@ def replace_context_snapshot(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     _require_evaluation_generation(uid, account_generation)
-    _bound_device_id(request_context, request.device_id, required=True)
+    device_id = _bound_device_id(request_context, request.device_id, required=True)
     try:
         return recommendations.ingest_context_snapshot(
             uid,
-            request,
+            request.model_copy(update={'device_id': device_id}),
             account_generation=account_generation,
             idempotency_key=idempotency_key,
         )
@@ -240,11 +240,11 @@ def replace_open_loop_snapshot(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     _require_evaluation_generation(uid, account_generation)
-    _bound_device_id(request_context, request.device_id, required=True)
+    device_id = _bound_device_id(request_context, request.device_id, required=True)
     try:
         return recommendations.ingest_open_loop_snapshot(
             uid,
-            request,
+            request.model_copy(update={'device_id': device_id}),
             account_generation=account_generation,
             idempotency_key=idempotency_key,
         )

@@ -2887,9 +2887,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     case .checkPermissionStatus, .requestPermission:
       // Permission prompts belong to this desktop process. Reuse the canonical
       // chat executor so PTT and main chat trigger exactly the same native flow.
-      // A PTT permission tool is selected for the user's active voice turn, so
-      // the macOS prompt is the sole grant confirmation; do not require a
-      // second typed in-agent affirmation before reaching the native requester.
+      // A PTT permission tool is selected for the user's active voice turn.
+      // Its authorization still has to come from that utterance: the native
+      // macOS prompt is the sole *grant* confirmation, but an unrelated voice
+      // request must never be enough to open System Settings.
       let originatingUserText = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
       guard let executorRoute = RealtimeHubTools.permissionExecutorRoute(
         for: tool, arguments: arguments)
@@ -2900,9 +2901,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         return
       }
       let permissionAuthorization = tool == .requestPermission
-        ? executorRoute.type.flatMap {
-          PermissionRequestAuthorization.authorizePTTPermissionRequest(permissionType: $0)
-        }
+        ? PermissionRequestAuthorization.authorize(
+          userMessage: originatingUserText,
+          precedingAssistantMessage: nil
+        )
         : nil
       runToolAndSpeak(
         source: source,
