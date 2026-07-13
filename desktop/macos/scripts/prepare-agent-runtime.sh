@@ -11,6 +11,7 @@ AGENT_PACKAGED_NODE_MODULES="$PACKAGED_RUNTIME_DIR/agent-node_modules"
 PI_MONO_PACKAGED_NODE_MODULES="$PACKAGED_RUNTIME_DIR/pi-mono-extension-node_modules"
 CACHE_STAMP="$PACKAGED_RUNTIME_DIR/cache.stamp"
 CACHE_LOCK="$DESKTOP_DIR/.harness/agent-runtime-prepare.lock.d"
+NODE_ARCHIVE_CACHE_DIR="${OMI_AGENT_RUNTIME_ARCHIVE_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/Library/Caches}/OmiDesktop/node-archives}"
 
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=agent-runtime-cache.sh
@@ -98,9 +99,9 @@ sha256_file() {
 verify_sha256() {
   local file="$1"
   local expected="$2"
-  local actual
-  actual="$(sha256_file "$file")"
-  if [ "$actual" != "$expected" ]; then
+  if ! arc_file_matches_sha256 "$file" "$expected"; then
+    local actual
+    actual="$(sha256_file "$file")"
     echo "ERROR: checksum mismatch for $file" >&2
     echo "  expected: $expected" >&2
     echo "  actual:   $actual" >&2
@@ -521,11 +522,39 @@ download_node_archive() {
   local arch="$1"
   local sha="$2"
   local out="$3"
+  local cache_path cache_lock temp
   local url="https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-darwin-$arch.tar.gz"
 
+  cache_path="$NODE_ARCHIVE_CACHE_DIR/$NODE_VERSION/node-$NODE_VERSION-darwin-$arch.tar.gz"
+  cache_lock="$cache_path.lock.d"
+  mkdir -p "$(dirname "$cache_path")"
+  arc_acquire_lock "$cache_lock" 600 || return 1
+
+  if arc_restore_verified_cache_file "$cache_path" "$sha" "$out"; then
+    log "Reusing cached Node $NODE_VERSION darwin-$arch archive"
+    arc_release_lock "$cache_lock"
+    return 0
+  fi
+  if [ -f "$cache_path" ]; then
+    log "Discarding cached Node $NODE_VERSION darwin-$arch archive with invalid checksum"
+    rm -f "$cache_path"
+  fi
+
   log "Downloading Node $NODE_VERSION darwin-$arch"
-  curl -L --fail --show-error -o "$out" "$url"
-  verify_sha256 "$out" "$sha"
+  temp="$(mktemp "${cache_path}.tmp.XXXXXX")"
+  if ! curl -L --fail --show-error -o "$temp" "$url"; then
+    rm -f "$temp"
+    arc_release_lock "$cache_lock"
+    return 1
+  fi
+  if ! verify_sha256 "$temp" "$sha"; then
+    rm -f "$temp"
+    arc_release_lock "$cache_lock"
+    return 1
+  fi
+  mv -f "$temp" "$cache_path"
+  cp -f "$cache_path" "$out"
+  arc_release_lock "$cache_lock"
 }
 
 stage_universal_node() {

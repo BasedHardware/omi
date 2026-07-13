@@ -26,6 +26,29 @@ printf 'target-one\n' >"$TMP_ROOT/outputs/targets/one"
 printf 'target-two\n' >"$TMP_ROOT/outputs/targets/two"
 ln -s targets/one "$TMP_ROOT/outputs/runtime-link"
 
+CHECKSUM_FILE="$TMP_ROOT/checksum-file"
+printf 'checksum-v1\n' >"$CHECKSUM_FILE"
+CHECKSUM="$(arc_sha256_file "$CHECKSUM_FILE")"
+arc_file_matches_sha256 "$CHECKSUM_FILE" "$CHECKSUM" || fail "valid checksum file did not match"
+printf 'checksum-corrupt\n' >"$CHECKSUM_FILE"
+if arc_file_matches_sha256 "$CHECKSUM_FILE" "$CHECKSUM"; then
+  fail "corrupt checksum file reported a match"
+fi
+
+CACHE_ARCHIVE="$TMP_ROOT/cache/archive.tar.gz"
+RESTORED_ARCHIVE="$TMP_ROOT/restored/archive.tar.gz"
+mkdir -p "$(dirname "$CACHE_ARCHIVE")" "$(dirname "$RESTORED_ARCHIVE")"
+printf 'cached-archive-v1\n' >"$CACHE_ARCHIVE"
+ARCHIVE_CHECKSUM="$(arc_sha256_file "$CACHE_ARCHIVE")"
+arc_restore_verified_cache_file "$CACHE_ARCHIVE" "$ARCHIVE_CHECKSUM" "$RESTORED_ARCHIVE" || fail "valid cached archive did not restore"
+assert_eq "$(cat "$RESTORED_ARCHIVE")" "cached-archive-v1"
+printf 'cached-archive-corrupt\n' >"$CACHE_ARCHIVE"
+printf 'destination-must-remain\n' >"$RESTORED_ARCHIVE"
+if arc_restore_verified_cache_file "$CACHE_ARCHIVE" "$ARCHIVE_CHECKSUM" "$RESTORED_ARCHIVE"; then
+  fail "corrupt cached archive restored"
+fi
+assert_eq "$(cat "$RESTORED_ARCHIVE")" "destination-must-remain"
+
 key_for() {
   local mode="$1"
   local node_version="$2"
