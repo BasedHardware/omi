@@ -173,14 +173,15 @@ class TranslateResponse(BaseModel):
 def _resolve_nllb_code(bcp47_code: str) -> Optional[str]:
     if not bcp47_code:
         return None
-    code = bcp47_code.strip().lower()
+    stripped = bcp47_code.strip()
+    code = stripped.lower()
     if code in _BCP47_TO_NLLB_LOWER:
         return _BCP47_TO_NLLB_LOWER[code]
     base = code.split("-")[0]
     if base in _BCP47_TO_NLLB_LOWER:
         return _BCP47_TO_NLLB_LOWER[base]
-    if code in NLLB_TO_BCP47:
-        return code
+    if stripped in NLLB_TO_BCP47:
+        return stripped
     return None
 
 

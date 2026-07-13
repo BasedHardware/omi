@@ -275,6 +275,8 @@ def is_selectable_backend_path(path: str) -> bool:
 
 
 def path_matches(path: str, pattern: str) -> bool:
+    if pattern.endswith('/**'):
+        return path.startswith(pattern[:-3].rstrip('/') + '/')
     return PurePosixPath(path).match(pattern)
 
 

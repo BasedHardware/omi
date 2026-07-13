@@ -98,6 +98,9 @@ autoscaling:
   minReplicas: 1
   maxReplicas: 2
   targetCPUUtilizationPercentage: 70
+  # Scale on concurrent active requests (primary signal for GPU inference).
+  # Requires the nllb_active_requests_total adapter rule in prod_omi_prometheus_adapter.yaml.
+  requestsPerPod: 4
 
 nodeSelector:
   cloud.google.com/gke-accelerator: nvidia-l4

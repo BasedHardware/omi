@@ -66,7 +66,7 @@ def test_backend_listen_helm_template_uses_runtime_project_for_google_cloud_proj
             str(CHART_DIR),
             "-f",
             str(expected["values_file"]),
-            "--set",
+            "--set-string",
             "image.tag=abc1234",
         ],
         check=True,
