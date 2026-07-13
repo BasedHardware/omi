@@ -66,6 +66,23 @@ final class DashboardCaptureStateTests: XCTestCase {
         XCTAssertFalse(source.contains(".frame(maxWidth: Self.homeStagePanelMaxWidth)"))
     }
 
+    func testHomeMatchesLockedDayZeroAndPopulatedMocks() throws {
+        let source = try dashboardSource()
+
+        XCTAssertTrue(source.contains("private var isDayZeroHome: Bool"))
+        XCTAssertTrue(source.contains("homeConversationCount == 0"))
+        XCTAssertTrue(source.contains("&& homeTaskCount == 0"))
+        XCTAssertTrue(source.contains("&& homeMemoryCount == 0"))
+        XCTAssertTrue(source.contains("&& homeScreenshotCount == 0"))
+        XCTAssertTrue(source.contains("if !isDayZeroHome {\n                    homeStatRibbon"))
+        XCTAssertTrue(source.contains("Turn your conversations and screen activity into answers, memories, and next steps."))
+        XCTAssertTrue(source.contains("Ask a question out loud"))
+        XCTAssertTrue(source.contains("See your first Memory — press ⌘O and try it now"))
+        XCTAssertTrue(source.contains("Set your first goal to focus What Matters Now"))
+        XCTAssertTrue(source.contains("let referenceWidth = isDayZeroHome ? Self.homeAskBarMinWidth : CGFloat(620)"))
+        XCTAssertTrue(source.contains(".scaledFont(size: 64, weight: .bold)"))
+    }
+
     func testHomeAskBarRefocusesAfterOpeningChatStage() throws {
         let source = try dashboardSource()
 

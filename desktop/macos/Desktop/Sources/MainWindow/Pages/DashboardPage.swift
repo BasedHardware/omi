@@ -580,65 +580,30 @@ struct DashboardPage: View {
         .padding(.bottom, Self.homeStageBottomPadding)
     }
 
-    /// Hub layout: the omi wordmark centered in the full screen, with the stats
-    /// ribbon, ask bar, and suggestions docked as one column at the bottom.
-    ///
-    /// Built as a plain VStack (wordmark, flexible gap, cluster) so the two can
-    /// never overlap. The wordmark's top inset is computed so it lands on the
-    /// true stage center when the window is tall enough, and lifts to sit just
-    /// above the cluster (with a minimum gap) when it isn't.
+    /// Locked mock layout: one centered hero group. Day zero promotes the value
+    /// line and omits the empty stat ribbon; populated Home swaps in real stats.
     private func homeHubStage(askBarWidth: CGFloat, stageHeight: CGFloat) -> some View {
-        // Wordmark height and a deliberately generous estimate of the docked
-        // cluster height (ribbon + gap + ask bar + gap + three suggestion rows).
-        // Overestimating only lifts the wordmark slightly early; it never lets
-        // the cluster clip.
-        let wordmarkHeight: CGFloat = 76
-        let clusterHeight: CGFloat = intelligenceStore.recommendations.isEmpty ? 390 : 570
-        let minGap: CGFloat = 24
-        let contentHeight = stageHeight - Self.homeStageTopPadding - Self.homeStageBottomPadding
+        VStack(spacing: OmiSpacing.xl) {
+            homeHubWordmark
+                .transition(.homeHubFade)
 
-        let trueCenterInset = (contentHeight - wordmarkHeight) / 2
-        let maxInset = contentHeight - wordmarkHeight - clusterHeight - minGap
-        let topInset = max(0, min(trueCenterInset, maxInset))
-
-        return VStack(spacing: 0) {
-            Spacer(minLength: 0)
-                .frame(height: topInset)
-
-            if intelligenceStore.recommendations.isEmpty {
-                homeHubWordmark
+            if isDayZeroHome {
+                Text("Turn your conversations and screen activity into answers, memories, and next steps.")
+                    .scaledFont(size: OmiType.subheading)
+                    .foregroundStyle(HomePalette.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(4)
+                    .frame(maxWidth: 440)
                     .transition(.homeHubFade)
-
-                // Flexible gap absorbs the remaining height, docking the cluster at
-                // the bottom while keeping at least `minGap` below the wordmark.
-                Spacer(minLength: minGap)
-            } else {
-                Spacer(minLength: 0)
             }
 
             VStack(spacing: 0) {
-                WhatMattersNowSection(
-                    store: intelligenceStore,
-                    onOpen: { recommendation in await openRecommendation(recommendation) }
-                )
-                .frame(width: askBarWidth)
-                .padding(.bottom, intelligenceStore.recommendations.isEmpty ? 0 : OmiSpacing.sm)
-
-                dashboardIntelligenceError
-                    .frame(width: askBarWidth)
-                    .padding(.bottom, intelligenceStore.error == nil ? 0 : OmiSpacing.sm)
-
-                FocusedGoalsSection(
-                    store: intelligenceStore,
-                    onOpenGoal: { goalID in await openGoal(goalID) },
-                    onShowAll: { showingAllGoals = true }
-                )
-                .frame(width: askBarWidth)
-                .padding(.bottom, intelligenceStore.goals.isEmpty ? 0 : OmiSpacing.sm)
-
-                homeStatRibbon
-                    .frame(width: askBarWidth)
-                    .padding(.bottom, OmiSpacing.md)
+                if !isDayZeroHome {
+                    homeStatRibbon
+                        .frame(width: askBarWidth)
+                        .padding(.bottom, OmiSpacing.md)
+                        .transition(.homeHubFade)
+                }
 
                 homeAskBar
                     .frame(width: askBarWidth)
@@ -650,6 +615,7 @@ struct DashboardPage: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxHeight: stageHeight)
     }
 
     /// Chat panel layout: the surface fills the height with the ask bar anchored
@@ -674,7 +640,7 @@ struct DashboardPage: View {
 
     private var homeHubWordmark: some View {
         Text("omi.")
-            .scaledFont(size: 58, weight: .bold)
+            .scaledFont(size: 64, weight: .bold)
             .foregroundStyle(HomePalette.ink)
             .lineLimit(1)
             .shadow(color: HomePalette.jewelGlow.opacity(0.22), radius: 24)
@@ -829,11 +795,17 @@ struct DashboardPage: View {
 
     private var homeSuggestedQuestions: [String] {
         let saved = PostOnboardingPromptSuggestions.suggestions()
-        let fallback = [
-            "What should I focus on today to achieve my goals?",
-            "What did I spend my time on this week?",
-            "What's the highest-leverage thing I can do next?",
-        ]
+        let fallback = isDayZeroHome
+            ? [
+                "Ask a question out loud — try \"What's on my screen?\"",
+                "See your first Memory — press ⌘O and try it now",
+                "Set your first goal to focus What Matters Now",
+            ]
+            : [
+                "What should I focus on today to achieve my goals?",
+                "What did I spend my time on this week?",
+                "What's the highest-leverage thing I can do next?",
+            ]
         return Array((saved.isEmpty ? fallback : saved).prefix(3))
     }
 
@@ -867,9 +839,10 @@ struct DashboardPage: View {
         }
 
         let availableWidth = min(Self.homeAskBarMaxWidth, contentWidth)
+        let referenceWidth = isDayZeroHome ? Self.homeAskBarMinWidth : CGFloat(620)
         let text = chatProvider.draftText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else {
-            return min(availableWidth, Self.homeAskBarMinWidth)
+            return min(availableWidth, referenceWidth)
         }
 
         let attributes: [NSAttributedString.Key: Any] = [
@@ -877,7 +850,7 @@ struct DashboardPage: View {
         ]
         let measuredTextWidth = (text as NSString).size(withAttributes: attributes).width
         let chromeWidth: CGFloat = 210
-        return min(availableWidth, max(Self.homeAskBarMinWidth, measuredTextWidth + chromeWidth))
+        return min(availableWidth, max(referenceWidth, measuredTextWidth + chromeWidth))
     }
 
     // MARK: Stage actions
@@ -989,25 +962,45 @@ struct DashboardPage: View {
         .frame(height: 36)
     }
 
+    private var homeConversationCount: Int {
+        homeStatusStore.conversationCount ?? appState.totalConversationsCount ?? appState.conversations.count
+    }
+
+    private var homeTaskCount: Int {
+        homeStatusStore.taskCount ?? incompleteTaskCount
+    }
+
+    private var homeMemoryCount: Int {
+        homeStatusStore.memoryCount ?? (memoriesViewModel.totalMemoriesCount > 0
+            ? memoriesViewModel.totalMemoriesCount
+            : memoriesViewModel.memories.count)
+    }
+
+    private var homeScreenshotCount: Int {
+        homeStatusStore.screenshotCount ?? 0
+    }
+
+    private var isDayZeroHome: Bool {
+        homeConversationCount == 0
+            && homeTaskCount == 0
+            && homeMemoryCount == 0
+            && homeScreenshotCount == 0
+    }
+
     private var conversationMetricValue: String {
-        formattedCount(
-            homeStatusStore.conversationCount ?? appState.totalConversationsCount ?? appState.conversations.count
-        )
+        formattedCount(homeConversationCount)
     }
 
     private var taskMetricValue: String {
-        formattedCount(homeStatusStore.taskCount ?? incompleteTaskCount)
+        formattedCount(homeTaskCount)
     }
 
     private var memoryMetricValue: String {
-        let count = homeStatusStore.memoryCount ?? (memoriesViewModel.totalMemoriesCount > 0
-            ? memoriesViewModel.totalMemoriesCount
-            : memoriesViewModel.memories.count)
-        return formattedCount(count)
+        formattedCount(homeMemoryCount)
     }
 
     private var screenshotMetricValue: String {
-        homeStatusStore.screenshotCount.map(formattedCount) ?? "—"
+        formattedCount(homeScreenshotCount)
     }
 
     private func navigate(to item: SidebarNavItem) {
