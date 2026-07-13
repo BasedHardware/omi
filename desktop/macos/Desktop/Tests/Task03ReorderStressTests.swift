@@ -23,7 +23,9 @@ final class Task03ReorderStressTests: XCTestCase {
 
   func test150RandomReordersKeepOrderingStableAndCollisionFree() {
     var rng = SystemRandomNumberGenerator.seeded(19)
-    let categoryIndex = 3  // noDeadline band [300_000, 400_000)
+    let categoryIndex = 3  // noDeadline band
+    let band = TasksViewModel.sortOrderBandWidth
+    let categoryBand = (categoryIndex * band)..<((categoryIndex + 1) * band)
     let ids = (1...30).map { "t\($0)" }
     var tasks = ids.map { item($0) }
     var order = ids
@@ -48,7 +50,7 @@ final class Task03ReorderStressTests: XCTestCase {
         sortOrders, sortOrders.sorted(),
         "step \(step): sortOrders must be monotonic with displayed position")
       XCTAssertTrue(
-        sortOrders.allSatisfy { (300_000..<400_000).contains($0) },
+        sortOrders.allSatisfy { categoryBand.contains($0) },
         "step \(step): every sortOrder must stay inside the category band")
     }
   }
@@ -57,6 +59,7 @@ final class Task03ReorderStressTests: XCTestCase {
     // Same seed → same final ordering; the criterion's "stable ordering" half.
     func run() -> [Int?] {
       var rng = SystemRandomNumberGenerator.seeded(7)
+      let categoryIndex = 3
       let ids = (1...30).map { "t\($0)" }
       var tasks = ids.map { item($0) }
       var order = ids
@@ -65,7 +68,7 @@ final class Task03ReorderStressTests: XCTestCase {
         let target = Int(rng.next() % 31)
         order.removeAll { $0 == moved }
         order.insert(moved, at: min(target, order.count))
-        TasksViewModel.applyReorder(order, categoryIndex: 3, to: &tasks)
+        TasksViewModel.applyReorder(order, categoryIndex: categoryIndex, to: &tasks)
       }
       return order.map { id in tasks.first { $0.id == id }?.sortOrder }
     }

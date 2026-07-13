@@ -7,8 +7,9 @@ import XCTest
 /// - TASK-05: `reorder_task flush=false` leaves the production 500ms sortOrder
 ///   debounce running so rapid reorders provably coalesce into ONE sync (the
 ///   bridge's unconditional flush was hiding exactly the behavior under test).
-/// - CHAT-07: `simulate_system_wake` posts the real `.systemDidWake` signal so the
-///   post-wake restart paths run without physically sleeping the machine.
+/// - CHAT-07: `simulate_system_wake` posts `NSWorkspace.didWakeNotification` on
+///   the workspace notification center, then AppState re-broadcasts `.systemDidWake`
+///   so post-wake restart paths run without physically sleeping the machine.
 ///
 /// Both are registry-bound `@MainActor` paths that can't be behaviorally unit-run
 /// in the test host, so these pin the wiring; the behavior is the runtime lane

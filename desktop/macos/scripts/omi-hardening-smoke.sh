@@ -174,11 +174,20 @@ token_file() { printf '%s/omi-automation-%s.token' "${TMPDIR:-/tmp}" "$PORT"; }
 bridge() { OMI_AUTOMATION_PORT="$PORT" "$OMI_CTL" "$@"; }
 
 action_json() {
-  # action_json <action-name> — raw JSON of the action's `detail` object ({} on failure)
+  # action_json <action-name> — raw JSON of the action's `detail` object.
+  # If the bridge/action returns an error outside detail, preserve it as
+  # {"error": "..."} so probes report the real blocked cause.
   bridge action "$1" 2>/dev/null | python3 -c '
 import json, sys
 try:
-    print(json.dumps(json.load(sys.stdin)["result"].get("detail", {})))
+    payload = json.load(sys.stdin)
+    result = payload.get("result", {})
+    detail = result.get("detail")
+    if isinstance(detail, dict):
+        print(json.dumps(detail))
+    else:
+        error = payload.get("error") or result.get("error")
+        print(json.dumps({"error": str(error)} if error else {}))
 except Exception:
     print("{}")
 ' 2>/dev/null || printf '{}'
@@ -428,10 +437,15 @@ probe_auth_03() {
   # the expiry through the app's OWN storage path instead (`expire_auth_token`), and
   # read the result back the same way (`auth_token_status`) — correct for both the
   # keychain and the UserDefaults fallback, and inert if storage changes again.
-  local t0 pre_status expired post_status signed_before signed_after expired_after storage
+  local t0 pre_status expired post_status signed_before signed_after expired_after storage error
   t0=$(now_s)
 
   pre_status="$(action_json auth_token_status)"
+  error="$(json_field "$pre_status" error)"
+  if [ -n "$error" ]; then
+    record auth-03 BLOCKED $(( $(now_s) - t0 )) "auth_token_status error before expiry: $error"
+    return
+  fi
   signed_before="$(json_field "$pre_status" signed_in)"
   storage="$(json_field "$pre_status" storage)"
   if [ "$signed_before" != "true" ]; then
@@ -440,6 +454,11 @@ probe_auth_03() {
   fi
 
   expired="$(action_json expire_auth_token)"
+  error="$(json_field "$expired" error)"
+  if [ -n "$error" ]; then
+    record auth-03 BLOCKED $(( $(now_s) - t0 )) "expire_auth_token error: $error (storage=$storage)"
+    return
+  fi
   if [ "$(json_field "$expired" is_token_expired)" != "true" ]; then
     record auth-03 BLOCKED $(( $(now_s) - t0 )) "could not force token expiry via expire_auth_token (storage=$storage)"
     return
@@ -453,6 +472,11 @@ probe_auth_03() {
   sleep 5
 
   post_status="$(action_json auth_token_status)"
+  error="$(json_field "$post_status" error)"
+  if [ -n "$error" ]; then
+    record auth-03 BLOCKED $(( $(now_s) - t0 )) "auth_token_status error after relaunch: $error (storage=$storage)"
+    return
+  fi
   signed_after="$(json_field "$post_status" signed_in)"
   expired_after="$(json_field "$post_status" is_token_expired)"
   {
