@@ -594,9 +594,9 @@ class ChatToolExecutor {
       )
     }
     guard
-      let fileURL = performOwnerBoundPhysicalEffect(
+      let capture = performOwnerBoundPhysicalEffect(
         expectedOwnerID: expectedOwnerID,
-        effect: { ScreenCaptureManager.captureScreen() }) ?? nil
+        effect: { ScreenCaptureManager.captureScreenWithDetailTiles() }) ?? nil
     else {
       guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
       ScreenContextToolTelemetry.trackToolResult(
@@ -614,7 +614,36 @@ class ChatToolExecutor {
       ok: true,
       permissionTCCGranted: true
     )
-    return fileURL.path
+    return captureScreenToolResult(
+      fullPath: capture.fullImageURL.path,
+      tiles: capture.tiles.map { (label: $0.label, rect: $0.rect, path: $0.url.path) }
+    )
+  }
+
+  /// Format the capture_screen tool result: the full-screen path first (the
+  /// original single-line contract), then native-resolution detail tiles. Vision
+  /// APIs downscale a full-Retina frame until dense UI text (product titles,
+  /// prices, labels) is illegible — the model then guesses instead of reading.
+  /// The tile listing tells it where to re-read at native sharpness. Pure and
+  /// nonisolated so it is hermetically testable.
+  nonisolated static func captureScreenToolResult(
+    fullPath: String,
+    tiles: [(label: String, rect: CGRect, path: String)]
+  ) -> String {
+    guard !tiles.isEmpty else { return fullPath }
+    var lines = [fullPath]
+    lines.append("")
+    lines.append(
+      "Detail tiles (native resolution). The full screenshot above gets downscaled before you see it, "
+        + "which can make small text unreadable. Before quoting or relying on small on-screen text "
+        + "(titles, prices, sizes, labels) or choosing between similar-looking items, Read the tile "
+        + "covering that part of the screen and take the exact text from it:")
+    for tile in tiles {
+      let r = tile.rect
+      lines.append(
+        "- \(tile.label) (x \(Int(r.minX))-\(Int(r.maxX)), y \(Int(r.minY))-\(Int(r.maxY))): \(tile.path)")
+    }
+    return lines.joined(separator: "\n")
   }
 
   private static func executeGetWorkContext(
