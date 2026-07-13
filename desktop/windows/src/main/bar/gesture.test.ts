@@ -1,8 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
-import { SummonGesture, HOLD_THRESHOLD_MS, REPEAT_GAP_MS } from './gesture'
+import { SummonGesture, HOLD_THRESHOLD_MS, REPEAT_GAP_MS, MAX_HOLD_MS } from './gesture'
 
 /** Deterministic clock + timer world for the gesture machine. */
-function world({ keyDown = null }: { keyDown?: (() => boolean) | null } = {}) {
+function world({
+  keyDown = null,
+  maxHoldMs
+}: { keyDown?: (() => boolean) | null; maxHoldMs?: number } = {}) {
   let now = 0
   const timers: { at: number; fn: () => void; id: number }[] = []
   let nextId = 1
@@ -11,10 +14,12 @@ function world({ keyDown = null }: { keyDown?: (() => boolean) | null } = {}) {
     {
       onStart: () => events.push('start'),
       onHoldStart: () => events.push('holdStart'),
-      onEnd: (kind) => events.push(`end:${kind}`)
+      onEnd: (kind) => events.push(`end:${kind}`),
+      onCapExceeded: () => events.push('cap')
     },
     {
       sampleKeyDown: keyDown,
+      maxHoldMs,
       now: () => now,
       setTimer: (fn, ms) => {
         const id = nextId++
@@ -160,6 +165,54 @@ describe('SummonGesture with key-state sampling', () => {
     timers.shift()!.fn() // key already up → gesture ends
     expect(g.isActive).toBe(false)
     expect(timers).toHaveLength(0) // and nothing remains scheduled
+  })
+
+  it('force-ends a hold the sampler never sees released (stuck-visualizer recovery)', () => {
+    // The physical key-up is missed — GetAsyncKeyState reads DOWN forever
+    // (stale-down after a focus/session transition). Without the cap the gesture
+    // never ends, main never sends 'up', and the recording orb sticks (machine.ts
+    // WATCHDOG no-ops while `holding`). The cap force-ends it exactly once.
+    let down = true
+    const w = world({ keyDown: () => down, maxHoldMs: 2000 })
+    w.g.fire()
+    w.advance(400)
+    expect(w.events).toEqual(['start', 'holdStart']) // held past threshold, still down
+    w.advance(2000) // cross the cap
+    expect(w.events).toEqual(['start', 'holdStart', 'cap', 'end:hold'])
+    expect(w.g.isActive).toBe(false)
+    // The real key-up finally arrives — it must NOT produce a second end (a
+    // double 'up' would desync the renderer).
+    down = false
+    w.advance(5000)
+    expect(w.events).toEqual(['start', 'holdStart', 'cap', 'end:hold'])
+  })
+
+  it('endIfActive finalizes an in-flight hold (session lock / suspend), once', () => {
+    // powerMonitor lock-screen/suspend end the hold directly: the key-up will
+    // never be observed across that transition, so finalize now rather than stick.
+    let down = true
+    const w = world({ keyDown: () => down })
+    w.g.fire()
+    w.advance(400) // a genuine hold in flight
+    expect(w.events).toEqual(['start', 'holdStart'])
+    w.g.endIfActive()
+    expect(w.events).toEqual(['start', 'holdStart', 'end:hold'])
+    expect(w.g.isActive).toBe(false)
+    // A stray sampler tick after must not resurrect it (no second end).
+    down = true
+    w.advance(1000)
+    expect(w.events).toEqual(['start', 'holdStart', 'end:hold'])
+  })
+
+  it('endIfActive is a no-op when idle', () => {
+    const w = world({ keyDown: () => false })
+    w.g.endIfActive()
+    expect(w.events).toEqual([])
+    expect(w.g.isActive).toBe(false)
+  })
+
+  it('MAX_HOLD_MS is 5 minutes (matches the renderer PCM buffer cap with margin)', () => {
+    expect(MAX_HOLD_MS).toBe(5 * 60 * 1000)
   })
 })
 

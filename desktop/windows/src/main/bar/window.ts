@@ -722,12 +722,28 @@ let gesture: SummonGesture | null = null
 let gestureStartedVisible = false
 let samplerAvailable = false
 
+// Always-on (survives packaging, unlike dev-gated diag()) trace of the PTT
+// release path. This path has stranded the recording visualizer in the wild: on
+// the summon-hotkey hold the renderer has NO independent key knowledge (the peek
+// pill is non-focusable, so its window-level Space keyup never fires), main's
+// GetAsyncKeyState poll is the SOLE release signal, and the pure machine's
+// WATCHDOG no-ops while `holding` — so a single missed/dropped 'up' sticks
+// forever. These terse, user-action-scoped lines tell a stuck report apart: a
+// `down` with no `up` means main never saw key-up (the poll missed the edge);
+// an `up -> renderer` with the visualizer still up means the release was lost
+// downstream. Grep `[ptt-diag]` in the packaged app log.
+function pttTrace(msg: string): void {
+  console.log(`[ptt-diag] ${msg}`)
+}
+
 function sendPtt(phase: 'down' | 'up'): void {
   if (!barReady) {
     // A cold first summon: queue the down, drop a release that beat the mount.
+    pttTrace(`ptt ${phase} NOT sent (bar not ready); pendingDown=${phase === 'down'}`)
     pendingPttDown = phase === 'down'
     return
   }
+  pttTrace(`ptt ${phase} -> renderer`)
   send('bar:ptt', phase)
 }
 
@@ -750,6 +766,7 @@ function onGestureStart(): void {
     // auto-opens the chat — Chris's rule), and arm the PTT path (the renderer's
     // own hold threshold decides recording; a hold keeps the pill up + drives
     // the orb). Click the pill to expand into the chat surface.
+    pttTrace(`gesture START (sampler) presented=${gestureStartedVisible}`)
     if (!gestureStartedVisible) showBar('peek', 'summon')
     sendPtt('down')
   } else {
@@ -767,6 +784,7 @@ function onGestureEnd(kind: GestureKind): void {
   // over from here for a real voice/chat exchange.
   gestureActiveHold = false
   diag(`gesture END kind=${kind} startedPresented=${gestureStartedVisible} mode=${currentMode}`)
+  pttTrace(`gesture END kind=${kind} sampler=${samplerAvailable}`)
   if (!samplerAvailable) return
   sendPtt('up')
   // A tap on an already-open bar closes it (deferred to release so a HOLD on
@@ -787,9 +805,27 @@ export function setSummonGestureAccelerator(accelerator: string): void {
   const sampler = makeKeySampler(accelerator)
   samplerAvailable = !!sampler
   gesture = new SummonGesture(
-    { onStart: onGestureStart, onEnd: onGestureEnd },
+    {
+      onStart: onGestureStart,
+      onEnd: onGestureEnd,
+      // The poll kept reading the key DOWN past the ~5-min cap — the physical
+      // key-up was almost certainly missed (GetAsyncKeyState stale-down). onEnd
+      // (below) still sends 'up'; this line just makes the recovery visible in
+      // field logs so we can confirm the failure class.
+      onCapExceeded: () => pttTrace('gesture CAP (~5min, key still reads down) → forcing release')
+    },
     { sampleKeyDown: sampler }
   )
+}
+
+/** End an in-flight summon PTT hold NOW because the OS is about to make the
+ *  physical key-up unobservable (session lock / suspend — GetAsyncKeyState
+ *  freezes across those, so the poll would read the key stuck-down). Wired to
+ *  powerMonitor 'lock-screen'/'suspend' in index.ts. No-op when nothing is held. */
+export function endActiveSummonHold(reason: string): void {
+  if (!gesture?.isActive) return
+  pttTrace(`system ${reason} → ending active hold`)
+  gesture.endIfActive()
 }
 
 /** E2E diagnostic: is real hit-testing currently enabled? Must be FALSE right

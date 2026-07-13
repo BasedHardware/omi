@@ -24,6 +24,12 @@ export type SummonGestureCallbacks = {
   onHoldStart?: () => void
   /** Gesture over. `kind` is 'hold' iff it lasted ≥ holdThresholdMs. */
   onEnd: (kind: GestureKind) => void
+  /** The absolute hold cap tripped — the sampler kept reading the key DOWN past
+   *  maxHoldMs, so the physical key-up was almost certainly missed (GetAsyncKeyState
+   *  can go stale-down after a focus/session transition). Fired once, immediately
+   *  before onEnd, so the caller can log it distinctly. Recovery only — a real hold
+   *  is already useless past the ~4.5-min buffer cap. */
+  onCapExceeded?: () => void
 }
 
 export type SummonGestureOptions = {
@@ -32,6 +38,7 @@ export type SummonGestureOptions = {
   holdThresholdMs?: number
   pollMs?: number
   repeatGapMs?: number
+  maxHoldMs?: number
   now?: () => number
   setTimer?: (fn: () => void, ms: number) => unknown
   clearTimer?: (h: unknown) => void
@@ -41,6 +48,14 @@ export const HOLD_THRESHOLD_MS = 350
 export const POLL_MS = 30
 /** Must exceed the slowest Windows keyboard initial repeat delay (~1s). */
 export const REPEAT_GAP_MS = 1200
+/** Absolute sampler-mode hold cap: force-end a gesture the poll still reads as
+ *  DOWN after this long. Matches the renderer's ~4.5-min PCM buffer cap
+ *  (MAX_BUFFER_BYTES) with margin — audio past that can't be transcribed, so
+ *  bounding the hold here can NEVER cost useful speech; it only rescues a hold
+ *  whose key-up edge the poll missed (the stuck-recording-visualizer failure
+ *  class). Without it, `machine.ts` WATCHDOG no-ops while `holding`, so a missed
+ *  edge sticks the orb forever. */
+export const MAX_HOLD_MS = 5 * 60 * 1000
 
 export class SummonGesture {
   private active = false
@@ -53,6 +68,7 @@ export class SummonGesture {
   private readonly holdThresholdMs: number
   private readonly pollMs: number
   private readonly repeatGapMs: number
+  private readonly maxHoldMs: number
   private readonly now: () => number
   private readonly setTimer: (fn: () => void, ms: number) => unknown
   private readonly clearTimer: (h: unknown) => void
@@ -65,6 +81,7 @@ export class SummonGesture {
     this.holdThresholdMs = opts.holdThresholdMs ?? HOLD_THRESHOLD_MS
     this.pollMs = opts.pollMs ?? POLL_MS
     this.repeatGapMs = opts.repeatGapMs ?? REPEAT_GAP_MS
+    this.maxHoldMs = opts.maxHoldMs ?? MAX_HOLD_MS
     this.now = opts.now ?? Date.now
     this.setTimer = opts.setTimer ?? ((fn, ms) => setTimeout(fn, ms))
     this.clearTimer = opts.clearTimer ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>))
@@ -99,6 +116,16 @@ export class SummonGesture {
     if (this.active) this.end()
   }
 
+  /** End an in-flight gesture NOW, as its current kind, because the physical
+   *  key-up will never be observed — the session is locking or the machine is
+   *  suspending (GetAsyncKeyState freezes across those transitions, so the poll
+   *  would otherwise read the key stuck-down). onEnd fires so the hold is
+   *  finalized/released rather than stranded. No-op when idle; the object stays
+   *  reusable for the next press. */
+  endIfActive(): void {
+    if (this.active) this.end()
+  }
+
   private end(): void {
     // Sampler mode ends AT key-up (now is accurate); gap mode ends a full
     // repeatGapMs after the key was released, so measure to the last fire.
@@ -117,6 +144,15 @@ export class SummonGesture {
       this.timer = null
       if (!this.active) return
       if (this.sample!()) {
+        // Absolute cap: the key still reads DOWN past maxHoldMs. A real hold is
+        // already useless (past the buffer cap), so this is overwhelmingly a
+        // missed key-up (stale-down) — force-end so the recording visualizer
+        // can't stick forever.
+        if (this.now() - this.startAt >= this.maxHoldMs) {
+          this.cb.onCapExceeded?.()
+          this.end()
+          return
+        }
         if (!this.holdFired && this.now() - this.startAt >= this.holdThresholdMs) {
           this.holdFired = true
           this.cb.onHoldStart?.()
