@@ -71,6 +71,7 @@ from routers import (
     memory_admin,
     memory_product,
     task_recommendations,
+    conversation_finalization,
 )
 
 from utils.other.timeout import TimeoutMiddleware
@@ -84,6 +85,7 @@ from utils.executors import (
     db_executor,
 )
 from utils.executors import start_background_task
+from services.conversation_finalization import reconcile_listen_finalization_jobs
 from services.users.account_deletion import reconcile_pending_deletion_wipes
 
 # Log LangSmith tracing status at startup
@@ -133,6 +135,7 @@ app.include_router(notifications.router)
 app.include_router(integration.router)
 app.include_router(agents.router)
 app.include_router(users.router)
+app.include_router(conversation_finalization.router)
 app.include_router(trends.router)
 
 app.include_router(other.router)
@@ -193,6 +196,7 @@ paths_timeout = {
     "/v2/sync-jobs/run": os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT', 1500),
     "/v2/audio-merge-jobs/run": os.environ.get('HTTP_AUDIO_MERGE_RUN_TIMEOUT', 600),
     "/v1/users/account-deletion-wipes/run": os.environ.get('HTTP_ACCOUNT_DELETION_WIPE_RUN_TIMEOUT', 1500),
+    "/v1/conversation-finalization-jobs/run": os.environ.get('HTTP_LISTEN_FINALIZATION_RUN_TIMEOUT', 1500),
 }
 
 app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout, paths_timeout=paths_timeout)
@@ -214,6 +218,11 @@ async def startup_event():
     # Periodic reconciliation ensures stale retrying claims (worker crashed) and
     # new pending/failed wipes are retried without requiring a restart.
     start_background_task(_periodic_deletion_wipe_reconcile(), name='periodic_deletion_wipe_reconcile')
+    start_background_task(
+        run_blocking(db_executor, _drain_listen_finalization_jobs),
+        name='startup_listen_finalization_reconcile',
+    )
+    start_background_task(_periodic_listen_finalization_reconcile(), name='periodic_listen_finalization_reconcile')
 
 
 def _drain_pending_deletion_wipes():
@@ -240,6 +249,28 @@ async def _periodic_deletion_wipe_reconcile(interval_seconds: int = 300):
                 logger.info(f"Periodic deletion-wipe reconciliation: {result}")
         except Exception as e:
             logger.error(f"Periodic deletion-wipe reconciliation failed: {e}")
+
+
+def _drain_listen_finalization_jobs():
+    """Best-effort durable finalization recovery after a restart/deploy."""
+    try:
+        result = reconcile_listen_finalization_jobs()
+        if result.get('requeued'):
+            logger.info(f"Startup listen-finalization reconciliation: {result}")
+    except Exception as e:
+        logger.error(f"Startup listen-finalization reconciliation failed: {e}")
+
+
+async def _periodic_listen_finalization_reconcile(interval_seconds: int = 300):
+    """Replay stale finalization leases and publish durable backlog metrics."""
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            result = await run_blocking(db_executor, reconcile_listen_finalization_jobs)
+            if result.get('requeued'):
+                logger.info(f"Periodic listen-finalization reconciliation: {result}")
+        except Exception as e:
+            logger.error(f"Periodic listen-finalization reconciliation failed: {e}")
 
 
 @app.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring

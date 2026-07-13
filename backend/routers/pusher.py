@@ -1,6 +1,5 @@
 import struct
 import asyncio
-import contextvars
 import json
 import time
 from collections import deque
@@ -11,20 +10,15 @@ from fastapi.websockets import WebSocketDisconnect, WebSocket
 from starlette.websockets import WebSocketState
 
 import database.conversations as conversations_db
+from database import conversation_finalization_jobs as finalization_jobs_db
 from database import users as users_db
-from database.redis_db import get_cached_user_geolocation
-from models.conversation_enums import ConversationStatus
-from utils.conversations.factory import deserialize_conversation
-from models.geolocation import Geolocation
 from utils.apps import is_audio_bytes_app_enabled
 from utils.app_integrations import (
     trigger_realtime_integrations,
     trigger_realtime_audio_bytes,
-    trigger_external_integrations,
 )
-from utils.conversations.location import async_get_google_maps_location
 from utils.byok import set_byok_keys, set_byok_uid
-from utils.conversations.process_conversation import process_conversation
+from utils.conversations.finalizer import ConversationFinalizationError, finalize_persisted_conversation
 from utils.executors import db_executor, storage_executor, run_blocking
 from utils.async_tasks import (
     supervise_tasks,
@@ -111,8 +105,10 @@ async def _process_conversation_task(
     language: str,
     websocket: WebSocket,
     byok_keys: Optional[Dict[str, str]] = None,
+    finalization_job_id: Optional[str] = None,
+    dispatch_generation: Optional[int] = None,
 ) -> None:
-    """Process a conversation and send result back to _listen via websocket.
+    """Process a leased conversation job and send a minimal result to listen.
 
     `byok_keys` is forwarded from the listen service. When present, LLM and
     STT calls made inside process_conversation route through the user's own
@@ -121,69 +117,101 @@ async def _process_conversation_task(
     if byok_keys:
         set_byok_keys(byok_keys)
         set_byok_uid(uid)
-    try:
-        conversation_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
-        if not conversation_data:
-            # Send error response
-            response = {"conversation_id": conversation_id, "error": "conversation_not_found"}
-            data = bytearray()
-            data.extend(struct.pack("I", 201))
-            data.extend(bytes(json.dumps(response), "utf-8"))
-            await websocket.send_bytes(bytes(data))
-            return
 
-        conversation = deserialize_conversation(conversation_data)
-
-        if conversation.status != ConversationStatus.processing:
-            await run_blocking(
-                db_executor,
-                conversations_db.update_conversation_status,
-                uid,
-                conversation.id,
-                ConversationStatus.processing,
-            )
-            conversation.status = ConversationStatus.processing
-
-        try:
-            # Geolocation
-            geolocation = await run_blocking(db_executor, get_cached_user_geolocation, uid)
-            if geolocation:
-                geolocation = Geolocation(**geolocation)
-                conversation.geolocation = await async_get_google_maps_location(
-                    geolocation.latitude, geolocation.longitude
-                )
-
-            # Default executor (None) is intentional: process_conversation is a coordinator
-            # that fans out to llm_executor/db_executor and calls .result(). Using a named
-            # pool would risk deadlock if that pool fills with coordinators. The default
-            # executor is unbounded so coordinators can't starve children.
-            # contextvars.copy_context() carries BYOK keys into the worker thread.
-            loop = asyncio.get_running_loop()
-            ctx = contextvars.copy_context()
-            conversation = await loop.run_in_executor(
-                None, lambda: ctx.run(process_conversation, uid, language, conversation)
-            )
-            await trigger_external_integrations(uid, conversation)
-        except Exception as e:
-            logger.error(f"Error processing conversation: {e} {uid} {conversation_id}")
-            await run_blocking(db_executor, conversations_db.set_conversation_as_discarded, uid, conversation.id)
-            conversation.discarded = True
-
-        # Send success response back (minimal - transcribe will fetch from DB)
-        response = {"conversation_id": conversation_id, "success": True}
+    async def send_result(result: Dict[str, Any]) -> None:
         data = bytearray()
         data.extend(struct.pack("I", 201))
-        data.extend(bytes(json.dumps(response), "utf-8"))
+        data.extend(bytes(json.dumps(result), "utf-8"))
         await websocket.send_bytes(bytes(data))
 
-    except Exception as e:
-        logger.error(f"Error in _process_conversation_task: {e} {uid} {conversation_id}")
-        response = {"conversation_id": conversation_id, "error": str(e)}
-        data = bytearray()
-        data.extend(struct.pack("I", 201))
-        data.extend(bytes(json.dumps(response), "utf-8"))
+    job_id: Optional[str] = None
+    generation: Optional[int] = None
+    lease_epoch: Optional[int] = None
+
+    async def mark_retryable(failure_code: str) -> None:
+        if job_id is None or generation is None or lease_epoch is None:
+            return
         try:
-            await websocket.send_bytes(bytes(data))
+            await run_blocking(
+                db_executor,
+                finalization_jobs_db.mark_finalization_retryable,
+                job_id,
+                generation,
+                lease_epoch,
+                failure_code,
+            )
+        except Exception:
+            logger.error(
+                'pusher finalization recovery update failed uid=%s conversation=%s failure=%s',
+                uid,
+                conversation_id,
+                failure_code,
+            )
+
+    try:
+        if not finalization_job_id or dispatch_generation is None:
+            # Every finalization request must be mediated by the Firestore
+            # owner.  Accepting the legacy frame would allow a pending pusher
+            # session to bypass the durable claim and double-process work.
+            await send_result({'conversation_id': conversation_id, 'error': 'durable_job_required'})
+            return
+
+        job_id = finalization_job_id
+        generation = dispatch_generation
+
+        claim = await run_blocking(
+            db_executor,
+            finalization_jobs_db.claim_finalization_job,
+            job_id,
+            generation,
+            allow_byok=bool(byok_keys),
+            expected_uid=uid,
+            expected_conversation_id=conversation_id,
+        )
+        claim_status = claim['status']
+        if claim_status == 'completed':
+            await send_result({'conversation_id': conversation_id, 'success': True})
+            return
+        if claim_status != 'claimed':
+            await send_result({'conversation_id': conversation_id, 'error': f'job_{claim_status}'})
+            return
+        lease_epoch = claim['lease_epoch']
+        if lease_epoch is None:
+            logger.error(
+                'pusher finalization claim returned no lease epoch uid=%s conversation=%s', uid, conversation_id
+            )
+            await send_result({'conversation_id': conversation_id, 'error': 'processing_failed'})
+            return
+
+        await finalize_persisted_conversation(uid, conversation_id, language)
+
+        completed = await run_blocking(
+            db_executor,
+            finalization_jobs_db.mark_finalization_completed,
+            job_id,
+            generation,
+            lease_epoch,
+        )
+        if not completed:
+            await send_result({'conversation_id': conversation_id, 'error': 'job_completion_conflict'})
+            return
+        await send_result({'conversation_id': conversation_id, 'success': True})
+    except ConversationFinalizationError:
+        await mark_retryable('processing_failed')
+        logger.error(
+            'pusher finalization failed uid=%s conversation=%s failure=processing_failed', uid, conversation_id
+        )
+        try:
+            await send_result({'conversation_id': conversation_id, 'error': 'processing_failed'})
+        except Exception:
+            pass
+    except Exception:
+        await mark_retryable('worker_failed')
+        logger.error(
+            'pusher finalization task failed uid=%s conversation=%s failure=worker_failed', uid, conversation_id
+        )
+        try:
+            await send_result({'conversation_id': conversation_id, 'error': 'processing_failed'})
         except Exception:
             pass
 
@@ -548,9 +576,21 @@ async def _websocket_util_trigger(
                     conversation_id = res.get('conversation_id')
                     language = res.get('language', 'en')
                     byok_keys = res.get('byok_keys') or None
+                    finalization_job_id = res.get('finalization_job_id')
+                    dispatch_generation = res.get('dispatch_generation')
                     if conversation_id:
                         logger.info(f"Pusher received process_conversation request: {conversation_id} {uid}")
-                        spawn(_process_conversation_task(uid, conversation_id, language, websocket, byok_keys))
+                        spawn(
+                            _process_conversation_task(
+                                uid,
+                                conversation_id,
+                                language,
+                                websocket,
+                                byok_keys,
+                                finalization_job_id if isinstance(finalization_job_id, str) else None,
+                                dispatch_generation if isinstance(dispatch_generation, int) else None,
+                            )
+                        )
                     continue
 
                 # Speaker sample extraction request - queue for background processing
