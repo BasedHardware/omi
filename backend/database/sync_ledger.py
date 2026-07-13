@@ -99,29 +99,33 @@ def _processing_claim_updates(
     lane: str,
     now: datetime,
     *,
+    existing: Optional[Dict[str, Any]] = None,
     clear_invalid_completion: bool = False,
 ) -> Dict[str, Any]:
-    """Move a claim to processing without discarding valid retry checkpoints."""
+    """Move a claim to processing without discarding valid retry checkpoints.
+
+    Only emit ``DELETE_FIELD`` for keys that already exist. Real Firestore no-ops
+    missing deletes, but hermetic fakes and sparse first-time claims should not
+    depend on that quirk for every admission.
+    """
+    existing = existing or {}
     updates: Dict[str, Any] = {
         'status': 'processing',
         'job_id': job_id,
-        'ledger_run_token': firestore.DELETE_FIELD,
-        'ledger_run_epoch': firestore.DELETE_FIELD,
         'lane': lane,
         'updated_at': now,
         'expires_at': now + timedelta(days=LEDGER_RETENTION_DAYS),
     }
+    for field in ('ledger_run_token', 'ledger_run_epoch'):
+        if field in existing:
+            updates[field] = firestore.DELETE_FIELD
     if clear_invalid_completion:
         # A malformed historical completion is not a retry checkpoint: keeping
         # its result/markers could recreate the false-completed state we are
         # explicitly repairing. Normal retryable claims preserve both fields.
-        updates.update(
-            {
-                'result': firestore.DELETE_FIELD,
-                'partial_result': firestore.DELETE_FIELD,
-                'processed_segment_ids': firestore.DELETE_FIELD,
-            }
-        )
+        for field in ('result', 'partial_result', 'processed_segment_ids'):
+            if field in existing:
+                updates[field] = firestore.DELETE_FIELD
     return updates
 
 
@@ -133,7 +137,11 @@ def _claim_transaction(transaction: Any, ref: Any, job_id: str, lane: str, now: 
         result = existing.get('result')
         if is_valid_completed_sync_content_result(result):
             return {'outcome': 'completed', 'result': result}
-        transaction.set(ref, _processing_claim_updates(job_id, lane, now, clear_invalid_completion=True), merge=True)
+        transaction.set(
+            ref,
+            _processing_claim_updates(job_id, lane, now, existing=existing, clear_invalid_completion=True),
+            merge=True,
+        )
         return {'outcome': 'owned'}
     if existing.get('job_id') == job_id:
         return {'outcome': 'owned'}
@@ -141,7 +149,7 @@ def _claim_transaction(transaction: Any, ref: Any, job_id: str, lane: str, now: 
     if existing.get('status') == 'retryable':
         transaction.set(
             ref,
-            _processing_claim_updates(job_id, lane, now),
+            _processing_claim_updates(job_id, lane, now, existing=existing),
             merge=True,
         )
         return {'outcome': 'owned'}
@@ -155,7 +163,7 @@ def _claim_transaction(transaction: Any, ref: Any, job_id: str, lane: str, now: 
 
     transaction.set(
         ref,
-        _processing_claim_updates(job_id, lane, now),
+        _processing_claim_updates(job_id, lane, now, existing=existing),
         merge=True,
     )
     return {'outcome': 'owned'}
@@ -208,6 +216,7 @@ def _bind_run_token_transaction(
                     job_id,
                     str(existing.get('lane') or 'legacy'),
                     now,
+                    existing=existing,
                     clear_invalid_completion=True,
                 ),
                 'ledger_run_token': run_token,

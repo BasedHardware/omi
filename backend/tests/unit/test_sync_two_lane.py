@@ -3,6 +3,8 @@ import hashlib
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from google.cloud import firestore
+
 from database import sync_ledger, user_usage
 from scripts.render_cloud_run_clone_env import clone_environment
 from utils.sync import backfill, capture_manifest, content_id, lanes
@@ -330,6 +332,52 @@ class _Transaction:
 
     def set(self, ref, data, merge=False):
         self.writes.append((ref, data, merge))
+
+
+def test_fresh_ledger_claim_omits_delete_field_for_missing_keys():
+    """First-time claims must not DELETE absent ledger fields.
+
+    Real Firestore no-ops missing deletes; hermetic fakes raise KeyError. Keep
+    the write sparse so both stay green.
+    """
+    now = datetime.now(timezone.utc)
+    transaction = _Transaction()
+    claim = sync_ledger._claim_transaction.to_wrap(transaction, _Ref(None), 'job-fresh', 'fresh', now)
+
+    assert claim == {'outcome': 'owned'}
+    assert len(transaction.writes) == 1
+    payload, merge = transaction.writes[0][1], transaction.writes[0][2]
+    assert merge is True
+    assert payload['status'] == 'processing'
+    assert payload['job_id'] == 'job-fresh'
+    assert 'ledger_run_token' not in payload
+    assert 'ledger_run_epoch' not in payload
+
+
+def test_retryable_ledger_claim_clears_existing_run_binding():
+    now = datetime.now(timezone.utc)
+    transaction = _Transaction()
+    claim = sync_ledger._claim_transaction.to_wrap(
+        transaction,
+        _Ref(
+            {
+                'status': 'retryable',
+                'job_id': 'old-job',
+                'ledger_run_token': '1:token-a',
+                'ledger_run_epoch': 1,
+                'updated_at': now - timedelta(days=3),
+            }
+        ),
+        'job-2',
+        'fresh',
+        now,
+    )
+
+    assert claim == {'outcome': 'owned'}
+    payload = transaction.writes[0][1]
+    assert payload['job_id'] == 'job-2'
+    assert payload['ledger_run_token'] == firestore.DELETE_FIELD
+    assert payload['ledger_run_epoch'] == firestore.DELETE_FIELD
 
 
 def test_durable_ledger_replays_completion_and_blocks_recent_duplicate():

@@ -384,7 +384,9 @@ jobs:
             --quiet
 
       - name: Remove failed production transcription candidate tag
-        if: ${{ failure() && github.event.inputs.environment == 'prod' && steps.transcription-candidate.outcome == 'success' }}
+        # Tag is created at deploy-backend; clean it up on any later prod failure,
+        # not only after the candidate URL resolution step succeeds.
+        if: ${{ failure() && github.event.inputs.environment == 'prod' && steps.deploy-backend.outcome == 'success' }}
         run: |
           gcloud run services update-traffic ${{ env.SERVICE }} \
             --project=${{ vars.GCP_PROJECT_ID }} \
