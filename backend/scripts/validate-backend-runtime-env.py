@@ -42,6 +42,11 @@ _NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_ENV = frozenset(
 _NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_SECRETS = frozenset({'TYPESENSE_HOST', 'TYPESENSE_API_KEY'})
 _SYNC_LEDGER_FENCE_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill')
 _SYNC_LEDGER_FENCE_MODES = frozenset({'legacy', 'standby', 'active'})
+_MEMORY_MAINTENANCE_DEV_REQUIRED_FLAGS = {
+    '--task-timeout': '3600s',
+    '--cpu': '2',
+    '--memory': '2Gi',
+}
 
 
 def _as_config_dict(value: object) -> ConfigDict | None:
@@ -460,6 +465,20 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
 
     job_env = _as_config_dict(job.get('env')) or {}
     job_secrets = _as_config_dict(job.get('secrets')) or {}
+    if env == 'dev':
+        job_flags = _as_config_dict(job.get('flags')) or {}
+        for flag_name, expected_value in _MEMORY_MAINTENANCE_DEV_REQUIRED_FLAGS.items():
+            actual_entry = job_flags.get(flag_name)
+            if actual_entry is None:
+                errors.append(ValidationError(scope, f'missing required dev Cloud Run flag {flag_name}'))
+                continue
+            if _expected_flag_value(actual_entry) != expected_value:
+                errors.append(
+                    ValidationError(
+                        scope,
+                        f'dev Cloud Run flag {flag_name} must be {expected_value!r}',
+                    )
+                )
     for required_env in (
         'MEMORY_MODE',
         'MEMORY_ENABLED_USERS',
@@ -743,6 +762,14 @@ def _validate_cloud_run_workflows(
                 scope=f'cloud_run_workflow/{job}',
                 expected=job_config.get('secrets', {}),
                 actual=actual_secrets,
+            )
+        )
+        errors.extend(
+            _validate_workflow_flags(
+                scope=f'cloud_run_workflow/{job}',
+                expected=_as_config_dict(job_config.get('flags')) or {},
+                actual=_substitute_values(job_state.get('flags', {}), variables=workflow_vars),
+                strict_provisional=strict_provisional,
             )
         )
     return errors
@@ -1098,6 +1125,7 @@ def _rendered_runtime_env_outputs(workflow: ConfigDict, *, env: str, manifest: C
             if job_config is None:
                 continue
             output_prefix = job.replace('-', '_')
+            outputs[f'{output_prefix}_flags'] = _render_cloud_run_flags(job_config.get('flags', {}))
             outputs[f'{output_prefix}_env_vars'] = _render_cloud_run_env_vars(job_config.get('env', {}))
             outputs[f'{output_prefix}_secrets'] = _render_cloud_run_secrets(job_config.get('secrets', {}))
     return outputs

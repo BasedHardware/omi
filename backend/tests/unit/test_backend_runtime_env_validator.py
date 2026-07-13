@@ -988,6 +988,49 @@ def test_memory_maintenance_job_contract_passes_for_repo_manifest():
     assert validator.validate_runtime_env(env='prod') == []
 
 
+def test_memory_maintenance_job_contract_rejects_missing_dev_capacity_flag():
+    validator = load_validator()
+    job = memory_maintenance_job_block()
+    job['flags'] = {
+        '--task-timeout': '3600s',
+        '--cpu': '2',
+        '--memory': '2Gi',
+    }
+    del job['flags']['--memory']
+
+    errors = validator._validate_memory_maintenance_job_contract(
+        'dev',
+        {'cloud_run': {'jobs': {'memory-maintenance-job': job}}},
+    )
+
+    assert (
+        validator.ValidationError(
+            'dev/cloud_run/jobs/memory-maintenance-job',
+            'missing required dev Cloud Run flag --memory',
+        )
+        in errors
+    )
+
+
+def test_memory_maintenance_job_contract_rejects_wrong_dev_capacity_value(tmp_path):
+    validator = load_validator()
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    job = manifest['environments']['dev']['cloud_run']['jobs']['memory-maintenance-job']
+    job['flags']['--cpu'] = '1'
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+
+    errors = validator.validate_runtime_env(env='dev', manifest_path=path)
+
+    assert (
+        validator.ValidationError(
+            'dev/cloud_run/jobs/memory-maintenance-job',
+            "dev Cloud Run flag --cpu must be '2'",
+        )
+        in errors
+    )
+
+
 def test_memory_maintenance_job_contract_rejects_notifications_job_maintenance_config(tmp_path):
     validator = load_validator()
     manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
@@ -1103,7 +1146,10 @@ def test_memory_maintenance_auto_dev_workflow_is_listed_and_targets_job():
     assert "backend/**" in text
     assert 'Dockerfile.memory_maintenance_job' in text
     assert "id-token: 'write'" not in text
-    assert 'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }}' in text
+    assert (
+        'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} '
+        '${{ steps.runtime-env.outputs.memory_maintenance_job_flags }}'
+    ) in text
     manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'))
     assert (
         '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml'
