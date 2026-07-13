@@ -157,6 +157,7 @@ def check_desktop_qualification_runner() -> list[str]:
         "self-hosted",
         "macos",
         "omi-desktop-qualification",
+        "ref: main",
         "docker info",
         "check-desktop-auto-beta-candidate.py",
         "--automatic",
