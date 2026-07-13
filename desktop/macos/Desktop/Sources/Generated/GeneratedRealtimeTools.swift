@@ -546,7 +546,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "request_permission",
-    "description": "Request Omi's macOS permission through the kernel-authorized native executor by opening the native prompt or relevant System Settings pane. Supports Screen Recording, microphone, notifications, Accessibility, Automation, and Full Disk Access.",
+    "description": "Request Omi's macOS permission through the kernel-authorized native executor by opening the native prompt or relevant System Settings pane. Screen share, screen sharing, and screen-share mean Screen Recording. Supports Screen Recording, microphone, notifications, Accessibility, Automation, and Full Disk Access.",
     "parameters": {
       "type": "object",
       "properties": {

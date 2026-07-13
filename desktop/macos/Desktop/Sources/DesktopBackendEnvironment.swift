@@ -18,6 +18,13 @@ enum DesktopBackendEnvironment {
     updateChannel: String,
     forceOverride: String? = nil
   ) -> Bool {
+    // Named/dev bundles route to the dev backend by default. Explicit launch
+    // URLs still win below so local harnesses and intentionally-targeted tests
+    // remain possible.
+    if bundleIdentifier != AppBuild.productionBundleIdentifier {
+      return true
+    }
+
     // Beta channel of the production bundle routes to the dev backend
     // (api.omiapi.com + dev Cloud Run desktop-backend). The dev backend is
     // configured to use prod Firebase (project_id=based-hardware, prod service
@@ -48,12 +55,12 @@ enum DesktopBackendEnvironment {
   }
 
   static func pythonBaseURL(useDevelopmentBackends: Bool, environmentValue: String?) -> String {
-    if useDevelopmentBackends {
-      return developmentPythonAPIURL
-    }
-
     if let url = normalizedURL(environmentValue) {
       return url
+    }
+
+    if useDevelopmentBackends {
+      return developmentPythonAPIURL
     }
 
     return productionPythonAPIURL
@@ -88,10 +95,6 @@ enum DesktopBackendEnvironment {
     environmentValue: String?,
     launchEnvironmentValue: String?
   ) -> String {
-    if useDevelopmentBackends {
-      return developmentRustBackendURL
-    }
-
     if let url = normalizedURL(environmentValue) {
       return url
     }
@@ -100,15 +103,23 @@ enum DesktopBackendEnvironment {
       return url
     }
 
+    if useDevelopmentBackends {
+      return developmentRustBackendURL
+    }
+
     return ""
   }
 
   static func applyReleaseChannelDefaults() {
     guard shouldUseDevelopmentBackends else { return }
 
-    setenv("OMI_PYTHON_API_URL", developmentPythonAPIURL, 1)
-    setenv("OMI_DESKTOP_API_URL", developmentRustBackendURL, 1)
-    log("BackendEnvironment: beta channel using development backends with production data stores")
+    if normalizedURL(currentEnvironmentValue("OMI_PYTHON_API_URL")) == nil {
+      setenv("OMI_PYTHON_API_URL", developmentPythonAPIURL, 1)
+    }
+    if normalizedURL(currentEnvironmentValue("OMI_DESKTOP_API_URL")) == nil {
+      setenv("OMI_DESKTOP_API_URL", developmentRustBackendURL, 1)
+    }
+    log("BackendEnvironment: development defaults applied only for missing backend URLs")
   }
 
   private static func normalizedChannel(_ channel: String) -> String {

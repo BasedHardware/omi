@@ -463,7 +463,7 @@ final class VoiceTurnCoordinator {
   /// so capture/playback cannot be left active.
   private static func ownerFencedTurnID(for effect: VoiceTurnEffect) -> VoiceTurnID? {
     switch effect {
-    case .finalizeCapturedInput(let turnID), .activateHub(let turnID, _),
+    case .finalizeCapturedInput(let turnID), .commitClaimedHubInput(let turnID), .activateHub(let turnID, _),
       .finalizeJournal(let turnID, _), .fallbackToTranscription(let turnID, _):
       return turnID
     case .scheduleDeadline, .cancelDeadline, .cancelAllDeadlines, .stopCapture,

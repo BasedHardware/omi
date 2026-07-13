@@ -3,6 +3,19 @@ import Foundation
 /// Loads bundle `.env` into the process environment before Firebase/auth bootstrap.
 enum BundleEnvironment {
   private static var didLoad = false
+  /// Capture process-provided values before any bundled environment file is
+  /// applied. This makes explicit `open`/launchd overrides authoritative while
+  /// retaining the existing merge order between bundled, working-directory,
+  /// and user environment files.
+  private static let launchEnvironment = ProcessInfo.processInfo.environment
+
+  static func shouldApplyBundledValue(
+    for key: String,
+    launchEnvironment: [String: String] = BundleEnvironment.launchEnvironment
+  ) -> Bool {
+    let launchValue = launchEnvironment[key]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return launchValue.isEmpty
+  }
 
   static func loadIfNeeded() {
     guard !didLoad else { return }
@@ -25,6 +38,10 @@ enum BundleEnvironment {
         let backendServedKeys = ["GEMINI_API_KEY", "GOOGLE_CALENDAR_API_KEY"]
         if backendServedKeys.contains(key) {
           log("  Skipped \(key) (fetched from backend via APIKeyService)")
+          continue
+        }
+        guard shouldApplyBundledValue(for: key) else {
+          log("  Skipped \(key) (explicit launch environment override)")
           continue
         }
         let value = String(parts[1]).trimmingCharacters(in: .whitespaces)

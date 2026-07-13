@@ -374,9 +374,12 @@ timeline identity/open, or pill projection is incomplete until:
 
 - **CI:** `agent-continuity-gauntlet.sh --self-check` only (via desktop-core /
   agent-logic harness). Never require live LLM in PR CI.
-- **Continuity PRs / RC:** `--suite continuity` (typed + PTT + blind recall) on
-  a named `omi-*` bundle after auth seed; `--suite all` for RC. Evidence under
-  `.harness/agent-continuity-gauntlet/*/manifest.json` with matching git SHA.
+- **Prompt / gateway changes:** `--suite prompts` on a named `omi-*` bundle;
+  P4 requires a completed public-web lookup with a source URL and fails on
+  provider tool-choice incompatibilities. **Continuity PRs / RC:** `--suite
+  continuity` (typed + PTT + blind recall) after auth seed; `--suite all` for
+  RC. Evidence under `.harness/agent-continuity-gauntlet/*/manifest.json` with
+  matching git SHA.
 - **Anti-flake:** clear owner/kernel surface before probes; per-run nonces;
   hard-fail on blind-recall / structural snapshot only; zero automatic retries
   on model wrongness.

@@ -372,7 +372,11 @@ class FloatingControlBarState: NSObject, ObservableObject {
     /// timeline remains source of truth once an answer id is anchored.
     func currentAIMessage(from provider: ChatProvider?) -> ChatMessage? {
         if let answerId = chatViewport.answerMessageId,
-           let message = provider?.messages.first(where: { $0.id == answerId })
+           let provider,
+           let message = AgentLifecycleDisplayProjection.projectedMessage(
+               id: answerId,
+               in: provider.messages
+           )
         {
             return message
         }
@@ -383,7 +387,10 @@ class FloatingControlBarState: NSObject, ObservableObject {
                $0.clientTurnId == turnId && $0.sender == .ai
            })
         {
-            return message
+            return AgentLifecycleDisplayProjection.projectedMessage(
+                id: message.id,
+                in: provider.messages
+            )
         }
         return nil
     }
@@ -443,7 +450,10 @@ class FloatingControlBarState: NSObject, ObservableObject {
         guard let provider else { return [] }
         return chatViewport.archivedExchanges.compactMap { pair in
             guard let answerId = pair.answerMessageId,
-                  let aiMessage = provider.messages.first(where: { $0.id == answerId })
+                  let aiMessage = AgentLifecycleDisplayProjection.projectedMessage(
+                      id: answerId,
+                      in: provider.messages
+                  )
             else { return nil }
             let question: String?
             if let questionId = pair.questionMessageId,

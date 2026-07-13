@@ -1,0 +1,3 @@
+{
+  "change": "Fixed push-to-talk barge-in so holding the shortcut interrupts an active voice response and starts a new recording"
+}

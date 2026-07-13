@@ -3970,6 +3970,11 @@ class FloatingControlBarManager {
             ?? .mainChat(chatId: "default")
     }
 
+    func realtimeVoiceSurfaceReference() -> AgentSurfaceReference {
+        historyChatProvider?.realtimeVoiceSurfaceReference()
+            ?? .realtimeVoice(chatId: "default")
+    }
+
     func kernelVoiceContextSnapshot() async -> KernelVoiceContextSnapshot {
         guard let provider = historyChatProvider else {
             return .empty

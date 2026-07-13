@@ -15,6 +15,13 @@ struct KernelVoiceContextSnapshot: Equatable, Sendable {
   let context: String
   let freshnessIdentity: String
   let turnIDs: Set<String>
+
+  /// `.empty` is a transport/bridge failure sentinel, not a valid blank
+  /// conversation. A valid new conversation may render no text, but it still
+  /// has a kernel session and a deterministic freshness identity.
+  var isResolved: Bool {
+    !sessionId.isEmpty && !freshnessIdentity.isEmpty
+  }
 }
 
 struct KernelAutomationTurnRange: Equatable, Sendable {

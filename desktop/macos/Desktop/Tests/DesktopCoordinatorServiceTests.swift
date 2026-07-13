@@ -604,7 +604,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     let providerSource = try sourceFile("Providers/ChatProvider.swift")
 
     XCTAssertTrue(managerSource.contains("provider.prepareRealtimeVoiceContextSnapshot()"))
-    XCTAssertTrue(providerSource.contains("surface: .realtimeVoice()"))
+    XCTAssertTrue(providerSource.contains("surface: realtimeVoiceSurfaceReference()"))
     XCTAssertTrue(providerSource.contains("includeScreenSource: false"))
     XCTAssertTrue(hubSource.contains("await self.refreshVoiceContextSnapshot()"))
     XCTAssertTrue(hubSource.contains("reconnectWarmSessionIfContextStale()"))

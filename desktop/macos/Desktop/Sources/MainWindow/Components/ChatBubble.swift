@@ -918,23 +918,42 @@ enum ContentBlockGroup: Identifiable {
   }
 
   /// Main chat renders the agent's final answer and sub-agent entrypoints, not
-  /// the implementation log of every completed tool. While a response is live,
-  /// in-flight tools remain visible as progress feedback; after completion,
-  /// only spawned-agent links survive. When a structured `.agentSpawn` exists
+  /// the implementation log of every completed tool. An in-flight tool remains
+  /// visible as progress feedback even if its surrounding text segment already
+  /// reached a terminal streaming state; the tool's own lifecycle is the
+  /// authority. Once that tool completes or fails, only spawned-agent links
+  /// survive. When a structured `.agentSpawn` exists
   /// for the same pill/run, hide the spawn tool call so the card is the single
   /// entrypoint (INV-6 structured identity).
   static func visibleChatGroups(_ blocks: [ChatContentBlock], isStreaming: Bool) -> [ContentBlockGroup] {
+    // The display projection turns a persisted spawn into its terminal card.
+    // Both structured forms are therefore authoritative evidence that the
+    // matching raw `spawn_agent` tool row is lifecycle plumbing, not a second
+    // user-visible subagent.
     let structuredSpawnKeys = Set(
       blocks.compactMap { block -> String? in
-        guard case .agentSpawn(_, let pillId, _, let runId, _, _) = block else { return nil }
+        let pillId: UUID?
+        let runId: String?
+        switch block {
+        case .agentSpawn(_, let blockPillId, _, let blockRunId, _, _):
+          pillId = blockPillId
+          runId = blockRunId
+        case .agentCompletion(_, let blockPillId, _, let blockRunId, _, _, _, _):
+          pillId = blockPillId
+          runId = blockRunId
+        default:
+          return nil
+        }
         if let pillId { return "pill:\(pillId.uuidString)" }
-        let trimmedRun = runId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedRun = runId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmedRun.isEmpty ? nil : "run:\(trimmedRun)"
       }
     )
     return group(blocks).compactMap { group in
       switch group {
-      case .text, .discoveryCard, .agentSpawn, .agentCompletion:
+      case .text(_, let text):
+        return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : group
+      case .discoveryCard, .agentSpawn, .agentCompletion:
         return group
       case .thinking:
         return isStreaming ? group : nil
@@ -949,17 +968,19 @@ enum ContentBlockGroup: Identifiable {
           }
           return true
         }
-        if !spawnedAgentCalls.isEmpty {
-          return .toolCalls(id: id, calls: spawnedAgentCalls)
-        }
-        guard isStreaming else { return nil }
-        let inFlightCalls = calls.filter { block in
+        // Keep unresolved agent links and live work together. A raw spawn can
+        // briefly precede its structured receipt while another tool (for
+        // example a web lookup) is still executing; returning early for the
+        // spawn would hide that truthful active-tool indication.
+        let unresolvedSpawnIDs = Set(spawnedAgentCalls.map(\.id))
+        let visibleCalls = calls.filter { block in
+          if unresolvedSpawnIDs.contains(block.id) { return true }
           if case .toolCall(_, _, let status, _, _, _) = block {
             return status.isInFlight
           }
           return false
         }
-        return inFlightCalls.isEmpty ? nil : .toolCalls(id: id, calls: inFlightCalls)
+        return visibleCalls.isEmpty ? nil : .toolCalls(id: id, calls: visibleCalls)
       }
     }
   }

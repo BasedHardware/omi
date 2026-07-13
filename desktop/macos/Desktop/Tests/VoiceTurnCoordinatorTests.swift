@@ -4,6 +4,31 @@ import XCTest
 
 @MainActor
 final class VoiceTurnCoordinatorTests: XCTestCase {
+  func testNestedHubCommitClaimRunsProviderEffectAfterClaimStateIsApplied() {
+    let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
+    var providerEffectTurn: VoiceTurn?
+    coordinator.setEffectHandler { effect in
+      switch effect {
+      case .finalizeCapturedInput(let turnID):
+        // Match the physical PTT path: its finalization effect requests the
+        // hub claim while the coordinator is already draining effects.
+        coordinator.send(.hubCommitClaimed(turnID: turnID))
+      case .commitClaimedHubInput:
+        providerEffectTurn = coordinator.activeTurn
+      default:
+        break
+      }
+    }
+
+    let turnID = coordinator.begin(intent: .hold)
+    coordinator.send(.selectRoute(turnID: turnID, route: .hub(sessionID: VoiceSessionID())))
+    coordinator.send(.finalize(turnID: turnID))
+
+    XCTAssertEqual(providerEffectTurn?.id, turnID)
+    XCTAssertEqual(providerEffectTurn?.phase, .awaitingResponse)
+    XCTAssertTrue(providerEffectTurn?.hubCommitPending == true)
+  }
+
   func testLocalAutomationFinalizeRemainsCommitableWithoutPhysicalCaptureBuffer() {
     let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
     var physicalFinalizeCount = 0

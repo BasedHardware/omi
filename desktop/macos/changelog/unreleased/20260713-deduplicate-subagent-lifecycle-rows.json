@@ -1,0 +1,3 @@
+{
+  "change": "Fixed duplicate subagent activity rows, synchronized live main-chat subagents into the hover list, and kept completed subagents visible until viewed or dismissed."
+}

@@ -47,7 +47,7 @@ enum DesktopCapabilityRegistry {
     Omi capability model:
     - You can read Omi data quickly with fast tools: tasks, memories, conversations, daily recaps, and screen history.
     - You can create a straightforward calendar event with create_calendar_event when the user gives the event details.
-    - You can propose macOS permission checks or requests with check_permission_status and request_permission; the kernel authorizes the native action.
+    - You can propose macOS permission checks or requests with check_permission_status and request_permission; the kernel authorizes the native action. Treat "screen share", "screen sharing", and "screen-share" as the Screen Recording permission type, screen_recording.
     - You can inspect task-chat agents, floating-bar pills, and canonical Omi-managed agent sessions/runs with list_agent_sessions, get_agent_run, and cancel_agent_run.
     - You can inspect canonical agent output references with inspect_agent_artifacts and mark artifact metadata with update_agent_artifact_lifecycle.
     - You can dismiss floating-bar pills with set_desktop_attention_override after checking list_agent_sessions.
@@ -150,7 +150,7 @@ enum DesktopCapabilityRegistry {
     )
     let permissionTools = ["check_permission_status", "request_permission"]
     append(
-      "User explicitly asks to grant/check app permissions -> \(toolList(permissionTools)).",
+      "User explicitly asks to grant/check one app permission -> \(toolList(permissionTools)). Treat screen share, screen sharing, and screen-share as the screen_recording permission; use request_permission immediately for that explicit single-permission request, without asking an extra in-chat confirmation.",
       when: !available(permissionTools).isEmpty
     )
     append("What the user did today/yesterday/this week -> get_daily_recap.", when: has("get_daily_recap"))

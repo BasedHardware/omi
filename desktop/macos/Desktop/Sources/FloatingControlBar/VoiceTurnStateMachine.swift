@@ -551,6 +551,11 @@ enum VoiceTurnEffect: Equatable, Sendable {
   case cancelAllDeadlines(turnID: VoiceTurnID)
   case stopCapture(turnID: VoiceTurnID, captureID: VoiceCaptureID?)
   case finalizeCapturedInput(turnID: VoiceTurnID)
+  /// The reducer has recorded the hub commit claim. The provider-facing driver
+  /// must run only after this effect, never inline with the request that
+  /// enqueued `hubCommitClaimed`, because `VoiceTurnCoordinator` drains nested
+  /// events FIFO.
+  case commitClaimedHubInput(turnID: VoiceTurnID)
   case activateHub(turnID: VoiceTurnID, sessionID: VoiceSessionID)
   case transcriptionFinalizationTimedOut(
     turnID: VoiceTurnID, mode: VoiceTranscriptionFinalizationMode)
@@ -792,6 +797,7 @@ struct VoiceTurnReducer {
       model.turn?.projection.isThinking = true
       model.turn?.projection.isResponseWaiting = true
       model.turn?.hubCommitPending = true
+      effects.append(.commitClaimedHubInput(turnID: turn.id))
 
     case .hubCommitDeferred:
       guard turn.phase == .finalizing, routeMatchesHub(turn.route) else {
@@ -832,7 +838,7 @@ struct VoiceTurnReducer {
         identity: identity, previousSessionID: previousSessionID)
       model.turn?.sessionID = nil
       model.turn?.providerFinished = false
-      if !turn.phase.isRecording {
+      if shouldProjectProviderConnectionAsAwaitingResponse(turn) {
         model.turn?.phase = .awaitingResponse
         model.turn?.projection.isThinking = true
         model.turn?.projection.isResponseWaiting = true
@@ -851,7 +857,7 @@ struct VoiceTurnReducer {
       model.turn?.providerConnection = .ready
       model.turn?.sessionID = sessionID
       model.turn?.route = .hub(sessionID: sessionID)
-      if !turn.phase.isRecording {
+      if shouldProjectProviderConnectionAsAwaitingResponse(turn) {
         model.turn?.phase = .awaitingResponse
       }
 
@@ -890,7 +896,7 @@ struct VoiceTurnReducer {
       model.turn?.providerEffectIdentity = identity
       model.turn?.sessionID = nil
       model.turn?.providerFinished = false
-      if !turn.phase.isRecording {
+      if shouldProjectProviderConnectionAsAwaitingResponse(turn) {
         model.turn?.phase = .awaitingResponse
         model.turn?.projection.isResponseActive = false
         model.turn?.projection.isResponseWaiting = true
@@ -914,7 +920,7 @@ struct VoiceTurnReducer {
       model.turn?.providerConnection = .ready
       model.turn?.sessionID = sessionID
       model.turn?.route = .hub(sessionID: sessionID)
-      if !turn.phase.isRecording {
+      if shouldProjectProviderConnectionAsAwaitingResponse(turn) {
         model.turn?.phase = .awaitingResponse
       }
 
@@ -1304,6 +1310,17 @@ struct VoiceTurnReducer {
       .awaitingJournal, .terminal:
       return false
     }
+  }
+
+  /// A physical PTT release remains `.finalizing` until the reducer has
+  /// explicitly claimed its hub commit. Reconnect/replacement setup may run in
+  /// that phase to buffer or refresh input context, but it cannot turn a
+  /// not-yet-committed capture into a response: `commitTurn()` and the
+  /// transcript fallback both require the finalizing boundary. Once a commit is
+  /// pending, or while handling existing provider output, keep the established
+  /// response projection during connection churn.
+  private func shouldProjectProviderConnectionAsAwaitingResponse(_ turn: VoiceTurn) -> Bool {
+    acceptsProviderOutput(turn.phase) || turn.hubCommitPending
   }
 
   private func completionFencesSatisfied(_ turn: VoiceTurn?) -> Bool {
