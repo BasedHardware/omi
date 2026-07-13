@@ -1083,6 +1083,37 @@ def run_agent_swift_screenshot(bundle_id: str, dest: Path) -> dict[str, Any]:
     return {"ok": True, "path": str(dest), "output": "\n".join(output)}
 
 
+def classify_restarted_bundle_state(
+    state: dict[str, Any],
+    expected_bundle: str,
+    expected_port: int,
+) -> tuple[str, str]:
+    """Classify a replacement process snapshot without treating auth restore as terminal."""
+    if state.get("ok") is not True:
+        return "wait", f"automation state is not ready ({state.get('error', 'missing ok=true')})"
+    result = state.get("result")
+    if not isinstance(result, dict):
+        return "wait", "automation state has no result"
+
+    current_bundle = str(result.get("bundleIdentifier") or "")
+    if not current_bundle:
+        return "wait", "replacement bundle identity is not ready"
+    if current_bundle != expected_bundle:
+        return "fail", "automation state belongs to an unexpected bundle identifier"
+
+    current_port = str(result.get("bridgePort") or "")
+    if not current_port:
+        return "wait", "replacement automation port is not ready"
+    if current_port != str(expected_port):
+        return "fail", "automation state reports an unexpected bridge port"
+
+    # The replacement listener can bind before Firebase restores the local
+    # session. Signed-out/onboarding snapshots from that window are retryable.
+    if result.get("isSignedIn") is not True or result.get("hasCompletedOnboarding") is not True:
+        return "wait", "replacement process is still restoring signed-in/onboarded state"
+    return "ready", "replacement process restored signed-in/onboarded state"
+
+
 class GauntletRunner:
     def __init__(self, args: argparse.Namespace) -> None:
         self.args = args
@@ -1208,6 +1239,13 @@ class GauntletRunner:
             raise SystemExit(
                 f"automation bridge unavailable on port {self.port}: {health.get('error', health)}"
             )
+        state = bridge_state(self.port)
+        classification, detail = classify_restarted_bundle_state(state, self.bundle_id, self.port)
+        if classification != "ready":
+            raise SystemExit(
+                f"automation bridge on port {self.port} does not match ready bundle "
+                f"{self.bundle_id}: {detail}"
+            )
 
     def navigate_chat(self) -> None:
         navigate = bridge_request(
@@ -1220,6 +1258,9 @@ class GauntletRunner:
             raise SystemExit(f"navigate chat failed: {navigate.get('error', navigate)}")
         ready = bridge_state(self.port)
         write_json(self.run_dir / "preflight-state.json", ready)
+        classification, detail = classify_restarted_bundle_state(ready, self.bundle_id, self.port)
+        if classification != "ready":
+            raise SystemExit(f"navigate chat did not retain expected bridge identity/readiness: {detail}")
 
     def record_step(
         self,
@@ -1411,6 +1452,12 @@ class GauntletRunner:
         if not before_pid or not isinstance(before_result, dict):
             self.fail("cannot prove named-bundle restart without the original listener/state")
             return False
+        before_classification, before_detail = classify_restarted_bundle_state(
+            before_state, self.bundle_id, self.port
+        )
+        if before_classification != "ready":
+            self.fail(f"cannot prove named-bundle restart from the expected ready bundle: {before_detail}")
+            return False
         restart = self.bridge_act("quit_and_reopen")
         write_json(step_dir / "quit-and-reopen-action.json", restart)
         detail = restart.get("result", {}).get("detail", {})
@@ -1418,27 +1465,43 @@ class GauntletRunner:
             self.fail(f"named-bundle quit-and-reopen failed: {detail.get('error', restart)}")
             return False
         deadline = time.monotonic() + 90
+        saw_replacement = False
+        last_restart_detail = "replacement process not observed"
+        last_restart_state: dict[str, Any] = {}
         while time.monotonic() < deadline:
             current_pid = automation_listener_pid(self.port)
             if current_pid and current_pid != before_pid:
+                saw_replacement = True
                 state = bridge_state(self.port)
-                result = state.get("result", {})
-                if state.get("ok") is not False and isinstance(result, dict):
-                    if result.get("bundleIdentifier") != before_result.get("bundleIdentifier"):
-                        self.fail("quit-and-reopen relaunched a different bundle identifier")
-                        return False
-                    if result.get("isSignedIn") is not True or result.get("hasCompletedOnboarding") is not True:
-                        self.fail("quit-and-reopen did not preserve signed-in/onboarded state")
-                        return False
-                    if str(result.get("bridgePort") or "") != str(self.port):
-                        self.fail("quit-and-reopen did not rebind the same automation port")
-                        return False
+                last_restart_state = state
+                classification, last_restart_detail = classify_restarted_bundle_state(
+                    state, self.bundle_id, self.port
+                )
+                if classification == "fail":
+                    self.fail(last_restart_detail)
+                    return False
+                if classification == "ready":
                     write_json(
                         step_dir / "post-restart-state.json",
                         {"beforeListenerPID": before_pid, "afterListenerPID": current_pid, "state": state},
                     )
                     return True
             time.sleep(0.5)
+        if saw_replacement:
+            write_json(
+                step_dir / "restart-wait-timeout.json",
+                {
+                    "beforeListenerPID": before_pid,
+                    "currentListenerPID": automation_listener_pid(self.port),
+                    "detail": last_restart_detail,
+                    "state": last_restart_state,
+                },
+            )
+            self.fail(
+                "quit-and-reopen replacement did not finish auth/onboarding restore "
+                f"({last_restart_detail})"
+            )
+            return False
         self.fail(
             "named bundle did not replace its automation listener after quit-and-reopen "
             f"(before={before_pid!r}, current={automation_listener_pid(self.port)!r})"
@@ -3618,6 +3681,43 @@ def self_check() -> int:
             f"{missing_exact_voice_checks}",
             file=sys.stderr,
         )
+        return 1
+    restart_bundle = "com.omi.omi-gauntlet"
+    restart_transitional = {
+        "ok": True,
+        "result": {
+            "bundleIdentifier": "com.omi.omi-gauntlet",
+            "bridgePort": 47777,
+            "isSignedIn": False,
+            "hasCompletedOnboarding": True,
+        },
+    }
+    restart_ready = {
+        "ok": True,
+        "result": {
+            "bundleIdentifier": "com.omi.omi-gauntlet",
+            "bridgePort": 47777,
+            "isSignedIn": True,
+            "hasCompletedOnboarding": True,
+        },
+    }
+    if classify_restarted_bundle_state(restart_transitional, restart_bundle, 47777)[0] != "wait":
+        print("self-check failed: transitional restart auth state must remain retryable", file=sys.stderr)
+        return 1
+    if classify_restarted_bundle_state(restart_ready, restart_bundle, 47777)[0] != "ready":
+        print("self-check failed: restored restart auth state must become ready", file=sys.stderr)
+        return 1
+    restart_wrong_bundle = {"ok": True, "result": {**restart_ready["result"], "bundleIdentifier": "com.omi.other"}}
+    if classify_restarted_bundle_state(restart_wrong_bundle, restart_bundle, 47777)[0] != "fail":
+        print("self-check failed: replacement bundle mismatch must remain terminal", file=sys.stderr)
+        return 1
+    restart_wrong_port = {"ok": True, "result": {**restart_ready["result"], "bridgePort": 47778}}
+    if classify_restarted_bundle_state(restart_wrong_port, restart_bundle, 47777)[0] != "fail":
+        print("self-check failed: replacement automation port mismatch must remain terminal", file=sys.stderr)
+        return 1
+    restart_missing_ok = {"result": restart_ready["result"]}
+    if classify_restarted_bundle_state(restart_missing_ok, restart_bundle, 47777)[0] != "wait":
+        print("self-check failed: replacement state without ok=true must remain retryable", file=sys.stderr)
         return 1
     spawn_acceptance_failures = spawn_acceptance_self_check_failures(driver_source)
     if spawn_acceptance_failures:
