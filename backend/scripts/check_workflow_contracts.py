@@ -16,7 +16,7 @@ CONTRACTS_REL_PATH = "backend/testing/workflow_contracts.json"
 
 
 def load_contracts() -> dict[str, Any]:
-    return json.loads(CONTRACTS_PATH.read_text())
+    return json.loads(CONTRACTS_PATH.read_text(encoding="utf-8"))
 
 
 def normalize_path(path: str) -> str:
@@ -82,7 +82,7 @@ def check_no_large_tuple_results(contracts: dict[str, Any], changed_paths: list[
     for rel_path in sorted(workflow_sources(contracts, changed_paths, check_name="no_large_tuple_results")):
         source_path = REPO_DIR / rel_path
         try:
-            tree = ast.parse(source_path.read_text())
+            tree = ast.parse(source_path.read_text(encoding="utf-8"))
         except SyntaxError as exc:
             errors.append(f"{rel_path}:{exc.lineno}: cannot parse source: {exc.msg}")
             continue
@@ -106,7 +106,7 @@ def main() -> int:
 
     changed_paths = None
     if args.changed_files:
-        changed_paths = Path(args.changed_files).read_text().splitlines()
+        changed_paths = Path(args.changed_files).read_text(encoding="utf-8").splitlines()
 
     contracts = load_contracts()
     errors = check_no_large_tuple_results(contracts, changed_paths)

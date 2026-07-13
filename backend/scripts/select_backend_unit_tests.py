@@ -289,7 +289,7 @@ def is_memory_policy_core_path(path: str) -> bool:
 def load_workflow_contracts() -> List[Dict[str, Any]]:
     if not WORKFLOW_CONTRACTS_PATH.exists():
         return []
-    data: object = json.loads(WORKFLOW_CONTRACTS_PATH.read_text())
+    data: object = json.loads(WORKFLOW_CONTRACTS_PATH.read_text(encoding='utf-8'))
     if not isinstance(data, dict):
         return []
     typed_data: Dict[str, Any] = cast(Dict[str, Any], data)
@@ -378,7 +378,7 @@ def match_tests(all_tests: list[str], test_globs: tuple[str, ...]) -> set[str]:
 
 
 def read_lines(path: Path) -> list[str]:
-    return [line.strip() for line in path.read_text().splitlines() if line.strip()]
+    return [line.strip() for line in path.read_text(encoding='utf-8').splitlines() if line.strip()]
 
 
 def existing_tests(paths: list[str], all_tests: list[str]) -> list[str]:
