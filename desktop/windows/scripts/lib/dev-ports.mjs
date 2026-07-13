@@ -5,7 +5,7 @@
 // KEEP IN SYNC with src/main/devInstance.ts — the arithmetic below is mirrored,
 // and devInstance.parity.test.ts fails if the two ever diverge.
 import { existsSync, statSync } from 'node:fs'
-import { basename, dirname, join } from 'node:path'
+import { basename, dirname, join, relative, isAbsolute } from 'node:path'
 
 export const PRIMARY_RENDERER_PORT = 5179
 export const PRIMARY_CDP_PORT = 9222
@@ -67,13 +67,27 @@ export function findWorktreeContext(startDir) {
       } catch {
         /* treat as linked */
       }
-      return { name: basename(dir), isPrimary: isDir }
+      if (!isDir) return { name: basename(dir), isPrimary: false }
+      // Mirror of devInstance.ts: recover a linked worktree whose `.git` pointer
+      // file was deleted (Windows worktree bug) instead of misdetecting as primary.
+      const recovered = linkedNameUnderWorktrees(dir, startDir)
+      return recovered
+        ? { name: recovered, isPrimary: false }
+        : { name: basename(dir), isPrimary: true }
     }
     const parent = dirname(dir)
     if (parent === dir) break
     dir = parent
   }
   return { name: 'primary', isPrimary: true }
+}
+
+/** If `startDir` lives under `<primaryRoot>/.worktrees/<name>/…`, return `<name>`; else null. */
+function linkedNameUnderWorktrees(primaryRoot, startDir) {
+  const rel = relative(join(primaryRoot, '.worktrees'), startDir)
+  if (!rel || rel.startsWith('..') || isAbsolute(rel)) return null
+  const first = rel.split(/[\\/]+/)[0]
+  return first || null
 }
 
 /** Resolve { name, isPrimary, rendererPort, cdpPort } for a checkout dir + env. */

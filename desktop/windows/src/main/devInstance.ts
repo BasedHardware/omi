@@ -17,7 +17,7 @@
 // point that changes behavior. `scripts/lib/dev-ports.mjs` mirrors the port math
 // for the plain-Node helper scripts; devInstance.parity.test.ts guards the mirror.
 import { existsSync, statSync } from 'node:fs'
-import { basename, dirname, join } from 'node:path'
+import { basename, dirname, join, relative, isAbsolute } from 'node:path'
 import { fnv1a, avalanche } from './portDerivation'
 
 /** Canonical primary-checkout ports — unchanged from the historical defaults. */
@@ -136,13 +136,31 @@ export function findWorktreeContext(startDir: string): { name: string; isPrimary
       } catch {
         /* race with a worktree repair — treat as linked (safer: isolates) */
       }
-      return { name: basename(dir), isPrimary: isDir }
+      if (!isDir) return { name: basename(dir), isPrimary: false }
+      // A `.git` DIRECTORY is the primary checkout root. But a linked worktree
+      // whose own `.git` POINTER FILE was deleted (a known Windows worktree bug —
+      // see ~/CLAUDE.md worktree-integrity notes) walks up into its parent primary
+      // and would otherwise misdetect as primary — binding 5179 + the DEFAULT
+      // profile and clobbering the real signed-in session. Recover the linked
+      // identity when startDir sits under `<primary>/.worktrees/<name>`.
+      const recovered = linkedNameUnderWorktrees(dir, startDir)
+      return recovered
+        ? { name: recovered, isPrimary: false }
+        : { name: basename(dir), isPrimary: true }
     }
     const parent = dirname(dir)
     if (parent === dir) break
     dir = parent
   }
   return { name: 'primary', isPrimary: true }
+}
+
+/** If `startDir` lives under `<primaryRoot>/.worktrees/<name>/…`, return `<name>`; else null. */
+function linkedNameUnderWorktrees(primaryRoot: string, startDir: string): string | null {
+  const rel = relative(join(primaryRoot, '.worktrees'), startDir)
+  if (!rel || rel.startsWith('..') || isAbsolute(rel)) return null
+  const first = rel.split(/[\\/]+/)[0]
+  return first || null
 }
 
 /** Resolve the active dev instance from the process cwd + env. Memoized per process. */

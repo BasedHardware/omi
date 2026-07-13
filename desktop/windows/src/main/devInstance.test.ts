@@ -147,6 +147,38 @@ describe('findWorktreeContext', () => {
     }
   })
 
+  it('recovers a linked worktree whose .git pointer was deleted (Windows worktree bug)', () => {
+    // A linked worktree nested at <primary>/.worktrees/<name>. Simulate the known
+    // Windows bug where the worktree's `.git` pointer FILE vanishes: the walk then
+    // reaches the parent primary's `.git` DIRECTORY. It must NOT misdetect as
+    // primary (which would bind 5179 + the default profile and clobber the real
+    // session) — it recovers the linked identity from the `.worktrees/<name>` path.
+    const primary = mkdtempSync(join(tmpdir(), 'omi-wt-orphan-'))
+    try {
+      mkdirSync(join(primary, '.git')) // primary root: .git DIRECTORY
+      const nested = join(primary, '.worktrees', 'my-feature', 'desktop', 'windows')
+      mkdirSync(nested, { recursive: true })
+      // NOTE: intentionally no `.git` file at the worktree root (deleted).
+      const ctx = findWorktreeContext(nested)
+      expect(ctx.isPrimary).toBe(false)
+      expect(ctx.name).toBe('my-feature')
+    } finally {
+      rmSync(primary, { recursive: true, force: true })
+    }
+  })
+
+  it('a real primary checkout (no .worktrees on the path) still classifies as primary', () => {
+    const root = mkdtempSync(join(tmpdir(), 'omi-wt-realprimary-'))
+    try {
+      mkdirSync(join(root, '.git'))
+      const nested = join(root, 'desktop', 'windows')
+      mkdirSync(nested, { recursive: true })
+      expect(findWorktreeContext(nested).isPrimary).toBe(true)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('falls back to primary when no .git is found', () => {
     const root = mkdtempSync(join(tmpdir(), 'omi-wt-none-'))
     try {
