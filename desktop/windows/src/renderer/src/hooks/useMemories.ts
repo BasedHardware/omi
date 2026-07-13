@@ -40,10 +40,13 @@ function extractList(data: unknown): Memory[] {
 // reassign it, so UI coloring must not depend on it.
 export type CreateMemoryExtra = { category?: string; tags?: string[] }
 
-// Match the server KG's build budget (it's built from up to 500 memories), so
-// the brain map can scope itself to roughly the same memory set the graph was
-// derived from rather than just the first 100. Also lets the Memories list show
-// more than one page.
+// The server ignores this `limit` at offset 0: both the legacy and canonical
+// read paths force limit to 5000 whenever offset is 0 (backend/routers/
+// memories.py), so this single call already returns up to 5000 memories —
+// comfortably past the KG's ~500-memory build budget and enough for the
+// Memories page to show more than one page's worth. The `limit: 500` value is
+// vestigial documentation of intent, not an effective cap; Memories.tsx bounds
+// what it actually renders via its own RENDER_CAP.
 async function fetchMemories(): Promise<Memory[]> {
   const r = await omiApi.get('/v3/memories', { params: { limit: 500, offset: 0 } })
   // The server doesn't return memories newest-first, so freshly created/imported

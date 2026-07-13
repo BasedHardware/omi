@@ -3,13 +3,25 @@ import type { Memory } from '../hooks/useMemories'
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
-// Page through every memory (server caps a page at 200). Dedupes by id and stops
-// if a page adds nothing new — guards against a server that ignores `offset`.
+// Page through every memory. GET /v3/memories clamps `limit` to at most 5000
+// and — on BOTH the legacy and canonical read paths — FORCES limit to 5000
+// whenever offset is 0, regardless of the requested limit (see
+// _legacy_get_memories and the canonical branch of get_memories in
+// backend/routers/memories.py). So the first call here can return up to 5000
+// memories even though it asks for 200. Advance `offset` by the number of
+// items actually received (not a fixed step) so the next request picks up
+// where the server really left off — a fixed +200 step would re-request
+// already-seen ids from inside that forced first page and hit the dedup guard
+// early, silently truncating anything past the account's first 5000 memories.
+// Dedupes by id and stops when a page is empty or adds nothing new — guards
+// against a server that ignores `offset` entirely.
 export async function fetchAllMemories(): Promise<Memory[]> {
   const byId = new Map<string, Memory>()
-  for (let offset = 0; offset < 100_000; offset += 200) {
+  let offset = 0
+  while (offset < 100_000) {
     const r = await omiApi.get('/v3/memories', { params: { limit: 200, offset } })
     const page = (Array.isArray(r.data) ? r.data : (r.data?.memories ?? [])) as Memory[]
+    if (page.length === 0) break
     let added = 0
     for (const m of page) {
       if (m.id && !byId.has(m.id)) {
@@ -17,7 +29,8 @@ export async function fetchAllMemories(): Promise<Memory[]> {
         added++
       }
     }
-    if (page.length < 200 || added === 0) break
+    if (added === 0) break
+    offset += page.length
   }
   return [...byId.values()]
 }
