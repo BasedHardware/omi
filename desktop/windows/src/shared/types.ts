@@ -359,6 +359,9 @@ export type BarChatState = {
   messages: BarChatMessage[]
   sending: boolean
   status: BarChatStatus
+  /** A delegated coding-agent (ACP) task is running in the shared engine — the
+   *  bar orb shows its distinctive 'agents' pose. Absent = false. */
+  agentsActive?: boolean
 }
 /** `token` is a per-reveal monotonic id: the renderer echoes it back via
  *  `showAck` once it has painted the revealed frame, so main can reject a stale
@@ -670,6 +673,75 @@ export type OmiBridgeApi = {
   screenSynthSetState: (patch: Partial<ScreenSynthState>) => Promise<ScreenSynthState>
   screenSynthAdvanceWatermark: (ts: number) => Promise<void>
   screenSynthRecordRun: (run: ScreenSynthRun) => Promise<void>
+  // --- Coding agents (Claude Code / OpenClaw / Hermes / Codex) ---
+  /** Connection status for every known agent (commandOverrides come from prefs). */
+  codingAgentList: (commandOverrides?: CodingAgentCommandOverrides) => Promise<CodingAgentInfo[]>
+  /** Run one delegated task; resolves with the final outcome. Streaming
+   *  progress arrives via onCodingAgentEvent, keyed by taskId. */
+  codingAgentRun: (args: CodingAgentRunArgs) => Promise<CodingAgentResult>
+  codingAgentCancel: (taskId: string) => Promise<boolean>
+  /** Spawn the agent and complete the ACP handshake, then tear it down —
+   *  proves the configured command works (Settings → Agents "Test"). */
+  codingAgentTest: (
+    agentId: CodingAgentId,
+    commandOverrides?: CodingAgentCommandOverrides
+  ) => Promise<{ ok: boolean; error?: string }>
+  onCodingAgentEvent: (cb: (event: CodingAgentEvent) => void) => () => void
+}
+
+// --- Coding agents ---
+
+export type CodingAgentId = 'acp' | 'openclaw' | 'hermes' | 'codex'
+
+export type CodingAgentCommandOverrides = Partial<Record<Exclude<CodingAgentId, 'acp'>, string>>
+
+export type CodingAgentInfo = {
+  id: CodingAgentId
+  displayName: string
+  connected: boolean
+  /** How to get connected, when not (shown by the chat + settings). */
+  installHint?: string
+}
+
+export type CodingAgentRunArgs = {
+  taskId: string
+  prompt: string
+  /** Preferred working directory; main falls back to the user's home dir. */
+  cwd?: string
+  /** Explicitly named agent; omitted = pick the best connected one. */
+  agentId?: CodingAgentId
+  commandOverrides?: CodingAgentCommandOverrides
+}
+
+export type CodingAgentEvent =
+  | {
+      type: 'agent_selected'
+      taskId: string
+      adapterId: CodingAgentId
+      displayName: string
+      fallback: boolean
+    }
+  | { type: 'status'; taskId: string; message: string }
+  | { type: 'text_delta'; taskId: string; text: string }
+  | { type: 'thinking_delta'; taskId: string; text: string }
+  | {
+      type: 'tool_activity'
+      taskId: string
+      name: string
+      status: 'started' | 'completed' | 'failed'
+      toolUseId?: string
+      input?: Record<string, unknown>
+    }
+  | { type: 'tool_result_display'; taskId: string; toolUseId: string; name: string; output: string }
+
+export type CodingAgentResult = {
+  taskId: string
+  ok: boolean
+  /** Agent that produced the outcome; null when none could run. */
+  adapterId: CodingAgentId | null
+  text: string
+  costUsd?: number
+  error?: string
 }
 
 // --- Screen activity → memories (Rewind OCR synthesis) ---

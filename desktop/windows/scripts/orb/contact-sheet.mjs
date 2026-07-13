@@ -28,23 +28,27 @@ const ROWS = [
     frames: seq(16, (i) => ({ t: 7.2 + (i / 15) * ORBIT, state: 'idle' }))
   },
   {
-    name: 'speaking — voice-demo timeline: speech starts at t=1 (dots conglomerate), waves with the voice, ends at t=5 (dissolves back out); t=0.4..6.4',
+    name: 'speaking — waveform (mini, square mount): the ring dots line up and hand off to the bar row; silence→speech burst→silence scrolls right→left; t=0.4..6.4',
     frames: seq(16, (i) => ({
       t: 0.4 + (i / 15) * 6.0,
       state: 'speaking',
       stateTime: 0.4 + (i / 15) * 6.0,
-      voiceDemo: true
+      waveDemo: true
     }))
   },
   {
-    name: 'speaking held — amplitude sweep 0→1→0 on the merged blob (the wave visibly tracks the voice, bounded)',
-    frames: seq(16, (i) => ({
-      t: 40 + (i / 15) * 2,
-      state: 'speaking',
-      stateTime: 3,
-      speechMerge: 1,
-      amplitude: Math.sin((i / 15) * Math.PI) * 1.2
-    }))
+    name: 'speaking — ring → waveform → ring crossfade (speechMerge 0→1→0 over a held bar pattern)',
+    frames: seq(16, (i) => {
+      const u = i / 15
+      const speechMerge = u <= 0.5 ? u / 0.5 : (1 - u) / 0.5
+      return {
+        t: 40,
+        state: 'speaking',
+        stateTime: 40,
+        speechMerge,
+        waveLevels: [0, 0, 0.3, 0.8, 0.4, 1, 0.5, 0.2]
+      }
+    })
   },
   {
     name: 'thinking — ramp into the DISTINCT autonomous blob (tighter, faster pulse, no audio), stateTime 0..3',
@@ -67,10 +71,17 @@ const ROWS = [
     }))
   },
   {
-    name: 'presets — default / calm / lively / notch: idle ring (t=12) then speaking blob (amp 0.7)',
+    name: 'presets — default / calm / lively / notch: idle ring (t=12) then speaking waveform (held bars)',
     frames: ['default', 'calm', 'lively', 'notch'].flatMap((p) => [
       { t: 12, state: 'idle', preset: p },
-      { t: 40, state: 'speaking', stateTime: 3, speechMerge: 1, amplitude: 0.7, preset: p }
+      {
+        t: 40,
+        state: 'speaking',
+        stateTime: 3,
+        speechMerge: 1,
+        waveLevels: [0, 0.3, 0.8, 0.4, 1, 0.5, 0.2],
+        preset: p
+      }
     ])
   }
 ]

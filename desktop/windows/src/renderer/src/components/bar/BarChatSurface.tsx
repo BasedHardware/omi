@@ -6,7 +6,7 @@
 // window.omiBar.sendChat). This component owns NO chat engine.
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import { ChatMessages } from '../chat/ChatMessages'
-import { omiChatListStatus } from './barDisplay'
+import { agentRowStatus, omiChatListStatus, type BarAgentRow } from './barDisplay'
 import type { BarChatState } from '../../../../shared/types'
 
 function ChevronRight(): React.JSX.Element {
@@ -37,8 +37,25 @@ function ChevronLeft(): React.JSX.Element {
   )
 }
 
+/** Leading status column shared by EVERY list row so all titles line up on one
+ *  left margin (no ragged edge). The dot pulses when that row is active — Omi
+ *  thinking/speaking, or an agent running a task — and is a calm neutral marker
+ *  otherwise. Neutral/emerald only (no purple — brand rule). */
+function RowStatusDot({ active }: { active: boolean }): React.JSX.Element {
+  return (
+    <span
+      aria-hidden="true"
+      className={`h-2 w-2 shrink-0 rounded-full ${
+        active ? 'animate-pulse bg-emerald-400' : 'bg-neutral-600'
+      }`}
+    />
+  )
+}
+
 export type BarChatSurfaceProps = {
   chat: BarChatState
+  /** Connected coding agents to list under "Omi Chat". */
+  agents: BarAgentRow[]
   view: 'list' | 'conversation'
   onOpenConversation: () => void
   onBack: () => void
@@ -118,12 +135,18 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
 
   if (view === 'list') {
     return (
-      <div className="flex flex-col gap-1 px-3 pb-3 pt-1">
+      // key={view} remounts on every list⇄conversation switch so bar-view-enter
+      // replays — the swap morphs in place instead of popping a new sheet.
+      <div key="list" className="bar-view-enter flex flex-col gap-1 px-3 pb-3 pt-1">
+        {/* Omi Chat — always present (INV-CHAT-1: the one shared thread). Its
+            dot pulses while Omi is thinking/speaking, matching the agent rows so
+            every title shares one left margin. */}
         <button
           type="button"
           onClick={props.onOpenConversation}
           className="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/[0.06]"
         >
+          <RowStatusDot active={chat.status !== 'idle'} />
           <div className="min-w-0 flex-1">
             <div className="text-sm font-medium text-neutral-100">Omi Chat</div>
             <div className="truncate text-xs text-neutral-500">{omiChatListStatus(chat)}</div>
@@ -132,13 +155,35 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
             <ChevronRight />
           </span>
         </button>
-        {/* Agent rows land here later (data-driven scaffold) — nothing yet. */}
+        {/* Connected coding agents. A row opens the SAME inline conversation —
+            agent progress streams into the shared thread (no separate store). */}
+        {props.agents.map((agent) => (
+          <button
+            key={agent.id}
+            type="button"
+            onClick={props.onOpenConversation}
+            className="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/[0.06]"
+          >
+            <RowStatusDot active={agent.working} />
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium text-neutral-100">{agent.displayName}</div>
+              <div className="truncate text-xs text-neutral-500">{agentRowStatus(agent)}</div>
+            </div>
+            <span className="shrink-0 text-neutral-600 transition-colors group-hover:text-neutral-400">
+              <ChevronRight />
+            </span>
+          </button>
+        ))}
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col">
+    // NO enter-animation class (unlike the list's bar-view-enter). The
+    // conversation renders opaque at its final seated layout from frame 1; the
+    // overflow:clip surface reveals it top-down as the box grows (see bar.css).
+    // Any opacity/transform here reintroduces the black-flash / slide-from-above.
+    <div key="conversation" className="flex flex-col">
       <div className="flex items-center gap-1.5 px-2 pb-1 pt-1">
         <button
           type="button"

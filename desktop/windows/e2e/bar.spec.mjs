@@ -25,11 +25,11 @@ const baseEnv = {
   OMI_SKIP_TUNNEL: '1'
 }
 
-async function launch(extraArgs = []) {
+async function launch(extraArgs = [], extraEnv = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'omi-bar-e2e-'))
   const app = await electron.launch({
     args: [mainEntry, `--user-data-dir=${dir}`, ...extraArgs],
-    env: baseEnv
+    env: { ...baseEnv, ...extraEnv }
   })
   const cleanup = async () => {
     try {
@@ -68,15 +68,6 @@ async function findBarPage(app) {
     await new Promise((r) => setTimeout(r, 100))
   }
   throw new Error('bar page (#/bar) not found')
-}
-
-/** Pull translateY (px) out of a computed `transform` matrix string. */
-function translateYpx(transform) {
-  if (!transform || transform === 'none') return 0
-  const m = transform.match(/matrix(3d)?\(([^)]+)\)/)
-  if (!m) return 0
-  const parts = m[2].split(',').map((v) => parseFloat(v.trim()))
-  return m[1] ? parts[13] : parts[5] // matrix3d ty@13, matrix ty@5
 }
 
 test('bar focus contract: peek/ptt never take or steal focus; expanded does', async (t) => {
@@ -147,17 +138,21 @@ test('bar hide returns cleanly and can re-reveal', async (t) => {
   await app.firstWindow()
 
   await barShow(app, 'peek')
-  // Graceful hide: renderer slide-out (≤200ms) then requestHide; fallback
-  // 450ms. Observe the window's 'hide' EVENT rather than polling visibility.
-  const didHide = await app.evaluate(({ BrowserWindow }) => {
-    return new Promise((resolve) => {
-      const win = BrowserWindow.fromId(globalThis.__omiE2E.barState().id)
-      win.once('hide', () => resolve(true))
-      globalThis.__omiE2E.barHide()
-      setTimeout(() => resolve(false), 1500)
-    })
-  })
-  assert.equal(didHide, true, 'bar should hide after the slide-out (event observed)')
+  // Graceful hide: renderer slide-out (≤200ms) then requestHide; fallback 450ms.
+  // The persistent window is PARKED off-screen rather than win.hide()'d (parking
+  // avoids the OS window-show fade on the NEXT reveal — see window.ts), so there
+  // is no window 'hide' event to observe. Assert the LOGICAL visibility instead.
+  await app.evaluate(() => globalThis.__omiE2E.barHide())
+  let didHide = false
+  for (let i = 0; i < 20; i++) {
+    const s = await app.evaluate(() => globalThis.__omiE2E.barState())
+    if (!s.visible) {
+      didHide = true
+      break
+    }
+    await new Promise((r) => setTimeout(r, 100))
+  }
+  assert.equal(didHide, true, 'bar should hide (park off-screen) after the slide-out')
   const again = await barShow(app, 'expanded')
   assert.equal(again.visible, true, 'bar should re-reveal after a hide')
 })
@@ -188,13 +183,13 @@ test('summon hotkey reveals the pill (peek), never the expanded chat (C5)', asyn
 })
 
 // Regression for the blank-bar paint race (C11): main used to showInactive()
-// the HWND BEFORE the renderer had painted the slide-in frame, so the compositor
-// flashed the previous off-screen translateY(-110%) frame — a blank window on
-// first hover. The fix holds the HWND hidden until the renderer acks (double-rAF)
-// it painted the revealed frame. This test proves (a) the structural invariant:
-// the show is DEFERRED after arming, not synchronous; and (b) the observable
-// outcome: the first frame the window shows is the descended slide-in frame, not
-// the off-screen blank one.
+// the HWND BEFORE the renderer had painted the revealing frame, so the compositor
+// flashed the previous un-revealed frame — a blank window on first hover. The fix
+// holds the HWND hidden until the renderer acks (double-rAF) it painted the
+// revealed frame. This test proves (a) the structural invariant: the show is
+// DEFERRED after arming, not synchronous; and (b) the observable outcome: the
+// first frame the window shows is the revealing (fade/scale-in) frame, not the
+// invisible pre-reveal one.
 test('paint-ack: reveal defers the HWND show until the renderer paints slide-in', async (t) => {
   const { app, cleanup } = await launch()
   t.after(cleanup)
@@ -232,33 +227,170 @@ test('paint-ack: reveal defers the HWND show until the renderer paints slide-in'
   )
 
   // (b) Observable outcome: read .bar-slide the instant the window becomes
-  // visible. Because the show was gated on the paint ack, the slide-in
-  // transition is already underway, so the surface is descended into view —
-  // never the off-screen translateY(-110%) blank the pre-fix code flashed.
-  // (translateY is -110% of the ~36px pill ≈ -40px, ratio -1.1; revealed sits
-  // well above.)
+  // visible. Because the show was gated on the paint ack, the reveal (a scale +
+  // fade GROW from the top-center seat, opacity 0→1) is already underway — so
+  // .bar-slide is fading/growing IN, never the invisible pre-reveal frame
+  // (opacity 0) the pre-fix code would have shown. (The entrance no longer uses
+  // an off-screen translateY(-110%); the anti-blank guarantee is stronger — the
+  // pre-reveal state is simply invisible, so a first opacity > 0 proves the show
+  // was gated on the revealing frame.)
   let first = null
   for (let i = 0; i < 100 && !first; i++) {
     const s = await app.evaluate(() => globalThis.__omiE2E.barState())
     if (s.visible) {
       first = await barPage.evaluate(() => {
         const el = document.querySelector('.bar-slide')
-        return el
-          ? { transform: getComputedStyle(el).transform, height: el.offsetHeight }
-          : { transform: 'no-element', height: 0 }
+        if (!el) return { opacity: 'no-element', transform: 'no-element' }
+        const cs = getComputedStyle(el)
+        return { opacity: cs.opacity, transform: cs.transform }
       })
       break
     }
     await new Promise((r) => setTimeout(r, 50))
   }
   assert.ok(first, 'bar never became visible after the paint ack')
-  assert.notEqual(first.transform, 'no-element', '.bar-slide missing at reveal')
-  const ratio = translateYpx(first.transform) / (first.height || 36)
+  assert.notEqual(first.opacity, 'no-element', '.bar-slide missing at reveal')
   assert.ok(
-    ratio > -1.0,
-    `visible frame was the off-screen blank (translateY ratio ${ratio.toFixed(2)}, ` +
-      `transform "${first.transform}", height ${first.height})`
+    parseFloat(first.opacity) > 0,
+    `visible frame was the invisible pre-reveal state (opacity ${first.opacity}, ` +
+      `transform "${first.transform}") — paint ack did not gate on the revealing frame`
   )
+})
+
+// Bug A regression: a normal mouse move onto the pill + click must expand into
+// the chat/agents surface. The reported bug was the pill "not expanding": main
+// left the window click-through until an async renderer mouseenter → IPC round
+// trip flipped hit-testing on, so a fast click landed first and passed through.
+// The fix drives interactivity from the OS cursor in main (peekTick). This test
+// drives the REAL built app: reveal the pill, locate its rect, move+click it,
+// and assert the bar expanded (focusable) with the Omi Chat + agent rows shown.
+// Signed-in (OMI_E2E_FAKE_AUTH) so the expanded surface renders its real rows,
+// not the signed-out prompt. Repeated to prove it is reliable, not flaky.
+//
+// (Note: Playwright's page.mouse dispatches via CDP, below the OS window-message
+// layer that setIgnoreMouseEvents gates, so this asserts the click→expand WIRING
+// + rendered surface end-to-end; the OS-cursor→interactivity race itself is
+// covered deterministically by the main/bar/watchdog.test.ts unit tests.)
+test('pill click expands into the chat/agents surface (Bug A)', async (t) => {
+  const { app, cleanup } = await launch([], { OMI_E2E_FAKE_AUTH: '1' })
+  t.after(cleanup)
+  await app.firstWindow()
+  // Live-desktop cursor sits outside the peek footprint; hold the pill open so
+  // the retract watchdog can't hide it between reveal and click.
+  await app.evaluate(() => globalThis.__omiE2E.barHoldPeekOpen(true))
+  const barPage = await findBarPage(app)
+
+  for (let i = 0; i < 5; i++) {
+    await barShow(app, 'peek')
+    // A REAL click on the pill. Playwright's locator.click auto-waits for the
+    // element to be visible + STABLE (so the slide-in animation has settled) and
+    // that it receives pointer events, then dispatches a real click — far more
+    // robust than a raw mouse.move+click at a rect read mid-animation.
+    await barPage.locator('.bar-content[role="button"]').click()
+
+    // Expand is async: the mode IPC flips focus in main immediately, but the
+    // renderer's pill→panel morph + content render lands a beat later. Wait for
+    // the expanded surface's rows rather than reading once (that read raced the
+    // morph). Presence of the shared "Omi Chat" row AND the always-connected
+    // "Claude Code" agent row proves the click reached the real chat surface.
+    await barPage.waitForFunction(() => {
+      const texts = [...document.querySelectorAll('.bar-content-active .text-sm')].map((e) =>
+        (e.textContent ?? '').trim()
+      )
+      return texts.includes('Omi Chat') && texts.includes('Claude Code')
+    })
+
+    const s = await app.evaluate(() => globalThis.__omiE2E.barState())
+    assert.equal(s.focusable, true, `pill click #${i} must expand the bar (focusable)`)
+
+    // Back to a pill for the next iteration.
+    await app.evaluate(() => globalThis.__omiE2E.barHide())
+    await new Promise((r) => setTimeout(r, 700))
+  }
+})
+
+// Bug A live gap: a pill summoned by a HOTKEY HOLD (mode 'ptt') must expand on
+// click just like a tap-summoned peek pill. The original interactivity watch was
+// peek-only, so a ptt-mode pill (the one that lingers after a hold) had no watch
+// arming click-to-expand. The fix runs the interactivity half of the watch in
+// EVERY visible collapsed mode (peek + ptt); retract stays peek-only. This drives
+// a ptt reveal + pill click and asserts it reaches the same expanded chat surface.
+// (CDP click bypasses OS hit-testing; the OS-cursor path in ptt is proven by the
+// barWatchPlan unit test + the real-cursor pywinauto run noted in the PR.)
+test('pill click expands from a ptt-summoned pill too (Bug A live gap)', async (t) => {
+  const { app, cleanup } = await launch([], { OMI_E2E_FAKE_AUTH: '1' })
+  t.after(cleanup)
+  await app.firstWindow()
+  const barPage = await findBarPage(app)
+  await barShow(app, 'ptt')
+  // The ptt pill is collapsed (!expanded), so its content is clickable; a click
+  // must expand into the shared chat surface (Omi Chat + the always-on agent row).
+  await barPage.locator('.bar-content[role="button"]').click()
+  await barPage.waitForFunction(() => {
+    const texts = [...document.querySelectorAll('.bar-content-active .text-sm')].map((e) =>
+      (e.textContent ?? '').trim()
+    )
+    return texts.includes('Omi Chat') && texts.includes('Claude Code')
+  })
+  const s = await app.evaluate(() => globalThis.__omiE2E.barState())
+  assert.equal(s.focusable, true, 'a ptt-summoned pill must expand on click (focusable)')
+})
+
+// Skeptical-review screenshot of the expanded surface WITH the agent rows
+// (signed-in so the real rows render, not the sign-in prompt).
+test('bar expanded agents-surface screenshot (signed-in)', async (t) => {
+  mkdirSync(shotsDir, { recursive: true })
+  const { app, cleanup } = await launch([], { OMI_E2E_FAKE_AUTH: '1' })
+  t.after(cleanup)
+  await app.firstWindow()
+  await app.evaluate(() => globalThis.__omiE2E.barHoldPeekOpen(true))
+  const barPage = await findBarPage(app)
+  await barShow(app, 'expanded')
+  await new Promise((r) => setTimeout(r, 900)) // morph + content dissolve + agent list
+  await barPage.screenshot({ path: path.join(shotsDir, 'bar-expanded-agents.png') })
+})
+
+// Bug C: the collapsed pill shows "Listening" while the orb is in its listening
+// pose (always-on mic live), and the resting "Omi" wordmark otherwise. Drives a
+// REAL listening state: signed-in (fake auth) + the continuousRecording pref
+// flipped on via the bar's own localStorage prefs channel — no test-only render
+// hook. Asserts the label flips Omi→Listening and captures the pill for review.
+test('pill shows the Listening label in the listening pose (Bug C)', async (t) => {
+  mkdirSync(shotsDir, { recursive: true })
+  const { app, cleanup } = await launch([], { OMI_E2E_FAKE_AUTH: '1' })
+  t.after(cleanup)
+  await app.firstWindow()
+  await app.evaluate(() => globalThis.__omiE2E.barHoldPeekOpen(true))
+  const barPage = await findBarPage(app)
+  await barShow(app, 'peek')
+
+  const labelText = () =>
+    barPage.evaluate(() => document.querySelector('.bar-pill-label')?.textContent ?? null)
+
+  // Resting pill: the "Omi" wordmark (continuous recording off).
+  await barPage.waitForFunction(
+    () => document.querySelector('.bar-pill-label')?.textContent === 'Omi'
+  )
+  assert.equal(await labelText(), 'Omi', 'resting pill should show the Omi wordmark')
+
+  // Flip always-on mic ON through the real preferences channel (the bar listens
+  // for the cross-window `storage` event and re-derives the orb pose).
+  await barPage.evaluate(() => {
+    const KEY = 'omi-windows-prefs-v1'
+    const prefs = JSON.parse(localStorage.getItem(KEY) || '{}')
+    prefs.continuousRecording = true
+    localStorage.setItem(KEY, JSON.stringify(prefs))
+    window.dispatchEvent(
+      new StorageEvent('storage', { key: KEY, newValue: localStorage.getItem(KEY) })
+    )
+  })
+
+  await barPage.waitForFunction(
+    () => document.querySelector('.bar-pill-label')?.textContent === 'Listening'
+  )
+  assert.equal(await labelText(), 'Listening', 'listening pose should show the Listening label')
+  await new Promise((r) => setTimeout(r, 400)) // let the orb settle for the shot
+  await barPage.screenshot({ path: path.join(shotsDir, 'bar-peek-listening.png') })
 })
 
 test('bar screenshots (collapsed / expanded) for the skeptical review', async (t) => {

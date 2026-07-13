@@ -5,7 +5,8 @@ import { gatherLocalContext } from '../lib/localAgent'
 import { readCurrentScreen } from '../lib/screenContext'
 import { looksLikeAction, looksLikeRawPlan, planActions } from '../lib/actionPlanner'
 import { callAgentLLM } from '../lib/agentLLM'
-import type { AutomationPlan } from '../../../shared/types'
+import { detectAgentTask, resolveTaskCwd } from '../lib/agentTask'
+import type { AutomationPlan, CodingAgentEvent } from '../../../shared/types'
 import { getPreferences } from '../lib/preferences'
 import { resolveChatId, mergeChatMessages } from '../lib/chatConversation'
 import { speakText } from '../lib/voice/voiceController'
@@ -21,6 +22,9 @@ export type UseChat = {
    *  distinct from `sending` (which is the streaming phase). The bar orb uses it
    *  to show the "speaking" state after a voice exchange. */
   speaking: boolean
+  /** True while a delegated coding-agent (ACP) task is running — the bar orb
+   *  shows its distinctive 'agents' pose. */
+  agentActive: boolean
   // `send` takes the message text. The draft input is intentionally NOT stored
   // here: this hook lives in the app-wide AppStateProvider, so keeping the
   // per-keystroke input in it would re-render the entire app shell (and every
@@ -52,6 +56,9 @@ export function useChat(): UseChat {
   // a later reply's TTS starts before an earlier one drains.
   const [speaking, setSpeaking] = useState(false)
   const ttsActiveRef = useRef(0)
+  // True while a delegated coding-agent (ACP) task is running — drives the bar
+  // orb's distinctive 'agents' pose (projected to the bar via ChatBridgeHost).
+  const [agentActive, setAgentActive] = useState(false)
   // Speak an assembled reply through the gated voice path — fire-and-forget so
   // the send promise resolves as soon as the text is rendered (audio plays on
   // its own). Only for voice-originated turns; falls back to the system voice
@@ -96,6 +103,21 @@ export function useChat(): UseChat {
   // message firing right as a previous reply finishes), which would wrongly drop
   // the new send; the ref is always current.
   const sendingRef = useRef(false)
+  // Coding-agent task currently streaming into this thread, so reset (the
+  // overlay's Esc) can actually stop the agent subprocess, not just the UI.
+  const activeAgentTaskRef = useRef<string | null>(null)
+
+  // The single engine-busy latch. `sendingRef` is the SYNCHRONOUS mirror the
+  // re-entrancy guard + infinite-load effect read; `sending` is the REACTIVE
+  // projection the UI and the bar↔main bridge (ChatBridgeHost) observe. Always
+  // move them together through this helper so the bridge never sees the engine
+  // idle while a send still holds the latch — a minutes-long coding-agent task
+  // holds it the whole time, and a bar/PTT message that raced a false "idle" gap
+  // would be silently dropped by the re-entrancy guard (the C3 loss class).
+  const setBusy = (busy: boolean): void => {
+    sendingRef.current = busy
+    setSending(busy)
+  }
 
   // In infinite mode the ongoing thread is loaded once on mount (and legacy
   // id-less messages get backfilled ids so the merge can match them). This hook
@@ -206,17 +228,157 @@ export function useChat(): UseChat {
     }
   }
 
+  // Delegated coding-agent task (Claude Code / OpenClaw / Hermes / Codex).
+  // Runs when the message explicitly names an agent (or asks for "an agent").
+  // Streams the agent's progress into an assistant bubble; when the named
+  // agent isn't connected, replies with install/connect guidance instead.
+  // Returns false when the message is not an agent task (fall through).
+  const tryAgentTask = async (
+    text: string,
+    baseHistory: ChatMsg[],
+    userMsg: ChatMsg
+  ): Promise<boolean> => {
+    const detection = detectAgentTask(text)
+    if (!detection) return false
+
+    const prefs = getPreferences()
+    let agents: Awaited<ReturnType<typeof window.omi.codingAgentList>>
+    try {
+      agents = await window.omi.codingAgentList(prefs.agentCommands)
+    } catch {
+      return false // bridge unavailable — let normal chat answer
+    }
+
+    const finish = (content: string): void => {
+      const msg: ChatMsg = { id: crypto.randomUUID(), role: 'assistant', content }
+      setHistory((h) => [...h, msg])
+      void persistChat([...baseHistory, userMsg, msg])
+      setBusy(false)
+    }
+
+    if (detection.agentId) {
+      const named = agents.find((a) => a.id === detection.agentId)
+      if (named && !named.connected) {
+        finish(
+          `**${named.displayName}** isn't connected yet. ${
+            named.installHint ?? 'You can connect it in Settings → Agents.'
+          }`
+        )
+        return true
+      }
+    }
+    const agentId = detection.agentId ?? agents.find((a) => a.connected)?.id
+    if (!agentId) {
+      finish('No coding agents are connected yet. You can connect one in Settings → Agents.')
+      return true
+    }
+
+    setAgentActive(true)
+    const taskId = crypto.randomUUID()
+    activeAgentTaskRef.current = taskId
+    const assistantId = crypto.randomUUID()
+
+    // Streamed bubble: a header naming the agent, the latest running tool as a
+    // transient italic line, and the agent's text as it arrives.
+    let header = ''
+    let activity: string | null = null
+    let text_ = ''
+    let statusNotes = ''
+    const compose = (final: boolean): string => {
+      let s = header
+      if (statusNotes) s += `\n\n${statusNotes.trimEnd()}`
+      if (text_) s += `\n\n${text_}`
+      if (!final && activity) s += `\n\n_${activity}…_`
+      return s || '_Starting the agent…_'
+    }
+    const render = (final = false): void => {
+      const content = compose(final)
+      setHistory((h) => {
+        const next = [...h]
+        const idx = next.findIndex((m) => m.id === assistantId)
+        if (idx >= 0) next[idx] = { id: assistantId, role: 'assistant', content }
+        return next
+      })
+    }
+    setHistory((h) => [...h, { id: assistantId, role: 'assistant', content: compose(false) }])
+
+    let lastPersist = Date.now()
+    const unsubscribe = window.omi.onCodingAgentEvent((event: CodingAgentEvent) => {
+      if (event.taskId !== taskId) return
+      if (event.type === 'agent_selected') {
+        header = event.fallback
+          ? `**${event.displayName}** took over the task.`
+          : `**${event.displayName}** is on it.`
+      } else if (event.type === 'status') {
+        statusNotes += `_${event.message}_\n`
+      } else if (event.type === 'text_delta') {
+        text_ += event.text
+      } else if (event.type === 'tool_activity') {
+        activity = event.status === 'started' ? event.name : null
+      }
+      render()
+      if (Date.now() - lastPersist > 1500) {
+        lastPersist = Date.now()
+        void persistChat([
+          ...baseHistory,
+          userMsg,
+          { id: assistantId, role: 'assistant', content: compose(false) }
+        ])
+      }
+    })
+
+    try {
+      const cwd = await resolveTaskCwd(text, {
+        searchFiles: (q) => window.omi.kgSearchFiles(q),
+        executeSql: (sql) => window.omi.kgExecuteSql(sql)
+      })
+      const result = await window.omi.codingAgentRun({
+        taskId,
+        prompt: detection.prompt,
+        cwd,
+        agentId,
+        commandOverrides: prefs.agentCommands
+      })
+      if (!result.ok) {
+        statusNotes += `_${result.error ?? 'The agent could not finish the task.'}_\n`
+      } else if (!text_ && result.text) {
+        text_ = result.text
+      } else if (!text_) {
+        text_ = 'Done.'
+      }
+    } catch (e) {
+      statusNotes += `_Error: ${(e as Error).message}_\n`
+    } finally {
+      if (activeAgentTaskRef.current === taskId) activeAgentTaskRef.current = null
+      setAgentActive(false)
+      unsubscribe()
+      activity = null
+      render(true)
+      void persistChat([
+        ...baseHistory,
+        userMsg,
+        { id: assistantId, role: 'assistant', content: compose(true) }
+      ])
+      setBusy(false)
+    }
+    return true
+  }
+
   const send = async (text: string, opts?: { fromVoice?: boolean }): Promise<void> => {
     // Re-entrancy latch (sendingRef is the always-current mirror of `sending`).
     if (!text.trim() || sendingRef.current) return
     const fromVoice = !!opts?.fromVoice
-    sendingRef.current = true
+    setBusy(true)
     const userMsg: ChatMsg = { id: crypto.randomUUID(), role: 'user', content: text }
     const baseHistory = history
     // Show the user's message immediately, BEFORE the (potentially ~2s) action-
     // planner snapshot+LLM round-trip, so the chat never appears to hang. The
     // planner then decides: park a plan, surface an error, or fall through to chat.
     setHistory((h) => [...h, userMsg])
+
+    // Delegated coding-agent tasks take precedence over the UI-automation
+    // planner and normal chat; tryAgentTask owns the latch when it handles one.
+    if (await tryAgentTask(text, baseHistory, userMsg)) return
 
     const verdict = await tryPlan(text)
     if (verdict.kind === 'planned') {
@@ -236,7 +398,7 @@ export function useChat(): UseChat {
       setHistory((h) => [...h, outMsg])
       void persistChat([...baseHistory, userMsg, outMsg])
       maybeSpeak(outMsg.content, fromVoice)
-      sendingRef.current = false
+      setBusy(false)
       return
     }
     if (verdict.kind === 'error') {
@@ -249,7 +411,7 @@ export function useChat(): UseChat {
       setHistory((h) => [...h, errMsg])
       void persistChat([...baseHistory, userMsg, errMsg])
       maybeSpeak(errMsg.content, fromVoice)
-      sendingRef.current = false
+      setBusy(false)
       return
     }
     const assistantId = crypto.randomUUID()
@@ -259,7 +421,6 @@ export function useChat(): UseChat {
       { id: assistantId, role: 'assistant', content: assistant }
     ]
     setHistory((h) => [...h, { id: assistantId, role: 'assistant', content: '' }])
-    setSending(true)
 
     void persistChat(buildThread(''))
     let lastPersist = Date.now()
@@ -366,8 +527,7 @@ export function useChat(): UseChat {
         return next
       })
     } finally {
-      sendingRef.current = false
-      setSending(false)
+      setBusy(false)
       await persistChat(buildThread(assistantText))
     }
   }
@@ -377,9 +537,17 @@ export function useChat(): UseChat {
   // when this is called will keep writing into the (now-empty) history — Esc-reset
   // mid-stream is a rare edge we don't guard against here.
   const reset = (): void => {
+    // Esc while an agent task is running cancels the task (aborts the attempt
+    // and tears the adapter subprocess down), not just the on-screen thread.
+    if (activeAgentTaskRef.current) {
+      void window.omi.codingAgentCancel(activeAgentTaskRef.current).catch(() => {})
+      activeAgentTaskRef.current = null
+    }
     setHistory([])
-    setSending(false)
-    sendingRef.current = false
+    setBusy(false)
+    // Esc also drops the 'agents' orb pose immediately — the cancel above tears
+    // the task down, so don't wait for the in-flight codingAgentRun to resolve.
+    setAgentActive(false)
     // Per-launch: forget the id so the next send creates a NEW conversation.
     // Infinite: keep the shared id — reset is only a fresh on-screen view of the
     // same ongoing thread, not a new conversation.
@@ -389,5 +557,5 @@ export function useChat(): UseChat {
     }
   }
 
-  return { history, sending, speaking, send, reset }
+  return { history, sending, speaking, agentActive, send, reset }
 }

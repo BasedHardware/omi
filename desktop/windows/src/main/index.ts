@@ -58,6 +58,7 @@ import { maybeGetWhatsNew, releaseNotesUrl } from './whatsNew'
 import { registerMeetingHandlers } from './ipc/meeting'
 import { startMeetingMonitor, stopMeetingMonitor, meetingDebug } from './meeting/meetingMonitor'
 import { registerAutomationHandlers } from './ipc/automation'
+import { registerCodingAgentHandlers } from './ipc/codingAgent'
 import { automationBridge } from './automation/bridge'
 import {
   startAutomationTargetTracker,
@@ -114,6 +115,11 @@ const startHidden = process.argv.includes('--hidden')
 // runner overrides OMI_PERF_LOG). Packaged builds write nothing unless the env
 // var is explicitly set — no silent prod telemetry file. Runs before app:start.
 if (import.meta.env.DEV) devBench.applyDevPerfLogDefault()
+// Dev GPU stability: render in software + keep WebGL on SwiftShader + never let a
+// GPU crash permanently blocklist WebGL, so the orb / brain map / blur / effects
+// stay reliable on flaky dev GPUs (hybrid laptop, asleep display, headless soak).
+// Must run before app ready. Packaged builds keep full hardware acceleration.
+if (import.meta.env.DEV) devBench.applyDevGpuStability()
 perfMark('app:start')
 
 // --- Global crash observability --------------------------------------------
@@ -149,7 +155,19 @@ const RENDERER_RELOAD_WINDOW_MS = 60_000
 const RENDERER_RELOAD_MAX = 3
 const rendererReloadTimes = new WeakMap<Electron.WebContents, number[]>()
 app.on('render-process-gone', (_e, wc, details) => {
-  logFatal('render-process-gone', `reason=${details.reason} exitCode=${details.exitCode}`)
+  // Include the URL so a crash is attributable to a specific window (main /bar /
+  // capture /insight-toast) instead of an anonymous "renderer crashed".
+  const url = ((): string => {
+    try {
+      return wc.getURL()
+    } catch {
+      return '?'
+    }
+  })()
+  logFatal(
+    'render-process-gone',
+    `url=${url} reason=${details.reason} exitCode=${details.exitCode}`
+  )
   // Skip clean exits (intentional teardown) and destroyed windows.
   if (details.reason === 'clean-exit' || wc.isDestroyed()) return
   const now = Date.now()
@@ -173,7 +191,15 @@ app.on('render-process-gone', (_e, wc, details) => {
   }
 })
 app.on('child-process-gone', (_e, details) =>
-  logFatal('child-process-gone', `type=${details.type} reason=${details.reason}`)
+  // Include the utility's name/service (e.g. "Audio Service", "Video Capture")
+  // so a Utility crash points at the actual subsystem rather than just "Utility".
+  logFatal(
+    'child-process-gone',
+    `type=${details.type}` +
+      (details.name ? ` name=${details.name}` : '') +
+      (details.serviceName ? ` service=${details.serviceName}` : '') +
+      ` reason=${details.reason} exitCode=${details.exitCode}`
+  )
 )
 
 // Desktop-automation bridge (real Windows UI actions). ON by default; set
@@ -193,6 +219,13 @@ if (import.meta.env.DEV) devBench.applySandboxUserDataOverride()
 // harness's --user-data-dir) each get their own lock instead of contending.
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) app.quit()
+
+// Wipe stale Chromium GPU/shader caches for THIS profile before the GPU process
+// opens them — a force-killed dev build corrupts them and the corruption poisons
+// the next launch's WebGL. Gated on the single-instance lock so a throwaway
+// second launch can't delete the RUNNING instance's live caches; still before
+// whenReady/first-window, so it lands ahead of GPU-process init.
+if (import.meta.env.DEV && gotSingleInstanceLock) devBench.clearStaleGpuCaches()
 
 // Crash/error reporting. After the lock check so the throwaway second-launch
 // process doesn't pay SDK setup; no-op unless a DSN is configured, and only
@@ -548,6 +581,9 @@ app.whenReady().then(async () => {
   // Screen-activity synthesis IPC (cheap handler registration; the renderer drives
   // cadence). Rewind handlers/services are already registered/deferred above + below.
   registerScreenSynthHandlers()
+  // Coding-agent task IPC (cheap handler registration; adapter subprocesses spawn
+  // only when a task actually runs).
+  registerCodingAgentHandlers()
 
   // `win` is this launch's instance for one-shot wiring below (ready-to-show,
   // bench); long-lived consumers read the module-level `mainWindow` instead.

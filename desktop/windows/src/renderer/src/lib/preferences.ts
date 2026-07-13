@@ -49,6 +49,11 @@ export type Preferences = {
   // users consent inline during onboarding instead, so this stays undefined for
   // them and the interstitial never fires (it's gated on onboardingCompletedAt).
   backgroundConsentAt?: number
+  // Launch commands for the external coding agents (OpenClaw/Hermes/Codex).
+  // Set in Settings → Agents; undefined = not connected (the matching
+  // OMI_*_ADAPTER_COMMAND env var still works as a power-user override).
+  // Claude Code is built in and needs no command.
+  agentCommands?: { openclaw?: string; hermes?: string; codex?: string }
 }
 
 const defaults: Preferences = {
@@ -76,6 +81,20 @@ function load(): Preferences {
 let current: Preferences = load()
 const listeners = new Set<(p: Preferences) => void>()
 
+// Cross-window sync: the main window, overlay, and hidden capture window are
+// separate renderer processes sharing one localStorage origin, but each caches
+// `current` at module load. A write in one window fires the 'storage' event in
+// the OTHERS — reload there so e.g. an agent command saved in the main window's
+// Settings reaches the overlay's chat, or a continuousRecording flip from the
+// tray/Settings reaches the capture window, without an app restart.
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('storage', (e) => {
+    if (e.key !== KEY) return
+    current = load()
+    listeners.forEach((cb) => cb(current))
+  })
+}
+
 export function getPreferences(): Preferences {
   return current
 }
@@ -99,20 +118,6 @@ export function setPreferences(patch: Partial<Preferences>): void {
 export function onPreferencesChange(cb: (p: Preferences) => void): () => void {
   listeners.add(cb)
   return () => listeners.delete(cb)
-}
-
-// Cross-window sync: localStorage is shared across same-origin windows (main,
-// overlay, hidden capture), but setPreferences only notifies its OWN window's
-// subscribers. The `storage` event fires in the OTHER windows when localStorage
-// changes — refresh the cache and notify there too. This is how the capture
-// window sees a continuousRecording flip made from the main window (e.g. the tray
-// Pause toggle or the Settings switch) without a reload.
-if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-  window.addEventListener('storage', (e: StorageEvent) => {
-    if (e.key !== KEY) return
-    current = load()
-    listeners.forEach((cb) => cb(current))
-  })
 }
 
 export function isOnboardingComplete(): boolean {

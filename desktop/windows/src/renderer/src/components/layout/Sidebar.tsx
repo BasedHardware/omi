@@ -151,9 +151,10 @@ export function Sidebar(): React.JSX.Element {
       )}
     >
       {/* Top row: orb + logo (left, logo fades out when collapsed) + collapse
-          toggle pinned right. The orb is the same component the bar mounts —
-          here it reflects the app's listening state (calm orbit while the
-          always-on mic is live, idle otherwise).
+          toggle pinned right. The orb is the same component the bar mounts, but
+          here it's the resting brand logo ONLY — pinned to the calm idle pose
+          with its slow step-rest spin (user, 2026-07-12: the in-app logo should
+          NOT mirror the bar's activity, just the regular slow-spin logo).
 
           Collapsed rail (w-16): the 22px orb and the ~28px collapse button can't
           sit side-by-side in the ~36px of header content width — the fixed-width
@@ -168,7 +169,7 @@ export function Sidebar(): React.JSX.Element {
         )}
       >
         <div className="flex min-w-0 items-center gap-2.5">
-          <Orb size={22} preset="compact" state={micOn && user ? 'listening' : 'idle'} />
+          <Orb size={22} preset="compact" state="idle" />
           {/* Wordmark as text (crisp at every DPI, no network fetch). */}
           <span
             className={cn(

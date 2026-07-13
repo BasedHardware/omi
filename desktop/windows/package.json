@@ -45,6 +45,7 @@
     "test:e2e:meeting-live": "node scripts/run-meeting-live.mjs"
   },
   "dependencies": {
+    "@agentclientprotocol/claude-agent-acp": "^0.58.1",
     "@electron-toolkit/preload": "^3.0.2",
     "@fontsource-variable/inter": "^5.2.8",
     "@electron-toolkit/utils": "^4.0.0",

@@ -18,6 +18,8 @@ import {
   computeOrbFrame,
   mergeAmount,
   spinTargetFor,
+  anchorWhirlStart,
+  waveMixFor,
   stepMergeEnvelope,
   SPIN_EASE_TAU,
   ORB_PRESETS,
@@ -25,6 +27,7 @@ import {
   type OrbParams,
   type OrbState
 } from '../src/renderer/src/orb/choreography'
+import { slotCountForAspect } from '../src/renderer/src/orb/waveform'
 import { OrbRenderer, DEFAULT_MORPH_RECT, type OrbRect } from '../src/renderer/src/orb/orbRenderer'
 import { OrbAnimator } from '../src/renderer/src/orb/orbAnimator'
 
@@ -44,6 +47,14 @@ type RenderSpec = {
    *  VOICE_T0, ends at VOICE_T1; amplitude follows a syllable-like envelope.
    *  Overrides amplitude/speechMerge from `t`. */
   voiceDemo?: boolean
+  /** Scrolling waveform demo: fills waveLevels from a deterministic scrolling
+   *  speech envelope (silence → burst → silence) sampled at `t`, and forces
+   *  speechMerge to 1 (full waveform). Overrides waveLevels. */
+  waveDemo?: boolean
+  /** Explicit per-slot waveform levels 0..1 (oldest→newest). */
+  waveLevels?: number[]
+  /** Bar-response gain 0..1 (staged ramp-in after the unroll). Defaults to 1. */
+  waveResponse?: number
   genesisTime?: number
   morph?: number
   preset?: string
@@ -72,6 +83,30 @@ export function demoVoice(t: number): { amplitude: number; speechMerge: number }
   return { amplitude, speechMerge }
 }
 
+// --- Deterministic scrolling waveform demo ------------------------------------
+const WAVE_SAMPLE_SEC = 0.06
+
+/** Speech loudness at absolute sample-time `s` (seconds): silence outside 1..5s,
+ *  a syllable-modulated phrase inside. Pure. */
+export function demoLoud(s: number): number {
+  if (s < VOICE_T0 || s > VOICE_T1) return 0
+  const u = s - VOICE_T0
+  const syllable = 0.5 - 0.5 * Math.cos(2 * Math.PI * 2.5 * u)
+  const phrase = 0.5 + 0.5 * Math.sin((u / (VOICE_T1 - VOICE_T0)) * Math.PI)
+  return Math.min(1, syllable * phrase * 1.15)
+}
+
+/** Scrolling history window ending at time `t`: slot j (oldest→newest) samples
+ *  the loudness `age` seconds before `t`, so the burst scrolls right→left. */
+export function demoWaveLevels(t: number, slotCount: number): number[] {
+  const out: number[] = []
+  for (let j = 0; j < slotCount; j++) {
+    const age = (slotCount - 1 - j) * WAVE_SAMPLE_SEC
+    out.push(demoLoud(t - age))
+  }
+  return out
+}
+
 /** base64-encode an RGBA readback so it can cross page.evaluate. */
 function encodePixels(bytes: Uint8Array): string {
   let bin = ''
@@ -82,14 +117,19 @@ function encodePixels(bytes: Uint8Array): string {
   return btoa(bin)
 }
 
-/** Count of white-blob pixels (bright + opaque) in an RGBA readback — the
- *  rendered silhouette area the transition check tracks for snap discontinuities. */
+/** Alpha-weighted white MASS of an RGBA readback (premultiplied): sum of the red
+ *  channel over pixels brighter than the dark disc. For a white dot/bar the
+ *  premultiplied red equals its coverage×opacity, so this tracks the rendered
+ *  ink CONTINUOUSLY across an opacity crossfade (a binary count would step as
+ *  pixels cross a threshold — a metric artifact, not a real snap). The >40 cut
+ *  excludes the near-black disc (premult red ≲ 22) so its invisible-on-the-pill
+ *  fade doesn't register; the transition check tracks this for snap discontinuities. */
 function whiteArea(rgba: Uint8Array): number {
-  let n = 0
+  let sum = 0
   for (let i = 0; i < rgba.length; i += 4) {
-    if (rgba[i + 3] > 128 && rgba[i] > 200 && rgba[i + 1] > 200 && rgba[i + 2] > 200) n++
+    if (rgba[i] > 40) sum += rgba[i]
   }
-  return n
+  return sum
 }
 
 const qs = new URLSearchParams(location.search)
@@ -113,20 +153,40 @@ const api = {
   renderer: null as OrbRenderer | null,
   animator: null as OrbAnimator | null,
 
+  /** Resize the harness canvas (CSS box + backing store). Aspect drives the
+   *  waveform slot count, so wide vs mini evidence renders through the same API. */
+  setCanvasSize(cssW: number, cssH: number, dprOverride?: number): void {
+    const d = dprOverride ?? dpr
+    canvas.style.width = `${cssW}px`
+    canvas.style.height = `${cssH}px`
+    canvas.width = Math.round(cssW * d)
+    canvas.height = Math.round(cssH * d)
+  },
+
   /** Render exactly one deterministic frame. */
   renderAt(spec: RenderSpec): void {
     if (!this.renderer) this.renderer = new OrbRenderer(canvas)
     const demo = spec.voiceDemo ? demoVoice(spec.t) : null
+    const aspect = canvas.width / canvas.height
+    let waveLevels = spec.waveLevels
+    let speechMerge = demo?.speechMerge ?? spec.speechMerge
+    if (spec.waveDemo) {
+      waveLevels = demoWaveLevels(spec.t, slotCountForAspect(aspect))
+      speechMerge = 1
+    }
     const frame = computeOrbFrame({
       t: spec.t,
       state: spec.state ?? (qs.get('state') as OrbState) ?? 'idle',
       stateTime: spec.stateTime ?? spec.t,
       amplitude: demo?.amplitude ?? spec.amplitude,
-      speechMerge: demo?.speechMerge ?? spec.speechMerge,
+      speechMerge,
       enterMerge: spec.enterMerge,
       orbitTime: spec.orbitTime,
       genesisTime: spec.genesisTime,
       morph: spec.morph,
+      waveLevels,
+      waveResponse: spec.waveResponse,
+      aspect,
       params: resolveParams(spec)
     })
     this.renderer.render(frame, spec.rect ?? DEFAULT_MORPH_RECT)
@@ -149,6 +209,9 @@ const api = {
     fromSpeechActive?: boolean
     toSpeechActive?: boolean
     amplitude?: number
+    /** Static per-slot waveform levels applied every frame — so the rendered area
+     *  reflects the ring→waveform crossfade smoothly rather than a scroll. */
+    waveLevels?: number[]
     preset?: string
   }): { merges: number[]; areas: number[] } {
     if (!this.renderer) this.renderer = new OrbRenderer(canvas)
@@ -163,8 +226,9 @@ const api = {
     let speechActive = opts.fromSpeechActive ?? opts.from === 'speaking'
     let speechMerge = speechActive ? 1 : 0 // start settled for the `from` state
     let enterMerge = mergeAmount(state, WARMUP, speechMerge)
-    let spinMult = spinTargetFor(state, params)
+    let spinMult = spinTargetFor(state, WARMUP, params)
     let orbitTime = 0
+    let whirlStartAt: number | null = null
     const merges: number[] = []
     const areas: number[] = []
     for (let i = 0; i < opts.frames; i++) {
@@ -174,13 +238,17 @@ const api = {
         enterMerge = mergeAmount(state, t - stateChangedAt, speechMerge, enterMerge)
         state = opts.to
         stateChangedAt = t
+        whirlStartAt = null // re-arm the whirl for the new state (see OrbAnimator)
         speechActive = opts.toSpeechActive ?? opts.to === 'speaking'
       }
       speechMerge = stepMergeEnvelope(speechMerge, speechActive ? 1 : 0, dt)
-      const spinTarget = spinTargetFor(state, params)
+      const stateTime = t - stateChangedAt
+      const isWhirl = state === 'thinking' || state === 'agents'
+      whirlStartAt = anchorWhirlStart(whirlStartAt, isWhirl, t, waveMixFor(state, speechMerge))
+      const whirlTime = isWhirl ? (whirlStartAt === null ? 0 : t - whirlStartAt) : stateTime
+      const spinTarget = spinTargetFor(state, stateTime, params, whirlTime)
       spinMult += (spinTarget - spinMult) * (1 - Math.exp(-dt / SPIN_EASE_TAU))
       orbitTime += dt * spinMult
-      const stateTime = t - stateChangedAt
       const frame = computeOrbFrame({
         t,
         state,
@@ -189,6 +257,8 @@ const api = {
         speechMerge,
         enterMerge,
         orbitTime,
+        waveLevels: opts.waveLevels,
+        aspect: canvas.width / canvas.height,
         params
       })
       this.renderer.render(frame, DEFAULT_MORPH_RECT)
@@ -208,6 +278,7 @@ const api = {
     duration: number
     count: number
     amplitude?: number
+    waveLevels?: number[]
     preset?: string
   }): { width: number; height: number; frames: string[] } {
     if (!this.renderer) this.renderer = new OrbRenderer(canvas)
@@ -224,8 +295,9 @@ const api = {
     let speechActive = opts.from === 'speaking'
     let speechMerge = speechActive ? 1 : 0
     let enterMerge = mergeAmount(state, WARMUP, speechMerge)
-    let spinMult = spinTargetFor(state, params)
+    let spinMult = spinTargetFor(state, WARMUP, params)
     let orbitTime = 0
+    let whirlStartAt: number | null = null
     const frames: string[] = []
     for (let i = 0; i < total; i++) {
       const t = i * dt
@@ -233,10 +305,17 @@ const api = {
         enterMerge = mergeAmount(state, t - stateChangedAt, speechMerge, enterMerge)
         state = opts.to
         stateChangedAt = t
+        whirlStartAt = null // re-arm the whirl for the new state (see OrbAnimator)
         speechActive = opts.to === 'speaking'
       }
       speechMerge = stepMergeEnvelope(speechMerge, speechActive ? 1 : 0, dt)
-      spinMult += (spinTargetFor(state, params) - spinMult) * (1 - Math.exp(-dt / SPIN_EASE_TAU))
+      const stateTime = t - stateChangedAt
+      const isWhirl = state === 'thinking' || state === 'agents'
+      whirlStartAt = anchorWhirlStart(whirlStartAt, isWhirl, t, waveMixFor(state, speechMerge))
+      const whirlTime = isWhirl ? (whirlStartAt === null ? 0 : t - whirlStartAt) : stateTime
+      spinMult +=
+        (spinTargetFor(state, stateTime, params, whirlTime) - spinMult) *
+        (1 - Math.exp(-dt / SPIN_EASE_TAU))
       orbitTime += dt * spinMult
       const frame = computeOrbFrame({
         t,
@@ -246,6 +325,8 @@ const api = {
         speechMerge,
         enterMerge,
         orbitTime,
+        waveLevels: opts.waveLevels,
+        aspect: canvas.width / canvas.height,
         params
       })
       this.renderer.render(frame, DEFAULT_MORPH_RECT)
@@ -257,7 +338,11 @@ const api = {
   /** RGBA readback of the last rendered frame (base64 so it crosses evaluate). */
   pixels(): { width: number; height: number; data: string } {
     if (!this.renderer) throw new Error('renderAt first')
-    return { width: canvas.width, height: canvas.height, data: encodePixels(this.renderer.readPixels()) }
+    return {
+      width: canvas.width,
+      height: canvas.height,
+      data: encodePixels(this.renderer.readPixels())
+    }
   },
 
   // --- Live mode (perf/throttle checks; uses the app's real OrbAnimator) -----

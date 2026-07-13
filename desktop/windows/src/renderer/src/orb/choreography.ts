@@ -8,24 +8,31 @@
 // Mark (decided by Chris 2026-07-10, do not revisit): 8 white dots on a dark
 // disc, matching the Mac notch logo.
 //
-// States (amended per Chris 2026-07-10: the merge-into-blob IS the speech
-// visualization — the blob is the person's voice made visible):
+// States (amended per Chris 2026-07-11: the speech blob is REPLACED by a
+// scrolling amplitude-history WAVEFORM — see waveform.ts. Audio-active states
+// line the 8 ring dots up into a horizontal row, then hand off to the bar
+// visualizer; a silent sample is a dot, so the resting waveform IS the dots):
 //   idle       — slow orbit with ease-in-out steps (rotate → rest → resume).
-//   listening  — quiet listening: same calm orbit (the mic is open, nothing
-//                is being said). Visually restrained on purpose.
-//   speaking   — live speech: the dots travel inward (staggered sweep) and
-//                conglomerate into the waving puddle blob; the wave/oscillation
-//                is DRIVEN by the live voice amplitude (bounded — see
-//                shapeAmplitude). Dissolves back out when speech ends (the
+//   listening  — quiet listening: same calm orbit (the mic is open, nothing is
+//                being said). With a live speech signal (speechMerge > 0) it
+//                becomes the waveform (recording the user's voice).
+//   speaking   — the spoken TTS reply: the ring dots glide into a horizontal
+//                line (staggered, like the agents pose) and hand off to the
+//                waveform row, whose bar heights track the live reply amplitude
+//                (bounded). Dissolves back to the ring when speech ends (the
 //                caller eases `speechMerge` down via stepMergeEnvelope).
-//   thinking   — deliberately DISTINCT from the speech blob: a tighter,
-//                faster, autonomous pulse with zero audio coupling.
-//   agents     — dots pair up into four status pills (clean, understated).
+//   thinking   — the dots STAY SEPARATE on the ring and orbit CONTINUOUSLY at an
+//                elevated speed. Entry kicks off a fast whirl that eases down to
+//                a steady cruise. Also covers transcribing and a streaming reply.
+//   agents     — entry whirls the ring fast for ~1s, THEN the dots pair up into
+//                four status pills (clean, understated) while the agent runs.
 //
 // Genesis (summon): scale 0 → full disc with an ease-out spring (slight
 // overshoot, fast settle) — never a fade/slide of a full-size element.
 // Morph: disc → rounded-rect is a single interpolation parameter consumed by
 // the SDF shader (one shape, continuous).
+
+import { waveBars, waveHalfWidth, slotCountForAspect, type WaveBar } from './waveform'
 
 export type OrbState = 'idle' | 'listening' | 'speaking' | 'thinking' | 'agents'
 
@@ -124,8 +131,12 @@ export const ORB_PRESETS: Record<string, OrbParams> = {
     orbitRadius: 0.54,
     dotRadius: 0.15,
     sminK: 0.3,
-    // Restrained spin-up: at 22–26px a big multiplier reads as frantic.
-    spinBusyMult: 1.55
+    // Thinking cruise must be UNMISTAKABLY fast at 22–26px — a user glancing at
+    // the bar pill has to notice the ring is spinning. 1.55 read as barely
+    // turning (user + investigator); match the default 2.0× busy cruise. The
+    // whirl overshoot scales with this, so the entry spins up hard then settles
+    // to a clearly-quick steady orbit.
+    spinBusyMult: 2.0
   }
 }
 
@@ -160,6 +171,21 @@ export type OrbFrame = {
   genesis: number
   /** Time feed for the shader's noise field (seconds). */
   noiseTime: number
+  /** Roll-up progress 0..1 (the lower staging band, see AUDIO_STAGE_SPLIT): 0 =
+   *  idle ring (dark disc + orbiting dots), 1 = the dots have fanned out onto the
+   *  flat line. The shader fades the dark DISC out as this rises while the DOTS
+   *  travel at full opacity — the ring visibly unrolls into the line instead of a
+   *  ring↔line opacity crossfade. Saturates before the bar handoff begins, so on
+   *  exit the bars are gone before this starts falling (a true mirror of entry). */
+  waveMix: number
+  /** Dot→bar handoff 0..1, staged AFTER the unroll (0 through the line-up, ramps
+   *  once the row is formed). ON the line the white dots crossfade to the bar
+   *  primitives (a representation swap at the same positions — never a position
+   *  crossfade). 0 keeps the traveling/rested dots; 1 shows only the bars. */
+  barMix: number
+  /** Vertical bars for the waveform (normalized short-axis units, centered on
+   *  y=0). Empty when waveMix is 0. */
+  waveBars: WaveBar[]
   params: OrbParams
 }
 
@@ -181,28 +207,57 @@ export function easeInOutVelocity(t: number): number {
 // --- Orbit -------------------------------------------------------------------
 
 /**
- * Ring rotation angle (radians) at time t: per cycle the ring eases through
- * `stepDegrees` (velocity S-curve), then rests. Continuous across cycles.
+ * Ring rotation angle (radians) at time t.
+ *
+ * `flow` (0..1) blends the cadence: 0 = eased STEP-then-REST (per cycle the ring
+ * eases through `stepDegrees` then rests — the calm idle look); 1 = a CONTINUOUS
+ * linear glide at the same average rate (the "dots moving around a circle fast"
+ * look busy states need — a discrete stepping ring never reads as spinning). The
+ * two agree exactly at every cycle boundary, so the blend is continuous across
+ * cycles for any flow, and the average rate (one `stepDegrees` per period) is
+ * identical either way — flow changes the texture of the motion, not its speed.
  */
-export function orbitAngle(t: number, p: OrbParams): number {
+export function orbitAngle(t: number, p: OrbParams, flow = 0): number {
   const period = Math.max(1e-6, p.orbitPeriod)
   const cycle = Math.floor(t / period)
   const u = (t - cycle * period) / period
   const rotateFrac = 1 - Math.min(0.95, Math.max(0, p.restFraction))
-  const progress = u < rotateFrac ? easeInOut(u / rotateFrac) : 1
+  const stepped = u < rotateFrac ? easeInOut(u / rotateFrac) : 1
+  const f = Math.min(1, Math.max(0, flow))
+  const progress = stepped * (1 - f) + u * f
   const step = (p.stepDegrees * Math.PI) / 180
   return (cycle + progress) * step
 }
 
-/** Instantaneous angular velocity (rad/s) — for the motion-profile check. */
-export function orbitVelocity(t: number, p: OrbParams): number {
+/** Instantaneous angular velocity (rad/s) — for the motion-profile check. At
+ *  `flow` 1 it never rests (constant glide `step/period`); at 0 it is the eased
+ *  step profile (0 → peak → 0, then a rest). */
+export function orbitVelocity(t: number, p: OrbParams, flow = 0): number {
   const period = Math.max(1e-6, p.orbitPeriod)
   const u = (t - Math.floor(t / period) * period) / period
   const rotateFrac = 1 - Math.min(0.95, Math.max(0, p.restFraction))
-  if (u >= rotateFrac) return 0
   const step = (p.stepDegrees * Math.PI) / 180
-  return (easeInOutVelocity(u / rotateFrac) * step) / (rotateFrac * period)
+  const f = Math.min(1, Math.max(0, flow))
+  const steppedV =
+    u >= rotateFrac ? 0 : (easeInOutVelocity(u / rotateFrac) * step) / (rotateFrac * period)
+  const continuousV = step / period
+  return steppedV * (1 - f) + continuousV * f
 }
+
+/**
+ * Per-state orbit cadence: busy orbiting states (thinking, and the agents entry
+ * whirl) glide the ring CONTINUOUSLY (1) so it reads as spinning fast; idle and
+ * quiet listening keep the calm STEP-then-REST cadence (0). The animator eases
+ * the live value across a state change so the cadence shift is never a jerk;
+ * deterministic renders (harness/tests) fall back to this per-state default.
+ */
+export function orbitFlowFor(state: OrbState): number {
+  return state === 'thinking' || state === 'agents' ? 1 : 0
+}
+
+/** Exponential time-constant (s) for easing the live orbit-cadence `flow` toward
+ *  its state target — a smooth glide↔step crossover, no snap when it flips. */
+export const FLOW_EASE_TAU = 0.3
 
 // --- Bounded amplitude (voice → wave, never spiky, never flatlined) -----------
 
@@ -261,60 +316,228 @@ export function stepMergeEnvelope(current: number, target: 0 | 1, dt: number): n
  *  the new state's own merge — short enough to feel immediate, long enough that
  *  a branch switch never snaps the blob apart and reforms it. */
 export const MERGE_XFADE = 0.4
-/** Thinking gathers into its blob over this long (its autonomous ramp). */
-const THINK_GATHER = 0.8
 
 /**
- * How merged the dots are (0 = ring, 1 = blob).
+ * How merged the dots are into the legacy puddle blob (0 = ring, 1 = blob).
  *
- * Each state has a steady merge target — thinking: 1 (autonomous), agents: 0,
- * speaking/listening/idle: the caller's speechMerge envelope. When `enterMerge`
- * is supplied (the merge shown at the instant this state was entered), the
- * result CROSS-FADES from it to the target over the state's ramp, so a state
- * change can never discontinuously snap the merge. Without `enterMerge` the
- * exact original per-state formulas are returned (deterministic harness/tests).
- *
- * This is the C6 fix: previously `mergeAmount` branch-switched formulas on a
- * state change, so e.g. speaking→thinking snapped merge 1→0 in one frame (the
- * blob exploded to dots) before thinking's own ramp reformed it.
+ * The speech blob is RETIRED — audio states now render the waveform (see
+ * computeOrbFrame / waveform.ts), so no state merges into a puddle: the steady
+ * target is 0 everywhere. The signature is kept (the animator/harness still track
+ * it) so a residual blob from any prior frame dissolves cleanly: when `enterMerge`
+ * is supplied it CROSS-FADES from it down to 0 over MERGE_XFADE rather than
+ * snapping. In steady operation this is uniformly 0.
  */
 export function mergeAmount(
-  state: OrbState,
+  _state: OrbState,
   stateTime: number,
-  speechMerge: number,
+  _speechMerge: number,
   enterMerge?: number
 ): number {
-  if (enterMerge === undefined) {
-    if (state === 'thinking') return easeInOut(Math.min(1, stateTime / THINK_GATHER))
-    if (state === 'agents') return 0
-    return easeInOut(Math.min(1, Math.max(0, speechMerge)))
-  }
-  const steady =
-    state === 'thinking'
-      ? 1
-      : state === 'agents'
-        ? 0
-        : easeInOut(Math.min(1, Math.max(0, speechMerge)))
-  // Thinking eases in over its designed gather time; every other transition
-  // uses the short cross-fade. (Entering thinking from the ring — enterMerge 0
-  // — reduces exactly to the original easeInOut(stateTime/0.8) ramp.)
-  const ramp = state === 'thinking' ? THINK_GATHER : MERGE_XFADE
-  const w = easeInOut(Math.min(1, stateTime / ramp))
-  return enterMerge * (1 - w) + steady * w
+  if (enterMerge === undefined) return 0
+  const w = easeInOut(Math.min(1, stateTime / MERGE_XFADE))
+  return enterMerge * (1 - w)
 }
 
 /**
- * Target orbit-speed multiplier for a state (1 = calm idle cadence). Busy
- * states spin the ring faster; the animator eases the LIVE multiplier toward
- * this so the change is never a jump (C9). Thinking is the busiest; speaking
- * and listening get progressively smaller bumps; idle and agents rest at 1×.
+ * Waveform crossfade 0..1 (0 = ring dots, 1 = full bar visualizer), driven by the
+ * speech-merge envelope. The app opens the gate (speechMerge → 1) only on audio
+ * states — 'speaking', or 'listening' with a live speech signal — and closes it
+ * on any other; the SAME envelope that used to drive the blob now drives the ring
+ * → waveform handoff. Following the envelope (not the raw state) is what makes a
+ * state change mid-utterance — e.g. speaking → thinking on release — DISSOLVE the
+ * bars back to the ring over the release instead of snapping them off the instant
+ * the state flips. Eased for a smooth glide.
  */
-export function spinTargetFor(state: OrbState, params: OrbParams = DEFAULT_ORB_PARAMS): number {
+export function waveMixFor(_state: OrbState, speechMerge: number): number {
+  return easeInOut(Math.min(1, Math.max(0, speechMerge)))
+}
+
+/**
+ * Audio-staging split. The waveform entrance/exit is TWO stages of the single
+ * speech-merge envelope, and they must never overlap or the exit reads as a
+ * bars↔ring CROSSFADE (the dark disc + orbiting dots fade in WHILE the bars fade
+ * out) instead of a roll-up. So the envelope is split into two DISJOINT bands:
+ *   • lower band [0, SPLIT] — the dots' roll-up (ring ↔ flat line) and the disc
+ *     fade. Owns `unrollProgressFor`.
+ *   • upper band [SPLIT, 1] — the dot ↔ bar handoff (bars fade in/out ON the
+ *     already-formed line). Owns `barResponseFor`.
+ * Because the bands don't overlap, ENTRY (roll out over the lower band, THEN bars
+ * over the upper) and EXIT (envelope runs the other way: bars fade over the upper
+ * band, THEN the dots roll up over the lower) are exact time-reverses — a true
+ * mirror. And because BOTH are pure functions of the one envelope, every driver
+ * that steps that envelope (the app's OrbAnimator, the deterministic harness)
+ * reproduces the identical staging: there is no separately-stepped bar gain to
+ * forget to mirror (the class of bug where the harness disagreed with live).
+ */
+export const AUDIO_STAGE_SPLIT = 0.55
+
+/** Roll-up progress 0..1 from the eased audio envelope (see `waveMixFor`): 0 =
+ *  idle ring, 1 = dots fanned onto the flat line. Reaches 1 by AUDIO_STAGE_SPLIT
+ *  so the whole upper band is free for the bar handoff (dots held on the line). */
+export function unrollProgressFor(audioMix: number): number {
+  return Math.min(1, Math.max(0, audioMix) / AUDIO_STAGE_SPLIT)
+}
+
+/** Dot→bar handoff gain 0..1 from the eased audio envelope: pinned at 0 through
+ *  the whole roll-up (lower band) so the traveling dots are never crossfaded, then
+ *  eased 0→1 across the UPPER band (dots already on the line). eased at both ends
+ *  for a gentle fade. This REPLACES the animator's old separately-stepped
+ *  `waveResponse`; callers may still pass an explicit `waveResponse` to override
+ *  it (the isolation checks pin it to 0). */
+export function barResponseFor(audioMix: number): number {
+  return easeInOut((Math.min(1, Math.max(0, audioMix)) - AUDIO_STAGE_SPLIT) / (1 - AUDIO_STAGE_SPLIT))
+}
+
+/** Per-dot stagger for the unroll (0 = all dots straighten together, 1 = fully
+ *  sequential fan-out). A moderate value reads as the ring PEELING open from one
+ *  end into the line rather than squashing flat all at once. */
+export const UNROLL_STAGGER = 0.55
+/** Peak height (disc units) of the transient arc the row bows through mid-unroll,
+ *  so it reads as "circle → open arc → flat line" instead of a straight collapse.
+ *  Zero at both endpoints (an exact ring at u=0, an exact flat line at u=1). */
+export const UNROLL_ARC = 0.34
+
+/** One point of the unrolled ring. */
+export type UnrollPoint = { x: number; y: number }
+
+/**
+ * UNROLL / FAN-OUT: the ring peels open into a horizontal line (user's ask —
+ * "the dots UNROLL and FAN OUT to make a line"). Pure and deterministic.
+ *
+ * At `u`=0 every dot sits EXACTLY on the live ring (`orbitRadius` at `angle`); at
+ * `u`=1 the dots are an evenly spaced horizontal row (y=0) spanning ±`lineHalf`,
+ * ordered left→right by their ring x so paths never cross. In between: each dot's
+ * straighten progress is STAGGERED by its rank (the row lays down from one end),
+ * and the whole row bows through a transient arc (UNROLL_ARC, zero at both ends)
+ * so it reads as a circle opening into an arc and flattening — not a squash. Feed
+ * the reverse (u: 1→0) for the exit (the line rolls back up into the ring).
+ */
+export function unrollPositions(
+  u: number,
+  angle: number,
+  lineHalf: number,
+  p: OrbParams = DEFAULT_ORB_PARAMS
+): UnrollPoint[] {
+  const uc = Math.min(1, Math.max(0, u))
+  const R = p.orbitRadius
+  // Rank the dots by their current ring x (leftmost → slot 0) so the fan-out is
+  // monotone in x and the paths don't cross.
+  const order = Array.from({ length: DOT_COUNT }, (_, i) => i).sort(
+    (A, B) =>
+      Math.cos(angle + (A * 2 * Math.PI) / DOT_COUNT) -
+      Math.cos(angle + (B * 2 * Math.PI) / DOT_COUNT)
+  )
+  const rankOf = new Array<number>(DOT_COUNT)
+  order.forEach((dotIdx, rank) => {
+    rankOf[dotIdx] = rank
+  })
+  // Transient arc envelope: 0 at u=0 and u=1, a single hump between.
+  const arcEnv = Math.sin(Math.PI * uc)
+  const out: UnrollPoint[] = []
+  for (let i = 0; i < DOT_COUNT; i++) {
+    const a = angle + (i * 2 * Math.PI) / DOT_COUNT
+    const ringX = Math.cos(a) * R
+    const ringY = Math.sin(a) * R
+    const rank = rankOf[i]
+    const centered = (rank + 0.5) / DOT_COUNT - 0.5 // -0.5..0.5
+    const lineX = centered * 2 * lineHalf
+    // Staggered per-dot straighten (the fan-out lays down from the left end).
+    const s = UNROLL_STAGGER
+    const ui = Math.min(1, Math.max(0, uc * (1 + s) - s * (rank / (DOT_COUNT - 1))))
+    const ue = easeInOut(ui)
+    const x = ringX * (1 - ue) + lineX * ue
+    // Bow the row through an arc: dots near the center rise most (cos peaks at the
+    // middle rank), the ends stay put; the whole thing vanishes at both endpoints.
+    const bow = arcEnv * UNROLL_ARC * Math.cos(centered * Math.PI)
+    const y = ringY * (1 - ue) + 0 * ue - bow
+    out.push({ x, y })
+  }
+  return out
+}
+
+// The bar handoff used to be a separately-stepped gain (WAVE_RESPONSE_ATTACK /
+// _RELEASE / _GATE) that the animator eased and the harness had to mirror by hand
+// — the source of the exit crossfade (release began too late and overlapped the
+// roll-up) and of the harness disagreeing with live. It is now the deterministic
+// UPPER staging band, barResponseFor / AUDIO_STAGE_SPLIT (above).
+
+/** Entry-whirl shape. On entry to a whirling state the spin target OVERSHOOTS its
+ *  cruise by `WHIRL_ADD` (scaled per preset), decaying with `WHIRL_TAU` so the
+ *  ring visibly speeds up then eases to cruise over ~1s — the "fast then slow
+ *  between states" effect. Deterministic (a function of stateTime, no random). */
+export const WHIRL_ADD = 2.5
+export const WHIRL_TAU = 0.35
+
+/** Seconds the agents entry keeps the dots whirling on the ring BEFORE the pose
+ *  (glide → pills) begins. Long enough to read as a fast orbit; the whirl spin
+ *  overshoot has mostly decayed by the time the dots start settling. */
+export const AGENTS_WHIRL = 1.0
+
+/**
+ * Target orbit-speed multiplier for a state at `stateTime` seconds in (1 = calm
+ * idle cadence). Busy states spin the ring faster; the animator eases the LIVE
+ * multiplier toward this so the change is never a jump (C9). Two shapes combine:
+ *  - a steady CRUISE — thinking is busiest, speaking/listening get smaller
+ *    bumps, idle/agents cruise at 1×;
+ *  - an entry WHIRL — thinking and agents kick off with a decaying overshoot so
+ *    the ring whirls fast on entry and eases down to cruise (speaking/listening
+ *    don't whirl — they merge/rest).
+ * Agents cruises at 1× (the pose is still), so its whole visible spin-up IS the
+ * entry whirl, which plays before the dots settle into pills.
+ */
+export function spinTargetFor(
+  state: OrbState,
+  stateTime: number,
+  params: OrbParams = DEFAULT_ORB_PARAMS,
+  // Clock for the entry-WHIRL decay, separate from `stateTime`. The whirl must
+  // land on the VISIBLE ring: entering 'thinking' from 'speaking', the orb is
+  // still the waveform line rolling back up (~0.85s), so anchoring the whirl to
+  // state entry decays it to ~9% before the ring even reappears (the user never
+  // sees the ring speed up). The animator passes the time since the ring RE-FORMED
+  // (waveMix < WHIRL_ANCHOR_EPS) instead; deterministic callers default it to
+  // `stateTime` (unchanged when a whirl state is entered from a non-audio state,
+  // where the ring is already present).
+  whirlTime: number = stateTime
+): number {
   const busy = params.spinBusyMult
-  if (state === 'thinking') return busy
-  if (state === 'speaking') return 1 + (busy - 1) * 0.45
-  if (state === 'listening') return 1 + (busy - 1) * 0.15
-  return 1 // idle, agents
+  const cruise =
+    state === 'thinking'
+      ? busy
+      : state === 'speaking'
+        ? 1 + (busy - 1) * 0.45
+        : state === 'listening'
+          ? 1 + (busy - 1) * 0.15
+          : 1 // idle, agents
+  if (state !== 'thinking' && state !== 'agents') return cruise
+  // Scale the whirl with the preset's spin budget (compact mounts stay calmer).
+  const add = WHIRL_ADD * (busy / DEFAULT_ORB_PARAMS.spinBusyMult)
+  return cruise + add * Math.exp(-Math.max(0, whirlTime) / WHIRL_TAU)
+}
+
+/** waveMix at/under which the ring is considered RE-FORMED, so the entry whirl's
+ *  decay clock may start (see spinTargetFor / anchorWhirlStart). Small but not 0
+ *  so the whirl fires as the roll-up finishes, not a frame late. */
+export const WHIRL_ANCHOR_EPS = 0.05
+
+/**
+ * Anchor the entry-whirl decay clock to the moment the ring RE-FORMS. Pure
+ * reducer over the animator's per-frame state: returns the time the whirl should
+ * count from (or `null` = "not yet — hold the whirl primed at full overshoot").
+ * While a whirling state is entered but the waveform line is still rolling back
+ * (waveMix ≥ eps), stays `null`; the first frame the ring is formed (waveMix <
+ * eps) it latches the current time; once latched it holds (a single decay per
+ * episode). Non-whirl states clear it. The animator resets it to `null` on every
+ * setState so each entry re-anchors.
+ */
+export function anchorWhirlStart(
+  prev: number | null,
+  isWhirlState: boolean,
+  t: number,
+  waveMix: number
+): number | null {
+  if (!isWhirlState) return null
+  if (prev !== null) return prev
+  return waveMix < WHIRL_ANCHOR_EPS ? t : null
 }
 
 /** Exponential time-constant (s) for easing the live spin multiplier toward its
@@ -369,10 +592,26 @@ export type OrbInputs = {
    *  multiplier so busy states rotate faster without an angle jump (C9); the
    *  noise/pulse still use the real `t`. Falls back to `t` when omitted. */
   orbitTime?: number
+  /** Orbit cadence 0..1 (0 = step-then-rest, 1 = continuous glide). The app
+   *  eases this across a state change for a smooth crossover; deterministic
+   *  renders fall back to `orbitFlowFor(state)`. */
+  flow?: number
   /** Seconds since summon, or Infinity when long-since materialized. */
   genesisTime?: number
   /** Disc → rounded-rect morph 0..1 (expanded surface drives this). */
   morph?: number
+  /** Per-slot loudness history 0..1 (oldest→newest = left→right) for the
+   *  waveform. The animator supplies its smoothed ring-buffer window; the harness
+   *  scripts it. When omitted on an audio state the row rests as silence dots. */
+  waveLevels?: number[]
+  /** Canvas aspect (width / height). Lays out the bar row and the dots' glide
+   *  line so a wide mount gets more slots than a square one. Defaults to 1. */
+  aspect?: number
+  /** Bar-response gain 0..1 OVERRIDE. Normally omitted — the handoff is derived
+   *  from the envelope's upper staging band (barResponseFor), so the app and the
+   *  harness agree. Supply it only to isolate the dots (the checks pin it to 0 so
+   *  no bars render) or to force a specific gain in a static frame. */
+  waveResponse?: number
   params?: OrbParams
 }
 
@@ -385,10 +624,28 @@ export function computeOrbFrame(input: OrbInputs): OrbFrame {
   const merge = mergeAmount(state, stateTime, input.speechMerge ?? 0, input.enterMerge)
   const thinking = state === 'thinking'
 
+  // Waveform crossfade: on an audio state the speech-merge envelope glides the
+  // ring dots into a horizontal line and hands off to the bar visualizer. 0 on
+  // every non-audio state (idle/thinking/agents keep their ring/pose untouched).
+  // The one envelope is split into two DISJOINT stages (see AUDIO_STAGE_SPLIT):
+  // `unrollU` (the roll-up, lower band) drives the dot travel + disc fade, and the
+  // bar handoff (upper band) rides on top only once the dots are on the line — so
+  // entry and exit are exact mirrors and the exit never crossfades bars↔ring.
+  const aspect = input.aspect ?? 1
+  const audioMix = waveMixFor(state, input.speechMerge ?? 0)
+  const unrollU = unrollProgressFor(audioMix)
+  const audioGlide = unrollU > 0
+  // Dot glide line half-width (disc units), clamped so the edge dots never leave
+  // the unit disc even as they line up (they fade out as the bars take over).
+  const lineHalf = Math.min(waveHalfWidth(aspect) / p.discRadius, 0.88)
+
   // Orbit runs on the (optionally speed-warped) orbit clock; everything else
-  // (noise, pulse, agents timing) stays on real time.
+  // (noise, pulse, agents timing) stays on real time. `flow` blends the ring
+  // cadence from stepped (idle) to a continuous glide (busy) — thinking and the
+  // agents entry whirl spin smoothly instead of stepping.
   const orbitT = input.orbitTime ?? t
-  const angle = orbitAngle(orbitT, p)
+  const flow = input.flow ?? orbitFlowFor(state)
+  const angle = orbitAngle(orbitT, p, flow)
 
   // Merge travel is STAGGERED per dot (a rotational sweep: dots pool into the
   // puddle one after another and split back out the same way). A simultaneous
@@ -413,20 +670,22 @@ export function computeOrbFrame(input: OrbInputs): OrbFrame {
   // Agents pose: dot PAIRS converge onto the same center and stretch into one
   // capsule per row — identical superimposed primitives, so each pill is a
   // single clean bar (offset endpoints made lumpy dumbbells; review finding).
-  // STAGED: the glide finishes BEFORE the stretch begins — stretching while
-  // vertical neighbors were still in smooth-min range bridged pills across
-  // rows into a two-row clump (review round 2). Dots glide as dots, settle on
-  // their row centers, then lengthen into bars.
-  const ap = state === 'agents' ? Math.min(1, Math.max(0, stateTime / 0.7)) : 0
+  // WHIRL-THEN-STAGE: for the first AGENTS_WHIRL seconds the dots stay on the
+  // ring and orbit fast (the entry whirl — spin overshoots, flow glides), THEN
+  // the pose plays. STAGED: the glide finishes BEFORE the stretch begins —
+  // stretching while vertical neighbors were still in smooth-min range bridged
+  // pills across rows into a two-row clump (review round 2). Dots glide as dots,
+  // settle on their row centers, then lengthen into bars.
+  const ap = state === 'agents' ? Math.min(1, Math.max(0, (stateTime - AGENTS_WHIRL) / 0.7)) : 0
   const agents = easeInOut(Math.min(1, ap / 0.6))
   const stretch = easeInOut(Math.max(0, (ap - 0.65) / 0.35))
   // Row assignment: each dot glides to the row matching its VERTICAL ORDER on
-  // the ring at transition start (t - stateTime — deterministic). Index-fixed
-  // pairing sent top-row dots straight through the second row's dots,
-  // bridging pills mid-glide (review round 2).
+  // the ring when the pose begins (t - stateTime + AGENTS_WHIRL — deterministic).
+  // Index-fixed pairing sent top-row dots straight through the second row's
+  // dots, bridging pills mid-glide (review round 2).
   let rowOf: number[] | null = null
   if (ap > 0) {
-    const a0 = orbitAngle(orbitT - stateTime, p)
+    const a0 = orbitAngle(orbitT - stateTime + AGENTS_WHIRL, p, flow)
     const order = Array.from({ length: DOT_COUNT }, (_, i) => i).sort(
       (A, B) =>
         Math.sin(a0 + (A * 2 * Math.PI) / DOT_COUNT) - Math.sin(a0 + (B * 2 * Math.PI) / DOT_COUNT)
@@ -436,6 +695,13 @@ export function computeOrbFrame(input: OrbInputs): OrbFrame {
       rowOf![dotIdx] = Math.floor(rank / 2)
     })
   }
+
+  // Waveform UNROLL: the ring peels open into the horizontal row as waveMix→1 —
+  // staggered per-dot fan-out through a transient arc (see unrollPositions), the
+  // exact ring at 0 and the exact line at 1. The dots fade out with the ring layer
+  // as the bar visualizer fades in. Mutually exclusive with the agents pose (audio
+  // states ≠ agents). Computed once per frame from the live orbit angle.
+  const unroll = audioGlide ? unrollPositions(unrollU, angle, lineHalf, p) : null
 
   const dots: OrbDot[] = []
   for (let i = 0; i < DOT_COUNT; i++) {
@@ -457,6 +723,9 @@ export function computeOrbFrame(input: OrbInputs): OrbFrame {
       y = y * (1 - agents) + py * agents
       r = r * (1 - agents) + p.dotRadius * 0.72 * agents
       halfLen = p.pillHalfLen * stretch
+    } else if (unroll) {
+      x = unroll[i].x
+      y = unroll[i].y
     }
     dots.push({ x, y, r, halfLen, merge: mi })
   }
@@ -484,6 +753,30 @@ export function computeOrbFrame(input: OrbInputs): OrbFrame {
     p.noiseAmp *
     (thinking ? THINK_WAVE_GAIN : WAVE_GAIN_MIN + (WAVE_GAIN_MAX - WAVE_GAIN_MIN) * shaped)
 
+  // Waveform bars: the scrolling amplitude-history row (empty unless the audio
+  // crossfade is engaged). Slot count follows the aspect when no explicit levels
+  // are supplied. The RESPONSE gain (1 by default; the animator ramps it in after
+  // the unroll) scales every level, so during the line-up the row is flat dots and
+  // the bars only come alive once the row is formed — and flatten before the exit.
+  // Bar-response gain: the UPPER-band handoff (barResponseFor) — 0 through the
+  // whole roll-up, easing in only once the dots are on the line. A caller may
+  // override it (the isolation checks pin it to 0 to render only the traveling
+  // dots); by default it is derived from the same envelope, so the app and the
+  // harness stage the bars identically with nothing separately stepped.
+  const response = Math.min(1, Math.max(0, input.waveResponse ?? barResponseFor(audioMix)))
+  let bars: WaveBar[] = []
+  if (unrollU > 0) {
+    const slotCount = input.waveLevels?.length ?? slotCountForAspect(aspect)
+    const raw = input.waveLevels ?? new Array<number>(slotCount).fill(0)
+    const levels = response === 1 ? raw : raw.map((l) => l * response)
+    bars = waveBars(levels, aspect)
+  }
+  // Dot→bar handoff: barResponse rides on the roll-up (unrollU), so it is 0 while
+  // the dots travel (they stay fully visible — never a ring↔line opacity crossfade)
+  // and rises only once the row is formed. On exit the reverse: bars fade off the
+  // line FIRST, then the dots roll up at full opacity. 0 on the ring (unrollU 0).
+  const barMix = unrollU * response
+
   return {
     dots,
     merge,
@@ -493,6 +786,9 @@ export function computeOrbFrame(input: OrbInputs): OrbFrame {
     morph: Math.min(1, Math.max(0, input.morph ?? 0)),
     genesis: genesisTime === Infinity ? 1 : genesisScale(genesisTime, p),
     noiseTime: t,
+    waveMix: unrollU,
+    barMix,
+    waveBars: bars,
     params: p
   }
 }

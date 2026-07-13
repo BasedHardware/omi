@@ -1,0 +1,200 @@
+// Orb waveform — the scrolling amplitude-history visualizer that REPLACES the
+// merged speech blob (design pivot, Chris 2026-07-11; the live scrolling look was
+// approved by the user 2026-07-11). Audio-active states (recording the user's
+// voice; the spoken TTS reply) render a classic voice-memo row: evenly spaced
+// vertical rounded-capsule bars whose heights track the live level. A SILENT
+// sample renders as a small round DOT (a narrow circle, well below the bar
+// height), so the resting waveform is a tidy row of dots — what the 8 ring dots
+// fan out into on entry. New samples enter at the RIGHT and the history slides
+// left.
+//
+// Everything here is a PURE function: the sensitivity curve, the ring buffer
+// stepping, the history → slot mapping, and the slot → bar geometry. The app's
+// OrbAnimator owns the stateful buffer and feeds real time/audio; the
+// deterministic harness scripts a levels array straight into computeOrbFrame.
+// Bars are returned in the shader's normalized short-axis units (y half-extent =
+// 1, x half-extent = aspect), so the fragment shader rasterizes them directly.
+
+/** Shader uniform-array cap for waveform slots (must match u_wave[] in shader.ts).
+ *  A wide mount uses ~24–32; a compact square mount ~5–7; this only bounds cost. */
+export const WAVE_MAX_SLOTS = 40
+
+/** Look/feel of the bar row, in normalized short-axis units. */
+export const WAVE = {
+  /** Row half-width as a fraction of the canvas aspect (leaves an edge margin). */
+  spanFrac: 0.9,
+  /** Never pack more/less than this many slots regardless of aspect. */
+  minSlots: 5,
+  /** Target slot pitch (center-to-center) — slot count is width / pitch. */
+  pitch: 0.25,
+  /** Bar half-width (the rounded cap radius) as a fraction of the pitch. Sets the
+   *  bar:gap ratio. */
+  barRadiusFrac: 0.36,
+  /** RESTING (silence) dot radius as a fraction of the bar half-width — a round
+   *  dot, clearly shorter than a bar (user: "shorten the default no-speaking
+   *  bars") yet comfortably visible (user, live tune 2026-07-12: 0.5 read "way
+   *  too thin/tiny — a tad bit vertically thicker"). Width ramps up to the full
+   *  bar quickly (see widthLevel) so actual speech bars stay a uniform width;
+   *  only near-silence reads as a dot. */
+  restRadiusFrac: 0.7,
+  /** Level by which a slot reaches its full bar WIDTH (height keeps growing past
+   *  it). Keeps all speaking bars uniform-width while silence stays a slim dot. */
+  widthLevel: 0.22,
+  /** Tallest bar's total half-height — bounds the loudest sample so a bar can
+   *  never reach the canvas edge (keeps the in-bounds invariant). */
+  maxHalfExtent: 0.82
+} as const
+
+// --- Sensitivity: raw loudness → bar level (gated + normalized, never pins) ---
+//
+// Calibrated from the user's REAL microphone (2026-07-12, ~956 live `orbLevel`
+// samples = (rms/255)·2.2, captured over CDP across a silent hold + normal
+// speech, k-means split). Measured distribution:
+//   ROOM SILENCE : p50 0.49, p95 0.65, max 0.75   ← NOT zero (the ×2.2 tap +
+//                                                    mic/room low-freq energy)
+//   NORMAL SPEECH: p50 0.98, p95 1.32, max 1.38
+// The old pure-exponential curve (CEIL·(1−e^(−raw·2.1)), no gate) mapped that
+// silence floor to 0.58 and normal speech to 0.79 — so the bars sat at 58–85%
+// height ALWAYS and barely moved (the user: "volume normalization and default
+// bar length weren't really changed"). Two fixes, both measured, not guessed:
+//   1. NOISE GATE at the silence p95 — anything at/below the ambient floor is a
+//      resting dot (level 0), so a quiet room reads as dots, not tall bars.
+//   2. tanh soft-knee above the gate — a soft onset so quiet speech still
+//      registers, but a DELIBERATELY GENTLE slope so the bars LIVE in the middle
+//      of the range with visible headroom almost always and only genuinely loud
+//      moments approach the ceiling.
+// The knee gain was softened 2.0 → 1.5 (user, live tune 2026-07-12: "still
+// getting maxed a lot" — their live speech runs HOTTER than the calibration
+// sample). At 1.5: sample-normal (0.98) → 0.40, sample-peak (1.38) → 0.71, and
+// even a hot ~1.5 reads 0.77 / loud ~1.8 reads 0.84 — real headroom stays. There
+// is NO per-slot amplification downstream: shapeBarLevel runs on the smoothed RMS
+// envelope and waveBars maps level→height linearly (halfH = restR + level·growth),
+// so a bar can never exceed its shaped level — softening this curve is the whole
+// fix for "maxing."
+
+/** Ambient floor (raw units): at/below this the bar rests as a dot. Set to the
+ *  measured room-silence p95 (0.65) with a hair of margin. */
+export const WAVE_NOISE_GATE = 0.66
+/** Soft-knee gain ABOVE the gate — deliberately GENTLE so bars sit mid-range with
+ *  headroom (user: "still getting maxed a lot"; live speech runs hotter than the
+ *  calibration sample). At 1.5: normal (raw ≈ 0.98) → ~0.40, peak (≈ 1.38) → ~0.71,
+ *  hot (≈ 1.8) → ~0.84 — genuinely loud only nears the 0.9 ceiling. */
+export const WAVE_LEVEL_GAIN = 1.5
+/** Ceiling (< 1) the knee asymptotes to: the tallest a bar can get, so genuinely
+ *  loud speech APPROACHES but never PINS at the max height (user: "the lines max
+ *  out when I'm not even speaking that loud — normalize the animation a tad"). */
+export const WAVE_LEVEL_CEIL = 0.9
+
+/**
+ * Gate + compress a raw loudness (≥ 0, possibly hot) into a bar level in
+ * [0, CEIL). Subtract the ambient NOISE_GATE, then a tanh soft-knee:
+ * `CEIL·tanh((raw − GATE)·GAIN)` for raw > GATE, else 0. Room silence → 0 (a
+ * resting dot); normal speech (~0.98) lands low-mid (~0.40); loud (~1.38) reads
+ * ~0.71 and even hot input keeps clear headroom below CEIL — it can never pin at
+ * the maximum. Monotonic and bounded for ANY input. Applied upstream (the
+ * animator, on the smoothed envelope); the harness/tests feed already-shaped
+ * levels straight into waveBars.
+ */
+export function shapeBarLevel(raw: number): number {
+  const x = raw - WAVE_NOISE_GATE
+  if (x <= 0) return 0
+  return WAVE_LEVEL_CEIL * Math.tanh(x * WAVE_LEVEL_GAIN)
+}
+
+const clamp01 = (x: number): number => Math.min(1, Math.max(0, x))
+
+/** Usable row half-width (normalized units) for a canvas of the given aspect
+ *  (width / height). A square canvas (aspect 1) still gets a sensible span. */
+export function waveHalfWidth(aspect: number): number {
+  return Math.max(0.7, aspect) * WAVE.spanFrac
+}
+
+/** How many time samples (slots) fit across the row at this aspect. Scales from
+ *  ~6 on a square mini mount to WAVE_MAX_SLOTS on a wide bar, bounded both ways. */
+export function slotCountForAspect(aspect: number): number {
+  const n = Math.round((2 * waveHalfWidth(aspect)) / WAVE.pitch)
+  return Math.max(WAVE.minSlots, Math.min(WAVE_MAX_SLOTS, n))
+}
+
+/** One rendered slot: center x on the y=0 centerline, half-width `halfW` and
+ *  TOTAL half-height `halfH`. All normalized short-axis units. Fed to the shader
+ *  as a rounded box of half-extent (halfW, halfH) with corner = min(halfW, halfH)
+ *  — so a slot with halfW==halfH is a circle (the resting dot) and a tall slot is
+ *  a round-capped vertical bar. */
+export type WaveBar = { x: number; halfW: number; halfH: number }
+
+/**
+ * Lay out `levels` (per-slot bar level 0..1, oldest→newest = left→right) into
+ * evenly spaced slots. A level of 0 yields a small round dot (radius restR); the
+ * width ramps to the full bar by WAVE.widthLevel (so speech bars are uniform
+ * width) while the height grows on up to WAVE.maxHalfExtent. Pure — the same call
+ * the animator and the harness both make. Levels are assumed already shaped (see
+ * shapeBarLevel); this is geometry only.
+ */
+export function waveBars(levels: number[], aspect: number): WaveBar[] {
+  const n = levels.length
+  if (n === 0) return []
+  const halfW = waveHalfWidth(aspect)
+  const pitch = (2 * halfW) / n
+  const barW = pitch * WAVE.barRadiusFrac // full bar half-width
+  const restR = barW * WAVE.restRadiusFrac // resting round-dot radius (< barW)
+  const growthH = Math.max(0, WAVE.maxHalfExtent - restR)
+  return levels.map((lvl, i) => {
+    const l = clamp01(lvl)
+    // Width reaches the full bar quickly (by widthLevel) so only near-silence is
+    // a slim dot; height grows the whole way from the dot radius to the max.
+    const wl = Math.min(1, l / WAVE.widthLevel)
+    return {
+      x: -halfW + pitch * (i + 0.5),
+      halfW: restR + wl * (barW - restR),
+      halfH: restR + l * growthH
+    }
+  })
+}
+
+/**
+ * Push one loudness sample into a fixed-length history ring, returning the new
+ * write index. The ring is sized WAVE_MAX_SLOTS; the newest sample lands at
+ * `writeIndex`, so the last `slotCount` entries (see historySlots) are what the
+ * row shows. Initialize the buffer to 0 (silence) so an unfilled ring reads as
+ * resting dots, never garbage.
+ */
+export function historyPush(buf: Float32Array, writeIndex: number, level: number): number {
+  buf[writeIndex % buf.length] = clamp01(level)
+  return (writeIndex + 1) % buf.length
+}
+
+/**
+ * The last `slotCount` samples, oldest → newest (newest last = rightmost slot).
+ * `writeIndex` is where the NEXT push will land, so the newest existing sample is
+ * at writeIndex-1. Reads wrap the ring; a slotCount larger than the buffer is
+ * clamped to the buffer length.
+ */
+export function historySlots(buf: Float32Array, writeIndex: number, slotCount: number): number[] {
+  const len = buf.length
+  const n = Math.min(slotCount, len)
+  const out = new Array<number>(n)
+  for (let j = 0; j < n; j++) {
+    // Oldest of the window first: writeIndex - n + j (the +len keeps it positive).
+    const idx = (((writeIndex - n + j) % len) + len) % len
+    out[j] = buf[idx]
+  }
+  return out
+}
+
+/** One deterministic ease of the displayed bar levels toward their targets, so a
+ *  new sample (or a scroll shift) never snaps a bar's height in a single frame —
+ *  the row flows. Fast enough to keep up with speech, slow enough to smooth the
+ *  per-slot steps. Callers step it per frame with their dt. */
+export function stepWaveLevels(
+  display: Float32Array,
+  target: number[],
+  dt: number,
+  tau = 0.05
+): void {
+  const k = 1 - Math.exp(-dt / Math.max(1e-6, tau))
+  for (let i = 0; i < display.length; i++) {
+    const tv = target[i] ?? 0
+    display[i] += (tv - display[i]) * k
+  }
+}

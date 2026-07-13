@@ -5,10 +5,10 @@ import { auth, onAuthStateChanged } from '../lib/firebase'
 import { useAppState } from '../state/appState'
 import { QuickTaskWidget } from '../components/home/QuickTaskWidget'
 import { QuickGoalsWidget } from '../components/home/QuickGoalsWidget'
-import { Markdown } from '../components/Markdown'
+import { RevealMarkdown } from '../components/chat/RevealMarkdown'
 import { maybeBuildLocalGraph } from '../lib/kgSynthesis'
 import { cn } from '../lib/utils'
-import omiMark from '../assets/omi-logo.png'
+import omiMark from '../assets/omi-mark.png'
 import { maybeStartScreenSynthesis } from '../lib/screenSynthesis'
 import { maybeStartInsightEngine } from '../lib/insightEngine'
 import { maybeStartRetentionSweep } from '../lib/retentionSweep'
@@ -92,7 +92,9 @@ export function Home(): React.JSX.Element {
   const { chat } = useAppState()
   const [user, setUser] = useState<User | null>(auth.currentUser)
   const chatScrollRef = useRef<HTMLDivElement>(null)
+  const chatContentRef = useRef<HTMLDivElement>(null)
   const widgetsGridRef = useRef<HTMLDivElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
   const lastLenRef = useRef(0)
   const [scrollMode, setScrollModeState] = useState<ChatScrollMode>('followingBottom')
   const scrollModeRef = useRef<ChatScrollMode>('followingBottom')
@@ -196,6 +198,12 @@ export function Home(): React.JSX.Element {
   // Only fade the thread's top once it actually overflows — otherwise a short
   // thread would sit entirely inside the fade and look washed out.
   const [overflowing, setOverflowing] = useState(false)
+  // The thread overflows (and the top fade shows) once its content is taller than
+  // the viewport. Recomputed from several effects/handlers, so it lives in one spot.
+  const recomputeOverflow = useCallback((): void => {
+    const el = chatScrollRef.current
+    if (el) setOverflowing(el.scrollHeight > el.clientHeight + 4)
+  }, [])
   // Split layout: false = idle (centered block), true = widgets at top + bar at
   // bottom. A small lead-in lets the first bubble render before the move starts
   // (avoids a glitchy instant jump); both spacers then collapse together so the
@@ -206,6 +214,16 @@ export function Home(): React.JSX.Element {
   const [showThread, setShowThread] = useState(false)
 
   const started = chat.history.length > 0
+  // The top cards persist on every VISIT to Home — they show on mount even when
+  // a conversation already exists — and stay until the user clicks any area
+  // below them (the thread or the chat bar), which dismisses them for this visit
+  // only. `cardsDismissed` is per-visit interaction state; a fresh visit re-arms
+  // it (see the IntersectionObserver below — Home is kept-alive, never
+  // unmounted, so we can't lean on unmount to reset). Dismissal also drops the
+  // thread's top fade so the chat reads at full focus.
+  const [cardsDismissed, setCardsDismissed] = useState(false)
+  const widgetsVisible = widgetsReady && !cardsDismissed
+  const dismissCards = useCallback((): void => setCardsDismissed(true), [])
 
   // Draft text is LOCAL state (not in the app-wide chat hook) so typing only
   // re-renders Home's chat bar — not the whole app shell + every mounted page.
@@ -257,6 +275,27 @@ export function Home(): React.JSX.Element {
     return () => ro.disconnect()
   }, [])
 
+  // Home is kept-alive by MainViews — it toggles a `hidden` class on Home's
+  // WRAPPER (see MainViews.panelClass), never unmounting Home — so per-visit
+  // state like `cardsDismissed` can't reset on unmount. Watch that wrapper's
+  // class directly: each hidden→visible flip is a fresh visit, so re-arm the
+  // cards. A MutationObserver on the exact attribute that changes is
+  // deterministic (an IntersectionObserver threshold callback proved unreliable
+  // on the display:none flip); and it avoids re-rendering this heavy panel on
+  // every unrelated navigation the way useLocation would.
+  useEffect(() => {
+    const panel = rootRef.current?.parentElement
+    if (!panel) return
+    let wasHidden = panel.classList.contains('hidden')
+    const mo = new MutationObserver(() => {
+      const isHidden = panel.classList.contains('hidden')
+      if (wasHidden && !isHidden) setCardsDismissed(false)
+      wasHidden = isHidden
+    })
+    mo.observe(panel, { attributes: true, attributeFilter: ['class'] })
+    return () => mo.disconnect()
+  }, [])
+
   // Drive the staggered split once a conversation starts: lead-in → bar down →
   // widgets up. Resets to centered if the thread is ever cleared.
   useEffect(() => {
@@ -289,15 +328,39 @@ export function Home(): React.JSX.Element {
     if (isInitialReveal || scrollModeRef.current === 'followingBottom') {
       scrollToLatest({ smooth: isNewMessage && !isInitialReveal })
     }
-    setOverflowing(el.scrollHeight > el.clientHeight + 4)
-  }, [chat.history, chat.sending, showThread, scrollToLatest, widgetsReady, widgetsH])
+    recomputeOverflow()
+  }, [
+    chat.history,
+    chat.sending,
+    showThread,
+    scrollToLatest,
+    recomputeOverflow,
+    widgetsReady,
+    widgetsH
+  ])
+
+  // RevealMarkdown grows the streaming reply's text every 16ms WITHOUT a
+  // chat.history change, so the effect above (keyed on history) can't follow it.
+  // Mirror BarChatSurface: observe the thread content and re-pin the live edge on
+  // every size change while following, so the bottom tracks the char-by-char
+  // reveal smoothly instead of jumping once per SSE chunk.
+  useEffect(() => {
+    const content = chatContentRef.current
+    if (!content) return
+    const ro = new ResizeObserver(() => {
+      recomputeOverflow()
+      if (scrollModeRef.current === 'followingBottom') scrollToLatest()
+    })
+    ro.observe(content)
+    return () => ro.disconnect()
+  }, [scrollToLatest, recomputeOverflow])
 
   // Reveal an older page when the user scrolls near the top, capturing the
   // current distance-from-bottom so the view can be pinned in place afterward.
   const onThreadScroll = (): void => {
     const el = chatScrollRef.current
     if (!el) return
-    setOverflowing(el.scrollHeight > el.clientHeight + 4)
+    recomputeOverflow()
     const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
     if (distFromBottom <= 8) {
       // Resume live following when the reader scrolls back to the live edge.
@@ -325,7 +388,9 @@ export function Home(): React.JSX.Element {
     restoreFromBottom.current = null
   }, [visibleCount])
 
-  const mask = overflowing ? FADE_MASK : undefined
+  // Drop the top fade once the cards are dismissed — with nothing above the
+  // thread to tuck under, the chat reads at full focus.
+  const mask = overflowing && !cardsDismissed ? FADE_MASK : undefined
 
   // Render only the tail of the thread; older messages reveal on scroll-up.
   const windowStart = Math.max(0, chat.history.length - visibleCount)
@@ -333,6 +398,7 @@ export function Home(): React.JSX.Element {
 
   return (
     <div
+      ref={rootRef}
       className="grid h-full px-6 py-8 transition-[grid-template-rows] duration-[1000ms] ease-[cubic-bezier(0.4,0,0.2,1)] lg:px-10"
       style={{ gridTemplateRows: split ? ROWS_FULL : ROWS_IDLE }}
     >
@@ -342,14 +408,25 @@ export function Home(): React.JSX.Element {
       {/* Widgets row — its height grows smoothly (0 → measured) when data loads,
           so the chat box slides to make room instead of jumping. Each card also
           fades in via widget-fade. */}
-      {/* The row's height is set instantly (no layout animation) once both
+      {/* On REVEAL the height is set instantly (no layout animation) once both
           widgets are ready; the reveal itself is a compositor-only transform +
-          opacity fade, so it can't reflow/jank the way animating height did. */}
-      <div className="overflow-hidden" style={{ height: widgetsReady ? widgetsH + 48 : 0 }}>
+          opacity fade, so it can't reflow/jank the way animating height did. On
+          DISMISS (a click below the cards) the row collapses the other way — the
+          height IS transitioned to 0 (only while dismissed, so reveal/return
+          stay instant), tucked together with the 600ms fade so the cards leave
+          as one coherent motion. */}
+      <div
+        data-testid="widgets-row"
+        className={cn(
+          'overflow-hidden',
+          cardsDismissed && 'transition-[height] duration-[600ms] ease-[cubic-bezier(0.4,0,0.2,1)]'
+        )}
+        style={{ height: widgetsVisible ? widgetsH + 48 : 0 }}
+      >
         <div
           className={cn(
             'transition-[transform,opacity] duration-[600ms] ease-[cubic-bezier(0.4,0,0.2,1)] will-change-transform',
-            widgetsReady ? 'translate-y-0 opacity-100' : '-translate-y-3 opacity-0'
+            widgetsVisible ? 'translate-y-0 opacity-100' : '-translate-y-3 opacity-0'
           )}
         >
           <div
@@ -367,7 +444,11 @@ export function Home(): React.JSX.Element {
           wrapped in a relative container so the Latest overlay is a sibling of
           the scroller — an absolute child of a scrolled element moves with the
           scrollable content and can scroll out of the visible viewport. */}
-      <div className="relative min-h-0">
+      {/* Dismiss hitbox: the thread/greeting region is "below the cards", so a
+          mousedown anywhere in it tucks the cards away (see also the chat bar
+          and bottom spacer). Mousedown (not click) so a press-drag select or a
+          scrollbar grab counts too. */}
+      <div className="relative min-h-0" data-testid="chat-below-region" onMouseDown={dismissCards}>
         <div
           ref={chatScrollRef}
           onScroll={onThreadScroll}
@@ -377,7 +458,7 @@ export function Home(): React.JSX.Element {
           style={{ WebkitMaskImage: mask, maskImage: mask }}
         >
           <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col">
-            <div className="mt-auto space-y-5 pb-2">
+            <div ref={chatContentRef} className="mt-auto space-y-5 pb-2">
               {started && showThread ? (
                 windowed.map((m, i) => {
                   const isUser = m.role === 'user'
@@ -400,12 +481,30 @@ export function Home(): React.JSX.Element {
                       key={m.id ?? `${windowStart}-${i}`}
                       className="bubble-in flex items-start gap-3"
                     >
-                      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white">
-                        <img src={omiMark} alt="Omi" className="h-4 w-4 object-contain" />
+                      {/* Crisp 256px omi mark (omi-mark.png) clipped to the
+                          circle. overflow-hidden is load-bearing: it guarantees
+                          the asset's SQUARE bounds can never poke past the round
+                          badge (the old 40px omi-logo.png had opaque-white
+                          corners whose diagonal exceeded the badge radius → four
+                          corner bumps). The mark is rendered larger than the
+                          badge (h-14 in an h-11 badge) to offset the asset's
+                          ~23% built-in padding, so the dot-ring reads at ~30px. */}
+                      <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white">
+                        <img src={omiMark} alt="Omi" className="h-14 w-14 object-contain" />
                       </div>
-                      <div className="min-w-0 max-w-[85%] pt-0.5 text-[15px] leading-[1.65] text-white/90">
+                      {/* pt-3 (12px) optically centers the first reply line on
+                          the 44px badge: Inter 15px/24.75px puts the first line's
+                          cap-midline ~12.4px below the text-box top, so a 12px
+                          top pad lands it at ~24px = the badge's vertical center
+                          (measured live: badge centerY 648 vs first-line ~638
+                          before, ~648 after). Tuned to the badge size — revisit
+                          if the badge height changes. */}
+                      <div className="min-w-0 max-w-[85%] pt-3 text-[15px] leading-[1.65] text-white/90">
                         {m.content ? (
-                          <Markdown text={m.content} />
+                          <RevealMarkdown
+                            text={m.content}
+                            startRevealed={!(isLast && chat.sending)}
+                          />
                         ) : chat.sending && isLast ? (
                           <span className="typing-dots" aria-label="Omi is replying">
                             <span />
@@ -438,8 +537,9 @@ export function Home(): React.JSX.Element {
         ) : null}
       </div>
 
-      {/* Chat bar — rides to the bottom via the spacer collapse. */}
-      <div className="py-3">
+      {/* Chat bar — rides to the bottom via the spacer collapse. Also "below the
+          cards": engaging the input/voice dismisses them for this visit. */}
+      <div className="py-3" onMouseDown={dismissCards}>
         <div className="fade-in-slow mx-auto max-w-4xl">
           {voiceOpen && (
             <div className="mb-2">
@@ -457,8 +557,9 @@ export function Home(): React.JSX.Element {
         </div>
       </div>
 
-      {/* Bottom spacer (collapses as the conversation starts). */}
-      <div aria-hidden />
+      {/* Bottom spacer (collapses as the conversation starts) — still "below the
+          cards", so clicking it dismisses them too. */}
+      <div aria-hidden onMouseDown={dismissCards} />
     </div>
   )
 }
