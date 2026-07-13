@@ -39,8 +39,9 @@ export function derivePort(userDataPath: string): number {
 }
 
 /** Murmur3-style finalizer: FNV-1a's low bits disperse poorly for near-identical
- * strings (sibling sandbox paths), and the modulo only sees the low bits. */
-function avalanche(h: number): number {
+ * strings (sibling sandbox paths), and the modulo only sees the low bits.
+ * Exported so devInstance.ts derives dev ports from the same well-mixed hash. */
+export function avalanche(h: number): number {
   h ^= h >>> 16
   h = Math.imul(h, 0x85ebca6b)
   h ^= h >>> 13
