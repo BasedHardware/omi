@@ -562,7 +562,8 @@ actor ActionItemStorage {
     @discardableResult
     func reconcileDashboardVisibilityFields(
         _ items: [TaskActionItem],
-        authorization: LocalMutationAuthorization
+        authorization: LocalMutationAuthorization,
+        deriveDeletedFromCancelledStatus: Bool = false
     ) async throws -> Int {
         try authorization.require()
         guard !items.isEmpty else { return 0 }
@@ -577,7 +578,13 @@ actor ActionItemStorage {
                         .filter(Column("backendId") == item.id)
                         .fetchOne(database) else { continue }
 
-                    let incomingDeleted = item.deleted ?? false
+                    // The list/detail wire model carries no `deleted` field; the
+                    // backend projects soft-deletion as status cancelled/superseded.
+                    // Callers doing authoritative per-document reconciliation opt in
+                    // to that derivation.
+                    let statusImpliesDeleted = deriveDeletedFromCancelledStatus
+                        && (item.taskStatus == "cancelled" || item.taskStatus == "superseded")
+                    let incomingDeleted = item.deleted ?? statusImpliesDeleted
                     var changed = false
 
                     if record.completed != item.completed {
@@ -668,11 +675,15 @@ actor ActionItemStorage {
     /// Returns the number of records deleted.
     func hardDeleteAbsentTasks(
         apiIds: Set<String>,
-        authorization: LocalMutationAuthorization
+        authorization: LocalMutationAuthorization,
+        confirmedEmpty: Bool = false
     ) async throws -> Int {
         try authorization.require()
-        // Safety guard: never wipe all tasks if the API set is empty (backend error)
-        guard !apiIds.isEmpty else {
+        // An empty API set is trusted only when the caller independently confirmed
+        // the account has zero incomplete tasks (TasksStore verifies through the
+        // IDs endpoint first); an unconfirmed empty set is treated as a backend
+        // error so a bogus empty page can never wipe local rows.
+        guard !apiIds.isEmpty || confirmedEmpty else {
             log("ActionItemStorage: hardDeleteAbsentTasks skipped — empty API set")
             return 0
         }

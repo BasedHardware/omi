@@ -37,6 +37,9 @@ class TasksStore: ObservableObject {
         }
 
         var fetchPage: ((_ completed: Bool, _ offset: Int, _ limit: Int, _ ownerID: String) async throws -> ActionItemsPage)?
+        var fetchAllTaskIds: ((_ ownerID: String) async throws -> [String])?
+        var fetchTaskDetail: ((_ id: String, _ ownerID: String) async throws -> TaskActionItem?)?
+        var reconcileVisibility: ((_ items: [TaskActionItem], _ ownerID: String) async throws -> Int)?
         var fetchDeletedPage: ((_ offset: Int, _ limit: Int, _ ownerID: String) async throws -> ActionItemsPage)?
         var syncPage: ((_ items: [TaskActionItem], _ overrideStagedDeletions: Bool, _ ownerID: String) async throws -> Void)?
         var hardDeleteAbsent: ((_ ids: Set<String>, _ ownerID: String) async throws -> Int)?
@@ -52,6 +55,9 @@ class TasksStore: ObservableObject {
 
         init(
             fetchPage: ((_ completed: Bool, _ offset: Int, _ limit: Int, _ ownerID: String) async throws -> ActionItemsPage)? = nil,
+            fetchAllTaskIds: ((_ ownerID: String) async throws -> [String])? = nil,
+            fetchTaskDetail: ((_ id: String, _ ownerID: String) async throws -> TaskActionItem?)? = nil,
+            reconcileVisibility: ((_ items: [TaskActionItem], _ ownerID: String) async throws -> Int)? = nil,
             fetchDeletedPage: ((_ offset: Int, _ limit: Int, _ ownerID: String) async throws -> ActionItemsPage)? = nil,
             syncPage: ((_ items: [TaskActionItem], _ overrideStagedDeletions: Bool, _ ownerID: String) async throws -> Void)? = nil,
             hardDeleteAbsent: ((_ ids: Set<String>, _ ownerID: String) async throws -> Int)? = nil,
@@ -66,6 +72,9 @@ class TasksStore: ObservableObject {
             backfillRelevance: ((_ ownerID: String) async throws -> Int)? = nil
         ) {
             self.fetchPage = fetchPage
+            self.fetchAllTaskIds = fetchAllTaskIds
+            self.fetchTaskDetail = fetchTaskDetail
+            self.reconcileVisibility = reconcileVisibility
             self.fetchDeletedPage = fetchDeletedPage
             self.syncPage = syncPage
             self.hardDeleteAbsent = hardDeleteAbsent
@@ -420,17 +429,25 @@ class TasksStore: ObservableObject {
 
             // Reconcile: if we got the full set, hard-delete local tasks absent from API
             // (completed/deleted on mobile). Safe: only deletes synced records.
-            // Safety guard: skip if API returned zero tasks (possible backend error / empty 200).
-            if response.items.count < reloadLimit, !response.items.isEmpty {
-                let apiIds = Set(response.items.map { $0.id })
-                let reconciled = try await hardDeleteAbsent(
-                    apiIds,
-                    lease: lease,
-                    operations: operations
-                )
-                guard isCurrent(lease) else { return }
-                if reconciled > 0 {
-                    log("TasksStore: Reconciled: hard-deleted \(reconciled) absent tasks during auto-refresh")
+            // An empty page is reconciled only after the IDs endpoint confirms the
+            // account truly has zero incomplete tasks (degraded-backend guard).
+            if response.items.count < reloadLimit {
+                if response.items.isEmpty {
+                    if !incompleteTasks.isEmpty {
+                        _ = await reconcileConfirmedEmptyCloud(lease: lease, operations: operations)
+                        guard isCurrent(lease) else { return }
+                    }
+                } else {
+                    let apiIds = Set(response.items.map { $0.id })
+                    let reconciled = try await hardDeleteAbsent(
+                        apiIds,
+                        lease: lease,
+                        operations: operations
+                    )
+                    guard isCurrent(lease) else { return }
+                    if reconciled > 0 {
+                        log("TasksStore: Reconciled: hard-deleted \(reconciled) absent tasks during auto-refresh")
+                    }
                 }
             }
 
@@ -609,19 +626,30 @@ class TasksStore: ObservableObject {
                 if response.items.count < batchSize { break }
             }
 
-            // Safety guard: skip if API returned zero tasks (possible backend error / empty 200).
+            let deleted: Int
             if allApiIds.isEmpty {
-                log("TasksStore: Periodic reconciliation skipped — API returned zero task IDs (possible backend error)")
-                return
+                // Zero incomplete tasks in the cloud — confirm through the IDs
+                // endpoint before wiping so stale local tasks converge to empty
+                // without trusting a single unverified empty response.
+                if incompleteTasks.isEmpty {
+                    // Local cache already matches the empty cloud state.
+                    lastReconciliationDate = Date()
+                    return
+                }
+                guard let confirmed = await reconcileConfirmedEmptyCloud(
+                    lease: lease,
+                    operations: operations
+                ) else { return }
+                deleted = confirmed
+            } else {
+                deleted = try await hardDeleteAbsent(
+                    allApiIds,
+                    lease: lease,
+                    operations: operations
+                )
+                guard isCurrent(lease) else { return }
+                lastReconciliationDate = Date()
             }
-
-            let deleted = try await hardDeleteAbsent(
-                allApiIds,
-                lease: lease,
-                operations: operations
-            )
-            guard isCurrent(lease) else { return }
-            lastReconciliationDate = Date()
 
             if deleted > 0 {
                 log("TasksStore: Full reconciliation: hard-deleted \(deleted) absent tasks")
@@ -925,7 +953,8 @@ class TasksStore: ObservableObject {
     private func hardDeleteAbsent(
         _ ids: Set<String>,
         lease: OwnerOperationLease,
-        operations: OwnerBoundOperations
+        operations: OwnerBoundOperations,
+        confirmedEmpty: Bool = false
     ) async throws -> Int {
         guard isCurrent(lease) else { throw LocalMutationAuthorizationError.revoked }
         if let hardDeleteAbsent = operations.hardDeleteAbsent {
@@ -933,8 +962,151 @@ class TasksStore: ObservableObject {
         }
         return try await ActionItemStorage.shared.hardDeleteAbsentTasks(
             apiIds: ids,
-            authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
+            authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot),
+            confirmedEmpty: confirmedEmpty
         )
+    }
+
+    /// The cloud returned zero incomplete tasks. A legitimately-empty account must
+    /// still converge (tasks completed/deleted on other devices have to disappear
+    /// here too), but a bogus empty page from a degraded backend must never wipe
+    /// the local cache on its own say-so. Instead of trusting the empty page,
+    /// reconcile against the independent ID census (GET /v1/action-items/ids):
+    ///   - rows whose documents are absent from the census are proven gone and
+    ///     hard-deleted;
+    ///   - rows whose documents still exist are resolved with authoritative
+    ///     per-document reads (completed/deleted flips), never blind deletion;
+    ///   - an empty census itself proves the account has no task documents at
+    ///     all, which authorizes the storage layer's confirmed-empty wipe.
+    /// Returns the number of local rows changed (deleted + visibility flips), or
+    /// nil when the census fetch failed (reconciliation skipped, fail closed).
+    private func reconcileConfirmedEmptyCloud(
+        lease: OwnerOperationLease,
+        operations: OwnerBoundOperations
+    ) async -> Int? {
+        guard isCurrent(lease) else { return nil }
+        do {
+            let censusIds: [String]
+            if let fetchAllTaskIds = operations.fetchAllTaskIds {
+                censusIds = try await fetchAllTaskIds(lease.ownerID)
+            } else {
+                censusIds = try await APIClient.shared.getActionItemIds(
+                    expectedOwnerId: lease.ownerID,
+                    authorizationSnapshot: lease.authorizationSnapshot
+                )
+            }
+            guard isCurrent(lease) else { return nil }
+
+            let census = Set(censusIds)
+            var changed: Int
+            if census.isEmpty {
+                changed = try await hardDeleteAbsent(
+                    [],
+                    lease: lease,
+                    operations: operations,
+                    confirmedEmpty: true
+                )
+            } else {
+                changed = try await hardDeleteAbsent(census, lease: lease, operations: operations)
+                guard isCurrent(lease) else { return nil }
+                changed += await resolveCensusPresentStaleRows(
+                    census: census,
+                    lease: lease,
+                    operations: operations
+                )
+            }
+            guard isCurrent(lease) else { return nil }
+            lastReconciliationDate = Date()
+            if changed > 0 {
+                log("TasksStore: Reconciled empty cloud to-do state: \(changed) stale local tasks resolved")
+            }
+            return changed
+        } catch {
+            if isCurrent(lease) {
+                log("TasksStore: Empty-cloud reconciliation skipped — census fetch failed: \(error.localizedDescription)")
+            }
+            return nil
+        }
+    }
+
+    /// Local incomplete rows whose documents still exist in the census cannot be
+    /// deleted on the empty page's word — read each document and apply its
+    /// authoritative completed/deleted state instead. Loops until a full cache
+    /// read shows no unattempted census-present rows, so the whole stale set is
+    /// resolved in one reconcile pass. Terminates because every iteration either
+    /// attempts new rows or widens the read window: rows that resolve leave the
+    /// incomplete cache, and rows that do not (still incomplete in the cloud, or
+    /// unreadable) are remembered in `attempted` and stay visible by design.
+    private func resolveCensusPresentStaleRows(
+        census: Set<String>,
+        lease: OwnerOperationLease,
+        operations: OwnerBoundOperations
+    ) async -> Int {
+        var flippedTotal = 0
+        var attempted = Set<String>()
+        var readLimit = pageSize
+        do {
+            while true {
+                guard isCurrent(lease) else { return flippedTotal }
+                let rows = try await loadCachedTasks(
+                    scope: .incomplete,
+                    limit: readLimit,
+                    offset: 0,
+                    lease: lease,
+                    operations: operations
+                )
+                let candidates = rows.filter { census.contains($0.id) && !attempted.contains($0.id) }
+                if candidates.isEmpty {
+                    // A short read means the whole remaining cache was visible and
+                    // holds nothing left to resolve. A full read may hide deeper
+                    // rows behind stable ones — widen and look again.
+                    if rows.count < readLimit { break }
+                    readLimit += pageSize
+                    continue
+                }
+
+                var fetched: [TaskActionItem] = []
+                for row in candidates {
+                    guard isCurrent(lease) else { return flippedTotal }
+                    attempted.insert(row.id)
+                    do {
+                        let item: TaskActionItem?
+                        if let fetchTaskDetail = operations.fetchTaskDetail {
+                            item = try await fetchTaskDetail(row.id, lease.ownerID)
+                        } else {
+                            item = try await APIClient.shared.getActionItem(
+                                id: row.id,
+                                expectedOwnerId: lease.ownerID,
+                                authorizationSnapshot: lease.authorizationSnapshot
+                            )
+                        }
+                        if let item { fetched.append(item) }
+                    } catch {
+                        // One unreadable document must not abort the rest; it stays
+                        // visible and is retried on the next reconcile pass.
+                        log("TasksStore: Skipping stale-row resolution for one task: \(error.localizedDescription)")
+                    }
+                }
+                guard isCurrent(lease) else { return flippedTotal }
+                guard !fetched.isEmpty else { continue }
+
+                if let reconcileVisibility = operations.reconcileVisibility {
+                    flippedTotal += try await reconcileVisibility(fetched, lease.ownerID)
+                } else {
+                    flippedTotal += try await ActionItemStorage.shared.reconcileDashboardVisibilityFields(
+                        fetched,
+                        authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot),
+                        deriveDeletedFromCancelledStatus: true
+                    )
+                }
+            }
+            return flippedTotal
+        } catch {
+            if isCurrent(lease) {
+                log("TasksStore: Stale-row resolution skipped: \(error.localizedDescription)")
+            }
+            return flippedTotal
+        }
     }
 
     private func loadCachedTasks(
@@ -1157,20 +1329,32 @@ class TasksStore: ObservableObject {
                 if response.items.count < batchSize { break }
             }
 
-            // Safety guard: if the API returned zero tasks, skip reconciliation.
-            // This prevents a backend error (200 with empty list) from wiping all local tasks.
+            let deleted: Int
             if allApiIds.isEmpty {
-                log("TasksStore: Reconciliation skipped — API returned zero task IDs (possible backend error)")
-                return
+                // Zero incomplete tasks in the cloud: either the account is truly
+                // empty (everything completed/deleted on another device) or the
+                // backend served a bogus empty page. Confirm before wiping so the
+                // local list converges to empty instead of showing stale tasks
+                // forever, without trusting a single unverified empty response.
+                if incompleteTasks.isEmpty {
+                    // Local cache already matches the empty cloud state.
+                    lastReconciliationDate = Date()
+                    return
+                }
+                guard let confirmed = await reconcileConfirmedEmptyCloud(
+                    lease: lease,
+                    operations: operations
+                ) else { return }
+                deleted = confirmed
+            } else {
+                deleted = try await hardDeleteAbsent(
+                    allApiIds,
+                    lease: lease,
+                    operations: operations
+                )
+                guard isCurrent(lease) else { return }
+                lastReconciliationDate = Date()
             }
-
-            let deleted = try await hardDeleteAbsent(
-                allApiIds,
-                lease: lease,
-                operations: operations
-            )
-            guard isCurrent(lease) else { return }
-            lastReconciliationDate = Date()
 
             if deleted > 0 {
                 log("TasksStore: Reconciled on load: hard-deleted \(deleted) absent tasks")
@@ -1187,10 +1371,7 @@ class TasksStore: ObservableObject {
                     incompleteTasks = refreshed
                     incompleteOffset = refreshed.count
                 }
-                await loadDashboardTasks(
-                    expectedOwnerID: lease.ownerID,
-                    authorizationSnapshot: lease.authorizationSnapshot
-                )
+                await refreshDashboardCache(lease: lease, operations: operations)
             } else {
                 log("TasksStore: Reconciled on load: all local tasks match API")
             }
