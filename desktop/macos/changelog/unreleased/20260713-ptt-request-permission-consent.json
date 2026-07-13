@@ -1,0 +1,3 @@
+{
+  "change": "Fixed permission requests (e.g. \"enable notifications\") being silently ignored in push-to-talk / voice mode — the consent gate now derives from the spoken turn transcript"
+}
