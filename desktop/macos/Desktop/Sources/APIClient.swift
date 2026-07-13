@@ -4887,8 +4887,11 @@ struct UserProfileResponse: Codable {
 
 // MARK: - Desktop Update Policy Models
 
-struct DesktopUpdatePolicyResponse: Codable, Equatable {
-  enum Severity: String, Codable {
+struct DesktopUpdatePolicyResponse: Decodable, Equatable, Sendable {
+  static let stableManualDownloadURL = URL(
+    string: "https://api.omi.me/v2/desktop/download/latest?channel=stable")!
+
+  enum Severity: String, Codable, Sendable {
     case none
     case banner
     case required
@@ -4912,6 +4915,77 @@ struct DesktopUpdatePolicyResponse: Codable, Equatable {
     case ctaText = "cta_text"
     case downloadURL = "download_url"
     case canDismiss = "can_dismiss"
+  }
+
+  init(
+    id: String,
+    active: Bool,
+    severity: Severity,
+    maximumBuildNumber: Int?,
+    latestBuildNumber: Int?,
+    title: String?,
+    message: String?,
+    ctaText: String,
+    downloadURL: String,
+    canDismiss: Bool
+  ) {
+    self.id = id
+    self.active = active
+    self.severity = severity
+    self.maximumBuildNumber = maximumBuildNumber
+    self.latestBuildNumber = latestBuildNumber
+    self.title = title
+    self.message = message
+    self.ctaText = ctaText
+    self.downloadURL = Self.resolvedDownloadURL(from: downloadURL).absoluteString
+    self.canDismiss = canDismiss
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    let id = Self.nonEmptyString(try? container.decode(String.self, forKey: .id)) ?? "current"
+    let active = (try? container.decode(Bool.self, forKey: .active)) ?? false
+    let severity = (try? container.decode(String.self, forKey: .severity))
+      .flatMap(Severity.init(rawValue:)) ?? .none
+    let maximumBuildNumber = try? container.decode(Int.self, forKey: .maximumBuildNumber)
+    let latestBuildNumber = try? container.decode(Int.self, forKey: .latestBuildNumber)
+    let title = Self.nonEmptyString(try? container.decode(String.self, forKey: .title))
+    let message = Self.nonEmptyString(try? container.decode(String.self, forKey: .message))
+    let ctaText = Self.nonEmptyString(try? container.decode(String.self, forKey: .ctaText))
+      ?? "Download latest"
+    let downloadURL = (try? container.decode(String.self, forKey: .downloadURL)) ?? ""
+    let canDismiss = (try? container.decode(Bool.self, forKey: .canDismiss)) ?? true
+
+    self.init(
+      id: id,
+      active: active,
+      severity: severity,
+      maximumBuildNumber: maximumBuildNumber,
+      latestBuildNumber: latestBuildNumber,
+      title: title,
+      message: message,
+      ctaText: ctaText,
+      downloadURL: downloadURL,
+      canDismiss: canDismiss
+    )
+  }
+
+  static func resolvedDownloadURL(from candidate: String?) -> URL {
+    guard let candidate = nonEmptyString(candidate),
+      let url = URL(string: candidate),
+      let scheme = url.scheme?.lowercased(),
+      ["http", "https"].contains(scheme),
+      url.host != nil
+    else {
+      return stableManualDownloadURL
+    }
+    return url
+  }
+
+  private static func nonEmptyString(_ value: String?) -> String? {
+    guard let value else { return nil }
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
   }
 
   var isRequired: Bool {
