@@ -8,6 +8,7 @@ import { QuickGoalsWidget } from '../components/home/QuickGoalsWidget'
 import { RevealMarkdown } from '../components/chat/RevealMarkdown'
 import { maybeBuildLocalGraph } from '../lib/kgSynthesis'
 import { cn } from '../lib/utils'
+import { keepLastPositive } from '../lib/measure'
 import omiMark from '../assets/omi-mark.png'
 import { maybeStartScreenSynthesis } from '../lib/screenSynthesis'
 import { maybeStartInsightEngine } from '../lib/insightEngine'
@@ -269,7 +270,14 @@ export function Home(): React.JSX.Element {
   useEffect(() => {
     const el = widgetsGridRef.current
     if (!el) return
-    const check = (): void => setWidgetsH(el.offsetHeight)
+    // Ignore 0-height reads via keepLastPositive: when Home is navigated away
+    // from it is hidden with display:none (see MainViews' panelClass), which
+    // makes the ResizeObserver fire a 0×0 rect. Writing that 0 would clobber the
+    // cached height, so on return React would paint the (un-transitioned) widget
+    // row at 48px and then snap to the real height a frame later — the
+    // intermittent "quick glitch". Keeping the last real measurement makes the
+    // return render correct up front.
+    const check = (): void => setWidgetsH((prev) => keepLastPositive(prev, el.offsetHeight))
     check()
     const ro = new ResizeObserver(check)
     ro.observe(el)
