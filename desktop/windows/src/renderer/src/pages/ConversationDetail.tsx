@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { RefreshCw, Loader2, Trash2, Sparkles, Copy, Check } from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
+import { isLocalConversationId, isPendingConversationId } from '../lib/conversationId'
 import { invalidateConversationsCache } from '../lib/pageCache'
 import { toast } from '../lib/toast'
 import type { ChatMessage } from '../../../shared/types'
@@ -85,7 +86,11 @@ function formatStart(seconds?: number): string {
   return `${m}:${r.toString().padStart(2, '0')}`
 }
 
-export function ConversationDetail({ conversationId }: { conversationId: string }): React.JSX.Element {
+export function ConversationDetail({
+  conversationId
+}: {
+  conversationId: string
+}): React.JSX.Element {
   const id = conversationId
   const navigate = useNavigate()
   const [display, setDisplay] = useState<Display | null>(null)
@@ -142,11 +147,13 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
 
   useEffect(() => {
     if (!id) return
-    const isLocal = id.startsWith('local-') || id.startsWith('chat-')
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional load-on-mount / reset-on-dependency-change; not a self-retriggering loop
     setError(null)
     setDisplay(null)
-    load(id, isLocal)
+    // A `pending-…` id is an optimistic placeholder with no server document yet —
+    // fetching it would 404. Render the processing state instead (see below).
+    if (isPendingConversationId(id)) return
+    load(id, isLocalConversationId(id))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
@@ -188,10 +195,9 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
   }, [id, display])
 
   const onRefresh = async (): Promise<void> => {
-    if (!id || refreshing) return
+    if (!id || refreshing || isPendingConversationId(id)) return
     setRefreshing(true)
-    const isLocal = id.startsWith('local-') || id.startsWith('chat-')
-    await load(id, isLocal)
+    await load(id, isLocalConversationId(id))
     setRefreshing(false)
   }
 
@@ -251,9 +257,7 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
         d && d.actionItems
           ? {
               ...d,
-              actionItems: d.actionItems.map((a, i) =>
-                i === idx ? { ...a, completed: !next } : a
-              )
+              actionItems: d.actionItems.map((a, i) => (i === idx ? { ...a, completed: !next } : a))
             }
           : d
       )
@@ -274,6 +278,24 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
     } finally {
       setReprocessing(false)
     }
+  }
+
+  // Optimistic placeholder opened before the backend produced the real cloud
+  // conversation. It has no server document (fetching would 404) and its real
+  // counterpart lands under a different id, so show a processing state and let the
+  // user return to the list, which reconciles the placeholder away.
+  if (isPendingConversationId(id)) {
+    return (
+      <div className="flex h-full flex-col">
+        <PageHeader title="Conversation" onBack={() => navigate('/conversations')} />
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-10 text-center">
+          <Loader2 className="h-6 w-6 animate-spin text-text-tertiary" aria-hidden />
+          <p className="max-w-sm text-sm text-text-tertiary">
+            Omi is still processing this conversation. It’ll appear in your list shortly.
+          </p>
+        </div>
+      </div>
+    )
   }
 
   if (error) {
@@ -400,7 +422,9 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
             )}
             <div className="surface-card p-6">
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="section-label">{display.chatMessages ? 'Messages' : 'Transcript'}</h2>
+                <h2 className="section-label">
+                  {display.chatMessages ? 'Messages' : 'Transcript'}
+                </h2>
                 <CopyTranscriptButton
                   transcript={
                     display.segments
@@ -412,56 +436,56 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
                 />
               </div>
               <div className="max-h-[60vh] overflow-y-auto pr-1 -mr-1">
-              {display.chatMessages ? (
-                <ul className="space-y-3">
-                  {display.chatMessages.map((m, i) => (
-                    <li
-                      key={i}
-                      className={
-                        m.role === 'user'
-                          ? 'glass ml-auto max-w-[85%] rounded-2xl rounded-br-md px-4 py-3 text-sm leading-relaxed text-white'
-                          : 'glass-subtle mr-auto max-w-[85%] rounded-2xl rounded-bl-md px-4 py-3 text-sm leading-relaxed text-white/75'
-                      }
-                    >
-                      <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-white/40">
-                        {m.role === 'user' ? 'You' : 'Omi'}
-                      </div>
-                      <div className="whitespace-pre-wrap">{m.content}</div>
-                    </li>
-                  ))}
-                </ul>
-              ) : display.segments && display.segments.length > 0 ? (
-                <ul className="space-y-4">
-                  {display.segments.map((s, i) => {
-                    const label = s.speaker || 'speaker'
-                    return (
-                      <li key={i} className="flex gap-3 animate-fade-in">
-                        <span
-                          className={`shrink-0 self-start rounded-full border px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${speakerColor(
-                            label
-                          )}`}
-                        >
-                          {label.replace(/^SPEAKER_/, 'S')}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          {s.start != null && (
-                            <div className="text-[10px] font-mono text-white/35">
-                              {formatStart(s.start)}
-                            </div>
-                          )}
-                          <p className="whitespace-pre-wrap text-sm leading-relaxed text-white/85">
-                            {s.text}
-                          </p>
+                {display.chatMessages ? (
+                  <ul className="space-y-3">
+                    {display.chatMessages.map((m, i) => (
+                      <li
+                        key={i}
+                        className={
+                          m.role === 'user'
+                            ? 'glass ml-auto max-w-[85%] rounded-2xl rounded-br-md px-4 py-3 text-sm leading-relaxed text-white'
+                            : 'glass-subtle mr-auto max-w-[85%] rounded-2xl rounded-bl-md px-4 py-3 text-sm leading-relaxed text-white/75'
+                        }
+                      >
+                        <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-white/40">
+                          {m.role === 'user' ? 'You' : 'Omi'}
                         </div>
+                        <div className="whitespace-pre-wrap">{m.content}</div>
                       </li>
-                    )
-                  })}
-                </ul>
-              ) : (
-                <pre className="whitespace-pre-wrap font-body text-sm leading-relaxed text-white/75">
-                  {display.transcript || '(no transcript)'}
-                </pre>
-              )}
+                    ))}
+                  </ul>
+                ) : display.segments && display.segments.length > 0 ? (
+                  <ul className="space-y-4">
+                    {display.segments.map((s, i) => {
+                      const label = s.speaker || 'speaker'
+                      return (
+                        <li key={i} className="flex gap-3 animate-fade-in">
+                          <span
+                            className={`shrink-0 self-start rounded-full border px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${speakerColor(
+                              label
+                            )}`}
+                          >
+                            {label.replace(/^SPEAKER_/, 'S')}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            {s.start != null && (
+                              <div className="text-[10px] font-mono text-white/35">
+                                {formatStart(s.start)}
+                              </div>
+                            )}
+                            <p className="whitespace-pre-wrap text-sm leading-relaxed text-white/85">
+                              {s.text}
+                            </p>
+                          </div>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                ) : (
+                  <pre className="whitespace-pre-wrap font-body text-sm leading-relaxed text-white/75">
+                    {display.transcript || '(no transcript)'}
+                  </pre>
+                )}
               </div>
             </div>
           </div>

@@ -1,8 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { LayoutGrid, RefreshCw, Star, Check, Plus, Loader2, Search, SlidersHorizontal, X } from 'lucide-react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  LayoutGrid,
+  RefreshCw,
+  Star,
+  Check,
+  Plus,
+  Loader2,
+  Search,
+  SlidersHorizontal,
+  X
+} from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
 import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
+import { popularityScore, rankSearchResults } from '../lib/appRanking'
 import type { App as AppEntry } from '../lib/omiApi.generated'
 
 // Turns raw API categories like "chat-assistants" into "Chat Assistants".
@@ -15,14 +26,31 @@ function formatCategory(raw: string): string {
     .join(' ')
 }
 
-function AppCard({ app, isOn, isBusy, onToggle }: { app: AppEntry; isOn: boolean; isBusy: boolean; onToggle: (a: AppEntry) => void }): React.JSX.Element {
+// Memoized so typing in the search box (which re-renders the Apps page every
+// keystroke) doesn't reconcile every card. Relies on a stable `onToggle`
+// (useCallback) and primitive isOn/isBusy props.
+const AppCard = memo(function AppCard({
+  app,
+  isOn,
+  isBusy,
+  onToggle
+}: {
+  app: AppEntry
+  isOn: boolean
+  isBusy: boolean
+  onToggle: (a: AppEntry) => void
+}): React.JSX.Element {
   return (
-    <div className="surface-card flex flex-col p-5 animate-fade-in">
+    <div className="surface-card-flat flex flex-col p-5 animate-fade-in">
       <div className="mb-3 flex items-start gap-3">
         {app.image ? (
           <img
             src={app.image}
             alt=""
+            width={48}
+            height={48}
+            loading="lazy"
+            decoding="async"
             className="h-12 w-12 shrink-0 rounded-2xl border border-white/10 object-cover"
             onError={(e) => {
               ;(e.target as HTMLImageElement).style.visibility = 'hidden'
@@ -35,9 +63,7 @@ function AppCard({ app, isOn, isBusy, onToggle }: { app: AppEntry; isOn: boolean
         )}
         <div className="min-w-0 flex-1">
           <div className="font-display font-semibold text-white/95">{app.name}</div>
-          {app.author && (
-            <div className="text-[11px] text-white/45">{app.author}</div>
-          )}
+          {app.author && <div className="text-[11px] text-white/45">{app.author}</div>}
         </div>
       </div>
       <p className="mb-4 line-clamp-3 flex-1 text-xs leading-relaxed text-white/65">
@@ -74,7 +100,7 @@ function AppCard({ app, isOn, isBusy, onToggle }: { app: AppEntry; isOn: boolean
       </div>
     </div>
   )
-}
+})
 
 export function Apps(): React.JSX.Element {
   const [apps, setApps] = useState<AppEntry[]>([])
@@ -136,10 +162,26 @@ export function Apps(): React.JSX.Element {
     setRefreshing(false)
   }
 
-  const toggle = async (a: AppEntry): Promise<void> => {
-    if (busy.has(a.id)) return
+  // Latest-value refs so `toggle` can read current busy/enabled without listing
+  // them as deps. `busy`/`enabled` are new Sets on every toggle, so depending on
+  // them would give `toggle` a fresh identity each time and re-render every
+  // memoized AppCard. Synced in an effect (never during render) and read only from
+  // the click handler, so `toggle` can keep empty deps and a stable identity.
+  const busyRef = useRef(busy)
+  const enabledRef = useRef(enabled)
+  useEffect(() => {
+    busyRef.current = busy
+  }, [busy])
+  useEffect(() => {
+    enabledRef.current = enabled
+  }, [enabled])
+
+  // Stable identity (empty deps) so memoized AppCards skip reconciliation while the
+  // user types in search or toggles another app.
+  const toggle = useCallback(async (a: AppEntry): Promise<void> => {
+    if (busyRef.current.has(a.id)) return
     setBusy((s) => new Set(s).add(a.id))
-    const wasEnabled = enabled.has(a.id)
+    const wasEnabled = enabledRef.current.has(a.id)
     // Optimistic
     setEnabled((s) => {
       const next = new Set(s)
@@ -169,9 +211,12 @@ export function Apps(): React.JSX.Element {
         return next
       })
     }
-  }
+  }, [])
 
   const LIMIT_PER_CATEGORY = 7
+  // Cap rendered search results so a broad query (e.g. "a") can't mount the whole
+  // catalog at once. Users refine rather than scroll hundreds of cards.
+  const SEARCH_LIMIT = 60
 
   // Unique categories present in the catalog, sorted by their display name.
   const allCategories = useMemo(() => {
@@ -197,24 +242,14 @@ export function Apps(): React.JSX.Element {
     }
 
     if (debouncedQuery.trim()) {
-      const q = debouncedQuery.trim().toLowerCase()
-      return {
-        search: base.filter(
-          (a) =>
-            a.name?.toLowerCase().includes(q) ||
-            a.description?.toLowerCase().includes(q) ||
-            a.category?.toLowerCase().includes(q) ||
-            a.author?.toLowerCase().includes(q)
-        )
-      }
+      // Rank matches by name-relevance then popularity before the render-time
+      // SEARCH_LIMIT cap, so a user's specific app (searched by name) is never
+      // pushed past the cap by more-popular substring matches. See rankSearchResults.
+      return { search: rankSearchResults(base, debouncedQuery) }
     }
 
     const categories: Record<string, AppEntry[]> = {}
-    const sortedByPopularity = [...base].sort((a, b) => {
-      const aScore = (a.rating_avg ?? 0) * Math.log((a.installs ?? 1) + 1)
-      const bScore = (b.rating_avg ?? 0) * Math.log((b.installs ?? 1) + 1)
-      return bScore - aScore
-    })
+    const sortedByPopularity = [...base].sort((a, b) => popularityScore(b) - popularityScore(a))
 
     for (const app of sortedByPopularity) {
       const cat = app.category || 'Other'
@@ -288,9 +323,7 @@ export function Apps(): React.JSX.Element {
             ))}
           </div>
         )}
-        {error && (
-          <div className="glass-subtle mb-5 px-4 py-3 text-sm text-white/60">{error}</div>
-        )}
+        {error && <div className="glass-subtle mb-5 px-4 py-3 text-sm text-white/60">{error}</div>}
         {!loading && !error && (
           <div className="mx-auto max-w-5xl space-y-5">
             <div className="flex items-center gap-2">
@@ -412,23 +445,54 @@ export function Apps(): React.JSX.Element {
             )}
 
             {query.trim() ? (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {categorized.search?.map((a) => <AppCard key={a.id} app={a} isOn={enabled.has(a.id)} isBusy={busy.has(a.id)} onToggle={toggle} />)}
-              </div>
+              <>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {categorized.search?.slice(0, SEARCH_LIMIT).map((a) => (
+                    <AppCard
+                      key={a.id}
+                      app={a}
+                      isOn={enabled.has(a.id)}
+                      isBusy={busy.has(a.id)}
+                      onToggle={toggle}
+                    />
+                  ))}
+                </div>
+                {categorized.search && categorized.search.length > SEARCH_LIMIT && (
+                  <p className="mt-3 text-center text-xs text-white/45">
+                    Showing the first {SEARCH_LIMIT} of {categorized.search.length} matches. Refine
+                    your search to narrow results.
+                  </p>
+                )}
+              </>
             ) : (
               Object.entries(categorized)
                 .sort(([catA], [catB]) => {
-                  const order = ['Most Popular', 'Featured', 'Integrations', 'Chat Assistants', 'Summary Apps', 'Notifications']
+                  const order = [
+                    'Most Popular',
+                    'Featured',
+                    'Integrations',
+                    'Chat Assistants',
+                    'Summary Apps',
+                    'Notifications'
+                  ]
                   const aIdx = order.indexOf(formatCategory(catA))
                   const bIdx = order.indexOf(formatCategory(catB))
                   return (aIdx === -1 ? Infinity : aIdx) - (bIdx === -1 ? Infinity : bIdx)
                 })
                 .map(([category, categoryApps]) => (
                   <div key={category} className="space-y-3">
-                    <h2 className="text-sm font-semibold text-white/80">{formatCategory(category)}</h2>
+                    <h2 className="text-sm font-semibold text-white/80">
+                      {formatCategory(category)}
+                    </h2>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       {categoryApps.map((a) => (
-                        <AppCard key={a.id} app={a} isOn={enabled.has(a.id)} isBusy={busy.has(a.id)} onToggle={toggle} />
+                        <AppCard
+                          key={a.id}
+                          app={a}
+                          isOn={enabled.has(a.id)}
+                          isBusy={busy.has(a.id)}
+                          onToggle={toggle}
+                        />
                       ))}
                     </div>
                   </div>
