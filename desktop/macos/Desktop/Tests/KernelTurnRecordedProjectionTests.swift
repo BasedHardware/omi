@@ -316,6 +316,74 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     XCTAssertEqual(provider.messages.map(\.text), ["Owner B history"])
   }
 
+  func testClearBootstrapsExactGenerationAfterOwnerProjectionInvalidation() async {
+    let provider = ChatProvider()
+    let surface = provider.mainChatSurfaceReference()
+    var ownerID = "owner-a"
+    var listCalls: [(ownerID: String, after: Int, limit: Int)] = []
+    var clearCalls: [(ownerID: String, generation: Int)] = []
+    let projection = KernelTurnProjection(
+      host: provider,
+      client: AgentClient.Session(harnessMode: "piMono"),
+      ownerIDProvider: { ownerID },
+      journalListOperation: { _, _, requestedOwnerID, afterTurnSeq, limit in
+        listCalls.append((requestedOwnerID, afterTurnSeq, limit))
+        return self.journalPage(
+          conversationId: requestedOwnerID == "owner-a" ? "conversation-a" : "conversation-b",
+          turns: [],
+          generation: requestedOwnerID == "owner-a" ? 3 : 7
+        )
+      },
+      journalClearOperation: { _, _, requestedOwnerID, expectedGeneration in
+        clearCalls.append((requestedOwnerID, expectedGeneration))
+        return 0
+      },
+      kernelReadyOperation: { true }
+    )
+
+    await projection.refresh(surface: surface)
+    ownerID = "owner-b"
+    projection.invalidateOwnerState()
+
+    let cleared = await projection.clear(surface: surface, ownerID: "owner-b")
+    XCTAssertTrue(cleared)
+    XCTAssertEqual(listCalls.last?.ownerID, "owner-b")
+    XCTAssertEqual(listCalls.last?.after, 0)
+    XCTAssertEqual(listCalls.last?.limit, 1)
+    XCTAssertEqual(clearCalls.map(\.ownerID), ["owner-b"])
+    XCTAssertEqual(clearCalls.map(\.generation), [7])
+  }
+
+  func testClearFailsClosedWhenGenerationBootstrapFails() async throws {
+    struct BootstrapFailure: Error {}
+
+    let provider = ChatProvider()
+    let surface = provider.mainChatSurfaceReference()
+    provider.projectJournalTurn(try turn(
+      surface: surface,
+      turnId: "owner-b-visible",
+      turnSeq: 1,
+      content: "Keep visible when clear is rejected"
+    ))
+    var clearCallCount = 0
+    let projection = KernelTurnProjection(
+      host: provider,
+      client: AgentClient.Session(harnessMode: "piMono"),
+      ownerIDProvider: { "owner-b" },
+      journalListOperation: { _, _, _, _, _ in throw BootstrapFailure() },
+      journalClearOperation: { _, _, _, _ in
+        clearCallCount += 1
+        return 1
+      },
+      kernelReadyOperation: { true }
+    )
+
+    let cleared = await projection.clear(surface: surface, ownerID: "owner-b")
+    XCTAssertFalse(cleared)
+    XCTAssertEqual(clearCallCount, 0)
+    XCTAssertEqual(provider.messages.map(\.id), ["owner-b-visible"])
+  }
+
   func testRuntimeOwnerNotificationSynchronouslyInvalidatesVisibleProjection() throws {
     let provider = ChatProvider()
     let surface = provider.mainChatSurfaceReference()
@@ -746,7 +814,8 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
 
   private func journalPage(
     conversationId: String,
-    turns: [KernelJournalTurn]
+    turns: [KernelJournalTurn],
+    generation: Int = 1
   ) -> AgentRuntimeProcess.JournalOperationResult {
     AgentRuntimeProcess.JournalOperationResult(
       operation: "list",
@@ -755,7 +824,7 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
       turns: turns,
       clearedCount: 0,
       highWaterTurnSeq: turns.map(\.turnSeq).max() ?? 0,
-      conversationGeneration: 1,
+      conversationGeneration: generation,
       generationBaseTurnSeq: 0
     )
   }

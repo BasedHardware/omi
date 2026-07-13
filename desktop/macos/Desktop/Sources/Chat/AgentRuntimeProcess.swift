@@ -69,6 +69,19 @@ final class AgentRuntimeStdoutChunkReader: @unchecked Sendable {
   }
 }
 
+/// Journal writes use SQLite `BEGIN IMMEDIATE`, whose configured busy window is
+/// five seconds. Keep the client deadline strictly beyond that database window
+/// so a successful commit still has time to traverse the JSONL IPC boundary.
+struct AgentRuntimeJournalTimeoutPolicy {
+  static let sqliteBusyWindowNanoseconds: UInt64 = 5_000_000_000
+  static let ipcSlackNanoseconds: UInt64 = 5_000_000_000
+  static let deadlineNanoseconds = sqliteBusyWindowNanoseconds + ipcSlackNanoseconds
+
+  static func allowsCorrelatedResult(elapsedNanoseconds: UInt64) -> Bool {
+    elapsedNanoseconds < deadlineNanoseconds
+  }
+}
+
 /// Actor-owned reorder and framing buffer for the runtime's JSONL stdout.
 /// Tasks created by a readability callback are not scheduling-ordered, so an
 /// N+1 chunk can reach the actor before N. Hold later chunks until every prior
@@ -1708,7 +1721,9 @@ actor AgentRuntimeProcess {
         return
       }
       Task {
-        try? await Task.sleep(nanoseconds: 5_000_000_000)
+        try? await Task.sleep(
+          nanoseconds: AgentRuntimeJournalTimeoutPolicy.deadlineNanoseconds
+        )
         guard let request = self.activeJournalRequests.removeValue(forKey: requestKey) else { return }
         request.continuation.resume(throwing: BridgeError.timeout)
       }

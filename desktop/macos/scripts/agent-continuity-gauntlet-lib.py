@@ -330,6 +330,7 @@ class TraceCursor:
     inode: int | None
     offset: int
     line_count: int
+    prefix_digest: str
 
 
 @dataclass(frozen=True)
@@ -343,23 +344,19 @@ def capture_trace_cursor(trace_log: Path = TRACE_LOG) -> TraceCursor:
     try:
         with trace_log.open("rb") as handle:
             stat = os.fstat(handle.fileno())
-            remaining = stat.st_size
-            line_count = 0
-            bytes_read = 0
-            last_complete_offset = 0
-            while remaining > 0:
-                chunk = handle.read(min(1024 * 1024, remaining))
-                if not chunk:
-                    break
-                line_count += chunk.count(b"\n")
-                final_newline = chunk.rfind(b"\n")
-                if final_newline >= 0:
-                    last_complete_offset = bytes_read + final_newline + 1
-                bytes_read += len(chunk)
-                remaining -= len(chunk)
-            return TraceCursor(stat.st_dev, stat.st_ino, last_complete_offset, line_count)
+            contents = handle.read(stat.st_size)
+            final_newline = contents.rfind(b"\n")
+            last_complete_offset = final_newline + 1 if final_newline >= 0 else 0
+            complete_prefix = contents[:last_complete_offset]
+            return TraceCursor(
+                stat.st_dev,
+                stat.st_ino,
+                last_complete_offset,
+                complete_prefix.count(b"\n"),
+                hashlib.sha256(complete_prefix).hexdigest(),
+            )
     except FileNotFoundError:
-        return TraceCursor(None, None, 0, 0)
+        return TraceCursor(None, None, 0, 0, hashlib.sha256(b"").hexdigest())
 
 
 def _opened_trace_file(path: Path):
@@ -388,6 +385,18 @@ def _read_trace_file_lines(
     ]
 
 
+def _trace_cursor_prefix_matches(
+    opened: tuple[Any, tuple[int, int], int],
+    cursor: TraceCursor,
+) -> bool:
+    handle, _, size = opened
+    if size < cursor.offset:
+        return False
+    handle.seek(0)
+    prefix = handle.read(cursor.offset)
+    return hashlib.sha256(prefix).hexdigest() == cursor.prefix_digest
+
+
 def _new_trace_lines(cursor: TraceCursor, trace_log: Path = TRACE_LOG) -> list[TraceLogLine]:
     backup_log = trace_log.with_name("traces.1.jsonl")
     active = _opened_trace_file(trace_log)
@@ -395,7 +404,7 @@ def _new_trace_lines(cursor: TraceCursor, trace_log: Path = TRACE_LOG) -> list[T
     cursor_identity = (cursor.device, cursor.inode)
     try:
         if active is not None and active[1] == cursor_identity:
-            if active[2] >= cursor.offset:
+            if _trace_cursor_prefix_matches(active, cursor):
                 return _read_trace_file_lines(
                     active,
                     offset=cursor.offset,
@@ -411,10 +420,11 @@ def _new_trace_lines(cursor: TraceCursor, trace_log: Path = TRACE_LOG) -> list[T
 
         lines: list[TraceLogLine] = []
         if backup is not None and backup[1] == cursor_identity:
+            backup_offset = cursor.offset if _trace_cursor_prefix_matches(backup, cursor) else 0
             lines.extend(_read_trace_file_lines(
                 backup,
-                offset=cursor.offset,
-                first_line_number=cursor.line_count + 1,
+                offset=backup_offset,
+                first_line_number=cursor.line_count + 1 if backup_offset else 1,
                 source=backup_log.name,
             ))
         if active is not None:
@@ -3446,6 +3456,26 @@ def trace_cursor_self_check_failures() -> list[str]:
         truncated_ids = trace_ids(read_new_traces(cursor, active))
         if truncated_ids != ["after-truncate"]:
             failures.append(f"truncation expected ['after-truncate'], got {truncated_ids}")
+
+        active.write_text(trace_row("regrow-base", padding="x" * 512), encoding="utf-8")
+        cursor = capture_trace_cursor(active)
+        original_inode = active.stat().st_ino
+        regrown_rows = "".join(
+            trace_row(f"after-regrow-{index}", padding="y" * 256)
+            for index in range(1, 4)
+        )
+        with active.open("r+b") as handle:
+            handle.seek(0)
+            handle.truncate()
+            handle.write(regrown_rows.encode("utf-8"))
+        if active.stat().st_ino != original_inode or active.stat().st_size <= cursor.offset:
+            failures.append("truncate-regrow fixture did not preserve inode and exceed old offset")
+        regrown_ids = trace_ids(read_new_traces(cursor, active))
+        expected_regrown_ids = ["after-regrow-1", "after-regrow-2", "after-regrow-3"]
+        if regrown_ids != expected_regrown_ids:
+            failures.append(
+                f"truncate-regrow expected {expected_regrown_ids}, got {regrown_ids}"
+            )
 
         active.write_text(trace_row("identity-base"), encoding="utf-8")
         cursor = capture_trace_cursor(active)

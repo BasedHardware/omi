@@ -5792,7 +5792,9 @@ private var activeBridgeSendGeneration: Int?
             return ["error": "clear_owner_surface_state is disabled on production bundles"]
         }
         _ = await ensureBridgeStartedForKernel()
-        await kernelTurnProjection.clearOwnerSurfaceState(chatId: chatId)
+        guard await kernelTurnProjection.clearOwnerSurfaceState(chatId: chatId) else {
+            return ["error": "kernel owner surface clear failed", "chat_id": chatId]
+        }
         return ["cleared": "true", "chat_id": chatId]
     }
 

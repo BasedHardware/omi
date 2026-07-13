@@ -100,6 +100,45 @@ private actor GatedRuntimeStartupHarness {
 }
 
 final class AgentRuntimeProcessTests: XCTestCase {
+  func testJournalDeadlineAcceptsResultAfterSQLiteBusyWindowWithoutWallClockDelay() {
+    let simulatedArrivalNanoseconds: UInt64 = 6_170_000_000
+    XCTAssertEqual(
+      AgentRuntimeJournalTimeoutPolicy.sqliteBusyWindowNanoseconds,
+      5_000_000_000
+    )
+    XCTAssertEqual(AgentRuntimeJournalTimeoutPolicy.ipcSlackNanoseconds, 5_000_000_000)
+    XCTAssertGreaterThan(
+      AgentRuntimeJournalTimeoutPolicy.deadlineNanoseconds,
+      AgentRuntimeJournalTimeoutPolicy.sqliteBusyWindowNanoseconds
+    )
+    XCTAssertLessThan(
+      simulatedArrivalNanoseconds,
+      AgentRuntimeJournalTimeoutPolicy.deadlineNanoseconds
+    )
+    XCTAssertTrue(
+      AgentRuntimeJournalTimeoutPolicy.allowsCorrelatedResult(
+        elapsedNanoseconds: simulatedArrivalNanoseconds
+      )
+    )
+  }
+
+  func testJournalDeadlineClassifiesExactAndLaterArrivalsAsTimedOut() {
+    let deadline = AgentRuntimeJournalTimeoutPolicy.deadlineNanoseconds
+    XCTAssertEqual(deadline, 10_000_000_000)
+    XCTAssertFalse(
+      AgentRuntimeJournalTimeoutPolicy.allowsCorrelatedResult(
+        elapsedNanoseconds: deadline
+      ),
+      "the actor removes the request at the exact deadline before late results can route"
+    )
+    XCTAssertFalse(
+      AgentRuntimeJournalTimeoutPolicy.allowsCorrelatedResult(
+        elapsedNanoseconds: deadline + 1_170_000_000
+      ),
+      "post-deadline results remain unroutable"
+    )
+  }
+
   // MARK: - CHAT-02 agent stall hook
 
   func testSuspendStreamNoOpsWithoutRunningProcess() async {

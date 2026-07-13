@@ -172,11 +172,22 @@ final class KernelTurnProjection {
     _ limit: Int
   ) async throws -> AgentRuntimeProcess.JournalOperationResult
 
+  typealias JournalClearOperation = (
+    _ client: AgentClient.Session,
+    _ surface: AgentSurfaceReference,
+    _ ownerID: String,
+    _ expectedGeneration: Int
+  ) async throws -> Int
+
+  typealias KernelReadyOperation = () async -> Bool
+
   private weak var host: ChatProvider?
   private var client: AgentClient.Session?
   private var eventToken: UUID?
   private let ownerIDProvider: () -> String?
   private let journalListOperation: JournalListOperation?
+  private let journalClearOperation: JournalClearOperation?
+  private let kernelReadyOperation: KernelReadyOperation?
   private var projectionEpoch: UInt64 = 0
   private var boundOwnerID: String?
   private var highWaterByConversation: [String: Int] = [:]
@@ -189,12 +200,16 @@ final class KernelTurnProjection {
     host: ChatProvider,
     client: AgentClient.Session? = nil,
     ownerIDProvider: @escaping () -> String? = { RuntimeOwnerIdentity.currentOwnerId() },
-    journalListOperation: JournalListOperation? = nil
+    journalListOperation: JournalListOperation? = nil,
+    journalClearOperation: JournalClearOperation? = nil,
+    kernelReadyOperation: KernelReadyOperation? = nil
   ) {
     self.host = host
     self.client = client
     self.ownerIDProvider = ownerIDProvider
     self.journalListOperation = journalListOperation
+    self.journalClearOperation = journalClearOperation
+    self.kernelReadyOperation = kernelReadyOperation
   }
 
   func attachClient(_ client: AgentClient.Session) async {
@@ -664,23 +679,59 @@ final class KernelTurnProjection {
 
   func clear(surface: AgentSurfaceReference, ownerID: String? = nil) async -> Bool {
     guard let lease = captureOwnerLease(ownerID: ownerID), let host else { return false }
-    guard await host.ensureBridgeStartedForKernel(), isCurrent(lease), let client else { return false }
+    let kernelReady = if let kernelReadyOperation {
+      await kernelReadyOperation()
+    } else {
+      await host.ensureBridgeStartedForKernel()
+    }
+    guard kernelReady, isCurrent(lease), let client else { return false }
     do {
-      let checkpointKey = conversationBySurface[surface.key].map {
+      let surfaceKey = surface.key
+      let checkpointKey = conversationBySurface[surfaceKey].map {
         checkpointKeyFor(conversationId: $0, surface: surface)
       }
-      let expectedGeneration = checkpointKey.flatMap { generationByConversation[$0] }
-      _ = try await client.clearJournalTurns(
-        surface: surface,
-        ownerID: lease.ownerID,
-        expectedGeneration: expectedGeneration
-      )
+      var expectedGeneration = checkpointKey.flatMap { generationByConversation[$0] }
+      if expectedGeneration.map({ $0 <= 0 }) ?? true {
+        let page = try await listJournalTurns(
+          client: client,
+          surface: surface,
+          ownerID: lease.ownerID,
+          afterTurnSeq: 0,
+          limit: 1
+        )
+        guard isCurrent(lease),
+          !page.conversationId.isEmpty,
+          page.conversationGeneration > 0
+        else { return false }
+        let bootstrapCheckpointKey = checkpointKeyFor(
+          conversationId: page.conversationId,
+          surface: surface
+        )
+        conversationBySurface[surfaceKey] = page.conversationId
+        generationByConversation[bootstrapCheckpointKey] = page.conversationGeneration
+        expectedGeneration = page.conversationGeneration
+      }
+      guard isCurrent(lease), let expectedGeneration, expectedGeneration > 0 else { return false }
+      if let journalClearOperation {
+        _ = try await journalClearOperation(
+          client,
+          surface,
+          lease.ownerID,
+          expectedGeneration
+        )
+      } else {
+        _ = try await client.clearJournalTurns(
+          surface: surface,
+          ownerID: lease.ownerID,
+          expectedGeneration: expectedGeneration
+        )
+      }
       guard isCurrent(lease) else { return false }
       for key in highWaterByConversation.keys where key.hasSuffix("|\(surface.key)") {
         highWaterByConversation.removeValue(forKey: key)
         generationByConversation.removeValue(forKey: key)
       }
-      conversationBySurface.removeValue(forKey: surface.key)
+      conversationBySurface.removeValue(forKey: surfaceKey)
       host.resetJournalProjection(surface: surface)
       return true
     } catch {
@@ -689,8 +740,8 @@ final class KernelTurnProjection {
     }
   }
 
-  func clearOwnerSurfaceState(chatId: String = "default") async {
-    _ = await clear(surface: .mainChat(chatId: chatId))
+  func clearOwnerSurfaceState(chatId: String = "default") async -> Bool {
+    await clear(surface: .mainChat(chatId: chatId))
   }
 
   @discardableResult

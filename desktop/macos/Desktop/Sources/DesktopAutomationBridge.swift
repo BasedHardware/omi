@@ -1504,7 +1504,10 @@ final class DesktopAutomationActionRegistry {
       guard let provider = ChatProvider.mainInstance else {
         return ["error": "main ChatProvider not yet initialized"]
       }
-      _ = await provider.automationClearOwnerSurfaceState(chatId: "default")
+      let clear = await provider.automationClearOwnerSurfaceState(chatId: "default")
+      if let error = clear["error"] {
+        return ["error": error]
+      }
       if let error = await provider.automationResetChatForHarness() {
         return ["error": error]
       }
