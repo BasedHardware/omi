@@ -218,7 +218,7 @@ pub fn FloatingBar() -> Element {
                                 // Web search augmentation
                                 let web_ctx = if cfg.web_search_enabled
                                     && !cfg.tavily_api_key.is_empty()
-                                    && crate::web_search::should_search(&text)
+                                    && crate::web_search::needs_web_search(&text, &cfg).await
                                 {
                                     match crate::web_search::search(&text, &cfg).await {
                                         Ok(resp) => Some(crate::web_search::format_search_context(&resp)),
