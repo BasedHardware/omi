@@ -196,12 +196,23 @@ jobs:
                         HCONC_EXIT=$?
                         set -e
 
+                        echo "--- Phase 9: VRAM Stress Test ---"
+                        set +e
+                        python -m pytest tests/container/test_parakeet_vram_stress.py -v -s \
+                          --tb=short 2>&1
+                        VRAM_EXIT=$?
+                        set -e
+
                         kill $SERVER_PID 2>/dev/null || true
                         wait $SERVER_PID 2>/dev/null || true
 
                         if [ $HCONC_EXIT -ne 0 ]; then
                           echo "High-concurrency test failed (exit=$HCONC_EXIT)"
                           exit $HCONC_EXIT
+                        fi
+                        if [ $VRAM_EXIT -ne 0 ]; then
+                          echo "VRAM stress test failed (exit=$VRAM_EXIT)"
+                          exit $VRAM_EXIT
                         fi
                         echo ""
 
