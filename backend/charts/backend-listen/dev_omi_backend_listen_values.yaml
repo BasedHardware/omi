@@ -10,7 +10,7 @@ image:
   repository: gcr.io/based-hardware-dev/backend
   # This sets the pull policy for images.
   pullPolicy: Always
-  # Build-specific; CI/manual deploy must pass --set image.tag=<short-sha>.
+  # Build-specific; CI/manual deploy must pass --set-string image.tag=<short-sha>.
   tag: ""
 
 gcpProjectId: based-hardware-dev

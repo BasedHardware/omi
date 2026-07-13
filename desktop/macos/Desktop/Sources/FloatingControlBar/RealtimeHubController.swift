@@ -2900,12 +2900,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           output: "Permission tool routing is unavailable.", expectedTurnEpoch: toolTurnEpoch)
         return
       }
-      let permissionAuthorization = tool == .requestPermission
-        ? PermissionRequestAuthorization.authorize(
-          userMessage: originatingUserText,
-          precedingAssistantMessage: nil
-        )
-        : nil
+      // Derive per-turn consent from the spoken transcript, mirroring the main
+      // chat path, so request_permission is not silently denied in PTT when the
+      // user explicitly asked for it.
+      let permissionAuthorization = PermissionRequestAuthorization.authorize(
+        userMessage: originatingUserText, precedingAssistantMessage: nil)
       runToolAndSpeak(
         source: source,
         callId: callId, name: name,
@@ -3160,13 +3159,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           outcome: .recovered,
           extra: ["surface": "realtime", "permission": permissionRedirect.type])
       }
+      let permissionAuthorization = PermissionRequestAuthorization.authorize(
+        userMessage: userText, precedingAssistantMessage: nil)
       let output = await ChatToolExecutor.execute(
         ToolCall(
           name: permissionRedirect.tool.rawValue,
           arguments: ["type": permissionRedirect.type],
           thoughtSignature: nil
         ),
-        originatingUserText: userText
+        originatingUserText: userText,
+        permissionAuthorization: permissionAuthorization
       )
       sendToolResultIfCurrent(
         source: source, callId: callId, name: name, output: output,

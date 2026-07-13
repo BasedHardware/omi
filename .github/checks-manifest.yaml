@@ -104,6 +104,8 @@ checks:
     reason: "desktop Swift production or test structure changed"
 
 exempt:
+  - path: ".github/scripts/check-desktop-auto-beta-candidate.py"
+    reason: "release pipeline check requires published candidate artifacts and workflow inputs"
   - path: ".github/scripts/check-desktop-prod-promotion-policy.py"
     reason: "release-policy full-tree check, not diff-scoped"
   - path: ".github/scripts/check-desktop-release-promotion.py"
@@ -118,5 +120,3 @@ exempt:
     reason: "typed error flow-control ratchet uses a committed baseline, not diff-scoped triggers"
   - path: "backend/scripts/check_app_client_openapi_compatibility.py"
     reason: "OpenAPI generation contract has component dependencies"
-  - path: ".github/scripts/check_isinstance_return_ratchet.py"
-    reason: "backend memory isinstance-return ratchet; full-tree baseline check, not diff-scoped"

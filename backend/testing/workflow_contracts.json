@@ -391,8 +391,10 @@
         ".github/workflows/gcp_memory_maintenance_job.yml",
         ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml",
         ".github/workflows/gcp_notifications_job.yml",
+        ".github/workflows/dev_backend_deployment_acceptance.yml",
         "backend/deploy/runtime_env.yaml",
         "backend/scripts/preflight-cloud-run-deploy.py",
+        "backend/scripts/verify_dev_backend_deployment.py",
         "backend/scripts/render_backend_runtime_env.py",
         "backend/scripts/repair_cloud_run_traffic.py",
         "backend/scripts/pre-deploy-check.sh",
@@ -401,6 +403,7 @@
       "tests": [
         "tests/unit/test_render_backend_runtime_env.py",
         "tests/unit/test_preflight_cloud_run_deploy.py",
+        "tests/unit/test_verify_dev_backend_deployment.py",
         "tests/unit/test_repair_cloud_run_traffic.py",
         "tests/unit/test_deploy_status_report.py",
         "tests/unit/test_backend_runtime_env_validator.py"
@@ -410,6 +413,28 @@
         "preflight fails before revision creation when Secret Manager bindings are missing",
         "traffic shifts only after candidate revisions are Ready=True",
         "spec.traffic mismatches are repaired or block deploy with an explicit command"
+      ]
+    },
+    {
+      "id": "rendered_gke_deployment_identity",
+      "risk": "high",
+      "sources": [
+        "backend/charts/backend-listen/**",
+        "backend/charts/pusher/**",
+        "backend/charts/agent-proxy/**",
+        "backend/charts/llm-gateway/**",
+        "backend/charts/diarizer/**",
+        "backend/charts/parakeet/**",
+        "backend/charts/nllb-translation/**",
+        "backend/charts/vad/**",
+        "backend/scripts/validate_rendered_deployment_contract.py"
+      ],
+      "tests": ["tests/unit/test_rendered_deployment_contract.py"],
+      "checks": [],
+      "invariants": [
+        "every first-party GKE workload renders an explicit immutable image identity",
+        "rendered Deployments keep their environment-specific service account, secret references, port, and health probes",
+        "chart defaults cannot fall back to an application-version or latest image tag"
       ]
     },
     {
