@@ -220,18 +220,9 @@ struct DashboardPage: View {
     @ObservedObject var chatProvider: ChatProvider
     @ObservedObject var memoriesViewModel: MemoriesViewModel
     var taskChatCoordinator: TaskChatCoordinator? = nil
-    @ObservedObject private var deviceProvider = DeviceProvider.shared
     @StateObject private var intelligenceStore = DashboardIntelligenceStore()
     @Binding var selectedIndex: Int
     @State private var citedConversation: ServerConversation? = nil
-    @State private var selectedCatalogApp: OmiApp?
-    @State private var selectedImportConnector: ImportConnector?
-    @State private var selectedExportDestination: MemoryExportDestination?
-    @State private var isShowingAppsPopup = false
-    @State private var appsPopupAcceptsInput = false
-    @State private var homeConnectSheetAcceptsInput = false
-    @State private var appsPopupInitialSection: AppsCatalogInitialSection = .imports
-    @State private var appsPopupPresentationID = UUID()
     @State private var isLoadingCitation = false
     @State private var isCaptureMonitoring = false
     @State private var isTogglingCapture = false
@@ -292,72 +283,6 @@ struct DashboardPage: View {
     private static let homeStageTopPadding: CGFloat = 74
     private static let homeStageBottomPadding: CGFloat = 26
     private static let homeStageAnimation = Animation.spring(response: 0.46, dampingFraction: 0.86)
-    private static let appsPopupMaxWidth: CGFloat = 1040
-    private static let appsPopupMaxHeight: CGFloat = 600
-    private static let appsPopupMinWidth: CGFloat = 360
-    private static let appsPopupMinHeight: CGFloat = 360
-    private static let appsPopupHorizontalMargin: CGFloat = 48
-    private static let appsPopupVerticalMargin: CGFloat = 32
-    private static let appsPopupCornerRadius: CGFloat = 22
-    private static let homeConnectSheetHorizontalMargin: CGFloat = 56
-    private static let homeConnectSheetVerticalMargin: CGFloat = 44
-    private static let homeConnectSheetMinWidth: CGFloat = 360
-    private static let homeConnectSheetMinHeight: CGFloat = 360
-    private static let homeConnectSheetCornerRadius: CGFloat = 24
-    private static let appDetailSheetPreferredSize = CGSize(width: 500, height: 600)
-    private static let importConnectorSheetPreferredSize = CGSize(width: 520, height: 500)
-    private static let exportDestinationSheetPreferredSize = CGSize(width: 520, height: 560)
-
-    private var homeConnectSheetIsPresented: Bool {
-        selectedCatalogApp != nil || selectedImportConnector != nil || selectedExportDestination != nil
-    }
-
-    private var isHomeModalPresented: Bool {
-        isShowingAppsPopup || homeConnectSheetIsPresented
-    }
-
-    private var legacySelectedCatalogApp: Binding<OmiApp?> {
-        Binding(
-            get: { useLegacyHomeDesign ? selectedCatalogApp : nil },
-            set: { selectedCatalogApp = $0 }
-        )
-    }
-
-    private var legacySelectedImportConnector: Binding<ImportConnector?> {
-        Binding(
-            get: { useLegacyHomeDesign ? selectedImportConnector : nil },
-            set: { selectedImportConnector = $0 }
-        )
-    }
-
-    private var legacySelectedExportDestination: Binding<MemoryExportDestination?> {
-        Binding(
-            get: { useLegacyHomeDesign ? selectedExportDestination : nil },
-            set: { selectedExportDestination = $0 }
-        )
-    }
-
-    private var hasOmiDeviceHistory: Bool {
-        deviceProvider.connectedDevice != nil || deviceProvider.pairedDevice != nil
-            || homeStatusStore.accountHasOmiDeviceConversations
-    }
-
-    /// Real persisted import-connector state (UserDefaults-backed via ImportConnectorStatusStore).
-    private func isImportConnectorConnected(_ connectorID: String) -> Bool {
-        guard let connector = ImportConnector.all.first(where: { $0.id == connectorID }) else { return false }
-        return homeStatusStore.connectorStatusStore.snapshot(for: connector).isConnected
-    }
-
-    private func isMCPDestinationConnected(_ destination: MemoryExportDestination) -> Bool {
-        switch destination {
-        case .claude, .claudeCode:
-            return [.claude, .claudeCode].contains { homeStatusStore.memoryExportStatuses[$0]?.hasConnection == true }
-        case .chatgpt, .codex:
-            return [.chatgpt, .codex].contains { homeStatusStore.memoryExportStatuses[$0]?.hasConnection == true }
-        default:
-            return homeStatusStore.memoryExportStatuses[destination]?.hasConnection == true
-        }
-    }
 
     var body: some View {
         applyHomeLifecycle(to: applyHomeSheets(to: homeSurface))
@@ -410,34 +335,6 @@ struct DashboardPage: View {
             } else {
                 ProgressView().frame(width: 300, height: 180)
             }
-        }
-        .dismissableSheet(item: legacySelectedCatalogApp) { app in
-            AppDetailSheet(app: app, appProvider: appProvider, onDismiss: { selectedCatalogApp = nil })
-                .frame(width: 500, height: 650)
-                .onAppear {
-                    AnalyticsManager.shared.appDetailViewed(appId: app.id, appName: app.name)
-                }
-        }
-        .dismissableSheet(item: legacySelectedImportConnector) { connector in
-            ImportConnectorSheet(
-                connector: connector,
-                appState: appState,
-                statusStore: homeStatusStore.connectorStatusStore,
-                onDismiss: {
-                    selectedImportConnector = nil
-                }
-            )
-            .frame(width: 520, height: 620)
-        }
-        .dismissableSheet(item: legacySelectedExportDestination) { destination in
-            ConnectDestinationSheet(
-                destination: destination,
-                statuses: $homeStatusStore.memoryExportStatuses,
-                onDismiss: {
-                    selectedExportDestination = nil
-                }
-            )
-            .frame(width: 520, height: 620)
         }
         .overlay {
             if isLoadingCitation {
@@ -523,7 +420,7 @@ struct DashboardPage: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .homeStageToggleConnect)) { _ in
             guard !useLegacyHomeDesign else { return }
-            toggleHomeConnectPanel()
+            openCanonicalApps()
         }
         .onReceive(NotificationCenter.default.publisher(for: .homeStageClose)) { _ in
             guard !useLegacyHomeDesign else { return }
@@ -633,16 +530,12 @@ struct DashboardPage: View {
     private var redesignedHome: some View {
         GeometryReader { proxy in
             let sideInset = homeStageSideInset(for: proxy.size.width)
-            let panelHeight = min(max(proxy.size.height - 132, CGFloat(440)), CGFloat(640))
-            let panelTop = max(CGFloat(82), (proxy.size.height - panelHeight) / 2)
-            let panelWidth = homeStageContentWidth(for: proxy.size.width)
 
             ZStack(alignment: .topTrailing) {
                 HomeCanvasBackground()
 
-                // Clicking anywhere outside the chat / connect panel collapses
-                // back to the hub (panels and the ask bar consume their own
-                // clicks above this catcher).
+                // Clicking anywhere outside the chat panel collapses back to
+                // the hub (the panel and ask bar consume their own clicks).
                 if homeMode != .hub {
                     Color.black.opacity(0.001)
                         .ignoresSafeArea()
@@ -654,47 +547,25 @@ struct DashboardPage: View {
 
                 homeStage(stageWidth: proxy.size.width, stageHeight: proxy.size.height)
                     .frame(width: proxy.size.width, height: proxy.size.height)
-                    // The popup/sheet overlays are modal: while one is up, the
-                    // stage underneath must not be reachable by VoiceOver /
-                    // Full Keyboard Access.
-                    .accessibilityHidden(isHomeModalPresented)
 
                 homeHeader
                     .padding(.horizontal, sideInset)
                     .padding(.top, OmiSpacing.xxl)
-                    .accessibilityHidden(isHomeModalPresented)
 
-                appsPopupOverlay(
-                    contentWidth: proxy.size.width,
-                    panelWidth: panelWidth,
-                    panelHeight: panelHeight,
-                    panelTop: panelTop
-                )
-
-                homeConnectSheetOverlay(
-                    contentWidth: proxy.size.width,
-                    panelWidth: panelWidth,
-                    panelHeight: panelHeight,
-                    panelTop: panelTop
-                )
-
-                // Esc collapses the inline chat / connect tray back to the hub —
-                // but only while no modal overlay owns the key.
-                if homeMode != .hub && !isHomeModalPresented {
+                // Esc collapses the inline chat back to the hub.
+                if homeMode != .hub {
                     OverlayModalEscapeCatcher {
                         closeHomeStagePanel()
                     }
                 }
             }
-            .omiAnimation(.easeOut(duration: 0.2), value: isShowingAppsPopup)
-            .omiAnimation(.easeOut(duration: 0.2), value: homeConnectSheetIsPresented)
             .omiAnimation(Self.homeStageAnimation, value: homeMode)
         }
     }
 
-    /// Vertical stage: mode content on top (hub metrics, inline chat, or the
-    /// connect tray), the persistent ask bar anchored beneath it, and the
-    /// suggested questions under the bar while the hub is showing.
+    /// Vertical stage: mode content on top (hub metrics or inline chat), the
+    /// persistent ask bar anchored beneath it, and suggested questions under
+    /// the bar while the hub is showing.
     private func homeStage(stageWidth: CGFloat, stageHeight: CGFloat) -> some View {
         let askBarWidth = homeAskBarWidth(for: stageWidth)
 
@@ -781,22 +652,12 @@ struct DashboardPage: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// Panel layout (chat / connect): the surface fills the height with the ask
-    /// bar anchored directly beneath it.
+    /// Chat panel layout: the surface fills the height with the ask bar anchored
+    /// directly beneath it.
     private func homePanelStage(stageWidth: CGFloat, askBarWidth: CGFloat) -> some View {
         VStack(spacing: 0) {
-            ZStack {
-                switch homeMode {
-                case .chat:
-                    homeChatPanel(stageWidth: stageWidth)
-                        .transition(.homeDropFromTop)
-                case .connect:
-                    homeConnectPanel(stageWidth: stageWidth)
-                        .transition(.homeDropFromTop)
-                case .hub:
-                    EmptyView()
-                }
-            }
+            homeChatPanel(stageWidth: stageWidth)
+                .transition(.homeDropFromTop)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             homeAskBar
@@ -927,65 +788,6 @@ struct DashboardPage: View {
         .frame(width: homeStagePanelWidth(for: stageWidth))
     }
 
-    // MARK: Connect tray
-
-    private func homeConnectPanel(stageWidth: CGFloat) -> some View {
-        // Sources feed omi; omi's memory flows out to the AI destinations —
-        // the chevron between the two cards reads that direction. The tray
-        // hugs its content: no scroll filler below the columns.
-        HStack(alignment: .center, spacing: OmiSpacing.md) {
-            homeConnectColumnCard {
-                VStack(alignment: .leading, spacing: OmiSpacing.md) {
-                    sourceColumnHeader
-                    sourceConstellation
-                }
-            }
-
-            Image(systemName: "chevron.right")
-                .scaledFont(size: OmiType.body, weight: .bold)
-                .foregroundStyle(HomePalette.secondary)
-                .frame(width: 30, height: 30)
-                .background(Circle().fill(HomePalette.tile))
-                .overlay(Circle().stroke(HomePalette.hairline, lineWidth: 1))
-                .accessibilityHidden(true)
-
-            homeConnectColumnCard {
-                destinationStack
-            }
-        }
-        .padding(OmiSpacing.lg)
-        .background(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(HomePalette.panel)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(HomePalette.hairline.opacity(0.9), lineWidth: 1)
-        )
-        .overlay(alignment: .topTrailing) {
-            HomeIconActionButton(title: "Close connect", systemImage: "xmark") {
-                closeHomeStagePanel()
-            }
-            .padding(OmiSpacing.md)
-        }
-        .shadow(color: .black.opacity(0.4), radius: 30, y: 16)
-        .frame(width: homeStagePanelWidth(for: stageWidth))
-    }
-
-    private func homeConnectColumnCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        content()
-            .padding(OmiSpacing.lg)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(Color.white.opacity(0.025))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(HomePalette.hairline.opacity(0.55), lineWidth: 1)
-            )
-    }
-
     // MARK: Ask bar + suggestions
 
     @ViewBuilder
@@ -1008,7 +810,7 @@ struct DashboardPage: View {
             text: $chatProvider.draftText,
             isSending: chatProvider.isSending,
             isStopping: chatProvider.isStopping,
-            isConnectActive: homeMode == .connect,
+            isConnectActive: false,
             focus: $homeAskFieldFocused,
             attachments: $chatProvider.pendingAttachments,
             onAttachmentsAdded: { urls in
@@ -1020,7 +822,7 @@ struct DashboardPage: View {
             },
             onSend: sendFromHomeAskBar,
             onStop: { chatProvider.stopAgent(owner: .mainChat) },
-            onConnect: toggleHomeConnectPanel,
+            onConnect: openCanonicalApps,
             onActivate: { openHomeChat() }
         )
     }
@@ -1107,15 +909,10 @@ struct DashboardPage: View {
         }
     }
 
-    private func toggleHomeConnectPanel() {
-        let target: HomeStageMode = homeMode == .connect ? .hub : .connect
-        if target == .connect {
-            homeAskFieldFocused = false
-        }
-        OmiMotion.withGated(Self.homeStageAnimation) {
-            homeMode = target
-        }
-        reportHomeAutomationMode()
+    private func openCanonicalApps() {
+        homeAskFieldFocused = false
+        appProvider.clearFilters()
+        navigate(to: .apps)
     }
 
     private func closeHomeStagePanel() {
@@ -1155,182 +952,6 @@ struct DashboardPage: View {
         Task { await chatProvider.sendMessage(suggestion) }
     }
 
-    @ViewBuilder
-    private func appsPopupOverlay(
-        contentWidth: CGFloat,
-        panelWidth: CGFloat,
-        panelHeight: CGFloat,
-        panelTop: CGFloat
-    ) -> some View {
-        ZStack {
-            if isShowingAppsPopup {
-                Color.black.opacity(0.16)
-                    .ignoresSafeArea()
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        dismissAppsPopup()
-                    }
-                    .transition(.opacity)
-                    .zIndex(2)
-
-                let popupSize = appsPopupSize(panelWidth: panelWidth, panelHeight: panelHeight)
-
-                AppsPage(
-                    appProvider: appProvider,
-                    appState: appState,
-                    connectorStatusStore: homeStatusStore.connectorStatusStore,
-                    initialSection: appsPopupInitialSection,
-                    onDismiss: {
-                        dismissAppsPopup()
-                    },
-                    onSelectApp: { app in
-                        openAppFromAppsPopup(app)
-                    },
-                    onSelectConnector: { connector in
-                        openImportConnectorFromAppsPopup(connector)
-                    },
-                    onSelectDestination: { destination in
-                        openExportDestinationFromAppsPopup(destination)
-                    }
-                )
-                .id(appsPopupPresentationID)
-                .frame(width: popupSize.width, height: popupSize.height)
-                .background(OmiColors.backgroundPrimary)
-                .clipShape(RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous)
-                        .stroke(HomePalette.hairline.opacity(0.9), lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.38), radius: 26, y: 14)
-                .position(x: contentWidth / 2, y: panelTop + panelHeight / 2)
-                .transition(.scale(scale: 0.95).combined(with: .opacity))
-                .accessibilityAddTraits(.isModal)
-                .zIndex(3)
-
-                // Only the topmost modal owns Esc; the connect sheet takes over
-                // while it is presented (including the brief crossfade overlap).
-                if appsPopupAcceptsInput && !homeConnectSheetIsPresented {
-                    OverlayModalEscapeCatcher {
-                        dismissAppsPopup()
-                    }
-                    .zIndex(3)
-                }
-            }
-        }
-        .allowsHitTesting(appsPopupAcceptsInput && !homeConnectSheetIsPresented)
-        .zIndex(2)
-    }
-
-    @ViewBuilder
-    private func homeConnectSheetOverlay(
-        contentWidth: CGFloat,
-        panelWidth: CGFloat,
-        panelHeight: CGFloat,
-        panelTop: CGFloat
-    ) -> some View {
-        ZStack {
-            if homeConnectSheetIsPresented {
-                Color.black.opacity(0.22)
-                    .ignoresSafeArea()
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        dismissHomeConnectSheet()
-                    }
-                    .transition(.opacity)
-                    .zIndex(4)
-
-                let sheetSize = homeConnectSheetSize(panelWidth: panelWidth, panelHeight: panelHeight)
-
-                homeConnectSheetContent()
-                    .frame(width: sheetSize.width, height: sheetSize.height)
-                    .background(OmiColors.backgroundPrimary)
-                    .clipShape(RoundedRectangle(cornerRadius: Self.homeConnectSheetCornerRadius, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Self.homeConnectSheetCornerRadius, style: .continuous)
-                            .stroke(HomePalette.hairline.opacity(0.92), lineWidth: 1)
-                    )
-                    .shadow(color: .black.opacity(0.42), radius: 30, y: 16)
-                    .position(x: contentWidth / 2, y: panelTop + panelHeight / 2)
-                    .transition(.scale(scale: 0.96).combined(with: .opacity))
-                    .accessibilityAddTraits(.isModal)
-                    .zIndex(5)
-
-                if homeConnectSheetAcceptsInput {
-                    OverlayModalEscapeCatcher {
-                        dismissHomeConnectSheet()
-                    }
-                    .zIndex(5)
-                }
-            }
-        }
-        .allowsHitTesting(homeConnectSheetAcceptsInput)
-        .zIndex(4)
-    }
-
-    private func homeConnectSheetSize(panelWidth: CGFloat, panelHeight: CGFloat) -> CGSize {
-        let preferred = homeConnectSheetPreferredSize
-        return CGSize(
-            width: min(
-                preferred.width,
-                max(Self.homeConnectSheetMinWidth, panelWidth - (Self.homeConnectSheetHorizontalMargin * 2))
-            ),
-            height: min(
-                preferred.height,
-                max(Self.homeConnectSheetMinHeight, panelHeight - (Self.homeConnectSheetVerticalMargin * 2))
-            )
-        )
-    }
-
-    private var homeConnectSheetPreferredSize: CGSize {
-        if selectedCatalogApp != nil {
-            return Self.appDetailSheetPreferredSize
-        }
-        if selectedImportConnector != nil {
-            return Self.importConnectorSheetPreferredSize
-        }
-        return Self.exportDestinationSheetPreferredSize
-    }
-
-    @ViewBuilder
-    private func homeConnectSheetContent() -> some View {
-        if let app = selectedCatalogApp {
-            AppDetailSheet(app: app, appProvider: appProvider, onDismiss: { dismissHomeConnectSheet() })
-                .onAppear {
-                    AnalyticsManager.shared.appDetailViewed(appId: app.id, appName: app.name)
-                }
-        } else if let connector = selectedImportConnector {
-            ImportConnectorSheet(
-                connector: connector,
-                appState: appState,
-                statusStore: homeStatusStore.connectorStatusStore,
-                onDismiss: {
-                    dismissHomeConnectSheet()
-                }
-            )
-        } else if let destination = selectedExportDestination {
-            ConnectDestinationSheet(
-                destination: destination,
-                statuses: $homeStatusStore.memoryExportStatuses,
-                onDismiss: {
-                    dismissHomeConnectSheet()
-                }
-            )
-        }
-    }
-
-    private func appsPopupSize(panelWidth: CGFloat, panelHeight: CGFloat) -> CGSize {
-        CGSize(
-            width: min(
-                Self.appsPopupMaxWidth,
-                max(Self.appsPopupMinWidth, panelWidth - (Self.appsPopupHorizontalMargin * 2))
-            ),
-            height: min(
-                Self.appsPopupMaxHeight,
-                max(Self.appsPopupMinHeight, panelHeight - (Self.appsPopupVerticalMargin * 2))
-            )
-        )
-    }
-
     private var homeHeader: some View {
         let transcriptionUnavailable = appState.transcriptionServiceError != nil
 
@@ -1368,76 +989,6 @@ struct DashboardPage: View {
         .frame(height: 36)
     }
 
-    private var sourceColumnHeader: some View {
-        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-            Text("Connect data")
-                .scaledFont(size: OmiType.heading, weight: .medium)
-                .foregroundStyle(HomePalette.ink)
-
-            Text("Sources Omi learns from.")
-                .scaledFont(size: OmiType.caption, weight: .medium)
-                .foregroundStyle(HomePalette.muted)
-                .lineLimit(1)
-        }
-    }
-
-    private var sourceConstellation: some View {
-        VStack(alignment: .leading, spacing: OmiSpacing.md) {
-            HomeAIChoiceButton(title: "Gmail", brand: .gmail, isConnected: isImportConnectorConnected("email")) {
-                openImportConnector("email")
-            }
-            HomeAIChoiceButton(title: "Calendar", brand: .calendar, isConnected: isImportConnectorConnected("calendar")) {
-                openImportConnector("calendar")
-            }
-            HomeAIChoiceButton(title: "Files", brand: .localFiles, isConnected: isImportConnectorConnected("local-files")) {
-                openImportConnector("local-files")
-            }
-            HomeAIChoiceButton(title: "Notes", brand: .appleNotes, isConnected: isImportConnectorConnected("apple-notes")) {
-                openImportConnector("apple-notes")
-            }
-            HomeAIChoiceButton(title: "Omi Device", usesOmiMark: true, isConnected: hasOmiDeviceHistory) {
-                openOmiDeviceWebsite()
-            }
-            HomeAIChoiceButton(title: "More", systemImage: "plus") {
-                openAppsPopup(initialSection: .imports)
-            }
-        }
-    }
-
-    private var destinationStack: some View {
-        VStack(alignment: .leading, spacing: OmiSpacing.md) {
-            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-                Text("Use omi memory anywhere")
-                    .scaledFont(size: OmiType.heading, weight: .medium)
-                    .foregroundStyle(HomePalette.ink)
-
-                Text("Bring your memories to the apps you use")
-                    .scaledFont(size: OmiType.caption, weight: .medium)
-                    .foregroundStyle(HomePalette.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            HomeAIChoiceButton(title: "Ask Omi", usesOmiMark: true) {
-                openHomeChat()
-            }
-            HomeAIChoiceButton(title: "Claude / Claude Code", brand: .claude, isConnected: isMCPDestinationConnected(.claude)) {
-                openExportDestination(.claudeCode)
-            }
-            HomeAIChoiceButton(title: "ChatGPT / Codex", brand: .chatgpt, isConnected: isMCPDestinationConnected(.chatgpt)) {
-                openExportDestination(.chatgpt)
-            }
-            HomeAIChoiceButton(title: "OpenClaw", brand: .openclaw, isConnected: isMCPDestinationConnected(.openclaw)) {
-                openExportDestination(.openclaw)
-            }
-            HomeAIChoiceButton(title: "Hermes", brand: .hermes, isConnected: isMCPDestinationConnected(.hermes)) {
-                openExportDestination(.hermes)
-            }
-            HomeAIChoiceButton(title: "More", systemImage: "plus") {
-                openAppsPopup(initialSection: .exports)
-            }
-        }
-    }
-
     private var conversationMetricValue: String {
         formattedCount(
             homeStatusStore.conversationCount ?? appState.totalConversationsCount ?? appState.conversations.count
@@ -1464,75 +1015,6 @@ struct DashboardPage: View {
         AnalyticsManager.shared.tabChanged(tabName: item.title)
     }
 
-    private func openAppsPopup(initialSection: AppsCatalogInitialSection) {
-        // Filters left behind by earlier catalog visits (a category, a search,
-        // "Installed") would otherwise replace the Imports/Exports sections
-        // this popup exists to show.
-        appProvider.clearFilters()
-        appsPopupInitialSection = initialSection
-        appsPopupPresentationID = UUID()
-        appsPopupAcceptsInput = true
-        isShowingAppsPopup = true
-    }
-
-    private func dismissAppsPopup() {
-        appsPopupAcceptsInput = false
-        isShowingAppsPopup = false
-    }
-
-    private func openAppFromAppsPopup(_ app: OmiApp) {
-        dismissAppsPopup()
-        presentCatalogApp(app)
-    }
-
-    private func openImportConnectorFromAppsPopup(_ connector: ImportConnector) {
-        dismissAppsPopup()
-        presentImportConnector(connector)
-    }
-
-    private func openExportDestinationFromAppsPopup(_ destination: MemoryExportDestination) {
-        dismissAppsPopup()
-        presentExportDestination(destination)
-    }
-
-    private func openImportConnector(_ connectorID: String) {
-        if let connector = ImportConnector.all.first(where: { $0.id == connectorID }) {
-            presentImportConnector(connector)
-        }
-    }
-
-    private func openExportDestination(_ destination: MemoryExportDestination) {
-        presentExportDestination(destination)
-    }
-
-    private func presentCatalogApp(_ app: OmiApp) {
-        homeConnectSheetAcceptsInput = true
-        selectedImportConnector = nil
-        selectedExportDestination = nil
-        selectedCatalogApp = app
-    }
-
-    private func presentImportConnector(_ connector: ImportConnector) {
-        homeConnectSheetAcceptsInput = true
-        selectedCatalogApp = nil
-        selectedExportDestination = nil
-        selectedImportConnector = connector
-    }
-
-    private func presentExportDestination(_ destination: MemoryExportDestination) {
-        homeConnectSheetAcceptsInput = true
-        selectedCatalogApp = nil
-        selectedImportConnector = nil
-        selectedExportDestination = destination
-    }
-
-    private func dismissHomeConnectSheet() {
-        homeConnectSheetAcceptsInput = false
-        selectedCatalogApp = nil
-        selectedImportConnector = nil
-        selectedExportDestination = nil
-    }
-
     private func openReferFriend() {
         if let url = URL(string: "https://affiliate.omi.me") {
             NSWorkspace.shared.open(url)
@@ -1541,12 +1023,6 @@ struct DashboardPage: View {
 
     private func openDiscord() {
         if let url = URL(string: "https://discord.com/invite/8MP3b9ymvx") {
-            NSWorkspace.shared.open(url)
-        }
-    }
-
-    private func openOmiDeviceWebsite() {
-        if let url = URL(string: "https://www.omi.me") {
             NSWorkspace.shared.open(url)
         }
     }
@@ -2063,13 +1539,11 @@ private enum HomeDestinationProminence {
 private enum HomeStageMode: Equatable {
     case hub
     case chat
-    case connect
 
     var automationLabel: String {
         switch self {
         case .hub: return "hub"
         case .chat: return "chat"
-        case .connect: return "connect"
         }
     }
 }
@@ -2868,159 +2342,6 @@ private struct HomeDataSourceCard: View {
                     .foregroundStyle(HomePalette.secondary)
             }
             .frame(width: 36, height: 36)
-        }
-    }
-}
-
-private struct HomeAIChoiceButton: View {
-    let title: String
-    let brand: ConnectorBrand?
-    let systemImage: String?
-    let usesOmiMark: Bool
-    let isPrimary: Bool
-    let isConnected: Bool
-    let action: () -> Void
-
-    @State private var isHovering = false
-
-    init(title: String, brand: ConnectorBrand, isPrimary: Bool = false, isConnected: Bool = false, action: @escaping () -> Void) {
-        self.title = title
-        self.brand = brand
-        self.systemImage = nil
-        self.usesOmiMark = false
-        self.isPrimary = isPrimary
-        self.isConnected = isConnected
-        self.action = action
-    }
-
-    init(title: String, systemImage: String, isPrimary: Bool = false, isConnected: Bool = false, action: @escaping () -> Void) {
-        self.title = title
-        self.brand = nil
-        self.systemImage = systemImage
-        self.usesOmiMark = false
-        self.isPrimary = isPrimary
-        self.isConnected = isConnected
-        self.action = action
-    }
-
-    init(title: String, usesOmiMark: Bool, isPrimary: Bool = false, isConnected: Bool = false, action: @escaping () -> Void) {
-        self.title = title
-        self.brand = nil
-        self.systemImage = nil
-        self.usesOmiMark = usesOmiMark
-        self.isPrimary = isPrimary
-        self.isConnected = isConnected
-        self.action = action
-    }
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: OmiSpacing.sm) {
-                icon
-
-                Text(title)
-                    .scaledFont(size: OmiType.body, weight: .semibold)
-                    .foregroundStyle(HomePalette.ink)
-                    .lineLimit(1)
-
-                Spacer(minLength: 8)
-
-                if isConnected {
-                    Text("Connected")
-                        .scaledFont(size: OmiType.caption, weight: .medium)
-                        .foregroundStyle(HomePalette.faint)
-                }
-
-                Image(systemName: "chevron.right")
-                    .scaledFont(size: OmiType.micro, weight: .bold)
-                    .foregroundStyle(HomePalette.faint)
-            }
-            .padding(.horizontal, OmiSpacing.md)
-            .padding(.vertical, OmiSpacing.md)
-            .frame(height: 48)
-            .frame(maxWidth: .infinity)
-            .background(buttonBackground)
-            .overlay(buttonStroke)
-            .contentShape(.rect(cornerRadius: 15))
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovering = $0 }
-        .accessibilityLabel(title)
-    }
-
-    @ViewBuilder
-    private var icon: some View {
-        if usesOmiMark {
-            HomeOmiMarkIcon(size: 24, cornerRadius: 7)
-        } else if let brand {
-            ConnectorBrandIcon(brand: brand, size: 24, cornerRadius: 7)
-        } else if let systemImage {
-            Image(systemName: systemImage)
-                .scaledFont(size: OmiType.body, weight: .bold)
-                .foregroundStyle(HomePalette.ink)
-                .frame(width: 24, height: 24)
-        }
-    }
-
-    private var buttonBackground: some View {
-        RoundedRectangle(cornerRadius: 15, style: .continuous)
-            .fill(isHovering ? HomePalette.tileHover : HomePalette.tile)
-    }
-
-    private var buttonStroke: some View {
-        RoundedRectangle(cornerRadius: 15, style: .continuous)
-            .stroke(
-                HomePalette.hairline.opacity(isHovering ? 1 : 0.9),
-                lineWidth: 1
-            )
-    }
-}
-
-private struct HomeOmiMarkIcon: View {
-    let size: CGFloat
-    let cornerRadius: CGFloat
-
-    private static let markImage: NSImage? = {
-        guard let url = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png") else {
-            return nil
-        }
-        return NSImage(contentsOf: url)
-    }()
-
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(Color.white.opacity(0.08))
-                .overlay(
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .stroke(Color.white.opacity(0.06), lineWidth: 1)
-                )
-
-            if let image = Self.markImage {
-                Image(nsImage: image)
-                    .resizable()
-                    .interpolation(.high)
-                    .aspectRatio(contentMode: .fit)
-                    .padding(size * 0.18)
-            } else {
-                OmiDotRing()
-                    .frame(width: size * 0.58, height: size * 0.58)
-            }
-        }
-        .frame(width: size, height: size)
-    }
-}
-
-private struct OmiDotRing: View {
-    var body: some View {
-        ZStack {
-            ForEach(0..<8, id: \.self) { index in
-                Circle()
-                    .fill(HomePalette.ink)
-                    .frame(width: 3.5, height: 3.5)
-                    .offset(y: -6)
-                    .rotationEffect(.degrees(Double(index) * 45))
-            }
         }
     }
 }

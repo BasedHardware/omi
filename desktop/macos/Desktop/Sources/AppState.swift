@@ -729,7 +729,7 @@ extension Notification.Name {
   static let showTryAskingPopup = Notification.Name("showTryAskingPopup")
   /// Posted (automation bridge) to open the inline chat on the redesigned Home
   static let homeStageOpenChat = Notification.Name("homeStageOpenChat")
-  /// Posted (automation bridge) to toggle the Connect tray on the redesigned Home
+  /// Posted (automation bridge) to follow Home's Connect shortcut to the canonical Apps page
   static let homeStageToggleConnect = Notification.Name("homeStageToggleConnect")
   /// Posted (automation bridge) to collapse the redesigned Home back to the hub
   static let homeStageClose = Notification.Name("homeStageClose")

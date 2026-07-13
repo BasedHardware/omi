@@ -1415,7 +1415,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "home_connect_toggle",
-      summary: "Toggle the Connect tray on Home (same path as the ask-bar Connect button)"
+      summary: "Open the canonical Apps connector page (same path as the Home Connect button)"
     ) { _ in
       NotificationCenter.default.post(name: .homeStageToggleConnect, object: nil)
       return nil
