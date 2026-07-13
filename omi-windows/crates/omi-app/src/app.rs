@@ -783,7 +783,7 @@ pub fn App() -> Element {
                     {ctx}"
                 );
 
-                if let Err(e) = rt_clone.query_native(h, &system, &cfg_val).await {
+                if let Err(e) = rt_clone.query_native(h, &system, true, &cfg_val).await {
                     tracing::error!("[APP] Continuous mode agent query failed: {e}");
                 }
             });
