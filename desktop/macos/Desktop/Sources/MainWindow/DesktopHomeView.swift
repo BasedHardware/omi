@@ -13,6 +13,17 @@ private protocol HostingSizingConfigurable: AnyObject {
 }
 extension NSHostingView: HostingSizingConfigurable {}
 
+@MainActor
+enum MainWindowBackdrop {
+  static func configure(_ window: NSWindow) {
+    window.isOpaque = false
+    window.backgroundColor = .clear
+    // Unlike the borderless floating panel, the titled main window keeps its
+    // standard system shadow and corner mask.
+    window.hasShadow = true
+  }
+}
+
 struct DesktopHomeView: View {
   private let minimumWindowWidth: CGFloat = 1200
   private let minimumWindowHeight: CGFloat = 680
@@ -477,6 +488,7 @@ struct DesktopHomeView: View {
     DispatchQueue.main.async {
       for window in NSApp.windows where window.title.lowercased().hasPrefix("omi") {
         window.appearance = NSAppearance(named: .darkAqua)
+        MainWindowBackdrop.configure(window)
         window.contentMinSize = minimumContentSize
         window.minSize = window.frameRect(forContentRect: NSRect(origin: .zero, size: minimumContentSize)).size
 

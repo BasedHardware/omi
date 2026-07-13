@@ -2466,7 +2466,8 @@ private struct HomeCanvasBackground: View {
     var body: some View {
         ZStack {
             OmiAdaptiveMaterialBackground(
-                material: .regularMaterial,
+                material: .hudWindow,
+                blendingMode: .behindWindow,
                 fallback: HomePalette.paper,
                 materialOverlay: Color.black.opacity(0.14)
             )
