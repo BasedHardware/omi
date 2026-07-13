@@ -152,6 +152,26 @@ export function Orb({
     }
   }, [cssW, cssH, preset, retryNonce])
 
+  // Runtime context-loss recovery. The build effect above only retries when
+  // CONSTRUCTION fails (WebGL not up yet); a context lost AFTER a successful
+  // build (GPU-process crash / SwiftShader reset — SwiftShader lives in the GPU
+  // process even with hardware accel off) fires `webglcontextlost` and leaves
+  // this element with a dead context that getContext() can never revive, i.e. a
+  // frozen/broken tiny orb. Drop to the static mark and remount a fresh canvas
+  // (retryNonce is the canvas key), reusing the same recovery the retry path
+  // uses. Re-attaches per canvas via the retryNonce dep.
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const onContextLost = (e: Event): void => {
+      e.preventDefault()
+      setReady(false)
+      setRetryNonce((n) => n + 1)
+    }
+    canvas.addEventListener('webglcontextlost', onContextLost)
+    return () => canvas.removeEventListener('webglcontextlost', onContextLost)
+  }, [retryNonce])
+
   // `ready` is in each dep list so that when a RETRY finally builds a fresh
   // animator (ready flips false→true), the app's current state / visibility /
   // pending genesis are re-applied to it — otherwise the rebuilt animator would

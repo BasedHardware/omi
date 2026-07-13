@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { render, cleanup } from '@testing-library/react'
+import { render, cleanup, act } from '@testing-library/react'
 import { Orb } from './Orb'
 
 // jsdom has no WebGL2 (canvas.getContext('webgl2') → null), so OrbAnimator throws
@@ -54,5 +54,18 @@ describe('Orb — WebGL-unavailable resilience', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('remounts a fresh canvas when the context is lost after build (no frozen/broken orb)', () => {
+    const { container } = render(<Orb size={26} state="idle" />)
+    const first = container.querySelector('canvas') as HTMLCanvasElement
+    // A GPU-process reset fires webglcontextlost on the live canvas. Without the
+    // recovery handler getContext() keeps returning the dead context → a frozen
+    // tiny orb; the fix remounts a brand-new canvas element (keyed on retryNonce).
+    act(() => {
+      first.dispatchEvent(new Event('webglcontextlost', { cancelable: true }))
+    })
+    const next = container.querySelector('canvas') as HTMLCanvasElement
+    expect(next).not.toBe(first)
   })
 })

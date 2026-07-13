@@ -204,7 +204,7 @@ app.on('render-process-gone', (_e, wc, details) => {
     /* window may be mid-teardown */
   }
 })
-app.on('child-process-gone', (_e, details) =>
+app.on('child-process-gone', (_e, details) => {
   // Include the utility's name/service (e.g. "Audio Service", "Video Capture")
   // so a Utility crash points at the actual subsystem rather than just "Utility".
   logFatal(
@@ -214,7 +214,18 @@ app.on('child-process-gone', (_e, details) =>
       (details.serviceName ? ` service=${details.serviceName}` : '') +
       ` reason=${details.reason} exitCode=${details.exitCode}`
   )
-)
+  // A GPU-process crash loses every live WebGL context, but the RENDERERS stay
+  // alive — so render-process-gone (which reloads) never fires, and a WebGL
+  // <canvas> (the brain map) is left painted as Chromium's broken-image
+  // placeholder with nothing to recover it. Chromium restarts the GPU process on
+  // its own; broadcast so WebGL surfaces remount and brand images re-decode.
+  // Clean exits are intentional teardown — skip.
+  if (details.type === 'GPU' && details.reason !== 'clean-exit') {
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (!w.isDestroyed()) w.webContents.send('gpu:context-lost')
+    }
+  }
+})
 
 // Desktop-automation bridge (real Windows UI actions). ON by default; set
 // OMI_AUTOMATION='0' as a kill-switch to disable it. Gates both the IPC

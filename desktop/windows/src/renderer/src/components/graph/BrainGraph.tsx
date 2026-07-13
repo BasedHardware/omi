@@ -11,6 +11,7 @@ import {
   type NodePosition
 } from '../../lib/useGraphSimulation'
 import { nodeColor } from './nodeColor'
+import { useWebglRecovery } from '../../lib/useWebglRecovery'
 
 export type BrainGraphProps = {
   graph: KnowledgeGraph
@@ -132,7 +133,12 @@ function GraphNodeMesh({
   return (
     <group ref={groupRef} position={[node.x, node.y, node.z]} scale={reduced ? [1, 1, 1] : [0, 0, 0]}>
       <mesh>
-        <sphereGeometry args={[radius, 32, 32]} />
+        {/* 16×16 (down from 32×32): at the on-screen size these spheres actually
+            render — small, glowing, and softened by the halo/bloom layers below
+            — the extra polys were invisible but every one of them still had to
+            be transformed and rasterized every animated frame across all nodes.
+            This is the single biggest per-frame triangle-count cut here. */}
+        <sphereGeometry args={[radius, 16, 16]} />
         <meshStandardMaterial
           ref={coreMat}
           color={color}
@@ -144,12 +150,12 @@ function GraphNodeMesh({
       </mesh>
       {/* pulsing glow halo (scales with the shine) */}
       <mesh ref={glowMesh}>
-        <sphereGeometry args={[radius * 1.9, 24, 24]} />
+        <sphereGeometry args={[radius * 1.9, 12, 12]} />
         <meshBasicMaterial ref={glowMat} color={color} transparent opacity={0.12} depthWrite={false} />
       </mesh>
       {/* faint outer bloom for extra shine */}
       <mesh>
-        <sphereGeometry args={[radius * 3, 16, 16]} />
+        <sphereGeometry args={[radius * 3, 8, 8]} />
         <meshBasicMaterial color={color} transparent opacity={0.04} depthWrite={false} />
       </mesh>
       <Billboard position={[0, radius + labelSize * 0.9, 0]}>
@@ -188,18 +194,22 @@ function GraphEdge({
   posMap: Map<string, THREE.Vector3>
 }): React.JSX.Element {
   const ref = useRef<{ geometry: { setPositions(p: number[]): void } } | null>(null)
+  // Reused every frame instead of a fresh array literal each time — setPositions
+  // only reads these six values (it copies them into its own GPU buffer), so
+  // there's nothing gained by allocating a new array per edge per frame, only
+  // GC pressure from it.
+  const positions = useRef<number[]>([0, 0, 0, 0, 0, 0]).current
   useFrame(() => {
     const a = posMap.get(edge.sourceId) ?? sim.liveNode(edge.sourceId)
     const b = posMap.get(edge.targetId) ?? sim.liveNode(edge.targetId)
     if (!a || !b || !ref.current) return
-    ref.current.geometry.setPositions([
-      a.x ?? 0,
-      a.y ?? 0,
-      a.z ?? 0,
-      b.x ?? 0,
-      b.y ?? 0,
-      b.z ?? 0
-    ])
+    positions[0] = a.x ?? 0
+    positions[1] = a.y ?? 0
+    positions[2] = a.z ?? 0
+    positions[3] = b.x ?? 0
+    positions[4] = b.y ?? 0
+    positions[5] = b.z ?? 0
+    ref.current.geometry.setPositions(positions)
   })
   return (
     <Line
@@ -441,10 +451,17 @@ export function BrainGraph({
     onVisibleChangeRef.current?.(showCanvas)
   }, [showCanvas])
 
+  // Remount the canvas subtree on webglcontextlost so a GPU-process crash
+  // (SwiftShader included) yields a fresh context instead of Chromium's
+  // broken-image placeholder. Covers direct mounts (Onboarding) that bypass
+  // LazyBrainGraph's own recovery wrapper.
+  const recoveryKey = useWebglRecovery(hostRef)
+
   return (
     <div ref={hostRef} className="absolute inset-0">
       {showCanvas && (
       <Canvas
+        key={recoveryKey}
         // Narrow FOV: a wide FOV projects off-center spheres into ellipses
         // ("deformed" nodes); this keeps them as round circles. CameraRig derives
         // its distance from the FOV, so the framing/zoom is unchanged.

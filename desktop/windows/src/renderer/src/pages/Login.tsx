@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { signInWithGoogle } from '../lib/firebase'
 import omiLogo from '../assets/omilogo.png'
+import { BrandImage } from '../components/ui/BrandImage'
 
 export function Login(): React.JSX.Element {
   // 'waiting' spans the whole system-browser round-trip (opening the browser →
@@ -36,7 +37,7 @@ export function Login(): React.JSX.Element {
   return (
     <div className="app-canvas relative flex h-full items-center justify-center p-8">
       <div className="animate-fade-in relative z-10 flex w-full max-w-[420px] flex-col items-center">
-        <img src={omiLogo} alt="omi" className="h-24 w-auto" />
+        <BrandImage src={omiLogo} alt="omi" className="h-24 w-auto" />
         <p className="mt-6 text-base leading-relaxed text-white/70">Sign in to continue</p>
         <div className="h-48" />
         <button

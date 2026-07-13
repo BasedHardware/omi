@@ -52,6 +52,11 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('recorder:hotkey', listener)
     return () => ipcRenderer.removeListener('recorder:hotkey', listener)
   },
+  onGpuContextLost: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('gpu:context-lost', listener)
+    return () => ipcRenderer.removeListener('gpu:context-lost', listener)
+  },
   listenStart: (args: ListenStartArgs) => ipcRenderer.invoke('omi-listen:start', args),
   listenStop: (sessionId: string) => ipcRenderer.invoke('omi-listen:stop', sessionId),
   listenFeed: (sessionId: string, pcm: ArrayBuffer) => {

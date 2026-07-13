@@ -453,6 +453,12 @@ export type OmiBridgeApi = {
   // fires on channel 'recorder:hotkey' from main; the callback receives the
   // capture mode to toggle ('mic'). Returns an unsubscribe function.
   onRecordHotkey: (cb: (choice: CaptureChoice) => void) => () => void
+  // Fires when the GPU process crashes/resets (main broadcasts on
+  // child-process-gone type=GPU). Every live WebGL context is lost but the
+  // renderer survives, so WebGL surfaces (the brain map) and already-decoded
+  // brand images can be left broken; listeners remount/re-decode to recover.
+  // Returns an unsubscribe function.
+  onGpuContextLost: (cb: () => void) => () => void
   // Omi v4/listen WebSocket sessions (main-process owned).
   listenStart: (args: ListenStartArgs) => Promise<void>
   listenStop: (sessionId: string) => Promise<void>
