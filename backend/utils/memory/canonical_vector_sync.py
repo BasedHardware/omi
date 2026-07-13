@@ -11,18 +11,20 @@ from models.product_memory import MemoryItemStatus, ProcessingState, MemoryItem
 logger = logging.getLogger(__name__)
 
 
-def delete_canonical_memory_vector(uid: str, memory_id: str) -> None:
+def delete_canonical_memory_vector(uid: str, memory_id: str) -> bool:
     """Delete a canonical neutral-id vector (identity = memory_id)."""
     try:
         from database.vector_db import delete_pinecone_memory_vectors_by_id
 
-        delete_pinecone_memory_vectors_by_id([memory_id])
+        deleted_count = delete_pinecone_memory_vectors_by_id([memory_id])
+        return deleted_count == 1
     except Exception:
         logger.exception(
             "canonical vector delete failed memory_id=%s uid=%s",
             memory_id,
             uid,
         )
+        return False
 
 
 def sync_canonical_memory_vector(
