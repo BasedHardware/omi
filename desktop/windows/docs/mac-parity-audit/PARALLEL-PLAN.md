@@ -249,7 +249,30 @@ items + area 10's local onboarding steps. The most self-contained stream.*
    `/v2/desktop/messages` persistence contract, then flips default chat as a distinct milestone
    with explicit verification: (a) shared-thread continuity proven against mobile in both
    directions (locked invariant), (b) grounding at least as good as the backend path, (c)
-   feature-flag fallback to backend chat for the first release.
+   feature-flag fallback to backend chat for the first release. **Required safeguards on the
+   flip (hard requirements, not intentions):**
+   - **Flag default-OFF shipping**: default chat stays on the backend `/v2/messages` path until
+     every criterion below is green; the kernel flip is a runtime feature flag that ships OFF in
+     the first release containing the kernel. Flipping it is its own decision point with Chris.
+   - **Kill switch**: the same flag is a live kill switch — flipping back requires no migration,
+     no data repair, at any time. Kernel chat persistence must therefore be ADDITIVE alongside
+     the existing local chat store: no rewrites/moves of existing chat history, no destructive
+     schema changes (`db.ts` additive-only rule applies doubly here).
+   - **No one-way doors**: kernel session/run state lives in its own tables; nothing in the flip
+     may alter or migrate existing conversations/messages such that the backend path can't
+     resume them unchanged.
+   - **Continuity invariant guarded by test**: shared chat continuity gets a guard test BEFORE
+     the flip — a turn sent via kernel chat must appear in the backend thread (via the
+     `/v2/desktop/messages` persistence contract) and turns from mobile must appear on Windows,
+     verified both directions against a real second client.
+   - **Fallback telemetry**: any runtime fallback from kernel → backend chat calls the shared
+     `recordFallback` helper (`component=chat, from=kernel, to=backend, outcome`) — silent ops
+     is banned by repo policy.
+   - **Failure containment**: a kernel crash/hang must degrade to the backend path within one
+     turn (watchdog + auto-fallback), never a dead chat UI.
+   - **Rollout order**: agent sessions on kernel first (lower blast radius, already the plan) →
+     internal/dev flag-on for daily use → only then consider default-on, staged per
+     release-channel (beta before stable).
 9. **Mac's System B (`TaskAgentManager`)** — **DECIDED**: skip. Upstream is consolidating on the
    kernel as single run authority; any future proactive task agent is kernel-based.
 
