@@ -2927,12 +2927,11 @@ extension APIClient {
 
 extension APIClient {
   func getWhatMattersNow(deviceID: String? = nil) async throws -> OmiAPI.WhatMattersNowProjection {
-    var endpoint = "v1/what-matters-now"
-    if let deviceID {
-      let encodedDeviceID = deviceID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? deviceID
-      endpoint += "?device_id=\(encodedDeviceID)"
-    }
-    return try await get(endpoint)
+    // Device identity is bound by X-App-Platform + X-Device-Id-Hash. Do not
+    // duplicate it in a caller-controlled query parameter; the optional input
+    // stays source-compatible for existing callers during the rollout.
+    _ = deviceID
+    return try await get("v1/what-matters-now")
   }
 
   func replaceTaskContextSnapshot(

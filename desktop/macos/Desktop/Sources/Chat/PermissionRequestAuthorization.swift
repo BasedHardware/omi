@@ -41,6 +41,25 @@ final class PermissionRequestAuthorization {
     self.expiresAt = expiresAt
   }
 
+  /// Authorizes the PTT controller's direct, current-turn permission tool call.
+  ///
+  /// The controller creates this only after the live voice model has selected
+  /// `request_permission` for the user's active utterance. The macOS prompt (or
+  /// System Settings pane) remains the user's actual grant decision; this only
+  /// prevents the shared executor from asking for an additional in-agent reply.
+  static func authorizePTTPermissionRequest(
+    permissionType: String,
+    now: Date = Date()
+  ) -> PermissionRequestAuthorization? {
+    guard let permission = Permission(rawValue: permissionType) else {
+      return nil
+    }
+    return PermissionRequestAuthorization(
+      permissions: [permission],
+      expiresAt: now.addingTimeInterval(authorizationLifetime)
+    )
+  }
+
   static func authorize(
     userMessage: String,
     precedingAssistantMessage: String?,

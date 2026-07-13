@@ -15,6 +15,22 @@ final class PermissionRequestAuthorizationTests: XCTestCase {
     XCTAssertFalse(authorization?.consume(permissionType: "screen_recording", now: Date(timeIntervalSince1970: 1_001)) == true)
   }
 
+  func testPTTCurrentTurnAuthorizationIsSingleUseAndRejectsUnknownPermissions() {
+    let authorization = PermissionRequestAuthorization.authorizePTTPermissionRequest(
+      permissionType: "microphone",
+      now: Date(timeIntervalSince1970: 1_000)
+    )
+
+    XCTAssertTrue(authorization?.consume(permissionType: "microphone", now: Date(timeIntervalSince1970: 1_001)) == true)
+    XCTAssertFalse(authorization?.consume(permissionType: "microphone", now: Date(timeIntervalSince1970: 1_001)) == true)
+    XCTAssertNil(
+      PermissionRequestAuthorization.authorizePTTPermissionRequest(
+        permissionType: "unknown_permission",
+        now: Date(timeIntervalSince1970: 1_000)
+      )
+    )
+  }
+
   func testAffirmativeReplyUsesTheImmediatelyPrecedingPermissionRequest() {
     let authorization = PermissionRequestAuthorization.authorize(
       userMessage: "Yes",

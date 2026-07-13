@@ -189,6 +189,8 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(source.contains("RealtimeHubTools.permissionExecutorRoute("))
     XCTAssertTrue(source.contains("name: executorRoute.toolName"))
     XCTAssertTrue(source.contains("originatingUserText: originatingUserText"))
+    XCTAssertTrue(source.contains("PermissionRequestAuthorization.authorizePTTPermissionRequest"))
+    XCTAssertTrue(source.contains("permissionAuthorization: permissionAuthorization"))
   }
 
   func testBargeInReplacementCommitIsDeferredInsteadOfRejected() throws {

@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI, HTTPException
+from starlette.requests import Request
 
 import routers.goals as goals_router
 import routers.task_recommendations as task_recommendations_router
@@ -70,6 +71,37 @@ def test_task_intelligence_mutations_reject_stale_account_generation(monkeypatch
 
     assert error.value.status_code == 409
     assert error.value.detail == 'account generation mismatch'
+
+
+def _device_request(*, device_hash: str = 'abcdef12') -> Request:
+    return Request(
+        {
+            'type': 'http',
+            'method': 'GET',
+            'scheme': 'https',
+            'path': '/v1/what-matters-now',
+            'query_string': b'',
+            'headers': [(b'x-app-platform', b'macos'), (b'x-device-id-hash', device_hash.encode())],
+            'server': ('testserver', 443),
+            'client': ('testclient', 1234),
+        }
+    )
+
+
+@pytest.mark.parametrize('requested_device_id', ['abcdef12', 'macos_abcdef12'])
+def test_task_intelligence_device_scope_accepts_only_authenticated_legacy_aliases(requested_device_id):
+    assert (
+        task_recommendations_router._bound_device_id(_device_request(), requested_device_id, required=False)
+        == 'macos_abcdef12'
+    )
+
+
+def test_task_intelligence_device_scope_rejects_another_device():
+    with pytest.raises(HTTPException) as error:
+        task_recommendations_router._bound_device_id(_device_request(), 'macos_deadbeef', required=False)
+
+    assert error.value.status_code == 403
+    assert error.value.detail == 'Device scope mismatch'
 
 
 @pytest.mark.parametrize('surface', ['get', 'evaluate', 'debug'])

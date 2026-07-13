@@ -98,7 +98,8 @@ def _require_evaluation_generation(uid: str, account_generation: int):
 
 
 def _bound_device_id(request: Request, requested_device_id: Optional[str], *, required: bool) -> Optional[str]:
-    resolved_device_id = resolve_client_device_from_request(request).client_device_id
+    device_context = resolve_client_device_from_request(request)
+    resolved_device_id = device_context.client_device_id
     if resolved_device_id is None:
         if required or requested_device_id is not None:
             raise HTTPException(
@@ -106,7 +107,15 @@ def _bound_device_id(request: Request, requested_device_id: Optional[str], *, re
                 detail='X-App-Platform and X-Device-Id-Hash are required for device-scoped state',
             )
         return None
-    if requested_device_id is not None and requested_device_id != resolved_device_id:
+    # The headers are the authenticated device binding. Older desktop clients
+    # sent their bare hash as ``device_id`` while canonical records use the
+    # platform-prefixed form (for example ``macos_abcdef12``). Accept that
+    # equivalent legacy representation during rollout, but never let a query
+    # parameter select another device.
+    accepted_device_ids = {resolved_device_id}
+    if device_context.device_hash:
+        accepted_device_ids.add(device_context.device_hash)
+    if requested_device_id is not None and requested_device_id not in accepted_device_ids:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Device scope mismatch')
     return resolved_device_id
 
