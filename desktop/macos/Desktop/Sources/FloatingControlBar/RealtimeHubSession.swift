@@ -137,8 +137,7 @@ final class RealtimeHubSession: NSObject {
   /// Screen frames awaiting an open socket (base64, mime) — flushed into the turn in
   /// markReady. A cold first turn would otherwise drop the frame before connect.
   private var pendingVideo: [(b64: String, mime: String)] = []
-  /// Hidden text inputs awaiting a provider-acceptable input window. Voice turn context
-  /// must survive the same cold-start/activity-window race as audio and screen frames.
+  /// Headless-test text awaiting a provider-acceptable input window.
   private var pendingTextInputs: [(text: String, logLabel: String)] = []
   private var pendingCommit = false
   /// OpenAI: call_id → function name, captured from response.output_item.added.
@@ -232,31 +231,45 @@ final class RealtimeHubSession: NSObject {
 
   func stop() {
     q.async { [weak self] in
-      guard let self else { return }
-      self.task?.cancel(with: .goingAway, reason: nil)
-      self.task = nil
-      self.rawWS?.close()
-      self.rawWS = nil
-      self.isOpen = false
-      self.pendingAudio.removeAll()
-      self.pendingVideo.removeAll()
-      self.pendingTextInputs.removeAll()
-      self.pendingCommit = false
-      self.openAIFunctionNames.removeAll()
-      self.dispatchedToolItems.removeAll()
-      self.activityOpen = false
-      self.pendingActivityStart = false
-      self.openAIResponseActive = false
-      self.openAIResponseCreatePending = false
-      self.openAIActiveResponseID = nil
-      self.openAIPendingResponseIdentities.removeAll()
-      self.openAIResponseIdentities.removeAll()
-      self.openAIPendingInputIdentities.removeAll()
-      self.openAIInputItemIdentities.removeAll()
-      self.geminiResponsePending = false
-      self.activeEventIdentity = nil
-      self.completedGeminiEventIdentity = nil
+      self?.stopOnQueue()
     }
+  }
+
+  /// Close the transport and drain its serialization queue before returning.
+  /// Owner replacement awaits this before the replacement owner becomes visible.
+  func stopAndWait() async {
+    await withCheckedContinuation { continuation in
+      q.async { [weak self] in
+        self?.stopOnQueue()
+        continuation.resume()
+      }
+    }
+  }
+
+  private func stopOnQueue() {
+    task?.cancel(with: .goingAway, reason: nil)
+    task = nil
+    rawWS?.close()
+    rawWS = nil
+    isOpen = false
+    pendingAudio.removeAll()
+    pendingVideo.removeAll()
+    pendingTextInputs.removeAll()
+    pendingCommit = false
+    openAIFunctionNames.removeAll()
+    dispatchedToolItems.removeAll()
+    activityOpen = false
+    pendingActivityStart = false
+    openAIResponseActive = false
+    openAIResponseCreatePending = false
+    openAIActiveResponseID = nil
+    openAIPendingResponseIdentities.removeAll()
+    openAIResponseIdentities.removeAll()
+    openAIPendingInputIdentities.removeAll()
+    openAIInputItemIdentities.removeAll()
+    geminiResponsePending = false
+    activeEventIdentity = nil
+    completedGeminiEventIdentity = nil
   }
 
   private func notifyError(_ message: String) {
@@ -406,10 +419,6 @@ final class RealtimeHubSession: NSObject {
 
   func sendTestTextInput(_ text: String) async -> Bool {
     await sendTextInput(text, logLabel: "test text input")
-  }
-
-  func sendTurnContextText(_ text: String) async -> Bool {
-    await sendTextInput(text, logLabel: "turn context")
   }
 
   private func sendTextInput(_ text: String, logLabel: String) async -> Bool {
@@ -609,20 +618,24 @@ final class RealtimeHubSession: NSObject {
     }
   }
 
-  /// OpenAI screenshot path: add the captured image as a user message item so it's in
-  /// context for the next response. (Gemini sends the screen as an in-turn video frame at
-  /// turn start — see RealtimeHubController.beginTurn — not via this path.)
+  /// Attach fresh pixels captured by the kernel-authorized screenshot executor.
+  /// No ambient or speculative caller may invoke this path.
   func injectImage(_ image: Data) {
     let b64 = image.base64EncodedString()
     q.async { [weak self] in
-      guard let self, self.provider == .openai else { return }
-      self.send(json: [
-        "type": "conversation.item.create",
-        "item": [
-          "type": "message", "role": "user",
-          "content": [["type": "input_image", "image_url": "data:image/jpeg;base64,\(b64)"]],
-        ],
-      ])
+      guard let self else { return }
+      switch self.provider {
+      case .openai:
+        self.send(json: [
+          "type": "conversation.item.create",
+          "item": [
+            "type": "message", "role": "user",
+            "content": [["type": "input_image", "image_url": "data:image/jpeg;base64,\(b64)"]],
+          ],
+        ])
+      case .gemini:
+        self.send(json: ["realtimeInput": ["video": ["data": b64, "mimeType": "image/jpeg"]]])
+      }
     }
   }
 

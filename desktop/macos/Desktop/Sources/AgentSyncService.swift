@@ -20,6 +20,17 @@ enum SyncQueryArg: Equatable {
 actor AgentSyncService {
     static let shared = AgentSyncService()
 
+    struct NetworkHooks: Sendable {
+        let fetchIDToken: @Sendable () async throws -> String
+        let dataForRequest: @Sendable (URLRequest) async throws -> (Data, URLResponse)
+        let tableSyncEnabled: Bool
+
+        static let live = NetworkHooks(
+            fetchIDToken: { try await AuthService.shared.getIdToken() },
+            dataForRequest: { try await URLSession.shared.data(for: $0) },
+            tableSyncEnabled: true)
+    }
+
     // MARK: - Types
 
     private struct SyncCursor: Codable {
@@ -44,14 +55,27 @@ actor AgentSyncService {
     private var consecutiveFailures = 0
     private var lastTokenRefresh: Date = .distantPast
     private var isPaused = false
+    /// Invalidates every suspended loop/tick/network continuation on stop,
+    /// restart, VM replacement, or effective-owner transition.
+    private var syncGeneration: UInt64 = 0
+    private var cursorOwnerID: String?
     private var latencyBackoffMultiplier: UInt64 = 1
     private var lastReuploadAt: Date = .distantPast
     private let reuploadCooldown: TimeInterval = 30 * 60  // don't re-upload more than once per 30 min
+    private let networkHooks: NetworkHooks
 
     private let batchSize = 100
     private let baseSyncInterval: UInt64 = 3_000_000_000  // 3s in nanoseconds
     private let maxSyncInterval: UInt64 = 60_000_000_000  // 60s max backoff
     private let tokenRefreshInterval: TimeInterval = 30 * 60  // 30 minutes
+
+    private init() {
+        networkHooks = .live
+    }
+
+    init(networkHooks: NetworkHooks) {
+        self.networkHooks = networkHooks
+    }
 
     // MARK: - Table definitions
 
@@ -82,29 +106,52 @@ actor AgentSyncService {
 
     /// Start the sync loop. Called after the VM is ready and DB is uploaded.
     func start(vmIP: String, authToken: String) {
-        guard !isRunning else {
-            log("AgentSync: already running, updating VM address to \(vmIP)")
-            self.vmIP = vmIP
-            self.authToken = authToken
-            return
-        }
+        syncGeneration &+= 1
+        let generation = syncGeneration
+        syncTask?.cancel()
         self.vmIP = vmIP
         self.authToken = authToken
         self.isRunning = true
-        loadCursors()
+        self.cursorOwnerID = RuntimeOwnerIdentity.currentOwnerId()
+        cursors.removeAll()
+        cachedTableColumns.removeAll()
+        consecutiveFailures = 0
+        lastTokenRefresh = .distantPast
+        isPaused = false
+        latencyBackoffMultiplier = 1
+        lastReuploadAt = .distantPast
+        loadCursors(ownerID: cursorOwnerID)
         log("AgentSync: starting (vm=\(vmIP), tables=\(tables.count))")
-        syncLoop()
+        syncLoop(generation: generation)
     }
 
-    /// Flush pending changes and stop the sync loop.
-    func stop() async {
-        guard isRunning else { return }
-        log("AgentSync: stopping — flushing final changes")
-        // Do one final tick before stopping
-        await syncTick()
+    /// Stop the sync loop. Normal shutdown flushes pending changes; an owner
+    /// transition cancels without a final tick because credentials/storage have
+    /// already moved to the next owner boundary.
+    func stop(flushPendingChanges: Bool = true) async {
+        syncGeneration &+= 1
+        let stopGeneration = syncGeneration
+        let wasRunning = isRunning
         isRunning = false
         syncTask?.cancel()
         syncTask = nil
+        guard wasRunning else { return }
+        if flushPendingChanges {
+            log("AgentSync: stopping — flushing final changes")
+            await syncTick(generation: stopGeneration)
+        } else {
+            log("AgentSync: stopping for owner transition without final flush")
+        }
+        guard syncGeneration == stopGeneration else {
+            log("AgentSync: stale stop completed after a newer start")
+            return
+        }
+        vmIP = nil
+        authToken = nil
+        cursorOwnerID = nil
+        isPaused = false
+        cursors.removeAll()
+        cachedTableColumns.removeAll()
         log("AgentSync: stopped")
     }
 
@@ -124,14 +171,15 @@ actor AgentSyncService {
 
     // MARK: - Sync loop
 
-    private func syncLoop() {
+    private func syncLoop(generation: UInt64) {
         syncTask = Task {
-            while !Task.isCancelled && isRunning {
+            while !Task.isCancelled && isRunning && syncGeneration == generation {
                 if isPaused {
                     try? await Task.sleep(nanoseconds: baseSyncInterval)
                     continue
                 }
-                await syncTick()
+                await syncTick(generation: generation)
+                guard syncGeneration == generation else { return }
                 let interval = currentSyncInterval()
                 try? await Task.sleep(nanoseconds: interval)
             }
@@ -149,20 +197,25 @@ actor AgentSyncService {
         return min(base * latencyBackoffMultiplier, maxSyncInterval)
     }
 
-    private func syncTick() async {
+    private func syncTick(generation: UInt64) async {
+        guard syncGeneration == generation else { return }
         // Skip if user is signed out (tokens are cleared)
         guard await AuthState.shared.isSignedIn else { return }
+        guard syncGeneration == generation else { return }
         let tickStart = ContinuousClock.now
 
         // Periodically refresh Firebase token on the VM (every 30 min)
         if Date().timeIntervalSince(lastTokenRefresh) >= tokenRefreshInterval {
-            await refreshFirebaseToken()
+            await refreshFirebaseToken(generation: generation)
+            guard syncGeneration == generation else { return }
         }
+        guard networkHooks.tableSyncEnabled else { return }
 
         var totalSynced = 0
         var anyFailed = false
         for spec in tables {
-            let count = await syncTable(spec)
+            let count = await syncTable(spec, generation: generation)
+            guard syncGeneration == generation else { return }
             if count < 0 {
                 anyFailed = true
             } else {
@@ -176,7 +229,8 @@ actor AgentSyncService {
             }
             // After 3 consecutive failures, check if the VM lost its database
             if consecutiveFailures == 3 {
-                await checkAndTriggerReupload()
+                await checkAndTriggerReupload(generation: generation)
+                guard syncGeneration == generation else { return }
             }
         } else if totalSynced > 0 {
             if consecutiveFailures > 0 {
@@ -184,7 +238,7 @@ actor AgentSyncService {
             }
             consecutiveFailures = 0
             log("AgentSync: pushed \(totalSynced) rows")
-            saveCursors()
+            saveCursors(generation: generation)
         }
 
         // Latency-based backpressure
@@ -209,7 +263,8 @@ actor AgentSyncService {
 
     /// Called after 3 consecutive sync failures. Hits /health — if the VM has no
     /// database (e.g. it restarted and lost its data), triggers a full re-upload.
-    private func checkAndTriggerReupload() async {
+    private func checkAndTriggerReupload(generation: UInt64) async {
+        guard syncGeneration == generation else { return }
         guard let vmIP = vmIP, let authToken = authToken else { return }
         guard Date().timeIntervalSince(lastReuploadAt) >= reuploadCooldown else {
             log("AgentSync: skipping re-upload check (cooldown active)")
@@ -219,6 +274,7 @@ actor AgentSyncService {
         guard let url = URL(string: "http://\(vmIP):8080/health") else { return }
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
+            guard syncGeneration == generation else { return }
             guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let dbReady = json["databaseReady"] as? Bool,
                   !dbReady else { return }
@@ -226,6 +282,7 @@ actor AgentSyncService {
             log("AgentSync: VM has no database — triggering re-upload")
             lastReuploadAt = Date()
             await AgentVMService.shared.reuploadDatabase(vmIP: vmIP, authToken: authToken)
+            guard syncGeneration == generation else { return }
         } catch {
             log("AgentSync: re-upload health check failed — \(error.localizedDescription)")
         }
@@ -233,11 +290,13 @@ actor AgentSyncService {
 
     // MARK: - Firebase token refresh
 
-    private func refreshFirebaseToken() async {
+    private func refreshFirebaseToken(generation: UInt64) async {
+        guard syncGeneration == generation else { return }
         guard let vmIP = vmIP, let authToken = authToken else { return }
 
         do {
-            let idToken = try await AuthService.shared.getIdToken()
+            let idToken = try await networkHooks.fetchIDToken()
+            guard syncGeneration == generation else { return }
             // Send token both as query param (backward compat) and header (preferred)
             guard let url = URL(string: "http://\(vmIP):8080/auth?token=\(authToken)") else { return }
             var request = URLRequest(url: url)
@@ -249,7 +308,8 @@ actor AgentSyncService {
             let body: [String: String] = ["firebaseToken": idToken]
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (_, response) = try await networkHooks.dataForRequest(request)
+            guard syncGeneration == generation else { return }
             if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
                 lastTokenRefresh = Date()
                 log("AgentSync: Firebase token refreshed on VM")
@@ -289,8 +349,10 @@ actor AgentSyncService {
         )
     }
 
-    private func syncTable(_ spec: TableSpec) async -> Int {
+    private func syncTable(_ spec: TableSpec, generation: UInt64) async -> Int {
+        guard syncGeneration == generation else { return 0 }
         guard let dbPool = await getDBPool() else { return 0 }
+        guard syncGeneration == generation else { return 0 }
 
         let cursor = cursors[spec.name] ?? SyncCursor(lastId: 0, lastUpdatedAt: "1970-01-01T00:00:00")
 
@@ -305,6 +367,7 @@ actor AgentSyncService {
                     let allColumns = columnInfos.compactMap { $0["name"] as? String }
                     return allColumns.filter { !spec.excludedColumns.contains($0) }
                 }
+                guard syncGeneration == generation else { return 0 }
                 cachedTableColumns[spec.name] = fetched
                 columns = fetched
             } catch {
@@ -359,10 +422,13 @@ actor AgentSyncService {
                 }
             }
 
+            guard syncGeneration == generation else { return 0 }
+
             guard !rows.isEmpty else { return 0 }
 
             // Push to VM
             let result = await pushRows(spec.name, rows)
+            guard syncGeneration == generation else { return 0 }
             if result == .success {
                 // Update cursor
                 if spec.appendOnly {
@@ -427,7 +493,7 @@ actor AgentSyncService {
         }
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await networkHooks.dataForRequest(request)
             guard let httpResponse = response as? HTTPURLResponse else { return .httpError }
 
             if httpResponse.statusCode == 200 {
@@ -456,19 +522,43 @@ actor AgentSyncService {
 
     // MARK: - Cursor persistence
 
-    private func loadCursors() {
-        guard let data = UserDefaults.standard.data(forKey: "agentSync_cursors"),
+    private func loadCursors(ownerID: String?) {
+        guard let ownerID, !ownerID.isEmpty else {
+            log("AgentSync: no effective owner, starting with empty cursors")
+            return
+        }
+        let ownerKey = cursorDefaultsKey(ownerID: ownerID)
+        let ownerData = UserDefaults.standard.data(forKey: ownerKey)
+        let legacyData = ownerData == nil
+            ? UserDefaults.standard.data(forKey: "agentSync_cursors")
+            : nil
+        guard let data = ownerData ?? legacyData,
               let decoded = try? JSONDecoder().decode([String: SyncCursor].self, from: data)
         else {
             log("AgentSync: no saved cursors, starting fresh")
             return
         }
         cursors = decoded
+        if legacyData != nil {
+            UserDefaults.standard.set(data, forKey: ownerKey)
+            UserDefaults.standard.removeObject(forKey: "agentSync_cursors")
+            log("AgentSync: migrated legacy cursors into the current owner scope")
+        }
         log("AgentSync: loaded cursors for \(decoded.keys.sorted().joined(separator: ", "))")
     }
 
-    private func saveCursors() {
+    private func saveCursors(generation: UInt64) {
+        guard syncGeneration == generation,
+              let ownerID = cursorOwnerID,
+              RuntimeOwnerIdentity.currentOwnerId() == ownerID
+        else {
+            return
+        }
         guard let data = try? JSONEncoder().encode(cursors) else { return }
-        UserDefaults.standard.set(data, forKey: "agentSync_cursors")
+        UserDefaults.standard.set(data, forKey: cursorDefaultsKey(ownerID: ownerID))
+    }
+
+    private func cursorDefaultsKey(ownerID: String) -> String {
+        "agentSync_cursors.\(ownerID)"
     }
 }

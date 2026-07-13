@@ -261,7 +261,6 @@ enum GeneratedToolCapabilities {
       bullets: [
       "Creates a canonical kernel session/run; visible runs project into floating-bar pills.",
       "Calling spawn_agent is the only way to start a visible floating-bar background agent; saying you will start one does not start it.",
-      "Prefer spawning when a request needs more than ~30 seconds of tool work or research — start the agent and tell the user in one line instead of making them wait.",
       "Use visible=false for parent-linked background work that should not appear as a pill.",
       "If the user asks to use OpenClaw or Hermes, pass provider='openclaw' or provider='hermes'.",
       "Inspect progress with list_agent_sessions or get_agent_run."
@@ -531,7 +530,7 @@ enum GeneratedToolCapabilities {
       bullets: [
       "Use when the user asks to add, create, schedule, or put a specific event on their calendar.",
       "Pass title, start_time, and end_time as ISO-8601 strings with timezone; include location, description, and attendees when provided.",
-      "Use spawn_agent for multi-step calendar work such as finding availability or coordinating with people."
+      "This capability creates one specified event; it does not find availability, reschedule, delete, or coordinate with people."
     ]
     ),
     Capability(

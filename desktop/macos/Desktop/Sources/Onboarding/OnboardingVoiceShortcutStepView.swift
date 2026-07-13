@@ -114,8 +114,6 @@ struct OnboardingVoiceShortcutStepView: View {
         barState.showingAIResponse = false
         barState.aiInputText = ""
         barState.clearViewport()
-        barState.isVoiceFollowUp = false
-        barState.voiceFollowUpTranscript = ""
     }
 
     private var shortcutKeyPreview: some View {

@@ -133,7 +133,7 @@ struct SettingsContentView: View {
   @State var showAskOmiBar: Bool = false
 
   // Grant for chat screenshot tools (capture_screen / get_screenshot);
-  // read by ChatToolExecutor.localPolicyDecision. Default on.
+  // read by ChatToolExecutor.physicalExecutionPrecondition. Default on.
   @AppStorage(DefaultsKey.chatScreenshotSharingEnabled.rawValue)
   var chatScreenshotSharingEnabled: Bool = true
 

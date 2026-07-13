@@ -2237,15 +2237,19 @@ export interface Message {
   app_id?: string | null;
   chart_data?: ChartData | Record<string, unknown> | null;
   chat_session_id?: string | null;
+  client_message_id?: string | null;
   created_at: string;
   data_protection_level?: string | null;
   files?: Array<FileChat>;
   files_id?: Array<string>;
   from_external_integration?: boolean;
   id: string;
+  journal_revision?: number | null;
   langsmith_run_id?: string | null;
   memories?: Array<MessageConversation>;
   memories_id?: Array<string>;
+  message_source?: string | null;
+  metadata?: string | null;
   plugin_id?: string | null;
   prompt_commit?: string | null;
   prompt_name?: string | null;
@@ -2253,6 +2257,7 @@ export interface Message {
   report_reason?: string | null;
   reported?: boolean;
   sender: MessageSender;
+  session_id?: string | null;
   text: string;
   type: MessageType;
 }
@@ -2617,15 +2622,19 @@ export interface ResponseMessage {
   ask_for_nps?: boolean | null;
   chart_data?: ChartData | Record<string, unknown> | null;
   chat_session_id?: string | null;
+  client_message_id?: string | null;
   created_at: string;
   data_protection_level?: string | null;
   files?: Array<FileChat>;
   files_id?: Array<string>;
   from_external_integration?: boolean;
   id: string;
+  journal_revision?: number | null;
   langsmith_run_id?: string | null;
   memories?: Array<MessageConversation>;
   memories_id?: Array<string>;
+  message_source?: string | null;
+  metadata?: string | null;
   plugin_id?: string | null;
   prompt_commit?: string | null;
   prompt_name?: string | null;
@@ -2633,6 +2642,7 @@ export interface ResponseMessage {
   report_reason?: string | null;
   reported?: boolean;
   sender: MessageSender;
+  session_id?: string | null;
   text: string;
   type: MessageType;
 }

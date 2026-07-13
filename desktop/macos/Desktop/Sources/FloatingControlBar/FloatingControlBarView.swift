@@ -985,6 +985,7 @@ struct FloatingControlBarView: View {
                         _ = AgentPillsManager.shared.spawn(
                             query: query,
                             model: model,
+                            originSurface: .floatingBar,
                             systemPromptSuffix: ProactiveTaskExecute.systemPromptSuffix
                         )
                         FloatingControlBarManager.shared.dismissCurrentNotification()
@@ -1439,14 +1440,8 @@ struct FloatingControlBarView: View {
             ),
             userInput: state.displayedQuery,
             chatHistory: state.derivedChatHistory(from: provider),
-            isVoiceFollowUp: Binding(
-                get: { state.isVoiceFollowUp },
-                set: { state.isVoiceFollowUp = $0 }
-            ),
-            voiceFollowUpTranscript: Binding(
-                get: { state.voiceFollowUpTranscript },
-                set: { state.voiceFollowUpTranscript = $0 }
-            ),
+            isVoiceFollowUp: state.isVoiceFollowUp,
+            voiceFollowUpTranscript: state.voiceFollowUpTranscript,
             canClearVisibleConversation: false,
             showsHeader: false,
             onClearVisibleConversation: onClearVisibleConversation,

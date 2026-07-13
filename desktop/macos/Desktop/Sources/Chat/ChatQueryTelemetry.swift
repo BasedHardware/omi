@@ -430,3 +430,23 @@ final class ChatQueryTelemetryAttempt {
     }
   }
 }
+
+/// Orders the successful visible-turn boundary. Once the final answer has been
+/// applied to the projection, product lifecycle and its single terminal
+/// telemetry event close before journal delivery or title generation begins.
+@MainActor
+enum ChatVisibleTurnCompletion {
+  @discardableResult
+  static func finish(
+    lifecycle: ChatTurnLifecycle,
+    telemetryAttempt: ChatQueryTelemetryAttempt,
+    metrics: ChatQueryCompletionMetrics,
+    afterTerminal: @MainActor () -> Void,
+    journalCommit: @MainActor () async -> Bool
+  ) async -> Bool {
+    guard lifecycle.complete() else { return false }
+    guard telemetryAttempt.complete(metrics: metrics) else { return false }
+    afterTerminal()
+    return await journalCommit()
+  }
+}

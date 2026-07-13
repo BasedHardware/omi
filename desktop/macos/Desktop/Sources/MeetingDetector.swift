@@ -179,8 +179,14 @@ final class MeetingDetector {
     }
 
     #if DEBUG
-    func triggerProbeForTesting() {
+    var currentProbeTaskForTesting: Task<Void, Never>? {
+        probeTask
+    }
+
+    @discardableResult
+    func triggerProbeForTesting() -> Task<Void, Never>? {
         tick()
+        return probeTask
     }
     #endif
 }

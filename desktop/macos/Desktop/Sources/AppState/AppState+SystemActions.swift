@@ -124,6 +124,7 @@ extension AppState {
   /// This clears onboarding state without touching production data or system permissions.
   nonisolated func resetOnboardingAndRestart() {
     log("Resetting onboarding state for current app...")
+    let graphAuthorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
 
     // Update live @AppStorage-backed state on the main thread *before* clearing
     // UserDefaults. DesktopHomeView handles .resetOnboardingRequested by setting
@@ -161,10 +162,23 @@ extension AppState {
     OnboardingChatPersistence.clear()
     log("Cleared onboarding chat persistence")
 
-    Task { [self] in
+    Task { @MainActor [self] in
       // Clear knowledge graph (local + server) so the onboarding chart starts fresh
-      await KnowledgeGraphStorage.shared.clearAll()
-      log("Cleared local knowledge graph storage")
+      if let graphAuthorizationSnapshot {
+        let authorization = LocalMutationAuthorization {
+          RuntimeOwnerIdentity.isAuthorizationCurrent(graphAuthorizationSnapshot)
+        }
+        do {
+          try await KnowledgeGraphStorage.shared.clearAll(authorization: authorization)
+          log("Cleared local knowledge graph storage")
+        } catch LocalMutationAuthorizationError.revoked {
+          log("Skipped stale-owner local knowledge graph reset")
+        } catch {
+          logError("Failed to clear local knowledge graph during onboarding reset", error: error)
+        }
+      } else {
+        log("Skipped local knowledge graph reset without an authenticated owner")
+      }
       do {
         try await APIClient.shared.deleteKnowledgeGraph()
         log("Cleared server knowledge graph")
@@ -172,13 +186,17 @@ extension AppState {
         logError("Failed to clear server knowledge graph during onboarding reset", error: error)
       }
 
-      // Clear persisted backend chat messages so onboarding does not resume old history.
-      // Onboarding currently uses the default chat message stream.
-      do {
-        _ = try await APIClient.shared.deleteMessages()
-        log("Cleared backend chat messages")
-      } catch {
-        logError("Failed to clear backend chat messages during onboarding reset", error: error)
+      // Clear the default stream through the kernel journal's durable,
+      // generation-fenced delete outbox. No UI surface may write or delete
+      // backend chat state directly.
+      if let chatProvider = ChatProvider.mainInstance {
+        if await chatProvider.clearDefaultJournalForOnboardingReset() {
+          log("Queued default chat reset through kernel journal")
+        } else {
+          log("Failed to queue default chat reset through kernel journal")
+        }
+      } else {
+        log("Default chat reset deferred: main chat provider unavailable")
       }
 
       try? await Task.sleep(nanoseconds: 150_000_000)

@@ -96,16 +96,19 @@ final class AuthSessionCoordinator {
 
     var phase: AuthSessionPhase { AuthState.shared.sessionPhase }
     private var refreshFlight: Task<String, Error>?
+    private var refreshFlightAttempt: AuthSessionAttempt?
     private var lastProactiveValidation: Date?
 
     private init() {}
 
     /// Light session invalidation: clears credentials and signed-in UI state without
     /// the nuclear teardown performed by `AuthService.signOut()`.
-    func invalidateSession(reason: InvalidateReason, auth: AuthService) {
+    func invalidateSession(reason: InvalidateReason, auth: AuthService) async {
         NSLog("OMI AUTH: invalidateSession reason=%@", reason.rawValue)
-        auth.performLightSessionInvalidation()
-        AuthState.shared.transition(to: .needsReauth)
+        guard await auth.performLightSessionInvalidation() else {
+            NSLog("OMI AUTH: stale invalidateSession completion ignored")
+            return
+        }
         NotificationCenter.default.post(
             name: .sessionDidInvalidate,
             object: nil,
@@ -115,19 +118,28 @@ final class AuthSessionCoordinator {
 
     /// Single-flight wrapper around forced token refresh so concurrent callers share one request.
     func refreshSingleFlight(auth: AuthService) async throws -> String {
-        if let refreshFlight {
+        let attempt = auth.currentSessionAttempt()
+        if let refreshFlight, refreshFlightAttempt == attempt {
             return try await refreshFlight.value
         }
+        refreshFlight?.cancel()
         let task = Task { @MainActor in
-            defer { self.refreshFlight = nil }
+            defer {
+                if self.refreshFlightAttempt == attempt {
+                    self.refreshFlight = nil
+                    self.refreshFlightAttempt = nil
+                }
+            }
             return try await auth.getIdToken(forceRefresh: true)
         }
         refreshFlight = task
+        refreshFlightAttempt = attempt
         return try await task.value
     }
 
     /// Returns true when the session has a usable ID token after optional refresh.
     func ensureValidSession(trigger: EnsureValidSessionTrigger, auth: AuthService) async -> Bool {
+        let attempt = auth.currentSessionAttempt()
         guard phase != .restoring, phase != .needsReauth else { return false }
         guard phase == .authenticated || phase == .recoveryRequired else {
             return false
@@ -139,15 +151,18 @@ final class AuthSessionCoordinator {
             } else {
                 _ = try await auth.getIdToken(forceRefresh: false)
             }
+            guard auth.isSessionAttemptCurrent(attempt) else { return false }
             AuthState.shared.transition(to: .authenticated)
             return true
         } catch AuthError.notSignedIn {
+            guard auth.isSessionAttemptCurrent(attempt) else { return false }
             NSLog("OMI AUTH: ensureValidSession(%@) session not signed in", trigger.rawValue)
             if phase != .needsReauth {
                 AuthState.shared.transition(to: .recoveryRequired)
             }
             return false
         } catch {
+            guard auth.isSessionAttemptCurrent(attempt) else { return false }
             NSLog("OMI AUTH: ensureValidSession(%@) deferred: %@", trigger.rawValue, error.localizedDescription)
             AuthState.shared.transition(to: .recoveryRequired)
             return false
@@ -174,20 +189,25 @@ final class AuthSessionCoordinator {
         endpoint: String,
         signOutOn401: Bool,
         auth: AuthService
-    ) {
+    ) async {
         guard signOutOn401 else { return }
-        invalidateSession(reason: .postRefreshHTTP401, auth: auth)
+        await invalidateSession(reason: .postRefreshHTTP401, auth: auth)
         _ = endpoint
     }
 
     func resetAfterNuclearSignOut() {
         refreshFlight?.cancel()
         refreshFlight = nil
+        refreshFlightAttempt = nil
+        lastProactiveValidation = nil
         AuthState.shared.transition(to: .signedOut)
     }
 
     func resetAfterSuccessfulSignIn() {
+        refreshFlight?.cancel()
         refreshFlight = nil
+        refreshFlightAttempt = nil
+        lastProactiveValidation = nil
         AuthState.shared.transition(to: .authenticated)
     }
 }

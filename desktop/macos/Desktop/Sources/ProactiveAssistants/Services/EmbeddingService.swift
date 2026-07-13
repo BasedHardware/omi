@@ -253,22 +253,35 @@ actor EmbeddingService {
 
   /// Batch-embed all tasks missing embeddings (action_items + staged_tasks)
   func backfillIfNeeded() async {
+    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+      return
+    }
     let batchSize = 100
     var totalProcessed = 0
 
     do {
       // Backfill action_items
       while true {
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
         let items = try await ActionItemStorage.shared.getItemsMissingEmbeddings(limit: batchSize)
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
         if items.isEmpty { break }
 
         let texts = items.map { $0.description }
         let embeddings = try await embedBatch(texts: texts)
 
         for (i, embedding) in embeddings.enumerated() where i < items.count {
+          guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
           let item = items[i]
           let data = floatsToData(embedding)
-          try await ActionItemStorage.shared.updateEmbedding(id: item.id, embedding: data)
+          try await ActionItemStorage.shared.updateEmbedding(
+            id: item.id,
+            embedding: data,
+            authorization: LocalMutationAuthorization {
+              RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+            }
+          )
+          guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
           addToIndex(source: .actionItem, id: item.id, embedding: embedding)
         }
 
@@ -281,6 +294,7 @@ actor EmbeddingService {
 
       // Backfill staged_tasks
       while true {
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
         let items = try await StagedTaskStorage.shared.getItemsMissingEmbeddings(limit: batchSize)
         if items.isEmpty { break }
 

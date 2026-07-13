@@ -264,7 +264,11 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
       encoding: .utf8
     )
     let resetStart = try XCTUnwrap(systemActions.range(of: "func resetOnboardingAndRestart"))
-    let resetBody = String(systemActions[resetStart.lowerBound...].prefix(1200))
+    let resetRemainder = systemActions[resetStart.lowerBound...]
+    let asynchronousCleanup = try XCTUnwrap(
+      resetRemainder.range(of: "Task { @MainActor [self] in")
+    )
+    let resetBody = String(resetRemainder[..<asynchronousCleanup.lowerBound])
     XCTAssertTrue(resetBody.contains("resetOnboardingRequested"))
     let notificationRange = try XCTUnwrap(resetBody.range(of: "resetOnboardingRequested"))
     let udClearRange = try XCTUnwrap(resetBody.range(of: "removeObject(forKey:"))
@@ -356,6 +360,21 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
       source.contains("try await Task.sleep(nanoseconds: 150_000_000)"),
       "ensureConversationsTabVisibleForAutomation should propagate cancellation via try await"
     )
+  }
+
+  func testDebugBarStateUsesReducerScopedPresentationEvent() throws {
+    let body = try actionBody(named: "debug_bar_state", in: bridgeSource())
+
+    XCTAssertTrue(body.contains("VoiceTurnDebugPresentationState(rawValue: s)"))
+    XCTAssertTrue(body.contains("VoiceTurnCoordinator.shared.applyDebugPresentationState"))
+    for forbidden in [
+      "debugSetVoiceResponseActive",
+      "bar.isVoiceListening =",
+      "bar.isThinking =",
+      "bar.voiceProjection =",
+    ] {
+      XCTAssertFalse(body.contains(forbidden), "debug automation bypasses reducer: \(forbidden)")
+    }
   }
 
   private func bridgeSource() throws -> String {

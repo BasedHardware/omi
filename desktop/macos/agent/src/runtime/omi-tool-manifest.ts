@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import {
   agentControlCapabilityManifest,
   agentControlInputSchema,
@@ -103,6 +105,7 @@ export interface OmiToolProjectionContext {
 
 export interface OmiToolAvailabilitySnapshot {
   manifestVersion: number;
+  manifestDigest: string;
   adapterId: OmiToolAdapterId;
   context: OmiToolProjectionContext;
   advertisedToolCount: number;
@@ -110,6 +113,9 @@ export interface OmiToolAvailabilitySnapshot {
   aliases: Record<string, string>;
   disabled: Array<{ name: string; reason: string }>;
 }
+
+/** Single generated-policy revision consumed by capability registration. */
+export const OMI_TOOL_MANIFEST_VERSION = 1 as const;
 
 const readOnlyLocal: OmiToolAnnotations = {
   readOnlyHint: true,
@@ -446,13 +452,13 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       [
         "Use when the user asks to add, create, schedule, or put a specific event on their calendar.",
         "Pass title, start_time, and end_time as ISO-8601 strings with timezone; include location, description, and attendees when provided.",
-        "Use spawn_agent for multi-step calendar work such as finding availability or coordinating with people.",
+        "This capability creates one specified event; it does not find availability, reschedule, delete, or coordinate with people.",
       ],
     ),
     executor: { kind: "swiftTool" },
     voice: {
       realtimeDescription:
-        "Create a Google Calendar event for the user. Use for simple calendar requests like 'put this on my calendar', 'schedule lunch tomorrow', or 'create an event'. Requires start_time and end_time as ISO-8601 strings with timezone. Use spawn_agent instead for multi-step scheduling, finding availability, rescheduling, deleting, or coordinating with people.",
+        "Create one specified Google Calendar event. Requires start_time and end_time as ISO-8601 strings with timezone. This capability does not find availability, reschedule, delete, or coordinate with people.",
       schemaOverride: schema(
         {
           title: { type: "string", description: "Event title." },
@@ -495,7 +501,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     ]),
     voice: {
       realtimeDescription:
-        "Check whether Omi has the requested macOS permission. This is a fast local action; use it directly when the user asks to check permissions, never by spawning an agent.",
+        "Check whether Omi has the requested macOS permission through the kernel-authorized native executor.",
     },
   },
   request_permission: {
@@ -507,7 +513,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     ]),
     voice: {
       realtimeDescription:
-        "Request Omi's macOS permission directly by opening the native prompt or the relevant System Settings pane. Use for Screen Recording, microphone, notifications, Accessibility, Automation, or Full Disk Access. Never use spawn_agent for a permission request.",
+        "Request Omi's macOS permission through the kernel-authorized native executor by opening the native prompt or relevant System Settings pane. Supports Screen Recording, microphone, notifications, Accessibility, Automation, and Full Disk Access.",
     },
   },
   scan_files: {
@@ -1452,6 +1458,22 @@ export const omiToolManifest: OmiToolManifestEntry[] = [
   ...swiftToolManifest.slice(4),
 ] satisfies OmiToolManifestEntry[];
 
+function canonicalManifestJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalManifestJson).join(",")}]`;
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .filter((key) => record[key] !== undefined)
+    .map((key) => `${JSON.stringify(key)}:${canonicalManifestJson(record[key])}`)
+    .join(",")}}`;
+}
+
+/** Content identity paired with the schema version on every physical command. */
+export const OMI_TOOL_MANIFEST_DIGEST = `sha256:${createHash("sha256")
+  .update(canonicalManifestJson(omiToolManifest))
+  .digest("hex")}` as const;
+
 export function isToolAvailableForContext(
   availability: OmiToolAdapterAvailability | undefined,
   context: OmiToolProjectionContext = {},
@@ -1542,7 +1564,8 @@ export function buildToolAvailabilitySnapshot(
   }
 
   return {
-    manifestVersion: 1,
+    manifestVersion: OMI_TOOL_MANIFEST_VERSION,
+    manifestDigest: OMI_TOOL_MANIFEST_DIGEST,
     adapterId,
     context,
     advertisedToolCount: advertised.length,

@@ -1437,7 +1437,8 @@ extension ChatContentBlock {
       let output
     else { return nil }
 
-    return Self.labeledValue(in: output, keys: ["id"]).flatMap(UUID.init(uuidString:))
+    return Self.canonicalSpawnReceipt(in: output)?.pillId
+      ?? Self.labeledValue(in: output, keys: ["id"]).flatMap(UUID.init(uuidString:))
   }
 
   var spawnedAgentSessionID: String? {
@@ -1452,7 +1453,8 @@ extension ChatContentBlock {
       !status.isInFlight,
       let output
     else { return nil }
-    return Self.labeledValue(in: output, keys: ["sessionid", "session_id"])
+    return Self.canonicalSpawnReceipt(in: output)?.sessionId
+      ?? Self.labeledValue(in: output, keys: ["sessionid", "session_id"])
   }
 
   var spawnedAgentRunID: String? {
@@ -1467,7 +1469,18 @@ extension ChatContentBlock {
       !status.isInFlight,
       let output
     else { return nil }
-    return Self.labeledValue(in: output, keys: ["runid", "run_id"])
+    return Self.canonicalSpawnReceipt(in: output)?.runId
+      ?? Self.labeledValue(in: output, keys: ["runid", "run_id"])
+  }
+
+  var spawnedAgentTitle: String? {
+    guard case .toolCall(_, let name, let status, _, _, let output) = self,
+      Self.cleanToolName(name) == "spawn_agent",
+      !status.isInFlight,
+      let output
+    else { return nil }
+    return Self.canonicalSpawnReceipt(in: output)?.title
+      ?? Self.labeledValue(in: output, keys: ["title"])
   }
 
   /// Parse a labeled `key: value` line from a spawn_agent tool block's output.
@@ -1488,6 +1501,41 @@ extension ChatContentBlock {
       if !value.isEmpty { return value }
     }
     return nil
+  }
+
+  /// Decode the one-line JSON emitted by the production Node `spawn_agent`
+  /// control tool. The labeled-line parser below remains decode-only rollback
+  /// compatibility for responses written by the previous desktop release.
+  private static func canonicalSpawnReceipt(in output: String) -> (
+    pillId: UUID?, sessionId: String?, runId: String?, title: String?
+  )? {
+    guard let data = output.data(using: .utf8),
+      let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      root["ok"] as? Bool == true
+    else { return nil }
+
+    let firstAgent = (root["agents"] as? [[String: Any]])?.first
+    let session = (firstAgent?["session"] as? [String: Any])
+      ?? (root["session"] as? [String: Any])
+    let run = (firstAgent?["run"] as? [String: Any])
+      ?? (root["run"] as? [String: Any])
+    let metadata = session?["metadata"] as? [String: Any]
+
+    func string(_ value: Any?) -> String? {
+      guard let raw = value as? String else { return nil }
+      let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+      return trimmed.isEmpty ? nil : trimmed
+    }
+
+    let pillRaw = string(session?["externalRefId"])
+      ?? string(metadata?["pillId"])
+      ?? string(root["pillId"])
+    return (
+      pillId: pillRaw.flatMap(UUID.init(uuidString:)),
+      sessionId: string(session?["sessionId"]),
+      runId: string(run?["runId"]),
+      title: string(session?["title"])
+    )
   }
 
   private static func cleanToolName(_ name: String) -> String {
