@@ -70,6 +70,8 @@ autoscaling:
   enabled: false
   minReplicas: 1
   maxReplicas: 2
+  # targetCPUUtilizationPercentage: 70   # CPU stays low during GPU inference; rarely triggers
+  # requestsPerPod: 4                     # scale on concurrent active requests (primary signal)
 
 volumes: []
 

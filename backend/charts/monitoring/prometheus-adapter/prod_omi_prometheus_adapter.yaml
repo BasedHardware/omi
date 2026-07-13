@@ -109,5 +109,13 @@ rules:
         overrides:
           namespace: { resource: "namespace" }
           pod: { resource: "pod" }
+    # Total active NLLB translation requests for HPA (concurrency-based autoscaling)
+    - name:
+        as: "nllb_active_requests_total"
+      seriesQuery: 'nllb_active_requests{namespace!=""}'
+      metricsQuery: 'sum(nllb_active_requests{<<.LabelMatchers>>})'
+      resources:
+        overrides:
+          namespace: { resource: "namespace" }
 extraArguments:
   - --metrics-max-age=5m
