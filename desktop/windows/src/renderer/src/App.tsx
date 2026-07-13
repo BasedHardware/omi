@@ -24,6 +24,7 @@ import { CaptureApp } from './capture/CaptureApp'
 import { LiveMirrorHost } from './components/recording/LiveMirrorHost'
 import { auth, onAuthStateChanged } from './lib/firebase'
 import { invalidateConversationsCache } from './lib/pageCache'
+import { startOutboxSweep, stopOutboxSweep } from './lib/sync/outboxSweep'
 import { runAnimBench } from './lib/dev/animBench'
 import { InsightToast } from './components/insight/InsightToast'
 import { TrayStateHost } from './components/tray/TrayStateHost'
@@ -76,6 +77,15 @@ function AppShellInner(): React.JSX.Element {
   // saves a chat it can't invalidate ours directly. Main rebroadcasts the change
   // here so this window's Conversations tab refreshes without a relaunch.
   useEffect(() => window.omi.onConversationsChanged(() => invalidateConversationsCache()), [])
+
+  // App-lifetime outbox retry sweep. This shell mounts only in the main window
+  // once signed in + onboarded, and unmounts on sign-out, so it doubles as the
+  // sweep's start-on-sign-in / stop-on-sign-out gate. Without it a PTT-only user
+  // who never opens Conversations has a failed sync wedged all session.
+  useEffect(() => {
+    startOutboxSweep()
+    return () => stopOutboxSweep()
+  }, [])
 
   return (
     <div className="app-canvas flex h-full min-h-0 flex-col">

@@ -130,6 +130,23 @@ export function isOnboardingComplete(): boolean {
   return typeof getPreferences().onboardingCompletedAt === 'number'
 }
 
+// Clear the user-identity fields (name, chosen goal) on sign-out so a different
+// account on the same machine doesn't inherit them. Device settings, consents,
+// and onboarding state in the same blob are machine-scoped and kept. Read-
+// modify-writes the live stored value like setPreferences (multi-window safe).
+export function clearUserScopedPreferences(): void {
+  const next = { ...load() }
+  delete next.displayName
+  delete next.goal
+  current = next
+  try {
+    localStorage.setItem(KEY, JSON.stringify(current))
+  } catch {
+    /* quota / privacy mode */
+  }
+  listeners.forEach((cb) => cb(current))
+}
+
 // One-shot, in-memory route the app shell should jump to right after onboarding
 // finishes (e.g. "Take me to my tasks" → '/tasks'). Not persisted — it only
 // bridges the onboarding→shell handoff. Navigating from the onboarding screen

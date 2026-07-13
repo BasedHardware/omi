@@ -3,13 +3,25 @@ import type { Memory } from '../hooks/useMemories'
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
-// Page through every memory (server caps a page at 200). Dedupes by id and stops
-// if a page adds nothing new — guards against a server that ignores `offset`.
+// Page through every memory. GET /v3/memories clamps `limit` to at most 5000
+// and — on BOTH the legacy and canonical read paths — FORCES limit to 5000
+// whenever offset is 0, regardless of the requested limit (see
+// _legacy_get_memories and the canonical branch of get_memories in
+// backend/routers/memories.py). So the first call here can return up to 5000
+// memories even though it asks for 200. Advance `offset` by the number of
+// items actually received (not a fixed step) so the next request picks up
+// where the server really left off — a fixed +200 step would re-request
+// already-seen ids from inside that forced first page and hit the dedup guard
+// early, silently truncating anything past the account's first 5000 memories.
+// Dedupes by id and stops when a page is empty or adds nothing new — guards
+// against a server that ignores `offset` entirely.
 export async function fetchAllMemories(): Promise<Memory[]> {
   const byId = new Map<string, Memory>()
-  for (let offset = 0; offset < 100_000; offset += 200) {
+  let offset = 0
+  while (offset < 100_000) {
     const r = await omiApi.get('/v3/memories', { params: { limit: 200, offset } })
     const page = (Array.isArray(r.data) ? r.data : (r.data?.memories ?? [])) as Memory[]
+    if (page.length === 0) break
     let added = 0
     for (const m of page) {
       if (m.id && !byId.has(m.id)) {
@@ -17,9 +29,45 @@ export async function fetchAllMemories(): Promise<Memory[]> {
         added++
       }
     }
-    if (page.length < 200 || added === 0) break
+    if (added === 0) break
+    offset += page.length
   }
   return [...byId.values()]
+}
+
+// Cap aligned with the backend's MEMORIES_BATCH_MAX (backend/routers/memories.py)
+// so a chunk can never be rejected for exceeding the server's per-request limit.
+export const MEMORIES_IMPORT_BATCH_SIZE = 100
+
+export type BatchImportTally = { ok: number; failed: number; firstError?: string }
+
+// Send memory contents through POST /v3/memories/batch in chunks of at most
+// MEMORIES_IMPORT_BATCH_SIZE, one request per chunk, sequentially. Replaces the
+// old one-POST-per-memory fan-out (up to hundreds of requests for a large
+// import), which could blow through the per-Authorization rate limit and
+// collaterally 429 unrelated chat/sync/goals calls for the same user.
+export async function postMemoriesBatched(contents: string[]): Promise<BatchImportTally> {
+  let ok = 0
+  let failed = 0
+  let firstError: string | undefined
+  for (let i = 0; i < contents.length; i += MEMORIES_IMPORT_BATCH_SIZE) {
+    const chunk = contents.slice(i, i + MEMORIES_IMPORT_BATCH_SIZE)
+    try {
+      const r = await omiApi.post('/v3/memories/batch', {
+        memories: chunk.map((content) => ({ content }))
+      })
+      ok += r.data?.created_count ?? chunk.length
+    } catch (e) {
+      const msg =
+        (e as { response?: { status?: number; data?: { detail?: string } }; message: string })
+          .response?.data?.detail ??
+        (e as { response?: { status?: number } }).response?.status?.toString() ??
+        (e as Error).message
+      if (!firstError) firstError = msg
+      failed += chunk.length
+    }
+  }
+  return { ok, failed, firstError }
 }
 
 export type BulkDeleteTally = { deleted: number; failed: number; firstError?: string }

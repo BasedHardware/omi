@@ -61,7 +61,29 @@ export type ConversationPayload = {
   source: 'omi-windows'
 }
 
-export type ChatMessage = { id?: string; role: 'user' | 'assistant'; content: string }
+/** A conversation the assistant's answer cited. Comes from the backend `done:`
+ *  payload's `memories` array (typed `MessageConversation` server-side); the
+ *  backend has already stripped the matching `[n]` markers from the reply text. */
+export type ChatCitation = { id: string; title: string; emoji?: string }
+
+export type ChatMessage = {
+  id?: string
+  role: 'user' | 'assistant'
+  content: string
+  // --- Finalized from the terminal `done:` SSE payload (assistant messages only;
+  // absent on user messages and on a still-streaming reply). Additive: older
+  // persisted rows simply lack them. ---
+  /** The server (Firestore) message id — distinct from the local client `id`.
+   *  Required to wire rating / report / share, which key off the server id. */
+  serverId?: string
+  /** Conversations the answer cited (see ChatCitation). */
+  citations?: ChatCitation[]
+  /** Inline chart payload when the answer produced one. Opaque here — Windows has
+   *  no chart UI yet; retained so the data isn't silently dropped. */
+  chartData?: unknown
+  /** Whether the backend flagged this turn to prompt the user for an NPS rating. */
+  askForNps?: boolean
+}
 
 /**
  * Cloud-sync outbox state for a local conversation row. The client OWNS retry
@@ -178,6 +200,12 @@ export type ListenStartArgs = {
   language: string
   /** Backend pipeline to use. Defaults to 'conversation' when omitted. */
   mode?: ListenMode
+  /** Conversation mode only: a client-generated UUID passed to /v4/listen as
+   *  `client_conversation_id`. The backend keys the server-side conversation on it,
+   *  so a reconnect that re-sends the SAME id RESUMES the same conversation instead
+   *  of stranding a half-recorded one. Regenerated per conversation (after each
+   *  finalize/silence boundary); re-used across reconnects within one conversation. */
+  clientConversationId?: string
 }
 
 export type ListenMessage =
@@ -454,6 +482,10 @@ export type OmiBridgeApi = {
    *  stale-snapshot second driver from re-POSTing. `resetAttempts` restarts the
    *  attempt counter (manual re-sync of a wedged row). */
   claimConversationForPosting: (id: string, resetAttempts?: boolean) => Promise<boolean>
+  /** Sign-out teardown: delete every user-scoped local table (conversations,
+   *  captions, local KG, rewind frames, app usage, insights, indexed files) so a
+   *  different account on this machine starts clean. */
+  wipeUserData: () => Promise<void>
   // The mic record chord (default Ctrl+Space, rebindable via setRecordHotkey)
   // fires on channel 'recorder:hotkey' from main; the callback receives the
   // capture mode to toggle ('mic'). Returns an unsubscribe function.

@@ -64,6 +64,7 @@ import { seedUserAssistOnce } from './usage/userAssistSeed'
 import { registerRewindHandlers } from './ipc/rewind'
 import { registerScreenHandlers } from './ipc/screen'
 import { registerBillingIpc } from './billing/checkoutWindow'
+import { helperProcess } from './ocr/helperProcess'
 import { registerInsightHandlers } from './ipc/insight'
 import {
   createInsightToastWindow,
@@ -268,7 +269,8 @@ import {
   deleteLocalConversation,
   updateLocalConversationTitle,
   updateLocalConversationSync,
-  claimConversationForPosting
+  claimConversationForPosting,
+  wipeUserData
 } from './ipc/db'
 
 // The first time the user closes the window to the tray, tell them Omi is still
@@ -546,6 +548,9 @@ app.whenReady().then(async () => {
     async (_e, id: string, resetAttempts?: boolean) =>
       claimConversationForPosting(id, resetAttempts)
   )
+  // Sign-out teardown: clear every user-scoped table so a second account on this
+  // machine can't see the prior user's local data (renderer authTeardown.ts).
+  ipcMain.handle('db:wipeUserData', async () => wipeUserData())
   registerOmiListenHandlers()
   // Capture bridge: routes commands from UI windows to the hidden capture window
   // and events back. Registered before the capture window is created so no early
@@ -899,6 +904,10 @@ app.on('will-quit', () => {
   flushPerfMarks()
   automationBridge.dispose()
   stopAutomationTargetTracker()
+  // Kill the long-running OCR/window-info helper subprocess. Without this it
+  // outlives the app on every quit, so orphaned omi-*-ocr-helper.exe processes
+  // pile up across launches (no production dispose() call site before this).
+  helperProcess.dispose()
 })
 
 // In this file you can include the rest of your app's specific main process

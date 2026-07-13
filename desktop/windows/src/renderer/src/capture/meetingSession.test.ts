@@ -7,21 +7,28 @@ const stops: Record<'mic' | 'system', ReturnType<typeof vi.fn>> = {
 }
 type LaneCb = { onLine: (l: { id: string; text: string; speaker?: string }) => void }
 const laneCbs: Partial<Record<'mic' | 'system', LaneCb>> = {}
+const laneModes: Partial<Record<'mic' | 'system', string>> = {}
 let systemShouldFail = false
 
 vi.mock('../lib/transcriptionClient', () => ({
-  startTranscription: vi.fn(async (source: 'mic' | 'system', cb: LaneCb) => {
+  startTranscription: vi.fn(async (source: 'mic' | 'system', cb: LaneCb, mode?: string) => {
     laneCbs[source] = cb
+    laneModes[source] = mode
     if (source === 'system' && systemShouldFail) throw new Error('loopback unavailable')
-    return { stop: stops[source] }
+    return { stop: stops[source], finalize: vi.fn() }
   })
+}))
+
+// The meeting session defers its mic lane to the continuous mic session (C6);
+// mock the signal so each test controls whether the mic is already owned.
+let continuousMicActive = false
+vi.mock('./liveMicSession', () => ({
+  isLiveMicSessionActive: () => continuousMicActive
 }))
 
 import { startMeetingSession, formatMeetingTranscript } from './meetingSession'
 
-const insertLocalConversation = vi.fn(
-  async (c: { transcript: string }): Promise<void> => void c
-)
+const insertLocalConversation = vi.fn(async (c: { transcript: string }): Promise<void> => void c)
 const notifyConversationsChanged = vi.fn()
 
 beforeEach(() => {
@@ -29,7 +36,10 @@ beforeEach(() => {
   stops.system.mockClear()
   laneCbs.mic = undefined
   laneCbs.system = undefined
+  laneModes.mic = undefined
+  laneModes.system = undefined
   systemShouldFail = false
+  continuousMicActive = false
   insertLocalConversation.mockClear()
   notifyConversationsChanged.mockClear()
   // meetingSession reads window.omi.* and the global crypto.randomUUID.
@@ -65,6 +75,31 @@ describe('startMeetingSession', () => {
     expect(notifyConversationsChanged).toHaveBeenCalledOnce()
   })
 
+  it('wires the local-only system lane transcription-only and the mic lane backend-owned', () => {
+    return startMeetingSession({ appName: 'Zoom', onError: vi.fn() }).then(() => {
+      // System is saved locally → must NOT create a server-side /v4/listen
+      // conversation (would race the mic conversation on the per-uid pointer).
+      expect(laneModes.system).toBe('transcribe')
+      // Mic is backend-owned when the meeting opens it.
+      expect(laneModes.mic).toBe('conversation')
+    })
+  })
+
+  it('does NOT open a second mic lane when a continuous mic session is already active (C6)', async () => {
+    continuousMicActive = true
+    const session = await startMeetingSession({ appName: 'Zoom', onError: vi.fn() })
+    // Only the system lane runs; the mic is left to the continuous session so no
+    // duplicate /v4/listen mic socket is opened for the same audio.
+    expect(laneCbs.mic).toBeUndefined()
+    expect(laneCbs.system).toBeDefined()
+    // The system transcript still saves locally.
+    laneCbs.system?.onLine({ id: 's', speaker: 'Alex', text: 'remote side' })
+    await session.stop()
+    expect(stops.mic).not.toHaveBeenCalled()
+    expect(stops.system).toHaveBeenCalledOnce()
+    expect(insertLocalConversation).toHaveBeenCalledOnce()
+  })
+
   it('skips the save when the system lane produced nothing', async () => {
     const session = await startMeetingSession({ appName: 'Teams', onError: vi.fn() })
     laneCbs.mic?.onLine({ id: 'm', text: 'only mic spoke' })
@@ -78,7 +113,7 @@ describe('startMeetingSession', () => {
       'loopback unavailable'
     )
     // The mic lane resolved before system rejected — it MUST be stopped, not
-    // orphaned (the C1 regression: Promise.all left it running).
+    // orphaned (the regression: Promise.all left it running).
     expect(stops.mic).toHaveBeenCalledOnce()
   })
 
