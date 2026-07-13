@@ -1,0 +1,87 @@
+name: Verify Development Backend Deployment
+
+on:
+  # This is not a generic health probe: the source deployment metadata
+  # determines the exact revision suffix and image tag that must still serve.
+  workflow_run:
+    workflows: ['Auto Deploy Backend to Development']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: 'Full commit SHA deployed by Auto Deploy Backend to Development'
+        required: true
+        type: string
+      deploy_run_id:
+        description: 'GitHub Actions run ID of that deployment'
+        required: true
+        type: string
+      deploy_run_attempt:
+        description: 'GitHub Actions attempt number of that deployment'
+        required: true
+        default: '1'
+        type: string
+
+# This is a read-only participant in the same mutation domain. A newer deploy
+# makes an older acceptance run fail instead of certifying stale composition.
+concurrency:
+  group: deploy-backend-stack-development
+  cancel-in-progress: false
+
+env:
+  REGION: us-central1
+  SOURCE_SHA: ${{ github.event.workflow_run.head_sha || inputs.commit_sha }}
+  DEPLOY_RUN_ID: ${{ github.event.workflow_run.id || inputs.deploy_run_id }}
+  DEPLOY_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt || inputs.deploy_run_attempt }}
+
+jobs:
+  verify:
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+      }}
+    environment: development
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout deployed commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+
+      - name: Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Verify exact deployed composition
+        run: |
+          python3 backend/scripts/verify_dev_backend_deployment.py \
+            --commit-sha "$SOURCE_SHA" \
+            --deploy-run-id "$DEPLOY_RUN_ID" \
+            --deploy-run-attempt "$DEPLOY_RUN_ATTEMPT" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "$REGION" \
+            --evidence-path artifacts/dev-backend-deployment-acceptance.json
+
+      - name: Upload deployment acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-backend-deployment-acceptance-${{ github.run_id }}
+          path: artifacts/dev-backend-deployment-acceptance.json
+          if-no-files-found: warn
