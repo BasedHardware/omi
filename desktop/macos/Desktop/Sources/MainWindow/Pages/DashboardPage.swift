@@ -2453,7 +2453,7 @@ private struct HomeSuggestionRow: View {
             )
             .contentShape(.rect(cornerRadius: 21))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(HomeSurfaceButtonStyle())
         .onHover { isHovering = $0 }
         .omiPointerCursor()
         .accessibilityLabel(text)
@@ -3376,10 +3376,22 @@ private struct HomeStatRibbonCell: View {
             .background(isHovering ? HomePalette.tileHover : Color.clear)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(HomeSurfaceButtonStyle())
         .onHover { isHovering = $0 }
         .omiPointerCursor()
         .accessibilityLabel("\(item.title), \(item.value)")
+    }
+}
+
+/// Shared tactile feedback for dashboard surfaces whose hover elevation is
+/// drawn by their label. Keeping press feedback here prevents each card from
+/// inventing its own scale and timing.
+private struct HomeSurfaceButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .brightness(configuration.isPressed ? 0.025 : 0)
+            .omiAnimation(.easeOut(duration: 0.10), value: configuration.isPressed)
     }
 }
 
