@@ -29,10 +29,17 @@ pub struct TavilyResult {
 }
 
 pub async fn needs_web_search(query: &str, cfg: &AppConfig) -> bool {
-    let (api_key, url, model) = crate::llm::resolve_llm_endpoint(cfg);
+    let api_key = if !cfg.groq_api_key.is_empty() {
+        cfg.groq_api_key.clone()
+    } else {
+        let (k, _, _) = crate::llm::resolve_llm_endpoint(cfg);
+        k
+    };
     if api_key.is_empty() {
         return false;
     }
+    let url = "https://api.groq.com/openai/v1/chat/completions";
+    let model = "llama-3.3-70b-versatile";
 
     let messages = vec![
         crate::llm::LlmMessage {
@@ -48,7 +55,7 @@ pub async fn needs_web_search(query: &str, cfg: &AppConfig) -> bool {
         },
     ];
 
-    match crate::llm::complete(&api_key, &url, &model, messages, Some(3)).await {
+    match crate::llm::complete(&api_key, url, model, messages, Some(3)).await {
         Ok(answer) => {
             let decision = answer.trim().to_uppercase();
             let needs = decision.starts_with("YES");
