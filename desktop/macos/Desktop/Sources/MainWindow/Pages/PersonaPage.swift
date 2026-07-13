@@ -44,16 +44,16 @@ struct PersonaPage: View {
                 Spacer()
                 DismissButton(action: dismissSheet)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
+            .padding(.horizontal, OmiSpacing.xl)
+            .padding(.top, OmiSpacing.lg)
 
             ScrollView {
                 VStack(spacing: 0) {
                     // Header
                     header
-                        .padding(.horizontal, 32)
-                        .padding(.top, 16)
-                        .padding(.bottom, 24)
+                        .padding(.horizontal, OmiSpacing.section)
+                        .padding(.top, OmiSpacing.lg)
+                        .padding(.bottom, OmiSpacing.xxl)
 
                     // Content
                     if isLoading && persona == nil {
@@ -62,10 +62,10 @@ struct PersonaPage: View {
                         errorView(error)
                     } else if let persona = persona {
                         personaDetailView(persona)
-                            .padding(.horizontal, 32)
+                            .padding(.horizontal, OmiSpacing.section)
                     } else {
                         noPersonaView
-                            .padding(.horizontal, 32)
+                            .padding(.horizontal, OmiSpacing.section)
                     }
 
                     Spacer()
@@ -94,13 +94,13 @@ struct PersonaPage: View {
 
     private var header: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                 Text("AI Persona")
-                    .scaledFont(size: 28, weight: .bold)
+                    .scaledFont(size: OmiType.title, weight: .bold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Text("Create an AI clone of yourself that others can chat with")
-                    .scaledFont(size: 14)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textTertiary)
             }
 
@@ -111,7 +111,7 @@ struct PersonaPage: View {
                     Task { await loadPersona() }
                 } label: {
                     Image(systemName: "arrow.clockwise")
-                        .scaledFont(size: 14, weight: .medium)
+                        .scaledFont(size: OmiType.body, weight: .medium)
                         .foregroundColor(OmiColors.textSecondary)
                 }
                 .buttonStyle(.plain)
@@ -123,12 +123,12 @@ struct PersonaPage: View {
     // MARK: - Loading View
 
     private var loadingView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: OmiSpacing.lg) {
             ProgressView()
                 .scaleEffect(1.2)
 
             Text("Loading persona...")
-                .scaledFont(size: 14)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(OmiColors.textTertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -138,13 +138,13 @@ struct PersonaPage: View {
     // MARK: - Error View
 
     private func errorView(_ message: String) -> some View {
-        VStack(spacing: 16) {
+        VStack(spacing: OmiSpacing.lg) {
             Image(systemName: "exclamationmark.triangle")
-                .scaledFont(size: 40)
+                .scaledFont(size: OmiType.hero)
                 .foregroundColor(OmiColors.error)
 
             Text(message)
-                .scaledFont(size: 14)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(OmiColors.textSecondary)
                 .multilineTextAlignment(.center)
 
@@ -152,12 +152,12 @@ struct PersonaPage: View {
                 Task { await loadPersona() }
             } label: {
                 Text("Try Again")
-                    .scaledFont(size: 14, weight: .medium)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-                    .background(OmiColors.purplePrimary)
-                    .cornerRadius(8)
+                    .scaledFont(size: OmiType.body, weight: .medium)
+                    .foregroundColor(OmiColors.backgroundPrimary)
+                    .padding(.horizontal, OmiSpacing.xl)
+                    .padding(.vertical, OmiSpacing.sm)
+                    .background(OmiColors.accent)
+                    .cornerRadius(OmiChrome.elementRadius)
             }
             .buttonStyle(.plain)
         }
@@ -168,25 +168,25 @@ struct PersonaPage: View {
     // MARK: - No Persona View
 
     private var noPersonaView: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: OmiSpacing.xxl) {
             // Icon
             ZStack {
                 Circle()
-                    .fill(OmiColors.purplePrimary.opacity(0.15))
+                    .fill(OmiColors.accent.opacity(0.15))
                     .frame(width: 100, height: 100)
 
                 Image(systemName: "person.crop.circle.badge.plus")
                     .scaledFont(size: 44)
-                    .foregroundColor(OmiColors.purplePrimary)
+                    .foregroundColor(OmiColors.accent)
             }
 
-            VStack(spacing: 8) {
+            VStack(spacing: OmiSpacing.sm) {
                 Text("No Persona Yet")
-                    .scaledFont(size: 20, weight: .semibold)
+                    .scaledFont(size: OmiType.heading, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Text("Create an AI clone of yourself using your public memories. Others can then chat with your persona to learn about you.")
-                    .scaledFont(size: 14)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textSecondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 400)
@@ -195,29 +195,29 @@ struct PersonaPage: View {
             Button {
                 showingCreateForm = true
             } label: {
-                HStack(spacing: 8) {
+                HStack(spacing: OmiSpacing.sm) {
                     Image(systemName: "plus")
                     Text("Create Persona")
                 }
-                .scaledFont(size: 15, weight: .semibold)
-                .foregroundColor(.white)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 12)
-                .background(OmiColors.purplePrimary)
-                .cornerRadius(10)
+                .scaledFont(size: OmiType.subheading, weight: .semibold)
+                .foregroundColor(OmiColors.backgroundPrimary)
+                .padding(.horizontal, OmiSpacing.xxl)
+                .padding(.vertical, OmiSpacing.md)
+                .background(OmiColors.accent)
+                .cornerRadius(OmiChrome.smallControlRadius)
             }
             .buttonStyle(.plain)
 
             // Info about public memories
-            HStack(spacing: 8) {
+            HStack(spacing: OmiSpacing.sm) {
                 Image(systemName: "info.circle")
-                    .scaledFont(size: 13)
+                    .scaledFont(size: OmiType.body)
 
                 Text("Make memories public in the Memories page to enhance your persona")
-                    .scaledFont(size: 13)
+                    .scaledFont(size: OmiType.body)
             }
             .foregroundColor(OmiColors.textTertiary)
-            .padding(.top, 8)
+            .padding(.top, OmiSpacing.sm)
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 80)
@@ -226,13 +226,13 @@ struct PersonaPage: View {
     // MARK: - Persona Detail View
 
     private func personaDetailView(_ persona: Persona) -> some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
             // Profile card
-            HStack(spacing: 20) {
+            HStack(spacing: OmiSpacing.xl) {
                 // Avatar
                 ZStack {
                     Circle()
-                        .fill(OmiColors.purplePrimary.opacity(0.15))
+                        .fill(OmiColors.accent.opacity(0.15))
                         .frame(width: 80, height: 80)
 
                     if !persona.image.isEmpty, let url = URL(string: persona.image) {
@@ -243,56 +243,56 @@ struct PersonaPage: View {
                         } placeholder: {
                             Image(systemName: "person.fill")
                                 .scaledFont(size: 32)
-                                .foregroundColor(OmiColors.purplePrimary)
+                                .foregroundColor(OmiColors.accent)
                         }
                         .frame(width: 80, height: 80)
                         .clipShape(Circle())
                     } else {
                         Image(systemName: "person.fill")
                             .scaledFont(size: 32)
-                            .foregroundColor(OmiColors.purplePrimary)
+                            .foregroundColor(OmiColors.accent)
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                     Text(persona.name)
-                        .scaledFont(size: 20, weight: .semibold)
+                        .scaledFont(size: OmiType.heading, weight: .semibold)
                         .foregroundColor(OmiColors.textPrimary)
 
                     if let username = persona.username {
                         Text("@\(username)")
-                            .scaledFont(size: 14)
+                            .scaledFont(size: OmiType.body)
                             .foregroundColor(OmiColors.textTertiary)
                     }
 
                     // Status badge
-                    HStack(spacing: 6) {
+                    HStack(spacing: OmiSpacing.xs) {
                         Circle()
                             .fill(statusColor(for: persona.status))
                             .frame(width: 8, height: 8)
 
                         Text(persona.statusText)
-                            .scaledFont(size: 12, weight: .medium)
+                            .scaledFont(size: OmiType.caption, weight: .medium)
                             .foregroundColor(OmiColors.textSecondary)
                     }
-                    .padding(.top, 4)
+                    .padding(.top, OmiSpacing.xxs)
                 }
 
                 Spacer()
 
                 // Actions
-                HStack(spacing: 12) {
+                HStack(spacing: OmiSpacing.md) {
                     Button {
                         editName = persona.name
                         editDescription = persona.description
                         isEditing = true
                     } label: {
                         Image(systemName: "pencil")
-                            .scaledFont(size: 14, weight: .medium)
+                            .scaledFont(size: OmiType.body, weight: .medium)
                             .foregroundColor(OmiColors.textSecondary)
                             .frame(width: 36, height: 36)
                             .background(OmiColors.backgroundTertiary)
-                            .cornerRadius(8)
+                            .cornerRadius(OmiChrome.elementRadius)
                     }
                     .buttonStyle(.plain)
 
@@ -300,50 +300,50 @@ struct PersonaPage: View {
                         showingDeleteConfirmation = true
                     } label: {
                         Image(systemName: "trash")
-                            .scaledFont(size: 14, weight: .medium)
+                            .scaledFont(size: OmiType.body, weight: .medium)
                             .foregroundColor(OmiColors.error)
                             .frame(width: 36, height: 36)
                             .background(OmiColors.error.opacity(0.15))
-                            .cornerRadius(8)
+                            .cornerRadius(OmiChrome.elementRadius)
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(20)
+            .padding(OmiSpacing.xl)
             .background(OmiColors.backgroundTertiary.opacity(0.5))
-            .cornerRadius(12)
+            .cornerRadius(OmiChrome.smallControlRadius)
 
             // Description section
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: OmiSpacing.md) {
                 Text("Description")
-                    .scaledFont(size: 14, weight: .semibold)
+                    .scaledFont(size: OmiType.body, weight: .semibold)
                     .foregroundColor(OmiColors.textSecondary)
 
                 if isEditing {
                     TextEditor(text: $editDescription)
-                        .scaledFont(size: 14)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(OmiColors.textPrimary)
                         .frame(height: 80)
-                        .padding(8)
+                        .padding(OmiSpacing.sm)
                         .background(OmiColors.backgroundPrimary)
-                        .cornerRadius(8)
+                        .cornerRadius(OmiChrome.elementRadius)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 8)
+                            RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                                 .stroke(OmiColors.textQuaternary.opacity(0.5), lineWidth: 1)
                         )
                 } else {
                     Text(persona.description.isEmpty ? "No description yet" : persona.description)
-                        .scaledFont(size: 14)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(persona.description.isEmpty ? OmiColors.textTertiary : OmiColors.textPrimary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .padding(16)
+            .padding(OmiSpacing.lg)
             .background(OmiColors.backgroundTertiary.opacity(0.5))
-            .cornerRadius(12)
+            .cornerRadius(OmiChrome.smallControlRadius)
 
             // Stats section
-            HStack(spacing: 16) {
+            HStack(spacing: OmiSpacing.lg) {
                 statCard(
                     title: "Public Memories",
                     value: "\(persona.publicMemoriesCount ?? 0)",
@@ -359,23 +359,23 @@ struct PersonaPage: View {
             }
 
             // Actions section
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: OmiSpacing.md) {
                 Text("Actions")
-                    .scaledFont(size: 14, weight: .semibold)
+                    .scaledFont(size: OmiType.body, weight: .semibold)
                     .foregroundColor(OmiColors.textSecondary)
 
                 if isEditing {
-                    HStack(spacing: 12) {
+                    HStack(spacing: OmiSpacing.md) {
                         Button {
                             isEditing = false
                         } label: {
                             Text("Cancel")
-                                .scaledFont(size: 14, weight: .medium)
+                                .scaledFont(size: OmiType.body, weight: .medium)
                                 .foregroundColor(OmiColors.textSecondary)
                                 .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
+                                .padding(.vertical, OmiSpacing.md)
                                 .background(OmiColors.backgroundTertiary)
-                                .cornerRadius(8)
+                                .cornerRadius(OmiChrome.elementRadius)
                         }
                         .buttonStyle(.plain)
 
@@ -383,12 +383,12 @@ struct PersonaPage: View {
                             Task { await saveEdits() }
                         } label: {
                             Text("Save Changes")
-                                .scaledFont(size: 14, weight: .semibold)
-                                .foregroundColor(.white)
+                                .scaledFont(size: OmiType.body, weight: .semibold)
+                                .foregroundColor(OmiColors.backgroundPrimary)
                                 .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(OmiColors.purplePrimary)
-                                .cornerRadius(8)
+                                .padding(.vertical, OmiSpacing.md)
+                                .background(OmiColors.accent)
+                                .cornerRadius(OmiChrome.elementRadius)
                         }
                         .buttonStyle(.plain)
                     }
@@ -406,20 +406,20 @@ struct PersonaPage: View {
 
                             Text(isRegenerating ? "Regenerating..." : "Regenerate from Memories")
                         }
-                        .scaledFont(size: 14, weight: .medium)
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .scaledFont(size: OmiType.body, weight: .medium)
+                        .foregroundColor(OmiColors.accent)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(OmiColors.purplePrimary.opacity(0.15))
-                        .cornerRadius(8)
+                        .padding(.vertical, OmiSpacing.md)
+                        .background(OmiColors.accent.opacity(0.15))
+                        .cornerRadius(OmiChrome.elementRadius)
                     }
                     .buttonStyle(.plain)
                     .disabled(isRegenerating)
                 }
             }
-            .padding(16)
+            .padding(OmiSpacing.lg)
             .background(OmiColors.backgroundTertiary.opacity(0.5))
-            .cornerRadius(12)
+            .cornerRadius(OmiChrome.smallControlRadius)
 
             // Persona prompt preview (collapsible)
             if persona.hasPrompt, let prompt = persona.personaPrompt {
@@ -429,45 +429,45 @@ struct PersonaPage: View {
     }
 
     private func statCard(title: String, value: String, icon: String, isWarning: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+            HStack(spacing: OmiSpacing.sm) {
                 Image(systemName: icon)
-                    .scaledFont(size: 14)
-                    .foregroundColor(isWarning ? OmiColors.warning : OmiColors.purplePrimary)
+                    .scaledFont(size: OmiType.body)
+                    .foregroundColor(isWarning ? OmiColors.warning : OmiColors.accent)
 
                 Text(title)
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textTertiary)
             }
 
             Text(value)
-                .scaledFont(size: 18, weight: .semibold)
+                .scaledFont(size: OmiType.heading, weight: .semibold)
                 .foregroundColor(isWarning ? OmiColors.warning : OmiColors.textPrimary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
+        .padding(OmiSpacing.lg)
         .background(OmiColors.backgroundTertiary.opacity(0.5))
-        .cornerRadius(12)
+        .cornerRadius(OmiChrome.smallControlRadius)
     }
 
     @State private var isPromptExpanded = false
 
     private func personaPromptSection(_ prompt: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
             Button {
-                withAnimation {
+                OmiMotion.withGated {
                     isPromptExpanded.toggle()
                 }
             } label: {
                 HStack {
                     Text("Persona Prompt")
-                        .scaledFont(size: 14, weight: .semibold)
+                        .scaledFont(size: OmiType.body, weight: .semibold)
                         .foregroundColor(OmiColors.textSecondary)
 
                     Spacer()
 
                     Image(systemName: isPromptExpanded ? "chevron.up" : "chevron.down")
-                        .scaledFont(size: 12)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(OmiColors.textTertiary)
                 }
             }
@@ -475,17 +475,17 @@ struct PersonaPage: View {
 
             if isPromptExpanded {
                 Text(prompt)
-                    .scaledFont(size: 13)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
+                    .padding(OmiSpacing.md)
                     .background(OmiColors.backgroundPrimary)
-                    .cornerRadius(8)
+                    .cornerRadius(OmiChrome.elementRadius)
             }
         }
-        .padding(16)
+        .padding(OmiSpacing.lg)
         .background(OmiColors.backgroundTertiary.opacity(0.5))
-        .cornerRadius(12)
+        .cornerRadius(OmiChrome.smallControlRadius)
     }
 
     private func statusColor(for status: String) -> Color {
@@ -636,53 +636,53 @@ private struct CreatePersonaSheetContent: View {
             // Header
             HStack {
                 Text("Create AI Persona")
-                    .scaledFont(size: 18, weight: .semibold)
+                    .scaledFont(size: OmiType.heading, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
 
                 DismissButton(action: dismissSheet)
             }
-            .padding(20)
+            .padding(OmiSpacing.xl)
 
             Divider()
                 .background(OmiColors.textQuaternary.opacity(0.3))
 
             // Form
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xl) {
                 // Name field
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: OmiSpacing.sm) {
                     Text("Name")
-                        .scaledFont(size: 13, weight: .medium)
+                        .scaledFont(size: OmiType.body, weight: .medium)
                         .foregroundColor(OmiColors.textSecondary)
 
                     TextField("Your display name", text: $newPersonaName)
                         .textFieldStyle(.plain)
-                        .scaledFont(size: 14)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(OmiColors.textPrimary)
-                        .padding(12)
+                        .padding(OmiSpacing.md)
                         .background(OmiColors.backgroundPrimary)
-                        .cornerRadius(8)
+                        .cornerRadius(OmiChrome.elementRadius)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 8)
+                            RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                                 .stroke(OmiColors.textQuaternary.opacity(0.5), lineWidth: 1)
                         )
                 }
 
                 // Username field
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: OmiSpacing.sm) {
                     Text("Username (optional)")
-                        .scaledFont(size: 13, weight: .medium)
+                        .scaledFont(size: OmiType.body, weight: .medium)
                         .foregroundColor(OmiColors.textSecondary)
 
                     HStack {
                         Text("@")
-                            .scaledFont(size: 14)
+                            .scaledFont(size: OmiType.body)
                             .foregroundColor(OmiColors.textTertiary)
 
                         TextField("username", text: $newPersonaUsername)
                             .textFieldStyle(.plain)
-                            .scaledFont(size: 14)
+                            .scaledFont(size: OmiType.body)
                             .foregroundColor(OmiColors.textPrimary)
                             .onChange(of: newPersonaUsername) { _, newValue in
                                 newPersonaUsername = newValue.lowercased().filter { $0.isLetter || $0.isNumber || $0 == "_" }
@@ -700,31 +700,31 @@ private struct CreatePersonaSheetContent: View {
                                 .foregroundColor(available ? .green : .red)
                         }
                     }
-                    .padding(12)
+                    .padding(OmiSpacing.md)
                     .background(OmiColors.backgroundPrimary)
-                    .cornerRadius(8)
+                    .cornerRadius(OmiChrome.elementRadius)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 8)
+                        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                             .stroke(OmiColors.textQuaternary.opacity(0.5), lineWidth: 1)
                     )
 
                     Text("3-30 characters, lowercase letters, numbers, and underscores only")
-                        .scaledFont(size: 11)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(OmiColors.textTertiary)
                 }
 
                 // Info
-                HStack(spacing: 8) {
+                HStack(spacing: OmiSpacing.sm) {
                     Image(systemName: "info.circle")
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
 
                     Text("Your persona will be built from your public memories. Make more memories public to improve it.")
-                        .scaledFont(size: 12)
+                        .scaledFont(size: OmiType.caption)
                 }
                 .foregroundColor(OmiColors.textTertiary)
-                .padding(12)
+                .padding(OmiSpacing.md)
                 .background(OmiColors.info.opacity(0.1))
-                .cornerRadius(8)
+                .cornerRadius(OmiChrome.elementRadius)
 
                 Spacer()
 
@@ -740,17 +740,17 @@ private struct CreatePersonaSheetContent: View {
 
                         Text(isCreating ? "Creating..." : "Create Persona")
                     }
-                    .scaledFont(size: 15, weight: .semibold)
-                    .foregroundColor(.white)
+                    .scaledFont(size: OmiType.subheading, weight: .semibold)
+                    .foregroundColor(OmiColors.backgroundPrimary)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(canCreate ? OmiColors.purplePrimary : OmiColors.textTertiary)
-                    .cornerRadius(10)
+                    .padding(.vertical, OmiSpacing.md)
+                    .background(canCreate ? OmiColors.accent : OmiColors.textTertiary)
+                    .cornerRadius(OmiChrome.smallControlRadius)
                 }
                 .buttonStyle(.plain)
                 .disabled(!canCreate || isCreating)
             }
-            .padding(20)
+            .padding(OmiSpacing.xl)
         }
         .frame(width: 400, height: 450)
         .background(OmiColors.backgroundSecondary)

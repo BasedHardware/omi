@@ -50,14 +50,13 @@ final class WifiSyncService: ObservableObject {
     // MARK: - Properties
 
     private let logger = Logger(subsystem: "me.omi.desktop", category: "WifiSyncService")
-    private let walService = WALService.shared
     private let deviceProvider = DeviceProvider.shared
-
-    /// Test seam: inject a non-singleton WALService in unit tests.
-    var walServiceForTesting: WALService?
+    private let walServiceOverride: WALService?
 
     private var activeWalService: WALService {
-        walServiceForTesting ?? walService
+        // Keep the production singleton lazy: constructing an injected test
+        // service must never recover the real user's WAL directory.
+        walServiceOverride ?? WALService.shared
     }
 
     private var tcpConnection: NWConnection?
@@ -74,7 +73,9 @@ final class WifiSyncService: ObservableObject {
 
     // MARK: - Initialization
 
-    private init() {}
+    init(walServiceForTesting: WALService? = nil) {
+        walServiceOverride = walServiceForTesting
+    }
 
     // MARK: - Public Methods
 

@@ -9543,7 +9543,7 @@ export async function get_calendar_onboarding_status_v1_calendar_onboarding_stat
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function list_candidates_v1_candidates_get(query: { status?: CandidateStatus | null, limit?: number, offset?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<CandidateListResponse> {
+export async function list_candidates_v1_candidates_get(query: { status?: CandidateStatus | null, limit?: number, offset?: number, surface?: "suggested" | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<CandidateListResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/candidates`;
   const _params = query ? Object.entries(query)

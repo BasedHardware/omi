@@ -9,33 +9,33 @@ struct RecentConversationsWidget: View {
     var appState: AppState
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
             // Header
             HStack {
                 Text("Recent Conversations")
-                    .scaledFont(size: 16, weight: .semibold)
+                    .scaledFont(size: OmiType.subheading, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
 
                 Button(action: onViewAll) {
                     Text("View All")
-                        .scaledFont(size: 12, weight: .medium)
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .scaledFont(size: OmiType.caption, weight: .medium)
+                        .foregroundColor(OmiColors.accent)
                 }
                 .buttonStyle(.plain)
             }
 
             if conversations.isEmpty {
-                VStack(spacing: 8) {
+                VStack(spacing: OmiSpacing.sm) {
                     Text("No conversations yet")
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
+                .padding(.vertical, OmiSpacing.lg)
             } else {
-                VStack(spacing: 4) {
+                VStack(spacing: OmiSpacing.xxs) {
                     ForEach(conversations) { conversation in
                         ConversationRowView(
                             conversation: conversation,
@@ -49,12 +49,12 @@ struct RecentConversationsWidget: View {
                 }
             }
         }
-        .padding(20)
+        .padding(OmiSpacing.xl)
         .background(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16)
+                    RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
                         .stroke(OmiColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
                 )
         )

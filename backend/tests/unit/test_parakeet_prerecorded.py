@@ -321,6 +321,56 @@ class TestTranscribeBytes:
             with pytest.raises(RuntimeError, match='Parakeet transcription failed'):
                 pr.parakeet_prerecorded_from_bytes(wav, diarize=False)
 
+    # A degraded/foreign 200 must not be mapped to "no speech": sync treats a
+    # word-less segment as success, marks the job completed, and the client then
+    # discards the only copy of the audio. See #9586.
+    @pytest.mark.parametrize(
+        'body',
+        [
+            {},
+            {'detail': 'Model loading, try again shortly'},
+            [],
+        ],
+    )
+    def test_response_without_segments_or_text_raises(self, body):
+        wav = _make_wav()
+        resp = MagicMock()
+        resp.raise_for_status = MagicMock()
+        resp.json.return_value = body
+
+        with patch('httpx.Client') as mock_client_cls:
+            mock_client = MagicMock()
+            mock_client.__enter__ = MagicMock(return_value=mock_client)
+            mock_client.__exit__ = MagicMock(return_value=False)
+            mock_client.post.return_value = resp
+            mock_client_cls.return_value = mock_client
+
+            with pytest.raises(RuntimeError, match='Parakeet transcription failed'):
+                pr.parakeet_prerecorded_from_bytes(wav, diarize=False)
+
+    @pytest.mark.parametrize(
+        'body',
+        [
+            {'text': '', 'segments': []},
+            {'segments': []},
+            {'text': ''},
+        ],
+    )
+    def test_well_formed_silence_is_still_no_speech(self, body):
+        wav = _make_wav()
+        resp = MagicMock()
+        resp.raise_for_status = MagicMock()
+        resp.json.return_value = body
+
+        with patch('httpx.Client') as mock_client_cls:
+            mock_client = MagicMock()
+            mock_client.__enter__ = MagicMock(return_value=mock_client)
+            mock_client.__exit__ = MagicMock(return_value=False)
+            mock_client.post.return_value = resp
+            mock_client_cls.return_value = mock_client
+
+            assert pr.parakeet_prerecorded_from_bytes(wav, diarize=False) == []
+
 
 class TestTranscribeUrl:
 

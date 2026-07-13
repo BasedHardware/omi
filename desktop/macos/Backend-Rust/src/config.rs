@@ -41,10 +41,6 @@ pub struct Config {
     pub redis_port: u16,
     /// Redis password
     pub redis_password: Option<String>,
-    /// PostHog Personal API Key (for querying analytics)
-    pub posthog_api_key: Option<String>,
-    /// PostHog Project ID
-    pub posthog_project_id: String,
     /// Sentry webhook HMAC-SHA256 secret for signature verification
     pub sentry_webhook_secret: Option<String>,
     /// Sentry API auth token for fetching event details
@@ -121,9 +117,6 @@ impl Config {
                 .and_then(|p| p.parse().ok())
                 .unwrap_or(6379),
             redis_password: env::var("REDIS_DB_PASSWORD").ok(),
-            posthog_api_key: env::var("POSTHOG_PERSONAL_API_KEY").ok(),
-            posthog_project_id: env::var("POSTHOG_PROJECT_ID")
-                .unwrap_or_else(|_| "302298".to_string()),
             sentry_webhook_secret: env::var("SENTRY_WEBHOOK_SECRET").ok(),
             sentry_auth_token: env::var("SENTRY_AUTH_TOKEN").ok(),
             sentry_admin_uid: env::var("SENTRY_ADMIN_UID").ok(),
@@ -186,21 +179,5 @@ impl Config {
             );
         }
         Ok(())
-    }
-
-    /// Get Redis connection URL
-    pub fn redis_url(&self) -> Option<String> {
-        self.redis_host.as_ref().map(|host| {
-            if let Some(password) = &self.redis_password {
-                // URL-encode the password to handle special characters
-                let encoded_password = urlencoding::encode(password);
-                format!(
-                    "redis://default:{}@{}:{}",
-                    encoded_password, host, self.redis_port
-                )
-            } else {
-                format!("redis://{}:{}", host, self.redis_port)
-            }
-        })
     }
 }

@@ -23,7 +23,7 @@ struct VoiceWaveformBars: View {
     private static let barWidth: CGFloat = 4
     private static let barSpacing: CGFloat = 3
     private static let barHeight: CGFloat = 18
-    private static let fillGradient = Gradient(colors: [OmiColors.purpleAccent, OmiColors.purplePrimary])
+    private static let fillGradient = Gradient(colors: [OmiColors.accent, OmiColors.accent.opacity(0.6)])
 
     @State private var model: WaveBarsModel
 

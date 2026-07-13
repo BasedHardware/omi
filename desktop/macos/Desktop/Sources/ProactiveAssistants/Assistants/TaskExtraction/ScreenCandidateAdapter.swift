@@ -30,6 +30,14 @@ struct ScreenCaptureFacts: Codable, Equatable {
 enum ScreenCapturePolicy {
     /// Keep in sync with `backend/utils/task_intelligence/capture_policy.py`.
     static let minimumCaptureConfidence = 0.8
+    static let minimumOwnershipConfidence = 0.8
+
+    private static func meetsUserCaptureFloor(_ facts: ScreenCaptureFacts) -> Bool {
+        facts.owner == "user"
+            && facts.concreteDeliverable
+            && facts.captureConfidence >= minimumCaptureConfidence
+            && facts.ownershipConfidence >= minimumOwnershipConfidence
+    }
 
     static func evaluate(_ facts: ScreenCaptureFacts) -> ScreenCaptureOutcome {
         if facts.alreadyDone { return .proposeCompletion }
@@ -38,12 +46,14 @@ enum ScreenCapturePolicy {
         if facts.publicBroadcast && !facts.directMention { return .ignore }
         if facts.explicitCommand { return .createDirect }
         if facts.clearCommitment && facts.owner == "user" {
-            if facts.concreteDeliverable && facts.captureConfidence >= minimumCaptureConfidence {
+            guard facts.concreteDeliverable else { return .ignore }
+            if meetsUserCaptureFloor(facts) {
                 return .autoAcceptSilent
             }
             return .pendingCandidate
         }
-        if facts.directRequest || facts.inferredNextStep { return .pendingCandidate }
+        if facts.directRequest && meetsUserCaptureFloor(facts) { return .pendingCandidate }
+        if facts.inferredNextStep && meetsUserCaptureFloor(facts) { return .pendingCandidate }
         return .ignore
     }
 }
@@ -217,7 +227,7 @@ enum ScreenCandidateAdapter {
             duplicateOf: task.duplicateOf,
             refinesTask: task.refinesTask,
             captureConfidence: task.confidence,
-            ownershipConfidence: task.ownershipConfidence ?? (task.owner == "user" ? task.confidence : 0.5)
+            ownershipConfidence: task.ownershipConfidence ?? 0.5
         )
     }
 
@@ -239,7 +249,7 @@ enum ScreenCandidateAdapter {
             id: localEvidenceID,
             kind: .local_screen,
             scope: .device_local,
-            version: "capture.v1"
+            version: "capture.v2"
         )
         let owner = OmiAPI.TaskOwner(rawValue: facts.owner) ?? .unknown
         let priority = OmiAPI.TaskPriority(rawValue: task.priority.rawValue)

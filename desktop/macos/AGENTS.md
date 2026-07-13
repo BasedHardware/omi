@@ -256,6 +256,18 @@ This creates `/Applications/omi-fix-rewind.app` with bundle ID `com.omi.omi-fix-
 - To actually test, ALWAYS use `./run.sh` with `OMI_APP_NAME` — it starts Rust backend + Cloudflare tunnel + Swift app together
 - **When the user says "test it"**, use the `test-local` skill to build, run, and verify via macOS automation
 
+### macOS Version Compatibility
+- The deployment floor is `.macOS("14.0")` in `Desktop/Package.swift`. Every change must work on every supported macOS version from that floor up.
+- Never call an API newer than the floor unguarded: wrap it in `if #available(macOS XX, *)` **and give the `else` branch a working fallback** (degrade the feature, don't blank it). Example: System Audio capture gates on `#available(macOS 14.4, *)` and hides cleanly below it.
+- Version-dependent system facts (renamed apps, moved paths, changed defaults) get an explicit mapping with the old value still handled — stored user data may predate the change (example: `AppIconCache.renamedApps` maps "System Preferences" → "System Settings").
+- Raising the deployment floor or dropping a fallback is a product decision — never do it as a side effect of another change.
+
+### Open-Source Merge Hygiene
+- Before starting and before committing, `git fetch origin && git rebase origin/main` (or merge) — other contributors land changes continuously; never review your diff against a stale base.
+- Keep diffs surgical: touch only lines your change needs. No drive-by reformatting, renames, or import reshuffles in files others may have in-flight PRs against.
+- After rebasing onto new upstream work, re-run the test suites for every file you touched **and** every file the rebase brought in that overlaps your change; a clean build alone is not revision.
+- If your change modifies shared surfaces (Theme tokens, `SettingsSection`, bridge actions, INV-* contract files), grep for all usages — including tests and e2e flows — and update them in the same commit so concurrent contributors inherit a consistent tree.
+
 ### Agent Logic Harness
 When touching desktop agent runtime, floating agent pills, realtime hub, PTT, or `pi-mono-extension`, run the focused harness before broader checks:
 ```bash

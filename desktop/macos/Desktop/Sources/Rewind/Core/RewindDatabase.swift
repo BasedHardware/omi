@@ -2571,6 +2571,57 @@ actor RewindDatabase {
         }
     }
 
+    /// Atomically replace every database row reconstructed from one video chunk.
+    ///
+    /// Rebuilds can be retried, so inserting reconstructed rows one at a time would
+    /// duplicate the chunk on every run. The delete and complete replacement set
+    /// intentionally share one transaction: if any insert fails, SQLite restores
+    /// the previous rows instead of leaving a partially rebuilt chunk.
+    @discardableResult
+    func replaceScreenshotsForVideoChunk(path: String, screenshots: [Screenshot]) throws -> Int {
+        guard let dbQueue = dbQueue else {
+            throw RewindError.databaseNotInitialized
+        }
+        guard !path.isEmpty else {
+            throw RewindError.storageError("Cannot rebuild a video chunk with an empty path")
+        }
+        guard !screenshots.isEmpty else {
+            throw RewindError.storageError("Cannot replace a video chunk with an empty frame set")
+        }
+
+        var frameOffsets = Set<Int>()
+        for screenshot in screenshots {
+            guard screenshot.videoChunkPath == path else {
+                throw RewindError.storageError("Reconstructed frames must belong to the replaced video chunk")
+            }
+            guard let frameOffset = screenshot.frameOffset,
+                  frameOffset >= 0,
+                  frameOffsets.insert(frameOffset).inserted
+            else {
+                throw RewindError.storageError("Reconstructed frames must have unique non-negative offsets")
+            }
+        }
+
+        return try dbQueue.write { db in
+            try db.execute(
+                sql: "DELETE FROM screenshots WHERE videoChunkPath = ?",
+                arguments: [path]
+            )
+
+            for screenshot in screenshots {
+                var record = screenshot
+                // Reconstructed rows receive fresh local identities. Carrying an ID
+                // from another database or an earlier rebuild could collide with an
+                // unrelated screenshot.
+                record.id = nil
+                if record.imagePath == nil { record.imagePath = "" }
+                try record.insert(db)
+            }
+
+            return screenshots.count
+        }
+    }
+
     /// Update OCR text for a screenshot (legacy - without bounding boxes)
     func updateOCRText(id: Int64, ocrText: String) throws {
         guard let dbQueue = dbQueue else {

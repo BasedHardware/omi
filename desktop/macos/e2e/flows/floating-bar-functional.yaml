@@ -24,6 +24,8 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubTools.swift
   - desktop/macos/Desktop/Sources/DesktopDiagnosticsManager.swift
   - desktop/macos/Desktop/Sources/Generated/GeneratedRealtimeTools.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBackgroundModifier.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceWaveformBars.swift
 preconditions:
   - automation_bridge_ready
 

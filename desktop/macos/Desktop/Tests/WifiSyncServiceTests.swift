@@ -14,17 +14,17 @@ final class WifiSyncServiceTests: XCTestCase {
       .appendingPathComponent("wifi-sync-test-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: walDir, withIntermediateDirectories: true)
 
-    walService = WALService(apiClient: APIClient(session: makeMockSession()))
-    walService.setWalDirectoryForTesting(walDir)
+    walService = WALService(
+      apiClient: APIClient(session: makeMockSession()),
+      walDirectoryForTesting: walDir
+    )
     walService.setWalsForTesting([])
     walService.uploadLocalFilesHandler = nil
 
-    wifiSync = WifiSyncService.shared
-    wifiSync.walServiceForTesting = walService
+    wifiSync = WifiSyncService(walServiceForTesting: walService)
   }
 
   override func tearDown() async throws {
-    wifiSync.walServiceForTesting = nil
     walService.uploadLocalFilesHandler = nil
     try? FileManager.default.removeItem(at: walDir)
   }

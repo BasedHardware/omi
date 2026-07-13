@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import OmiTheme
 
 /// Which edge of the target window this glow window represents
 enum GlowEdge {
@@ -221,12 +222,12 @@ struct GlowEdgeView: View {
   /// Start the glow animation sequence
   private func startAnimation() {
     // Fade in
-    withAnimation(.easeIn(duration: 0.3)) {
+    OmiMotion.withGated(.easeIn(duration: 0.3)) {
       opacity = 1.0
     }
 
     // Animate the mesh movement
-    withAnimation(
+    OmiMotion.withGated(
       .easeInOut(duration: 1.5)
         .repeatCount(3, autoreverses: true)
     ) {
@@ -235,7 +236,7 @@ struct GlowEdgeView: View {
 
     // Schedule fade out
     DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-      withAnimation(.easeOut(duration: 0.5)) {
+      OmiMotion.withGated(.easeOut(duration: 0.5)) {
         opacity = 0.0
       }
     }

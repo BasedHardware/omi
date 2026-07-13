@@ -17,11 +17,11 @@ struct FocusSummaryWidget: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
             // Header with tabs
             HStack {
                 Text("Focus")
-                    .scaledFont(size: 16, weight: .semibold)
+                    .scaledFont(size: OmiType.subheading, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
@@ -30,32 +30,32 @@ struct FocusSummaryWidget: View {
                 HStack(spacing: 0) {
                     ForEach(FocusTab.allCases, id: \.self) { tab in
                         Button(action: {
-                            withAnimation(.easeInOut(duration: 0.15)) {
+                            OmiMotion.withGated(.easeInOut(duration: 0.15)) {
                                 selectedTab = tab
                             }
                         }) {
                             Text(tab.rawValue)
-                                .scaledFont(size: 11, weight: selectedTab == tab ? .semibold : .regular)
+                                .scaledFont(size: OmiType.caption, weight: selectedTab == tab ? .semibold : .regular)
                                 .foregroundColor(selectedTab == tab ? OmiColors.textPrimary : OmiColors.textTertiary)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 4)
+                                .padding(.horizontal, OmiSpacing.sm)
+                                .padding(.vertical, OmiSpacing.xxs)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 6)
+                                    RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
                                         .fill(selectedTab == tab ? OmiColors.backgroundQuaternary.opacity(0.6) : Color.clear)
                                 )
                         }
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(2)
+                .padding(OmiSpacing.hairline)
                 .background(
-                    RoundedRectangle(cornerRadius: 8)
+                    RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                         .fill(OmiColors.backgroundTertiary.opacity(0.5))
                 )
             }
 
             // Stats row - all in one line
-            HStack(spacing: 10) {
+            HStack(spacing: OmiSpacing.sm) {
                 FocusStatCard(
                     title: "Focus Time",
                     value: "\(stats.focusedMinutes)",
@@ -89,13 +89,13 @@ struct FocusSummaryWidget: View {
                 )
             }
         }
-        .padding(20)
+        .padding(OmiSpacing.xl)
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .background(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16)
+                    RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
                         .stroke(OmiColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
                 )
         )
@@ -112,20 +112,20 @@ struct FocusStatCard: View {
     let color: Color
 
     var body: some View {
-        VStack(alignment: .center, spacing: 4) {
-            HStack(alignment: .center, spacing: 4) {
+        VStack(alignment: .center, spacing: OmiSpacing.xxs) {
+            HStack(alignment: .center, spacing: OmiSpacing.xxs) {
                 Image(systemName: icon)
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textSecondary)
 
-                HStack(alignment: .lastTextBaseline, spacing: 1) {
+                HStack(alignment: .lastTextBaseline, spacing: OmiSpacing.hairline) {
                     Text(value)
-                        .scaledFont(size: 18, weight: .bold)
+                        .scaledFont(size: OmiType.heading, weight: .bold)
                         .foregroundColor(OmiColors.textPrimary)
 
                     if !unit.isEmpty {
                         Text(unit)
-                            .scaledFont(size: 10)
+                            .scaledFont(size: OmiType.micro)
                             .foregroundColor(OmiColors.textTertiary)
                     }
                 }
@@ -134,14 +134,14 @@ struct FocusStatCard: View {
             .minimumScaleFactor(0.5)
 
             Text(title)
-                .scaledFont(size: 10)
+                .scaledFont(size: OmiType.micro)
                 .foregroundColor(OmiColors.textTertiary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
-        .padding(.horizontal, 8)
+        .padding(.vertical, OmiSpacing.sm)
+        .padding(.horizontal, OmiSpacing.sm)
         .background(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
                 .fill(OmiColors.backgroundTertiary.opacity(0.6))
         )
     }

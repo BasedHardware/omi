@@ -30,6 +30,8 @@ covers:
   - desktop/macos/Desktop/Sources/Bluetooth/Connections/LimitlessDeviceConnection.swift
   - desktop/macos/Desktop/Sources/Providers/DeviceProvider.swift
   - desktop/macos/Desktop/Sources/SystemAudioCaptureService.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/AudioLevelWaveformView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/AudioSourceSelector.swift
 preconditions:
   - auth_ready
 

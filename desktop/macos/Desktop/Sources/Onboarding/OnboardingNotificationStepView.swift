@@ -33,8 +33,8 @@ struct OnboardingNotificationStepView: View {
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 16)
+            .padding(.horizontal, OmiSpacing.xxl)
+            .padding(.vertical, OmiSpacing.lg)
 
             Divider()
                 .background(OmiColors.backgroundTertiary)
@@ -42,7 +42,7 @@ struct OnboardingNotificationStepView: View {
             Spacer()
 
             // Content
-            VStack(spacing: 32) {
+            VStack(spacing: OmiSpacing.section) {
                 // Icon with glow
                 ZStack {
                     Circle()
@@ -50,7 +50,7 @@ struct OnboardingNotificationStepView: View {
                         .frame(width: 100, height: 100)
                         .blur(radius: 20)
                         .scaleEffect(pulseAnimation ? 1.2 : 1.0)
-                        .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: pulseAnimation)
+                        .omiAnimation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: pulseAnimation)
 
                     Image(systemName: "bell.badge.fill")
                         .font(.system(size: 44))
@@ -64,7 +64,7 @@ struct OnboardingNotificationStepView: View {
                 }
                 .onAppear { pulseAnimation = true }
 
-                VStack(spacing: 10) {
+                VStack(spacing: OmiSpacing.sm) {
                     Text("Proactive Intelligence")
                         .font(.system(size: 24, weight: .bold))
                         .foregroundColor(OmiColors.textPrimary)
@@ -85,14 +85,14 @@ struct OnboardingNotificationStepView: View {
                         ))
                 }
             }
-            .padding(.horizontal, 40)
+            .padding(.horizontal, OmiSpacing.page)
 
             Spacer()
 
             // Bottom: confirmation + continue
             if notificationSent {
-                VStack(spacing: 12) {
-                    HStack(spacing: 6) {
+                VStack(spacing: OmiSpacing.md) {
+                    HStack(spacing: OmiSpacing.xs) {
                         Image(systemName: "bell.badge.fill")
                             .foregroundColor(Color.white)
                             .font(.system(size: 12))
@@ -106,14 +106,14 @@ struct OnboardingNotificationStepView: View {
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundColor(.black)
                             .frame(maxWidth: 280)
-                            .padding(.vertical, 12)
+                            .padding(.vertical, OmiSpacing.md)
                             .background(Color.white)
-                            .cornerRadius(12)
+                            .cornerRadius(OmiChrome.smallControlRadius)
                     }
                     .buttonStyle(.plain)
                     .keyboardShortcut(.defaultAction)
                 }
-                .padding(.bottom, 32)
+                .padding(.bottom, OmiSpacing.section)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
@@ -125,7 +125,7 @@ struct OnboardingNotificationStepView: View {
 
             // Show the notification preview after a brief delay
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                OmiMotion.withGated(.spring(response: 0.5, dampingFraction: 0.8)) {
                     showNotification = true
                 }
 
@@ -139,7 +139,7 @@ struct OnboardingNotificationStepView: View {
 
                 // Show "notification sent" + continue after a beat
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    withAnimation(.easeInOut(duration: 0.3)) {
+                    OmiMotion.withGated(.easeInOut(duration: 0.3)) {
                         notificationSent = true
                     }
                 }
@@ -150,10 +150,10 @@ struct OnboardingNotificationStepView: View {
     // MARK: - macOS Notification Preview
 
     private var notificationPreview: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: OmiSpacing.md) {
             // App icon
             ZStack {
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                     .fill(
                         LinearGradient(
                             colors: [Color.black, Color.gray],
@@ -168,7 +168,7 @@ struct OnboardingNotificationStepView: View {
                     .foregroundColor(.white)
             }
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                 HStack {
                     Text("omi")
                         .font(.system(size: 13, weight: .semibold))
@@ -193,10 +193,10 @@ struct OnboardingNotificationStepView: View {
                     .lineSpacing(1)
             }
         }
-        .padding(12)
+        .padding(OmiSpacing.md)
         .frame(maxWidth: 380, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 14)
+            RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
                 .fill(.white)
                 .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
                 .shadow(color: .black.opacity(0.05), radius: 1, x: 0, y: 1)
