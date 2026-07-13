@@ -1,5 +1,8 @@
 /* The top-edge bar window is TRANSPARENT (no DWM material) — the page paints
-   everything. The window is oversized and static; all motion is CSS/canvas. */
+   everything. The window is oversized and static; all motion is CSS/canvas.
+   ⚠ Read desktop/windows/docs/bar-gotchas.md before changing bar animations —
+   entering conversation content must stay clip-revealed (opaque + seated from
+   frame 1), never faded/translated in, or the "plummet"/black-flash returns. */
 html,
 body.bar-body {
   background: transparent !important;
