@@ -48,6 +48,7 @@ desktop.ini
 docs/*
 !docs/conversation-sync.md
 !docs/bar-gotchas.md
+!docs/multi-worktree-dev.md
 skills-lock.json
 
 # Visual brainstorming companion

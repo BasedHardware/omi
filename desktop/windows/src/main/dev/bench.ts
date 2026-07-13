@@ -8,6 +8,7 @@ import { app, ipcMain, type BrowserWindow } from 'electron'
 import { join } from 'path'
 import { rmSync } from 'fs'
 import { perfMark, flushPerfMarks } from '../../shared/perf'
+import { resolveDevInstance } from '../devInstance'
 
 // OMI_BENCH drives a fixed startup-timing run that quits when done; OMI_ANIM_BENCH
 // records the renderer's animation-jank summary instead. Both are dev-only: a
@@ -29,29 +30,64 @@ export function applyDevPerfLogDefault(): void {
   }
 }
 
-// OMI_SANDBOX pins a throwaway userData dir so parallel dev worktrees can run
-// side by side without clobbering the real profile's omi.db / local_kg / signed-in
-// Firebase session. Must run before any DB open (db.ts resolves userData lazily on
-// first IPC) and before the single-instance lock, so distinct sandbox profiles get
-// their own lock. Never repin in bench mode (the runner's --user-data-dir must win)
-// and never in a packaged build.
+// Pin a throwaway userData dir so parallel dev worktrees run side by side without
+// clobbering the real profile's omi.db / local_kg / signed-in Firebase session.
+// Each worktree gets its OWN dir, so concurrent instances never contend for the
+// shared Chromium GPU/disk/quota caches (that contention crashes the WebGL brain
+// map — the only GPU-backed surface — while the plain-DOM UI survives). Must run
+// before any DB open (db.ts resolves userData lazily on first IPC) and before the
+// single-instance lock, so distinct profiles get their own lock. Never repin in
+// bench mode (the runner's --user-data-dir must win) or in a packaged build.
 //
-// The VALUE names the profile, so concurrent worktrees each get their OWN userData
-// dir and never contend for the shared Chromium GPU/disk/quota caches (that
-// contention crashes the WebGL brain map — the only GPU-backed surface — while the
-// plain-DOM UI survives). OMI_SANDBOX=1 keeps the legacy shared "…-sandbox-chat-kg"
-// profile (no re-login). This is intentionally OPT-IN, NOT auto-derived from the
-// worktree folder: the real data + Firebase session + onboarding floor live in the
-// DEFAULT profile, so the MAIN worktree stays default and only SECONDARY worktrees
-// set OMI_SANDBOX=<name>. (An earlier auto-derive moved a worktree off the default
-// profile and blanked the brain map's onboarding floor — never do that.)
+// Two ways a profile is chosen:
+//   • Explicit OMI_SANDBOX=<name> (opt-in): names the profile. OMI_SANDBOX=1 keeps
+//     the legacy shared "…-sandbox-chat-kg" profile.
+//   • Otherwise, a LINKED git worktree auto-isolates to a profile named after its
+//     folder. The PRIMARY checkout resolves to isPrimary and stays on the DEFAULT
+//     profile (the real data + Firebase session + onboarding floor live there, so
+//     the main flow is unchanged). Auto-isolation is safe now that fresh worktree
+//     profiles are populated on demand by `pnpm seed:auth` (scripts/seed-auth.mjs)
+//     — earlier the auto-derive blanked the onboarding floor because nothing
+//     re-seeded the new profile; the seed step is what makes it safe. Force the
+//     default profile from a linked worktree with OMI_INSTANCE=primary.
 export function applySandboxUserDataOverride(): void {
   if (app.isPackaged) return
-  const sandbox = process.env.OMI_SANDBOX
-  if (sandbox && process.env.OMI_BENCH !== '1') {
-    const suffix = sandbox === '1' ? 'chat-kg' : sandbox.replace(/[^a-zA-Z0-9._-]/g, '-')
+  if (process.env.OMI_BENCH === '1') return
+  const explicit = process.env.OMI_SANDBOX
+  let suffix: string | null = null
+  if (explicit) {
+    suffix = explicit === '1' ? 'chat-kg' : explicit.replace(/[^a-zA-Z0-9._-]/g, '-')
+  } else if (!hasCliSwitch('user-data-dir')) {
+    // A caller that pinned --user-data-dir (E2E / soak harness) owns the profile;
+    // never override it. Otherwise auto-isolate a linked worktree.
+    const instance = resolveDevInstance()
+    if (!instance.isPrimary) suffix = instance.name
+  }
+  if (suffix) {
     app.setPath('userData', join(app.getPath('appData'), `omi-windows-sandbox-${suffix}`))
   }
+}
+
+/** True if `--<name>` (or `--<name>=…`) is present on the process command line. */
+function hasCliSwitch(name: string): boolean {
+  return process.argv.some((a) => a === `--${name}` || a.startsWith(`--${name}=`))
+}
+
+// Append the dev instance's title suffix (e.g. " — multi-worktree-dev") to the
+// native window title so overlapping worktree windows are tellable apart in the
+// taskbar / Alt-Tab. Re-applies on every renderer title update. No-op on the
+// primary checkout (empty suffix) and in packaged builds.
+export function applyDevWindowTitleSuffix(win: BrowserWindow): void {
+  if (app.isPackaged) return
+  const suffix = resolveDevInstance().titleSuffix
+  if (!suffix) return
+  const withSuffix = (base: string): string =>
+    (base.endsWith(suffix) ? base.slice(0, -suffix.length) : base) + suffix
+  win.setTitle(withSuffix(win.getTitle()))
+  win.webContents.on('page-title-updated', (e, title) => {
+    e.preventDefault()
+    win.setTitle(withSuffix(title))
+  })
 }
 
 // --- Dev GPU stability ------------------------------------------------------
@@ -60,10 +96,12 @@ export function applySandboxUserDataOverride(): void {
 // hybrid-GPU laptops, an asleep display, headless soak — hardware WebGL
 // (ANGLE→D3D11) destabilises and the GPU process crashes. A dead context makes
 // the orb's shader "compile" fail (getShaderInfoLog === null), and Chromium then
-// BLOCKS 3D APIs per-origin "until restart". Because every worktree's dev server
-// shares one origin (localhost:5179) and one userData profile, that block plus a
-// corrupt GPU disk cache PERSIST across launches and break every GPU surface for
-// the next run — the recurring "stale" breakage. In dev we render in SOFTWARE
+// BLOCKS 3D APIs per-origin "until restart". Within one instance's origin +
+// userData profile that block, plus a corrupt GPU disk cache, PERSIST across
+// launches and break every GPU surface for the next run — the recurring "stale"
+// breakage (the primary checkout reuses localhost:5179 + the default profile every
+// time; a linked worktree reuses its own derived origin + profile). In dev we
+// render in SOFTWARE
 // (no GPU process to crash) while keeping WebGL alive on SwiftShader, and stop
 // the per-origin 3D block so a crash can never permanently blocklist WebGL. Opt
 // back into hardware with OMI_DEV_HW_GPU=1 (interactive perf on a healthy
@@ -71,10 +109,17 @@ export function applySandboxUserDataOverride(): void {
 // acceleration. Must run before the app is ready.
 export function applyDevGpuStability(): void {
   if (app.isPackaged) return
-  // Opt-in headless CDP inspection (WebGL/GPU state, console, network) for
-  // debugging the running app. Off unless OMI_DEV_REMOTE_DEBUG=<port> is set.
-  if (process.env.OMI_DEV_REMOTE_DEBUG) {
-    app.commandLine.appendSwitch('remote-debugging-port', process.env.OMI_DEV_REMOTE_DEBUG)
+  // Headless CDP endpoint (WebGL/GPU state, console, network) — also what powers
+  // cross-instance auth seeding (scripts/seed-auth.mjs). Default the port to THIS
+  // instance's derived CDP port so every dev instance is reachable and two
+  // instances never share one port; OMI_DEV_REMOTE_DEBUG pins an explicit port,
+  // OMI_DEV_NO_REMOTE_DEBUG=1 turns it off. Localhost-only and dev-only (packaged
+  // builds return above, so the port never opens in production).
+  if (process.env.OMI_DEV_NO_REMOTE_DEBUG !== '1' && !hasCliSwitch('remote-debugging-port')) {
+    // resolveDevInstance().cdpPort already folds in OMI_DEV_REMOTE_DEBUG >
+    // OMI_DEV_CDP_PORT > derived (see computeDevInstance), so the app, the seed
+    // script, and `pnpm dev:instance` all agree on the port.
+    app.commandLine.appendSwitch('remote-debugging-port', String(resolveDevInstance().cdpPort))
     app.commandLine.appendSwitch('remote-allow-origins', '*')
   }
   // A GPU crash must never permanently blocklist WebGL for the shared dev origin.
