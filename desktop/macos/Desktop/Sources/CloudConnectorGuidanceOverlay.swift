@@ -643,6 +643,9 @@ final class AppBundleDragSourceNSView: NSView, NSDraggingSource {
     didSet { needsDisplay = true }
   }
   private var currentDragIconSize = fullDragIconSize
+  /// While the dragging session is in flight the card must not keep painting the
+  /// icon — the dragged copy under the cursor is "it". Restored on end/cancel.
+  private var isDragInFlight = false
 
   static func pasteboardWriter(for appURL: URL) -> NSURL {
     appURL as NSURL
@@ -655,12 +658,15 @@ final class AppBundleDragSourceNSView: NSView, NSDraggingSource {
     let session = beginDraggingSession(with: [item], event: event, source: self)
     session.draggingFormation = .none
     session.animatesToStartingPositionsOnCancelOrFail = true
+    isDragInFlight = true
+    needsDisplay = true
   }
 
   override var isOpaque: Bool { false }
 
   override func draw(_ dirtyRect: NSRect) {
     super.draw(dirtyRect)
+    guard !isDragInFlight else { return }
     image?.draw(
       in: bounds,
       from: .zero,
@@ -701,6 +707,8 @@ final class AppBundleDragSourceNSView: NSView, NSDraggingSource {
     _ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation
   ) {
     currentDragIconSize = Self.fullDragIconSize
+    isDragInFlight = false
+    needsDisplay = true
   }
 
   static func dragIconSize(pointer: CGPoint, targetFrame: CGRect?) -> CGSize {
