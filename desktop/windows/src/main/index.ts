@@ -52,12 +52,16 @@ import {
   unregisterOverlayShortcut,
   suspendOverlayShortcut,
   resumeOverlayShortcut,
+  setOverlayAccelerator,
+  getOverlayAccelerator,
+  getOverlaySummonState,
   OVERLAY_ACCELERATOR
 } from './overlay/shortcut'
 import { registerOverlayHandlers } from './overlay/ipc'
 import { seedUserAssistOnce } from './usage/userAssistSeed'
 import { registerRewindHandlers } from './ipc/rewind'
 import { registerScreenHandlers } from './ipc/screen'
+import { registerBillingIpc } from './billing/checkoutWindow'
 import { registerInsightHandlers } from './ipc/insight'
 import {
   createInsightToastWindow,
@@ -87,7 +91,7 @@ import * as devBench from './dev/bench'
 import { initSentry } from './sentry'
 import { isQuitting, quitApp } from './lifecycle'
 import { createTray, updateTrayState, destroyTray, isTrayCreated } from './tray'
-import { initAutoUpdater, getPendingUpdate } from './updater'
+import { initAutoUpdater, getPendingUpdate, checkForUpdatesNow } from './updater'
 import {
   registerRecordShortcut,
   setRecordAccelerator,
@@ -566,6 +570,7 @@ app.whenReady().then(async () => {
   registerMemoryCleanupHandlers()
   registerRewindHandlers()
   registerScreenHandlers()
+  registerBillingIpc()
   // Cross-window conversations refresh: any renderer that writes a local
   // conversation (main window OR overlay) notifies here; rebroadcast to every
   // window so each invalidates its own per-process conversations cache (e.g. an
@@ -740,8 +745,13 @@ app.whenReady().then(async () => {
   // (INV-CHAT-1): bar IPC forwards send/state routing to the main window here,
   // since bar/window.ts has no reference to it.
   registerBarIpc((channel, ...args) => withMainWindow((w) => w.webContents.send(channel, ...args)))
-  setSummonGestureAccelerator(OVERLAY_ACCELERATOR)
-  const shortcutOk = registerOverlayShortcut(OVERLAY_ACCELERATOR, handleSummonPress)
+  // Register the PERSISTED summon chord (default Shift+Space), so a rebind
+  // survives restarts and a taken chord fails loudly (surfaced in Settings) at
+  // launch. The legacy renderer `overlayShortcut` preference is re-applied by
+  // App.tsx on startup and kept in step by the Settings rebind (dual-write).
+  const summonAccel = getAppSettings().summonHotkey ?? OVERLAY_ACCELERATOR
+  setSummonGestureAccelerator(summonAccel)
+  const shortcutOk = registerOverlayShortcut(summonAccel, handleSummonPress)
   if (!shortcutOk) {
     console.warn(
       '[bar] summon shortcut unavailable; the bar can still be revealed from the top edge'
@@ -788,9 +798,16 @@ app.whenReady().then(async () => {
   // Record-chord get/rebind. Rebinds persist and never throw on a conflict — a
   // taken chord returns registered=false so the UI can prompt for another.
   ipcMain.handle('shortcuts:get-record', () => getRecordShortcut())
+  // Summon (floating-bar) chord: current binding + whether the OS claimed it, so
+  // Settings → Shortcuts can show a conflict instead of a silently-dead shortcut.
+  ipcMain.handle('shortcuts:get-summon', () => getOverlaySummonState())
   // Query the staged update on demand (the update:ready event fires once,
   // usually while Settings isn't mounted — see updater.getPendingUpdate).
   ipcMain.handle('update:get-pending', () => getPendingUpdate())
+  // App identity for Settings → About.
+  ipcMain.handle('app:get-version', () => ({ name: app.getName(), version: app.getVersion() }))
+  // Manual update check (About). Inert in unpackaged dev (returns `unsupported`).
+  ipcMain.handle('update:check', () => checkForUpdatesNow())
 
   // Suspend/resume global chords while the settings UI captures raw keys for a
   // rebind — otherwise pressing the CURRENT chord fires it instead of being
@@ -811,6 +828,24 @@ app.whenReady().then(async () => {
     const next = setRecordAccelerator(accelerator.trim())
     if (next.registered) setAppSettings({ recordHotkey: next.accelerator })
     return { ok: next.registered, registered: next.registered }
+  })
+
+  // Rebind the summon chord (mirrors overlay:setAccelerator used by onboarding):
+  // re-register globally and rebuild the bar's tap/hold gesture on the new key.
+  // Returns registered=false when the chord is taken (main rolled back). The
+  // renderer persists the accelerator in preferences (overlayShortcut) on ok, and
+  // App.tsx re-applies it to main on the next startup.
+  ipcMain.handle('shortcuts:set-summon', (_e, accelerator: string) => {
+    if (typeof accelerator !== 'string' || !accelerator.trim()) {
+      return { ok: false, registered: getOverlaySummonState().registered }
+    }
+    const ok = setOverlayAccelerator(accelerator.trim())
+    if (ok) {
+      setSummonGestureAccelerator(getOverlayAccelerator())
+      // Persist so the chord survives restarts and main re-registers it at launch.
+      setAppSettings({ summonHotkey: getOverlayAccelerator() })
+    }
+    return { ok, registered: ok }
   })
 
   // Renderer → quit for real (menu/button in the UI).

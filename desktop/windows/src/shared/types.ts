@@ -415,6 +415,25 @@ export type TrayListeningState = 'idle' | 'listening' | 'paused'
 /** The mic record chord and whether the OS accepted its registration. */
 export type RecordHotkeyState = { accelerator: string; registered: boolean }
 
+/** Outcome of a manual "check for updates" from Settings → About.
+ *  - `unsupported`: the updater is inert (unpackaged dev build) — updates install
+ *    automatically only in packaged builds, so there is nothing to check.
+ *  - `checking`: a check was kicked off (electron-updater downloads in the
+ *    background and stages install-on-quit; progress arrives via update:ready).
+ *  - `up-to-date`: the feed reported no newer version than the running build.
+ *  - `update-available`: a newer version exists and is downloading/queued.
+ *  - `error`: the check failed (offline, feed 404, bad signature…) — non-fatal. */
+export type UpdateCheckResult = {
+  status: 'unsupported' | 'checking' | 'up-to-date' | 'update-available' | 'error'
+  /** Newer version string when `update-available`; the running version otherwise. */
+  version?: string
+  /** Human-readable failure reason when `error`. */
+  message?: string
+}
+
+/** Result of an in-app Stripe Checkout flow (main/billing/checkoutWindow). */
+export type CheckoutOutcome = 'success' | 'cancel' | 'closed'
+
 export type OmiBridgeApi = {
   getCaptureSources: () => Promise<CaptureSource[]>
   remapConversationId: (fromId: string, toId: string) => Promise<number>
@@ -492,6 +511,12 @@ export type OmiBridgeApi = {
   /** Read/write the foreground-monitor opt-out flag. */
   usageGetSettings: () => Promise<UsageSettings>
   usageSetSettings: (next: UsageSettings) => Promise<UsageSettings>
+  /** Open a Stripe Checkout URL in a modal in-app window; resolves when the flow
+   *  completes ('success'/'cancel' at the backend redirect) or the user closes it
+   *  ('closed'). Only displays Stripe's hosted page — completes no payment. */
+  openCheckout: (url: string) => Promise<CheckoutOutcome>
+  /** Open a web URL (e.g. the Stripe customer portal) in the system browser. */
+  openExternalUrl: (url: string) => Promise<boolean>
   // Bulk-delete memories from the main process (survives renderer navigation /
   // reload; paced + backed-off). Renderer supplies the API base, a fresh token,
   // and the ids; progress streams via onMemoriesDeleteProgress.
@@ -661,9 +686,23 @@ export type OmiBridgeApi = {
   /** Rebind the record chord (persisted). Never throws on a conflict — returns
    *  registered=false when the chord is owned by another app. */
   setRecordHotkey: (accelerator: string) => Promise<{ ok: boolean; registered: boolean }>
+  /** The current floating-bar summon chord and whether the OS accepted it. Same
+   *  shape as the record chord; the summon accelerator is persisted in renderer
+   *  preferences (overlayShortcut) and re-applied to main on startup. */
+  getSummonHotkey: () => Promise<RecordHotkeyState>
+  /** Rebind the summon chord (re-registers globally + rebuilds the bar gesture).
+   *  Never throws on a conflict — returns registered=false when the chord is owned
+   *  by another app (main rolls back to the previous binding). Persist the new
+   *  accelerator in preferences (overlayShortcut) on ok so it survives restarts. */
+  setSummonHotkey: (accelerator: string) => Promise<{ ok: boolean; registered: boolean }>
   /** The update staged for install-on-quit, if any (query on Settings mount —
    *  the one-shot update:ready event usually fires while Settings is unmounted). */
   getPendingUpdate: () => Promise<{ version: string } | null>
+  /** App display name + version (from Electron's app metadata). Shown in About. */
+  getAppVersion: () => Promise<{ name: string; version: string }>
+  /** Manually trigger an update check (Settings → About "Check for updates").
+   *  Inert in unpackaged dev (returns `unsupported`). */
+  checkForUpdates: () => Promise<UpdateCheckResult>
   /** Release all global chords while a rebind UI captures raw keys (pressing the
    *  current chord must be captured, not fire the shortcut). Always pair with resume. */
   suspendShortcutCapture: () => void
