@@ -1754,6 +1754,9 @@ class ChatToolExecutor {
         pane: "Privacy_AllFiles",
         expectedOwnerID: expectedOwnerID,
         authorizationSnapshot: authorizationSnapshot)
+      // Same drag-to-grant mechanic as Screen Recording: drop the app into the
+      // Full Disk Access list to add and enable it in one gesture.
+      Task { await PermissionDragGuidance.presentDragToGrantHelper() }
       try? await Task.sleep(nanoseconds: 3_000_000_000)
       guard isPermissionAuthorizationCurrent(
         expectedOwnerID,

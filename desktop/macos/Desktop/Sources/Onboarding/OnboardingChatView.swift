@@ -540,6 +540,10 @@ struct OnboardingChatView: View {
     }()
     if let urlString, let url = URL(string: urlString) {
       NSWorkspace.shared.open(url)
+      // Full Disk Access uses the same drag-to-grant mechanic as Screen Recording.
+      if type == "full_disk_access" {
+        Task { await PermissionDragGuidance.presentDragToGrantHelper() }
+      }
     }
   }
 

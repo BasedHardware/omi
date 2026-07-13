@@ -1,7 +1,7 @@
 import AppKit
 
 @MainActor
-enum ScreenRecordingGrantGuidance {
+enum PermissionDragGuidance {
   private static var lastPresentedAt: Date?
 
   static func presentDragToGrantHelper() async {

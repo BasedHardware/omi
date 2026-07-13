@@ -122,7 +122,7 @@ final class ScreenCaptureService: Sendable {
 
   /// Open System Preferences to Screen Recording settings
   static func openScreenRecordingPreferences() {
-    Task { await ScreenRecordingGrantGuidance.presentDragToGrantHelper() }
+    Task { await PermissionDragGuidance.presentDragToGrantHelper() }
 
     if let url = URL(
       string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
@@ -240,7 +240,7 @@ final class ScreenCaptureService: Sendable {
     }
 
     if !CGPreflightScreenCaptureAccess() {
-      Task { await ScreenRecordingGrantGuidance.presentDragToGrantHelper() }
+      Task { await PermissionDragGuidance.presentDragToGrantHelper() }
     }
 
     // Note: callers are responsible for opening System Settings
