@@ -41,6 +41,15 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Verify serving sync ledger fence mode before deploy
+        env:
+          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
+        run: |
+          python3 backend/scripts/verify_sync_ledger_fence_transition.py \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --desired-mode="$SYNC_LEDGER_FENCE_MODE"
+
       - name: Login to GCR
         run: gcloud auth configure-docker
 
@@ -63,6 +72,7 @@ jobs:
           CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
           CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
           OMI_LLM_GATEWAY_URL: ${{ vars.OMI_LLM_GATEWAY_URL }}
+          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
         run: |
           python3 backend/scripts/render_backend_runtime_env.py --env dev >> "$GITHUB_OUTPUT"
 
@@ -77,6 +87,8 @@ jobs:
             --repair-traffic
 
       - name: Validate backend runtime env before deploy
+        env:
+          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
         run: |
           python3 backend/scripts/validate-backend-runtime-env.py --env dev --check-workflows --check-rendered-cloud-run
 
@@ -225,6 +237,8 @@ jobs:
             --wait-revision-ready backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }}
 
       - name: Validate backend runtime env after deploy
+        env:
+          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
         run: |
           python3 backend/scripts/validate-backend-runtime-env.py --env dev --check-workflows --check-live-cloud-run
 

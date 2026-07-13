@@ -10,6 +10,7 @@ from listen_test_helpers import (
     is_ready_event,
     is_segment_batch,
     is_streaming_segment_batch,
+    receive_message,
     receive_until,
     seed_listen_user,
 )
@@ -293,6 +294,63 @@ def test_web_listen_streaming_stt_happy_path_persists_segments(client, auth_head
     assert body["source"] == "desktop"
     assert body["status"] == "in_progress"
     assert body["transcript_segments"] == emitted_segments
+
+
+def test_web_listen_streaming_stt_send_failure_emits_terminal_status_then_closes(
+    client,
+    test_uid,
+    monkeypatch,
+):
+    """A provider death is explicit and terminal instead of leaving a green socket."""
+
+    seed_listen_user(test_uid, uses_custom_stt=False)
+    sockets = install_streaming_stt_fake(monkeypatch, die_on_first_send=True)
+
+    with client.websocket_connect("/v4/web/listen?sample_rate=8000&codec=pcm8&source=desktop") as websocket:
+        websocket.send_text(json.dumps({"type": "auth", "token": "dev-token"}))
+        assert websocket.receive_json() == {"type": "auth_response", "success": True}
+        receive_until(websocket, is_conversation_session_event)
+        receive_until(websocket, is_ready_event)
+
+        websocket.send_bytes(b"\x80" * 320)
+
+        payloads = []
+        close_message = None
+        for _ in range(20):
+            message = receive_message(websocket, timeout=1.0)
+            if message.get("type") == "websocket.close":
+                close_message = message
+                break
+            text = message.get("text")
+            if text and text != "ping":
+                payloads.append(json.loads(text))
+
+    terminal_statuses = [
+        payload
+        for payload in payloads
+        if isinstance(payload, dict)
+        and payload.get("type") == "service_status"
+        and payload.get("status") == "stt_failed"
+    ]
+    assert terminal_statuses == [
+        {
+            "type": "service_status",
+            "status": "stt_failed",
+            "status_text": "The transcription provider could not complete the request.",
+            "outcome": "upstream_error",
+            "provider": "deepgram",
+            "retryable": True,
+            "reason": "send_failed",
+        }
+    ]
+    assert not any(isinstance(payload, list) for payload in payloads)
+    assert close_message == {
+        "type": "websocket.close",
+        "code": 1011,
+        "reason": "transcription_service_unavailable",
+    }
+    assert len(sockets) == 1
+    assert len(sockets[0].sent_chunks) == 1
 
 
 def test_web_listen_reconnect_reuses_active_conversation_id(client, test_uid, monkeypatch):

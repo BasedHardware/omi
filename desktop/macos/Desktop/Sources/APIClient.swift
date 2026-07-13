@@ -5366,6 +5366,12 @@ extension APIClient {
 
     if http.statusCode == 200 {
       let completed = try decoder.decode(SyncLocalFilesResultResponse.self, from: data)
+      // A legacy synchronous path can return 200 even when one or more
+      // segments failed. Treat it as a retryable upload failure so WALService
+      // preserves the local recording instead of acknowledging it as synced.
+      if completed.failedSegments > 0 {
+        throw APIError.syncUploadRejected(reason: "Transcription incomplete; retrying retained audio")
+      }
       return .done(completed)
     }
     if http.statusCode == 202 {

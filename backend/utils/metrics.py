@@ -117,6 +117,43 @@ OMI_SYNC_BACKFILL_DAILY_USED_MS = Gauge(
     'Current UTC-day processed speech milliseconds reserved by historical sync',
 )
 
+OMI_TRANSCRIPTION_ACCEPTED_TOTAL = Counter(
+    'omi_voice_transcription_accepted_total',
+    'Accepted prerecorded transcription journeys by bounded route and runtime identity',
+    ['route', 'provider', 'client_platform', 'deployment_version'],
+)
+
+OMI_TRANSCRIPTION_COMPLETED_TOTAL = Counter(
+    'omi_voice_transcription_completed_total',
+    'Terminal semantic outcomes for accepted prerecorded transcription journeys',
+    ['route', 'provider', 'outcome', 'client_platform', 'deployment_version'],
+)
+
+OMI_TRANSCRIPTION_LATENCY_SECONDS = Histogram(
+    'omi_voice_transcription_latency_seconds',
+    'End-to-end latency for accepted prerecorded transcription journeys',
+    ['route', 'provider', 'outcome', 'client_platform', 'deployment_version'],
+    buckets=(0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300),
+)
+
+OMI_SYNC_TRANSCRIPTION_SEGMENTS_TOTAL = Counter(
+    'omi_sync_transcription_segments_total',
+    'Terminal semantic outcomes for sync transcription segments',
+    ['provider', 'model', 'lane', 'outcome', 'deployment_version'],
+)
+
+OMI_SYNC_TRANSCRIPTION_JOBS_TOTAL = Counter(
+    'omi_sync_transcription_job_total',
+    'Terminal semantic outcomes for sync transcription jobs',
+    ['provider', 'model', 'lane', 'outcome', 'deployment_version'],
+)
+
+OMI_LIVE_STT_TERMINAL_FAILURES_TOTAL = Counter(
+    'omi_live_stt_terminal_failures_total',
+    'Terminal live-STT failures by bounded provider, outcome, client platform, revision, and phase',
+    ['provider', 'outcome', 'client_platform', 'deployment_version', 'phase'],
+)
+
 TASK_WORKSTREAM_ASSOCIATION_TOTAL = Counter(
     'task_workstream_association_total',
     'Canonical evidence association outcomes with bounded adjudication reasons',

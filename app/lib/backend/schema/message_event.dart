@@ -48,11 +48,29 @@ class UnknownEvent extends MessageEvent {
 class MessageServiceStatusEvent extends MessageEvent {
   final String status;
   final String? statusText;
+  final String? outcome;
+  final String? provider;
+  final bool? retryable;
+  final String? reason;
 
-  MessageServiceStatusEvent({required this.status, this.statusText}) : super(eventType: 'service_status');
+  MessageServiceStatusEvent({
+    required this.status,
+    this.statusText,
+    this.outcome,
+    this.provider,
+    this.retryable,
+    this.reason,
+  }) : super(eventType: 'service_status');
 
   factory MessageServiceStatusEvent.fromJson(Map<String, dynamic> json) {
-    return MessageServiceStatusEvent(status: json['status'], statusText: json['status_text']);
+    return MessageServiceStatusEvent(
+      status: json['status'],
+      statusText: json['status_text'] as String?,
+      outcome: json['outcome'] as String?,
+      provider: json['provider'] as String?,
+      retryable: json['retryable'] as bool?,
+      reason: json['reason'] as String?,
+    );
   }
 }
 

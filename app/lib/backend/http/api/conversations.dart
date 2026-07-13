@@ -495,6 +495,26 @@ class SyncRateLimitedException implements Exception {
   String toString() => 'SyncRateLimitedException(kind=$kind, retryAfter=$retryAfterSeconds)';
 }
 
+/// A synchronous upload response that durably reached the server but did not
+/// transcribe every segment. Callers keep the local WAL and retry it; the
+/// backend deduplicates any segments that already succeeded.
+class SyncUploadIncompleteException implements Exception {
+  final int failedSegments;
+
+  const SyncUploadIncompleteException(this.failedSegments);
+
+  @override
+  String toString() => 'SyncUploadIncompleteException(failedSegments=$failedSegments)';
+}
+
+@visibleForTesting
+SyncLocalFilesResponse requireCompleteSyncUpload(SyncLocalFilesResponse response) {
+  if (response.hasPartialFailure) {
+    throw SyncUploadIncompleteException(response.failedSegments);
+  }
+  return response;
+}
+
 /// Parse a Retry-After header expressed in delta-seconds. Returns null for an
 /// absent or non-integer (HTTP-date) value; the caller falls back to a default.
 int? _parseRetryAfterSeconds(http.Response response) {
@@ -555,11 +575,14 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   );
 
   if (response.statusCode == 200) {
-    // Fast-path: server processed synchronously and returned the result.
+    // Fast-path: server processed synchronously and returned the result. A
+    // legacy server can still encode partial work in a 200, which must follow
+    // the retry path rather than acknowledging/deleting the local WAL.
+    final completed = SyncLocalFilesResponse.fromGenerated(
+      wire.GeneratedSyncLocalFilesResultResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+    );
     return UploadFilesResult.done(
-      SyncLocalFilesResponse.fromGenerated(
-        wire.GeneratedSyncLocalFilesResultResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
-      ),
+      requireCompleteSyncUpload(completed),
     );
   }
   if (response.statusCode == 202) {

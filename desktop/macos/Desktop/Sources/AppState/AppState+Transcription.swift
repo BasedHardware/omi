@@ -1164,6 +1164,11 @@ extension AppState {
     // End live notes session
     LiveNotesMonitor.shared.endSession()
 
+    // A terminal STT error belongs to the session that just ended. Leaving it
+    // set after an explicit stop/reset makes the idle home header look
+    // permanently blocked even though no audio is being handed to STT.
+    transcriptionServiceError = nil
+
     // Mark DB session as finished (pending upload / crash recovery)
     if finishSession, let sessionId = currentSessionId {
       Task {

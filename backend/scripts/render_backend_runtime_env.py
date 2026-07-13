@@ -110,6 +110,9 @@ def _runtime_value(name: str, entry: ConfigDict, *, allow_missing: bool = False)
         value = os.environ.get(env_var, '')
         if value:
             return value
+        default = entry.get('default')
+        if default is not None:
+            return str(default)
         if allow_missing:
             return None
         raise ValueError(f'{name} requires ${env_var} to be set')

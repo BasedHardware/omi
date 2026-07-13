@@ -201,6 +201,21 @@
       ]
     },
     {
+      "id": "sync_ledger_fence_cutover",
+      "risk": "high",
+      "sources": [
+        "backend/scripts/sync_ledger_fence_cutover.py",
+        ".github/workflows/sync_ledger_fence_cutover.yml"
+      ],
+      "tests": ["tests/unit/test_sync_ledger_fence_cutover.py"],
+      "checks": [],
+      "invariants": [
+        "standby admission traffic reaches every sync surface before Cloud Tasks queues are paused",
+        "the exact immutable candidate digest is proven through the tagged full transcription route before active traffic promotion",
+        "failed stage or activation attempts preserve the first queue-origin artifact and leave queues paused"
+      ]
+    },
+    {
       "id": "vector_repair_outbox",
       "risk": "high",
       "sources": [
@@ -305,13 +320,16 @@
       "sources": [
         "backend/utils/listen_session_bootstrap.py",
         "backend/routers/transcribe.py",
+        "backend/utils/stt/live_failure.py",
         "backend/utils/transcribe_decisions.py"
       ],
       "tests": [
         "tests/unit/test_listen_session_bootstrap.py",
+        "tests/unit/test_live_stt_failure.py",
         "tests/unit/test_transcribe_decisions.py",
         "tests/unit/test_listen_pipeline.py",
-        "tests/unit/utils/test_listen_pusher_session.py"
+        "tests/unit/utils/test_listen_pusher_session.py",
+        "testing/e2e/test_listen_stt.py"
       ],
       "checks": [],
       "invariants": [
@@ -365,6 +383,7 @@
         "backend/routers/transcribe.py",
         "backend/utils/listen_pusher_session.py",
         "backend/utils/pusher.py",
+        "backend/utils/stt/live_failure.py",
         "backend/utils/transcribe_decisions.py",
         "backend/pusher/main.py"
       ],
@@ -372,9 +391,11 @@
         "tests/unit/test_listen_pipeline.py",
         "tests/unit/test_pusher_heartbeat.py",
         "tests/unit/test_pusher_conversation_retry.py",
+        "tests/unit/test_live_stt_failure.py",
         "tests/unit/test_transcribe_decisions.py",
         "tests/unit/utils/test_listen_pusher_session.py",
-        "tests/unit/test_transcribe_teardown_flush.py"
+        "tests/unit/test_transcribe_teardown_flush.py",
+        "testing/e2e/test_listen_stt.py"
       ],
       "checks": [],
       "invariants": [
@@ -394,9 +415,12 @@
         ".github/workflows/dev_backend_deployment_acceptance.yml",
         "backend/deploy/runtime_env.yaml",
         "backend/scripts/preflight-cloud-run-deploy.py",
+        "backend/scripts/resolve_cloud_run_tagged_url.py",
         "backend/scripts/verify_dev_backend_deployment.py",
+        "backend/scripts/verify_sync_ledger_fence_transition.py",
         "backend/scripts/render_backend_runtime_env.py",
         "backend/scripts/repair_cloud_run_traffic.py",
+        "backend/scripts/transcription_capability_probe.py",
         "backend/scripts/pre-deploy-check.sh",
         "backend/scripts/validate-backend-runtime-env.py"
       ],
@@ -404,15 +428,21 @@
         "tests/unit/test_render_backend_runtime_env.py",
         "tests/unit/test_preflight_cloud_run_deploy.py",
         "tests/unit/test_verify_dev_backend_deployment.py",
+        "tests/unit/test_resolve_cloud_run_tagged_url.py",
         "tests/unit/test_repair_cloud_run_traffic.py",
         "tests/unit/test_deploy_status_report.py",
-        "tests/unit/test_backend_runtime_env_validator.py"
+        "tests/unit/test_backend_runtime_env_validator.py",
+        "tests/unit/test_sync_two_lane.py",
+        "tests/unit/test_transcription_capability_probe.py",
+        "tests/unit/test_verify_sync_ledger_fence_transition.py"
       ],
       "checks": [],
       "invariants": [
         "preflight fails before revision creation when Secret Manager bindings are missing",
         "traffic shifts only after candidate revisions are Ready=True",
-        "spec.traffic mismatches are repaired or block deploy with an explicit command"
+        "spec.traffic mismatches are repaired or block deploy with an explicit command",
+        "normal deploys cannot change the serving sync ledger fence mode",
+        "production backend traffic cannot shift until the exact tagged candidate proves the known-audio full route"
       ]
     },
     {

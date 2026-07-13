@@ -584,6 +584,48 @@ void main() {
     });
   });
 
+  group('terminal live transcription status', () {
+    test('preserves server STT failure across socket close until ready', () {
+      final provider = CaptureProvider();
+      final failure = MessageServiceStatusEvent(
+        status: 'stt_failed',
+        outcome: 'upstream_error',
+        provider: 'deepgram',
+        retryable: true,
+        reason: 'connection_lost',
+      );
+
+      provider.onMessageEventReceived(failure);
+      expect(provider.terminalTranscriptionFailure?.outcome, 'upstream_error');
+      expect(provider.terminalTranscriptionFailure?.retryable, isTrue);
+
+      provider.onClosed();
+      expect(provider.terminalTranscriptionFailure?.status, 'stt_failed');
+
+      provider.onMessageEventReceived(MessageServiceStatusEvent(status: 'ready'));
+      expect(provider.terminalTranscriptionFailure, isNull);
+      provider.dispose();
+    });
+
+    test('parses legacy and populated service-status payloads additively', () {
+      final legacy = MessageServiceStatusEvent.fromJson({'type': 'service_status', 'status': 'ready'});
+      final failed = MessageServiceStatusEvent.fromJson({
+        'type': 'service_status',
+        'status': 'stt_failed',
+        'outcome': 'timeout',
+        'provider': 'parakeet',
+        'retryable': true,
+        'reason': 'send_failed',
+      });
+
+      expect(legacy.outcome, isNull);
+      expect(failed.outcome, 'timeout');
+      expect(failed.provider, 'parakeet');
+      expect(failed.retryable, isTrue);
+      expect(failed.reason, 'send_failed');
+    });
+  });
+
   // Regression coverage for issue #6499: before this change, a socket drop
   // during phone-mic recording (e.g. triggered by an iOS audio session
   // interruption from an incoming call) left recordingState stuck at `record`,

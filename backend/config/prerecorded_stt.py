@@ -10,9 +10,22 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
+from enum import Enum
 
 STT_PRERECORDED_MODEL_ENV = 'STT_PRERECORDED_MODEL'
 DEFAULT_STT_PRERECORDED_MODELS = ('dg-nova-3',)
+
+
+class TranscriptionOutcome(str, Enum):
+    """Closed, low-cardinality vocabulary for every accepted transcription."""
+
+    SUCCESS = 'success'
+    EXPECTED_SILENCE = 'expected_silence'
+    EMPTY_UNEXPECTED = 'empty_unexpected'
+    TIMEOUT = 'timeout'
+    UPSTREAM_ERROR = 'upstream_error'
+    CONFIG_ERROR = 'config_error'
+    INVALID_INPUT = 'invalid_input'
 
 
 class PrerecordedSTTService:

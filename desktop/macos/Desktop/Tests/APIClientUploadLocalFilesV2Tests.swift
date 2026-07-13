@@ -44,6 +44,28 @@ final class APIClientUploadLocalFilesV2Tests: XCTestCase {
     XCTAssertEqual(completed.newMemories, ["c1"])
   }
 
+  func testUploadLocalFilesV2200WithFailedSegmentsRetainsRetryPath() async throws {
+    SyncUploadURLProtocol.setResponse(
+      statusCode: 200,
+      body: """
+      {"new_memories":["c1"],"updated_memories":[],"failed_segments":1,"total_segments":2,"errors":[]}
+      """.data(using: .utf8)!
+    )
+
+    let client = APIClient(session: makeSession())
+    await client.setTestAuthHeader("Bearer test-token")
+    let fileURL = try writeTempFile()
+
+    do {
+      _ = try await client.uploadLocalFilesV2(fileURLs: [fileURL])
+      XCTFail("expected incomplete synchronous upload to be rejected for retry")
+    } catch APIError.syncUploadRejected(let reason) {
+      XCTAssertEqual(reason, "Transcription incomplete; retrying retained audio")
+    } catch {
+      XCTFail("unexpected error: \(error)")
+    }
+  }
+
   func testUploadLocalFilesV2429ThrowsRateLimited() async throws {
     SyncUploadURLProtocol.setResponse(
       statusCode: 429,
