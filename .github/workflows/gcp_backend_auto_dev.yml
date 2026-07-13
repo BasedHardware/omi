@@ -275,3 +275,53 @@ jobs:
 
       - name: Show Output
         run: echo "Backend deployed to development environment"
+
+  # Keep acceptance in the source workflow's mutation lock. A cancelled deploy
+  # never creates a second workflow run that could replace a pending deploy,
+  # and a newer deploy cannot mutate the composition while this check runs.
+  verify:
+    needs: deploy
+    if: needs.deploy.result == 'success'
+    environment: development
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout deployed commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Verify exact deployed composition
+        run: |
+          python3 backend/scripts/verify_dev_backend_deployment.py \
+            --commit-sha "${{ github.sha }}" \
+            --deploy-run-id "${{ github.run_id }}" \
+            --deploy-run-attempt "${{ github.run_attempt }}" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --evidence-path artifacts/dev-backend-deployment-acceptance.json
+
+      - name: Upload deployment acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-backend-deployment-acceptance-${{ github.run_id }}
+          path: artifacts/dev-backend-deployment-acceptance.json
+          if-no-files-found: warn
