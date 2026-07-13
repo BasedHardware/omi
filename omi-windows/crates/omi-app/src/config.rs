@@ -423,6 +423,10 @@ impl AppConfig {
         env_fallback!(cfg.deepgram_api_key,     "DEEPGRAM_API_KEY");
         env_fallback!(cfg.gemini_api_key,       "GEMINI_API_KEY");
         env_fallback!(cfg.openai_api_key,       "OPENAI_API_KEY");
+        env_fallback!(cfg.tavily_api_key,       "TAVILY_API_KEY");
+        if !cfg.tavily_api_key.is_empty() {
+            cfg.web_search_enabled = true;
+        }
         cfg
     }
 
