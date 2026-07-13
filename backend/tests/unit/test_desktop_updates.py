@@ -878,6 +878,27 @@ class TestDesktopUpdatePolicyEndpoint:
             resp = await client.get("/v2/desktop/update-policy?platform=ios")
         assert resp.status_code == 422
 
+    @pytest.mark.asyncio
+    async def test_firestore_failure_returns_inactive_policy_and_records_fallback(self):
+        with (
+            patch("routers.updates.get_desktop_update_policy", side_effect=RuntimeError("unavailable")),
+            patch("routers.updates.record_fallback") as fallback,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/update-policy?platform=macos&current_build=11400")
+
+        assert resp.status_code == 200
+        assert resp.json()["active"] is False
+        assert resp.json()["download_url"].endswith("/v2/desktop/download/latest?channel=stable")
+        fallback.assert_called_once_with(
+            component="other",
+            from_mode="desktop_update_policy",
+            to_mode="desktop_update_appcast",
+            reason="other",
+            outcome="recovered",
+            log=ANY,
+        )
+
 
 class TestDesktopUpdatePolicyDatabase:
     def _mock_doc(self, exists=True, data=None):
@@ -894,6 +915,22 @@ class TestDesktopUpdatePolicyDatabase:
 
         assert policy["active"] is False
         assert policy["severity"] == "none"
+        assert policy["download_url"].endswith("/v2/desktop/download/latest?channel=stable")
+
+    def test_invalid_policy_download_url_uses_stable_manual_download_path(self):
+        doc = self._mock_doc(
+            data={
+                "active": True,
+                "severity": "required",
+                "download_url": "file:///Applications/Omi.app",
+            }
+        )
+        mock_db = MagicMock()
+        mock_db.collection.return_value.document.return_value.get.return_value = doc
+
+        policy = get_desktop_update_policy(current_build=11400, firestore_client=mock_db)
+
+        assert policy["active"] is True
         assert policy["download_url"].endswith("/v2/desktop/download/latest?channel=stable")
 
     def test_required_policy_applies_through_maximum_build(self):
