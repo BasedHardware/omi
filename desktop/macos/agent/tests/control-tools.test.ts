@@ -918,6 +918,52 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  it("keeps session lists bounded and excludes persisted surface context", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const surfaceContextSentinel = "SENSITIVE_CONTEXT_SENTINEL".repeat(20_000);
+    await kernel.executeRun({
+      ...baseRunInput,
+      surfaceContextJson: JSON.stringify({ rendered: surfaceContextSentinel }),
+      prompt: "p".repeat(4_000),
+    });
+
+    const raw = await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+      ownerId: "owner",
+    });
+    const listed = parseToolResult(raw);
+
+    expect(Buffer.byteLength(raw, "utf8")).toBeLessThan(64 * 1024);
+    expect(raw).not.toContain("SENSITIVE_CONTEXT_SENTINEL");
+    expect(listed.sessions[0].latestRun.input.prompt).toContain("[truncated]");
+    expect(listed.sessions[0].latestRun.input).not.toHaveProperty("surfaceContextJson");
+    store.close();
+  });
+
+  it("keeps the aggregate default session list within the realtime provider budget", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    for (let index = 0; index < 60; index += 1) {
+      await kernel.executeRun({
+        ...baseRunInput,
+        externalRefId: `task-${index}`,
+        requestId: `request-${index}`,
+        prompt: `${index}-${"p".repeat(4_000)}`,
+      });
+    }
+
+    const raw = await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+      ownerId: "owner",
+    });
+    const listed = parseToolResult(raw);
+
+    expect(Buffer.byteLength(raw, "utf8")).toBeLessThan(48 * 1024);
+    expect(listed.fetched_session_count).toBe(50);
+    expect(listed.returned_session_count).toBeLessThan(listed.fetched_session_count);
+    expect(listed.truncated).toBe(true);
+    expect(listed.sessions).toHaveLength(listed.returned_session_count);
+    expect(listed.task_agents).toHaveLength(listed.returned_session_count);
+    store.close();
+  });
+
   it("defaults owner-scoped tools to the active control context owner", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     await kernel.executeRun({ ...baseRunInput, ownerId: "owner-from-context" });
@@ -2240,6 +2286,16 @@ describe("agent control tools", () => {
         defaultAdapterId: provider,
         providerBoundary: `local_user:${provider}`,
       });
+      const listed = parseToolResult(
+        await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", { ownerId: "owner" }),
+      );
+      expect(listed.floating_agent_pills).toContainEqual(
+        expect.objectContaining({
+          sessionId: spawned.session.sessionId,
+          runId: spawned.run.runId,
+          provider,
+        }),
+      );
       expect(adapter.executed).toHaveLength(1);
       store.close();
     }

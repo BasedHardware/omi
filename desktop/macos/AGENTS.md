@@ -250,6 +250,16 @@ This creates `/Applications/omi-fix-rewind.app` with bundle ID `com.omi.omi-fix-
 - To connect agent-swift: `agent-swift connect --bundle-id com.omi.omi-fix-rewind`
 - **Skip the web login:** sign into "Omi Dev" once; named bundles launched by `./run.sh` clone that session before launch.
 - **Jump to a screen without clicking:** the automation bridge auto-enables on non-prod bundles — `./scripts/omi-ctl navigate <screen>` (e.g. `rewind`, `memories`, `settings rewind`). See "Fast-Path for Local Iteration" in `e2e/SKILL.md`.
+- Named/dev bundles default to the development Python and Rust backends unless
+  an explicit launch URL overrides them. Before QA, run
+  `./scripts/omi-ctl health`; its unauthenticated identity payload reports the
+  resolved backend environment/URLs plus the agent-runtime handshake state,
+  negotiated protocol version, packaged runtime version, and expected protocol.
+  A protocol-compatible runtime that omits a required capability is rejected at
+  startup; health never reports the expected protocol as if it were negotiated.
+- Run `./scripts/agent-logic-harness.sh --cross-surface-smoke` before building a
+  QA bundle. This is the compact Swift/Node/Rust contract gate; reserve full
+  component suites and the live continuity gauntlet for PR readiness.
 
 ### After Implementing Changes
 - `xcrun swift build` is for **compile checks only** — it does NOT start the backend

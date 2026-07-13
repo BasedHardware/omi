@@ -316,3 +316,28 @@ final class AgentControlServiceTests: XCTestCase {
     XCTAssertTrue(artifactError!.contains("couldn't resolve"))
   }
 }
+
+final class RealtimeProviderToolResultPolicyTests: XCTestCase {
+  func testSmallToolResultPassesThroughUnchanged() {
+    let result = RealtimeProviderToolResultPolicy.prepare(
+      name: HubTool.listAgentSessions.rawValue,
+      output: #"{"ok":true,"sessions":[]}"#)
+
+    XCTAssertFalse(result.wasOversized)
+    XCTAssertEqual(result.output, #"{"ok":true,"sessions":[]}"#)
+  }
+
+  func testOversizedToolResultBecomesSmallStructuredRetryError() throws {
+    let result = RealtimeProviderToolResultPolicy.prepare(
+      name: HubTool.listAgentSessions.rawValue,
+      output: String(repeating: "x", count: RealtimeProviderToolResultPolicy.maximumByteCount + 1))
+
+    XCTAssertTrue(result.wasOversized)
+    XCTAssertLessThan(result.output.utf8.count, RealtimeProviderToolResultPolicy.maximumByteCount)
+    let object = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: Data(result.output.utf8)) as? [String: Any])
+    let error = try XCTUnwrap(object["error"] as? [String: Any])
+    XCTAssertEqual(error["code"] as? String, "tool_result_too_large")
+    XCTAssertEqual(error["tool"] as? String, HubTool.listAgentSessions.rawValue)
+  }
+}

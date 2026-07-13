@@ -187,6 +187,28 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
         currentTurnEpoch: 4))
   }
 
+  func testHeadlessPTTAuthorizationUsesExactInjectedTranscriptOverProviderArtifact() {
+    let selection = RealtimeAutomationTranscriptOverridePolicy.select(
+      providerText: "¿Qué es el número de serie?",
+      providerIsFinal: true,
+      forcedText: "Request it now.")
+
+    XCTAssertEqual(selection.text, "Request it now.")
+    XCTAssertTrue(selection.isFinal)
+    XCTAssertTrue(selection.usedOverride)
+
+    let productionSelection = RealtimeAutomationTranscriptOverridePolicy.select(
+      providerText: "Request Omi's Screen Recording permission.",
+      providerIsFinal: true,
+      forcedText: nil)
+    XCTAssertEqual(
+      productionSelection,
+      .init(
+        text: "Request Omi's Screen Recording permission.",
+        isFinal: true,
+        usedOverride: false))
+  }
+
   func testCompletedProviderCallReplayCannotExecutePhysicalToolTwice() {
     let turnID = VoiceTurnID()
     let invocationID = RealtimeExternalToolInvocationIdentity.make(
@@ -487,7 +509,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertTrue(source.contains("voiceContextRefreshGeneration == refreshGeneration"))
     XCTAssertTrue(
       source.contains(
-        "let resolvedSnapshot = await FloatingControlBarManager.shared.kernelVoiceContextSnapshot()"))
+        "resolvedSnapshot = try await FloatingControlBarManager.shared.kernelVoiceContextSnapshot()"))
     XCTAssertTrue(source.contains("prefetchedVoiceContext = resolvedSnapshot.context"))
     XCTAssertTrue(source.contains("prefetchedVoiceContextFreshnessIdentity = resolvedSnapshot.freshnessIdentity"))
     XCTAssertTrue(source.contains("guard resolvedSnapshot.isResolved else"))
@@ -592,7 +614,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
       source.range(of: "private func runHeadlessPTTTurn("))
     let tail = source[harness.lowerBound...]
     let begin = try XCTUnwrap(
-      tail.range(of: "let turnID = VoiceTurnCoordinator.shared.begin(intent: .hold)"))
+      tail.range(of: "let turnID = RealtimeAutomationTurnHarness.begin(on: VoiceTurnCoordinator.shared)"))
     let route = try XCTUnwrap(
       tail.range(of: ".selectRoute(turnID: turnID, route: .hub(sessionID: nil))"))
     let controllerBegin = try XCTUnwrap(tail.range(of: "beginTurn(turnID: turnID)"))
@@ -612,7 +634,8 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
       source.range(of: "private func runHeadlessRapidPTTBurst("))
     let tail = source[harness.lowerBound...]
     let loop = try XCTUnwrap(tail.range(of: "for clip in clips"))
-    let begin = try XCTUnwrap(tail.range(of: "VoiceTurnCoordinator.shared.begin(intent: .hold)"))
+    let begin = try XCTUnwrap(
+      tail.range(of: "RealtimeAutomationTurnHarness.begin(on: VoiceTurnCoordinator.shared)"))
     let finalize = try XCTUnwrap(tail.range(of: ".finalize(turnID: turnID)"))
     let commit = try XCTUnwrap(tail.range(of: "_ = commitTurn()"))
     let wait = try XCTUnwrap(tail.range(of: "while Date() < deadline"))
@@ -712,40 +735,44 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
       idempotencyKey: "turn-interrupted"
     )
 
-    await RealtimeHubBargeInContinuity.prepareReplacementSession(
+    let outcome = await RealtimeHubBargeInContinuity.prepareReplacementSession(
       resolveInterruptedTurn: { interrupted },
       recordInterruptedTurn: { turn in
         steps.append("record:\(turn.idempotencyKey)")
+        return true
       },
       refreshVoiceContext: {
         steps.append("seed")
-        return true
+        return KernelTurnProjection.stableTurnIDs(continuityKey: "turn-interrupted")
       },
       startReplacementSession: {
         steps.append("session")
       }
     )
 
+    XCTAssertEqual(outcome, .started)
     XCTAssertEqual(steps, ["record:turn-interrupted", "seed", "session"])
   }
 
   func testPrepareReplacementSessionSkipsRecordWhenNoInterruptedTurn() async {
     var steps: [String] = []
 
-    await RealtimeHubBargeInContinuity.prepareReplacementSession(
+    let outcome = await RealtimeHubBargeInContinuity.prepareReplacementSession(
       resolveInterruptedTurn: { nil },
       recordInterruptedTurn: { _ in
         steps.append("record")
+        return true
       },
       refreshVoiceContext: {
         steps.append("seed")
-        return true
+        return []
       },
       startReplacementSession: {
         steps.append("session")
       }
     )
 
+    XCTAssertEqual(outcome, .started)
     XCTAssertEqual(steps, ["seed", "session"])
   }
 
@@ -753,27 +780,29 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     var steps: [String] = []
     var refreshAttempts = 0
 
-    await RealtimeHubBargeInContinuity.prepareReplacementSession(
+    let outcome = await RealtimeHubBargeInContinuity.prepareReplacementSession(
       resolveInterruptedTurn: { nil },
       recordInterruptedTurn: { _ in
         XCTFail("no interrupted turn should be recorded")
+        return false
       },
       refreshVoiceContext: {
         refreshAttempts += 1
         steps.append("seed:\(refreshAttempts)")
-        return refreshAttempts == 3
+        return refreshAttempts == 3 ? [] : nil
       },
       startReplacementSession: {
         steps.append("session")
       })
 
+    XCTAssertEqual(outcome, .started)
     XCTAssertEqual(steps, ["seed:1", "seed:2", "seed:3", "session"])
   }
 
   func testReplacementWaitsForLateTranscriptBeforePersistenceSeedAndSession() async {
     var steps: [String] = []
 
-    await RealtimeHubBargeInContinuity.prepareReplacementSession(
+    let outcome = await RealtimeHubBargeInContinuity.prepareReplacementSession(
       resolveInterruptedTurn: {
         steps.append("resolve:start")
         await Task.yield()
@@ -784,14 +813,86 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
           assistantText: "partial",
           idempotencyKey: "late-turn")
       },
-      recordInterruptedTurn: { _ in steps.append("record") },
+      recordInterruptedTurn: { _ in
+        steps.append("record")
+        return true
+      },
       refreshVoiceContext: {
         steps.append("seed")
-        return true
+        return KernelTurnProjection.stableTurnIDs(continuityKey: "late-turn")
       },
       startReplacementSession: { steps.append("session") })
 
+    XCTAssertEqual(outcome, .started)
     XCTAssertEqual(steps, ["resolve:start", "resolve:done", "record", "seed", "session"])
+  }
+
+  func testReplacementRejectsResolvedButStaleSnapshotUntilInterruptedTurnsAreVisible() async {
+    var steps: [String] = []
+    var refreshAttempts = 0
+    let continuityKey = "stale-then-fresh"
+    let expectedIDs = KernelTurnProjection.stableTurnIDs(continuityKey: continuityKey)
+
+    let outcome = await RealtimeHubBargeInContinuity.prepareReplacementSession(
+      resolveInterruptedTurn: {
+        InterruptedTurnPayload(
+          ownerID: "owner-a",
+          userText: "request screen permission",
+          assistantText: "requesting it now",
+          idempotencyKey: continuityKey)
+      },
+      recordInterruptedTurn: { _ in
+        steps.append("record")
+        return true
+      },
+      refreshVoiceContext: {
+        refreshAttempts += 1
+        steps.append("seed:\(refreshAttempts)")
+        return refreshAttempts == 1 ? [] : expectedIDs
+      },
+      startReplacementSession: { steps.append("session") })
+
+    XCTAssertEqual(outcome, .started)
+    XCTAssertEqual(steps, ["record", "seed:1", "seed:2", "session"])
+  }
+
+  func testReplacementFailsClosedWhenInterruptedTurnPersistenceFails() async {
+    var steps: [String] = []
+    let outcome = await RealtimeHubBargeInContinuity.prepareReplacementSession(
+      resolveInterruptedTurn: {
+        InterruptedTurnPayload(
+          ownerID: "owner-a",
+          userText: "request it",
+          assistantText: "partial",
+          idempotencyKey: "failed-persistence")
+      },
+      recordInterruptedTurn: { _ in
+        steps.append("record")
+        return false
+      },
+      refreshVoiceContext: {
+        steps.append("seed")
+        return []
+      },
+      startReplacementSession: { steps.append("session") })
+
+    XCTAssertEqual(outcome, .interruptedTurnPersistenceFailed)
+    XCTAssertEqual(steps, ["record"])
+  }
+
+  func testReplacementStopsAfterBoundedContextRefreshFailures() async {
+    var refreshAttempts = 0
+    let outcome = await RealtimeHubBargeInContinuity.prepareReplacementSession(
+      resolveInterruptedTurn: { nil },
+      recordInterruptedTurn: { _ in true },
+      refreshVoiceContext: {
+        refreshAttempts += 1
+        return nil
+      },
+      startReplacementSession: { XCTFail("replacement must not start without context") })
+
+    XCTAssertEqual(outcome, .contextUnavailable)
+    XCTAssertEqual(refreshAttempts, RealtimeHubBargeInContinuity.maximumContextRefreshAttempts)
   }
 
   func testTranscriptPolicyUsesLocalDecodeWhenProviderTranscriptIsLate() {

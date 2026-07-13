@@ -295,7 +295,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
       response: """
       {
         "ok": true,
-        "session": {"sessionId": "ses_pill"},
+        "session": {"sessionId": "ses_pill", "metadata": {"provider": "openclaw"}},
         "run": {"runId": "run_pill", "status": "running"},
         "attempt": {"attemptId": "att_pill"}
       }
@@ -312,6 +312,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
 
     XCTAssertEqual(inspection.runId, "run_pill")
     XCTAssertEqual(inspection.attemptId, "att_pill")
+    XCTAssertEqual(inspection.provider, "openclaw")
     let call = try XCTUnwrap(runtime.calls.first)
     XCTAssertEqual(call.name, "get_agent_run")
     XCTAssertEqual(Set(call.input.keys), ["runId"])
@@ -607,7 +608,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(providerSource.contains("surface: realtimeVoiceSurfaceReference()"))
     XCTAssertTrue(providerSource.contains("includeScreenSource: false"))
     XCTAssertTrue(hubSource.contains("await self.refreshVoiceContextSnapshot()"))
-    XCTAssertTrue(hubSource.contains("reconnectWarmSessionIfContextStale()"))
+    XCTAssertTrue(hubSource.contains("RealtimeVoiceContextRefreshPolicy.requiresRefresh("))
     XCTAssertTrue(hubSource.contains("sessionVoiceContextFreshnessIdentity"))
     XCTAssertTrue(hubSource.contains("snapshotFreshnessIdentity: prefetchedVoiceContextFreshnessIdentity"))
   }

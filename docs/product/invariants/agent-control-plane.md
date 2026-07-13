@@ -52,6 +52,11 @@ must name the invariant they affect and update the matching guard test.
   owner-scoped RPC, even when the adapter needs no Firebase token. Query,
   interrupt, warmup, and session-invalidation transport mutations reject a
   caller owner that differs from the active runtime owner.
+- Swift treats the runtime `init` handshake as a compatibility boundary: the
+  negotiated protocol version must match exactly and every required capability
+  must be declared before the runtime becomes ready. Missing or stale
+  capabilities fail startup closed instead of surfacing later as unknown wire
+  messages.
 - Owner replacement is a correlated pre-visibility barrier. Node first makes
   the previous owner inert, synchronously terminalizes its foreground/external
   runs, pending tool claims, and session bindings, then returns an exact-owner
@@ -65,6 +70,10 @@ must name the invariant they affect and update the matching guard test.
 - Swift validates and executes only `authorized_tool_execution`, echoing the
   complete immutable claim tuple and generated manifest digest. Ordinary
   `tool_use` events are display-only.
+- Control-plane list operations return bounded summaries, never complete
+  persisted run inputs, surface context, results, or metadata. Detail remains an
+  explicit run lookup, and realtime provider responses enforce a byte ceiling so
+  one oversized tool result cannot tear down the voice session.
 - Workstream consolidation moves task-scoped history through the canonical
   journal migration transaction, preserving typed payloads, revisions, outbox
   state, sequencing, and restart visibility; it never inserts or deletes turn
@@ -90,8 +99,11 @@ Documented per-invariant in the canonical invariants doc, including:
 - `desktop/macos/agent/tests/session-execution-profile.test.ts`
 - `desktop/macos/agent/tests/run-tool-capability.test.ts`
 - `desktop/macos/agent/tests/convergence-authority-ratchet.test.ts`
+- `desktop/macos/agent/tests/runtime-stdio-contract.test.ts`
+- `desktop/macos/agent/tests/cross-surface-contract-smoke.test.ts`
 - `desktop/macos/Desktop/Tests/AuthorizedToolExecutionTests.swift`
 - `desktop/macos/Desktop/Tests/KernelContractWireTests.swift`
+- `desktop/macos/Desktop/Tests/AgentRuntimeStatusStoreTests.swift`
 
 ## Path globs
 

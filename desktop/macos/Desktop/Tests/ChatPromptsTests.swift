@@ -9,6 +9,16 @@ final class ChatPromptsTests: XCTestCase {
         XCTAssertTrue(desktopPrompt.contains("use request_permission immediately"))
         XCTAssertTrue(DesktopCapabilityRegistry.realtimeSelfModelPrompt.contains("screen share"))
         XCTAssertTrue(DesktopCapabilityRegistry.realtimeSelfModelPrompt.contains("screen_recording"))
+        XCTAssertTrue(
+            DesktopCapabilityRegistry.realtimeSelfModelPrompt.contains(
+                "explicitly say that Omi needs Screen Recording permission"
+            )
+        )
+        XCTAssertTrue(
+            DesktopCapabilityRegistry.realtimeSelfModelPrompt.contains(
+                "next-turn request such as \"request it\""
+            )
+        )
     }
 
     func testOnboardingDefersWebResearchUntilAfterFileScanAndEmailAttempt() throws {

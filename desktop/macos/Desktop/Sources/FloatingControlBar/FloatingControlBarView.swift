@@ -19,10 +19,9 @@ enum ShortcutHintLayout {
 enum FloatingChatPTTOverlayPolicy {
     static func shouldShow(
         showingAIConversation: Bool,
-        isVoiceListening: Bool,
-        isVoiceFollowUp: Bool
+        isVoiceListening: Bool
     ) -> Bool {
-        showingAIConversation && isVoiceListening && !isVoiceFollowUp
+        showingAIConversation && isVoiceListening
     }
 }
 
@@ -361,8 +360,7 @@ struct FloatingControlBarView: View {
         .overlay(alignment: .bottom) {
             if FloatingChatPTTOverlayPolicy.shouldShow(
                 showingAIConversation: state.showingAIConversation,
-                isVoiceListening: state.isVoiceListening,
-                isVoiceFollowUp: state.isVoiceFollowUp
+                isVoiceListening: state.isVoiceListening
             ) {
                 // `conversationView` replaces the normal notch waveform while
                 // chat is open. Keep the recording/hint projection visible at
@@ -1298,9 +1296,9 @@ struct FloatingControlBarView: View {
     @ViewBuilder
     private func pillRowIdentityMark(_ pill: AgentPill) -> some View {
         let group = NotchAgentStatusGroup(status: pill.status)
-        if pill.bridgeHarnessOverride.rendersProviderMark {
+        if pill.providerIdentity.rendersProviderMark {
             AgentProviderLogoMark(
-                provider: pill.bridgeHarnessOverride,
+                provider: pill.providerIdentity,
                 statusColor: group.color,
                 size: NotchAgentStackMetrics.listOrbSize + 5
             )
@@ -2114,10 +2112,13 @@ private struct AgentMainChatView: View {
                     case .discoveryCard(_, let title, let summary, let fullText):
                         DiscoveryCard(title: title, summary: summary, fullText: fullText)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                    case .agentSpawn(_, let pillId, let sessionId, let runId, let title, let objective):
+                    case .agentSpawn(
+                        _, let pillId, let sessionId, let runId, let title, let objective, let provider
+                    ):
                         AgentSpawnCard(
                             title: title,
                             objective: objective,
+                            provider: provider,
                             ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
                             onOpen: nil
                         )
@@ -2486,7 +2487,7 @@ private struct NotchAgentMorphField: View {
                     .help(pill.title)
 
                     notchAgentIdentityMark(
-                        provider: pill.bridgeHarnessOverride,
+                        provider: pill.providerIdentity,
                         color: group.color,
                         isActive: pill.id == activePillID,
                         progress: 1

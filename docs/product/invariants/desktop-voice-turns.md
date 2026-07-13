@@ -39,6 +39,13 @@ SwiftUI and floating-bar state are projections.
 - Reconnect and replacement state belongs to the reducer. The realtime controller
   may buffer bounded PCM while a socket authenticates, but that buffer does not
   decide whether the turn is recording, responding, finished, or current.
+- A physical release is idempotent once the reducer has a pending hub commit.
+  `PushToTalkManager` must not start batch transcription for that same audio; only
+  a still-finalizing turn with no accepted/deferred hub commit may take the batch
+  fallback.
+- A barge-in replacement session starts only after the canonical snapshot proves
+  it contains every just-persisted interrupted turn ID. A merely resolved but
+  stale snapshot is retried and never becomes provider context.
 - Context capture publishes one versioned captured/omitted outcome to the turn.
   A late context result for a superseded turn is dropped.
 - User interrupt is a typed reducer event. It revokes tools/output and terminalizes
@@ -62,6 +69,17 @@ tools, explicit interruption, local playback drain, journal acceptance/failure,
 deadlines, and a rapid three-turn replacement sequence. Tests use an injected
 deadline scheduler; lifecycle tests must not sleep on wall clock time.
 
+`scripts/agent-logic-harness.sh --cross-surface-smoke` is the fast deterministic
+gate for consecutive turns, reconnect-at-release, barge-in replacement, typing
+during PTT, shared journal identity, and exactly-once commit admission. It uses
+production reducers/protocols with fixture providers and does not require audio
+hardware or a live model.
+
+Non-production `ptt_test_turn` and `ptt_test_burst` actions use the reducer's
+typed `.automation` intent. That intent owns synthetic finalization and bypasses
+only the physical microphone silence gate; provider, journal, playback, and
+terminal reducer fences remain production paths.
+
 The named-bundle continuity gauntlet remains the real-path release gate for typed
 chat → PTT → typed follow-up and cross-surface agent continuity.
 
@@ -77,6 +95,7 @@ chat → PTT → typed follow-up and cross-surface agent continuity.
 - `desktop/macos/Desktop/Tests/VoiceTurnReducerTests.swift`
 - `desktop/macos/Desktop/Tests/VoiceTurnOutputOwnershipTests.swift`
 - `desktop/macos/Desktop/Tests/RealtimeHubBargeInContinuityTests.swift`
+- `desktop/macos/Desktop/Tests/CrossSurfaceContractSmokeTests.swift`
 - `desktop/macos/agent/tests/convergence-authority-ratchet.test.ts`
 
 ## Path globs

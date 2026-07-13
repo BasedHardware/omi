@@ -713,7 +713,7 @@ private extension ChatContentBlock {
         case .toolCall(let id, let name, let status, _, _, _): return "c:\(id):\(name):\(status)"
         case .thinking(let id, _): return "h:\(id)"
         case .discoveryCard(let id, _, _, _): return "d:\(id)"
-        case .agentSpawn(let id, let pillId, _, _, _, _): return "s:\(id):\(pillId?.uuidString ?? "")"
+        case .agentSpawn(let id, let pillId, _, _, _, _, _): return "s:\(id):\(pillId?.uuidString ?? "")"
         case .agentCompletion(let id, let pillId, _, _, _, _, _, _): return "a:\(id):\(pillId?.uuidString ?? "")"
         }
     }

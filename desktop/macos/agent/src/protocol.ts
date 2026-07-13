@@ -4,6 +4,7 @@
 // === Swift → Bridge (stdin) ===
 
 export const PROTOCOL_VERSION = 2 as const;
+export const RUNTIME_CAPABILITIES = ["journal_import_remote_turn"] as const;
 export type ProtocolVersion = typeof PROTOCOL_VERSION;
 
 export interface ProtocolEnvelope {
@@ -254,6 +255,57 @@ export interface JournalRecordExchangeMessage extends ProtocolEnvelope {
   turns: JournalTurnWireInput[];
 }
 
+export interface JournalRemoteTurnWireInput {
+  remoteId: string;
+  canonicalTurnId?: string;
+  role: "user" | "assistant";
+  content: string;
+  contentBlocks: unknown[];
+  resources: unknown[];
+  metadataJson: string;
+  createdAtMs: number;
+}
+
+/**
+ * Bounded upgrade input for backend rows written before the kernel journal was
+ * authoritative. The runtime, not Swift, resolves the canonical conversation
+ * and owns the imported turn projection.
+ */
+export interface JournalImportRemoteTurnMessage extends ProtocolEnvelope {
+  type: "journal_import_remote_turn";
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
+  turn: JournalRemoteTurnWireInput;
+}
+
+export function assertJournalRemoteTurnInput(
+  input: unknown,
+): asserts input is JournalRemoteTurnWireInput {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new Error("Remote journal turn input must be an object");
+  }
+  const turn = input as Partial<JournalRemoteTurnWireInput>;
+  if (typeof turn.remoteId !== "string" || !turn.remoteId.trim()) {
+    throw new Error("Remote journal turn requires remoteId");
+  }
+  if (turn.canonicalTurnId !== undefined
+      && (typeof turn.canonicalTurnId !== "string" || !turn.canonicalTurnId.trim())) {
+    throw new Error("Remote journal canonicalTurnId must be non-empty when provided");
+  }
+  if (turn.role !== "user" && turn.role !== "assistant") {
+    throw new Error("Remote journal turn requires a valid role");
+  }
+  if (typeof turn.content !== "string"
+      || !Array.isArray(turn.contentBlocks)
+      || !Array.isArray(turn.resources)
+      || typeof turn.metadataJson !== "string"
+      || typeof turn.createdAtMs !== "number"
+      || !Number.isFinite(turn.createdAtMs)) {
+    throw new Error("Remote journal turn has an invalid payload");
+  }
+}
+
 export interface JournalUpdateTurnMessage extends ProtocolEnvelope {
   type: "journal_update_turn";
   surfaceKind: string;
@@ -387,6 +439,7 @@ export type InboundMessage =
   | GetContextSnapshotMessage
   | JournalRecordTurnMessage
   | JournalRecordExchangeMessage
+  | JournalImportRemoteTurnMessage
   | JournalUpdateTurnMessage
   | JournalTerminalizeTurnMessage
   | JournalListTurnsMessage
@@ -422,10 +475,12 @@ export interface QueryScopedOutbound extends OutboundEnvelope, CanonicalCorrelat
   adapterSessionId?: string;
 }
 
-export interface InitMessage {
+export interface InitMessage extends OutboundEnvelope {
   type: "init";
   sessionId: string;
   agentControlTools: string[];
+  runtimeVersion: string;
+  runtimeCapabilities: string[];
 }
 
 export interface TextDeltaMessage extends QueryScopedOutbound {
@@ -773,7 +828,7 @@ export interface AgentSpawnJournalEnsuredMessage extends OutboundEnvelope {
 
 export interface JournalOperationResultMessage extends OutboundEnvelope {
   type: "journal_operation_result";
-  operation: "record" | "record_exchange" | "update" | "list" | "clear";
+  operation: "record" | "record_exchange" | "import_remote" | "update" | "list" | "clear";
   conversationId: string;
   surfaceKind: string;
   externalRefKind: string;
@@ -876,13 +931,13 @@ export type OutboundMessage =
   | JournalBackendDeleteMessage
   | JournalBackendReconcileMessage;
 
-type OutboundWithEnvelope = Exclude<OutboundMessage, InitMessage | AuthRequiredMessage | AuthSuccessMessage>;
+type OutboundWithEnvelope = Exclude<OutboundMessage, AuthRequiredMessage | AuthSuccessMessage>;
 
 type DraftEnvelope<T extends OutboundWithEnvelope> = Omit<T, "protocolVersion"> & Partial<Pick<T, "protocolVersion">>;
 
 /** Outbound payload before correlation / envelope enrichment (adapters, transport internals). */
 export type OutboundMessageDraft =
-  | InitMessage
+  | DraftEnvelope<InitMessage>
   | AuthRequiredMessage
   | AuthSuccessMessage
   | DraftEnvelope<TextDeltaMessage>
@@ -913,7 +968,7 @@ export type OutboundMessageDraft =
   | DraftEnvelope<JournalBackendReconcileMessage>;
 
 export function ensureOutboundProtocolVersion(message: OutboundMessageDraft): OutboundMessage {
-  if (message.type === "init" || message.type === "auth_required" || message.type === "auth_success") {
+  if (message.type === "auth_required" || message.type === "auth_success") {
     return message;
   }
   if ("protocolVersion" in message && message.protocolVersion === PROTOCOL_VERSION) {

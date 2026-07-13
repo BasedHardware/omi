@@ -91,6 +91,8 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
           "sessionId": "session-child",
           "externalRefId": pillID.uuidString,
           "title": "Research models",
+          "defaultAdapterId": "hermes",
+          "metadata": [:],
         ],
         "run": [
           "runId": "run-child",
@@ -121,6 +123,7 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
         sessionID: "session-child",
         runID: "run-child",
         attemptID: "attempt-child",
+        provider: "hermes",
         title: "Research models",
         objective: "Research the latest models"))
   }

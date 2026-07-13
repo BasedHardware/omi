@@ -137,14 +137,13 @@ private final class VoiceTurnOmniDelegateProxy: RealtimeOmniServiceDelegate {
 class PushToTalkManager: ObservableObject {
   static let shared = PushToTalkManager()
 
-  /// A local-profile automation turn drives provider/reducer boundaries itself;
+  /// An automation turn drives provider/reducer boundaries itself;
   /// it has no physical capture buffer for this manager to silence-gate. Let the
   /// reducer reach `.finalizing`, then leave the exact commit to the harness.
   nonisolated static func shouldFinalizeCapturedInputPhysically(
-    turnIntent: VoiceTurnIntent?,
-    localProfileEnabled: Bool
+    turnIntent: VoiceTurnIntent?
   ) -> Bool {
-    !(localProfileEnabled && turnIntent == .automation)
+    turnIntent != .automation
   }
 
   /// Whether a shortcut-down may begin a fresh capture generation. The reducer
@@ -339,8 +338,7 @@ class PushToTalkManager: ObservableObject {
     case .finalizeCapturedInput(let turnID):
       guard voiceTurnCoordinator.activeTurnID == turnID else { return }
       guard Self.shouldFinalizeCapturedInputPhysically(
-        turnIntent: voiceTurnCoordinator.activeTurn?.intent,
-        localProfileEnabled: DesktopLocalProfile.isEnabled)
+        turnIntent: voiceTurnCoordinator.activeTurn?.intent)
       else {
         log("PushToTalkManager: local automation turn owns synthetic captured-input finalization")
         return
@@ -1047,6 +1045,10 @@ class PushToTalkManager: ObservableObject {
         transcribeBufferedWarmWaitAudio()
         return
       }
+      if commitResult == .alreadyOwned {
+        log("PushToTalkManager: realtime hub already owns this pending commit — skipping duplicate fallback")
+        return
+      }
       silentMicRecoveryPolicy.recordSuccessfulTurn()
       DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: true)
       AnalyticsManager.shared.floatingBarPTTEnded(
@@ -1580,6 +1582,10 @@ class PushToTalkManager: ObservableObject {
       batchAudioBuffer = turnAudio
       batchAudioLock.unlock()
       transcribeBufferedWarmWaitAudio()
+      return
+    }
+    if commitResult == .alreadyOwned {
+      log("PushToTalkManager: buffered hub commit is already owned — skipping duplicate fallback")
       return
     }
     silentMicRecoveryPolicy.recordSuccessfulTurn()

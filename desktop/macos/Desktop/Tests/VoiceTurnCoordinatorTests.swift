@@ -29,20 +29,19 @@ final class VoiceTurnCoordinatorTests: XCTestCase {
     XCTAssertTrue(providerEffectTurn?.hubCommitPending == true)
   }
 
-  func testLocalAutomationFinalizeRemainsCommitableWithoutPhysicalCaptureBuffer() {
+  func testAutomationFinalizeRemainsCommitableWithoutPhysicalCaptureBuffer() {
     let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
     var physicalFinalizeCount = 0
     coordinator.setEffectHandler { effect in
       guard case .finalizeCapturedInput(let turnID) = effect else { return }
       if PushToTalkManager.shouldFinalizeCapturedInputPhysically(
-        turnIntent: coordinator.activeTurn?.intent,
-        localProfileEnabled: true)
+        turnIntent: coordinator.activeTurn?.intent)
       {
         physicalFinalizeCount += 1
         coordinator.send(.finish(turnID: turnID, reason: .tooShort))
       }
     }
-    let turnID = coordinator.begin(intent: .automation)
+    let turnID = RealtimeAutomationTurnHarness.begin(on: coordinator)
     coordinator.send(.selectRoute(turnID: turnID, route: .hub(sessionID: VoiceSessionID())))
 
     coordinator.send(.finalize(turnID: turnID))
@@ -52,6 +51,18 @@ final class VoiceTurnCoordinatorTests: XCTestCase {
     XCTAssertTrue(coordinator.canCommitHubTurn(turnID))
     coordinator.send(.hubCommitClaimed(turnID: turnID))
     XCTAssertEqual(coordinator.activeTurn?.phase, .awaitingResponse)
+  }
+
+  func testAutomationHarnessSatisfiesCaptureStartDeadline() {
+    let scheduler = ManualVoiceTurnScheduler()
+    let coordinator = VoiceTurnCoordinator(scheduler: scheduler)
+
+    let turnID = RealtimeAutomationTurnHarness.begin(on: coordinator)
+    scheduler.fire(deadline: .captureStart)
+
+    XCTAssertEqual(coordinator.activeTurnID, turnID)
+    XCTAssertEqual(coordinator.activeTurn?.captureID, VoiceCaptureID(1))
+    XCTAssertEqual(coordinator.activeTurn?.phase, .recording)
   }
 
   func testFakeClockDrivesLockDeadlineAndRealStopCaptureEffect() {
@@ -497,6 +508,33 @@ final class VoiceTurnCoordinatorTests: XCTestCase {
     XCTAssertEqual(coordinator.activeTurnID, replacementTurnID)
     XCTAssertTrue(barState.isVoiceResponseActive)
     XCTAssertEqual(coordinator.model.staleEventCount, 1)
+  }
+
+  func testPendingHubCommitIsAlreadyOwnedInsteadOfEligibleForBatchFallback() {
+    let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
+    let turnID = coordinator.begin(intent: .hold)
+    coordinator.send(.selectRoute(turnID: turnID, route: .hub(sessionID: VoiceSessionID())))
+    coordinator.send(.finalize(turnID: turnID))
+    coordinator.send(.hubCommitClaimed(turnID: turnID))
+
+    XCTAssertFalse(coordinator.canCommitHubTurn(turnID))
+    XCTAssertTrue(
+      RealtimeHubCommitOwnershipPolicy.isAlreadyOwned(
+        turn: coordinator.activeTurn,
+        requestedTurnID: turnID))
+  }
+
+  func testFinalizingHubTurnIsNotClassifiedAsAlreadyOwned() {
+    let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
+    let turnID = coordinator.begin(intent: .hold)
+    coordinator.send(.selectRoute(turnID: turnID, route: .hub(sessionID: VoiceSessionID())))
+    coordinator.send(.finalize(turnID: turnID))
+
+    XCTAssertTrue(coordinator.canCommitHubTurn(turnID))
+    XCTAssertFalse(
+      RealtimeHubCommitOwnershipPolicy.isAlreadyOwned(
+        turn: coordinator.activeTurn,
+        requestedTurnID: turnID))
   }
 }
 

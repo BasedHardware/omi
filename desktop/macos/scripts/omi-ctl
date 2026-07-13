@@ -32,8 +32,13 @@ curl_bridge() {
 
 cmd="${1:-help}"; shift || true
 case "$cmd" in
-  state|health)
-    curl_bridge "$BASE/$cmd"; echo ;;
+  state)
+    curl_bridge "$BASE/state"; echo ;;
+  health)
+    # Health intentionally uses the unauthenticated identity route so callers
+    # see backend and negotiated runtime diagnostics, not the auth-only state
+    # snapshot served at the same path.
+    curl -fsS "$BASE/health"; echo ;;
   navigate)
     target="${1:?usage: omi-ctl navigate <screen> [settings-section]}"
     section="${2:-}"

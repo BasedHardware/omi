@@ -8,29 +8,19 @@ final class FloatingControlBarStateTests: XCTestCase {
         XCTAssertTrue(
             FloatingChatPTTOverlayPolicy.shouldShow(
                 showingAIConversation: true,
-                isVoiceListening: true,
-                isVoiceFollowUp: false
+                isVoiceListening: true
             )
         )
         XCTAssertFalse(
             FloatingChatPTTOverlayPolicy.shouldShow(
                 showingAIConversation: false,
-                isVoiceListening: true,
-                isVoiceFollowUp: false
+                isVoiceListening: true
             )
         )
         XCTAssertFalse(
             FloatingChatPTTOverlayPolicy.shouldShow(
                 showingAIConversation: true,
-                isVoiceListening: false,
-                isVoiceFollowUp: false
-            )
-        )
-        XCTAssertFalse(
-            FloatingChatPTTOverlayPolicy.shouldShow(
-                showingAIConversation: true,
-                isVoiceListening: true,
-                isVoiceFollowUp: true
+                isVoiceListening: false
             )
         )
     }

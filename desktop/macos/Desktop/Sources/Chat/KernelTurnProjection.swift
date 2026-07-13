@@ -66,7 +66,7 @@ enum KernelAgentLifecycleMutation {
       .filter({ turn in
         let blocks = ChatContentBlockCodec.decode(turn.contentBlocksJSON) ?? []
         return blocks.contains { block in
-          guard case .agentSpawn(_, let spawnPillID, _, let spawnRunID, _, _) = block else {
+          guard case .agentSpawn(_, let spawnPillID, _, let spawnRunID, _, _, _) = block else {
             return false
           }
           if spawnPillID == pillID { return true }

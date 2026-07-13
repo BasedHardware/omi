@@ -21,7 +21,7 @@ enum AgentLifecycleDisplayProjection {
 
         for (messageIndex, message) in canonicalMessages.enumerated() {
             for (blockIndex, block) in message.contentBlocks.enumerated() {
-                guard case .agentSpawn(_, let pillID, _, let runID, _, _) = block else { continue }
+                guard case .agentSpawn(_, let pillID, _, let runID, _, _, _) = block else { continue }
                 if let runID = nonEmpty(runID) {
                     spawnByRunID[runID] = spawnByRunID[runID] ?? Location(messageIndex: messageIndex, blockIndex: blockIndex)
                 }

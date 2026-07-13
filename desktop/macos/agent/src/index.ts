@@ -27,6 +27,7 @@
  */
 
 import { createInterface } from "readline";
+import packageMetadata from "../package.json" with { type: "json" };
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { createServer as createNetServer, type Socket } from "net";
@@ -52,6 +53,7 @@ import type {
   InvalidateSessionMessage,
   JournalRecordTurnMessage,
   JournalRecordExchangeMessage,
+  JournalImportRemoteTurnMessage,
   JournalUpdateTurnMessage,
   JournalTerminalizeTurnMessage,
   JournalListTurnsMessage,
@@ -67,6 +69,8 @@ import type {
 } from "./protocol.js";
 import {
   PROTOCOL_VERSION,
+  RUNTIME_CAPABILITIES,
+  assertJournalRemoteTurnInput,
   assertPublicJournalRecordAuthority,
   assertPublicJournalUpdateAuthority,
   ensureOutboundProtocolVersion,
@@ -122,6 +126,7 @@ import {
   failBackendTurnOutbox,
   journalTurnForSurfaceProjection,
   journalTurnChangedWakes,
+  importRemoteJournalTurn,
   listJournalTurns,
   recordJournalExchange,
   recordJournalTurn,
@@ -1427,7 +1432,13 @@ async function main(): Promise<void> {
   const journalPumpTimer = setInterval(pumpJournalOutbox, 1_000);
   journalPumpTimer.unref();
   // 3. Signal readiness
-  send({ type: "init", sessionId: "", agentControlTools: SWIFT_ADVERTISED_AGENT_CONTROL_TOOL_NAMES });
+  send({
+    type: "init",
+    sessionId: "",
+    agentControlTools: SWIFT_ADVERTISED_AGENT_CONTROL_TOOL_NAMES,
+    runtimeVersion: packageMetadata.version,
+    runtimeCapabilities: [...RUNTIME_CAPABILITIES],
+  });
   logErr("Agent runtime bridge started, waiting for queries...");
 
   // 4. Read JSON lines from Swift
@@ -2057,6 +2068,68 @@ async function main(): Promise<void> {
             clientId: request.clientId,
             message: envelope.message,
             failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
+      case "journal_import_remote_turn": {
+        const request = msg as JournalImportRemoteTurnMessage;
+        const ownerId = resolveActiveOwner(request.ownerId);
+        const resolved = resolveJournalSurface({
+          ownerId,
+          surfaceKind: request.surfaceKind,
+          externalRefKind: request.externalRefKind,
+          externalRefId: request.externalRefId,
+        });
+        assertJournalRemoteTurnInput(request.turn);
+        const imported = importRemoteJournalTurn(store, {
+          ownerId,
+          conversationId: resolved.conversationId,
+          remoteId: request.turn.remoteId,
+          canonicalTurnId: request.turn.canonicalTurnId,
+          role: request.turn.role,
+          surfaceKind: request.surfaceKind,
+          content: request.turn.content,
+          contentBlocks: request.turn.contentBlocks as ConversationContentBlock[],
+          resources: request.turn.resources as ConversationResource[],
+          metadataJson: request.turn.metadataJson,
+          createdAtMs: request.turn.createdAtMs,
+          source: "legacy_upgrade",
+        });
+        const range = listJournalTurns(store, {
+          ownerId,
+          conversationId: resolved.conversationId,
+          afterTurnSeq: Math.max(0, imported.turn.turnSeq - 1),
+          limit: 1,
+        });
+        send({
+          type: "journal_operation_result",
+          protocolVersion: request.protocolVersion,
+          requestId: request.requestId,
+          clientId: request.clientId,
+          operation: "import_remote",
+          conversationId: resolved.conversationId,
+          surfaceKind: request.surfaceKind,
+          externalRefKind: request.externalRefKind,
+          externalRefId: request.externalRefId,
+          turn: journalTurnProjection(imported.turn),
+          turns: [],
+          clearedCount: 0,
+          highWaterTurnSeq: range.highWaterTurnSeq,
+          generationBaseTurnSeq: range.generationBaseTurnSeq,
+          conversationGeneration: range.generation,
+        });
+        if (imported.imported) {
+          send({
+            type: "journal_turn_changed",
+            ownerId,
+            conversationGeneration: range.generation,
+            generationBaseTurnSeq: range.generationBaseTurnSeq,
+            surfaceKind: request.surfaceKind,
+            externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId,
+            turn: journalTurnProjection(imported.turn),
           });
         }
         break;
