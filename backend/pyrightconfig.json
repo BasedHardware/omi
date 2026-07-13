@@ -191,5 +191,11 @@
     "reportMissingTypeArgument": "warning",
     "reportUnnecessaryTypeIgnoreComment": "warning",
     "reportInvalidTypeForm": "error",
-    "reportDeprecated": "none"
+    "reportDeprecated": "none",
+    "executionEnvironments": [
+        {
+            "root": "utils/sync",
+            "reportMissingParameterType": "error"
+        }
+    ]
 }
