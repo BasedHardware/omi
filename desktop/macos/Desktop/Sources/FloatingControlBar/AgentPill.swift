@@ -151,10 +151,6 @@ final class AgentPillsManager: ObservableObject {
     private var pendingFollowUpsByPill: [UUID: [PendingAgentFollowUp]] = [:]
     private var producingJournalSurfaceByPill: [UUID: AgentSurfaceReference] = [:]
 
-    /// Which pill (if any) is currently capturing a voice follow-up — drives the
-    /// pill popover's mic button state.
-    @Published var recordingPillID: UUID?
-
     private let viewedFinishedTTL: TimeInterval = 10 * 60
 
     private var projectionSyncCancellable: AnyCancellable?
@@ -197,10 +193,6 @@ final class AgentPillsManager: ObservableObject {
         projectionRefreshTask = nil
         for task in runTasksByPill.values { task.cancel() }
         for item in viewedExpirationWorkItemsByPill.values { item.cancel() }
-        if let recordingPillID {
-            PushToTalkManager.shared.cancelPillFollowUp(for: recordingPillID)
-        }
-        recordingPillID = nil
         runTasksByPill.removeAll()
         runAttemptGenerationByPill.removeAll()
         viewedExpirationWorkItemsByPill.removeAll()
@@ -579,24 +571,6 @@ final class AgentPillsManager: ObservableObject {
         return pill
     }
 
-    // MARK: - Voice follow-up (continue THIS agent's session)
-
-    /// Tap the pill's mic button: start recording if idle, or stop + transcribe +
-    /// send if this pill is already recording.
-    func toggleFollowUpVoice(for pill: AgentPill) {
-        if recordingPillID == pill.id {
-            log("AgentPills: voice follow-up STOP tapped for \(pill.title)")
-            recordingPillID = nil
-            PushToTalkManager.shared.endPillFollowUp()
-        } else if recordingPillID == nil {
-            log("AgentPills: voice follow-up START tapped for \(pill.title)")
-            recordingPillID = pill.id
-            // Routes through the realtime omni STT (hub pipeline); the transcript comes
-            // back into continueAgent(from:text:) for THIS pill's session.
-            PushToTalkManager.shared.startPillFollowUp(for: pill)
-        }
-    }
-
     /// Send a follow-up to the same canonical background-agent session.
     func continueAgent(
         from pill: AgentPill,
@@ -807,10 +781,6 @@ final class AgentPillsManager: ObservableObject {
     func stop(pillID: UUID) {
         guard let pill = pills.first(where: { $0.id == pillID }), !pill.status.isFinished else { return }
         log("AgentPills: stopping pill \(pill.title)")
-        if recordingPillID == pillID {
-            recordingPillID = nil
-            PushToTalkManager.shared.cancelPillFollowUp(for: pillID)
-        }
         let runId = pill.canonicalRunId
         runTasksByPill[pillID]?.cancel()
         runTasksByPill[pillID] = nil
@@ -967,10 +937,6 @@ final class AgentPillsManager: ObservableObject {
     }
 
     private func cleanup(pillID: UUID) {
-        if recordingPillID == pillID {
-            recordingPillID = nil
-            PushToTalkManager.shared.cancelPillFollowUp(for: pillID)
-        }
         let pill = pills.first(where: { $0.id == pillID })
         let shouldCancelRun = pill?.status.isFinished == false
         let runId = pill?.canonicalRunId
@@ -990,10 +956,6 @@ final class AgentPillsManager: ObservableObject {
     }
 
     private func removeRenderedProjection(pillID: UUID) {
-        if recordingPillID == pillID {
-            recordingPillID = nil
-            PushToTalkManager.shared.cancelPillFollowUp(for: pillID)
-        }
         runTasksByPill[pillID]?.cancel()
         runTasksByPill[pillID] = nil
         runAttemptGenerationByPill[pillID] = nil
@@ -1444,7 +1406,7 @@ final class AgentPillsManager: ObservableObject {
     }
 
     private func hasLocalTransientState(pillID: UUID) -> Bool {
-        recordingPillID == pillID || pendingFollowUpsByPill[pillID]?.isEmpty == false
+        pendingFollowUpsByPill[pillID]?.isEmpty == false
     }
 
     func snapshotJSON(limit: Int = 20) -> String {

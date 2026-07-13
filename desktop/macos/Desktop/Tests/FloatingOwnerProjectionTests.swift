@@ -190,7 +190,6 @@ final class FloatingOwnerProjectionTests: XCTestCase {
     NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
 
     XCTAssertTrue(manager.pills.isEmpty)
-    XCTAssertNil(manager.recordingPillID)
   }
 
   @MainActor

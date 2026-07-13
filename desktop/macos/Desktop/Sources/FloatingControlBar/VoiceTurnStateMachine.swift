@@ -91,7 +91,6 @@ struct VoiceEffectIdentity: Hashable, Equatable, Sendable {
 enum VoiceTurnIntent: String, Equatable, Sendable {
   case hold
   case locked
-  case agentFollowUp
   case automation
 }
 
@@ -102,7 +101,6 @@ enum VoiceTurnRoute: Equatable, Sendable {
   case omniSTT
   case deepgramBatch
   case deepgramLive
-  case agentFollowUp
 }
 
 enum VoiceContextOutcome: Equatable, Sendable {
@@ -239,7 +237,6 @@ enum VoiceTurnDeadline: String, Equatable, Hashable, Sendable, CaseIterable {
 struct VoiceTurnUIProjection: Equatable, Sendable {
   var isListening = false
   var isLocked = false
-  var isFollowUp = false
   var transcript = ""
   var hint = ""
   var isThinking = false
@@ -314,7 +311,7 @@ struct VoiceTurn: Equatable, Sendable {
     self.supersededTurnID = supersededTurnID
     self.intent = intent
     phase = intent == .locked ? .lockedRecording : .recording
-    route = intent == .agentFollowUp ? .agentFollowUp : .undecided
+    route = .undecided
     pendingToolCallIDs = []
     toolEffectIdentities = [:]
     providerFinished = false
@@ -334,7 +331,6 @@ struct VoiceTurn: Equatable, Sendable {
     projection = VoiceTurnUIProjection(
       isListening: true,
       isLocked: intent == .locked,
-      isFollowUp: intent == .agentFollowUp,
       transcript: "",
       hint: "",
       isThinking: false,
@@ -1216,7 +1212,6 @@ struct VoiceTurnReducer {
     case .clearPresentation:
       model.turn?.projection.isListening = false
       model.turn?.projection.isLocked = false
-      model.turn?.projection.isFollowUp = false
       model.turn?.projection.transcript = ""
       model.turn?.projection.hint = ""
       model.turn?.projection.isThinking = false

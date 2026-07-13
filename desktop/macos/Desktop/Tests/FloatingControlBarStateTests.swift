@@ -123,11 +123,12 @@ final class FloatingControlBarStateTests: XCTestCase {
             "@Published var isVoiceLocked",
             "@Published var pttHintText",
             "@Published var isThinking",
-            "@Published var isVoiceFollowUp",
             "presentVoiceResponseActive",
             "beginVoiceResponseWaiting",
             "clearVoiceResponseState",
             "debugSetVoiceResponseActive",
+            "var isVoiceFollowUp",
+            "var voiceFollowUpTranscript",
         ] {
             XCTAssertFalse(source.contains(forbidden), "legacy voice mutation surface: \(forbidden)")
         }
@@ -469,14 +470,14 @@ final class FloatingControlBarStateTests: XCTestCase {
         XCTAssertTrue(state.isAgentSwitcherExpanded)
     }
 
-    func testHideConversationSurfaceCannotClearReducerOwnedFollowUpProjection() {
+    func testHideConversationSurfaceDoesNotMutateReducerProjectionDirectly() {
         let state = FloatingControlBarState()
         let coordinator = VoiceTurnCoordinator()
         coordinator.configure(barState: state)
         let agentID = UUID()
         state.present(.agent(agentID))
         state.isAILoading = true
-        let turnID = coordinator.begin(intent: .agentFollowUp)
+        let turnID = coordinator.begin(intent: .hold)
         coordinator.send(.transcriptChanged(turnID: turnID, text: "partial transcript"))
 
         state.hideConversationSurface()
@@ -486,14 +487,16 @@ final class FloatingControlBarStateTests: XCTestCase {
         XCTAssertFalse(state.showingAIConversation)
         XCTAssertFalse(state.showingAIResponse)
         XCTAssertFalse(state.isAILoading)
-        XCTAssertTrue(state.isVoiceFollowUp)
-        XCTAssertEqual(state.voiceFollowUpTranscript, "partial transcript")
+        // cancelListening is a no-op when PushToTalkManager is idle; projection stays
+        // reducer-owned until the coordinator cancels the turn.
         XCTAssertEqual(state.voiceProjection, coordinator.projection)
+        XCTAssertTrue(state.isVoiceListening)
+        XCTAssertEqual(state.voiceProjection.transcript, "partial transcript")
         XCTAssertFalse(state.hasVisibleConversation)
 
         coordinator.send(.cancel(turnID: turnID, reason: .cancelled))
-        XCTAssertFalse(state.isVoiceFollowUp)
-        XCTAssertEqual(state.voiceFollowUpTranscript, "")
+        XCTAssertFalse(state.isVoiceListening)
+        XCTAssertEqual(state.voiceProjection.transcript, "")
     }
 
     private func makeResponseActive(

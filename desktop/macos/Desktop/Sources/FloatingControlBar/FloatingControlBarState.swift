@@ -224,7 +224,6 @@ class FloatingControlBarState: NSObject, ObservableObject {
             let shouldExpandForVoice = barState.isVoiceListening
 
             if shouldExpandForVoice != wasExpandedForVoice,
-               !barState.isVoiceFollowUp,
                !barState.showingAIConversation,
                UserDefaults.standard.bool(forKey: .hasCompletedOnboarding)
             {
@@ -321,12 +320,6 @@ class FloatingControlBarState: NSObject, ObservableObject {
     /// exposes a real camera housing safe area. External displays keep old pill UI.
     @Published var usesNotchIsland: Bool = false
     @Published var notchRevealProgress: CGFloat = 1
-
-    // Voice follow-up state (PTT while AI conversation is active)
-    var isVoiceFollowUp: Bool { voiceProjection.isFollowUp && isVoiceListening }
-    var voiceFollowUpTranscript: String {
-        isVoiceFollowUp ? voiceProjection.transcript : ""
-    }
 
     private func applyVoiceProjection(_ projection: VoiceTurnUIProjection) {
         voiceProjection = projection
@@ -637,10 +630,7 @@ class FloatingControlBarState: NSObject, ObservableObject {
         // are cleared, and late-arriving chunks update a surface nobody sees.
         // (Cubic P2 — presentation/process desync.)
         FloatingControlBarManager.shared.cancelChat()
-        // Call cancelListening() directly instead of gating on isVoiceFollowUp:
-        // the derived UI flag is not the authoritative source of microphone
-        // state, and cancelListening() is already guarded by state != .idle.
-        // (Cubic P2 — stale PTT capture after surface hide.)
+        // cancelListening() is already guarded by state != .idle.
         PushToTalkManager.shared.cancelListening()
         activeAgentChatPillID = nil
         conversationSurface = .closed

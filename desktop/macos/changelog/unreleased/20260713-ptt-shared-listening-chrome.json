@@ -1,0 +1,3 @@
+{
+  "change": "Push-to-talk listening morphs shared floating-bar chrome during chat on every display; too-short/error copy uses a readable status banner under chrome/pill; agent voice follow-up was removed so global PTT always talks to the main agent"
+}

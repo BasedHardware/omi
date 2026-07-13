@@ -117,7 +117,11 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("preservingAttemptForSameRun: true"))
     XCTAssertTrue(source.contains("return !hasLocalTransientState(pillID: pill.id)"))
     XCTAssertTrue(source.contains("private func hasLocalTransientState(pillID: UUID) -> Bool"))
-    XCTAssertTrue(source.contains("recordingPillID == pillID || pendingFollowUpsByPill[pillID]?.isEmpty == false"))
+    XCTAssertTrue(source.contains("pendingFollowUpsByPill[pillID]?.isEmpty == false"))
+    XCTAssertFalse(source.contains("recordingPillID"))
+    XCTAssertFalse(source.contains("toggleFollowUpVoice"))
+    XCTAssertFalse(source.contains("startPillFollowUp"))
+    XCTAssertFalse(source.contains("cancelPillFollowUp"))
   }
 
   func testFinishedAgentArtifactsAreDeliveredToParentChatSurfaces() throws {
@@ -283,7 +287,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertFalse(windowSource.contains("let targetSize = self.currentSurfaceSizeForCurrentScreen(frameIncludesVoiceGlow: wasActive)"))
   }
 
-  func testNotchPTTUsesCompactWaveformOnly() throws {
+    func testNotchPTTUsesCompactWaveformOnly() throws {
     let source = try floatingControlBarViewSource()
 
     guard let lobeRange = source.range(of: "private var notchAgentLobe: some View"),
@@ -294,7 +298,25 @@ final class AgentPillLifecycleTests: XCTestCase {
     let lobeSource = String(source[lobeRange.lowerBound..<controlRange.lowerBound])
 
     XCTAssertTrue(lobeSource.contains("VoiceWaveformBars(isActive: true)"))
-    XCTAssertFalse(lobeSource.contains("Image(systemName: \"mic.fill\")"))
+    XCTAssertFalse(lobeSource.contains("showingNotchPttHint"))
+    XCTAssertTrue(source.contains("pttStatusBanner"))
+    XCTAssertTrue(source.contains("state.isVoiceListening && state.pttHintText.isEmpty"))
+    XCTAssertFalse(source.contains("!state.isVoiceFollowUp && !state.showingAIConversation"))
+  }
+
+  func testVoiceWaveformBarsOwnedByChromeMorph() throws {
+    let view = try floatingControlBarViewSource()
+    let response = try aiResponseViewSource()
+    let waveformSites = view.components(separatedBy: "VoiceWaveformBars(").count - 1
+    // Chrome morph lobe + optional idle pill voiceListeningView.
+    XCTAssertEqual(waveformSites, 2)
+    XCTAssertTrue(view.contains("private var notchAgentLobe: some View"))
+    XCTAssertTrue(view.contains("private var voiceListeningView: some View"))
+    XCTAssertTrue(view.contains("if state.usesNotchIsland || state.showingAIConversation {\n                notchChrome"))
+    XCTAssertFalse(response.contains("VoiceWaveformBars("))
+    XCTAssertFalse(view.contains("voiceFollowUpView"))
+    XCTAssertFalse(view.contains("toggleFollowUpVoice"))
+    XCTAssertFalse(view.contains("agentFollowUp"))
   }
 
   func testNotchHoverMenuKeepsAskOmiReachable() throws {
@@ -472,7 +494,8 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("showsHeader: false"))
     XCTAssertTrue(responseSource.contains("var showsHeader: Bool = true"))
     XCTAssertTrue(responseSource.contains("if showsHeader {"))
-    XCTAssertTrue(responseSource.contains(".padding(.top, state.usesNotchIsland ? 0 : OmiSpacing.lg)"))
+    XCTAssertTrue(responseSource.contains(".padding(.top, 0)"))
+    XCTAssertFalse(responseSource.contains(".padding(.top, state.usesNotchIsland ? 0 : OmiSpacing.lg)"))
     XCTAssertFalse(source.contains("NotchAgentSwitcherMenu("))
     XCTAssertFalse(source.contains("Text(\"Subagents\")"))
     XCTAssertFalse(source.contains(".fill(Color.white.opacity(0.025))"))
