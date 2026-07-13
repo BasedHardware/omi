@@ -33,7 +33,9 @@ pub struct Config {
     pub google_client_id: Option<String>,
     /// Google OAuth Client Secret
     pub google_client_secret: Option<String>,
-    /// Redis host for distributed request rate limiting
+    /// Encryption secret for decrypting user data with enhanced protection level
+    pub encryption_secret: Option<Vec<u8>>,
+    /// Redis host for shared metadata and server-key request metering
     pub redis_host: Option<String>,
     /// Redis port
     pub redis_port: u16,
@@ -106,6 +108,9 @@ impl Config {
             apple_private_key: env::var("APPLE_PRIVATE_KEY").ok(),
             google_client_id: env::var("GOOGLE_CLIENT_ID").ok(),
             google_client_secret: env::var("GOOGLE_CLIENT_SECRET").ok(),
+            encryption_secret: env::var("ENCRYPTION_SECRET")
+                .ok()
+                .map(|s| s.into_bytes()),
             redis_host: env::var("REDIS_DB_HOST").ok(),
             redis_port: env::var("REDIS_DB_PORT")
                 .ok()
@@ -164,7 +169,14 @@ impl Config {
             tracing::warn!("GEMINI_API_KEY not set - conversation processing will fail");
         }
         if self.redis_host.is_none() {
-            tracing::warn!("REDIS_DB_HOST not set - distributed rate limiting is unavailable");
+            tracing::warn!(
+                "REDIS_DB_HOST not set - readiness and server-key request metering will fail closed"
+            );
+        }
+        if self.encryption_secret.is_none() {
+            tracing::warn!(
+                "ENCRYPTION_SECRET not set — encrypted user data will not be decryptable"
+            );
         }
         Ok(())
     }

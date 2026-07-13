@@ -23,7 +23,7 @@ use crate::models::chat_completions::*;
 use crate::AppState;
 
 use super::llm_stub::{llm_stub_enabled, stub_chat_completions_response};
-use super::rate_limit::RateDecision;
+use super::rate_limit::{requires_server_metering, RateDecision};
 use super::retrieval_policy::{
     caller_disabled_tools, prepend_latest_user_instruction, retrieval_policy, RetrievalSource,
     REQUIRED_WEB_SEARCH_INSTRUCTION,
@@ -31,6 +31,32 @@ use super::retrieval_policy::{
 
 fn response_or_500(builder: axum::http::response::Builder, body: Body) -> Response {
     crate::routes::response_or_500("chat_completions", builder, body)
+}
+
+fn chat_metering_response(decision: &RateDecision) -> Option<Response> {
+    match decision {
+        RateDecision::Reject => Some(response_or_500(
+            Response::builder()
+                .status(StatusCode::TOO_MANY_REQUESTS)
+                .header("content-type", "application/json")
+                .header("retry-after", "60"),
+            Body::from(
+                json!({"error": {"message": "Rate limit exceeded", "type": "rate_limit_error", "code": 429}})
+                    .to_string(),
+            ),
+        )),
+        RateDecision::Unavailable => Some(response_or_500(
+            Response::builder()
+                .status(StatusCode::SERVICE_UNAVAILABLE)
+                .header("content-type", "application/json")
+                .header("retry-after", "5"),
+            Body::from(
+                json!({"error": {"message": "Chat metering is temporarily unavailable", "type": "metering_unavailable", "code": 503}})
+                    .to_string(),
+            ),
+        )),
+        RateDecision::Allow | RateDecision::DegradeToFlash => None,
+    }
 }
 
 /// Default max_tokens when client doesn't specify one.
@@ -710,22 +736,13 @@ async fn chat_completions(
     // burst of proactive/vision Gemini calls can never 429 a user's chat. The chat
     // limiter only trips on a pathological per-minute burst (runaway client), which
     // a human typing never reaches. Skipped entirely when using a BYOK key.
-    if !is_byok {
+    if requires_server_metering(is_byok) {
         let decision = state
             .chat_rate_limiter
             .check_and_record(&user.uid, state.redis.as_ref())
             .await;
-        if decision == RateDecision::Reject {
-            return Ok(response_or_500(
-                Response::builder()
-                    .status(StatusCode::TOO_MANY_REQUESTS)
-                    .header("content-type", "application/json")
-                    .header("retry-after", "60"),
-                Body::from(
-                    json!({"error": {"message": "Rate limit exceeded", "type": "rate_limit_error", "code": 429}})
-                        .to_string(),
-                ),
-            ));
+        if let Some(response) = chat_metering_response(&decision) {
+            return Ok(response);
         }
     }
 
@@ -1255,6 +1272,14 @@ pub fn chat_completions_routes() -> Router<AppState> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn server_key_chat_fails_closed_when_metering_is_unavailable() {
+        let response = chat_metering_response(&RateDecision::Unavailable).unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.headers().get("retry-after").unwrap(), "5");
+        assert!(chat_metering_response(&RateDecision::Allow).is_none());
+    }
 
     fn test_request(messages: Vec<ChatMessage>) -> ChatCompletionRequest {
         ChatCompletionRequest {

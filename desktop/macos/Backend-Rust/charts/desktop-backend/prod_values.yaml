@@ -67,6 +67,8 @@ livenessProbe:
 
 readinessProbe:
   httpGet:
+    # Keep Redis-independent routes available; probe /ready separately when
+    # evaluating managed/server-key dependency health.
     path: /health
     port: 8080
   failureThreshold: 3
