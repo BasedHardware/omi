@@ -826,25 +826,25 @@ struct DashboardPage: View {
             HomeStatItem(
                 title: "Conversations",
                 value: conversationMetricValue,
-                systemImage: "text.bubble.fill",
+                icon: .messageCircle,
                 action: { navigate(to: .conversations) }
             ),
             HomeStatItem(
                 title: "Tasks",
                 value: taskMetricValue,
-                systemImage: "checklist",
+                icon: .listChecks,
                 action: { navigate(to: .tasks) }
             ),
             HomeStatItem(
                 title: "Memories",
                 value: memoryMetricValue,
-                systemImage: "brain",
+                icon: .brain,
                 action: { navigate(to: .memories) }
             ),
             HomeStatItem(
                 title: "Screenshots",
                 value: screenshotMetricValue,
-                systemImage: "photo.on.rectangle.angled",
+                icon: .images,
                 action: { navigate(to: .rewind) }
             ),
         ])
@@ -2158,8 +2158,8 @@ private struct HomeAskBar: View {
 
             HStack(spacing: OmiSpacing.sm) {
                 Button(action: pickFiles) {
-                    Image(systemName: "paperclip")
-                        .scaledFont(size: OmiType.subheading, weight: .medium)
+                    OmiIcon(.paperclip)
+                        .frame(width: 15, height: 15)
                         .foregroundStyle(isFocused ? HomePalette.secondary : HomePalette.muted)
                         .frame(width: 24, height: 24)
                         .contentShape(Rectangle())
@@ -2168,6 +2168,7 @@ private struct HomeAskBar: View {
                 .disabled(attachments.count >= kMaxChatAttachments)
                 .omiPointerCursor(isEnabled: attachments.count < kMaxChatAttachments)
                 .help("Attach files")
+                .accessibilityLabel("Attach files")
 
                 TextField(
                     "",
@@ -2285,7 +2286,8 @@ private struct HomeAskBar: View {
 
     private var sendButton: some View {
         Button(action: handleSubmit) {
-            Image(systemName: "arrow.up")
+            OmiIcon(.arrowUp)
+                .frame(width: 14, height: 14)
         }
         .buttonStyle(HomeSendButtonStyle())
         .help("Send")
@@ -2303,8 +2305,8 @@ private struct HomeAskBar: View {
                         .controlSize(.small)
                         .scaleEffect(0.6)
                 } else {
-                    Image(systemName: "square.fill")
-                        .scaledFont(size: OmiType.micro, weight: .bold)
+                    OmiIcon(.square)
+                        .frame(width: 10, height: 10)
                         .foregroundStyle(HomePalette.ink)
                 }
             }
@@ -2389,8 +2391,8 @@ private struct HomeAskBarConnectButton: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: OmiSpacing.xs) {
-                Image(systemName: "link")
-                    .scaledFont(size: OmiType.caption, weight: .semibold)
+                OmiIcon(.link)
+                    .frame(width: 13, height: 13)
 
                 Text("Connect")
                     .scaledFont(size: OmiType.caption, weight: .semibold)
@@ -2425,8 +2427,8 @@ private struct HomeSuggestionRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: OmiSpacing.sm) {
-                Image(systemName: "sparkles")
-                    .scaledFont(size: OmiType.caption, weight: .semibold)
+                OmiIcon(.sparkles)
+                    .frame(width: 14, height: 14)
                     .foregroundStyle(isHovering ? OmiColors.warning : HomePalette.muted)
 
                 Text(text)
@@ -2436,8 +2438,8 @@ private struct HomeSuggestionRow: View {
 
                 Spacer(minLength: 8)
 
-                Image(systemName: "arrow.up.right")
-                    .scaledFont(size: OmiType.micro, weight: .bold)
+                OmiIcon(.arrowUpRight)
+                    .frame(width: 12, height: 12)
                     .foregroundStyle(isHovering ? HomePalette.ink : HomePalette.faint)
             }
             .padding(.horizontal, OmiSpacing.lg)
@@ -3313,7 +3315,7 @@ private struct HomeStatItem: Identifiable {
     let id = UUID()
     let title: String
     let value: String
-    let systemImage: String
+    let icon: OmiIconName
     let action: () -> Void
 }
 
@@ -3357,8 +3359,8 @@ private struct HomeStatRibbonCell: View {
         Button(action: item.action) {
             VStack(spacing: OmiSpacing.xxs) {
                 HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.xs) {
-                    Image(systemName: item.systemImage)
-                        .scaledFont(size: OmiType.caption, weight: .semibold)
+                    OmiIcon(item.icon)
+                        .frame(width: 14, height: 14)
                         .foregroundStyle(isHovering ? HomePalette.ink : HomePalette.secondary)
 
                     Text(item.value)

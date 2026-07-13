@@ -41,6 +41,7 @@ let package = Package(
       resources: [
         .copy("Resources/Fonts"),
         .copy("Resources/Licenses"),
+        .process("Resources/OmiIcons.xcassets"),
       ]
     ),
     .target(
