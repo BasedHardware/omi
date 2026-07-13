@@ -12,6 +12,7 @@ extension APIClient {
     metadata: String? = nil,
     clientMessageId: String? = nil,
     messageSource: String = "desktop_chat",
+    journalRevision: Int? = nil,
     expectedOwnerId: String? = nil
   ) async throws -> SaveMessageResponse {
     struct SaveRequest: Encodable {
@@ -22,6 +23,7 @@ extension APIClient {
       let metadata: String?
       let client_message_id: String?
       let message_source: String
+      let journal_revision: Int?
     }
     let body = SaveRequest(
       text: text,
@@ -30,7 +32,8 @@ extension APIClient {
       session_id: sessionId,
       metadata: metadata,
       client_message_id: clientMessageId,
-      message_source: messageSource)
+      message_source: messageSource,
+      journal_revision: journalRevision)
     return try await post(
       "v2/desktop/messages",
       body: body,
@@ -98,12 +101,16 @@ struct SaveMessageResponse: Codable {
   let createdAt: Date
   let sessionId: String?
   let created: Bool?
+  let updated: Bool?
+  let journalRevision: Int?
 
   enum CodingKeys: String, CodingKey {
     case id
     case createdAt = "created_at"
     case sessionId = "session_id"
     case created
+    case updated
+    case journalRevision = "journal_revision"
   }
 }
 

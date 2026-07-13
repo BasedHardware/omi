@@ -24,7 +24,7 @@ export interface CanonicalCorrelation {
 export interface QueryMessage extends ProtocolEnvelope {
   type: "query";
   sessionId: string;
-  surfaceKind: string;
+  producingTurnId?: string;
   prompt: string;
   mode?: "ask" | "act";
   imageBase64?: string;
@@ -203,12 +203,47 @@ export interface GetContextSnapshotMessage extends ProtocolEnvelope {
   surfaceKind: string;
 }
 
+export interface JournalTurnWireInput {
+  turnId?: string;
+  producerId?: string;
+  role?: "user" | "assistant";
+  origin?: string;
+  status?: string;
+  content?: string;
+  contentBlocks?: unknown[];
+  resources?: unknown[];
+  metadataJson?: string;
+  createdAtMs?: number;
+}
+
+export function assertPublicJournalRecordAuthority(input: unknown): asserts input is JournalTurnWireInput {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new Error("Journal turn input must be an object");
+  }
+  for (const field of ["delivery", "producingRunId", "producingAttemptId"] as const) {
+    if (Object.prototype.hasOwnProperty.call(input, field)) {
+      throw new Error(`Journal ${field} is kernel-owned`);
+    }
+  }
+}
+
+export function assertPublicJournalUpdateAuthority(input: unknown): asserts input is Record<string, unknown> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new Error("Journal update input must be an object");
+  }
+  for (const field of ["producingRunId", "producingAttemptId"] as const) {
+    if (Object.prototype.hasOwnProperty.call(input, field)) {
+      throw new Error(`Journal ${field} is kernel-owned`);
+    }
+  }
+}
+
 export interface JournalRecordTurnMessage extends ProtocolEnvelope {
   type: "journal_record_turn";
   surfaceKind: string;
   externalRefKind: string;
   externalRefId: string;
-  turn: Record<string, unknown>;
+  turn: JournalTurnWireInput;
 }
 
 export interface JournalRecordExchangeMessage extends ProtocolEnvelope {
@@ -216,7 +251,7 @@ export interface JournalRecordExchangeMessage extends ProtocolEnvelope {
   surfaceKind: string;
   externalRefKind: string;
   externalRefId: string;
-  turns: Record<string, unknown>[];
+  turns: JournalTurnWireInput[];
 }
 
 export interface JournalUpdateTurnMessage extends ProtocolEnvelope {
@@ -225,6 +260,33 @@ export interface JournalUpdateTurnMessage extends ProtocolEnvelope {
   externalRefKind: string;
   externalRefId: string;
   update: Record<string, unknown>;
+}
+
+export interface JournalTerminalizeTurnMessage extends ProtocolEnvelope {
+  type: "journal_terminalize_turn";
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
+  terminalization: {
+    turnId: string;
+    producingRunId: string;
+    producingAttemptId: string;
+    disposition: "accept" | "discard";
+    content?: string;
+    replaceContentBlocks?: unknown[];
+    replaceResources?: unknown[];
+  };
+}
+
+export function journalTerminalizationDisposition(input: unknown): "accept" | "discard" {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new Error("Journal terminalization input must be an object");
+  }
+  const disposition = (input as { disposition?: unknown }).disposition;
+  if (disposition !== "accept" && disposition !== "discard") {
+    throw new Error("Journal terminalization requires an explicit accept or discard disposition");
+  }
+  return disposition;
 }
 
 export interface JournalListTurnsMessage extends ProtocolEnvelope {
@@ -326,6 +388,7 @@ export type InboundMessage =
   | JournalRecordTurnMessage
   | JournalRecordExchangeMessage
   | JournalUpdateTurnMessage
+  | JournalTerminalizeTurnMessage
   | JournalListTurnsMessage
   | JournalClearTurnsMessage
   | EnsureAgentSpawnJournalMessage
@@ -334,6 +397,18 @@ export type InboundMessage =
   | JournalBackendReconcileResultMessage
   | RefreshTokenMessage
   | RefreshOwnerMessage;
+
+const INBOUND_RESPONSE_MESSAGE_TYPES = new Set<InboundMessage["type"]>([
+  "authorized_tool_execution_result",
+  "journal_backend_sync_result",
+  "journal_backend_delete_result",
+  "journal_backend_reconcile_result",
+]);
+
+/** Response handlers log invalid replies locally; they never echo request errors back to Swift. */
+export function isInboundResponseMessage(message: Pick<InboundMessage, "type">): boolean {
+  return INBOUND_RESPONSE_MESSAGE_TYPES.has(message.type);
+}
 
 // === Bridge → Swift (stdout) ===
 
@@ -678,6 +753,7 @@ export interface JournalTurnProjection {
   contentBlocks: unknown[];
   resources: unknown[];
   producingRunId: string | null;
+  producingAttemptId: string | null;
   remoteId: string | null;
   createdAtMs: number;
   updatedAtMs: number;
@@ -691,7 +767,7 @@ export interface AgentSpawnJournalEnsuredMessage extends OutboundEnvelope {
   sessionId: string;
   runId: string;
   conversationId: string;
-  userTurn: JournalTurnProjection;
+  userTurn: JournalTurnProjection | null;
   assistantTurn: JournalTurnProjection;
 }
 
@@ -713,6 +789,7 @@ export interface JournalOperationResultMessage extends OutboundEnvelope {
 
 export interface JournalTurnChangedMessage extends OutboundEnvelope {
   type: "journal_turn_changed";
+  ownerId: string;
   conversationGeneration: number;
   generationBaseTurnSeq: number;
   surfaceKind: string;
@@ -731,6 +808,7 @@ export interface JournalBackendSyncMessage extends OutboundEnvelope {
   deliveryGeneration: number;
   payloadHash: string;
   clientMessageId: string;
+  journalRevision: number;
   text: string;
   sender: "human" | "ai";
   appId: string | null;

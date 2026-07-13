@@ -1119,7 +1119,7 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     update_agent_artifact_lifecycle: ["artifactId", "state"],
     load_skill: ["name"],
     send_agent_message: ["sessionId", "originSurfaceKind", "prompt"],
-    spawn_agent: ["objective", "originSurfaceKind"],
+    spawn_agent: ["objective"],
     run_agent_and_wait: ["objective", "originSurfaceKind", "parentRunId"],
     set_desktop_attention_override: ["subjectKind", "subjectId"],
     search_tasks: ["query"],

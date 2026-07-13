@@ -164,6 +164,7 @@ export interface ConversationTurn {
   contentBlocks: ConversationContentBlock[];
   resources: ConversationResource[];
   producingRunId: string | null;
+  producingAttemptId: string | null;
   remoteId: string | null;
   createdAtMs: number;
   updatedAtMs: number;
@@ -186,6 +187,7 @@ export type NewConversationTurn = Pick<
     | "contentBlocks"
     | "resources"
     | "producingRunId"
+    | "producingAttemptId"
     | "remoteId"
     | "updatedAtMs"
     | "completedAtMs"

@@ -68,6 +68,7 @@ const BACKEND_RECONCILE_STATE_MIGRATION_VERSION = 23;
 const CLEARED_BACKEND_TURN_CLAIMS_MIGRATION_VERSION = 24;
 const CONTEXT_SOURCE_SURFACE_SCOPE_MIGRATION_VERSION = 25;
 const BACKEND_RECONCILE_CURSOR_MIGRATION_VERSION = 26;
+const JOURNAL_PRODUCING_ATTEMPT_MIGRATION_VERSION = 27;
 
 const ACTIVE_ATTEMPT_STATUSES = ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling"] as const;
 const TERMINAL_ATTEMPT_STATUSES = ["succeeded", "failed", "cancelled", "timed_out", "orphaned"] as const;
@@ -373,6 +374,7 @@ export function probeNodeSqliteRuntime(options: NodeSqliteProbeOptions = {}): vo
     runKernelContextAuthorityMigration(db, Date.now());
     runJournalGenerationBaseMigration(db, Date.now());
     runContextSourceSurfaceScopeMigration(db, Date.now());
+    runJournalProducingAttemptMigration(db, Date.now());
     runTransaction(db, () => {
       db?.prepare("INSERT INTO sessions (session_id, owner_id, status, surface_kind, default_adapter_id, created_at_ms, updated_at_ms, last_activity_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(
         "ses_probe",
@@ -501,6 +503,9 @@ export class SqliteAgentStore implements AgentStore {
     }
     if (!this.hasMigration(BACKEND_RECONCILE_CURSOR_MIGRATION_VERSION)) {
       runBackendReconcileCursorMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(JOURNAL_PRODUCING_ATTEMPT_MIGRATION_VERSION)) {
+      runJournalProducingAttemptMigration(this.db, this.nowMs());
     }
   }
 
@@ -861,6 +866,7 @@ export class SqliteAgentStore implements AgentStore {
         : []),
       resources: input.resources ?? [],
       producingRunId: input.producingRunId ?? null,
+      producingAttemptId: input.producingAttemptId ?? null,
       remoteId: input.remoteId ?? null,
       createdAtMs: input.createdAtMs,
       updatedAtMs: input.updatedAtMs ?? input.createdAtMs,
@@ -873,8 +879,8 @@ export class SqliteAgentStore implements AgentStore {
         conversation_id, turn_id, turn_seq, producer_id, payload_hash,
         role, surface_kind, content, created_at_ms, metadata_json,
         origin, status, content_blocks_json, resources_json, producing_run_id,
-        remote_id, updated_at_ms, completed_at_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        producing_attempt_id, remote_id, updated_at_ms, completed_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       turn.conversationId,
       turn.turnId,
@@ -891,6 +897,7 @@ export class SqliteAgentStore implements AgentStore {
       JSON.stringify(turn.contentBlocks),
       JSON.stringify(turn.resources),
       turn.producingRunId,
+      turn.producingAttemptId,
       turn.remoteId,
       turn.updatedAtMs,
       turn.completedAtMs,
@@ -1874,6 +1881,7 @@ function rewriteJournalRow(
     contentBlocks,
     resources,
     producingRunId: row.producing_run_id == null ? null : text(row.producing_run_id),
+    producingAttemptId: row.producing_attempt_id == null ? null : text(row.producing_attempt_id),
     remoteId: row.remote_id == null ? null : text(row.remote_id),
     metadataJson: input.metadataJson,
   };
@@ -1912,6 +1920,7 @@ function rewriteJournalRow(
     contentBlocks,
     resources,
     producingRunId: row.producing_run_id == null ? null : text(row.producing_run_id),
+    producingAttemptId: row.producing_attempt_id == null ? null : text(row.producing_attempt_id),
     remoteId: row.remote_id == null ? null : text(row.remote_id),
     createdAtMs: Number(row.created_at_ms),
     updatedAtMs: input.nowMs,
@@ -3107,6 +3116,25 @@ function runBackendReconcileCursorMigration(
     `);
     db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
       BACKEND_RECONCILE_CURSOR_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+function runJournalProducingAttemptMigration(
+  db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">,
+  appliedAtMs: number,
+): void {
+  runTransaction(db, () => {
+    db.exec(`
+      ALTER TABLE conversation_turns
+        ADD COLUMN producing_attempt_id TEXT REFERENCES run_attempts(attempt_id) ON DELETE SET NULL;
+      CREATE INDEX conversation_turns_producing_attempt_idx
+        ON conversation_turns(producing_attempt_id, updated_at_ms ASC)
+        WHERE producing_attempt_id IS NOT NULL;
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      JOURNAL_PRODUCING_ATTEMPT_MIGRATION_VERSION,
       appliedAtMs,
     );
   });

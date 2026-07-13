@@ -285,14 +285,19 @@ final class AgentRuntimeStatusStore: ObservableObject {
       let accepted = message.payload["accepted"] as? Bool ?? false
       update(surface: surface, status: accepted ? .cancelling : .running, statusText: nil, terminal: false, payload: message.payload)
     case .result:
-      let terminalStatus = AgentRunProjectionStatus.fromWire(message.payload["terminalStatus"] as? String) ?? .succeeded
+      let rawTerminalStatus = message.payload["terminalStatus"] as? String
+      let parsedTerminalStatus = AgentRunProjectionStatus.fromWire(rawTerminalStatus)
+      let terminalStatus = parsedTerminalStatus.flatMap { $0.isTerminal ? $0 : nil } ?? .failed
       let text = (message.payload["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
       let failure = AgentRuntimeFailure.parse(from: message.payload["failure"])
+      let invalidTerminalMessage = parsedTerminalStatus?.isTerminal == true
+        ? nil
+        : "Agent returned an invalid terminal status"
       update(
         surface: surface,
         status: terminalStatus,
         statusText: text?.isEmpty == false ? text : nil,
-        errorMessage: failure?.displayMessage,
+        errorMessage: failure?.displayMessage ?? invalidTerminalMessage,
         failure: failure,
         terminal: true,
         payload: message.payload

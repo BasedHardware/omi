@@ -49,6 +49,59 @@ actor AgentRuntimeStartupSingleFlight<Key: Equatable & Sendable, Output: Sendabl
   }
 }
 
+/// Serializes the pipe read and sequence assignment performed by Foundation's
+/// readability callback. The callback may be re-entered on different threads;
+/// sequencing only after `availableData` would still allow a later read to be
+/// delivered first if the earlier callback were preempted between those steps.
+final class AgentRuntimeStdoutChunkReader: @unchecked Sendable {
+  private let lock = NSLock()
+  private var nextSequence: UInt64 = 0
+
+  func read(from handle: FileHandle) -> (sequence: UInt64, data: Data) {
+    lock.lock()
+    defer { lock.unlock() }
+    let data = handle.availableData
+    let sequence = nextSequence
+    if !data.isEmpty {
+      nextSequence &+= 1
+    }
+    return (sequence, data)
+  }
+}
+
+/// Actor-owned reorder and framing buffer for the runtime's JSONL stdout.
+/// Tasks created by a readability callback are not scheduling-ordered, so an
+/// N+1 chunk can reach the actor before N. Hold later chunks until every prior
+/// sequence is present, then extract complete lines from the canonical order.
+struct AgentRuntimeOrderedStdoutBuffer {
+  private var nextSequence: UInt64 = 0
+  private var pendingChunks: [UInt64: Data] = [:]
+  private var lineBuffer = Data()
+
+  mutating func ingest(_ data: Data, sequence: UInt64) -> [Data] {
+    guard !data.isEmpty, sequence >= nextSequence else { return [] }
+    guard pendingChunks[sequence] == nil else { return [] }
+    pendingChunks[sequence] = data
+
+    var lines: [Data] = []
+    while let chunk = pendingChunks.removeValue(forKey: nextSequence) {
+      nextSequence &+= 1
+      lineBuffer.append(chunk)
+      while let newlineIndex = lineBuffer.firstIndex(of: UInt8(ascii: "\n")) {
+        lines.append(Data(lineBuffer[lineBuffer.startIndex..<newlineIndex]))
+        lineBuffer = Data(lineBuffer[lineBuffer.index(after: newlineIndex)...])
+      }
+    }
+    return lines
+  }
+
+  mutating func reset() {
+    nextSequence = 0
+    pendingChunks.removeAll(keepingCapacity: false)
+    lineBuffer.removeAll(keepingCapacity: false)
+  }
+}
+
 /// Thread-safe, actor-independent holder for the debug suspend/resume (SIGSTOP /
 /// SIGCONT) state used by the non-prod stall harness.
 ///
@@ -355,7 +408,7 @@ actor AgentRuntimeProcess {
   private var stdinPipe: Pipe?
   private var stdoutPipe: Pipe?
   private var stderrPipe: Pipe?
-  private var stdoutLineBuffer = Data()
+  private var stdoutBuffer = AgentRuntimeOrderedStdoutBuffer()
   private var isRunning = false
   private var processGeneration: UInt64 = 0
   private var runtimeOwnerAuthorityEpoch: UInt64 = 0
@@ -1330,6 +1383,7 @@ actor AgentRuntimeProcess {
     mode: String?,
     imageData: Data?,
     attachments: [AgentQueryAttachment],
+    producingTurnId: String?,
     expectedContext: AgentContextFreshness?
   ) -> [String: Any] {
     var message = protocolEnvelope(
@@ -1343,9 +1397,12 @@ actor AgentRuntimeProcess {
     if let mode { message["mode"] = mode }
     if let imageData { message["imageBase64"] = imageData.base64EncodedString() }
     if !attachments.isEmpty { message["attachments"] = attachments.map(\.dictionary) }
+    if let producingTurnId, !producingTurnId.isEmpty { message["producingTurnId"] = producingTurnId }
     if let expectedContext {
       message["expectedContextSnapshotVersion"] = expectedContext.version
       message["expectedContextSnapshotGeneration"] = expectedContext.generation
+      message["expectedContextRendererFingerprint"] = expectedContext.rendererFingerprint
+      message["expectedCapabilityVersion"] = expectedContext.capabilityVersion
     }
     return message
   }
@@ -1527,6 +1584,28 @@ actor AgentRuntimeProcess {
       throw BridgeError.agentError("Kernel journal update returned no turn")
     }
     return updated
+  }
+
+  func terminalizeJournalTurn(
+    clientId: String,
+    surface: AgentSurfaceReference,
+    ownerID: String,
+    terminalization: KernelJournalTurnTerminalization,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> KernelJournalTurn {
+    let result = try await journalOperation(
+      type: "journal_terminalize_turn",
+      operation: "terminalize",
+      clientId: clientId,
+      surface: surface,
+      ownerID: ownerID,
+      payload: ["terminalization": terminalization.dictionary],
+      authorizationSnapshot: authorizationSnapshot
+    )
+    guard let turn = result.turn else {
+      throw BridgeError.agentError("Kernel journal terminalization returned no turn")
+    }
+    return turn
   }
 
   func listJournalTurns(
@@ -1976,6 +2055,7 @@ actor AgentRuntimeProcess {
     mode: String?,
     imageData: Data?,
     attachments: [AgentQueryAttachment],
+    producingTurnId: String?,
     expectedContext: AgentContextFreshness?,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     onTextDelta: @escaping AgentBridge.TextDeltaHandler,
@@ -2018,6 +2098,7 @@ actor AgentRuntimeProcess {
         mode: mode,
         imageData: imageData,
         attachments: attachments,
+        producingTurnId: producingTurnId,
         expectedContext: expectedContext
       )
       sendJson(queryDict)
@@ -2482,21 +2563,27 @@ actor AgentRuntimeProcess {
   private func startReadingStdout() {
     guard let stdoutPipe else { return }
     let expectedGeneration = processGeneration
+    stdoutBuffer.reset()
+    let chunkReader = AgentRuntimeStdoutChunkReader()
 
     let handle = stdoutPipe.fileHandleForReading
     handle.readabilityHandler = { [weak self] handle in
-      let data = handle.availableData
-      guard !data.isEmpty else {
+      let chunk = chunkReader.read(from: handle)
+      guard !chunk.data.isEmpty else {
         handle.readabilityHandler = nil
         return
       }
       Task { [weak self] in
-        await self?.processStdoutData(data, generation: expectedGeneration)
+        await self?.processStdoutData(
+          chunk.data,
+          sequence: chunk.sequence,
+          generation: expectedGeneration
+        )
       }
     }
   }
 
-  private func processStdoutData(_ data: Data, generation: UInt64) {
+  private func processStdoutData(_ data: Data, sequence: UInt64, generation: UInt64) {
     // Drop stdout chunks from a previous process generation. When the bridge is
     // restarted or startup cleanup closes the pipe, a readability callback that
     // already captured the old data can still fire after the new process has
@@ -2506,12 +2593,7 @@ actor AgentRuntimeProcess {
       log("AgentRuntimeProcess: dropping stale stdout chunk (gen=\(generation), current=\(processGeneration))")
       return
     }
-    stdoutLineBuffer.append(data)
-
-    while let newlineIndex = stdoutLineBuffer.firstIndex(of: UInt8(ascii: "\n")) {
-      let lineData = stdoutLineBuffer[stdoutLineBuffer.startIndex..<newlineIndex]
-      stdoutLineBuffer = Data(stdoutLineBuffer[stdoutLineBuffer.index(after: newlineIndex)...])
-
+    for lineData in stdoutBuffer.ingest(data, sequence: sequence) {
       guard let line = String(data: lineData, encoding: .utf8),
         !line.trimmingCharacters(in: .whitespaces).isEmpty
       else {
@@ -2900,18 +2982,7 @@ actor AgentRuntimeProcess {
       request.continuation.resume(throwing: BridgeError.authMissing)
       return
     }
-    if terminalStatus == "cancelled" {
-      request.continuation.resume(throwing: BridgeError.stopped)
-      return
-    }
-    if let terminalStatus,
-       ["failed", "timed_out", "orphaned"].contains(terminalStatus) {
-      let failure = AgentRuntimeFailure.parse(from: message.payload["failure"])
-      let raw = failure?.displayMessage ?? message.payload["text"] as? String ?? "Agent failed"
-      log("AgentRuntimeProcess: agent result failed (raw): \(raw)")
-      request.continuation.resume(throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw))
-      return
-    }
+    expectedCancelledRequests.remove(requestKey)
     request.continuation.resume(returning: queryResult(from: message))
   }
 
@@ -3331,8 +3402,11 @@ actor AgentRuntimeProcess {
       request.continuation.resume(throwing: BridgeError.authMissing)
       return
     }
-    log("AgentRuntimeProcess: agent error (raw): \(raw)")
-    request.continuation.resume(throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw))
+    let bridgeError = failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw)
+    if !bridgeError.isContextSnapshotProjectionMismatch {
+      log("AgentRuntimeProcess: agent error (raw): \(raw)")
+    }
+    request.continuation.resume(throwing: bridgeError)
   }
 
   private func queryResult(from message: RuntimeMessage) -> AgentBridge.QueryResult {
@@ -3346,7 +3420,8 @@ actor AgentRuntimeProcess {
       runId: payload["runId"] as? String ?? "",
       attemptId: payload["attemptId"] as? String ?? "",
       adapterSessionId: adapterSessionId,
-      terminalStatus: payload["terminalStatus"] as? String ?? "succeeded",
+      terminalStatus: payload["terminalStatus"] as? String,
+      failure: AgentRuntimeFailure.parse(from: payload["failure"]),
       inputTokens: payload["inputTokens"] as? Int ?? 0,
       outputTokens: payload["outputTokens"] as? Int ?? 0,
       cacheReadTokens: payload["cacheReadTokens"] as? Int ?? 0,
@@ -3475,7 +3550,7 @@ actor AgentRuntimeProcess {
     stdinPipe = nil
     stdoutPipe = nil
     stderrPipe = nil
-    stdoutLineBuffer.removeAll(keepingCapacity: false)
+    stdoutBuffer.reset()
     // Advance the generation so that any readability callback that already
     // captured the old generation is rejected by the generation guard in
     // processStdoutData(_:generation:) the moment it fires. Without this, a

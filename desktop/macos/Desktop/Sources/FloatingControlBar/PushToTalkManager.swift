@@ -79,6 +79,16 @@ private final class VoiceTurnOmniDelegateProxy: RealtimeOmniServiceDelegate {
 class PushToTalkManager: ObservableObject {
   static let shared = PushToTalkManager()
 
+  /// A local-profile automation turn drives provider/reducer boundaries itself;
+  /// it has no physical capture buffer for this manager to silence-gate. Let the
+  /// reducer reach `.finalizing`, then leave the exact commit to the harness.
+  nonisolated static func shouldFinalizeCapturedInputPhysically(
+    turnIntent: VoiceTurnIntent?,
+    localProfileEnabled: Bool
+  ) -> Bool {
+    !(localProfileEnabled && turnIntent == .automation)
+  }
+
   private let voiceTurnCoordinator = VoiceTurnCoordinator.shared
   private var voiceTurnSnapshotObservation: VoiceTurnSnapshotObservation?
 
@@ -248,6 +258,13 @@ class PushToTalkManager: ObservableObject {
       _ = turnID
     case .finalizeCapturedInput(let turnID):
       guard voiceTurnCoordinator.activeTurnID == turnID else { return }
+      guard Self.shouldFinalizeCapturedInputPhysically(
+        turnIntent: voiceTurnCoordinator.activeTurn?.intent,
+        localProfileEnabled: DesktopLocalProfile.isEnabled)
+      else {
+        log("PushToTalkManager: local automation turn owns synthetic captured-input finalization")
+        return
+      }
       continueFinalization()
     case .activateHub(let turnID, _):
       guard voiceTurnCoordinator.activeTurnID == turnID else { return }

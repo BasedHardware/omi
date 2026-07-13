@@ -112,6 +112,45 @@ struct ChatTerminalTargetRegistry<T> {
   }
 }
 
+/// Orders coalesced streaming journal writes ahead of the exact terminal
+/// mutation for the same assistant turn. Claiming is synchronous on the main
+/// actor, so no later streaming callback can enqueue after terminalization has
+/// taken ownership; an already queued write is drained before the caller sends
+/// the terminal mutation to the kernel.
+@MainActor
+final class ChatJournalWriteCoordinator {
+  private var updateTasks: [String: Task<Void, Never>] = [:]
+  private var terminalizingMessageIDs: Set<String> = []
+
+  @discardableResult
+  func schedule(
+    messageID: String,
+    operation: @escaping @MainActor @Sendable () async -> Void
+  ) -> Bool {
+    guard !terminalizingMessageIDs.contains(messageID) else { return false }
+    let previous = updateTasks[messageID]
+    let task = Task { @MainActor in
+      _ = await previous?.value
+      guard !Task.isCancelled else { return }
+      await operation()
+    }
+    updateTasks[messageID] = task
+    return true
+  }
+
+  func beginTerminalization(messageID: String) async -> Bool {
+    guard terminalizingMessageIDs.insert(messageID).inserted else { return false }
+    _ = await updateTasks.removeValue(forKey: messageID)?.value
+    return true
+  }
+
+  func cancelAll() {
+    for task in updateTasks.values { task.cancel() }
+    updateTasks.removeAll()
+    terminalizingMessageIDs.removeAll()
+  }
+}
+
 /// Collects bridge callbacks that were emitted before `query()` returned so
 /// ChatProvider can apply them before it finalizes the visible response.
 ///

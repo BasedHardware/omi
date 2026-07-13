@@ -8,6 +8,82 @@ struct TaskChatOwnerLease: Equatable, Sendable {
     var ownerID: String { authorizationSnapshot.ownerID }
 }
 
+enum TaskChatTerminalDisposition: Equatable {
+    case succeeded
+    case failed
+    case cancelled
+    case invalid
+
+    static func classify(_ status: AgentQueryTerminalStatus) -> TaskChatTerminalDisposition {
+        switch status {
+        case .succeeded:
+            return .succeeded
+        case .failed, .timedOut, .orphaned:
+            return .failed
+        case .cancelled:
+            return .cancelled
+        case .invalid:
+            return .invalid
+        }
+    }
+}
+
+/// Exact run/attempt linkage for the one assistant turn admitted by the active
+/// task-chat query. Runtime status is indexed by surface for display, but a
+/// terminal projection may request a canonical refresh only through this
+/// narrower producing-turn identity; it never writes journal state itself.
+struct TaskChatProducingRunProjection: Equatable {
+    private(set) var assistantMessageID: String?
+    private(set) var runID: String?
+    private(set) var attemptID: String?
+
+    mutating func begin(assistantMessageID: String) {
+        self.assistantMessageID = assistantMessageID
+        runID = nil
+        attemptID = nil
+    }
+
+    /// A returned QueryResult is already correlated to the active bridge
+    /// request. Surface-keyed runtime projections are never allowed to bind this
+    /// identity because a delayed R1 projection can arrive while R2 is active.
+    @discardableResult
+    mutating func bindResult(
+        assistantMessageID: String,
+        runID: String,
+        attemptID: String
+    ) -> Bool {
+        guard self.assistantMessageID == assistantMessageID,
+              let normalizedRunID = Self.normalized(runID),
+              let normalizedAttemptID = Self.normalized(attemptID) else { return false }
+        self.runID = normalizedRunID
+        self.attemptID = normalizedAttemptID
+        return true
+    }
+
+    func terminalMessageID(for projection: AgentRunProjection) -> String? {
+        guard projection.status.isTerminal,
+              projection.status != .succeeded,
+              let assistantMessageID,
+              let runID,
+              let attemptID,
+              Self.normalized(projection.runId) == runID,
+              Self.normalized(projection.attemptId) == attemptID else { return nil }
+        return assistantMessageID
+    }
+
+    mutating func clear() {
+        assistantMessageID = nil
+        runID = nil
+        attemptID = nil
+    }
+
+    private static func normalized(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalized.isEmpty ? nil : normalized
+    }
+}
+
 /// Task-scoped UI projected over one kernel-owned workstream conversation.
 @MainActor
 class TaskChatState: ObservableObject {
@@ -63,6 +139,7 @@ class TaskChatState: ObservableObject {
     private var runtimeProjectionCancellable: AnyCancellable?
     private var surfacedFailureKeys: Set<String> = []
     private var activeAssistantMessageId: String?
+    private var producingRunProjection = TaskChatProducingRunProjection()
     private var journalEventToken: UUID?
     private var journalHighWater = 0
     private var journalGeneration = 0
@@ -159,6 +236,7 @@ class TaskChatState: ObservableObject {
         messages.removeAll()
         surfacedFailureKeys.removeAll()
         activeAssistantMessageId = nil
+        producingRunProjection.clear()
         journalHighWater = 0
         journalGeneration = 0
         isRefreshingJournal = false
@@ -354,7 +432,10 @@ class TaskChatState: ObservableObject {
         if let last = contiguous.last { journalHighWater = last.turnSeq }
     }
 
-    private func scheduleJournalUpdate(messageId: String, status: KernelJournalTurnStatus? = nil) {
+    private func scheduleJournalUpdate(
+        messageId: String,
+        status: KernelJournalTurnStatus? = nil
+    ) {
         guard let lease = captureOwnerLease() else { return }
         guard let message = messages.first(where: { $0.id == messageId }) else { return }
         let previous = journalUpdateTasks[messageId]
@@ -371,21 +452,57 @@ class TaskChatState: ObservableObject {
         }
     }
 
-    private func finishJournalUpdate(
+    private func terminalizeJournalMessage(
         messageId: String,
-        status: KernelJournalTurnStatus,
-        lease: TaskChatOwnerLease
-    ) async {
+        lease: TaskChatOwnerLease,
+        producingRunId: String,
+        producingAttemptId: String
+    ) async throws -> KernelJournalTurn {
         _ = await journalUpdateTasks.removeValue(forKey: messageId)?.value
-        guard isCurrent(lease) else { return }
-        guard let message = messages.first(where: { $0.id == messageId }) else { return }
-        _ = try? await TaskChatRuntime.updateJournalMessage(
+        guard isCurrent(lease) else { throw LocalMutationAuthorizationError.revoked }
+        guard let message = messages.first(where: { $0.id == messageId }) else {
+            throw BridgeError.agentError("Producing task-chat turn is unavailable")
+        }
+        let turn = try await TaskChatRuntime.terminalizeJournalMessage(
             workstreamId: workstreamId,
             ownerID: lease.ownerID,
             authorizationSnapshot: lease.authorizationSnapshot,
             message: message,
-            status: status
+            producingRunId: producingRunId,
+            producingAttemptId: producingAttemptId
         )
+        guard isCurrent(lease) else { throw LocalMutationAuthorizationError.revoked }
+        guard turn.turnId == messageId,
+              turn.producingRunId == producingRunId,
+              turn.producingAttemptId == producingAttemptId,
+              turn.status == .completed || turn.status == .failed else {
+            throw BridgeError.agentError("Kernel returned an invalid task-chat terminal receipt")
+        }
+        projectJournalTurn(turn)
+        await refreshJournal(lease: lease)
+        return turn
+    }
+
+    /// Pre-admission failures have no run/attempt capability to present. The
+    /// kernel accepts this generic failure only while the turn is still
+    /// unbound; once query admission links a producer, the same update is
+    /// rejected and only exact terminalization may close it.
+    private func failUnboundJournalMessage(
+        messageId: String,
+        lease: TaskChatOwnerLease
+    ) async {
+        _ = await journalUpdateTasks.removeValue(forKey: messageId)?.value
+        guard isCurrent(lease),
+              let message = messages.first(where: { $0.id == messageId }) else { return }
+        if let turn = try? await TaskChatRuntime.updateJournalMessage(
+            workstreamId: workstreamId,
+            ownerID: lease.ownerID,
+            authorizationSnapshot: lease.authorizationSnapshot,
+            message: message,
+            status: .failed
+        ), isCurrent(lease) {
+            projectJournalTurn(turn)
+        }
         guard isCurrent(lease) else { return }
         await refreshJournal(lease: lease)
     }
@@ -429,14 +546,12 @@ class TaskChatState: ObservableObject {
                 userMessage.journalWrite(
                     origin: "workstream",
                     status: .completed,
-                    delivery: .local,
                     continuityKey: continuityKey,
                     messageSource: "workstream"
                 ),
                 aiMessage.journalWrite(
                     origin: "workstream",
                     status: .streaming,
-                    delivery: .local,
                     continuityKey: continuityKey,
                     messageSource: "workstream"
                 ),
@@ -466,6 +581,7 @@ class TaskChatState: ObservableObject {
         localSendToken = LocalSendToken(generation: localSendToken.generation + 1)
         if draftText == text { draftText = "" }
         activeAssistantMessageId = aiMessageId
+        producingRunProjection.begin(assistantMessageID: aiMessageId)
 
         do {
             let textDeltaHandler: @Sendable (String) -> Void = { [weak self] delta in
@@ -502,6 +618,7 @@ class TaskChatState: ObservableObject {
             let queryResult = try await TaskChatRuntime.query(
                 prompt: trimmedText,
                 workstreamId: workstreamId,
+                producingTurnId: aiMessageId,
                 workspacePath: workspacePath,
                 mode: chatMode.rawValue,
                 taskContext: taskContext,
@@ -515,39 +632,65 @@ class TaskChatState: ObservableObject {
             )
             guard isCurrent(lease) else { return }
 
+            guard producingRunProjection.bindResult(
+                assistantMessageID: aiMessageId,
+                runID: queryResult.runId,
+                attemptID: queryResult.attemptId
+            ) else {
+                throw BridgeError.agentError("Agent result did not match the producing task-chat turn")
+            }
+            let terminalDisposition = TaskChatTerminalDisposition.classify(queryResult.terminalStatus)
+
             // Flush remaining streaming buffers
             streamingBuffer.cancelPendingFlush()
             flushStreamingBuffer()
 
             // Finalize AI message
             if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
-                let terminalStatus = AgentRunProjectionStatus.fromWire(queryResult.terminalStatus) ?? .succeeded
-                if terminalStatus == .failed || terminalStatus == .timedOut || terminalStatus == .orphaned {
-                    surfaceCurrentRuntimeFailureIfNeeded(fallbackMessage: "Agent failed")
-                    if let currentIndex = messages.firstIndex(where: { $0.id == aiMessageId }) {
-                        messages[currentIndex].isStreaming = false
-                        messages[currentIndex].resources = queryResult.artifacts.map(ChatResource.artifact)
-                        completeRemainingToolCalls(messageId: aiMessageId, terminalStatus: .failed)
-                        await finishJournalUpdate(messageId: aiMessageId, status: .failed, lease: lease)
-                    }
+                if terminalDisposition != .succeeded {
+                    let failureText = queryResult.failure?.displayMessage
+                        ?? (terminalDisposition == .cancelled
+                            ? "Agent cancelled"
+                            : terminalDisposition == .invalid
+                                ? "Agent returned an invalid terminal status"
+                                : "Agent failed")
+                    Self.applyFailureTextIfNeeded(
+                        to: &messages[index],
+                        errorDescription: failureText)
+                    messages[index].isStreaming = false
+                    messages[index].resources = queryResult.artifacts.map(ChatResource.artifact)
+                    completeRemainingToolCalls(messageId: aiMessageId, terminalStatus: .failed)
                 } else {
                     let messageText = messages[index].text.isEmpty ? queryResult.text : messages[index].text
                     messages[index].text = messageText
                     messages[index].isStreaming = false
                     messages[index].resources = queryResult.artifacts.map(ChatResource.artifact)
                     completeRemainingToolCalls(messageId: aiMessageId)
-                    await finishJournalUpdate(messageId: aiMessageId, status: .completed, lease: lease)
                 }
             }
             guard isCurrent(lease) else { return }
 
+            let terminalTurn = try await terminalizeJournalMessage(
+                messageId: aiMessageId,
+                lease: lease,
+                producingRunId: queryResult.runId,
+                producingAttemptId: queryResult.attemptId)
+            let canonicalSucceeded = terminalTurn.status == .completed
+            guard (terminalDisposition == .succeeded) == canonicalSucceeded,
+                  terminalDisposition != .invalid else {
+                throw BridgeError.agentError("Kernel rejected the agent terminal status")
+            }
+
             log("TaskChatState[\(workstreamId)]: response complete (cost=$\(queryResult.costUsd))")
-            let terminalStatus = AgentRunProjectionStatus.fromWire(queryResult.terminalStatus) ?? .succeeded
-            if terminalStatus == .failed || terminalStatus == .timedOut || terminalStatus == .orphaned {
+            if !canonicalSucceeded {
                 let failureText =
                     AgentRuntimeStatusStore.shared.projection(for: .workstream(workstreamId: workstreamId))
                     .flatMap(AgentFailureTranscriptFormatter.errorText(for:))
-                    ?? "Agent failed"
+                    ?? (terminalDisposition == .cancelled
+                        ? "Agent cancelled"
+                        : terminalDisposition == .invalid
+                            ? "Agent returned an invalid terminal status"
+                            : "Agent failed")
                 errorMessage = failureText
             } else {
                 await onQueryCompleted?(queryResult, userMessage.id)
@@ -568,7 +711,6 @@ class TaskChatState: ObservableObject {
             if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
                 if failedByUserStop && messages[index].text.isEmpty && messages[index].contentBlocks.isEmpty {
                     messages[index].isStreaming = false
-                    await finishJournalUpdate(messageId: aiMessageId, status: .failed, lease: lease)
                 } else {
                     if !failedByUserStop {
                         Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: error.localizedDescription)
@@ -576,15 +718,12 @@ class TaskChatState: ObservableObject {
                     messages[index].isStreaming = false
                     completeRemainingToolCalls(
                         messageId: aiMessageId,
-                        terminalStatus: failedByUserStop ? .completed : .failed
-                    )
-                    await finishJournalUpdate(
-                        messageId: aiMessageId,
-                        status: failedByUserStop ? .completed : .failed,
-                        lease: lease
+                        terminalStatus: .failed
                     )
                 }
             }
+
+            await failUnboundJournalMessage(messageId: aiMessageId, lease: lease)
 
             if !failedByUserStop {
                 errorMessage = error.localizedDescription
@@ -594,6 +733,7 @@ class TaskChatState: ObservableObject {
 
         guard isCurrent(lease) else { return }
         activeAssistantMessageId = nil
+        producingRunProjection.clear()
         isSending = false
         isStopping = false
     }
@@ -650,19 +790,15 @@ class TaskChatState: ObservableObject {
     func surfaceRuntimeFailure(_ projection: AgentRunProjection, fallbackMessage: String? = nil) {
         guard hasCurrentOwner else { return }
         guard projection.surface == .workstream(workstreamId: workstreamId) else { return }
+        guard let producingMessageID = producingRunProjection.terminalMessageID(for: projection)
+        else { return }
         guard let errorText = AgentFailureTranscriptFormatter.errorText(for: projection) ?? fallbackMessage else { return }
-        let failureKey = [
-            projection.runId,
-            projection.attemptId,
-            projection.sessionId,
-            projection.completedAt.map { String($0.timeIntervalSinceReferenceDate) },
-            errorText,
-        ]
-        .compactMap { $0 }
-        .joined(separator: "|")
+        let failureKey = [projection.runId, projection.attemptId, producingMessageID, errorText]
+            .compactMap { $0 }
+            .joined(separator: "|")
         guard surfacedFailureKeys.insert(failureKey).inserted else { return }
 
-        appendFailureTranscriptMessage(errorText)
+        requestJournalRefreshForRuntimeFailure(producingMessageID: producingMessageID)
         errorMessage = errorText
     }
 
@@ -683,66 +819,16 @@ class TaskChatState: ObservableObject {
         if let projection = AgentRuntimeStatusStore.shared.projection(for: .workstream(workstreamId: workstreamId)) {
             surfaceRuntimeFailure(projection, fallbackMessage: fallbackMessage)
         } else if let fallbackMessage {
-            appendFailureTranscriptMessage(fallbackMessage)
             errorMessage = fallbackMessage
         }
     }
 
-    private func appendFailureTranscriptMessage(_ errorText: String) {
-        guard let lease = captureOwnerLease() else { return }
-        guard let failureText = AgentFailureTranscriptFormatter.transcriptText(for: errorText) else { return }
-        if messages.contains(where: { message in
-            message.sender == .ai
-                && message.text.trimmingCharacters(in: .whitespacesAndNewlines) == failureText
-        }) {
-            return
-        }
-
-        if let activeAssistantMessageId,
-           let index = messages.firstIndex(where: { $0.id == activeAssistantMessageId }),
-           messages[index].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: errorText)
-            messages[index].isStreaming = false
-            completeRemainingToolCalls(messageId: activeAssistantMessageId, terminalStatus: .failed)
-            scheduleJournalUpdate(messageId: activeAssistantMessageId, status: .failed)
-            return
-        }
-
-        if let index = messages.lastIndex(where: { message in
-            message.sender == .ai
-                && message.isStreaming
-                && message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }) {
-            Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: errorText)
-            messages[index].isStreaming = false
-            let messageId = messages[index].id
-            completeRemainingToolCalls(messageId: messageId, terminalStatus: .failed)
-            scheduleJournalUpdate(messageId: messageId, status: .failed)
-            return
-        }
-
-        let failureMessage = ChatMessage(
-            text: failureText,
-            sender: .ai,
-            turnOwner: .taskChat(workstreamId)
-        )
+    private func requestJournalRefreshForRuntimeFailure(producingMessageID: String) {
+        guard messages.contains(where: { $0.id == producingMessageID }),
+              let lease = captureOwnerLease() else { return }
         Task { @MainActor [weak self] in
             guard let self, self.isCurrent(lease) else { return }
-            do {
-                _ = try await TaskChatRuntime.recordJournalMessage(
-                    workstreamId: self.workstreamId,
-                    ownerID: lease.ownerID,
-                    authorizationSnapshot: lease.authorizationSnapshot,
-                    message: failureMessage,
-                    status: .failed
-                )
-                guard self.isCurrent(lease) else { return }
-                await self.refreshJournal(lease: lease)
-            } catch {
-                if self.isCurrent(lease) {
-                    log("TaskChatState[\(self.workstreamId)]: failure transcript record failed (code=journal_record_failed)")
-                }
-            }
+            await self.refreshJournal(lease: lease)
         }
     }
 

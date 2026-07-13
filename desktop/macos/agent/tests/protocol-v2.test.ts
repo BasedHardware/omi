@@ -21,8 +21,17 @@ import type {
   LegacyMainChatSessionsImportedMessage,
   RevokeOwnerRuntimeMessage,
   OwnerRuntimeRevokedMessage,
+  JournalRecordTurnMessage,
+  JournalTerminalizeTurnMessage,
+  JournalBackendSyncMessage,
 } from "../src/protocol.js";
-import { PROTOCOL_VERSION } from "../src/protocol.js";
+import {
+  PROTOCOL_VERSION,
+  assertPublicJournalRecordAuthority,
+  assertPublicJournalUpdateAuthority,
+  isInboundResponseMessage,
+  journalTerminalizationDisposition,
+} from "../src/protocol.js";
 import {
   AGENT_CONTROL_TOOL_NAMES,
   SWIFT_ADVERTISED_AGENT_CONTROL_TOOL_NAMES,
@@ -37,7 +46,6 @@ describe("protocol v2", () => {
       clientId: "bridge-client",
       ownerId: "owner",
       sessionId: "ses_placeholder",
-      surfaceKind: "main_chat",
       prompt: "hello",
       expectedContextSnapshotVersion: "sha256:snapshot",
       expectedContextSnapshotGeneration: 3,
@@ -137,6 +145,86 @@ describe("protocol v2", () => {
     };
     expect((request as InboundMessage).ownerId).toBe("owner-a");
     expect((receipt as OutboundMessage).requestId).toBe(request.requestId);
+  });
+
+  it("keeps delivery kernel-owned and terminalizes with exact run-attempt authority", () => {
+    const record: JournalRecordTurnMessage = {
+      type: "journal_record_turn",
+      protocolVersion: PROTOCOL_VERSION,
+      requestId: "record-task-turn",
+      clientId: "task-chat",
+      ownerId: "owner",
+      surfaceKind: "task_chat",
+      externalRefKind: "task",
+      externalRefId: "task-1",
+      turn: {
+        turnId: "turn-task-1",
+        role: "assistant",
+        content: "Working",
+        contentBlocks: [],
+      },
+    };
+    expect(record.turn).not.toHaveProperty("delivery");
+
+    const terminalize: JournalTerminalizeTurnMessage = {
+      type: "journal_terminalize_turn",
+      protocolVersion: PROTOCOL_VERSION,
+      requestId: "terminalize-task-turn",
+      clientId: "task-chat",
+      ownerId: "owner",
+      surfaceKind: "task_chat",
+      externalRefKind: "task",
+      externalRefId: "task-1",
+      terminalization: {
+        turnId: "turn-task-1",
+        producingRunId: "run-task-1",
+        producingAttemptId: "att-task-1",
+        disposition: "accept",
+        content: "Done",
+        replaceContentBlocks: [],
+        replaceResources: [],
+      },
+    };
+    expect((terminalize as InboundMessage).terminalization).toMatchObject({
+      producingRunId: "run-task-1",
+      producingAttemptId: "att-task-1",
+    });
+
+    const delivery: JournalBackendSyncMessage = {
+      type: "journal_backend_sync",
+      protocolVersion: PROTOCOL_VERSION,
+      requestId: "journal:turn-task-1:2",
+      clientId: "kernel-journal",
+      ownerId: "owner",
+      turnId: "turn-task-1",
+      conversationId: "conversation-1",
+      conversationGeneration: 1,
+      attemptCount: 1,
+      deliveryGeneration: 2,
+      payloadHash: "sha256:payload",
+      clientMessageId: "turn-task-1",
+      journalRevision: 3,
+      text: "Done",
+      sender: "ai",
+      appId: null,
+      sessionId: null,
+      metadata: null,
+      messageSource: "desktop_chat",
+    };
+    expect(delivery).toMatchObject({ clientMessageId: delivery.turnId, journalRevision: 3 });
+    expect(delivery).not.toHaveProperty("remoteId");
+    expect(() => assertPublicJournalRecordAuthority({ ...record.turn, delivery: "local" })).toThrow(
+      /delivery is kernel-owned/i,
+    );
+    expect(() => assertPublicJournalRecordAuthority({ ...record.turn, producingRunId: "forged" })).toThrow(
+      /producingRunId is kernel-owned/i,
+    );
+    expect(() => assertPublicJournalUpdateAuthority({ turnId: record.turn.turnId, producingAttemptId: "forged" }))
+      .toThrow(/producingAttemptId is kernel-owned/i);
+    expect(() => journalTerminalizationDisposition({ disposition: "maybe" })).toThrow(
+      /explicit accept or discard disposition/i,
+    );
+    expect(() => journalTerminalizationDisposition({})).toThrow(/explicit accept or discard disposition/i);
   });
 
   it("acknowledges legacy main-chat aliases only with correlated owner-scoped acceptance", () => {
@@ -301,5 +389,21 @@ describe("protocol v2", () => {
     const protocol = readFileSync(join(here, "../src/protocol.ts"), "utf8");
     expect(protocol).not.toMatch(/tool_capability_(?:register|revoke)/);
     expect(protocol).not.toMatch(/record_surface_turn|project_cross_surface_turn|turn_recorded/);
+  });
+
+  it("classifies inbound results as responses that must not receive reflected request errors", () => {
+    for (const type of [
+      "authorized_tool_execution_result",
+      "journal_backend_sync_result",
+      "journal_backend_delete_result",
+      "journal_backend_reconcile_result",
+    ] as const) {
+      expect(isInboundResponseMessage({ type })).toBe(true);
+    }
+    expect(isInboundResponseMessage({ type: "query" })).toBe(false);
+    const here = dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(join(here, "../src/index.ts"), "utf8");
+    expect(source).toContain("if (isInboundResponseMessage(msg))");
+    expect(source).toContain("Unhandled runtime response error type=");
   });
 });

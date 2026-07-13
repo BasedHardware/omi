@@ -42,18 +42,22 @@ final class KernelJournalBackendReconcileTests: XCTestCase {
   }
 
   func testReconcilePageDecodesCanonicalIdentityAndStructuredMetadata() throws {
-    let data = Data(#"{"messages":[{"id":"remote-1","text":"I started an agent.","created_at":0,"sender":"ai","app_id":null,"session_id":"session-1","rating":null,"reported":false,"metadata":"{\"content_blocks\":[{\"type\":\"agent_spawn\"}]}","client_message_id":"turn-canonical"}],"next_cursor":"remote-1","has_more":true}"#.utf8)
+    let data = Data(#"{"messages":[{"id":"turn-canonical","text":"I started an agent.","created_at":0,"sender":"ai","app_id":null,"session_id":"session-1","rating":null,"reported":false,"metadata":"{\"content_blocks\":[{\"type\":\"agent_spawn\"},{\"type\":\"agent_completion\",\"runId\":\"run-1\"}],\"resources\":[{\"id\":\"artifact-1\",\"type\":\"file\",\"name\":\"result.txt\"}]}","client_message_id":"turn-canonical","journal_revision":12}],"next_cursor":"turn-canonical","has_more":true}"#.utf8)
     let page = try JSONDecoder().decode(DesktopMessageReconcilePage.self, from: data)
 
-    XCTAssertEqual(page.nextCursor, "remote-1")
+    XCTAssertEqual(page.nextCursor, "turn-canonical")
     XCTAssertTrue(page.hasMore)
     XCTAssertEqual(page.messages.count, 1)
     XCTAssertEqual(page.messages[0].clientMessageId, "turn-canonical")
     XCTAssertEqual(page.messages[0].sessionId, "session-1")
     XCTAssertEqual(
       page.messages[0].metadata,
-      #"{"content_blocks":[{"type":"agent_spawn"}]}"#
+      #"{"content_blocks":[{"type":"agent_spawn"},{"type":"agent_completion","runId":"run-1"}],"resources":[{"id":"artifact-1","type":"file","name":"result.txt"}]}"#
     )
+    let rollbackProjection = KernelJournalBackendSyncDriver.reconcileProjection(page.messages[0])
+    XCTAssertTrue(rollbackProjection.contentBlocksJSON.contains("agent_completion"))
+    XCTAssertTrue(rollbackProjection.resourcesJSON.contains("artifact-1"))
+    XCTAssertEqual(rollbackProjection.canonicalTurnId, "turn-canonical")
   }
 
   func testReconcileRejectsOwnerChangeBeforeHTTP() async throws {

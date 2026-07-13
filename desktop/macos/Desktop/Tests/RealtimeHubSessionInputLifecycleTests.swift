@@ -4,6 +4,53 @@ import XCTest
 
 @MainActor
 final class RealtimeHubSessionInputLifecycleTests: XCTestCase {
+  func testLocalProfileTransportAuthorityIsExactSessionAndOwnerScoped() throws {
+    let sourceA = NSObject()
+    let sourceB = NSObject()
+    let ownerAuthority = RuntimeOwnerAuthorizationAuthority()
+    let ownerSnapshot = try XCTUnwrap(
+      ownerAuthority.capture(ownerID: "owner-a", expectedOwnerID: "owner-a"))
+    let authority = RealtimeLocalProfileTransportAuthority(
+      sourceID: ObjectIdentifier(sourceA),
+      ownerScope: .authenticated("owner-a"),
+      authorizationSnapshot: ownerSnapshot)
+
+    XCTAssertTrue(
+      authority.accepts(
+        sourceID: ObjectIdentifier(sourceA),
+        currentOwnerID: "owner-a",
+        localProfileEnabled: true,
+        authorizationIsCurrent: true))
+    XCTAssertFalse(
+      authority.accepts(
+        sourceID: ObjectIdentifier(sourceB),
+        currentOwnerID: "owner-a",
+        localProfileEnabled: true,
+        authorizationIsCurrent: true),
+      "a replacement socket must not inherit the offline provider-warm bypass")
+    XCTAssertFalse(
+      authority.accepts(
+        sourceID: ObjectIdentifier(sourceA),
+        currentOwnerID: "owner-b",
+        localProfileEnabled: true,
+        authorizationIsCurrent: true),
+      "an owner transition must revoke the hermetic transport")
+    XCTAssertFalse(
+      authority.accepts(
+        sourceID: ObjectIdentifier(sourceA),
+        currentOwnerID: "owner-a",
+        localProfileEnabled: false,
+        authorizationIsCurrent: true),
+      "the capability must not exist outside the local profile")
+    XCTAssertFalse(
+      authority.accepts(
+        sourceID: ObjectIdentifier(sourceA),
+        currentOwnerID: "owner-a",
+        localProfileEnabled: true,
+        authorizationIsCurrent: false),
+      "same-UID ABA must not revive a transport from an older authorization generation")
+  }
+
   func testWarmGeminiBuffersAudioAndCommitUntilActivityWindowOpens() async {
     let delegate = RealtimeHubSessionDelegateSpy()
     let session = makeSession(provider: .gemini, delegate: delegate)

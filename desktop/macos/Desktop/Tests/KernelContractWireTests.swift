@@ -13,9 +13,7 @@ final class KernelContractWireTests: XCTestCase {
         content: "Question",
         contentBlocksJSON: "[]",
         resourcesJSON: "[]",
-        producingRunId: nil,
         metadataJSON: "{}",
-        delivery: .backend,
         createdAtMs: 1
       ),
       KernelJournalTurnWrite(
@@ -26,9 +24,7 @@ final class KernelContractWireTests: XCTestCase {
         content: "Answer",
         contentBlocksJSON: "[]",
         resourcesJSON: "[]",
-        producingRunId: nil,
         metadataJSON: "{}",
-        delivery: .backend,
         createdAtMs: 2
       ),
     ]
@@ -47,6 +43,37 @@ final class KernelContractWireTests: XCTestCase {
     XCTAssertEqual(message["ownerId"] as? String, "owner-a")
     let encodedTurns = try XCTUnwrap(message["turns"] as? [[String: Any]])
     XCTAssertEqual(encodedTurns.map { $0["turnId"] as? String }, ["turn-user", "turn-assistant"])
+    XCTAssertTrue(encodedTurns.allSatisfy { $0["delivery"] == nil })
+  }
+
+  func testJournalTerminalizationWireCarriesExactAttemptAndNoCallerChosenStatus() throws {
+    let terminalization = KernelJournalTurnTerminalization(
+      turnId: "turn-assistant",
+      producingRunId: "run-2",
+      producingAttemptId: "attempt-3",
+      disposition: .accept,
+      content: "Final answer",
+      contentBlocksJSON: #"[{"id":"completion-1","type":"agentCompletion","runId":"run-2","status":"completed"}]"#,
+      resourcesJSON: #"[{"id":"artifact-1","type":"file","name":"result.txt"}]"#
+    )
+    let message = AgentRuntimeProcess.journalOperationWireMessage(
+      type: "journal_terminalize_turn",
+      operation: "terminalize",
+      clientId: "client",
+      requestId: "request",
+      ownerId: "owner-a",
+      surface: .workstream(workstreamId: "workstream-1"),
+      payload: ["terminalization": terminalization.dictionary]
+    )
+
+    let encoded = try XCTUnwrap(message["terminalization"] as? [String: Any])
+    XCTAssertEqual(encoded["turnId"] as? String, "turn-assistant")
+    XCTAssertEqual(encoded["producingRunId"] as? String, "run-2")
+    XCTAssertEqual(encoded["producingAttemptId"] as? String, "attempt-3")
+    XCTAssertEqual(encoded["disposition"] as? String, "accept")
+    XCTAssertNil(encoded["status"])
+    XCTAssertEqual((encoded["replaceContentBlocks"] as? [[String: Any]])?.count, 1)
+    XCTAssertEqual((encoded["replaceResources"] as? [[String: Any]])?.count, 1)
   }
 
   func testQueryWireContainsOnlyTracingSessionAndDataInputs() throws {
@@ -67,18 +94,28 @@ final class KernelContractWireTests: XCTestCase {
           uri: "file:///tmp/notes.txt"
         )
       ],
-      expectedContext: AgentContextFreshness(version: "snapshot-v2", generation: 7)
+      producingTurnId: "turn-assistant",
+      expectedContext: AgentContextFreshness(
+        version: "snapshot-v2",
+        generation: 7,
+        rendererFingerprint: "renderer-v2",
+        capabilityVersion: "capability-v2")
     )
 
     XCTAssertEqual(Set(message.keys), Set([
       "type", "protocolVersion", "requestId", "clientId", "ownerId",
       "sessionId", "prompt", "mode", "imageBase64", "attachments",
+      "producingTurnId",
       "expectedContextSnapshotVersion", "expectedContextSnapshotGeneration",
+      "expectedContextRendererFingerprint", "expectedCapabilityVersion",
     ]))
     XCTAssertEqual(message["type"] as? String, "query")
     XCTAssertEqual(message["sessionId"] as? String, "session-1")
+    XCTAssertEqual(message["producingTurnId"] as? String, "turn-assistant")
     XCTAssertEqual(message["expectedContextSnapshotVersion"] as? String, "snapshot-v2")
     XCTAssertEqual(message["expectedContextSnapshotGeneration"] as? Int, 7)
+    XCTAssertEqual(message["expectedContextRendererFingerprint"] as? String, "renderer-v2")
+    XCTAssertEqual(message["expectedCapabilityVersion"] as? String, "capability-v2")
     let attachment = try XCTUnwrap((message["attachments"] as? [[String: Any]])?.first)
     XCTAssertEqual(attachment["attachmentId"] as? String, "attachment-1")
     XCTAssertEqual(attachment["sizeBytes"] as? Int, 42)
@@ -101,10 +138,13 @@ final class KernelContractWireTests: XCTestCase {
       mode: nil,
       imageData: nil,
       attachments: [],
+      producingTurnId: nil,
       expectedContext: nil
     )
     XCTAssertNil(unfenced["expectedContextSnapshotVersion"])
     XCTAssertNil(unfenced["expectedContextSnapshotGeneration"])
+    XCTAssertNil(unfenced["expectedContextRendererFingerprint"])
+    XCTAssertNil(unfenced["expectedCapabilityVersion"])
 
     let fenced = AgentRuntimeProcess.queryWireMessage(
       clientId: "client",
@@ -115,10 +155,17 @@ final class KernelContractWireTests: XCTestCase {
       mode: nil,
       imageData: nil,
       attachments: [],
-      expectedContext: AgentContextFreshness(version: "v3", generation: 9)
+      producingTurnId: nil,
+      expectedContext: AgentContextFreshness(
+        version: "v3",
+        generation: 9,
+        rendererFingerprint: "renderer-v3",
+        capabilityVersion: "capability-v3")
     )
     XCTAssertEqual(fenced["expectedContextSnapshotVersion"] as? String, "v3")
     XCTAssertEqual(fenced["expectedContextSnapshotGeneration"] as? Int, 9)
+    XCTAssertEqual(fenced["expectedContextRendererFingerprint"] as? String, "renderer-v3")
+    XCTAssertEqual(fenced["expectedCapabilityVersion"] as? String, "capability-v3")
   }
 
   func testWarmupCanOnlyIdentifyPinnedSessionProfile() {
@@ -262,7 +309,11 @@ final class KernelContractWireTests: XCTestCase {
       ],
     ]
     let snapshot = try XCTUnwrap(AgentContextSnapshot(dictionary: snapshotDictionary))
-    XCTAssertEqual(snapshot.freshness, AgentContextFreshness(version: "version-a", generation: 11))
+    XCTAssertEqual(snapshot.freshness, AgentContextFreshness(
+      version: "version-a",
+      generation: 11,
+      rendererFingerprint: "renderer-2",
+      capabilityVersion: "1:digest"))
     XCTAssertEqual(snapshot.sourceRevision(for: .screen), "sha256:abc")
     XCTAssertEqual(snapshot.renderedContext, "[Kernel Context Snapshot]\n{\"sourceOutcomes\":[]}")
   }

@@ -51,6 +51,11 @@ export function establishRuntimeOwner(
 ): RuntimeOwnerAuthorityTransition {
   const ownerId = requestedOwnerId?.trim() ?? "";
   if (!ownerId) throw new Error("Runtime owner handshake requires a non-empty ownerId");
+  if (state.established && ownerId !== state.ownerId) {
+    throw new Error(
+      "owner_mismatch: established runtime owner replacement requires correlated revoke and a fresh process",
+    );
+  }
   return {
     previousOwnerId: state.ownerId,
     ownerId,
@@ -72,9 +77,6 @@ export function authorizeRuntimeTokenRefresh(
   commitCredentials: () => void,
 ): RuntimeOwnerAuthorityTransition {
   const transition = establishRuntimeOwner(state, requestedOwnerId);
-  if (state.established && transition.changed) {
-    throw new Error("owner_mismatch: token refresh owner does not match the active runtime owner");
-  }
   commitCredentials();
   return transition;
 }

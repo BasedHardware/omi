@@ -12,7 +12,7 @@ import {
   stableAgentSpawnTurnId,
 } from "../src/runtime/agent-spawn-journal.js";
 import { handleAgentControlToolCall } from "../src/runtime/control-tools.js";
-import { recordJournalTurn } from "../src/runtime/conversation-journal.js";
+import { recordJournalTurn, terminalizeJournalTurn, updateJournalTurn } from "../src/runtime/conversation-journal.js";
 import { routeExternalSurfaceTool } from "../src/runtime/external-surface-tool-policy.js";
 import { AgentRuntimeKernel, ExternalSurfaceAuthorityError } from "../src/runtime/kernel.js";
 import type { AuthorizedRunToolInvocation } from "../src/runtime/run-tool-capability.js";
@@ -562,7 +562,7 @@ describe("external realtime surface authority", () => {
       surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "typed-spawn" },
       defaultAdapterId: "acp",
     }, () => 1);
-    const sourceSnapshot = kernel.updateContextSource({
+    kernel.updateContextSource({
       ownerId: "owner",
       sessionId: parentSurface.agentSessionId,
       surfaceKind: "main_chat",
@@ -572,7 +572,34 @@ describe("external realtime surface authority", () => {
       capturedAtMs: 2,
       payload: { repository: "omi", branch: "typed-spawn" },
     }).snapshot;
-    adapter.deferOnlyPromptIncludes = "DEFER_TYPED_PARENT_9515";
+    recordJournalTurn(store, {
+      ownerId: "owner",
+      conversationId: parentSurface.conversationId,
+      turnId: "typed-spawn-user",
+      role: "user",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "completed",
+      content: "DEFER_TYPED_PARENT_9515 research the release plan",
+      contentBlocks: [],
+      resources: [],
+      createdAtMs: 3,
+    });
+    recordJournalTurn(store, {
+      ownerId: "owner",
+      conversationId: parentSurface.conversationId,
+      turnId: "typed-spawn-assistant",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "streaming",
+      content: "preexisting partial assistant text",
+      contentBlocks: [],
+      resources: [],
+      createdAtMs: 4,
+    });
+    const admittedSnapshot = kernel.contextSnapshot(parentSurface.agentSessionId, "owner", "main_chat");
+    adapter.deferOnlyPromptIncludes = "# User Message\nDEFER_TYPED_PARENT_9515";
     adapter.deferResult();
     const parentPromise = kernel.executeRun({
       ownerId: "owner",
@@ -584,6 +611,7 @@ describe("external realtime surface authority", () => {
       adapterId: "acp",
       clientId: "typed-chat",
       requestId: "typed-spawn-parent",
+      producingTurnId: "typed-spawn-assistant",
       prompt: "DEFER_TYPED_PARENT_9515 research the release plan",
       cwd: "/tmp/work",
     });
@@ -596,13 +624,14 @@ describe("external realtime surface authority", () => {
       toolName: "spawn_agent",
       toolInput: {
         objective: "Research release-plan risks",
+        requestedAgentCount: 2,
         metadata: { producerJournal: { forged: true } },
       },
     });
     expect(routed).toMatchObject({
       toolName: "spawn_agent",
       recoveredFromDelegation: false,
-      toolInput: { objective: "Research release-plan risks" },
+      toolInput: { objective: "Research release-plan risks", requestedAgentCount: 2 },
     });
     const authorized = kernel.authorizeRelayedRunToolInvocation({
       capabilityRef: parentAttempt.toolCapabilityRef,
@@ -618,7 +647,7 @@ describe("external realtime surface authority", () => {
       attemptId: authorized.attemptId,
       invocationId: authorized.invocationId,
       surfaceKind: authorized.surfaceKind,
-      toolInput: routed.toolInput,
+      toolInput: { ...routed.toolInput, originSurfaceKind: "realtime" },
     });
     expect(prepared).toMatchObject({
       parentRunId: authorized.runId,
@@ -626,6 +655,7 @@ describe("external realtime surface authority", () => {
         schemaVersion: 1,
         surface: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "typed-spawn" },
         continuityKey: `agent_spawn:${invocationId}`,
+        producerTurnId: "typed-spawn-assistant",
         userText: "DEFER_TYPED_PARENT_9515 research the release plan",
         assistantText: "I started a background agent for that.",
         objective: "Research release-plan risks",
@@ -657,11 +687,24 @@ describe("external realtime surface authority", () => {
       outcome: "succeeded",
       result: raw,
     });
-    const result = JSON.parse(raw) as { run: { runId: string }; session: { sessionId: string } };
-    await waitUntil(() => String(store.getRow(
+    const result = JSON.parse(raw) as {
+      run: { runId: string };
+      session: { sessionId: string };
+      agents: Array<{ run: { runId: string }; session: { sessionId: string } }>;
+    };
+    expect(result.agents).toHaveLength(2);
+    const childRunIds = result.agents.map((agent) => agent.run.runId);
+    await waitUntil(() => childRunIds.every((runId) => String(store.getRow(
       "SELECT status FROM runs WHERE run_id = ?",
-      [result.run.runId],
-    ).status) === "succeeded");
+      [runId],
+    ).status) === "succeeded"));
+    await waitUntil(() => {
+      const blocks = JSON.parse(String(store.getRow(
+        "SELECT content_blocks_json FROM conversation_turns WHERE turn_id = ?",
+        ["typed-spawn-assistant"],
+      ).content_blocks_json)) as Array<{ type?: string }>;
+      return blocks.filter((block) => block.type === "agentCompletion").length === 2;
+    });
     const parentInput = JSON.parse(String(store.getRow(
       "SELECT input_json FROM runs WHERE run_id = ?",
       [authorized.runId],
@@ -678,20 +721,163 @@ describe("external realtime surface authority", () => {
     expect(childInput.contextCapabilityVersion).not.toBe(parentInput.contextCapabilityVersion);
     expect(childInput.contextRendererFingerprint).toBe(childInput.admittedContextSnapshot.rendererFingerprint);
     expect(childInput.contextCapabilityVersion).toBe(childInput.admittedContextSnapshot.capabilityVersion);
-    expect(childInput.contextSnapshotVersion).toBe(sourceSnapshot.version);
-    expect(childInput.contextSnapshotGeneration).toBe(sourceSnapshot.snapshotGeneration);
+    expect(childInput.contextSnapshotVersion).toBe(admittedSnapshot.version);
+    expect(childInput.contextSnapshotGeneration).toBe(admittedSnapshot.snapshotGeneration);
     const ensured = kernel.ensureAgentSpawnJournal({
       ownerId: "owner",
       sessionId: result.session.sessionId,
       runId: result.run.runId,
     });
-    expect(ensured.assistantTurn.contentBlocks).toEqual([
-      expect.objectContaining({ type: "agentSpawn", runId: result.run.runId }),
-      expect.objectContaining({ type: "agentCompletion", runId: result.run.runId }),
-    ]);
+    expect(ensured.userTurn).toBeNull();
+    expect(ensured.assistantTurn).toMatchObject({
+      turnId: "typed-spawn-assistant",
+      content: "preexisting partial assistant text",
+      status: "streaming",
+      producingRunId: authorized.runId,
+      producingAttemptId: authorized.attemptId,
+    });
+    for (const childRunId of childRunIds) {
+      expect(ensured.assistantTurn.contentBlocks).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: "agentSpawn", runId: childRunId }),
+        expect.objectContaining({ type: "agentCompletion", runId: childRunId }),
+      ]));
+    }
+    expect(ensured.assistantTurn.contentBlocks.filter((block) => block.type === "agentSpawn")).toHaveLength(2);
+    expect(ensured.assistantTurn.contentBlocks.filter((block) => block.type === "agentCompletion")).toHaveLength(2);
+    expect(store.getRow(
+      "SELECT COUNT(*) AS count FROM conversation_turns WHERE conversation_id = ?",
+      [parentSurface.conversationId],
+    ).count).toBe(2);
 
-    adapter.resolveDeferred();
-    await parentPromise;
+    const writeRunInput = (runId: string, value: Record<string, unknown>) => {
+      store.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", [JSON.stringify(value), runId]);
+    };
+    const childWithProducerTarget = (
+      producerTurnId: string,
+      surface = prepared.producerJournal.surface,
+    ) => {
+      const value = structuredClone(childInput);
+      value.metadata.producerJournal.producerTurnId = producerTurnId;
+      value.metadata.producerJournal.surface = surface;
+      return value;
+    };
+    writeRunInput(result.run.runId, childWithProducerTarget("forged-producer-turn"));
+    expect(() => kernel.ensureAgentSpawnJournal({
+      ownerId: "owner",
+      sessionId: result.session.sessionId,
+      runId: result.run.runId,
+    })).toThrow(/does not match the parent query producing turn/i);
+    writeRunInput(result.run.runId, childInput);
+
+    const crossSurface = resolveSurfaceSession(store, {
+      ownerId: "owner",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "typed-spawn-cross" },
+      defaultAdapterId: "acp",
+    }, () => 5);
+    recordJournalTurn(store, {
+      ownerId: "owner",
+      conversationId: crossSurface.conversationId,
+      turnId: "cross-session-assistant",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "streaming",
+      content: "cross-session target",
+      contentBlocks: [],
+      resources: [],
+      producingRunId: authorized.runId,
+      producingAttemptId: authorized.attemptId,
+      createdAtMs: 6,
+    });
+    writeRunInput(authorized.runId, { ...parentInput, producingTurnId: "cross-session-assistant" });
+    writeRunInput(result.run.runId, childWithProducerTarget("cross-session-assistant", {
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "typed-spawn-cross",
+    }));
+    expect(() => kernel.ensureAgentSpawnJournal({
+      ownerId: "owner",
+      sessionId: result.session.sessionId,
+      runId: result.run.runId,
+    })).toThrow(/outside the parent session conversation/i);
+    writeRunInput(authorized.runId, parentInput);
+    writeRunInput(result.run.runId, childInput);
+
+    recordJournalTurn(store, {
+      ownerId: "owner",
+      conversationId: parentSurface.conversationId,
+      turnId: "typed-spawn-user-target",
+      role: "user",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "streaming",
+      content: "must not become the producer target",
+      contentBlocks: [],
+      resources: [],
+      producingRunId: authorized.runId,
+      producingAttemptId: authorized.attemptId,
+      createdAtMs: 7,
+    });
+    writeRunInput(authorized.runId, { ...parentInput, producingTurnId: "typed-spawn-user-target" });
+    writeRunInput(result.run.runId, childWithProducerTarget("typed-spawn-user-target"));
+    expect(() => kernel.ensureAgentSpawnJournal({
+      ownerId: "owner",
+      sessionId: result.session.sessionId,
+      runId: result.run.runId,
+    })).toThrow(/must be an assistant turn/i);
+    writeRunInput(authorized.runId, parentInput);
+    writeRunInput(result.run.runId, childInput);
+
+    updateJournalTurn(store, {
+      ownerId: "owner",
+      conversationId: parentSurface.conversationId,
+      turnId: "typed-spawn-assistant",
+      metadataJson: JSON.stringify({ terminalMarker: "discarded_terminal_projection" }),
+    });
+    expect(() => kernel.ensureAgentSpawnJournal({
+      ownerId: "owner",
+      sessionId: result.session.sessionId,
+      runId: result.run.runId,
+    })).toThrow(/rejects terminal-marker targets/i);
+    updateJournalTurn(store, {
+      ownerId: "owner",
+      conversationId: parentSurface.conversationId,
+      turnId: "typed-spawn-assistant",
+      metadataJson: "{}",
+    });
+
+    adapter.resolveDeferred({
+      terminalStatus: "succeeded",
+      text: "parent response completed",
+      adapterSessionId: parentAttempt.binding.adapterNativeSessionId,
+    });
+    const parentResult = await parentPromise;
+    expect(parentResult).toMatchObject({ terminalStatus: "succeeded" });
+    expect(store.getRow("SELECT status FROM runs WHERE run_id = ?", [authorized.runId])).toEqual({ status: "succeeded" });
+    expect(store.getRow("SELECT status FROM run_attempts WHERE attempt_id = ?", [authorized.attemptId])).toEqual({ status: "succeeded" });
+    terminalizeJournalTurn(store, {
+      ownerId: "owner",
+      conversationId: parentSurface.conversationId,
+      turnId: "typed-spawn-assistant",
+      producingRunId: authorized.runId,
+      producingAttemptId: authorized.attemptId,
+      disposition: "accept",
+      content: "parent response completed",
+      replaceContentBlocks: [],
+      replaceResources: [],
+    });
+    const terminalProducer = store.getRow(
+      "SELECT status, content_blocks_json FROM conversation_turns WHERE turn_id = ?",
+      ["typed-spawn-assistant"],
+    );
+    expect(terminalProducer.status).toBe("completed");
+    const terminalBlocks = JSON.parse(String(terminalProducer.content_blocks_json));
+    for (const childRunId of childRunIds) {
+      expect(terminalBlocks).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: "agentSpawn", runId: childRunId }),
+        expect.objectContaining({ type: "agentCompletion", runId: childRunId }),
+      ]));
+    }
     store.close();
   });
 
@@ -775,6 +961,11 @@ describe("external realtime surface authority", () => {
       sessionId: childSession.sessionId,
       runId: child.runId,
     });
+    expect(ensured.userTurn).not.toBeNull();
+    expect(store.getRow(
+      "SELECT COUNT(*) AS count FROM conversation_turns WHERE conversation_id = ?",
+      [ensured.conversationId],
+    ).count).toBe(2);
     expect(ensured.assistantTurn.contentBlocks).toEqual([
       expect.objectContaining({
         type: "agentSpawn",
@@ -801,13 +992,12 @@ describe("external realtime surface authority", () => {
       journalReceipt: receipt,
     });
 
-    // The provider still emits turn_done after the spawn tool result. Its
-    // ordinary main-chat projection must acknowledge, not overwrite or collide
-    // with, the already committed canonical voice spawn exchange.
-    const lateUser = recordJournalTurn(store, {
+    // Once the spawn receipt commits the exchange, any late provider mutation
+    // is a strict identity collision rather than an alternate projection.
+    expect(() => recordJournalTurn(store, {
       ownerId: "owner",
       conversationId: ensured.conversationId,
-      turnId: receipt.userTurnId,
+      turnId: receipt.userTurnId!,
       role: "user",
       surfaceKind: "main_chat",
       origin: "realtime_voice",
@@ -819,9 +1009,8 @@ describe("external realtime surface authority", () => {
         continuityKey: receipt.continuityKey,
         messageSource: "realtime_voice",
       }),
-      delivery: "backend",
-    });
-    const lateAssistant = recordJournalTurn(store, {
+    })).toThrow(/identity collision has different journal content/i);
+    expect(() => recordJournalTurn(store, {
       ownerId: "owner",
       conversationId: ensured.conversationId,
       turnId: receipt.assistantTurnId,
@@ -836,12 +1025,7 @@ describe("external realtime surface authority", () => {
         continuityKey: receipt.continuityKey,
         messageSource: "realtime_voice",
       }),
-      delivery: "backend",
-    });
-    expect(lateUser).toMatchObject({ created: false, duplicate: true });
-    expect(lateAssistant).toMatchObject({ created: false, duplicate: true });
-    expect(lateAssistant.turn.content).toBe(receipt.assistantText);
-    expect(lateAssistant.turn.contentBlocks.filter((block) => block.type === "agentSpawn")).toHaveLength(1);
+    })).toThrow(/identity collision has different journal content/i);
     expect(store.getRow(
       "SELECT COUNT(*) AS count FROM conversation_turns WHERE conversation_id = ?",
       [ensured.conversationId],

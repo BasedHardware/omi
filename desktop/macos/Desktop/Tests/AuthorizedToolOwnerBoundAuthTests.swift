@@ -142,22 +142,21 @@ private actor PermissionCallbackBox<Value: Sendable> {
 
 @MainActor
 final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
-  private var originalAuthOwner: Any?
-  private var originalOwnerOverride: Any?
-  private var originalOwnerBackup: Any?
+  private var originalAuthOwner: String?
+  private var originalOwnerOverride: String?
+  private var originalOwnerBackup: String?
 
   override func setUp() {
     super.setUp()
-    originalAuthOwner = UserDefaults.standard.object(forKey: .authUserId)
-    originalOwnerOverride = UserDefaults.standard.object(forKey: .automationOwnerOverride)
-    originalOwnerBackup = UserDefaults.standard.object(forKey: .automationOwnerABackup)
+    originalAuthOwner = UserDefaults.standard.string(forKey: .authUserId)
+    originalOwnerOverride = UserDefaults.standard.string(forKey: .automationOwnerOverride)
+    originalOwnerBackup = UserDefaults.standard.string(forKey: .automationOwnerABackup)
   }
 
-  override func tearDown() {
-    restoreDefault(originalAuthOwner, forKey: .authUserId)
-    restoreDefault(originalOwnerOverride, forKey: .automationOwnerOverride)
-    restoreDefault(originalOwnerBackup, forKey: .automationOwnerABackup)
-    super.tearDown()
+  override func tearDown() async throws {
+    await restoreOriginalOwnerDefaults()
+    await AuthorizedToolOwnerURLProtocol.gate.reset()
+    try await super.tearDown()
   }
 
   func testMemoryReadRejectsPrivateResponseAfterMidFlightAccountSwitch() async {
@@ -332,7 +331,7 @@ final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
   }
 
   func testDetachedPermissionEffectsStayRevokedAcrossSameOwnerSessionReplacement() async {
-    UserDefaults.standard.set("owner-a", forKey: .authUserId)
+    await establishStandardOwner("owner-a")
     guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
       expectedOwnerID: "owner-a")
     else {
@@ -420,7 +419,7 @@ final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
   }
 
   func testSuspendedPhysicalEffectStaysRevokedAcrossSameOwnerSessionReplacement() async {
-    UserDefaults.standard.set("owner-a", forKey: .authUserId)
+    await establishStandardOwner("owner-a")
     guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
       expectedOwnerID: "owner-a")
     else {
@@ -504,9 +503,7 @@ final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
   }
 
   func testSignedOutOnboardingPermissionStatusIsTheOnlyNarrowNilOwnerPath() async {
-    UserDefaults.standard.removeObject(forKey: .authUserId)
-    UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
-    UserDefaults.standard.removeObject(forKey: .automationOwnerABackup)
+    await establishStandardOwner(nil)
 
     let permissionResult = await ChatToolExecutor.execute(
       ToolCall(
@@ -526,9 +523,7 @@ final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
 
   private func makeClient() async -> APIClient {
     await AuthorizedToolOwnerURLProtocol.gate.reset()
-    UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
-    UserDefaults.standard.removeObject(forKey: .automationOwnerABackup)
-    UserDefaults.standard.set("owner-a", forKey: .authUserId)
+    await establishStandardOwner("owner-a")
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [AuthorizedToolOwnerURLProtocol.self]
     let client = APIClient(session: URLSession(configuration: configuration))
@@ -546,6 +541,8 @@ final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
       retargetLocalStorage: { _, _ in },
       ownerDidChange: {}
     ) { defaults in
+      defaults.removeObject(forKey: .automationOwnerOverride)
+      defaults.removeObject(forKey: .automationOwnerABackup)
       if let ownerID {
         defaults.set(ownerID, forKey: .authUserId)
       } else {
@@ -554,11 +551,46 @@ final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
     }
   }
 
-  private func restoreDefault(_ value: Any?, forKey key: DefaultsKey) {
-    if let value {
-      UserDefaults.standard.set(value, forKey: key.rawValue)
+  private func establishStandardOwner(_ ownerID: String?) async {
+    let bootstrapOwner = "authorized-tool-owner-bootstrap"
+    if ownerID == bootstrapOwner {
+      await replaceStandardOwner(with: nil)
     } else {
-      UserDefaults.standard.removeObject(forKey: key.rawValue)
+      await replaceStandardOwner(with: bootstrapOwner)
+    }
+    await replaceStandardOwner(with: ownerID)
+  }
+
+  private func restoreOriginalOwnerDefaults() async {
+    let authOwner = originalAuthOwner
+    let ownerOverride = originalOwnerOverride
+    let ownerBackup = originalOwnerBackup
+    let effectiveOwner = ownerOverride?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+      ? ownerOverride
+      : authOwner
+    // Force one distinct completed generation first so even an authority that
+    // a mismatch test deliberately left revoked is quiescent before restore.
+    await replaceStandardOwner(with: "authorized-tool-owner-restore")
+    await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+      defaults: .standard,
+      allowAutomationOverride: true,
+      plannedNextOwner: { _, _ in effectiveOwner },
+      quiesceVoice: { _, _ in },
+      revokeKernelOwner: { _, _ in },
+      retargetLocalStorage: { _, _ in },
+      ownerDidChange: {}
+    ) { defaults in
+      for (key, value) in [
+        (DefaultsKey.authUserId, authOwner),
+        (DefaultsKey.automationOwnerOverride, ownerOverride),
+        (DefaultsKey.automationOwnerABackup, ownerBackup),
+      ] {
+        if let value {
+          defaults.set(value, forKey: key.rawValue)
+        } else {
+          defaults.removeObject(forKey: key.rawValue)
+        }
+      }
     }
   }
 }

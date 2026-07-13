@@ -306,25 +306,13 @@ final class StartupWarmupPolicyTests: XCTestCase {
 
     @MainActor
     func testTasksStoreStartupMaintenanceSchedulesOnceForFirstUseLoadPath() async {
-        let defaults = UserDefaults.standard
-        let previousOwner = defaults.object(forKey: .authUserId)
-        let previousOverride = defaults.object(forKey: .automationOwnerOverride)
         let store = TasksStore.shared
-        defer {
-            if let previousOwner {
-                defaults.set(previousOwner, forKey: .authUserId)
-            } else {
-                defaults.removeObject(forKey: .authUserId)
-            }
-            if let previousOverride {
-                defaults.set(previousOverride, forKey: .automationOwnerOverride)
-            } else {
-                defaults.removeObject(forKey: .automationOwnerOverride)
-            }
+        let ownerFixture = RuntimeOwnerAuthorityTestFixture()
+        addTeardownBlock { @MainActor in
+            await ownerFixture.restore()
             store.resetSessionState()
         }
-        defaults.removeObject(forKey: .automationOwnerOverride)
-        defaults.set("startup-maintenance-owner", forKey: .authUserId)
+        await ownerFixture.establish(authOwnerID: "startup-maintenance-owner")
         store.resetSessionState()
         let counter = StartupMaintenanceCounter()
 

@@ -15,7 +15,7 @@ import type {
 } from "../protocol.js";
 import { PROTOCOL_VERSION } from "../protocol.js";
 import { serializeArtifact } from "./artifact-serialization.js";
-import { failureFromError, type RuntimeFailure } from "./failures.js";
+import { failureFromError, sanitizeProcessDiagnostic, type RuntimeFailure } from "./failures.js";
 import type { AgentEvent, RunMode } from "./types.js";
 import { AgentRuntimeKernel, type ExecuteAgentRunInput } from "./kernel.js";
 import { kernelSystemPolicy } from "./context-snapshot.js";
@@ -94,7 +94,7 @@ const QUERY_WIRE_FIELDS = new Set([
   "clientId",
   "ownerId",
   "sessionId",
-  "surfaceKind",
+  "producingTurnId",
   "prompt",
   "mode",
   "imageBase64",
@@ -166,25 +166,13 @@ export class JsonlTransport {
       context.adapterSessionId = result.adapterSessionId ?? undefined;
       if (context.revoked) return;
 
-      if (result.terminalStatus === "failed") {
-        const failure = failureFromResultJson(result.run.resultJson);
-        const messageText = failure?.userMessage ?? result.run.errorMessage ?? "Agent run failed";
-        const errorMessage = {
-          type: "error" as const,
-          message: messageText,
-          failure,
-        };
-        this.send(this.withCorrelation(errorMessage, context));
-        return;
-      }
-
       const resultMessage = {
         type: "result" as const,
         text: result.text,
         sessionId: result.session.sessionId,
         adapterSessionId: result.adapterSessionId ?? undefined,
         terminalStatus: result.terminalStatus,
-        failure: failureFromResultJson(result.run.resultJson),
+        failure: boundedTerminalFailure(result),
         costUsd: result.run.costUsd ?? 0,
         inputTokens: result.run.inputTokens ?? Math.ceil(input.prompt.length / 4),
         outputTokens: result.run.outputTokens ?? Math.ceil(result.text.length / 4),
@@ -414,9 +402,13 @@ export class JsonlTransport {
     const ownerId = this.requireActiveOwner(message.ownerId);
     const sessionId = message.sessionId.trim();
     if (!sessionId) throw new Error("query requires sessionId");
-    const surfaceKind = message.surfaceKind.trim();
-    if (!surfaceKind) throw new Error("query requires surfaceKind");
+    const producingTurnId = message.producingTurnId?.trim();
+    if (message.producingTurnId !== undefined && !producingTurnId) {
+      throw new Error("query producingTurnId must not be empty");
+    }
     const session = this.kernel.ownedSession(sessionId, ownerId);
+    const surfaceKind = session.surfaceKind;
+    if (!surfaceKind) throw new Error("canonical session requires surfaceKind");
     const profile = this.kernel.sessionExecutionProfile(sessionId, ownerId);
     const snapshot = this.kernel.contextSnapshot(sessionId, ownerId, surfaceKind);
     const expectationCount = [
@@ -454,9 +446,11 @@ export class JsonlTransport {
       adapterId: profile.adapterId,
       clientId,
       requestId,
+      producingTurnId,
       prompt: message.prompt,
       promptBlocks: this.promptBlocks(message),
       systemPrompt: kernelSystemPolicy(surfaceKind, executionRole),
+      admittedContextSnapshot: snapshot,
       mode,
       cwd,
       model: profile.modelProfile ?? undefined,
@@ -651,6 +645,24 @@ function failureFromResultJson(resultJson: string | null): RuntimeFailure | unde
     return undefined;
   }
   return undefined;
+}
+
+function boundedTerminalFailure(result: Awaited<ReturnType<AgentRuntimeKernel["executeRun"]>>): RuntimeFailure | undefined {
+  if (result.terminalStatus === "succeeded") return undefined;
+  const persisted = failureFromResultJson(result.run.resultJson);
+  const fallbackCode = result.terminalStatus === "cancelled" ? "run_cancelled" : "runtime_run_failed";
+  const rawCode = persisted?.code ?? result.run.errorCode ?? fallbackCode;
+  const code = /^[a-z0-9_.:-]{1,64}$/i.test(rawCode) ? rawCode : fallbackCode;
+  const fallbackMessage = result.terminalStatus === "cancelled" ? "Agent run was cancelled." : "Agent run failed.";
+  const userMessage = sanitizeProcessDiagnostic(
+    persisted?.userMessage ?? result.run.errorMessage ?? fallbackMessage,
+  ) || fallbackMessage;
+  return {
+    code,
+    userMessage,
+    source: persisted?.source ?? "runtime",
+    retryable: persisted?.retryable ?? false,
+  };
 }
 
 function parsePayload(payloadJson: string): Record<string, unknown> {

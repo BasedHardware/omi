@@ -253,6 +253,94 @@ final class ChatQueryTelemetryTests: XCTestCase {
   }
 
   @MainActor
+  func testQueuedJournalUpdateDrainsBeforeTerminalizationAndLaterWritesAreRejectedLocally() async {
+    let coordinator = ChatJournalWriteCoordinator()
+    var order: [String] = []
+    var postTerminalKernelAttempts = 0
+
+    XCTAssertTrue(coordinator.schedule(messageID: "assistant-1") {
+      await Task.yield()
+      order.append("streaming_update")
+    })
+
+    let beganTerminalization = await coordinator.beginTerminalization(messageID: "assistant-1")
+    XCTAssertTrue(beganTerminalization)
+    XCTAssertFalse(coordinator.schedule(messageID: "assistant-1") {
+      postTerminalKernelAttempts += 1
+    })
+    order.append("terminalize")
+    XCTAssertFalse(coordinator.schedule(messageID: "assistant-1") {
+      postTerminalKernelAttempts += 1
+    })
+    await Task.yield()
+
+    XCTAssertEqual(order, ["streaming_update", "terminalize"])
+    XCTAssertEqual(postTerminalKernelAttempts, 0)
+  }
+
+  @MainActor
+  func testOwnerIsolationControlProbeCreatesSurfaceBeforeCanonicalExchange() async throws {
+    var events: [String] = []
+    var capturedWrites: [KernelJournalTurnWrite] = []
+    let surface = AgentSurfaceReference.mainChat(chatId: nil)
+    let recordedTurns = try [
+      XCTUnwrap(KernelJournalTurn(dictionary: [
+        "conversationId": "conversation-b",
+        "turnId": "user-b",
+        "turnSeq": 1,
+        "role": "user",
+        "content": "PROBE request",
+        "origin": "typed_chat",
+        "status": "completed",
+        "surfaceKind": surface.surfaceKind,
+        "externalRefKind": surface.externalRefKind,
+        "externalRefId": surface.externalRefId,
+      ])),
+      XCTUnwrap(KernelJournalTurn(dictionary: [
+        "conversationId": "conversation-b",
+        "turnId": "assistant-b",
+        "turnSeq": 2,
+        "role": "assistant",
+        "content": "PROBE",
+        "origin": "typed_chat",
+        "status": "completed",
+        "surfaceKind": surface.surfaceKind,
+        "externalRefKind": surface.externalRefKind,
+        "externalRefId": surface.externalRefId,
+      ])),
+    ]
+
+    let receipt = try await OwnerIsolationKernelProbe.run(
+      ownerID: "owner-b",
+      query: "PROBE request",
+      response: "PROBE",
+      registerControlOnlyRuntime: { events.append("register") },
+      synchronizeOwner: {
+        events.append("synchronize")
+        return true
+      },
+      resolveSurface: {
+        events.append("resolve_surface")
+        return ("conversation-b", "session-b")
+      },
+      recordExchange: { writes in
+        events.append("record_exchange")
+        capturedWrites = writes
+        return recordedTurns
+      }
+    )
+
+    XCTAssertEqual(events, ["register", "synchronize", "resolve_surface", "record_exchange"])
+    XCTAssertEqual(capturedWrites.map(\.role), ["user", "assistant"])
+    XCTAssertEqual(capturedWrites.map(\.status), [.completed, .completed])
+    XCTAssertEqual(capturedWrites.map(\.content), ["PROBE request", "PROBE"])
+    XCTAssertEqual(receipt.ownerID, "owner-b")
+    XCTAssertEqual(receipt.conversationID, "conversation-b")
+    XCTAssertEqual(receipt.sessionID, "session-b")
+    XCTAssertEqual(receipt.turns, recordedTurns)
+  }
+
+  @MainActor
   func testBridgeCallbackEmittedBeforeReturnDrainsBeforeTurnCompletes() async {
     let lifecycle = ChatTurnLifecycle()
     let generation = ChatTestGenerationBox(7)

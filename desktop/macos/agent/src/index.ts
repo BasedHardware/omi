@@ -53,6 +53,7 @@ import type {
   JournalRecordTurnMessage,
   JournalRecordExchangeMessage,
   JournalUpdateTurnMessage,
+  JournalTerminalizeTurnMessage,
   JournalListTurnsMessage,
   JournalClearTurnsMessage,
   EnsureAgentSpawnJournalMessage,
@@ -64,7 +65,14 @@ import type {
   RefreshTokenMessage,
   AuthMethod,
 } from "./protocol.js";
-import { PROTOCOL_VERSION, ensureOutboundProtocolVersion } from "./protocol.js";
+import {
+  PROTOCOL_VERSION,
+  assertPublicJournalRecordAuthority,
+  assertPublicJournalUpdateAuthority,
+  ensureOutboundProtocolVersion,
+  isInboundResponseMessage,
+  journalTerminalizationDisposition,
+} from "./protocol.js";
 import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
 import { isProductionAdapterId, type PromptBlock, type RuntimeAdapter } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
@@ -87,7 +95,11 @@ import {
 import { SqliteAgentStore } from "./runtime/sqlite-store.js";
 import { OmiArtifactStorage, defaultArtifactRoot } from "./runtime/artifact-storage.js";
 import { configuredPiMonoMaxWorkers } from "./runtime/worker-pool.js";
-import { failureFromError } from "./runtime/failures.js";
+import {
+  failureFromError,
+  sanitizeProcessDiagnostic,
+  unexpectedQueryErrorDiagnostic,
+} from "./runtime/failures.js";
 import { providerBoundaryForAdapter } from "./runtime/execution-policy.js";
 import { executionRoleForSurface } from "./runtime/execution-policy.js";
 import type { AuthorizedRunToolInvocation, RunToolExecutionLease } from "./runtime/run-tool-capability.js";
@@ -102,16 +114,20 @@ import {
   applyBackendReconcilePage,
   beginBackendReconcilesForOwner,
   clearJournalConversation,
+  classifyBackendTurnResultDisposition,
   drainBackendConversationDeleteOutbox,
   drainBackendTurnOutbox,
   failBackendConversationDeleteOutbox,
   failBackendReconcile,
   failBackendTurnOutbox,
+  journalTurnForSurfaceProjection,
   journalTurnChangedWakes,
   listJournalTurns,
   recordJournalExchange,
   recordJournalTurn,
   settleClearedBackendTurnClaim,
+  assertPublicJournalUpdatePolicy,
+  terminalizeJournalTurn,
   updateJournalTurn,
 } from "./runtime/conversation-journal.js";
 import { DirectControlExecutionBroker } from "./runtime/direct-control-execution.js";
@@ -156,11 +172,14 @@ function send(msg: OutboundMessageDraft): void {
 }
 
 function runtimeErrorEnvelope(error: unknown): { message: string; failure: ReturnType<typeof failureFromError> } {
-  const failure = failureFromError(error, {
+  const message = sanitizeProcessDiagnostic(error instanceof Error ? error.message : String(error))
+    || "Runtime request rejected";
+  const failure = {
     code: "runtime_error",
-    source: "runtime",
-    userMessage: error instanceof Error ? error.message : String(error),
-  });
+    source: "runtime" as const,
+    retryable: false,
+    userMessage: message,
+  };
   return { message: failure.userMessage, failure };
 }
 
@@ -1425,7 +1444,8 @@ async function main(): Promise<void> {
       return;
     }
 
-    switch (msg.type) {
+    try {
+      switch (msg.type) {
       case "query":
         (async () => {
           const query = msg as QueryMessage;
@@ -1455,7 +1475,8 @@ async function main(): Promise<void> {
           }
           await transport.handleQuery(query);
         })().catch((err) => {
-          logErr(`Unhandled query error: ${err}`);
+          const diagnostic = unexpectedQueryErrorDiagnostic(err);
+          if (diagnostic) logErr(diagnostic);
           const query = msg as QueryMessage;
           const envelope = runtimeErrorEnvelope(err);
           send({
@@ -1902,6 +1923,7 @@ async function main(): Promise<void> {
           externalRefId: request.externalRefId,
         });
         const turn = request.turn ?? {};
+        assertPublicJournalRecordAuthority(turn);
         const result = recordJournalTurn(store, {
           ownerId,
           conversationId: resolved.conversationId,
@@ -1916,9 +1938,7 @@ async function main(): Promise<void> {
             ? turn.contentBlocks as ConversationContentBlock[]
             : [],
           resources: Array.isArray(turn.resources) ? turn.resources as ConversationResource[] : [],
-          producingRunId: typeof turn.producingRunId === "string" ? turn.producingRunId : null,
           metadataJson: typeof turn.metadataJson === "string" ? turn.metadataJson : "{}",
-          delivery: turn.delivery === "local" ? "local" : "backend",
           createdAtMs: typeof turn.createdAtMs === "number" ? turn.createdAtMs : undefined,
         });
         const range = listJournalTurns(store, {
@@ -1947,6 +1967,7 @@ async function main(): Promise<void> {
         if (result.created) {
           send({
             type: "journal_turn_changed",
+            ownerId,
             conversationGeneration: range.generation,
             generationBaseTurnSeq: range.generationBaseTurnSeq,
             surfaceKind: request.surfaceKind,
@@ -1970,6 +1991,7 @@ async function main(): Promise<void> {
             externalRefId: request.externalRefId,
           });
           const turns = Array.isArray(request.turns) ? request.turns : [];
+          turns.forEach(assertPublicJournalRecordAuthority);
           const result = recordJournalExchange(store, {
             ownerId,
             conversationId: resolved.conversationId,
@@ -1985,9 +2007,7 @@ async function main(): Promise<void> {
                 ? turn.contentBlocks as ConversationContentBlock[]
                 : [],
               resources: Array.isArray(turn.resources) ? turn.resources as ConversationResource[] : [],
-              producingRunId: typeof turn.producingRunId === "string" ? turn.producingRunId : null,
               metadataJson: typeof turn.metadataJson === "string" ? turn.metadataJson : "{}",
-              delivery: turn.delivery === "local" ? "local" as const : "backend" as const,
               createdAtMs: typeof turn.createdAtMs === "number" ? turn.createdAtMs : undefined,
             })),
           });
@@ -2018,6 +2038,7 @@ async function main(): Promise<void> {
           for (const turn of result.createdTurns) {
             send({
               type: "journal_turn_changed",
+              ownerId,
               conversationGeneration: range.generation,
               generationBaseTurnSeq: range.generationBaseTurnSeq,
               surfaceKind: request.surfaceKind,
@@ -2043,75 +2064,183 @@ async function main(): Promise<void> {
 
       case "journal_update_turn": {
         const request = msg as JournalUpdateTurnMessage;
-        const ownerId = resolveActiveOwner(request.ownerId);
-        const resolved = resolveJournalSurface({
-          ownerId,
-          surfaceKind: request.surfaceKind,
-          externalRefKind: request.externalRefKind,
-          externalRefId: request.externalRefId,
-        });
-        const update = request.update ?? {};
-        const turnId = typeof update.turnId === "string" ? update.turnId : "";
-        const before = store.getRow(
-          "SELECT turn_seq FROM conversation_turns WHERE conversation_id = ? AND turn_id = ?",
-          [resolved.conversationId, turnId],
-        );
-        const turn = updateJournalTurn(store, {
-          ownerId,
-          conversationId: resolved.conversationId,
-          turnId,
-          status: typeof update.status === "string" ? update.status as ConversationTurnStatus : undefined,
-          content: typeof update.content === "string" ? update.content : undefined,
-          replaceContentBlocks: Array.isArray(update.replaceContentBlocks)
-            ? update.replaceContentBlocks as ConversationContentBlock[]
-            : undefined,
-          appendContentBlocks: Array.isArray(update.appendContentBlocks)
-            ? update.appendContentBlocks as ConversationContentBlock[]
-            : undefined,
-          replaceResources: Array.isArray(update.replaceResources)
-            ? update.replaceResources as ConversationResource[]
-            : undefined,
-          appendResources: Array.isArray(update.appendResources)
-            ? update.appendResources as ConversationResource[]
-            : undefined,
-          producingRunId: typeof update.producingRunId === "string" ? update.producingRunId : undefined,
-          metadataJson: typeof update.metadataJson === "string" ? update.metadataJson : undefined,
-        });
-        const range = listJournalTurns(store, {
-          ownerId,
-          conversationId: resolved.conversationId,
-          afterTurnSeq: Math.max(0, turn.turnSeq - 1),
-          limit: 1,
-        });
-        send({
-          type: "journal_operation_result",
-          protocolVersion: request.protocolVersion,
-          requestId: request.requestId,
-          clientId: request.clientId,
-          operation: "update",
-          conversationId: resolved.conversationId,
-          surfaceKind: request.surfaceKind,
-          externalRefKind: request.externalRefKind,
-          externalRefId: request.externalRefId,
-          turn: journalTurnProjection(turn),
-          turns: [],
-          clearedCount: 0,
-          highWaterTurnSeq: range.highWaterTurnSeq,
-          generationBaseTurnSeq: range.generationBaseTurnSeq,
-          conversationGeneration: range.generation,
-        });
-        if (turn.turnSeq !== Number(before.turn_seq)) {
+        try {
+          const ownerId = resolveActiveOwner(request.ownerId);
+          const resolved = resolveJournalSurface({
+            ownerId,
+            surfaceKind: request.surfaceKind,
+            externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId,
+          });
+          const update = request.update ?? {};
+          assertPublicJournalUpdateAuthority(update);
+          const turnId = typeof update.turnId === "string" ? update.turnId : "";
+          const before = store.getRow(
+            `SELECT turn_seq, producing_run_id
+             FROM conversation_turns WHERE conversation_id = ? AND turn_id = ?`,
+            [resolved.conversationId, turnId],
+          );
+          if (
+            before.producing_run_id != null
+            && (update.status === "completed" || update.status === "failed")
+          ) {
+            throw new Error("Runtime-produced journal turns require kernel-authoritative terminalization");
+          }
+          const parsedUpdate = {
+            ownerId,
+            conversationId: resolved.conversationId,
+            turnId,
+            status: typeof update.status === "string" ? update.status as ConversationTurnStatus : undefined,
+            content: typeof update.content === "string" ? update.content : undefined,
+            replaceContentBlocks: Array.isArray(update.replaceContentBlocks)
+              ? update.replaceContentBlocks as ConversationContentBlock[]
+              : undefined,
+            appendContentBlocks: Array.isArray(update.appendContentBlocks)
+              ? update.appendContentBlocks as ConversationContentBlock[]
+              : undefined,
+            replaceResources: Array.isArray(update.replaceResources)
+              ? update.replaceResources as ConversationResource[]
+              : undefined,
+            appendResources: Array.isArray(update.appendResources)
+              ? update.appendResources as ConversationResource[]
+              : undefined,
+            metadataJson: typeof update.metadataJson === "string" ? update.metadataJson : undefined,
+          };
+          assertPublicJournalUpdatePolicy(store, parsedUpdate);
+          const turn = updateJournalTurn(store, parsedUpdate);
+          const range = listJournalTurns(store, {
+            ownerId,
+            conversationId: resolved.conversationId,
+            afterTurnSeq: Math.max(0, turn.turnSeq - 1),
+            limit: 1,
+          });
           send({
-            type: "journal_turn_changed",
-            conversationGeneration: range.generation,
-            generationBaseTurnSeq: range.generationBaseTurnSeq,
+            type: "journal_operation_result",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            operation: "update",
+            conversationId: resolved.conversationId,
             surfaceKind: request.surfaceKind,
             externalRefKind: request.externalRefKind,
             externalRefId: request.externalRefId,
             turn: journalTurnProjection(turn),
+            turns: [],
+            clearedCount: 0,
+            highWaterTurnSeq: range.highWaterTurnSeq,
+            generationBaseTurnSeq: range.generationBaseTurnSeq,
+            conversationGeneration: range.generation,
+          });
+          if (turn.turnSeq !== Number(before.turn_seq)) {
+            send({
+              type: "journal_turn_changed",
+              ownerId,
+              conversationGeneration: range.generation,
+              generationBaseTurnSeq: range.generationBaseTurnSeq,
+              surfaceKind: request.surfaceKind,
+              externalRefKind: request.externalRefKind,
+              externalRefId: request.externalRefId,
+              turn: journalTurnProjection(turn),
+            });
+          }
+          pumpJournalOutbox();
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            message: envelope.message,
+            failure: envelope.failure,
           });
         }
-        pumpJournalOutbox();
+        break;
+      }
+
+      case "journal_terminalize_turn": {
+        const request = msg as JournalTerminalizeTurnMessage;
+        try {
+          const ownerId = resolveActiveOwner(request.ownerId);
+          const resolved = resolveJournalSurface({
+            ownerId,
+            surfaceKind: request.surfaceKind,
+            externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId,
+          });
+          const terminalization = request.terminalization;
+          const disposition = journalTerminalizationDisposition(terminalization);
+          const turnId = typeof terminalization?.turnId === "string" ? terminalization.turnId : "";
+          const before = store.getRow(
+            "SELECT turn_seq FROM conversation_turns WHERE conversation_id = ? AND turn_id = ?",
+            [resolved.conversationId, turnId],
+          );
+          const turn = terminalizeJournalTurn(store, {
+            ownerId,
+            conversationId: resolved.conversationId,
+            turnId,
+            producingRunId: typeof terminalization?.producingRunId === "string"
+              ? terminalization.producingRunId
+              : "",
+            producingAttemptId: typeof terminalization?.producingAttemptId === "string"
+              ? terminalization.producingAttemptId
+              : "",
+            disposition,
+            content: typeof terminalization?.content === "string" ? terminalization.content : undefined,
+            replaceContentBlocks: Array.isArray(terminalization?.replaceContentBlocks)
+              ? terminalization.replaceContentBlocks as ConversationContentBlock[]
+              : undefined,
+            replaceResources: Array.isArray(terminalization?.replaceResources)
+              ? terminalization.replaceResources as ConversationResource[]
+              : undefined,
+          });
+          const range = listJournalTurns(store, {
+            ownerId,
+            conversationId: resolved.conversationId,
+            afterTurnSeq: Math.max(0, turn.turnSeq - 1),
+            limit: 1,
+          });
+          send({
+            type: "journal_operation_result",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            operation: "update",
+            conversationId: resolved.conversationId,
+            surfaceKind: request.surfaceKind,
+            externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId,
+            turn: journalTurnProjection(turn),
+            turns: [],
+            clearedCount: 0,
+            highWaterTurnSeq: range.highWaterTurnSeq,
+            generationBaseTurnSeq: range.generationBaseTurnSeq,
+            conversationGeneration: range.generation,
+          });
+          if (turn.turnSeq !== Number(before.turn_seq)) {
+            send({
+              type: "journal_turn_changed",
+              ownerId,
+              conversationGeneration: range.generation,
+              generationBaseTurnSeq: range.generationBaseTurnSeq,
+              surfaceKind: request.surfaceKind,
+              externalRefKind: request.externalRefKind,
+              externalRefId: request.externalRefId,
+              turn: journalTurnProjection(turn),
+            });
+          }
+          pumpJournalOutbox();
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            message: envelope.message,
+            failure: envelope.failure,
+          });
+        }
         break;
       }
 
@@ -2140,7 +2269,9 @@ async function main(): Promise<void> {
           surfaceKind: request.surfaceKind,
           externalRefKind: request.externalRefKind,
           externalRefId: request.externalRefId,
-          turns: range.turns.map(journalTurnProjection),
+          turns: range.turns.map((turn) => journalTurnProjection(
+            journalTurnForSurfaceProjection(turn, request.surfaceKind),
+          )),
           clearedCount: 0,
           highWaterTurnSeq: range.highWaterTurnSeq,
           generationBaseTurnSeq: range.generationBaseTurnSeq,
@@ -2204,10 +2335,11 @@ async function main(): Promise<void> {
           sessionId: result.sessionId,
           runId: result.runId,
           conversationId: result.conversationId,
-          userTurn: journalTurnProjection(result.userTurn),
+          userTurn: result.userTurn ? journalTurnProjection(result.userTurn) : null,
           assistantTurn: journalTurnProjection(result.assistantTurn),
         });
         for (const turn of [result.userTurn, result.assistantTurn]) {
+          if (!turn) continue;
           for (const wake of journalTurnChangedWakes(store, ownerId, turn)) {
             send({ type: "journal_turn_changed", ...wake, turn: journalTurnProjection(wake.turn) });
           }
@@ -2243,6 +2375,25 @@ async function main(): Promise<void> {
         }
         const ownerId = String(claimOwner.owner_id);
         if (result.ownerId !== ownerId) throw new Error("Backend sync result owner does not match the claim owner");
+        const disposition = classifyBackendTurnResultDisposition(store, {
+          ownerId,
+          turnId: result.turnId,
+          conversationId: result.conversationId,
+          attemptCount: result.attemptCount,
+          deliveryGeneration: result.deliveryGeneration,
+          conversationGeneration: result.conversationGeneration,
+          payloadHash: result.payloadHash,
+          ok: result.ok,
+          remoteId: result.remoteId,
+          errorCode: result.errorCode,
+        });
+        if (disposition !== "active") {
+          logErr(
+            `Ignoring ${disposition} backend sync result turn=${result.turnId} delivery=${result.deliveryGeneration}`,
+          );
+          pumpJournalOutbox();
+          break;
+        }
         if (result.ok && result.remoteId) {
           if (ownerId !== currentOwnerId) throw new Error("Backend sync success is outside the active owner");
           const acknowledged = ackBackendTurnOutboxWithWakes(store, {
@@ -2636,6 +2787,28 @@ async function main(): Promise<void> {
 
       default:
         logErr(`Unknown message type: ${(msg as any).type}`);
+      }
+    } catch (error) {
+      const request = msg as { protocolVersion?: unknown; requestId?: unknown; clientId?: unknown };
+      const requestId = typeof request.requestId === "string" ? request.requestId : undefined;
+      const clientId = typeof request.clientId === "string" ? request.clientId : undefined;
+      const envelope = runtimeErrorEnvelope(error);
+      if (isInboundResponseMessage(msg)) {
+        logErr(`Unhandled runtime response error type=${msg.type}: ${envelope.message}`);
+        return;
+      }
+      if (requestId && clientId) {
+        send({
+          type: "error",
+          protocolVersion: PROTOCOL_VERSION,
+          requestId,
+          clientId,
+          message: envelope.message,
+          failure: envelope.failure,
+        });
+      } else {
+        logErr(`Unhandled uncorrelated runtime request error: ${envelope.message}`);
+      }
     }
   });
 

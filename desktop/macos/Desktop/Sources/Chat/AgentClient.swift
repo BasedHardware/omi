@@ -1,5 +1,42 @@
 import Foundation
 
+enum AgentContextAdmissionRetry {
+  static func run<Result>(
+    expectedContext: AgentContextFreshness?,
+    refresh: () async throws -> AgentContextFreshness,
+    attempt: (AgentContextFreshness?) async throws -> Result
+  ) async throws -> Result {
+    do {
+      return try await attempt(expectedContext)
+    } catch let error as BridgeError
+      where expectedContext != nil && error.isContextSnapshotProjectionMismatch
+    {
+      log("AgentClient: canonical context advanced before admission; refreshing and retrying once")
+      do {
+        let refreshedContext = try await refresh()
+        let result = try await attempt(refreshedContext)
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "chat_bridge",
+          from: "stale_context_snapshot",
+          to: "fresh_context_snapshot",
+          reason: "local_heal",
+          outcome: .recovered
+        )
+        return result
+      } catch {
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "chat_bridge",
+          from: "stale_context_snapshot",
+          to: "fresh_context_snapshot",
+          reason: "local_heal",
+          outcome: .exhausted
+        )
+        throw error
+      }
+    }
+  }
+}
+
 /// Unified entry point for agent runtime queries. Owns all `AgentBridge` construction.
 enum AgentClient {
   typealias TextDeltaHandler = AgentBridge.TextDeltaHandler
@@ -17,7 +54,8 @@ enum AgentClient {
     let runId: String
     let attemptId: String
     let adapterSessionId: String?
-    let terminalStatus: String
+    let terminalStatus: AgentQueryTerminalStatus
+    let failure: AgentRuntimeFailure?
     let inputTokens: Int
     let outputTokens: Int
     let cacheReadTokens: Int
@@ -33,12 +71,28 @@ enum AgentClient {
       attemptId = result.attemptId
       adapterSessionId = result.adapterSessionId
       terminalStatus = result.terminalStatus
+      failure = result.failure
       inputTokens = result.inputTokens
       outputTokens = result.outputTokens
       cacheReadTokens = result.cacheReadTokens
       cacheWriteTokens = result.cacheWriteTokens
       artifacts = result.artifacts
       completionDeltaArtifacts = result.completionDeltaArtifacts
+    }
+
+    @discardableResult
+    func requireSucceeded() throws -> QueryResult {
+      switch terminalStatus {
+      case .succeeded:
+        return self
+      case .cancelled:
+        throw BridgeError.stopped
+      case .failed, .timedOut, .orphaned:
+        let raw = failure?.displayMessage ?? (text.isEmpty ? "Agent failed" : text)
+        throw failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw)
+      case .invalid:
+        throw BridgeError.agentError("Agent returned an invalid terminal status")
+      }
     }
   }
 
@@ -193,6 +247,18 @@ enum AgentClient {
       try await bridge.updateJournalTurn(surface: surface, ownerID: ownerID, update: update)
     }
 
+    func terminalizeJournalTurn(
+      surface: AgentSurfaceReference,
+      ownerID: String,
+      terminalization: KernelJournalTurnTerminalization
+    ) async throws -> KernelJournalTurn {
+      try await bridge.terminalizeJournalTurn(
+        surface: surface,
+        ownerID: ownerID,
+        terminalization: terminalization
+      )
+    }
+
     func listJournalTurns(
       surface: AgentSurfaceReference,
       ownerID: String? = nil,
@@ -241,6 +307,7 @@ enum AgentClient {
       mode: String? = nil,
       imageData: Data? = nil,
       attachments: [AgentQueryAttachment] = [],
+      producingTurnId: String? = nil,
       expectedContext: AgentContextFreshness? = nil,
       onTextDelta: @escaping TextDeltaHandler,
       onToolActivity: @escaping ToolActivityHandler,
@@ -255,6 +322,7 @@ enum AgentClient {
         mode: mode,
         imageData: imageData,
         attachments: attachments,
+        producingTurnId: producingTurnId,
         expectedContext: expectedContext,
         onTextDelta: onTextDelta,
         onToolActivity: onToolActivity,
@@ -273,6 +341,7 @@ enum AgentClient {
       mode: String? = nil,
       imageData: Data? = nil,
       attachments: [AgentQueryAttachment] = [],
+      producingTurnId: String? = nil,
       expectedContext: AgentContextFreshness? = nil,
       onTextDelta: @escaping TextDeltaHandler,
       onToolActivity: @escaping ToolActivityHandler,
@@ -281,20 +350,33 @@ enum AgentClient {
       onAuthRequired: @escaping AuthRequiredHandler = { _, _ in },
       onAuthSuccess: @escaping AuthSuccessHandler = {}
     ) async throws -> QueryResult {
-      QueryResult(try await bridge.query(
-        prompt: prompt,
-        session: session,
-        surface: surface,
-        mode: mode,
-        imageData: imageData,
-        attachments: attachments,
+      let bridge = bridge
+      return QueryResult(try await AgentContextAdmissionRetry.run(
         expectedContext: expectedContext,
-        onTextDelta: onTextDelta,
-        onToolActivity: onToolActivity,
-        onThinkingDelta: onThinkingDelta,
-        onToolResultDisplay: onToolResultDisplay,
-        onAuthRequired: onAuthRequired,
-        onAuthSuccess: onAuthSuccess
+        refresh: {
+          try await bridge.getContextSnapshot(
+            sessionId: session.sessionId,
+            surfaceKind: surface.surfaceKind
+          ).freshness
+        },
+        attempt: { admittedContext in
+          try await bridge.query(
+            prompt: prompt,
+            session: session,
+            surface: surface,
+            mode: mode,
+            imageData: imageData,
+            attachments: attachments,
+            producingTurnId: producingTurnId,
+            expectedContext: admittedContext,
+            onTextDelta: onTextDelta,
+            onToolActivity: onToolActivity,
+            onThinkingDelta: onThinkingDelta,
+            onToolResultDisplay: onToolResultDisplay,
+            onAuthRequired: onAuthRequired,
+            onAuthSuccess: onAuthSuccess
+          )
+        }
       ))
     }
   }
@@ -386,7 +468,7 @@ enum AgentClient {
       onAuthRequired: onAuthRequired,
       onAuthSuccess: onAuthSuccess
     )
-      let output = QueryResult(result)
+      let output = try QueryResult(result).requireSucceeded()
       await bridge.stop()
       return output
     } catch {

@@ -7,11 +7,6 @@ enum KernelJournalTurnStatus: String, Sendable {
   case failed
 }
 
-enum KernelJournalDelivery: String, Sendable {
-  case backend
-  case local
-}
-
 /// Sendable wire projection of one kernel-owned journal row. Structured UI
 /// payloads stay encoded while crossing the runtime actor boundary and are
 /// decoded only on MainActor.
@@ -33,6 +28,7 @@ struct KernelJournalTurn: Sendable, Equatable {
   let contentBlocksJSON: String
   let resourcesJSON: String
   let producingRunId: String?
+  let producingAttemptId: String?
   let remoteId: String?
   let metadataJSON: String
   let createdAtMs: Int
@@ -75,6 +71,7 @@ struct KernelJournalTurn: Sendable, Equatable {
     self.contentBlocksJSON = Self.jsonArrayString(dictionary["contentBlocks"])
     self.resourcesJSON = Self.jsonArrayString(dictionary["resources"])
     self.producingRunId = dictionary["producingRunId"] as? String
+    self.producingAttemptId = dictionary["producingAttemptId"] as? String
     self.remoteId = dictionary["remoteId"] as? String
     self.metadataJSON = dictionary["metadataJson"] as? String ?? "{}"
     self.createdAtMs = Self.int(dictionary["createdAtMs"]) ?? 0
@@ -127,13 +124,11 @@ struct KernelJournalTurnWrite: Sendable {
   let content: String
   let contentBlocksJSON: String
   let resourcesJSON: String
-  let producingRunId: String?
   let metadataJSON: String
-  let delivery: KernelJournalDelivery
   let createdAtMs: Int
 
   var dictionary: [String: Any] {
-    var value: [String: Any] = [
+    [
       "turnId": turnId,
       "role": role,
       "origin": origin,
@@ -142,11 +137,8 @@ struct KernelJournalTurnWrite: Sendable {
       "contentBlocks": Self.jsonArray(contentBlocksJSON),
       "resources": Self.jsonArray(resourcesJSON),
       "metadataJson": metadataJSON,
-      "delivery": delivery.rawValue,
       "createdAtMs": createdAtMs,
     ]
-    if let producingRunId { value["producingRunId"] = producingRunId }
-    return value
   }
 
   static func jsonArray(_ raw: String) -> [Any] {
@@ -165,7 +157,6 @@ struct KernelJournalTurnUpdate: Sendable {
   let appendContentBlocksJSON: String?
   let resourcesJSON: String?
   let appendResourcesJSON: String?
-  let producingRunId: String?
   let metadataJSON: String?
 
   /// A terminal lifecycle update that deliberately carries no response
@@ -184,7 +175,6 @@ struct KernelJournalTurnUpdate: Sendable {
       appendContentBlocksJSON: nil,
       resourcesJSON: nil,
       appendResourcesJSON: nil,
-      producingRunId: nil,
       metadataJSON: nil
     )
   }
@@ -205,8 +195,39 @@ struct KernelJournalTurnUpdate: Sendable {
     if let appendResourcesJSON {
       value["appendResources"] = KernelJournalTurnWrite.jsonArray(appendResourcesJSON)
     }
-    if let producingRunId { value["producingRunId"] = producingRunId }
     if let metadataJSON { value["metadataJson"] = metadataJSON }
+    return value
+  }
+}
+
+enum KernelJournalTerminalDisposition: String, Sendable {
+  case accept
+  case discard
+}
+
+struct KernelJournalTurnTerminalization: Sendable {
+  let turnId: String
+  let producingRunId: String
+  let producingAttemptId: String
+  let disposition: KernelJournalTerminalDisposition
+  let content: String?
+  let contentBlocksJSON: String?
+  let resourcesJSON: String?
+
+  var dictionary: [String: Any] {
+    var value: [String: Any] = [
+      "turnId": turnId,
+      "producingRunId": producingRunId,
+      "producingAttemptId": producingAttemptId,
+      "disposition": disposition.rawValue,
+    ]
+    if let content { value["content"] = content }
+    if let contentBlocksJSON {
+      value["replaceContentBlocks"] = KernelJournalTurnWrite.jsonArray(contentBlocksJSON)
+    }
+    if let resourcesJSON {
+      value["replaceResources"] = KernelJournalTurnWrite.jsonArray(resourcesJSON)
+    }
     return value
   }
 }
@@ -289,9 +310,7 @@ extension ChatMessage {
   func journalWrite(
     origin: String,
     status: KernelJournalTurnStatus,
-    delivery: KernelJournalDelivery,
     continuityKey: String? = nil,
-    producingRunId: String? = nil,
     appId: String? = nil,
     sessionId: String? = nil,
     messageSource: String? = nil
@@ -320,17 +339,12 @@ extension ChatMessage {
       content: text,
       contentBlocksJSON: ChatContentBlockCodec.encode(contentBlocks) ?? "[]",
       resourcesJSON: ChatResource.encodeResourcesForPersistence(displayResources) ?? "[]",
-      producingRunId: producingRunId,
       metadataJSON: metadataJSON,
-      delivery: delivery,
       createdAtMs: Int(createdAt.timeIntervalSince1970 * 1_000)
     )
   }
 
-  func journalUpdate(
-    status: KernelJournalTurnStatus? = nil,
-    producingRunId: String? = nil
-  ) -> KernelJournalTurnUpdate {
+  func journalUpdate(status: KernelJournalTurnStatus? = nil) -> KernelJournalTurnUpdate {
     KernelJournalTurnUpdate(
       turnId: id,
       status: status,
@@ -339,7 +353,6 @@ extension ChatMessage {
       appendContentBlocksJSON: nil,
       resourcesJSON: ChatResource.encodeResourcesForPersistence(displayResources) ?? "[]",
       appendResourcesJSON: nil,
-      producingRunId: producingRunId,
       metadataJSON: nil
     )
   }

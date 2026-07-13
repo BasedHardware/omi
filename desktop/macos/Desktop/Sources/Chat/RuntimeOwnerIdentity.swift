@@ -12,13 +12,14 @@ struct RuntimeOwnerAuthorizationSnapshot: Equatable, Sendable {
   fileprivate let generation: UInt64
 }
 
-private final class RuntimeOwnerAuthorizationAuthority: @unchecked Sendable {
+final class RuntimeOwnerAuthorizationAuthority: @unchecked Sendable {
   static let shared = RuntimeOwnerAuthorizationAuthority()
 
   private let lock = NSLock()
   private var generation: UInt64 = 0
   private var ownerID: String?
   private var revoked = false
+  private var bootstrapped = false
 
   func beginTransition() {
     lock.withLock {
@@ -33,17 +34,26 @@ private final class RuntimeOwnerAuthorizationAuthority: @unchecked Sendable {
     lock.withLock {
       self.ownerID = normalized
       revoked = false
+      bootstrapped = true
     }
   }
 
   func capture(ownerID: String?, expectedOwnerID: String?) -> RuntimeOwnerAuthorizationSnapshot? {
-    guard let normalized = Self.normalize(ownerID) else { return nil }
-    if let expectedOwnerID, Self.normalize(expectedOwnerID) != normalized { return nil }
+    let normalized = Self.normalize(ownerID)
+    let normalizedExpectedOwnerID = Self.normalize(expectedOwnerID)
     return lock.withLock {
-      guard !revoked else { return nil }
-      // Bootstrap from durable auth on first access. Real production changes
-      // subsequently enter through beginTransition/endTransition.
-      if self.ownerID != normalized { self.ownerID = normalized }
+      if !bootstrapped {
+        guard let normalized, !revoked else { return nil }
+        // Durable auth may predate construction of this in-memory authority.
+        // This is the only path allowed to adopt an owner without a transition.
+        self.ownerID = normalized
+        bootstrapped = true
+      } else if self.ownerID != normalized {
+        revokeUnexpectedOwnerMismatch()
+        return nil
+      }
+      guard let normalized, !revoked else { return nil }
+      if expectedOwnerID != nil, normalizedExpectedOwnerID != normalized { return nil }
       return RuntimeOwnerAuthorizationSnapshot(ownerID: normalized, generation: generation)
     }
   }
@@ -52,10 +62,24 @@ private final class RuntimeOwnerAuthorizationAuthority: @unchecked Sendable {
     _ snapshot: RuntimeOwnerAuthorizationSnapshot,
     ownerID: String?
   ) -> Bool {
-    guard Self.normalize(ownerID) == snapshot.ownerID else { return false }
+    let normalized = Self.normalize(ownerID)
     return lock.withLock {
-      !revoked && self.ownerID == snapshot.ownerID && generation == snapshot.generation
+      guard bootstrapped else { return false }
+      guard self.ownerID == normalized else {
+        revokeUnexpectedOwnerMismatch()
+        return false
+      }
+      return !revoked && normalized == snapshot.ownerID && generation == snapshot.generation
     }
+  }
+
+  /// Durable auth changed without crossing the exclusive transition boundary.
+  /// Advance and revoke once, then stay fail-closed until a legitimate
+  /// beginTransition/endTransition pair establishes the next generation.
+  private func revokeUnexpectedOwnerMismatch() {
+    if !revoked { generation &+= 1 }
+    ownerID = nil
+    revoked = true
   }
 
   private static func normalize(_ ownerID: String?) -> String? {

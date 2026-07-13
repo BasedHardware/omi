@@ -982,6 +982,160 @@ class TestSaveMessageSessionBehavior:
         message_ref.create.assert_not_called()
         message_ref.set.assert_not_called()
 
+    def test_newer_journal_revision_atomically_enriches_delivered_message(self):
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'Agent started.',
+            'sender': 'ai',
+            'app_id': None,
+            'plugin_id': None,
+            'metadata': '{"content_blocks":[{"type":"agent_spawn"}]}',
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+            'session_id': 'session-1',
+            'journal_revision': 10,
+            'client_message_payload_hash': 'sha256:old',
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+        enriched_metadata = (
+            '{"content_blocks":[{"type":"agent_spawn"},{"type":"agent_completion"}],'
+            '"resources":[{"id":"artifact-1","type":"file"}]}'
+        )
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            result = chat_db.save_message(
+                'uid',
+                text='Agent started.',
+                sender='ai',
+                session_id='session-1',
+                metadata=enriched_metadata,
+                client_message_id='turn-1',
+                journal_revision=11,
+            )
+
+        assert result['created'] is False
+        assert result['updated'] is True
+        assert result['journal_revision'] == 11
+        patched_db.transaction.return_value.update.assert_called_once()
+        update = patched_db.transaction.return_value.update.call_args.args[1]
+        assert update['metadata'] == enriched_metadata
+        assert update['journal_revision'] == 11
+
+    def test_equal_journal_revision_with_different_payload_fails_closed(self):
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'original',
+            'sender': 'ai',
+            'app_id': None,
+            'plugin_id': None,
+            'metadata': None,
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+            'session_id': 'session-1',
+            'journal_revision': 7,
+            'client_message_payload_hash': 'sha256:original',
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
+                chat_db.save_message(
+                    'uid',
+                    text='collision',
+                    sender='ai',
+                    session_id='session-1',
+                    client_message_id='turn-1',
+                    journal_revision=7,
+                )
+
+        patched_db.transaction.return_value.update.assert_not_called()
+
+    def test_older_journal_revision_is_ignored_without_rollback(self):
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'newest',
+            'sender': 'ai',
+            'app_id': None,
+            'plugin_id': None,
+            'metadata': '{"resources":[{"id":"new"}]}',
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+            'session_id': 'session-1',
+            'journal_revision': 12,
+            'client_message_payload_hash': 'sha256:newest',
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            result = chat_db.save_message(
+                'uid',
+                text='stale',
+                sender='ai',
+                session_id='session-1',
+                metadata='{"resources":[]}',
+                client_message_id='turn-1',
+                journal_revision=11,
+            )
+
+        assert result['updated'] is False
+        assert result['journal_revision'] == 12
+        patched_db.transaction.return_value.update.assert_not_called()
+
+    def test_lost_ack_then_newer_journal_revision_converges_without_remote_receipt(self):
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'original',
+            'sender': 'ai',
+            'app_id': None,
+            'plugin_id': None,
+            'metadata': None,
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+            'session_id': 'session-1',
+            'journal_revision': 2,
+            'client_message_payload_hash': 'sha256:original',
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            result = chat_db.save_message(
+                'uid',
+                text='enriched after lost ack',
+                sender='ai',
+                session_id='session-1',
+                metadata='{"content_blocks":[{"type":"agent_completion"}]}',
+                client_message_id='turn-1',
+                journal_revision=3,
+            )
+
+        assert result['updated'] is True
+        assert result['journal_revision'] == 3
+        patched_db.transaction.return_value.update.assert_called_once()
+
     def test_client_message_id_fingerprint_distinguishes_omitted_from_explicit_session(self):
         payload_hash = chat_db._message_idempotency_payload_hash(
             text='hello',

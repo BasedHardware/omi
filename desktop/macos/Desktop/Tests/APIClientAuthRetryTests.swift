@@ -116,20 +116,26 @@ private final class SuspendedOwnerBoundURLStub: URLProtocol, @unchecked Sendable
 
 @MainActor
 final class APIClientAuthRetryTests: XCTestCase {
-  override func setUp() {
-    super.setUp()
+  override func setUp() async throws {
+    try await super.setUp()
+    // Prior test bundles may leave the process-wide authorization authority
+    // bootstrapped at another owner (or deliberately revoked after a raw
+    // mismatch). Establish this test's signed-out baseline through the same
+    // completed transition boundary used in production.
+    await establishOwnerForAuthTest(nil)
     AuthRetryURLStub.reset()
     DesktopDiagnosticsManager.shared.resetForTests()
     SuspendedOwnerBoundURLStub.reset()
   }
 
   override func tearDown() async throws {
+    SuspendedOwnerBoundURLStub.release()
     DesktopDiagnosticsManager.shared.resetForTests()
     let auth = AuthService.shared
     await auth.invalidateSession(reason: .manual)
     auth.tokenStorageHooks = .live
     auth.tokenRefreshHooks = .live
-    UserDefaults.standard.removeObject(forKey: .authUserId)
+    await establishOwnerForAuthTest(nil)
     try await super.tearDown()
   }
 
@@ -201,8 +207,7 @@ final class APIClientAuthRetryTests: XCTestCase {
       expiresIn: 3600,
       userId: "same-owner"
     )
-    UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
-    UserDefaults.standard.set("same-owner", forKey: .authUserId)
+    await transitionOwnerForAuthTest(to: "same-owner")
     let snapshot = try XCTUnwrap(
       RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: "same-owner"))
 
@@ -332,6 +337,19 @@ final class APIClientAuthRetryTests: XCTestCase {
         defaults.removeObject(forKey: .authUserId)
       }
     }
+  }
+
+  /// Cross a real owner boundary even when persisted defaults already equal the
+  /// requested baseline. This repairs a deliberately revoked process-wide
+  /// authority left by any preceding out-of-band mismatch test.
+  private func establishOwnerForAuthTest(_ ownerID: String?) async {
+    let bootstrapOwner = "api-client-auth-retry-bootstrap"
+    if ownerID == bootstrapOwner {
+      await transitionOwnerForAuthTest(to: nil)
+    } else {
+      await transitionOwnerForAuthTest(to: bootstrapOwner)
+    }
+    await transitionOwnerForAuthTest(to: ownerID)
   }
 
   func testTTSProvider401RetriesWithoutInvalidatingFirebaseSession() async throws {

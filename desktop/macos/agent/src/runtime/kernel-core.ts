@@ -26,6 +26,10 @@ import {
   renderContextSnapshot,
 } from "./context-snapshot.js";
 import { repairPersistedAgentSpawnJournals } from "./agent-spawn-journal.js";
+import {
+  bindProducingJournalTurn,
+  validateProducingJournalTurnAdmission,
+} from "./conversation-journal.js";
 import type {
   AdapterBinding,
   AgentArtifact,
@@ -181,14 +185,14 @@ export class KernelCore {
     this.toolCapabilities = new RunToolCapabilityBroker({
       store: this.store,
       onRejected: options.onToolCapabilityRejected,
-      profileForSession: (sessionId) => {
+      profileForSession: options.toolCapabilityProfileForSession ?? ((sessionId) => {
         const profile = readSessionExecutionProfile(this.store, sessionId);
         return {
           generation: profile.generation,
           adapterId: profile.adapterId,
           executionRole: profile.executionRole,
         };
-      },
+      }),
     });
     repairPersistedAgentSpawnJournals(this.store);
   }
@@ -479,6 +483,9 @@ export class KernelCore {
     const externalTurnId = externalSurface && typeof externalSurface === "object" && !Array.isArray(externalSurface)
       ? String((externalSurface as Record<string, unknown>).turnId ?? "").trim()
       : "";
+    const producerTurnId = typeof runInput.producingTurnId === "string"
+      ? runInput.producingTurnId.trim()
+      : "";
     const pillId = stableExternalSpawnPillId(requiredExternalIdentity(input.invocationId, "invocationId"));
     const proposedTitle = typeof input.toolInput.title === "string" ? input.toolInput.title.trim() : "";
     const title = proposedTitle || `Delegated: ${objective.slice(0, 80)}`;
@@ -504,6 +511,7 @@ export class KernelCore {
         ? `voice:${externalTurnId.toLowerCase()}`
         : `agent_spawn:${input.invocationId}`,
       pillId,
+      ...(producerTurnId ? { producerTurnId } : {}),
       userText: typeof runInput.prompt === "string" ? runInput.prompt : "",
       assistantText: "I started a background agent for that.",
       objective,
@@ -738,6 +746,18 @@ export class KernelCore {
       ) {
         throw new Error("context_snapshot_projection_mismatch");
       }
+      if (input.producingTurnId) {
+        const conversationId = conversationIdForSession(this.store, session.sessionId);
+        if (!conversationId) {
+          throw new Error("Producing turn admission requires a canonical session conversation");
+        }
+        validateProducingJournalTurnAdmission(this.store, {
+          ownerId: session.ownerId,
+          sessionId: session.sessionId,
+          conversationId,
+          turnId: input.producingTurnId,
+        });
+      }
       const run = this.store.insertRun({
         sessionId: session.sessionId,
         parentRunId: input.parentRunId ?? null,
@@ -749,6 +769,7 @@ export class KernelCore {
         profileGeneration: session.executionProfileGeneration,
         inputJson: JSON.stringify({
           prompt: input.prompt,
+          producingTurnId: input.producingTurnId ?? null,
           metadata: input.metadata ?? {},
           contextSnapshotVersion: contextSnapshot.version,
           contextSnapshotGeneration: contextSnapshot.snapshotGeneration,
@@ -814,6 +835,9 @@ export class KernelCore {
     let completionDeltaArtifacts: AgentArtifact[] = [];
     const surfaceRef = this.surfaceRefForInput(input);
     const conversationId = conversationIdForSession(this.store, accepted.session.sessionId);
+    if (input.producingTurnId && !conversationId) {
+      throw new Error("Producing turn admission lost its canonical session conversation");
+    }
 
     for (let attemptNo = 1; attemptNo <= maxAttempts; attemptNo += 1) {
       assertExecutionAuthority();
@@ -823,6 +847,12 @@ export class KernelCore {
         adapterId,
         retryReason,
         resumeFromAttemptId,
+        producingTurn: input.producingTurnId ? {
+          ownerId: accepted.session.ownerId,
+          sessionId: accepted.session.sessionId,
+          conversationId: conversationId!,
+          turnId: input.producingTurnId,
+        } : undefined,
       });
       lastAttempt = attempt;
       const toolCapability = this.toolCapabilities.register({
@@ -1013,6 +1043,15 @@ export class KernelCore {
         });
         this.activeExecutions.delete(accepted.run.runId);
         assertExecutionAuthority();
+        if (
+          (
+            this.runStatus(accepted.run.runId) === "cancelling"
+            || this.readAttempt(attempt.attemptId).status === "cancelling"
+          )
+          && result.terminalStatus !== "cancelled"
+        ) {
+          throw new Error("cancelled_before_adapter_result_commit");
+        }
         const completed = this.completeAttemptAndRun(
           accepted.session,
           accepted.run.runId,
@@ -1442,6 +1481,12 @@ export class KernelCore {
     adapterId: string;
     retryReason: string | null;
     resumeFromAttemptId: string | null;
+    producingTurn?: {
+      ownerId: string;
+      sessionId: string;
+      conversationId: string;
+      turnId: string;
+    };
   }): RunAttempt {
     return this.withTransaction(() => {
       const active = this.readActiveAttempt(input.runId);
@@ -1466,6 +1511,13 @@ export class KernelCore {
         resumeFromAttemptId: input.resumeFromAttemptId,
         retryable: input.retryReason ? 1 : 0,
       });
+      if (input.producingTurn) {
+        bindProducingJournalTurn(this.store, {
+          ...input.producingTurn,
+          runId: input.runId,
+          attemptId: attempt.attemptId,
+        });
+      }
       this.appendEvent({
         sessionId: run.sessionId,
         runId: input.runId,

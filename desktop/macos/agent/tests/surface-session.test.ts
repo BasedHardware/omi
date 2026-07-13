@@ -184,7 +184,6 @@ describe("surface_conversations", () => {
       status: "completed",
       content: "Shared voice turn",
       contentBlocks: [{ type: "text", id: "voice:text", text: "Shared voice turn" }],
-      delivery: "backend",
       createdAtMs: 10,
     });
     expect(listJournalTurns(store, {

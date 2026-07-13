@@ -568,12 +568,14 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
       "attemptCount": 2,
       "deliveryGeneration": 4,
       "payloadHash": "sha256:payload",
+      "journalRevision": 11,
       "text": "hello",
       "sender": "human",
       "messageSource": "desktop_chat",
     ]
     XCTAssertEqual(KernelJournalBackendSyncDriver.Request(payload: valid)?.turnId, "turn-1")
     XCTAssertEqual(KernelJournalBackendSyncDriver.Request(payload: valid)?.ownerId, "owner-1")
+    XCTAssertEqual(KernelJournalBackendSyncDriver.Request(payload: valid)?.journalRevision, 11)
 
     var invalid = valid
     invalid["clientMessageId"] = "another-id"
@@ -586,6 +588,11 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     invalid = valid
     invalid.removeValue(forKey: "ownerId")
     XCTAssertNil(KernelJournalBackendSyncDriver.Request(payload: invalid))
+
+    invalid = valid
+    invalid["journalRevision"] = 0
+    XCTAssertNil(KernelJournalBackendSyncDriver.Request(payload: invalid))
+
   }
 
   func testBackendSyncRejectsOwnerChangeBeforeHTTP() async throws {
@@ -598,6 +605,7 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
       "attemptCount": 2,
       "deliveryGeneration": 4,
       "payloadHash": "sha256:payload",
+      "journalRevision": 11,
       "text": "hello",
       "sender": "human",
       "messageSource": "desktop_chat",

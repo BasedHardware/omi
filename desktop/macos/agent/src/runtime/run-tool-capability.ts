@@ -150,7 +150,7 @@ export interface RunToolCapabilityBrokerOptions {
    * seam keeps the broker independently testable and makes legacy session
    * columns a write-only projection rather than a second reader.
    */
-  profileForSession?: (sessionId: string) => {
+  profileForSession: (sessionId: string) => {
     generation: number;
     adapterId: string;
     executionRole: AgentExecutionRole;
@@ -179,7 +179,16 @@ function rejectCodeForRevocation(reason: RunToolCapabilityRevocationReason): Run
 }
 
 function relayAdapterId(adapterId: string): OmiToolAdapterId {
-  return adapterId === "pi-mono" ? "pi-mono" : "omi-tools-stdio";
+  switch (adapterId) {
+    case "pi-mono":
+      return "pi-mono";
+    case "acp":
+    case "hermes":
+    case "openclaw":
+      return "omi-tools-stdio";
+    default:
+      throw new Error(`Unknown canonical session adapter ${adapterId}`);
+  }
 }
 
 function text(value: unknown): string {
@@ -189,18 +198,6 @@ function text(value: unknown): string {
 function number(value: unknown, fallback = 0): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function profileFromLegacySessionRow(row: Record<string, unknown>): {
-  generation: number;
-  adapterId: string;
-  executionRole: AgentExecutionRole;
-} {
-  return {
-    generation: 1,
-    adapterId: text(row.default_adapter_id),
-    executionRole: text(row.execution_role) === "leaf" ? "leaf" : "coordinator",
-  };
 }
 
 /**
@@ -217,7 +214,7 @@ export class RunToolCapabilityBroker {
   private readonly nowMs: () => number;
   readonly daemonBootEpoch: string;
   private readonly onRejected: (code: RunToolCapabilityRejectCode) => void;
-  private readonly profileForSession?: RunToolCapabilityBrokerOptions["profileForSession"];
+  private readonly profileForSession: RunToolCapabilityBrokerOptions["profileForSession"];
   private readonly states = new Map<string, CapabilityState>();
   private readonly activeByAttempt = new Map<string, string>();
   private readonly activeByRun = new Map<string, Set<string>>();
@@ -228,6 +225,9 @@ export class RunToolCapabilityBroker {
     this.nowMs = options.nowMs ?? Date.now;
     this.daemonBootEpoch = options.daemonBootEpoch ?? `boot_${randomUUID().replaceAll("-", "")}`;
     this.onRejected = options.onRejected ?? (() => undefined);
+    if (typeof options.profileForSession !== "function") {
+      throw new Error("Run tool capability broker requires a canonical session profile reader");
+    }
     this.profileForSession = options.profileForSession;
   }
 
@@ -688,18 +688,6 @@ export class RunToolCapabilityBroker {
       [runId],
     );
     const sessionId = text(row.authoritative_session_id);
-    const precedingAssistant = this.store.getOptionalRow(
-      `SELECT ct.content
-       FROM surface_conversations sc
-       JOIN conversation_turns ct ON ct.conversation_id = sc.conversation_id
-       JOIN conversation_turn_revisions revision
-         ON revision.conversation_id = ct.conversation_id
-        AND revision.turn_seq = ct.turn_seq
-       WHERE sc.agent_session_id = ? AND ct.role = 'assistant'
-       ORDER BY revision.generation DESC, revision.turn_seq DESC
-       LIMIT 1`,
-      [sessionId],
-    );
     let runInput: Record<string, unknown> = {};
     try {
       const parsed = JSON.parse(text(row.input_json));
@@ -723,12 +711,12 @@ export class RunToolCapabilityBroker {
       runStatus: text(row.authoritative_run_status) as RunStatus,
       attemptStatus: text(row.authoritative_attempt_status) as AttemptStatus,
       currentAttemptId: text(latest.attempt_id),
-      profile: this.profileForSession?.(sessionId) ?? profileFromLegacySessionRow(row),
+      profile: this.profileForSession(sessionId),
       surfaceKind: externalSurface?.authority === "swift_realtime" ? "realtime_voice" : text(row.surface_kind),
       externalRefKind: row.external_ref_kind === null ? null : text(row.external_ref_kind),
       externalRefId: row.external_ref_id === null ? null : text(row.external_ref_id),
       originatingUserText: typeof runInput.prompt === "string" ? runInput.prompt : "",
-      precedingAssistantText: precedingAssistant ? text(precedingAssistant.content) : null,
+      precedingAssistantText: admittedPrecedingAssistantText(runInput),
       runMode: text(row.mode) === "act" ? "act" : "ask",
       chatMode: typeof metadata.chatMode === "string" ? metadata.chatMode : null,
       screenContext: admittedScreenContext(runInput),
@@ -769,4 +757,20 @@ function admittedScreenContext(runInput: Record<string, unknown>): boolean {
     && (source as Record<string, unknown>).source === "screen"
     && (source as Record<string, unknown>).outcome === "available",
   );
+}
+
+function admittedPrecedingAssistantText(runInput: Record<string, unknown>): string | null {
+  const admitted = runInput.admittedContextSnapshot;
+  if (!admitted || typeof admitted !== "object" || Array.isArray(admitted)) return null;
+  const recentTurns = (admitted as Record<string, unknown>).recentTurns;
+  if (!Array.isArray(recentTurns)) return null;
+  for (let index = recentTurns.length - 1; index >= 0; index -= 1) {
+    const turn = recentTurns[index];
+    if (!turn || typeof turn !== "object" || Array.isArray(turn)) continue;
+    const record = turn as Record<string, unknown>;
+    if (record.role === "assistant" && typeof record.content === "string") {
+      return record.content;
+    }
+  }
+  return null;
 }

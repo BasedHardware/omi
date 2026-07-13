@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterator, List, Optional, cast
 
 from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition
-from google.cloud import firestore
+from google.cloud import firestore, firestore_v1
 from google.cloud.firestore_v1 import FieldFilter
 
 from models.chat import Message
@@ -848,6 +848,7 @@ def save_message(
     metadata: Optional[str] = None,
     client_message_id: Optional[str] = None,
     message_source: str = 'desktop_chat',
+    journal_revision: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Save a chat message for the desktop app.
 
@@ -870,9 +871,8 @@ def save_message(
     if client_message_id:
         existing_message = message_ref.get()
         if existing_message.exists:
-            existing: Dict[str, Any] = _typed_doc(existing_message)
-            _assert_idempotent_message_payload(
-                existing,
+            existing_result = _apply_existing_message_revision(
+                message_ref,
                 text=text,
                 sender=sender,
                 app_id=app_id,
@@ -880,16 +880,10 @@ def save_message(
                 metadata=metadata,
                 message_source=message_source,
                 payload_hash=idempotency_payload_hash,
+                journal_revision=journal_revision,
             )
-            existing_created_at = existing.get('created_at')
-            if existing_created_at is not None and hasattr(existing_created_at, 'isoformat'):
-                existing_created_at = existing_created_at.isoformat()
-            return {
-                'id': msg_id,
-                'created_at': existing_created_at or now.isoformat(),
-                'session_id': existing.get('chat_session_id') or existing.get('session_id'),
-                'created': False,
-            }
+            if existing_result is not None:
+                return _message_revision_response(msg_id, existing_result, now)
 
     # Auto-acquire session (matches Rust backend behavior)
     if not session_id:
@@ -915,14 +909,15 @@ def save_message(
     if client_message_id:
         doc['client_message_id'] = client_message_id
         doc['client_message_payload_hash'] = idempotency_payload_hash
+        if journal_revision is not None:
+            doc['journal_revision'] = journal_revision
     created = True
     if client_message_id:
         try:
             message_ref.create(doc)
         except (AlreadyExists, Conflict):
-            existing = _typed_doc(message_ref.get())
-            _assert_idempotent_message_payload(
-                existing,
+            existing_result = _apply_existing_message_revision(
+                message_ref,
                 text=text,
                 sender=sender,
                 app_id=app_id,
@@ -930,16 +925,11 @@ def save_message(
                 metadata=metadata,
                 message_source=message_source,
                 payload_hash=idempotency_payload_hash,
+                journal_revision=journal_revision,
             )
-            existing_created_at = existing.get('created_at')
-            if existing_created_at is not None and hasattr(existing_created_at, 'isoformat'):
-                existing_created_at = existing_created_at.isoformat()
-            return {
-                'id': msg_id,
-                'created_at': existing_created_at or now.isoformat(),
-                'session_id': existing.get('chat_session_id') or existing.get('session_id'),
-                'created': False,
-            }
+            if existing_result is None:
+                raise ClientMessageIdPayloadConflict('client_message_id disappeared during revision arbitration')
+            return _message_revision_response(msg_id, existing_result, now)
     else:
         message_ref.set(doc)
 
@@ -956,7 +946,124 @@ def save_message(
                 }
             )
 
-    return {'id': msg_id, 'created_at': now.isoformat(), 'session_id': session_id, 'created': created}
+    return {
+        'id': msg_id,
+        'created_at': now.isoformat(),
+        'session_id': session_id,
+        'created': created,
+        'updated': False,
+        'journal_revision': journal_revision,
+    }
+
+
+def _apply_existing_message_revision(
+    message_ref: Any,
+    *,
+    text: str,
+    sender: str,
+    app_id: Optional[str],
+    session_id: Optional[str],
+    metadata: Optional[str],
+    message_source: str,
+    payload_hash: str,
+    journal_revision: Optional[int],
+) -> Optional[Dict[str, Any]]:
+    """Atomically arbitrate an idempotent retry or monotonic journal enrichment."""
+    transaction = db.transaction()
+
+    @firestore_v1.transactional
+    def apply(write_transaction: Any) -> Optional[Dict[str, Any]]:
+        snapshot = message_ref.get(transaction=write_transaction)
+        if not snapshot.exists:
+            return None
+        existing = _typed_doc(snapshot)
+        _assert_message_identity(
+            existing,
+            sender=sender,
+            app_id=app_id,
+            session_id=session_id,
+            message_source=message_source,
+        )
+        stored_revision = int(existing.get('journal_revision') or 1)
+        if journal_revision is None:
+            _assert_idempotent_message_payload(
+                existing,
+                text=text,
+                sender=sender,
+                app_id=app_id,
+                session_id=session_id,
+                metadata=metadata,
+                message_source=message_source,
+                payload_hash=payload_hash,
+            )
+            existing['_revision_updated'] = False
+            existing['journal_revision'] = existing.get('journal_revision')
+            return existing
+        if journal_revision < stored_revision:
+            existing['_revision_updated'] = False
+            return existing
+        if journal_revision == stored_revision:
+            _assert_idempotent_message_payload(
+                existing,
+                text=text,
+                sender=sender,
+                app_id=app_id,
+                session_id=session_id,
+                metadata=metadata,
+                message_source=message_source,
+                payload_hash=payload_hash,
+            )
+            existing['_revision_updated'] = False
+            return existing
+        patch = {
+            'text': text,
+            'metadata': metadata,
+            'client_message_payload_hash': payload_hash,
+            'journal_revision': journal_revision,
+        }
+        write_transaction.update(message_ref, patch)
+        existing.update(patch)
+        existing['_revision_updated'] = True
+        return existing
+
+    return apply(transaction)
+
+
+def _assert_message_identity(
+    existing: Dict[str, Any],
+    *,
+    sender: str,
+    app_id: Optional[str],
+    session_id: Optional[str],
+    message_source: str,
+) -> None:
+    mismatched = existing.get('sender') != sender
+    mismatched = mismatched or existing.get('message_source', 'desktop_chat') != message_source
+    existing_app_ids = [existing[field] for field in ('app_id', 'plugin_id') if field in existing] or [None]
+    mismatched = mismatched or any(existing_app_id != app_id for existing_app_id in existing_app_ids)
+    if session_id is not None:
+        existing_session_ids = [
+            existing[field] for field in ('chat_session_id', 'session_id') if field in existing
+        ] or [None]
+        mismatched = mismatched or any(
+            existing_session_id != session_id for existing_session_id in existing_session_ids
+        )
+    if mismatched:
+        raise ClientMessageIdPayloadConflict('client_message_id already exists with a different canonical identity')
+
+
+def _message_revision_response(msg_id: str, existing: Dict[str, Any], now: datetime) -> Dict[str, Any]:
+    existing_created_at = existing.get('created_at')
+    if existing_created_at is not None and hasattr(existing_created_at, 'isoformat'):
+        existing_created_at = existing_created_at.isoformat()
+    return {
+        'id': msg_id,
+        'created_at': existing_created_at or now.isoformat(),
+        'session_id': existing.get('chat_session_id') or existing.get('session_id'),
+        'created': False,
+        'updated': bool(existing.get('_revision_updated')),
+        'journal_revision': existing.get('journal_revision'),
+    }
 
 
 def _assert_idempotent_message_payload(

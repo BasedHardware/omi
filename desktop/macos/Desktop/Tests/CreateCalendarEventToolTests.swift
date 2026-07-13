@@ -2,29 +2,18 @@ import XCTest
 @testable import Omi_Computer
 
 final class CreateCalendarEventToolTests: XCTestCase {
-    private var previousAuthOwner: Any?
-    private var previousAutomationOwner: Any?
+    private var ownerFixture: RuntimeOwnerAuthorityTestFixture!
 
-    override func setUp() {
-        super.setUp()
-        previousAuthOwner = UserDefaults.standard.object(forKey: .authUserId)
-        previousAutomationOwner = UserDefaults.standard.object(forKey: .automationOwnerOverride)
-        UserDefaults.standard.set("calendar-tool-test-owner", forKey: .authUserId)
-        UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+    override func setUp() async throws {
+        try await super.setUp()
+        ownerFixture = await RuntimeOwnerAuthorityTestFixture()
+        await ownerFixture.establish(authOwnerID: "calendar-tool-test-owner")
     }
 
-    override func tearDown() {
-        if let previousAuthOwner {
-            UserDefaults.standard.set(previousAuthOwner, forKey: .authUserId)
-        } else {
-            UserDefaults.standard.removeObject(forKey: .authUserId)
-        }
-        if let previousAutomationOwner {
-            UserDefaults.standard.set(previousAutomationOwner, forKey: .automationOwnerOverride)
-        } else {
-            UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
-        }
-        super.tearDown()
+    override func tearDown() async throws {
+        await ownerFixture.restore()
+        ownerFixture = nil
+        try await super.tearDown()
     }
 
     func testCreateCalendarEventIsHandledByExecutor() async {

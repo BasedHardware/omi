@@ -4,6 +4,31 @@ import XCTest
 
 @MainActor
 final class VoiceTurnCoordinatorTests: XCTestCase {
+  func testLocalAutomationFinalizeRemainsCommitableWithoutPhysicalCaptureBuffer() {
+    let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
+    var physicalFinalizeCount = 0
+    coordinator.setEffectHandler { effect in
+      guard case .finalizeCapturedInput(let turnID) = effect else { return }
+      if PushToTalkManager.shouldFinalizeCapturedInputPhysically(
+        turnIntent: coordinator.activeTurn?.intent,
+        localProfileEnabled: true)
+      {
+        physicalFinalizeCount += 1
+        coordinator.send(.finish(turnID: turnID, reason: .tooShort))
+      }
+    }
+    let turnID = coordinator.begin(intent: .automation)
+    coordinator.send(.selectRoute(turnID: turnID, route: .hub(sessionID: VoiceSessionID())))
+
+    coordinator.send(.finalize(turnID: turnID))
+
+    XCTAssertEqual(physicalFinalizeCount, 0)
+    XCTAssertEqual(coordinator.activeTurn?.phase, .finalizing)
+    XCTAssertTrue(coordinator.canCommitHubTurn(turnID))
+    coordinator.send(.hubCommitClaimed(turnID: turnID))
+    XCTAssertEqual(coordinator.activeTurn?.phase, .awaitingResponse)
+  }
+
   func testFakeClockDrivesLockDeadlineAndRealStopCaptureEffect() {
     let scheduler = ManualVoiceTurnScheduler()
     let coordinator = VoiceTurnCoordinator(scheduler: scheduler)

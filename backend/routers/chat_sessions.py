@@ -61,6 +61,7 @@ class SaveMessageRequest(BaseModel):
     metadata: str | None = None
     client_message_id: str | None = Field(None, pattern=r'^[A-Za-z0-9_-]{1,128}$')
     message_source: str = Field('desktop_chat', pattern=r'^(desktop_chat|realtime_voice)$')
+    journal_revision: int | None = Field(None, ge=1, le=9_007_199_254_740_991)
 
 
 class RateMessageRequest(BaseModel):
@@ -172,6 +173,7 @@ def save_message(
             metadata=request.metadata,
             client_message_id=request.client_message_id,
             message_source=request.message_source,
+            journal_revision=request.journal_revision,
         )
     except chat_db.ClientMessageIdPayloadConflict as exc:
         raise HTTPException(status_code=409, detail='client_message_id payload conflict') from exc

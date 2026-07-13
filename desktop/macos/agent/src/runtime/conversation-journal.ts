@@ -17,7 +17,7 @@ const TURN_COLUMNS = `
   conversation_id, turn_id, turn_seq, producer_id, payload_hash,
   role, surface_kind, content, created_at_ms, metadata_json,
   origin, status, content_blocks_json, resources_json, producing_run_id,
-  remote_id, updated_at_ms, completed_at_ms
+  producing_attempt_id, remote_id, updated_at_ms, completed_at_ms
 `;
 
 const OUTBOX_COLUMNS = `
@@ -38,6 +38,7 @@ const DEFAULT_OUTBOX_LEASE_MS = 30_000;
 const MAX_DRAIN_BATCH = 100;
 const BACKEND_RECONCILE_PAGE_LIMIT = 100;
 const MAX_BACKEND_RECONCILE_CURSOR_BYTES = 512;
+const MAX_JOURNAL_REVISION = 2_147_483_647;
 
 export type JournalDeliveryDestination = "backend" | "local";
 
@@ -54,8 +55,8 @@ export interface RecordJournalTurnInput {
   contentBlocks: readonly ConversationContentBlock[];
   resources?: readonly ConversationResource[];
   producingRunId?: string | null;
+  producingAttemptId?: string | null;
   metadataJson?: string;
-  delivery: JournalDeliveryDestination;
   createdAtMs?: number;
 }
 
@@ -88,7 +89,41 @@ export interface UpdateJournalTurnInput {
   replaceResources?: readonly ConversationResource[];
   appendResources?: readonly ConversationResource[];
   producingRunId?: string | null;
+  producingAttemptId?: string | null;
   metadataJson?: string;
+  nowMs?: number;
+}
+
+export interface TerminalizeJournalTurnInput {
+  ownerId: string;
+  conversationId: string;
+  turnId: string;
+  producingRunId: string;
+  producingAttemptId: string;
+  disposition: "accept" | "discard";
+  content?: string;
+  replaceContentBlocks?: readonly ConversationContentBlock[];
+  replaceResources?: readonly ConversationResource[];
+  nowMs?: number;
+}
+
+export interface ProducingJournalTurnAdmissionInput {
+  ownerId: string;
+  conversationId: string;
+  sessionId: string;
+  turnId: string;
+}
+
+export interface BindProducingJournalTurnInput extends ProducingJournalTurnAdmissionInput {
+  runId: string;
+  attemptId: string;
+  nowMs?: number;
+}
+
+export interface DiscardProducingJournalTurnInput {
+  ownerId: string;
+  runId: string;
+  attemptId: string;
   nowMs?: number;
 }
 
@@ -121,9 +156,12 @@ export interface BackendTurnDelivery extends BackendTurnOutboxRecord {
   payload: BackendTurnPayload;
 }
 
+export type BackendTurnResultDisposition = "active" | "superseded" | "duplicate";
+
 export interface BackendTurnPayload {
   turnId: string;
   clientMessageId: string;
+  journalRevision: number;
   text: string;
   sender: "human" | "ai";
   appId: string | null;
@@ -191,12 +229,25 @@ export interface JournalTurnRange {
 }
 
 export interface JournalTurnChangedWake {
+  ownerId: string;
   conversationGeneration: number;
   generationBaseTurnSeq: number;
   surfaceKind: string;
   externalRefKind: string;
   externalRefId: string;
   turn: ConversationTurn;
+}
+
+/**
+ * Present a conversation-owned turn through the exact surface binding that
+ * requested or observed it. Shared chat surfaces intentionally converge on one
+ * conversation, while Swift routes projection events by the turn surface.
+ */
+export function journalTurnForSurfaceProjection(
+  turn: ConversationTurn,
+  surfaceKind: string,
+): ConversationTurn {
+  return { ...turn, surfaceKind: nonEmpty(surfaceKind, "surfaceKind") };
 }
 
 export interface MigrateJournalConversationInput {
@@ -245,10 +296,11 @@ export function recordJournalTurn(
   const resources = validateResources(input.resources ?? []);
   const metadataJson = validObjectJson(input.metadataJson ?? "{}", "metadataJson");
   const producerId = nonEmpty(input.producerId ?? `turn:${turnId}`, "producerId");
-  validateDeliverySurface(input.surfaceKind, input.delivery);
 
   return store.withTransaction(() => {
     assertConversationOwner(store, input.conversationId, input.ownerId);
+    const canonicalDelivery = canonicalJournalDelivery(store, input.ownerId, input.conversationId);
+    assertCanonicalJournalDelivery(input.surfaceKind, canonicalDelivery);
     assertProducingRunOwner(store, input.producingRunId ?? null, input.ownerId);
 
     const existingByTurnId = findJournalTurnById(store, turnId);
@@ -270,14 +322,12 @@ export function recordJournalTurn(
         metadataJson,
         producerId,
       };
-      if (!acceptsCanonicalRealtimeAgentSpawnProjection(store, existing, normalizedInput)) {
-        assertIdempotentRecord(existing, normalizedInput);
-      }
+      assertIdempotentRecord(existing, normalizedInput);
       const outboxStatus = ensureDeliveryState(store, {
         ownerId: input.ownerId,
         conversationId: input.conversationId,
         turnId: existing.turnId,
-        delivery: input.delivery,
+        delivery: canonicalDelivery,
         nowMs: now,
       });
       return { turn: existing, created: false, duplicate: true, outboxStatus };
@@ -294,6 +344,7 @@ export function recordJournalTurn(
       contentBlocks,
       resources,
       producingRunId: input.producingRunId ?? null,
+      producingAttemptId: input.producingAttemptId ?? null,
       remoteId: null,
       metadataJson,
     });
@@ -311,6 +362,7 @@ export function recordJournalTurn(
       contentBlocks,
       resources,
       producingRunId: input.producingRunId ?? null,
+      producingAttemptId: input.producingAttemptId ?? null,
       createdAtMs: now,
       updatedAtMs: now,
       completedAtMs: terminalTurnStatus(input.status ?? "pending") ? now : null,
@@ -321,7 +373,7 @@ export function recordJournalTurn(
       ownerId: input.ownerId,
       conversationId: input.conversationId,
       turnId,
-      delivery: input.delivery,
+      delivery: canonicalDelivery,
       nowMs: now,
     });
     return { turn, created: true, duplicate: false, outboxStatus };
@@ -349,6 +401,11 @@ export function recordJournalExchange(
   }
 
   return store.withTransaction(() => {
+    assertConversationOwner(store, input.conversationId, input.ownerId);
+    const canonicalDelivery = canonicalJournalDelivery(store, input.ownerId, input.conversationId);
+    for (const turn of input.turns) {
+      assertCanonicalJournalDelivery(turn.surfaceKind, canonicalDelivery);
+    }
     const results = input.turns.map((turn) => recordJournalTurn(store, {
       ...turn,
       ownerId: input.ownerId,
@@ -371,6 +428,7 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
     && input.replaceResources === undefined
     && input.appendResources === undefined
     && input.producingRunId === undefined
+    && input.producingAttemptId === undefined
     && input.metadataJson === undefined
   ) {
     throw new Error("Journal turn update has no changes");
@@ -386,6 +444,30 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
         throw new Error("A journal turn cannot change its producing run");
       }
     }
+    if (input.producingAttemptId !== undefined) {
+      if (input.producingAttemptId === null) {
+        throw new Error("A journal turn producing attempt cannot be cleared");
+      }
+      if (current.producingAttemptId !== null && current.producingAttemptId !== input.producingAttemptId) {
+        const attemptAdvance = store.getOptionalRow(
+          `SELECT prior.run_id AS prior_run_id, prior.attempt_no AS prior_attempt_no,
+                  next.run_id AS next_run_id, next.attempt_no AS next_attempt_no
+           FROM run_attempts prior, run_attempts next
+           WHERE prior.attempt_id = ? AND next.attempt_id = ?`,
+          [current.producingAttemptId, input.producingAttemptId],
+        );
+        const targetRunId = input.producingRunId ?? current.producingRunId;
+        if (
+          !attemptAdvance
+          || String(attemptAdvance.prior_run_id) !== targetRunId
+          || String(attemptAdvance.next_run_id) !== targetRunId
+          || Number(attemptAdvance.next_attempt_no) <= Number(attemptAdvance.prior_attempt_no)
+          || terminalTurnStatus(current.status)
+        ) {
+          throw new Error("A journal turn cannot change its producing attempt");
+        }
+      }
+    }
 
     const contentBlocks = input.replaceContentBlocks === undefined
       ? mergeById(current.contentBlocks, validateContentBlocks(input.appendContentBlocks ?? []))
@@ -399,11 +481,15 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
       : validObjectJson(input.metadataJson, "metadataJson");
     const content = input.content ?? current.content;
     const producingRunId = input.producingRunId === undefined ? current.producingRunId : input.producingRunId;
+    const producingAttemptId = input.producingAttemptId === undefined
+      ? current.producingAttemptId
+      : input.producingAttemptId;
     const changed = status !== current.status
       || content !== current.content
       || stableJson(contentBlocks) !== stableJson(current.contentBlocks)
       || stableJson(resources) !== stableJson(current.resources)
       || producingRunId !== current.producingRunId
+      || producingAttemptId !== current.producingAttemptId
       || stableJson(parseObjectJson(metadataJson)) !== stableJson(parseObjectJson(current.metadataJson));
     if (!changed) return current;
 
@@ -418,6 +504,7 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
       contentBlocks,
       resources,
       producingRunId,
+      producingAttemptId,
       remoteId: current.remoteId,
       metadataJson,
     });
@@ -425,7 +512,8 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
     store.execute(
       `UPDATE conversation_turns
        SET content = ?, status = ?, content_blocks_json = ?, resources_json = ?,
-           producing_run_id = ?, metadata_json = ?, turn_seq = ?, payload_hash = ?, updated_at_ms = ?,
+           producing_run_id = ?, producing_attempt_id = ?, metadata_json = ?,
+           turn_seq = ?, payload_hash = ?, updated_at_ms = ?,
            completed_at_ms = CASE
              WHEN ? IN ('completed', 'failed') THEN COALESCE(completed_at_ms, ?)
              ELSE NULL
@@ -437,6 +525,7 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
         JSON.stringify(contentBlocks),
         JSON.stringify(resources),
         producingRunId,
+        producingAttemptId,
         metadataJson,
         sequence.turnSeq,
         payloadHash,
@@ -452,20 +541,314 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
     appendJournalRevision(store, updated, sequence.generation, "updated", now);
     const backendHash = backendTurnPayloadHash(backendTurnPayload(updated));
     const tombstoneCode = backendTombstoneCode(updated);
-    // Backend POST is create-only: after delivery, material enrichment remains
-    // local journal state and is never reposted as a second logical message.
     store.execute(
       `UPDATE backend_turn_outbox
-       SET payload_hash = CASE WHEN status = 'delivered' THEN payload_hash ELSE ? END,
-           status = CASE WHEN status = 'delivered' THEN status WHEN ? IS NOT NULL THEN 'failed' ELSE status END,
-           lease_expires_at_ms = CASE WHEN ? IS NOT NULL THEN NULL ELSE lease_expires_at_ms END,
-           last_error_code = CASE WHEN ? IS NOT NULL THEN ? ELSE last_error_code END,
+       SET payload_hash = ?,
+           status = CASE WHEN ? IS NOT NULL THEN 'failed' ELSE 'pending' END,
+           attempt_count = 0,
+           available_at_ms = ?,
+           lease_expires_at_ms = NULL,
+           last_error_code = ?,
            updated_at_ms = ?
-       WHERE turn_id = ?`,
-      [backendHash, tombstoneCode, tombstoneCode, tombstoneCode, tombstoneCode, now, input.turnId],
+       WHERE turn_id = ? AND payload_hash != ?`,
+      [backendHash, tombstoneCode, now, tombstoneCode, now, input.turnId, backendHash],
     );
     return updated;
   });
+}
+
+export function validateProducingJournalTurnAdmission(
+  store: AgentStore,
+  input: ProducingJournalTurnAdmissionInput,
+): void {
+  assertProducingJournalTurnMapping(store, input);
+  const turn = requireJournalTurn(store, input.conversationId, nonEmpty(input.turnId, "producingTurnId"));
+  if (turn.role !== "assistant" || !["pending", "streaming"].includes(turn.status)) {
+    throw new Error("Producing turn admission requires a pending or streaming assistant turn");
+  }
+  if (turn.producingRunId !== null || turn.producingAttemptId !== null) {
+    throw new Error("Producing turn is already bound to a canonical run attempt");
+  }
+}
+
+export function bindProducingJournalTurn(
+  store: AgentStore,
+  input: BindProducingJournalTurnInput,
+): ConversationTurn {
+  return store.withTransaction(() => {
+    assertProducingJournalTurnMapping(store, input);
+    const authority = store.getOptionalRow(
+      `SELECT r.session_id, s.owner_id, a.attempt_no,
+              (SELECT latest.attempt_id FROM run_attempts latest
+               WHERE latest.run_id = r.run_id ORDER BY latest.attempt_no DESC LIMIT 1) AS latest_attempt_id
+       FROM runs r
+       JOIN sessions s ON s.session_id = r.session_id
+       JOIN run_attempts a ON a.run_id = r.run_id AND a.attempt_id = ?
+       WHERE r.run_id = ?`,
+      [input.attemptId, input.runId],
+    );
+    if (
+      !authority
+      || String(authority.owner_id) !== input.ownerId
+      || String(authority.session_id) !== input.sessionId
+      || String(authority.latest_attempt_id) !== input.attemptId
+    ) {
+      throw new Error("Producing turn admission run attempt is not the latest canonical session authority");
+    }
+    const turn = requireJournalTurn(store, input.conversationId, nonEmpty(input.turnId, "producingTurnId"));
+    if (turn.role !== "assistant" || !["pending", "streaming"].includes(turn.status)) {
+      throw new Error("Producing turn admission requires a pending or streaming assistant turn");
+    }
+    if (turn.producingRunId !== null && turn.producingRunId !== input.runId) {
+      throw new Error("Producing turn is already bound to a different canonical run");
+    }
+    return updateJournalTurn(store, {
+      ownerId: input.ownerId,
+      conversationId: input.conversationId,
+      turnId: turn.turnId,
+      producingRunId: input.runId,
+      producingAttemptId: input.attemptId,
+      nowMs: input.nowMs,
+    });
+  });
+}
+
+export function assertPublicJournalUpdatePolicy(
+  store: AgentStore,
+  input: UpdateJournalTurnInput,
+): void {
+  assertConversationOwner(store, input.conversationId, input.ownerId);
+  const current = requireJournalTurn(store, input.conversationId, input.turnId);
+  const linkedTerminal = current.producingRunId !== null
+    && current.producingAttemptId !== null
+    && terminalTurnStatus(current.status);
+  if (!linkedTerminal) return;
+  const metadata = parseObjectJson(current.metadataJson) as Record<string, unknown>;
+  const discarded = metadata.terminalMarker === "discarded_terminal_projection"
+    || store.getOptionalRow(
+      `SELECT 1 FROM backend_turn_outbox
+       WHERE turn_id = ? AND last_error_code = 'discarded_terminal_projection'`,
+      [current.turnId],
+    ) !== undefined;
+  if (discarded) {
+    throw new Error("Discarded terminal journal projection rejects every public update");
+  }
+  const appendBlocks = input.appendContentBlocks ?? [];
+  const appendResources = input.appendResources ?? [];
+  const hasAppend = appendBlocks.length > 0 || appendResources.length > 0;
+  const hasForbiddenMutation = input.status !== undefined
+    || input.content !== undefined
+    || input.replaceContentBlocks !== undefined
+    || input.replaceResources !== undefined
+    || input.producingRunId !== undefined
+    || input.producingAttemptId !== undefined
+    || input.metadataJson !== undefined;
+  if (current.status !== "completed" || hasForbiddenMutation || !hasAppend) {
+    throw new Error("Linked terminal journal turns allow only typed completion/resource appends");
+  }
+  const completions = validateContentBlocks(appendBlocks);
+  if (completions.some((block) => block.type !== "agentCompletion")) {
+    throw new Error("Linked terminal journal turns accept only agentCompletion blocks");
+  }
+  const spawnBlocks = current.contentBlocks.filter(
+    (block): block is Extract<ConversationContentBlock, { type: "agentSpawn" }> => block.type === "agentSpawn",
+  );
+  for (const completion of completions as Extract<ConversationContentBlock, { type: "agentCompletion" }>[]) {
+    if (!completion.runId || !completion.sessionId) {
+      throw new Error("Agent completion append requires canonical session and run identity");
+    }
+    if (!spawnBlocks.some((spawn) => (
+      spawn.runId === completion.runId
+      && spawn.sessionId === completion.sessionId
+      && (!spawn.pillId || !completion.pillId || spawn.pillId === completion.pillId)
+    ))) {
+      throw new Error("Agent completion append must match an existing canonical agentSpawn block");
+    }
+  }
+  const allowedRunIds = new Set<string>([
+    current.producingRunId!,
+    ...spawnBlocks.map((block) => block.runId),
+  ]);
+  for (const completion of completions) {
+    if (completion.type === "agentCompletion" && completion.runId) allowedRunIds.add(completion.runId);
+  }
+  for (const resource of validateResources(appendResources)) {
+    if (resource.runId && !allowedRunIds.has(resource.runId)) {
+      throw new Error("Terminal resource append is outside the canonical producing/spawn run graph");
+    }
+  }
+}
+
+export function discardProducingJournalTurnForRunAttempt(
+  store: AgentStore,
+  input: DiscardProducingJournalTurnInput,
+): ConversationTurn | null {
+  return store.withTransaction(() => {
+    const rows = store.allRows(
+      `SELECT conversation_id, turn_id
+       FROM conversation_turns
+       WHERE producing_run_id = ? AND producing_attempt_id = ?
+       ORDER BY conversation_id, turn_id`,
+      [input.runId, input.attemptId],
+    );
+    if (rows.length === 0) return null;
+    if (rows.length !== 1) throw new Error("Canonical run attempt is bound to multiple producing turns");
+    return terminalizeJournalTurn(store, {
+      ownerId: input.ownerId,
+      conversationId: String(rows[0]!.conversation_id),
+      turnId: String(rows[0]!.turn_id),
+      producingRunId: input.runId,
+      producingAttemptId: input.attemptId,
+      disposition: "discard",
+      nowMs: input.nowMs,
+    });
+  });
+}
+
+/**
+ * Authenticated terminal mutation for runtime-produced turns. Callers provide
+ * the exact canonical run/attempt proof and final material, while the kernel
+ * alone derives success or failure from durable run state.
+ */
+export function terminalizeJournalTurn(
+  store: AgentStore,
+  input: TerminalizeJournalTurnInput,
+): ConversationTurn {
+  const now = input.nowMs ?? Date.now();
+  const producingRunId = nonEmpty(input.producingRunId, "producingRunId");
+  const producingAttemptId = nonEmpty(input.producingAttemptId, "producingAttemptId");
+  const contentBlocks = input.replaceContentBlocks === undefined
+    ? undefined
+    : validateContentBlocks(input.replaceContentBlocks);
+  const resources = input.replaceResources === undefined
+    ? undefined
+    : validateResources(input.replaceResources);
+  return store.withTransaction(() => {
+    if (
+      input.disposition === "discard"
+      && (input.content !== undefined || contentBlocks !== undefined || resources !== undefined)
+    ) {
+      throw new Error("Discarded journal terminalization cannot apply late material");
+    }
+    assertConversationOwner(store, input.conversationId, input.ownerId);
+    const authority = store.getOptionalRow(
+      `SELECT r.status AS run_status, r.session_id, a.status AS attempt_status,
+              (SELECT latest.attempt_id
+               FROM run_attempts latest
+               WHERE latest.run_id = r.run_id
+               ORDER BY latest.attempt_no DESC
+               LIMIT 1) AS latest_attempt_id
+       FROM runs r
+       JOIN sessions s ON s.session_id = r.session_id
+       JOIN run_attempts a ON a.run_id = r.run_id AND a.attempt_id = ?
+       WHERE r.run_id = ? AND s.owner_id = ?`,
+      [producingAttemptId, producingRunId, input.ownerId],
+    );
+    if (!authority) throw new Error("Journal terminalization run or attempt is unknown or outside owner scope");
+    if (String(authority.latest_attempt_id) !== producingAttemptId) {
+      throw new Error("Journal terminalization requires the latest canonical run attempt");
+    }
+    if (!store.getOptionalRow(
+      `SELECT 1 FROM surface_conversations
+       WHERE conversation_id = ? AND owner_id = ? AND agent_session_id = ?
+       LIMIT 1`,
+      [input.conversationId, input.ownerId, String(authority.session_id)],
+    )) {
+      throw new Error("Journal terminalization run is not bound to the canonical conversation session");
+    }
+    const status = input.disposition === "discard"
+      ? "failed"
+      : journalTerminalStatus(authority.run_status, authority.attempt_status);
+    const current = requireJournalTurn(store, input.conversationId, input.turnId);
+    if (current.producingRunId !== producingRunId) {
+      throw new Error("Journal terminalization run does not match the producing turn");
+    }
+    if (current.producingAttemptId !== producingAttemptId) {
+      throw new Error("Journal terminalization attempt does not match the producing turn");
+    }
+    const content = input.content ?? current.content;
+    const finalContentBlocks = input.disposition === "accept" && contentBlocks !== undefined
+      ? monotonicAcceptContentBlocks(current.contentBlocks, contentBlocks)
+      : contentBlocks ?? current.contentBlocks;
+    const finalResources = input.disposition === "accept" && resources !== undefined
+      ? monotonicAcceptResources(current.resources, resources)
+      : resources ?? current.resources;
+    const metadata = parseObjectJson(current.metadataJson) as Record<string, unknown>;
+    const metadataJson = input.disposition === "discard"
+      ? JSON.stringify({ ...metadata, terminalMarker: "discarded_terminal_projection" })
+      : current.metadataJson;
+    const exactReplay = current.status === status
+      && current.content === content
+      && stableJson(current.contentBlocks) === stableJson(finalContentBlocks)
+      && stableJson(current.resources) === stableJson(finalResources)
+      && stableJson(parseObjectJson(current.metadataJson)) === stableJson(parseObjectJson(metadataJson));
+    if (exactReplay) {
+      if (input.disposition === "discard") {
+        markDiscardedBackendProjection(store, input.turnId, now);
+      }
+      return current;
+    }
+    if (terminalTurnStatus(current.status) && current.producingAttemptId !== null) {
+      throw new Error("Journal turn is already terminalized with different canonical material");
+    }
+    const terminalized = updateJournalTurn(store, {
+      ownerId: input.ownerId,
+      conversationId: input.conversationId,
+      turnId: input.turnId,
+      status,
+      content,
+      replaceContentBlocks: finalContentBlocks,
+      replaceResources: finalResources,
+      producingRunId,
+      producingAttemptId,
+      metadataJson,
+      nowMs: now,
+    });
+    if (input.disposition === "discard") {
+      markDiscardedBackendProjection(store, input.turnId, now);
+    }
+    return terminalized;
+  });
+}
+
+function markDiscardedBackendProjection(store: AgentStore, turnId: string, nowMs: number): void {
+  store.execute(
+    `UPDATE backend_turn_outbox
+     SET status = 'failed', lease_expires_at_ms = NULL,
+         last_error_code = 'discarded_terminal_projection', updated_at_ms = ?
+     WHERE turn_id = ?`,
+    [nowMs, turnId],
+  );
+}
+
+function monotonicAcceptContentBlocks(
+  current: readonly ConversationContentBlock[],
+  incoming: readonly ConversationContentBlock[],
+): ConversationContentBlock[] {
+  const protectedCurrent = new Map(
+    current
+      .filter((block) => block.type === "agentSpawn" || block.type === "agentCompletion")
+      .map((block) => [block.id, block] as const),
+  );
+  const result = incoming.map((block) => structuredClone(protectedCurrent.get(block.id) ?? block));
+  const resultIds = new Set(result.map((block) => block.id));
+  for (const block of protectedCurrent.values()) {
+    if (!resultIds.has(block.id)) result.push(structuredClone(block));
+  }
+  return result;
+}
+
+function monotonicAcceptResources(
+  current: readonly ConversationResource[],
+  incoming: readonly ConversationResource[],
+): ConversationResource[] {
+  const currentById = new Map(current.map((resource) => [resource.id, resource] as const));
+  const result = incoming.map((resource) => structuredClone(currentById.get(resource.id) ?? resource));
+  const resultIds = new Set(result.map((resource) => resource.id));
+  for (const resource of current) {
+    if (!resultIds.has(resource.id)) result.push(structuredClone(resource));
+  }
+  return result;
 }
 
 /**
@@ -595,6 +978,7 @@ export function migrateJournalConversation(
         contentBlocks: source.contentBlocks,
         resources: source.resources,
         producingRunId: source.producingRunId,
+        producingAttemptId: source.producingAttemptId,
         remoteId: source.remoteId,
         createdAtMs: source.createdAtMs,
         updatedAtMs: source.updatedAtMs,
@@ -845,6 +1229,7 @@ export function importRemoteJournalTurn(
       contentBlocks,
       resources,
       producingRunId: null,
+      producingAttemptId: null,
       remoteId,
       metadataJson,
     });
@@ -862,6 +1247,7 @@ export function importRemoteJournalTurn(
       contentBlocks,
       resources,
       producingRunId: null,
+      producingAttemptId: null,
       remoteId,
       createdAtMs: input.createdAtMs,
       updatedAtMs: now,
@@ -1382,6 +1768,9 @@ export function drainBackendTurnOutbox(
       const turn = requireJournalTurn(store, currentOutbox.conversationId, turnId);
       const payload = backendTurnPayload(turn);
       const payloadHash = backendTurnPayloadHash(payload);
+      if (payloadHash !== currentOutbox.payloadHash) {
+        throw new Error("Backend turn outbox revision does not match the canonical journal turn");
+      }
       const journalState = requireJournalState(store, currentOutbox.conversationId);
       store.execute(
         `UPDATE backend_turn_outbox
@@ -1421,6 +1810,91 @@ export function ackBackendTurnOutboxWithWakes(
     outbox,
     wakes: journalTurnChangedWakes(store, input.ownerId, turn),
   };
+}
+
+/**
+ * Classify a backend result against durable claim and journal history.
+ *
+ * A turn revision can supersede a physical POST while it is in flight. The
+ * exact ACK/failure mutators intentionally continue to reject that stale
+ * claim; this boundary absorbs it only when the supplied payload is provably a
+ * prior canonical revision (or the exact result was already settled).
+ */
+export function classifyBackendTurnResultDisposition(
+  store: AgentStore,
+  input: {
+    ownerId: string;
+    turnId: string;
+    conversationId: string;
+    attemptCount: number;
+    deliveryGeneration: number;
+    conversationGeneration: number;
+    payloadHash: string;
+    ok: boolean;
+    remoteId?: string;
+    errorCode?: string;
+  },
+): BackendTurnResultDisposition {
+  for (const [label, value] of [
+    ["attemptCount", input.attemptCount],
+    ["deliveryGeneration", input.deliveryGeneration],
+    ["conversationGeneration", input.conversationGeneration],
+  ] as const) {
+    if (!Number.isSafeInteger(value) || value < 1) {
+      throw new Error(`Backend sync result ${label} must be a positive safe integer`);
+    }
+  }
+  nonEmpty(input.payloadHash, "payloadHash");
+  const current = requireOutboxRecord(store, input.turnId);
+  if (current.ownerId !== input.ownerId) {
+    throw new Error("Backend sync result owner does not match the claim owner");
+  }
+  if (current.conversationId !== input.conversationId) {
+    throw new Error("Backend sync result conversation does not match the active claim");
+  }
+  const exactClaim = current.deliveryGeneration === input.deliveryGeneration
+    && current.attemptCount === input.attemptCount
+    && current.conversationGeneration === input.conversationGeneration
+    && current.payloadHash === input.payloadHash;
+  if (exactClaim && current.status === "delivering") return "active";
+  if (exactClaim && current.status === "delivered") {
+    if (!input.ok || !input.remoteId || current.remoteId !== input.remoteId) {
+      throw new Error("Duplicate backend sync success conflicts with the delivered result");
+    }
+    return "duplicate";
+  }
+  if (exactClaim && (current.status === "retrying" || current.status === "failed")) {
+    const errorCode = input.errorCode ?? "backend_sync_failed";
+    if (input.ok || current.lastErrorCode !== errorCode) {
+      throw new Error("Duplicate backend sync failure conflicts with the settled result");
+    }
+    return "duplicate";
+  }
+  if (
+    input.deliveryGeneration > current.deliveryGeneration
+    || input.conversationGeneration > current.conversationGeneration
+  ) {
+    throw new Error("Backend sync result claims a future delivery generation");
+  }
+  const currentTurn = requireJournalTurn(store, input.conversationId, input.turnId);
+  const historicalTurnSeq = historicalBackendPayloadTurnSeq(store, {
+    conversationId: input.conversationId,
+    turnId: input.turnId,
+    conversationGeneration: input.conversationGeneration,
+    payloadHash: input.payloadHash,
+  });
+  if (historicalTurnSeq === null) {
+    throw new Error("Backend sync result payload was never a canonical journal revision");
+  }
+  const olderClaim = input.deliveryGeneration < current.deliveryGeneration;
+  const olderPayloadOnSupersededClaim = input.deliveryGeneration === current.deliveryGeneration
+    && input.payloadHash !== current.payloadHash
+    && historicalTurnSeq < currentTurn.turnSeq
+    && current.status !== "delivering"
+    && current.attemptCount === 0
+    && input.attemptCount > 0;
+  if (olderClaim || olderPayloadOnSupersededClaim) return "superseded";
+  throw new Error("Backend sync result does not match the active claimed generation");
 }
 
 /** Settle an exact pre-clear physical POST claim after its canonical turn was removed. */
@@ -1484,6 +1958,7 @@ export function journalTurnChangedWakes(
   return surfaces.map((surface) => {
     const surfaceKind = String(surface.surface_kind);
     return {
+      ownerId,
       conversationGeneration: state.generation,
       generationBaseTurnSeq: state.generationBaseTurnSeq,
       surfaceKind,
@@ -1491,7 +1966,7 @@ export function journalTurnChangedWakes(
       externalRefId: String(surface.external_ref_id),
       // Swift treats this payload as a wake only, but its router keys from the
       // turn's surfaceKind. Project the binding surface so every wake routes.
-      turn: { ...turn, surfaceKind },
+      turn: journalTurnForSurfaceProjection(turn, surfaceKind),
     };
   });
 }
@@ -1673,6 +2148,7 @@ function acknowledgeBackendTurn(
         contentBlocks: turn.contentBlocks,
         resources: turn.resources,
         producingRunId: turn.producingRunId,
+        producingAttemptId: turn.producingAttemptId,
         remoteId,
         metadataJson: turn.metadataJson,
       });
@@ -1809,6 +2285,22 @@ function assertConversationOwner(store: AgentStore, conversationId: string, owne
   if (!row) throw new Error("Journal conversation is outside owner scope");
 }
 
+function assertProducingJournalTurnMapping(
+  store: AgentStore,
+  input: ProducingJournalTurnAdmissionInput,
+): void {
+  assertConversationOwner(store, input.conversationId, input.ownerId);
+  const mapping = store.getOptionalRow(
+    `SELECT 1 FROM surface_conversations
+     WHERE conversation_id = ? AND owner_id = ? AND agent_session_id = ?
+     LIMIT 1`,
+    [input.conversationId, input.ownerId, input.sessionId],
+  );
+  if (!mapping) {
+    throw new Error("Producing turn admission requires the exact canonical owner/session/conversation mapping");
+  }
+}
+
 function assertProducingRunOwner(store: AgentStore, runId: string | null, ownerId: string): void {
   if (runId === null) return;
   const row = store.getOptionalRow(
@@ -1839,76 +2331,46 @@ function assertIdempotentRecord(
     && existing.origin === input.origin
     && existing.producerId === input.producerId
     && existing.producingRunId === (input.producingRunId ?? null)
+    && existing.producingAttemptId === (input.producingAttemptId ?? null)
     && stableJson(existing.contentBlocks) === stableJson(input.contentBlocks)
     && stableJson(existing.resources) === stableJson(input.resources)
     && stableJson(parseObjectJson(existing.metadataJson)) === stableJson(parseObjectJson(input.metadataJson));
   if (!equivalent) throw new Error("Canonical turn or producer identity collision has different journal content");
 }
 
-/**
- * A realtime spawn commits the canonical acknowledgement as soon as the child
- * is accepted. The provider can still emit its ordinary turn_done projection
- * afterward. Accept that late projection as a no-op only when the stable voice
- * continuity key already resolves to an assistant owned by an agentSpawn run.
- * This preserves strict collision detection for every other turn.
- */
-function acceptsCanonicalRealtimeAgentSpawnProjection(
+function canonicalJournalDelivery(
   store: AgentStore,
-  existing: ConversationTurn,
-  input: RecordJournalTurnInput & {
-    turnId: string;
-    contentBlocks: ConversationContentBlock[];
-    resources: ConversationResource[];
-    metadataJson: string;
-    producerId: string;
-  },
-): boolean {
-  if (
-    input.origin !== "realtime_voice"
-    || input.delivery !== "backend"
-    || (input.status ?? "pending") !== "completed"
-    || input.contentBlocks.length !== 0
-    || input.resources.length !== 0
-    || (input.producingRunId ?? null) !== null
-    || !["main_chat", "floating_chat", "realtime", "realtime_voice"].includes(input.surfaceKind)
-    || existing.conversationId !== input.conversationId
-    || existing.role !== input.role
-  ) return false;
-  const incomingMetadata = parseObjectJson(input.metadataJson) as Record<string, unknown>;
-  const continuityKey = typeof incomingMetadata.continuityKey === "string"
-    ? incomingMetadata.continuityKey.trim()
-    : "";
-  if (!continuityKey.startsWith("voice:") || stableContinuityTurnId(continuityKey, input.role) !== input.turnId) {
-    return false;
-  }
-  const existingMetadata = parseObjectJson(existing.metadataJson) as Record<string, unknown>;
-  if (existingMetadata.continuityKey !== continuityKey) return false;
-  const assistantTurnId = stableContinuityTurnId(continuityKey, "assistant");
-  const assistant = existing.role === "assistant"
-    ? existing
-    : findJournalTurnById(store, assistantTurnId);
-  if (
-    !assistant
-    || assistant.conversationId !== existing.conversationId
-    || assistant.role !== "assistant"
-    || assistant.origin !== "realtime_voice"
-    || assistant.producingRunId === null
-    || (parseObjectJson(assistant.metadataJson) as Record<string, unknown>).continuityKey !== continuityKey
-  ) return false;
-  return assistant.contentBlocks.some((block) =>
-    block.type === "agentSpawn"
-    && block.runId === assistant.producingRunId,
+  ownerId: string,
+  conversationId: string,
+): JournalDeliveryDestination {
+  const surfaces = store.allRows(
+    `SELECT DISTINCT surface_kind
+     FROM surface_conversations
+     WHERE conversation_id = ? AND owner_id = ?`,
+    [conversationId, ownerId],
   );
-}
-
-function stableContinuityTurnId(continuityKey: string, role: ConversationTurnRole): string {
-  return `turn_${createHash("sha256").update(`${continuityKey}\0${role}`).digest("hex").slice(0, 32)}`;
-}
-
-function validateDeliverySurface(surfaceKind: string, delivery: JournalDeliveryDestination): void {
-  if (LOCAL_ONLY_SURFACES.has(surfaceKind) && delivery !== "local") {
-    throw new Error(`${surfaceKind} turns are local journal records and cannot use the main-chat backend outbox`);
+  if (surfaces.length === 0) throw new Error("Journal conversation is outside owner scope");
+  const destinations = new Set(
+    surfaces.map((surface) => journalDeliveryForSurface(String(surface.surface_kind))),
+  );
+  if (destinations.size !== 1) {
+    throw new Error("Journal conversation mixes local-only and backend-backed canonical surfaces");
   }
+  return destinations.values().next().value!;
+}
+
+function assertCanonicalJournalDelivery(
+  surfaceKind: string,
+  canonicalDelivery: JournalDeliveryDestination,
+): void {
+  const normalizedSurfaceKind = nonEmpty(surfaceKind, "surfaceKind");
+  if (journalDeliveryForSurface(normalizedSurfaceKind) !== canonicalDelivery) {
+    throw new Error("Journal turn surface does not match the canonical conversation delivery boundary");
+  }
+}
+
+function journalDeliveryForSurface(surfaceKind: string): JournalDeliveryDestination {
+  return LOCAL_ONLY_SURFACES.has(surfaceKind) ? "local" : "backend";
 }
 
 function validateContentBlocks(blocks: readonly ConversationContentBlock[]): ConversationContentBlock[] {
@@ -1960,6 +2422,19 @@ function assertTurnStatusTransition(from: ConversationTurnStatus, to: Conversati
 
 function terminalTurnStatus(status: ConversationTurnStatus): boolean {
   return status === "completed" || status === "failed";
+}
+
+function journalTerminalStatus(runStatus: unknown, attemptStatus: unknown): ConversationTurnStatus {
+  const terminal = new Set(["succeeded", "failed", "cancelled", "timed_out", "orphaned"]);
+  const run = String(runStatus);
+  const attempt = String(attemptStatus);
+  if (!terminal.has(run) || !terminal.has(attempt)) {
+    throw new Error("Journal terminalization requires a terminal canonical run and attempt");
+  }
+  if ((run === "succeeded") !== (attempt === "succeeded")) {
+    throw new Error("Journal terminalization run and attempt outcomes disagree");
+  }
+  return run === "succeeded" ? "completed" : "failed";
 }
 
 function boundedLimit(limit: number): number {
@@ -2035,6 +2510,7 @@ function backendTurnPayload(turn: ConversationTurn): BackendTurnPayload {
   return {
     turnId: turn.turnId,
     clientMessageId: turn.turnId,
+    journalRevision: boundedJournalRevision(turn.turnSeq),
     text: projectedText,
     sender: turn.role === "user" ? "human" : "ai",
     appId: typeof metadata.appId === "string" ? metadata.appId : null,
@@ -2042,6 +2518,13 @@ function backendTurnPayload(turn: ConversationTurn): BackendTurnPayload {
     metadata: Object.keys(backendMetadata).length === 0 ? null : stableJson(backendMetadata),
     messageSource: turn.origin === "realtime_voice" ? "realtime_voice" : "desktop_chat",
   };
+}
+
+function boundedJournalRevision(revision: number): number {
+  if (!Number.isSafeInteger(revision) || revision < 1 || revision > MAX_JOURNAL_REVISION) {
+    throw new Error(`Journal revision must be between 1 and ${MAX_JOURNAL_REVISION}`);
+  }
+  return revision;
 }
 
 function backendTombstoneCode(turn: ConversationTurn): string | null {
@@ -2054,6 +2537,33 @@ function backendTombstoneCode(turn: ConversationTurn): string | null {
 
 function backendTurnPayloadHash(payload: BackendTurnPayload): string {
   return sha256(stableJson(payload));
+}
+
+function historicalBackendPayloadTurnSeq(
+  store: AgentStore,
+  input: {
+    conversationId: string;
+    turnId: string;
+    conversationGeneration: number;
+    payloadHash: string;
+  },
+): number | null {
+  const rows = store.allRows(
+    `SELECT turn_json FROM conversation_turn_revisions
+     WHERE conversation_id = ? AND turn_id = ? AND generation = ?
+     ORDER BY turn_seq DESC`,
+    [input.conversationId, input.turnId, input.conversationGeneration],
+  );
+  for (const row of rows) {
+    const parsed = JSON.parse(String(row.turn_json)) as ConversationTurn;
+    if (parsed.conversationId !== input.conversationId || parsed.turnId !== input.turnId) {
+      throw new Error("Backend sync result history has inconsistent turn identity");
+    }
+    if (backendTurnPayloadHash(backendTurnPayload(parsed)) === input.payloadHash) {
+      return parsed.turnSeq;
+    }
+  }
+  return null;
 }
 
 function nextJournalSequence(
@@ -2168,6 +2678,9 @@ function migratedJournalRevisionTurn(
     producingRunId: parsed.producingRunId === undefined
       ? current.producingRunId
       : parsed.producingRunId == null ? null : String(parsed.producingRunId),
+    producingAttemptId: parsed.producingAttemptId === undefined
+      ? current.producingAttemptId
+      : parsed.producingAttemptId == null ? null : String(parsed.producingAttemptId),
     remoteId: parsed.remoteId === undefined
       ? current.remoteId
       : parsed.remoteId == null ? null : String(parsed.remoteId),

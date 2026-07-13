@@ -3,15 +3,12 @@ import XCTest
 @testable import Omi_Computer
 
 final class ChatToolExecutorPolicyTests: XCTestCase {
-  private var previousAuthOwner: Any?
-  private var previousAutomationOwner: Any?
+  private var ownerFixture: RuntimeOwnerAuthorityTestFixture!
 
-  override func setUp() {
-    super.setUp()
-    previousAuthOwner = UserDefaults.standard.object(forKey: .authUserId)
-    previousAutomationOwner = UserDefaults.standard.object(forKey: .automationOwnerOverride)
-    UserDefaults.standard.set("chat-tool-policy-owner", forKey: .authUserId)
-    UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+  override func setUp() async throws {
+    try await super.setUp()
+    ownerFixture = await RuntimeOwnerAuthorityTestFixture()
+    await ownerFixture.establish(authOwnerID: "chat-tool-policy-owner")
   }
 
   @MainActor
@@ -41,19 +38,11 @@ final class ChatToolExecutorPolicyTests: XCTestCase {
 
   private let screenshotKey = DefaultsKey.chatScreenshotSharingEnabled.rawValue
 
-  override func tearDown() {
+  override func tearDown() async throws {
     UserDefaults.standard.removeObject(forKey: screenshotKey)
-    if let previousAuthOwner {
-      UserDefaults.standard.set(previousAuthOwner, forKey: .authUserId)
-    } else {
-      UserDefaults.standard.removeObject(forKey: .authUserId)
-    }
-    if let previousAutomationOwner {
-      UserDefaults.standard.set(previousAutomationOwner, forKey: .automationOwnerOverride)
-    } else {
-      UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
-    }
-    super.tearDown()
+    await ownerFixture.restore()
+    ownerFixture = nil
+    try await super.tearDown()
   }
 
   func testScreenshotToolsAllowedByDefault() {

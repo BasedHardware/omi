@@ -27,13 +27,15 @@ describe("runtime owner handshake authority", () => {
     expect(() => requireActiveRuntimeOwner(transition.state, "other-owner")).toThrow(/owner_mismatch/);
   });
 
-  it("distinguishes a same-owner first handshake from a later owner transition", () => {
+  it("allows only first establishment or idempotent same-owner refresh in one process", () => {
     const first = establishRuntimeOwner({ ownerId: "owner-a", established: false }, "owner-a");
     expect(first).toMatchObject({ changed: false, firstEstablishment: true });
     const repeated = establishRuntimeOwner(first.state, "owner-a");
     expect(repeated).toMatchObject({ changed: false, firstEstablishment: false });
-    const switched = establishRuntimeOwner(repeated.state, "owner-b");
-    expect(switched).toMatchObject({ changed: true, firstEstablishment: false });
+    expect(() => establishRuntimeOwner(repeated.state, "owner-b")).toThrow(
+      /established runtime owner replacement requires correlated revoke and a fresh process/,
+    );
+    expect(runtimeOwnerForEffects(repeated.state)).toBe("owner-a");
   });
 
   it("rejects ownerless and stale-owner token refresh before any credential side effect", () => {

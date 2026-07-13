@@ -663,6 +663,44 @@ def trace_tool_executions(traces: list[dict[str, Any]], names: set[str] | None =
     ]
 
 
+def spawn_tool_acceptance_error(output: Any) -> str | None:
+    """Validate the spawn admission result, not incidental words in its JSON.
+
+    spawn_agent is asynchronous: a successful tool response returns an admitted
+    child whose run is normally queued (or may already be running/succeeded).
+    Nested fields such as errorCode=null must never turn that accepted response
+    into a failure merely because their key contains the word "error".
+    """
+    payload = output
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except json.JSONDecodeError:
+            return "spawn_agent output is not valid JSON"
+    if not isinstance(payload, dict):
+        return "spawn_agent output is not a JSON object"
+    if payload.get("ok") is not True:
+        error = payload.get("error")
+        if isinstance(error, dict):
+            detail = error.get("message") or error.get("code")
+            if detail:
+                return f"spawn_agent rejected the request: {detail}"
+        return "spawn_agent response did not report ok=true"
+    agents = payload.get("agents")
+    if not isinstance(agents, list) or not agents:
+        return "spawn_agent ok=true response has no admitted agents"
+    requested = payload.get("requestedAgentCount")
+    if isinstance(requested, int) and requested > 0 and len(agents) != requested:
+        return f"spawn_agent admitted {len(agents)} agents, expected {requested}"
+    accepted_statuses = {"queued", "running", "succeeded"}
+    for index, agent in enumerate(agents):
+        run = agent.get("run") if isinstance(agent, dict) else None
+        status = run.get("status") if isinstance(run, dict) else None
+        if status not in accepted_statuses:
+            return f"spawn_agent agent {index} has non-accepted run status {status!r}"
+    return None
+
+
 def strip_probe_text(haystack: str, probe_texts: list[str]) -> str:
     """Remove the probe turn's own text from an assertion haystack (R8).
 
@@ -731,6 +769,36 @@ def current_turn_assistant_text(snapshot_detail: dict[str, str], query_text: str
     return ""
 
 
+def current_turn_has_terminal_assistant(snapshot_detail: dict[str, str], query_text: str) -> bool:
+    """Return whether the exact query has its own terminal assistant projection.
+
+    Main-chat idle is a transport/lifecycle signal, not proof that this send
+    produced a terminal row. Keying the wait to the exact user text prevents a
+    failed empty turn from inheriting the previous turn's assistant response.
+    """
+    try:
+        messages = json.loads(snapshot_detail.get("messages_json", "[]"))
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(messages, list):
+        return False
+    query = query_text.strip()
+    start_index: int | None = None
+    for index, message in enumerate(messages):
+        if not isinstance(message, dict):
+            continue
+        if message.get("role") == "user" and str(message.get("text") or "").strip() == query:
+            start_index = index
+    if start_index is None:
+        return False
+    return any(
+        isinstance(message, dict)
+        and message.get("role") == "assistant"
+        and message.get("streaming") != "true"
+        for message in messages[start_index + 1 :]
+    )
+
+
 def exact_voice_agent_turn_signature(
     snapshot_detail: dict[str, Any],
     *,
@@ -745,39 +813,47 @@ def exact_voice_agent_turn_signature(
     if not isinstance(messages, list):
         raise ValueError("main chat snapshot messages are not an array")
 
-    user_indexes = [
-        index
-        for index, message in enumerate(messages)
+    producing_assistants: list[tuple[int, dict[str, Any], list[Any]]] = []
+    for index, message in enumerate(messages):
+        if not isinstance(message, dict) or message.get("role") != "assistant":
+            continue
+        try:
+            candidate_blocks = json.loads(str(message.get("content_blocks_json", "[]")))
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(candidate_blocks, list):
+            continue
+        if any(
+            isinstance(block, dict)
+            and block.get("type") in {"agentSpawn", "agentCompletion"}
+            and block.get("sessionId") == child_session_id
+            and block.get("runId") == child_run_id
+            for block in candidate_blocks
+        ):
+            producing_assistants.append((index, message, candidate_blocks))
+    if len(producing_assistants) != 1:
+        raise ValueError(
+            "expected one producing assistant for the accepted child, "
+            f"found {len(producing_assistants)}"
+        )
+    assistant_index, assistant, blocks = producing_assistants[0]
+    adjacent_users = [
+        message
+        for message in messages[max(0, assistant_index - 1) : assistant_index]
         if isinstance(message, dict)
         and message.get("role") == "user"
         and str(message.get("raw_text") or message.get("text") or "").strip()
         == EXACT_VOICE_AGENT_MEMORY_REQUEST
     ]
-    if len(user_indexes) != 1:
-        raise ValueError(f"expected one exact voice user turn, found {len(user_indexes)}")
-    start = user_indexes[0] + 1
-    end = next(
-        (
-            index
-            for index in range(start, len(messages))
-            if isinstance(messages[index], dict) and messages[index].get("role") == "user"
-        ),
-        len(messages),
-    )
-    assistants = [
-        message
-        for message in messages[start:end]
-        if isinstance(message, dict) and message.get("role") == "assistant"
-    ]
-    if len(assistants) != 1:
-        raise ValueError(f"expected one producing assistant turn, found {len(assistants)}")
-    assistant = assistants[0]
+    if len(adjacent_users) != 1:
+        raise ValueError(
+            "accepted child producing assistant does not have exactly one adjacent exact voice user turn"
+        )
     assistant_raw_text = str(assistant.get("raw_text") or assistant.get("text") or "").strip()
     if assistant_raw_text != "I started a background agent for that.":
         raise ValueError(f"producing assistant used noncanonical acknowledgement: {assistant_raw_text!r}")
 
     try:
-        blocks = json.loads(str(assistant.get("content_blocks_json", "[]")))
         resources = json.loads(str(assistant.get("resources_json", "[]")))
     except json.JSONDecodeError as exc:
         raise ValueError(f"producing turn structured payload is malformed: {exc.msg}") from exc
@@ -1627,10 +1703,16 @@ class GauntletRunner:
             )
             snapshot_detail = wait.get("result", {}).get("detail", {})
             if wait.get("ok") and snapshot_detail.get("idle") == "true":
-                break
+                snapshot = self.bridge_act("main_chat_snapshot", {"limit": "80"})
+                snapshot_detail = snapshot.get("result", {}).get("detail", snapshot_detail)
+                if current_turn_has_terminal_assistant(snapshot_detail, query):
+                    break
             time.sleep(0.25)
         else:
-            self.fail(f"timed out waiting for main chat idle after query: {query[:120]}")
+            self.fail(
+                "timed out waiting for query-specific terminal assistant row after query: "
+                f"{query[:120]}"
+            )
 
         snapshot = self.bridge_act( "main_chat_snapshot", {"limit": "80"})
         snapshot_detail = snapshot.get("result", {}).get("detail", snapshot_detail)
@@ -1661,10 +1743,16 @@ class GauntletRunner:
             )
             snapshot_detail = wait.get("result", {}).get("detail", {})
             if wait.get("ok") and snapshot_detail.get("idle") == "true":
-                break
+                snapshot = self.bridge_act("main_chat_snapshot", {"limit": "80"})
+                snapshot_detail = snapshot.get("result", {}).get("detail", snapshot_detail)
+                if current_turn_has_terminal_assistant(snapshot_detail, query):
+                    break
             time.sleep(0.25)
         else:
-            self.fail(f"timed out waiting for resilience main chat idle after query: {query[:120]}")
+            self.fail(
+                "timed out waiting for resilience query-specific terminal assistant row after query: "
+                f"{query[:120]}"
+            )
 
         snapshot = self.bridge_act("main_chat_snapshot", {"limit": "80"})
         snapshot_detail = snapshot.get("result", {}).get("detail", snapshot_detail)
@@ -1786,7 +1874,11 @@ class GauntletRunner:
         )
         send, snapshot, traces = self.send_and_wait(typed_query, self.args.turn_timeout_ms)
         self.record_step("01-typed-turn", "typed turn", user_text=typed_query, action_response=send, snapshot_detail=snapshot, traces=traces)
-        self.assert_assistant_mentions(latest_assistant_text(snapshot), [self.markers["typed"]], "typed turn")
+        self.assert_assistant_mentions(
+            current_turn_assistant_text(snapshot, typed_query),
+            [self.markers["typed"]],
+            "typed turn",
+        )
 
         # Step 2 — PTT turn (real hub controller path; transcript forced for determinism)
         ptt_user = (
@@ -1859,7 +1951,7 @@ class GauntletRunner:
             "Reply with only that exact marker string, nothing else."
         )
         send, snapshot, traces = self.send_and_wait(followup_query, self.args.turn_timeout_ms)
-        assistant = latest_assistant_text(snapshot)
+        assistant = current_turn_assistant_text(snapshot, followup_query)
         continuity_checks = self.assert_step3_blind_recall(assistant, traces, followup_query)
         self.record_step(
             "03-typed-followup",
@@ -2215,19 +2307,23 @@ class GauntletRunner:
             },
         )
         if not spawn_tools:
-            assistant = latest_assistant_text(snapshot)
+            assistant = current_turn_assistant_text(snapshot, spawn_query)
             self.fail(
                 "no spawn_agent execution with the objective marker — model refused or "
                 f"mis-routed the spawn request (assistant={assistant[:160]!r})"
             )
         else:
             failed_spawns = [
-                tool
+                (tool, error)
                 for tool in spawn_tools
-                if re.search(r"error|failed|denied", str(tool.get("output", "")), re.I)
+                if (error := spawn_tool_acceptance_error(tool.get("output"))) is not None
             ]
             if failed_spawns:
-                self.fail(f"spawn_agent execution reported failure: {failed_spawns[0].get('output')!r}")
+                failed_tool, failure = failed_spawns[0]
+                self.fail(
+                    f"spawn_agent execution reported failure: {failure}; "
+                    f"output={failed_tool.get('output')!r}"
+                )
 
         # Step 5 — status query about spawned agent
         # R8: marker-free probe — the answer must surface the objective marker
@@ -2238,7 +2334,7 @@ class GauntletRunner:
             "include the agent's exact objective marker."
         )
         send, snapshot, traces = self.send_and_wait(status_query, self.args.turn_timeout_ms)
-        assistant = latest_assistant_text(snapshot)
+        assistant = current_turn_assistant_text(snapshot, status_query)
         list_tools = [
             tool
             for trace in traces
@@ -2399,7 +2495,7 @@ class GauntletRunner:
 
         # Typed main-chat blind recall — same marker-free probe.
         send, snapshot, traces = self.send_and_wait(recency_probe, self.args.turn_timeout_ms)
-        assistant = latest_assistant_text(snapshot)
+        assistant = current_turn_assistant_text(snapshot, recency_probe)
         typed_evidence = strip_probe_text(
             assistant + "\n" + "\n".join(flatten_trace_text(trace) for trace in traces),
             [recency_probe],
@@ -2586,7 +2682,7 @@ class GauntletRunner:
         # even with coordinator/context-packet policy prose in the prompt (R9).
         p1_query = "Use execute_sql to count the rows in the memories table and tell me just the number."
         send, snapshot, traces = self.send_and_wait(p1_query, self.args.turn_timeout_ms)
-        assistant = latest_assistant_text(snapshot)
+        assistant = current_turn_assistant_text(snapshot, p1_query)
         sql_calls = trace_tool_executions(traces, {"execute_sql"})
         self.record_step(
             "p1-over-refusal",
@@ -2607,7 +2703,7 @@ class GauntletRunner:
         # tool, preferably get_daily_recap.
         p2_query = "What did I do yesterday? One short paragraph."
         send, snapshot, traces = self.send_and_wait(p2_query, self.args.turn_timeout_ms)
-        assistant = latest_assistant_text(snapshot)
+        assistant = current_turn_assistant_text(snapshot, p2_query)
         data_tools = trace_tool_executions(
             traces,
             {"get_daily_recap", "execute_sql", "get_conversations", "search_conversations", "semantic_search"},
@@ -2634,7 +2730,7 @@ class GauntletRunner:
         # with no robotic data-source phrasing.
         p3_query = "What should I know about my new colleague Zebulon Quarkfinder?"
         send, snapshot, traces = self.send_and_wait(p3_query, self.args.turn_timeout_ms)
-        assistant = latest_assistant_text(snapshot)
+        assistant = current_turn_assistant_text(snapshot, p3_query)
         robotic = [
             phrase
             for phrase in (
@@ -2939,7 +3035,11 @@ class GauntletRunner:
             traces=traces,
             extra={"terminal_reason": r1_reason},
         )
-        self.assert_assistant_mentions(latest_assistant_text(snapshot), ["RESILIENCE_BRIDGE_READY"], "R1 bridge launch")
+        self.assert_assistant_mentions(
+            current_turn_assistant_text(snapshot, r1_query),
+            ["RESILIENCE_BRIDGE_READY"],
+            "R1 bridge launch",
+        )
 
         # R2 — warm reuse probe. Sequential short prompts must settle cleanly and
         # must not surface already-running or generic stopped-response text.
@@ -2964,7 +3064,7 @@ class GauntletRunner:
                 extra={"terminal_reason": terminal_reason},
             )
             self.assert_assistant_mentions(
-                latest_assistant_text(snapshot),
+                current_turn_assistant_text(snapshot, query),
                 [f"WARM_REUSE_{index}"],
                 f"R2 warm reuse {index}",
             )
@@ -3043,6 +3143,19 @@ class GauntletRunner:
                 },
             )
             self.fail("R4 subagent launch: no spawn_agent execution carrying the resilience marker")
+        spawn_failures = [
+            error
+            for tool in spawn_tools
+            if (error := spawn_tool_acceptance_error(tool.get("output"))) is not None
+        ]
+        if spawn_failures:
+            self.record_resilience_diagnostic(
+                "R4-subagent-launch",
+                2,
+                "subagent_spawn_rejected",
+                {"error": spawn_failures[0]},
+            )
+            self.fail(f"R4 subagent launch: {spawn_failures[0]}")
         if runtime.get("ok") is False or runtime_detail.get("error") or runtime_detail.get("database_exists") != "true":
             self.record_resilience_diagnostic(
                 "R4-subagent-launch",
@@ -3087,7 +3200,7 @@ class GauntletRunner:
             snapshot=snapshot,
             traces=traces,
         )
-        assistant = latest_assistant_text(snapshot)
+        assistant = current_turn_assistant_text(snapshot, status_query)
         list_tools = trace_tool_executions(traces, {"list_agent_sessions"})
         list_outputs = "\n".join(str(tool.get("output", "")) for tool in list_tools)
         if not list_tools or marker not in (assistant + "\n" + list_outputs):
@@ -3226,6 +3339,38 @@ def self_check() -> int:
             file=sys.stderr,
         )
         return 1
+    spawn_acceptance_failures = spawn_acceptance_self_check_failures(driver_source)
+    if spawn_acceptance_failures:
+        print(
+            f"self-check failed: spawn acceptance classification {spawn_acceptance_failures}",
+            file=sys.stderr,
+        )
+        return 1
+    stale_turn_messages = [
+        {"role": "user", "text": "old query", "streaming": "false"},
+        {"role": "assistant", "text": "old answer", "streaming": "false"},
+        {"role": "user", "text": "new query", "streaming": "false"},
+    ]
+    stale_turn_snapshot = {"messages_json": json.dumps(stale_turn_messages)}
+    if (
+        current_turn_assistant_text(stale_turn_snapshot, "new query")
+        or current_turn_has_terminal_assistant(stale_turn_snapshot, "new query")
+    ):
+        print(
+            "self-check failed: query-specific evidence inherited a prior assistant turn",
+            file=sys.stderr,
+        )
+        return 1
+    stale_turn_messages.append(
+        {"role": "assistant", "text": "", "streaming": "false", "status": "failed"}
+    )
+    terminal_failure_snapshot = {"messages_json": json.dumps(stale_turn_messages)}
+    if not current_turn_has_terminal_assistant(terminal_failure_snapshot, "new query"):
+        print(
+            "self-check failed: query-specific wait did not recognize an empty terminal row",
+            file=sys.stderr,
+        )
+        return 1
     missing_contract_checks = continuity_contract_self_check_failures()
     if missing_contract_checks:
         print(
@@ -3240,9 +3385,62 @@ def self_check() -> int:
     print(
         "self-check passed "
         "(R3 race actions + resilience wiring + exact voice authority + "
-        "INV-6 hermetic contract gates + owner-switch)"
+        "query-specific terminal evidence + INV-6 hermetic contract gates + owner-switch)"
     )
     return 0
+
+
+def spawn_acceptance_self_check_failures(driver_source: str) -> list[str]:
+    failures: list[str] = []
+    tree = ast.parse(driver_source)
+    runner = next(
+        (node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "GauntletRunner"),
+        None,
+    )
+    methods = {
+        node.name: node
+        for node in (runner.body if runner is not None else [])
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    for method_name in ("run_agents_suite", "run_resilience_suite"):
+        if not method_calls(methods.get(method_name), "spawn_tool_acceptance_error"):
+            failures.append(f"{method_name} uses structured spawn acceptance")
+    accepted = json.dumps(
+        {
+            "ok": True,
+            "requestedAgentCount": 1,
+            "agents": [
+                {
+                    "run": {
+                        "status": "queued",
+                        "errorCode": None,
+                        "errorMessage": None,
+                        "input": {"prompt": "track a failed-build marker safely"},
+                    },
+                    "delegation": {"status": "running"},
+                }
+            ],
+        }
+    )
+    if spawn_tool_acceptance_error(accepted) is not None:
+        failures.append("ok=true queued delegation is accepted despite nested error keys")
+    rejected = json.dumps(
+        {"ok": False, "error": {"code": "spawn_denied", "message": "denied by policy"}}
+    )
+    if spawn_tool_acceptance_error(rejected) is None:
+        failures.append("ok=false response is rejected")
+    failed_child = json.dumps(
+        {
+            "ok": True,
+            "requestedAgentCount": 1,
+            "agents": [{"run": {"status": "failed"}}],
+        }
+    )
+    if spawn_tool_acceptance_error(failed_child) is None:
+        failures.append("non-accepted child run status is rejected")
+    if spawn_tool_acceptance_error("not-json") is None:
+        failures.append("malformed tool output is rejected")
+    return failures
 
 
 def continuity_contract_self_check_failures() -> list[str]:
@@ -3381,6 +3579,38 @@ def exact_voice_acceptance_self_check_failures(driver_source: str) -> list[str]:
     sample_snapshot = {
         "messages_json": json.dumps(
             [
+                {
+                    "id": "stale-user",
+                    "role": "user",
+                    "text": EXACT_VOICE_AGENT_MEMORY_REQUEST,
+                    "raw_text": EXACT_VOICE_AGENT_MEMORY_REQUEST,
+                },
+                {
+                    "id": "stale-assistant",
+                    "role": "assistant",
+                    "text": "I started a background agent for that.",
+                    "raw_text": "I started a background agent for that.",
+                    "content_blocks_json": json.dumps(
+                        [
+                            {
+                                "type": "agentSpawn",
+                                "id": "stale-spawn",
+                                "pillId": "00000000-0000-0000-0000-000000000950",
+                                "sessionId": "stale-child-session",
+                                "runId": "stale-child-run",
+                            },
+                            {
+                                "type": "agentCompletion",
+                                "id": "stale-completion",
+                                "pillId": "00000000-0000-0000-0000-000000000950",
+                                "sessionId": "stale-child-session",
+                                "runId": "stale-child-run",
+                                "status": "completed",
+                            },
+                        ]
+                    ),
+                    "resources_json": "[]",
+                },
                 {
                     "id": "user-1",
                     "role": "user",

@@ -11,6 +11,8 @@ import {
 } from "../src/runtime/run-tool-capability.js";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 import { readToolInvocation } from "../src/runtime/tool-invocation-ledger.js";
+import { readSessionExecutionProfile } from "../src/runtime/session-execution-profile.js";
+import { recordJournalTurn } from "../src/runtime/conversation-journal.js";
 
 const roots: string[] = [];
 
@@ -46,6 +48,17 @@ function fixture(role: "coordinator" | "leaf" = "coordinator") {
   return { databasePath, store, session, run, attempt };
 }
 
+function createBroker(
+  store: SqliteAgentStore,
+  options: Omit<ConstructorParameters<typeof RunToolCapabilityBroker>[0], "store" | "profileForSession"> = {},
+): RunToolCapabilityBroker {
+  return new RunToolCapabilityBroker({
+    store,
+    ...options,
+    profileForSession: (sessionId) => readSessionExecutionProfile(store, sessionId),
+  });
+}
+
 function expectCode(work: () => unknown, code: string): void {
   try {
     work();
@@ -73,9 +86,108 @@ function invocationIdentity(invocation: AuthorizedRunToolInvocation) {
 }
 
 describe("RunToolCapabilityBroker", () => {
+  it("requires the canonical profile reader and rejects unknown canonical adapters", () => {
+    const { store } = fixture();
+    expect(() => new RunToolCapabilityBroker({ store } as never)).toThrow(
+      /requires a canonical session profile reader/,
+    );
+    const session = store.insertSession({
+      ownerId: "owner-1",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "unknown-adapter",
+    });
+    const run = store.insertRun({
+      sessionId: session.sessionId,
+      clientId: "unknown-client",
+      requestId: "unknown-request",
+      status: "running",
+      mode: "act",
+    });
+    const attempt = store.insertAttempt({
+      runId: run.runId,
+      attemptNo: 1,
+      status: "running",
+      adapterId: "unknown-adapter",
+      adapterInstanceId: "unknown-worker",
+    });
+    const canonicalUnknown = createBroker(store);
+    expect(() => canonicalUnknown.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    })).toThrow(/Unknown canonical session adapter unknown-adapter/);
+    store.close();
+  });
+
+  it("uses the immutable canonical profile instead of conflicting legacy session columns", () => {
+    const { store, session, run, attempt } = fixture("leaf");
+    store.execute(
+      "UPDATE sessions SET default_adapter_id = 'pi-mono', execution_role = 'coordinator' WHERE session_id = ?",
+      [session.sessionId],
+    );
+    const capability = createBroker(store).register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    expect(capability).toMatchObject({ adapterId: "acp", executionRole: "leaf", profileGeneration: 1 });
+    expect(capability.allowedToolNames).not.toContain("spawn_agent");
+    store.close();
+  });
+
+  it("pins preceding assistant text to the run's admitted context snapshot", () => {
+    const { store, session, run, attempt } = fixture();
+    store.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", [
+      JSON.stringify({
+        prompt: "Continue from the accepted context",
+        admittedContextSnapshot: {
+          recentTurns: [
+            { role: "assistant", content: "assistant-at-admission" },
+            { role: "user", content: "accepted user prompt" },
+          ],
+          sourceOutcomes: [],
+        },
+      }),
+      run.runId,
+    ]);
+    store.insertSurfaceConversation({
+      ownerId: session.ownerId,
+      surfaceKind: session.surfaceKind,
+      externalRefKind: "chat",
+      externalRefId: "default",
+      conversationId: "conv-live-newer",
+      agentSessionId: session.sessionId,
+      createdAtMs: 1,
+      lastActiveAtMs: 1,
+    });
+    recordJournalTurn(store, {
+      ownerId: session.ownerId,
+      conversationId: "conv-live-newer",
+      turnId: "assistant-after-admission",
+      role: "assistant",
+      surfaceKind: session.surfaceKind,
+      origin: "typed_chat",
+      status: "completed",
+      content: "newer-live-assistant-must-not-leak",
+      contentBlocks: [],
+      createdAtMs: 2,
+    });
+
+    const capability = createBroker(store).register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    expect(capability.precedingAssistantText).toBe("assistant-at-admission");
+    store.close();
+  });
+
   it("authorizes two direct-child memory calls and persists each single-use lifecycle", () => {
     const { store, session, run, attempt } = fixture("leaf");
-    const broker = new RunToolCapabilityBroker({ store, daemonBootEpoch: "boot-test" });
+    const broker = createBroker(store, { daemonBootEpoch: "boot-test" });
     expect(session.executionRole).toBe("leaf");
     const capability = broker.register({
       ownerId: session.ownerId,
@@ -129,7 +241,7 @@ describe("RunToolCapabilityBroker", () => {
 
   it("rejects stale and duplicate Swift results by the exact persisted tuple", () => {
     const { store, session, run, attempt } = fixture();
-    const broker = new RunToolCapabilityBroker({ store });
+    const broker = createBroker(store);
     const capability = broker.register({
       ownerId: session.ownerId,
       sessionId: session.sessionId,
@@ -174,7 +286,7 @@ describe("RunToolCapabilityBroker", () => {
 
   it("revalidates the active owner before accepting a durable completion", () => {
     const { store, session, run, attempt } = fixture();
-    const broker = new RunToolCapabilityBroker({ store });
+    const broker = createBroker(store);
     const capability = broker.register({
       ownerId: session.ownerId,
       sessionId: session.sessionId,
@@ -208,7 +320,7 @@ describe("RunToolCapabilityBroker", () => {
 
   it("fails closed for wrong owner, run, attempt, role, and unmanifested tools", () => {
     const { store, session, run, attempt } = fixture("leaf");
-    const broker = new RunToolCapabilityBroker({ store });
+    const broker = createBroker(store);
     const capability = broker.register({
       ownerId: session.ownerId,
       sessionId: session.sessionId,
@@ -235,7 +347,7 @@ describe("RunToolCapabilityBroker", () => {
 
   it("keeps capability state internal and revokes it at terminal attempt", () => {
     const { store, session, run, attempt } = fixture();
-    const broker = new RunToolCapabilityBroker({ store });
+    const broker = createBroker(store);
     const capability = broker.register({
       ownerId: session.ownerId,
       sessionId: session.sessionId,
@@ -270,7 +382,7 @@ describe("RunToolCapabilityBroker", () => {
 
   it("aborts an acquired execution lease and revalidates persisted authority at effect boundaries", () => {
     const { store, session, run, attempt } = fixture();
-    const broker = new RunToolCapabilityBroker({ store });
+    const broker = createBroker(store);
     const capability = broker.register({
       ownerId: session.ownerId,
       sessionId: session.sessionId,
@@ -310,7 +422,7 @@ describe("RunToolCapabilityBroker", () => {
 
   it("terminalizes every pending invocation and rejects late durable success after a run ends", () => {
     const { store, session, run, attempt } = fixture();
-    const broker = new RunToolCapabilityBroker({ store });
+    const broker = createBroker(store);
     const capability = broker.register({
       ownerId: session.ownerId,
       sessionId: session.sessionId,
@@ -384,7 +496,7 @@ describe("RunToolCapabilityBroker", () => {
         }),
         run.runId,
       ]);
-      const broker = new RunToolCapabilityBroker({ store });
+      const broker = createBroker(store);
       const capability = broker.register({
         ownerId: session.ownerId,
         sessionId: session.sessionId,
@@ -399,7 +511,7 @@ describe("RunToolCapabilityBroker", () => {
   it("rejects new invocations as soon as either run or attempt starts cancelling", () => {
     for (const cancellingOwner of ["run", "attempt"] as const) {
       const { store, session, run, attempt } = fixture();
-      const broker = new RunToolCapabilityBroker({ store });
+      const broker = createBroker(store);
       const capability = broker.register({
         ownerId: session.ownerId,
         sessionId: session.sessionId,
@@ -426,7 +538,7 @@ describe("RunToolCapabilityBroker", () => {
 
   it("reconciles prepared to failed and dispatched to outcome_unknown after restart", () => {
     const { databasePath, store, session, run, attempt } = fixture();
-    const broker = new RunToolCapabilityBroker({ store, daemonBootEpoch: "boot-before" });
+    const broker = createBroker(store, { daemonBootEpoch: "boot-before" });
     const capability = broker.register({
       ownerId: session.ownerId,
       sessionId: session.sessionId,

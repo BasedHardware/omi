@@ -24,6 +24,7 @@ import {
   type AuthorizedRunToolInvocation,
 } from "../src/runtime/run-tool-capability.js";
 import { readToolInvocation } from "../src/runtime/tool-invocation-ledger.js";
+import { readSessionExecutionProfile } from "../src/runtime/session-execution-profile.js";
 import { baseRunInput, createKernelHarness, FakeRuntimeAdapter, waitUntil } from "./kernel-fakes.js";
 
 const createdDirs: string[] = [];
@@ -65,6 +66,22 @@ afterEach(async () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+function createCapabilityBroker(store: SqliteAgentStore): RunToolCapabilityBroker {
+  return new RunToolCapabilityBroker({
+    store,
+    profileForSession: (sessionId) => {
+      const profile = readSessionExecutionProfile(store, sessionId);
+      return {
+        generation: profile.generation,
+        // These control-tool tests use the kernel's synthetic `fake` adapter;
+        // the canonical capability projection they exercise is the stdio lane.
+        adapterId: profile.adapterId === "fake" ? "acp" : profile.adapterId,
+        executionRole: profile.executionRole,
+      };
+    },
+  });
+}
 
 describe("agent control tools", () => {
   it("bridges workstream migration, artifact versioning, checkpointing, and idempotent replay", async () => {
@@ -201,7 +218,7 @@ describe("agent control tools", () => {
       adapterId: "fake",
       adapterInstanceId: "workstream-lease-worker",
     });
-    const broker = new RunToolCapabilityBroker({ store });
+    const broker = createCapabilityBroker(store);
     const capability = broker.register({
       ownerId: "owner",
       sessionId: caller.sessionId,
@@ -477,6 +494,16 @@ describe("agent control tools", () => {
         prompt: "valid",
       }).success,
     ).toBe(false);
+  });
+
+  it("accepts objective-only public spawn_agent input and rejects caller-supplied routing authority", () => {
+    expect(agentControlToolSchemas.spawn_agent.safeParse({
+      objective: "Research the release plan",
+    }).success).toBe(true);
+    expect(agentControlToolSchemas.spawn_agent.safeParse({
+      objective: "Research the release plan",
+      originSurfaceKind: "main_chat",
+    }).success).toBe(false);
   });
 
   it("declares coordinator policy metadata for every control tool", () => {
@@ -1804,7 +1831,7 @@ describe("agent control tools", () => {
       adapterId: "fake",
       adapterInstanceId: "lease-worker",
     });
-    const broker = new RunToolCapabilityBroker({ store });
+    const broker = createCapabilityBroker(store);
     const capability = broker.register({
       ownerId: "owner",
       sessionId: caller.sessionId,
@@ -1887,7 +1914,7 @@ describe("agent control tools", () => {
       adapterId: "fake",
       adapterInstanceId: "sibling-lease-worker",
     });
-    const broker = new RunToolCapabilityBroker({ store });
+    const broker = createCapabilityBroker(store);
     const capability = broker.register({
       ownerId: "owner",
       sessionId: caller.sessionId,
@@ -1980,7 +2007,7 @@ describe("agent control tools", () => {
       defaultAdapterId: "fake",
       executionRole: "leaf",
     });
-    const broker = new RunToolCapabilityBroker({ store });
+    const broker = createCapabilityBroker(store);
     const capability = broker.register({
       ownerId: "owner",
       sessionId: caller.sessionId,

@@ -306,7 +306,14 @@ describe("kernel ContextSnapshot", () => {
       payload: { root: "/main-only" },
     }, 3);
     recordJournalTurn(store, journalTurn("isolated-owner", main.conversationId, "main-turn", "main only", 4));
-    recordJournalTurn(store, journalTurn("isolated-owner", workstream.conversationId, "work-turn", "work only", 5));
+    recordJournalTurn(store, journalTurn(
+      "isolated-owner",
+      workstream.conversationId,
+      "work-turn",
+      "work only",
+      5,
+      "workstream",
+    ));
 
     const mainSnapshot = buildContextSnapshot(store, main.agentSessionId, "isolated-owner", 6, "main_chat");
     const workSnapshot = buildContextSnapshot(store, workstream.agentSessionId, "isolated-owner", 6, "workstream");
@@ -560,18 +567,24 @@ describe("kernel ContextSnapshot", () => {
   });
 });
 
-function journalTurn(ownerId: string, conversationId: string, turnId: string, content: string, createdAtMs: number) {
+function journalTurn(
+  ownerId: string,
+  conversationId: string,
+  turnId: string,
+  content: string,
+  createdAtMs: number,
+  surfaceKind = "main_chat",
+) {
   return {
     ownerId,
     conversationId,
     turnId,
     role: "user" as const,
-    surfaceKind: "main_chat",
-    origin: "typed_chat" as const,
+    surfaceKind,
+    origin: surfaceKind === "workstream" ? "workstream" as const : "typed_chat" as const,
     status: "completed" as const,
     content,
     contentBlocks: [{ type: "text" as const, id: `${turnId}:text`, text: content }],
-    delivery: "local" as const,
     createdAtMs,
   };
 }

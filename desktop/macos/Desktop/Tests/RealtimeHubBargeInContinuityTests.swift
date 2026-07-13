@@ -4,6 +4,45 @@ import XCTest
 
 @MainActor
 final class RealtimeHubBargeInContinuityTests: XCTestCase {
+  func testAcceptedSpawnOwnsJournalAndProviderCompletionMakesNoSecondMutation() async {
+    var refreshCount = 0
+    var mutationCount = 0
+
+    let accepted = await RealtimeTurnJournalAuthority.persist(
+      turnOwnerID: "owner-a",
+      acceptedSpawnOwnerID: "owner-a",
+      refreshAcceptedSpawn: {
+        refreshCount += 1
+        return true
+      },
+      recordProviderExchange: {
+        mutationCount += 1
+        return true
+      })
+
+    XCTAssertTrue(accepted)
+    XCTAssertEqual(refreshCount, 1)
+    XCTAssertEqual(
+      mutationCount, 0,
+      "provider turn_done must not write after spawn admission recorded the canonical exchange")
+  }
+
+  func testProviderCompletionRecordsWhenNoSpawnReceiptOwnsTheExchange() async {
+    var mutationCount = 0
+
+    let accepted = await RealtimeTurnJournalAuthority.persist(
+      turnOwnerID: "owner-a",
+      acceptedSpawnOwnerID: nil,
+      refreshAcceptedSpawn: { XCTFail("no spawn receipt exists"); return false },
+      recordProviderExchange: {
+        mutationCount += 1
+        return true
+      })
+
+    XCTAssertTrue(accepted)
+    XCTAssertEqual(mutationCount, 1)
+  }
+
   func testConnectReplayGateNeverBeginsInputTwice() {
     XCTAssertTrue(
       RealtimeHubConnectReplayGate.shouldBeginGenericInput(

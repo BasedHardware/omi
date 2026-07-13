@@ -33,6 +33,7 @@ export function conversationTurnFromRow(row: Record<string, unknown>): Conversat
     contentBlocks: parseArray<ConversationContentBlock>(row.content_blocks_json),
     resources: parseArray<ConversationResource>(row.resources_json),
     producingRunId: row.producing_run_id == null ? null : String(row.producing_run_id),
+    producingAttemptId: row.producing_attempt_id == null ? null : String(row.producing_attempt_id),
     remoteId: row.remote_id == null ? null : String(row.remote_id),
     createdAtMs: Number(row.created_at_ms),
     updatedAtMs: Number(row.updated_at_ms ?? row.created_at_ms),

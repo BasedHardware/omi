@@ -612,6 +612,56 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertNil(withoutAdapter.adapterSessionId)
   }
 
+  @MainActor
+  func testEveryNonTaskQueryResultLayerFailsClosedWithoutTypedSuccess() throws {
+    XCTAssertEqual(AgentQueryTerminalStatus(wireValue: "succeeded"), .succeeded)
+    XCTAssertEqual(AgentQueryTerminalStatus(wireValue: "cancelled"), .cancelled)
+    XCTAssertEqual(AgentQueryTerminalStatus(wireValue: nil), .invalid(nil))
+    XCTAssertEqual(AgentQueryTerminalStatus(wireValue: "future_terminal"), .invalid("future_terminal"))
+
+    let successfulBridgeResult = AgentBridge.QueryResult(
+      text: "accepted",
+      costUsd: 0,
+      omiSessionId: "omi-session",
+      runId: "run",
+      attemptId: "attempt",
+      adapterSessionId: nil,
+      terminalStatus: "succeeded",
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0
+    )
+    let successfulClientResult = AgentClient.QueryResult(successfulBridgeResult)
+    XCTAssertEqual(try successfulBridgeResult.requireSucceeded().text, "accepted")
+    XCTAssertEqual(try successfulClientResult.requireSucceeded().text, "accepted")
+    XCTAssertEqual(
+      try ChatProvider.requireSuccessfulQueryResult(successfulClientResult).text,
+      "accepted"
+    )
+
+    for rawStatus in [nil, "future_terminal", "failed", "timed_out", "orphaned", "cancelled"] as [String?] {
+      let bridgeResult = AgentBridge.QueryResult(
+        text: "not successful",
+        costUsd: 0,
+        omiSessionId: "omi-session",
+        runId: "run",
+        attemptId: "attempt",
+        adapterSessionId: nil,
+        terminalStatus: rawStatus,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0
+      )
+      let clientResult = AgentClient.QueryResult(bridgeResult)
+      let label = "\(String(describing: rawStatus)) must fail closed"
+      XCTAssertThrowsError(try bridgeResult.requireSucceeded(), label)
+      XCTAssertThrowsError(try clientResult.requireSucceeded(), label)
+      XCTAssertThrowsError(try ChatProvider.requireSuccessfulQueryResult(clientResult), label)
+    }
+  }
+
   func testSharedRuntimeDoesNotTrackCurrentHarnessMode() throws {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
@@ -792,6 +842,28 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertFalse(source.contains("while !Task.isCancelled"))
   }
 
+  func testStdoutChunksAreReorderedBeforeJSONLFraming() {
+    let frame = Data(
+      #"{"type":"context_snapshot","protocolVersion":2,"requestId":"context-1","clientId":"client-1","ownerId":"owner-1","snapshot":{}}"#.utf8
+    ) + Data([UInt8(ascii: "\n")])
+    let split = frame.count / 2
+    let first = Data(frame[..<split])
+    let second = Data(frame[split...])
+    var buffer = AgentRuntimeOrderedStdoutBuffer()
+
+    XCTAssertTrue(buffer.ingest(second, sequence: 1).isEmpty)
+    let lines = buffer.ingest(first, sequence: 0)
+    let parsed = lines.compactMap { lineData -> AgentRuntimeProcess.RuntimeMessage? in
+      guard let line = String(data: lineData, encoding: .utf8) else { return nil }
+      return AgentRuntimeProcess.RuntimeMessage.parse(line)
+    }
+
+    XCTAssertEqual(lines.count, 1)
+    XCTAssertEqual(parsed.count, 1, "ordered delivery must produce zero malformed JSONL frames")
+    XCTAssertEqual(parsed.first?.kind, .contextSnapshot)
+    XCTAssertEqual(parsed.first?.requestId, "context-1")
+  }
+
   func testFailedRuntimeStartCleansUpLatchedRunningState() throws {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
@@ -849,7 +921,8 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains("completeControlRequest(message)"))
     XCTAssertTrue(source.contains("if !sent, let request = activeControlRequests.removeValue(forKey: requestKey)"))
     XCTAssertTrue(source.contains("failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw)"))
-    XCTAssertTrue(source.contains(#"["failed", "timed_out", "orphaned"].contains(terminalStatus)"#))
+    XCTAssertTrue(source.contains("request.continuation.resume(returning: queryResult(from: message))"))
+    XCTAssertFalse(source.contains(#"terminalStatus: payload["terminalStatus"] as? String ?? "succeeded""#))
   }
 
   func testDirectControlToolRequestsUseDedicatedSignedInOwnerEnvelope() throws {
@@ -1000,6 +1073,112 @@ final class AgentRuntimeProcessTests: XCTestCase {
     let bridgeSource = try sourceFile("Chat/AgentBridge.swift")
     XCTAssertTrue(bridgeSource.contains("func prepareForCrashRecovery()"))
     XCTAssertTrue(bridgeSource.contains("registered = false"))
+  }
+
+  func testContextAdmissionMismatchRefreshesCompleteFreshnessAndRetriesOnce() async throws {
+    let initial = AgentContextFreshness(
+      version: "snapshot-v1",
+      generation: 7,
+      rendererFingerprint: "renderer-v1",
+      capabilityVersion: "capabilities-v1"
+    )
+    let refreshed = AgentContextFreshness(
+      version: "snapshot-v2",
+      generation: 8,
+      rendererFingerprint: "renderer-v2",
+      capabilityVersion: "capabilities-v2"
+    )
+    var attempts: [AgentContextFreshness?] = []
+    var refreshCount = 0
+
+    let result: String = try await AgentContextAdmissionRetry.run(
+      expectedContext: initial,
+      refresh: {
+        refreshCount += 1
+        return refreshed
+      },
+      attempt: { context in
+        attempts.append(context)
+        if attempts.count == 1 {
+          throw self.contextProjectionMismatchError()
+        }
+        return "admitted"
+      }
+    )
+
+    XCTAssertEqual(result, "admitted")
+    XCTAssertEqual(refreshCount, 1)
+    XCTAssertEqual(attempts, [initial, refreshed])
+  }
+
+  func testContextAdmissionSecondMismatchFailsWithoutAnotherRefreshOrRetry() async {
+    let initial = AgentContextFreshness(
+      version: "snapshot-v1",
+      generation: 11,
+      rendererFingerprint: "renderer-v1",
+      capabilityVersion: "capabilities-v1"
+    )
+    let refreshed = AgentContextFreshness(
+      version: "snapshot-v2",
+      generation: 12,
+      rendererFingerprint: "renderer-v2",
+      capabilityVersion: "capabilities-v2"
+    )
+    var attempts: [AgentContextFreshness?] = []
+    var refreshCount = 0
+
+    do {
+      let _: String = try await AgentContextAdmissionRetry.run(
+        expectedContext: initial,
+        refresh: {
+          refreshCount += 1
+          return refreshed
+        },
+        attempt: { context in
+          attempts.append(context)
+          throw self.contextProjectionMismatchError()
+        }
+      )
+      XCTFail("expected the second projection mismatch to fail closed")
+    } catch let error as BridgeError {
+      XCTAssertTrue(error.isContextSnapshotProjectionMismatch)
+    } catch {
+      XCTFail("unexpected error: \(error)")
+    }
+
+    XCTAssertEqual(refreshCount, 1)
+    XCTAssertEqual(attempts, [initial, refreshed])
+  }
+
+  func testContextAdmissionMismatchClassifierRequiresExactRuntimeCode() {
+    XCTAssertTrue(contextProjectionMismatchError().isContextSnapshotProjectionMismatch)
+    XCTAssertFalse(
+      BridgeError.agentError("prefix context_snapshot_projection_mismatch suffix")
+        .isContextSnapshotProjectionMismatch
+    )
+    XCTAssertFalse(
+      BridgeError.agentRuntimeFailure(AgentRuntimeFailure(
+        code: "runtime_query_failed",
+        userMessage: "context_snapshot_projection_mismatch",
+        technicalMessage: nil,
+        source: "adapter_execution",
+        adapterId: nil,
+        provider: nil,
+        retryable: false
+      )).isContextSnapshotProjectionMismatch
+    )
+  }
+
+  private func contextProjectionMismatchError() -> BridgeError {
+    .agentRuntimeFailure(AgentRuntimeFailure(
+      code: "runtime_query_failed",
+      userMessage: "context_snapshot_projection_mismatch",
+      technicalMessage: "context_snapshot_projection_mismatch",
+      source: "runtime",
+      adapterId: nil,
+      provider: nil,
+      retryable: false
+    ))
   }
 
   private func agentRuntimeSource() throws -> String {

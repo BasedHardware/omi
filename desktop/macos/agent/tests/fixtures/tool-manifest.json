@@ -2413,17 +2413,6 @@
           "type": "string",
           "description": "Self-contained background-agent objective."
         },
-        "originSurfaceKind": {
-          "type": "string",
-          "description": "Surface that originated the spawn request. Persisted caller session authority overrides this routing fact.",
-          "enum": [
-            "main_chat",
-            "floating_bar",
-            "realtime",
-            "task_chat",
-            "agent_control"
-          ]
-        },
         "requestedAgentCount": {
           "type": "number",
           "description": "Number of sibling agents requested in this single canonical route decision (default 1, maximum 8)."
@@ -2483,8 +2472,7 @@
         }
       },
       "required": [
-        "objective",
-        "originSurfaceKind"
+        "objective"
       ],
       "additionalProperties": false
     },
@@ -2495,17 +2483,6 @@
           "type": "string",
           "description": "Self-contained background-agent objective."
         },
-        "originSurfaceKind": {
-          "type": "string",
-          "description": "Surface that originated the spawn request. Persisted caller session authority overrides this routing fact.",
-          "enum": [
-            "main_chat",
-            "floating_bar",
-            "realtime",
-            "task_chat",
-            "agent_control"
-          ]
-        },
         "requestedAgentCount": {
           "type": "number",
           "description": "Number of sibling agents requested in this single canonical route decision (default 1, maximum 8)."
@@ -2565,8 +2542,7 @@
         }
       },
       "required": [
-        "objective",
-        "originSurfaceKind"
+        "objective"
       ],
       "additionalProperties": false
     },

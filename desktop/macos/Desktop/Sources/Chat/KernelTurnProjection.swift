@@ -123,7 +123,6 @@ enum KernelAgentLifecycleMutation {
       appendResourcesJSON: ChatResource.encodeResourcesForPersistence(
         result.resources
       ) ?? "[]",
-      producingRunId: nil,
       metadataJSON: nil
     )
   }
@@ -344,9 +343,7 @@ final class KernelTurnProjection {
     message: ChatMessage,
     origin: String,
     status: KernelJournalTurnStatus,
-    delivery: KernelJournalDelivery,
     continuityKey: String? = nil,
-    producingRunId: String? = nil,
     appId: String? = nil,
     sessionId: String? = nil,
     messageSource: String? = nil,
@@ -361,9 +358,7 @@ final class KernelTurnProjection {
         turn: message.journalWrite(
           origin: origin,
           status: status,
-          delivery: delivery,
           continuityKey: continuityKey,
-          producingRunId: producingRunId,
           appId: appId,
           sessionId: sessionId,
           messageSource: messageSource
@@ -384,7 +379,6 @@ final class KernelTurnProjection {
     surface: AgentSurfaceReference,
     message: ChatMessage,
     status: KernelJournalTurnStatus? = nil,
-    producingRunId: String? = nil,
     ownerID: String? = nil
   ) async -> KernelJournalTurn? {
     guard let lease = captureOwnerLease(ownerID: ownerID), let host else { return nil }
@@ -393,7 +387,7 @@ final class KernelTurnProjection {
       let turn = try await client.updateJournalTurn(
         surface: surface,
         ownerID: lease.ownerID,
-        update: message.journalUpdate(status: status, producingRunId: producingRunId)
+        update: message.journalUpdate(status: status)
       )
       guard isCurrent(lease) else { return nil }
       await refresh(surface: surface, lease: lease)
@@ -401,6 +395,52 @@ final class KernelTurnProjection {
       return turn
     } catch {
       log("KernelTurnProjection: journal update failed (code=journal_update_failed)")
+      return nil
+    }
+  }
+
+  @discardableResult
+  func terminalizeTurn(
+    surface: AgentSurfaceReference,
+    turnId: String,
+    message: ChatMessage?,
+    producingRunId: String,
+    producingAttemptId: String,
+    disposition: KernelJournalTerminalDisposition,
+    acceptedContent: String? = nil,
+    acceptedResources: [ChatResource]? = nil,
+    ownerID: String
+  ) async -> KernelJournalTurn? {
+    guard let lease = captureOwnerLease(ownerID: ownerID), let host else { return nil }
+    guard await host.ensureBridgeStartedForKernel(), isCurrent(lease), let client else { return nil }
+    let acceptedText = message.flatMap { $0.text.isEmpty ? nil : $0.text } ?? acceptedContent
+    let terminalization = KernelJournalTurnTerminalization(
+      turnId: turnId,
+      producingRunId: producingRunId,
+      producingAttemptId: producingAttemptId,
+      disposition: disposition,
+      content: disposition == .accept ? acceptedText : nil,
+      contentBlocksJSON: disposition == .accept
+        ? message.flatMap { ChatContentBlockCodec.encode($0.contentBlocks) }
+        : nil,
+      resourcesJSON: disposition == .accept
+        ? message.flatMap { ChatResource.encodeResourcesForPersistence($0.displayResources) }
+          ?? acceptedResources.flatMap { resources in
+            resources.isEmpty ? nil : ChatResource.encodeResourcesForPersistence(resources)
+          }
+        : nil
+    )
+    do {
+      let turn = try await client.terminalizeJournalTurn(
+        surface: surface,
+        ownerID: lease.ownerID,
+        terminalization: terminalization
+      )
+      guard isCurrent(lease) else { return nil }
+      await refresh(surface: surface, lease: lease)
+      return isCurrent(lease) ? turn : nil
+    } catch {
+      log("KernelTurnProjection: journal terminalization failed (code=journal_terminalize_failed)")
       return nil
     }
   }
@@ -444,11 +484,8 @@ final class KernelTurnProjection {
     continuityKey: String,
     assistantContentBlocks: [ChatContentBlock] = [],
     resources: [ChatResource] = [],
-    producingRunId: String? = nil,
     ownerID: String? = nil
   ) async -> Bool {
-    let delivery: KernelJournalDelivery = ["task_chat", "workstream"].contains(surface.surfaceKind)
-      ? .local : .backend
     let baseDate = Date()
     var writes: [KernelJournalTurnWrite] = []
     if !userText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -462,9 +499,7 @@ final class KernelTurnProjection {
       writes.append(user.journalWrite(
         origin: origin,
         status: .completed,
-        delivery: delivery,
         continuityKey: continuityKey,
-        producingRunId: producingRunId,
         messageSource: origin
       ))
     }
@@ -483,9 +518,7 @@ final class KernelTurnProjection {
       writes.append(assistant.journalWrite(
         origin: origin,
         status: .completed,
-        delivery: delivery,
         continuityKey: continuityKey,
-        producingRunId: producingRunId,
         messageSource: origin
       ))
     }
@@ -505,9 +538,7 @@ final class KernelTurnProjection {
     surface: AgentSurfaceReference,
     turns: [ExchangeTurn],
     origin: String,
-    delivery: KernelJournalDelivery,
     continuityKey: String,
-    producingRunId: String? = nil,
     appId: String? = nil,
     sessionId: String? = nil,
     messageSource: String,
@@ -517,9 +548,7 @@ final class KernelTurnProjection {
       entry.message.journalWrite(
         origin: origin,
         status: entry.status,
-        delivery: delivery,
         continuityKey: continuityKey,
-        producingRunId: producingRunId,
         appId: appId,
         sessionId: sessionId,
         messageSource: messageSource

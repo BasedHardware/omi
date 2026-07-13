@@ -4,6 +4,20 @@ import XCTest
 
 @MainActor
 final class ChatToolExecutorSpawnAgentTests: XCTestCase {
+  private var ownerFixture: RuntimeOwnerAuthorityTestFixture!
+
+  override func setUp() async throws {
+    try await super.setUp()
+    ownerFixture = RuntimeOwnerAuthorityTestFixture()
+    await ownerFixture.establish(authOwnerID: "spawn-test-owner")
+  }
+
+  override func tearDown() async throws {
+    await ownerFixture.restore()
+    ownerFixture = nil
+    try await super.tearDown()
+  }
+
   func testDirectPermissionToolsRemainCanonicalPhysicalExecutors() {
     XCTAssertEqual(
       GeneratedToolExecutors.chatDispatch(for: "check_permission_status"),
@@ -14,15 +28,6 @@ final class ChatToolExecutorSpawnAgentTests: XCTestCase {
   }
 
   func testSpawnAgentHasNoDormantSwiftExecutionPath() async {
-    let previousOwner = UserDefaults.standard.object(forKey: DefaultsKey.authUserId.rawValue)
-    defer {
-      if let previousOwner {
-        UserDefaults.standard.set(previousOwner, forKey: DefaultsKey.authUserId.rawValue)
-      } else {
-        UserDefaults.standard.removeObject(forKey: DefaultsKey.authUserId.rawValue)
-      }
-    }
-    UserDefaults.standard.set("spawn-test-owner", forKey: DefaultsKey.authUserId.rawValue)
     let before = AgentPillsManager.shared.pills.count
     let toolCall = ToolCall(
       name: "spawn_agent",

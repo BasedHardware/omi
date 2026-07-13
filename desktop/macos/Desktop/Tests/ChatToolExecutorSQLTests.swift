@@ -84,6 +84,23 @@ private final class SQLTransactionObserver: TransactionObserver, @unchecked Send
 }
 
 final class ChatToolExecutorSQLTests: XCTestCase {
+    private var originalAuthOwner: String?
+    private var originalOwnerOverride: String?
+    private var originalOwnerBackup: String?
+
+    override func setUp() async throws {
+        try await super.setUp()
+        originalAuthOwner = UserDefaults.standard.string(forKey: .authUserId)
+        originalOwnerOverride = UserDefaults.standard.string(forKey: .automationOwnerOverride)
+        originalOwnerBackup = UserDefaults.standard.string(forKey: .automationOwnerABackup)
+        await restoreOriginalOwnerDefaults()
+    }
+
+    override func tearDown() async throws {
+        await restoreOriginalOwnerDefaults()
+        try await super.tearDown()
+    }
+
     func testReadOnlySQLAllowsSelectAndReadOnlyCTE() {
         XCTAssertTrue(ChatToolExecutor.isReadOnlySQLStatement("SELECT * FROM screenshots LIMIT 1"))
         XCTAssertTrue(
@@ -228,15 +245,7 @@ final class ChatToolExecutorSQLTests: XCTestCase {
 
     @MainActor
     func testKernelStampedReadOnlySQLRejectsPhysicalMutationInput() async {
-        let previousOwner = UserDefaults.standard.object(forKey: DefaultsKey.authUserId.rawValue)
-        defer {
-            if let previousOwner {
-                UserDefaults.standard.set(previousOwner, forKey: DefaultsKey.authUserId.rawValue)
-            } else {
-                UserDefaults.standard.removeObject(forKey: DefaultsKey.authUserId.rawValue)
-            }
-        }
-        UserDefaults.standard.set("sql-owner", forKey: DefaultsKey.authUserId.rawValue)
+        await establishStandardOwner("sql-owner")
         let result = await ChatToolExecutor.execute(
             ToolCall(
                 name: "execute_sql",
@@ -253,5 +262,62 @@ final class ChatToolExecutorSQLTests: XCTestCase {
             result,
             "Error: this SQL surface is read-only. Use SELECT or read-only WITH queries."
         )
+    }
+
+    private func establishStandardOwner(_ ownerID: String?) async {
+        let bootstrapOwner = "chat-tool-sql-owner-bootstrap"
+        await transitionStandardOwner(to: ownerID == bootstrapOwner ? nil : bootstrapOwner)
+        await transitionStandardOwner(to: ownerID)
+    }
+
+    private func transitionStandardOwner(to ownerID: String?) async {
+        await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+            defaults: .standard,
+            allowAutomationOverride: false,
+            plannedNextOwner: { _, _ in ownerID },
+            quiesceVoice: { _, _ in },
+            revokeKernelOwner: { _, _ in },
+            retargetLocalStorage: { _, _ in },
+            ownerDidChange: {}
+        ) { defaults in
+            defaults.removeObject(forKey: .automationOwnerOverride)
+            defaults.removeObject(forKey: .automationOwnerABackup)
+            if let ownerID {
+                defaults.set(ownerID, forKey: .authUserId)
+            } else {
+                defaults.removeObject(forKey: .authUserId)
+            }
+        }
+    }
+
+    private func restoreOriginalOwnerDefaults() async {
+        let authOwner = originalAuthOwner
+        let ownerOverride = originalOwnerOverride
+        let ownerBackup = originalOwnerBackup
+        let effectiveOwner = ownerOverride?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            ? ownerOverride
+            : authOwner
+        await transitionStandardOwner(to: "chat-tool-sql-owner-restore")
+        await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+            defaults: .standard,
+            allowAutomationOverride: true,
+            plannedNextOwner: { _, _ in effectiveOwner },
+            quiesceVoice: { _, _ in },
+            revokeKernelOwner: { _, _ in },
+            retargetLocalStorage: { _, _ in },
+            ownerDidChange: {}
+        ) { defaults in
+            for (key, value) in [
+                (DefaultsKey.authUserId, authOwner),
+                (DefaultsKey.automationOwnerOverride, ownerOverride),
+                (DefaultsKey.automationOwnerABackup, ownerBackup),
+            ] {
+                if let value {
+                    defaults.set(value, forKey: key.rawValue)
+                } else {
+                    defaults.removeObject(forKey: key.rawValue)
+                }
+            }
+        }
     }
 }

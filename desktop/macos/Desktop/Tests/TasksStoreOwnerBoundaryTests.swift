@@ -104,17 +104,8 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
   @MainActor
   func testPausedDashboardRefreshCannotPublishAfterOwnerSwitch() async {
     let defaults = UserDefaults.standard
-    let previousOwner = defaults.object(forKey: .authUserId)
-    let previousOverride = defaults.object(forKey: .automationOwnerOverride)
     let store = TasksStore.shared
-    defer {
-      restore(previousOwner, key: .authUserId, defaults: defaults)
-      restore(previousOverride, key: .automationOwnerOverride, defaults: defaults)
-      store.resetSessionState()
-    }
-    defaults.removeObject(forKey: .automationOwnerOverride)
-    defaults.set("owner-a", forKey: .authUserId)
-    store.resetSessionState()
+    await prepareOwnerBoundaryTest(store: store)
 
     let ownerATask = task(id: "owner-a-dashboard")
     let ownerBTask = task(id: "owner-b-dashboard")
@@ -132,7 +123,7 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
         })
     }
     await gate.waitUntilStarted()
-    defaults.set("owner-b", forKey: .authUserId)
+    illegallyMutateOwnerDefaults(to: "owner-b", defaults: defaults)
     await gate.release()
     await refresh.value
 
@@ -144,17 +135,8 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
   @MainActor
   func testDefaultToggleEntrypointCapturesOwnerBeforeItsFirstAwait() async {
     let defaults = UserDefaults.standard
-    let previousOwner = defaults.object(forKey: .authUserId)
-    let previousOverride = defaults.object(forKey: .automationOwnerOverride)
     let store = TasksStore.shared
-    defer {
-      restore(previousOwner, key: .authUserId, defaults: defaults)
-      restore(previousOverride, key: .automationOwnerOverride, defaults: defaults)
-      store.resetSessionState()
-    }
-    defaults.removeObject(forKey: .automationOwnerOverride)
-    defaults.set("owner-a", forKey: .authUserId)
-    store.resetSessionState()
+    await prepareOwnerBoundaryTest(store: store)
 
     let task = task(id: "owner-a-default-toggle")
     let dashboardSentinel = self.task(id: "owner-b-dashboard-sentinel")
@@ -168,7 +150,7 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
       })
     }
     await gate.waitUntilStarted()
-    defaults.set("owner-b", forKey: .authUserId)
+    illegallyMutateOwnerDefaults(to: "owner-b", defaults: defaults)
     await gate.release()
     await operation.value
 
@@ -181,17 +163,8 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
   @MainActor
   func testDefaultDeleteEntrypointCapturesOwnerBeforeItsFirstAwait() async {
     let defaults = UserDefaults.standard
-    let previousOwner = defaults.object(forKey: .authUserId)
-    let previousOverride = defaults.object(forKey: .automationOwnerOverride)
     let store = TasksStore.shared
-    defer {
-      restore(previousOwner, key: .authUserId, defaults: defaults)
-      restore(previousOverride, key: .automationOwnerOverride, defaults: defaults)
-      store.resetSessionState()
-    }
-    defaults.removeObject(forKey: .automationOwnerOverride)
-    defaults.set("owner-a", forKey: .authUserId)
-    store.resetSessionState()
+    await prepareOwnerBoundaryTest(store: store)
 
     let task = task(id: "owner-a-default-delete")
     let dashboardSentinel = self.task(id: "owner-b-dashboard-sentinel")
@@ -205,7 +178,7 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
       })
     }
     await gate.waitUntilStarted()
-    defaults.set("owner-b", forKey: .authUserId)
+    illegallyMutateOwnerDefaults(to: "owner-b", defaults: defaults)
     await gate.release()
     await operation.value
 
@@ -217,23 +190,12 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
 
   @MainActor
   func testPinnedToolSnapshotCannotRecaptureSameUIDAfterSessionGenerationChanges() async {
-    let defaults = UserDefaults.standard
-    let previousOwner = RuntimeOwnerIdentity.currentOwnerId()
-    let previousAuthOwner = defaults.object(forKey: .authUserId)
-    let previousOverride = defaults.object(forKey: .automationOwnerOverride)
     let store = TasksStore.shared
-    defer {
-      restore(previousAuthOwner, key: .authUserId, defaults: defaults)
-      restore(previousOverride, key: .automationOwnerOverride, defaults: defaults)
-      store.resetSessionState()
-    }
-
-    await transitionEffectiveOwner(to: "owner-a")
+    await prepareOwnerBoundaryTest(store: store)
     guard let ownerASnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
       expectedOwnerID: "owner-a"
     ) else {
       XCTFail("owner-a authorization snapshot was unavailable")
-      await transitionEffectiveOwner(to: previousOwner)
       return
     }
     store.resetSessionState()
@@ -282,24 +244,13 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
       store.incompleteTasks.isEmpty,
       "the owner transition must purge the prior session's visible task arrays")
     XCTAssertTrue(store.completedTasks.isEmpty)
-
-    await transitionEffectiveOwner(to: previousOwner)
   }
 
   @MainActor
   func testLateDefaultToggleAPIResponseCannotApplyOrRollbackInReplacementOwner() async {
     let defaults = UserDefaults.standard
-    let previousOwner = defaults.object(forKey: .authUserId)
-    let previousOverride = defaults.object(forKey: .automationOwnerOverride)
     let store = TasksStore.shared
-    defer {
-      restore(previousOwner, key: .authUserId, defaults: defaults)
-      restore(previousOverride, key: .automationOwnerOverride, defaults: defaults)
-      store.resetSessionState()
-    }
-    defaults.removeObject(forKey: .automationOwnerOverride)
-    defaults.set("owner-a", forKey: .authUserId)
-    store.resetSessionState()
+    await prepareOwnerBoundaryTest(store: store)
 
     let ownerATask = task(id: "owner-a-api-toggle")
     let optimisticTask = task(id: ownerATask.id, completed: true)
@@ -336,7 +287,7 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
           }))
     }
     await gate.waitUntilStarted()
-    defaults.set("owner-b", forKey: .authUserId)
+    illegallyMutateOwnerDefaults(to: "owner-b", defaults: defaults)
     store.incompleteTasks = [ownerBTask]
     store.completedTasks = []
     store.overdueTasks = [ownerBDashboard]
@@ -358,17 +309,8 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
   @MainActor
   func testPausedBackendRollbackCannotRewriteReplacementOwnerArrays() async {
     let defaults = UserDefaults.standard
-    let previousOwner = defaults.object(forKey: .authUserId)
-    let previousOverride = defaults.object(forKey: .automationOwnerOverride)
     let store = TasksStore.shared
-    defer {
-      restore(previousOwner, key: .authUserId, defaults: defaults)
-      restore(previousOverride, key: .automationOwnerOverride, defaults: defaults)
-      store.resetSessionState()
-    }
-    defaults.removeObject(forKey: .automationOwnerOverride)
-    defaults.set("owner-a", forKey: .authUserId)
-    store.resetSessionState()
+    await prepareOwnerBoundaryTest(store: store)
 
     let original = task(id: "owner-a-toggle", completed: false)
     let optimistic = task(id: original.id, completed: true)
@@ -386,7 +328,7 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
         })
     }
     await gate.waitUntilStarted()
-    defaults.set("owner-b", forKey: .authUserId)
+    illegallyMutateOwnerDefaults(to: "owner-b", defaults: defaults)
     await gate.release()
     await rollback.value
 
@@ -398,17 +340,8 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
   @MainActor
   func testSuspendedOrdinaryLoadCannotWriteOrPublishAfterOwnerSwitch() async {
     let defaults = UserDefaults.standard
-    let previousOwner = defaults.object(forKey: .authUserId)
-    let previousOverride = defaults.object(forKey: .automationOwnerOverride)
     let store = TasksStore.shared
-    defer {
-      restore(previousOwner, key: .authUserId, defaults: defaults)
-      restore(previousOverride, key: .automationOwnerOverride, defaults: defaults)
-      store.resetSessionState()
-    }
-    defaults.removeObject(forKey: .automationOwnerOverride)
-    defaults.set("owner-a", forKey: .authUserId)
-    store.resetSessionState()
+    await prepareOwnerBoundaryTest(store: store)
 
     let gate = TasksStorePauseGate()
     let probe = TasksStoreOperationProbe()
@@ -451,25 +384,18 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
   @MainActor
   func testSuspendedStartupPageCannotMutateCacheDefaultsOrUIAfterOwnerSwitch() async {
     let defaults = UserDefaults.standard
-    let previousOwner = defaults.object(forKey: .authUserId)
-    let previousOverride = defaults.object(forKey: .automationOwnerOverride)
     let ownerASyncKey = "tasksFullSyncCompleted_v9_owner-a"
     let ownerBSyncKey = "tasksFullSyncCompleted_v9_owner-b"
     let previousASync = defaults.object(forKey: ownerASyncKey)
     let previousBSync = defaults.object(forKey: ownerBSyncKey)
     let store = TasksStore.shared
     defer {
-      restore(previousOwner, key: .authUserId, defaults: defaults)
-      restore(previousOverride, key: .automationOwnerOverride, defaults: defaults)
       restore(previousASync, key: ownerASyncKey, defaults: defaults)
       restore(previousBSync, key: ownerBSyncKey, defaults: defaults)
-      store.resetSessionState()
     }
-    defaults.removeObject(forKey: .automationOwnerOverride)
-    defaults.set("owner-a", forKey: .authUserId)
+    await prepareOwnerBoundaryTest(store: store)
     defaults.removeObject(forKey: ownerASyncKey)
     defaults.removeObject(forKey: ownerBSyncKey)
-    store.resetSessionState()
 
     let gate = TasksStorePauseGate()
     let probe = TasksStoreOperationProbe()
@@ -509,8 +435,6 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
   @MainActor
   func testSuspendedStartupMigrationCannotContinueIntoReplacementOwner() async {
     let defaults = UserDefaults.standard
-    let previousOwner = defaults.object(forKey: .authUserId)
-    let previousOverride = defaults.object(forKey: .automationOwnerOverride)
     let fullSyncKey = "tasksFullSyncCompleted_v9_owner-a"
     let ownerAMigrationKey = "stagedTasksMigrationCompleted_v4_owner-a"
     let ownerBMigrationKey = "stagedTasksMigrationCompleted_v4_owner-b"
@@ -519,18 +443,13 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
     let previousValues = Dictionary(uniqueKeysWithValues: keys.map { ($0, defaults.object(forKey: $0)) })
     let store = TasksStore.shared
     defer {
-      restore(previousOwner, key: .authUserId, defaults: defaults)
-      restore(previousOverride, key: .automationOwnerOverride, defaults: defaults)
       for key in keys { restore(previousValues[key] ?? nil, key: key, defaults: defaults) }
-      store.resetSessionState()
     }
-    defaults.removeObject(forKey: .automationOwnerOverride)
-    defaults.set("owner-a", forKey: .authUserId)
+    await prepareOwnerBoundaryTest(store: store)
     defaults.set(true, forKey: fullSyncKey)
     defaults.removeObject(forKey: ownerAMigrationKey)
     defaults.removeObject(forKey: ownerBMigrationKey)
     defaults.removeObject(forKey: ownerAConversationKey)
-    store.resetSessionState()
 
     let gate = TasksStorePauseGate()
     let probe = TasksStoreOperationProbe()
@@ -561,17 +480,8 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
   @MainActor
   func testSuspendedPaginationCannotAppendOrSyncAfterOwnerSwitch() async {
     let defaults = UserDefaults.standard
-    let previousOwner = defaults.object(forKey: .authUserId)
-    let previousOverride = defaults.object(forKey: .automationOwnerOverride)
     let store = TasksStore.shared
-    defer {
-      restore(previousOwner, key: .authUserId, defaults: defaults)
-      restore(previousOverride, key: .automationOwnerOverride, defaults: defaults)
-      store.resetSessionState()
-    }
-    defaults.removeObject(forKey: .automationOwnerOverride)
-    defaults.set("owner-a", forKey: .authUserId)
-    store.resetSessionState()
+    await prepareOwnerBoundaryTest(store: store)
 
     let trigger = task(id: "owner-a-page-trigger")
     let ownerBSentinel = task(id: "owner-b-page-sentinel")
@@ -605,22 +515,15 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
   @MainActor
   func testSuspendedActivationRefreshCannotSyncOrPublishAfterOwnerSwitch() async {
     let defaults = UserDefaults.standard
-    let previousOwner = defaults.object(forKey: .authUserId)
-    let previousOverride = defaults.object(forKey: .automationOwnerOverride)
     let previousSignedIn = AuthService.shared.isSignedIn
     let store = TasksStore.shared
     defer {
       store.isActive = false
       AuthService.shared.isSignedIn = previousSignedIn
-      restore(previousOwner, key: .authUserId, defaults: defaults)
-      restore(previousOverride, key: .automationOwnerOverride, defaults: defaults)
-      store.resetSessionState()
     }
-    defaults.removeObject(forKey: .automationOwnerOverride)
-    defaults.set("owner-a", forKey: .authUserId)
+    await prepareOwnerBoundaryTest(store: store)
     AuthService.shared.isSignedIn = true
     store.isActive = false
-    store.resetSessionState()
     store.isActive = true
 
     let ownerATask = task(id: "owner-a-refresh-base")
@@ -673,20 +576,13 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
   @MainActor
   func testSuspendedPeriodicReconciliationCannotDeleteForReplacementOwner() async {
     let defaults = UserDefaults.standard
-    let previousOwner = defaults.object(forKey: .authUserId)
-    let previousOverride = defaults.object(forKey: .automationOwnerOverride)
     let previousSignedIn = AuthService.shared.isSignedIn
     let store = TasksStore.shared
     defer {
       AuthService.shared.isSignedIn = previousSignedIn
-      restore(previousOwner, key: .authUserId, defaults: defaults)
-      restore(previousOverride, key: .automationOwnerOverride, defaults: defaults)
-      store.resetSessionState()
     }
-    defaults.removeObject(forKey: .automationOwnerOverride)
-    defaults.set("owner-a", forKey: .authUserId)
+    await prepareOwnerBoundaryTest(store: store)
     AuthService.shared.isSignedIn = true
-    store.resetSessionState()
 
     let gate = TasksStorePauseGate()
     let probe = TasksStoreOperationProbe()
@@ -736,24 +632,73 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
   }
 
   @MainActor
-  private func restore(_ value: Any?, key: DefaultsKey, defaults: UserDefaults) {
-    if let value {
-      defaults.set(value, forKey: key)
-    } else {
-      defaults.removeObject(forKey: key)
+  private func switchOwner(to ownerID: String, defaults: UserDefaults) {
+    illegallyMutateOwnerDefaults(to: ownerID, defaults: defaults, notify: true)
+  }
+
+  @MainActor
+  private func illegallyMutateOwnerDefaults(
+    to ownerID: String,
+    defaults: UserDefaults,
+    notify: Bool = false
+  ) {
+    // Deliberately bypass the transition authority: these tests simulate an
+    // illegal mid-flight defaults mutation and prove captured work fails shut.
+    defaults.set(ownerID, forKey: .authUserId)
+    if notify {
+      NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
     }
   }
 
   @MainActor
-  private func switchOwner(to ownerID: String, defaults: UserDefaults) {
-    defaults.set(ownerID, forKey: .authUserId)
-    NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+  private func prepareOwnerBoundaryTest(store: TasksStore) async {
+    let defaults = UserDefaults.standard
+    let previousAuthOwner = defaults.string(forKey: .authUserId)
+    let previousOverride = defaults.string(forKey: .automationOwnerOverride)
+    addTeardownBlock { @MainActor [weak self] in
+      guard let self else { return }
+      await self.establishEffectiveOwner(
+        authOwnerID: previousAuthOwner,
+        automationOverrideID: previousOverride)
+      store.resetSessionState()
+    }
+    await establishEffectiveOwner(authOwnerID: "owner-a", automationOverrideID: nil)
+    store.resetSessionState()
+  }
+
+  @MainActor
+  private func establishEffectiveOwner(
+    authOwnerID: String?,
+    automationOverrideID: String?
+  ) async {
+    let finalOwner = normalizedOwner(automationOverrideID) ?? normalizedOwner(authOwnerID)
+    let bootstrap = finalOwner == "tasks-owner-boundary-bootstrap-a"
+      ? "tasks-owner-boundary-bootstrap-b"
+      : "tasks-owner-boundary-bootstrap-a"
+    if RuntimeOwnerIdentity.currentOwnerId(allowAutomationOverride: true) == bootstrap {
+      await transitionEffectiveOwner(authOwnerID: nil, automationOverrideID: nil)
+    } else {
+      await transitionEffectiveOwner(authOwnerID: bootstrap, automationOverrideID: nil)
+    }
+    await transitionEffectiveOwner(
+      authOwnerID: authOwnerID,
+      automationOverrideID: automationOverrideID)
   }
 
   private func transitionEffectiveOwner(to ownerID: String?) async {
+    await transitionEffectiveOwner(authOwnerID: ownerID, automationOverrideID: nil)
+  }
+
+  private func transitionEffectiveOwner(
+    authOwnerID: String?,
+    automationOverrideID: String?
+  ) async {
+    let plannedOwner = normalizedOwner(automationOverrideID) ?? normalizedOwner(authOwnerID)
     _ = await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
-      plannedNextOwner: { _, _ in ownerID },
+      allowAutomationOverride: true,
+      plannedNextOwner: { _, _ in plannedOwner },
       quiesceVoice: { _, _ in },
+      revokeKernelOwner: { _, _ in },
       retargetLocalStorage: { _, _ in },
       ownerDidChange: {
         await MainActor.run {
@@ -761,13 +706,24 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
         }
       }
     ) { defaults in
-      defaults.removeObject(forKey: .automationOwnerOverride)
-      if let ownerID {
-        defaults.set(ownerID, forKey: .authUserId)
+      if let authOwnerID {
+        defaults.set(authOwnerID, forKey: .authUserId)
       } else {
         defaults.removeObject(forKey: .authUserId)
       }
+      if let automationOverrideID {
+        defaults.set(automationOverrideID, forKey: .automationOwnerOverride)
+      } else {
+        defaults.removeObject(forKey: .automationOwnerOverride)
+      }
     }
+  }
+
+  private func normalizedOwner(_ ownerID: String?) -> String? {
+    guard let normalized = ownerID?.trimmingCharacters(in: .whitespacesAndNewlines),
+      !normalized.isEmpty
+    else { return nil }
+    return normalized
   }
 
   @MainActor

@@ -91,6 +91,7 @@ class Message(BaseModel):
     metadata: Optional[str] = None
     client_message_id: Optional[str] = None
     message_source: Optional[str] = None
+    journal_revision: Optional[int] = None
     chart_data: Optional[Union[ChartData, dict]] = None  # Inline chart visualization data
 
     @model_validator(mode='before')

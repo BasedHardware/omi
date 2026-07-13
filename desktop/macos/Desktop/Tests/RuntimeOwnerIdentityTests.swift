@@ -138,6 +138,34 @@ final class RuntimeOwnerIdentityTests: XCTestCase {
   private var defaults: UserDefaults!
   private let suiteName = "RuntimeOwnerIdentityTests.\(UUID().uuidString)"
 
+  func testAuthorizationAuthorityRejectsOutOfBandOwnerABA() throws {
+    let authority = RuntimeOwnerAuthorizationAuthority()
+    let original = try XCTUnwrap(
+      authority.capture(ownerID: "owner-a", expectedOwnerID: "owner-a"))
+
+    XCTAssertNil(authority.capture(ownerID: nil, expectedOwnerID: nil))
+    XCTAssertNil(
+      authority.capture(ownerID: "owner-a", expectedOwnerID: "owner-a"),
+      "A -> nil -> A outside the transition boundary must not revive authority")
+    XCTAssertFalse(authority.isCurrent(original, ownerID: "owner-a"))
+  }
+
+  func testAuthorizationAuthorityAcceptsLegitimateTransitionAndRejectsOldGeneration() throws {
+    let authority = RuntimeOwnerAuthorizationAuthority()
+    let ownerA = try XCTUnwrap(
+      authority.capture(ownerID: "owner-a", expectedOwnerID: "owner-a"))
+
+    authority.beginTransition()
+    XCTAssertNil(authority.capture(ownerID: nil, expectedOwnerID: nil))
+    authority.endTransition(ownerID: "owner-b")
+
+    let ownerB = try XCTUnwrap(
+      authority.capture(ownerID: "owner-b", expectedOwnerID: "owner-b"))
+    XCTAssertFalse(authority.isCurrent(ownerA, ownerID: "owner-b"))
+    XCTAssertTrue(authority.isCurrent(ownerB, ownerID: "owner-b"))
+    XCTAssertNotEqual(ownerA, ownerB)
+  }
+
   override func setUp() {
     super.setUp()
     defaults = UserDefaults(suiteName: suiteName)

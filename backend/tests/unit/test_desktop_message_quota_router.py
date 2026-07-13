@@ -112,6 +112,7 @@ def test_desktop_human_message_records_quota_once_after_persistence_acceptance()
             metadata=None,
             client_message_id='client-msg-1',
             message_source='desktop_chat',
+            journal_revision=None,
         )
         module.llm_usage_db.record_chat_quota_question.assert_called_once_with(
             'test-uid',
@@ -206,6 +207,7 @@ def test_desktop_duplicate_human_message_retries_idempotent_quota_record():
             metadata=None,
             client_message_id='client-msg-1',
             message_source='desktop_chat',
+            journal_revision=None,
         )
         module.llm_usage_db.record_chat_quota_question.assert_called_once_with(
             'test-uid',
@@ -231,6 +233,63 @@ def test_desktop_message_rejects_idempotency_payload_collision():
         assert response.status_code == 409
         assert response.json() == {'detail': 'client_message_id payload conflict'}
         module.llm_usage_db.record_chat_quota_question.assert_not_called()
+    finally:
+        _cleanup(saved)
+
+
+def test_desktop_message_forwards_bounded_journal_revision():
+    client, module, saved = _make_client()
+    try:
+        module.chat_db.save_message.return_value = {
+            'id': 'turn-1',
+            'created_at': '2026-07-02T00:00:00+00:00',
+            'created': False,
+            'updated': True,
+            'journal_revision': 12,
+        }
+        response = client.post(
+            '/v2/desktop/messages',
+            json={
+                'text': 'enriched',
+                'sender': 'ai',
+                'session_id': 'session-1',
+                'client_message_id': 'turn-1',
+                'journal_revision': 12,
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()['journal_revision'] == 12
+        assert response.json()['updated'] is True
+        module.chat_db.save_message.assert_called_once_with(
+            'test-uid',
+            text='enriched',
+            sender='ai',
+            app_id=None,
+            session_id='session-1',
+            metadata=None,
+            client_message_id='turn-1',
+            message_source='desktop_chat',
+            journal_revision=12,
+        )
+    finally:
+        _cleanup(saved)
+
+
+def test_desktop_message_rejects_nonpositive_journal_revision_at_boundary():
+    client, module, saved = _make_client()
+    try:
+        response = client.post(
+            '/v2/desktop/messages',
+            json={
+                'text': 'invalid',
+                'sender': 'ai',
+                'client_message_id': 'turn-1',
+                'journal_revision': 0,
+            },
+        )
+        assert response.status_code == 422
+        module.chat_db.save_message.assert_not_called()
     finally:
         _cleanup(saved)
 
@@ -280,6 +339,7 @@ def test_realtime_voice_human_message_does_not_record_desktop_message_quota():
             metadata=None,
             client_message_id='voice-msg-1',
             message_source='realtime_voice',
+            journal_revision=None,
         )
         module.llm_usage_db.record_chat_quota_question.assert_not_called()
     finally:

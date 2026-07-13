@@ -462,7 +462,11 @@ struct AgentContextSnapshot: @unchecked Sendable {
   }
 
   var freshness: AgentContextFreshness {
-    AgentContextFreshness(version: version, generation: snapshotGeneration)
+    AgentContextFreshness(
+      version: version,
+      generation: snapshotGeneration,
+      rendererFingerprint: rendererFingerprint,
+      capabilityVersion: capabilityVersion)
   }
 
   func sourceRevision(for source: AgentContextSource) -> String? {
@@ -496,6 +500,39 @@ struct AgentQueryAttachment: Equatable, Sendable {
 struct AgentContextFreshness: Equatable, Sendable {
   let version: String
   let generation: Int
+  let rendererFingerprint: String
+  let capabilityVersion: String
+}
+
+enum AgentQueryTerminalStatus: Equatable, Sendable {
+  case succeeded
+  case failed
+  case timedOut
+  case orphaned
+  case cancelled
+  case invalid(String?)
+
+  init(wireValue: String?) {
+    switch wireValue {
+    case "succeeded": self = .succeeded
+    case "failed": self = .failed
+    case "timed_out": self = .timedOut
+    case "orphaned": self = .orphaned
+    case "cancelled": self = .cancelled
+    default: self = .invalid(wireValue)
+    }
+  }
+
+  var wireValue: String? {
+    switch self {
+    case .succeeded: return "succeeded"
+    case .failed: return "failed"
+    case .timedOut: return "timed_out"
+    case .orphaned: return "orphaned"
+    case .cancelled: return "cancelled"
+    case .invalid(let value): return value
+    }
+  }
 }
 
 /// Lightweight client handle for the shared Node.js agent runtime.
@@ -508,7 +545,8 @@ actor AgentBridge {
     let runId: String
     let attemptId: String
     let adapterSessionId: String?
-    let terminalStatus: String
+    let terminalStatus: AgentQueryTerminalStatus
+    let failure: AgentRuntimeFailure?
     let inputTokens: Int
     let outputTokens: Int
     let cacheReadTokens: Int
@@ -523,7 +561,8 @@ actor AgentBridge {
       runId: String,
       attemptId: String,
       adapterSessionId: String?,
-      terminalStatus: String,
+      terminalStatus: String?,
+      failure: AgentRuntimeFailure? = nil,
       inputTokens: Int,
       outputTokens: Int,
       cacheReadTokens: Int,
@@ -537,13 +576,29 @@ actor AgentBridge {
       self.runId = runId
       self.attemptId = attemptId
       self.adapterSessionId = adapterSessionId
-      self.terminalStatus = terminalStatus
+      self.terminalStatus = AgentQueryTerminalStatus(wireValue: terminalStatus)
+      self.failure = failure
       self.inputTokens = inputTokens
       self.outputTokens = outputTokens
       self.cacheReadTokens = cacheReadTokens
       self.cacheWriteTokens = cacheWriteTokens
       self.artifacts = artifacts
       self.completionDeltaArtifacts = completionDeltaArtifacts
+    }
+
+    @discardableResult
+    func requireSucceeded() throws -> QueryResult {
+      switch terminalStatus {
+      case .succeeded:
+        return self
+      case .cancelled:
+        throw BridgeError.stopped
+      case .failed, .timedOut, .orphaned:
+        let raw = failure?.displayMessage ?? (text.isEmpty ? "Agent failed" : text)
+        throw failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw)
+      case .invalid:
+        throw BridgeError.agentError("Agent returned an invalid terminal status")
+      }
     }
   }
 
@@ -1234,6 +1289,25 @@ actor AgentBridge {
     )
   }
 
+  func terminalizeJournalTurn(
+    surface: AgentSurfaceReference,
+    ownerID: String,
+    terminalization: KernelJournalTurnTerminalization,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> KernelJournalTurn {
+    let authorization = try resolveAuthorization(
+      authorizationSnapshot,
+      expectedOwnerID: ownerID)
+    try await start(authorizationSnapshot: authorization)
+    return try await runtime.terminalizeJournalTurn(
+      clientId: clientId,
+      surface: surface,
+      ownerID: ownerID,
+      terminalization: terminalization,
+      authorizationSnapshot: authorization
+    )
+  }
+
   func listJournalTurns(
     surface: AgentSurfaceReference,
     ownerID: String? = nil,
@@ -1338,6 +1412,7 @@ actor AgentBridge {
     mode: String? = nil,
     imageData: Data? = nil,
     attachments: [AgentQueryAttachment] = [],
+    producingTurnId: String? = nil,
     expectedContext: AgentContextFreshness? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     onTextDelta: @escaping TextDeltaHandler,
@@ -1368,6 +1443,7 @@ actor AgentBridge {
       mode: mode,
       imageData: imageData,
       attachments: attachments,
+      producingTurnId: producingTurnId,
       expectedContext: expectedContext,
       authorizationSnapshot: authorization,
       onTextDelta: onTextDelta,
@@ -1386,6 +1462,7 @@ actor AgentBridge {
     mode: String? = nil,
     imageData: Data? = nil,
     attachments: [AgentQueryAttachment] = [],
+    producingTurnId: String? = nil,
     expectedContext: AgentContextFreshness? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     onTextDelta: @escaping TextDeltaHandler,
@@ -1484,6 +1561,7 @@ actor AgentBridge {
         mode: mode,
         imageData: imageData,
         attachments: attachments,
+        producingTurnId: producingTurnId,
         expectedContext: expectedContext,
         authorizationSnapshot: authorization,
         onTextDelta: trackedTextDelta,
@@ -1520,6 +1598,7 @@ actor AgentBridge {
         mode: mode,
         imageData: imageData,
         attachments: attachments,
+        producingTurnId: producingTurnId,
         expectedContext: expectedContext,
         authorizationSnapshot: authorization,
         onTextDelta: trackedTextDelta,
@@ -1701,7 +1780,7 @@ actor AgentBridge {
         log("AgentBridge: test tool result: \(name) -> \(output.prefix(200))")
       }
     )
-    let connected = result.text.contains("CONNECTED")
+    let connected = try result.requireSucceeded().text.contains("CONNECTED")
     log("AgentBridge: Playwright test response: \(result.text.prefix(300)), connected=\(connected)")
     return connected
   }
@@ -1810,6 +1889,21 @@ enum BridgeError: LocalizedError {
   case agentRuntimeFailure(AgentRuntimeFailure)
   case quotaExceeded(plan: String, unit: String, used: Double, limit: Double?, resetAtUnix: Int?)
   case authMissing
+
+  var isContextSnapshotProjectionMismatch: Bool {
+    let exactCode = "context_snapshot_projection_mismatch"
+    switch self {
+    case .agentError(let message):
+      return message == exactCode
+    case .agentRuntimeFailure(let failure):
+      guard failure.source == "runtime" else { return false }
+      return failure.userMessage == exactCode || failure.technicalMessage == exactCode
+    case .nodeNotFound, .bridgeScriptNotFound, .notRunning, .encodingError, .timeout,
+         .processExited, .outOfMemory, .stopped, .restarting, .requestAlreadyActive,
+         .quotaExceeded, .authMissing:
+      return false
+    }
+  }
 
   var isSessionAuthenticationFailure: Bool {
     switch self {

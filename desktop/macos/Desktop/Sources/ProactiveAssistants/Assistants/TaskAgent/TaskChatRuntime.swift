@@ -83,7 +83,6 @@ enum TaskChatRuntime {
             turn: message.journalWrite(
                 origin: "workstream",
                 status: status,
-                delivery: .local,
                 continuityKey: continuityKey,
                 messageSource: "workstream"
             ),
@@ -105,6 +104,36 @@ enum TaskChatRuntime {
             surface: .workstream(workstreamId: workstreamId),
             ownerID: ownerID,
             update: message.journalUpdate(status: status),
+            authorizationSnapshot: authorizationSnapshot
+        )
+    }
+
+    /// Atomically projects the final assistant payload onto the exact canonical
+    /// run attempt. The kernel validates run + attempt ownership and derives the
+    /// terminal journal status; Swift cannot choose it.
+    static func terminalizeJournalMessage(
+        workstreamId: String,
+        ownerID: String,
+        authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+        message: ChatMessage,
+        producingRunId: String,
+        producingAttemptId: String
+    ) async throws -> KernelJournalTurn {
+        try requireCurrent(authorizationSnapshot, expectedOwnerID: ownerID)
+        let bridge = try await sharedBridge()
+        try requireCurrent(authorizationSnapshot, expectedOwnerID: ownerID)
+        return try await bridge.terminalizeJournalTurn(
+            surface: .workstream(workstreamId: workstreamId),
+            ownerID: ownerID,
+            terminalization: KernelJournalTurnTerminalization(
+                turnId: message.id,
+                producingRunId: producingRunId,
+                producingAttemptId: producingAttemptId,
+                disposition: .accept,
+                content: message.text,
+                contentBlocksJSON: ChatContentBlockCodec.encode(message.contentBlocks) ?? "[]",
+                resourcesJSON: ChatResource.encodeResourcesForPersistence(message.displayResources) ?? "[]"
+            ),
             authorizationSnapshot: authorizationSnapshot
         )
     }
@@ -133,6 +162,7 @@ enum TaskChatRuntime {
     static func query(
         prompt: String,
         workstreamId: String,
+        producingTurnId: String,
         workspacePath: String,
         mode: String,
         taskContext: String?,
@@ -221,6 +251,7 @@ enum TaskChatRuntime {
             session: session,
             surface: surface,
             mode: routing.runMode,
+            producingTurnId: producingTurnId,
             expectedContext: snapshot.freshness,
             authorizationSnapshot: authorizationSnapshot,
             onTextDelta: onTextDelta,
@@ -324,7 +355,6 @@ enum TaskChatRuntime {
             turn: message.journalWrite(
                 origin: "task_chat",
                 status: .completed,
-                delivery: .local,
                 messageSource: "task_chat"
             )
         )

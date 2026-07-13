@@ -298,9 +298,8 @@ const spawnBackgroundAgentSchema = strictObject({
   metadata: z.record(z.string(), z.unknown()).default({}),
 });
 
-const spawnAgentSchema = strictObject({
+const spawnAgentPublicShape = {
   objective: z.string().min(1),
-  originSurfaceKind: originSurfaceKindSchema,
   requestedAgentCount: z.coerce.number().int().min(1).max(8).default(1),
   provider: z.enum(["openclaw", "hermes"]).optional(),
   parentRunId: z.string().min(1).optional(),
@@ -314,6 +313,13 @@ const spawnAgentSchema = strictObject({
   requestId: z.string().min(1).optional(),
   clientId: z.string().min(1).default("omi-control-tools"),
   metadata: z.record(z.string(), z.unknown()).default({}),
+} as const;
+
+const spawnAgentSchema = strictObject(spawnAgentPublicShape);
+
+const authorizedSpawnAgentSchema = strictObject({
+  ...spawnAgentPublicShape,
+  originSurfaceKind: originSurfaceKindSchema,
 });
 
 const runAgentAndWaitSchema = strictObject({
@@ -1035,14 +1041,17 @@ export async function handleAgentControlToolCall(
       }
       case "spawn_agent": {
         assertAgentSpawningAllowed(context);
-        const parsed = agentControlToolSchemas.spawn_agent.parse(input);
+        const parsed = authorizedSpawnAgentSchema.parse(input);
         const callerMetadata = { ...(parsed.metadata ?? {}) };
         const proposedProducerJournal = callerMetadata.producerJournal;
         delete callerMetadata.producerJournal;
-        const producerJournal = context.authorizedProducerJournal
-          ?? (context.trustedUserControl && proposedProducerJournal !== undefined
-            ? parseAgentSpawnProducerJournalDescriptor(proposedProducerJournal)
-            : undefined);
+        let producerJournal = context.authorizedProducerJournal;
+        if (!producerJournal && context.trustedUserControl && proposedProducerJournal !== undefined) {
+          producerJournal = parseAgentSpawnProducerJournalDescriptor(proposedProducerJournal);
+          if (producerJournal.producerTurnId) {
+            throw new Error("producerTurnId is reserved for kernel-authorized spawn invocations");
+          }
+        }
         const parentRunId = context.authorizedCallerRunId ?? parsed.parentRunId;
         if (context.authorizedCallerRunId && parsed.parentRunId && parsed.parentRunId !== context.authorizedCallerRunId) {
           throw new Error("Agent spawn parent run does not match authorized caller run");

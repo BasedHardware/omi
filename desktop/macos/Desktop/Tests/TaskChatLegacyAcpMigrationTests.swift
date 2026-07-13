@@ -13,6 +13,7 @@ final class TaskChatKernelIdentityTests: XCTestCase {
   func testTaskChatStateUsesSharedRuntimeNotPerTaskBridge() throws {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
     XCTAssertTrue(source.contains("TaskChatRuntime.query("))
+    XCTAssertTrue(source.contains("producingTurnId: aiMessageId"))
     XCTAssertFalse(source.contains("private var agentBridge"))
     XCTAssertFalse(source.contains("ensureBridgeStarted"))
   }
@@ -32,7 +33,7 @@ final class TaskChatKernelIdentityTests: XCTestCase {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
 
     XCTAssertTrue(source.contains("Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: error.localizedDescription)"))
-    XCTAssertTrue(source.contains("await finishJournalUpdate("))
+    XCTAssertTrue(source.contains("try await terminalizeJournalMessage("))
     XCTAssertFalse(source.contains("persistMessage("))
     XCTAssertTrue(source.contains("observeRuntimeProjectionFailures()"))
     XCTAssertTrue(source.contains("surfaceRuntimeFailure(projection)"))
@@ -119,7 +120,16 @@ final class TaskChatKernelIdentityTests: XCTestCase {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
 
     XCTAssertTrue(source.contains("if !failedByUserStop {\n                        Self.applyFailureTextIfNeeded"))
-    XCTAssertTrue(source.contains("terminalStatus: failedByUserStop ? .completed : .failed"))
+    XCTAssertTrue(source.contains("terminalStatus: .failed"))
+    XCTAssertFalse(source.contains("failedByUserStop ? .completed : .failed"))
+  }
+
+  func testTaskChatPreAdmissionFailureUsesKernelGuardedUnboundFallback() throws {
+    let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
+
+    XCTAssertTrue(source.contains("await failUnboundJournalMessage(messageId: aiMessageId, lease: lease)"))
+    XCTAssertTrue(source.contains("status: .failed"))
+    XCTAssertTrue(source.contains("once query admission links a producer"))
   }
 
   func testTaskChatSendSignalsLocalSendOnlyAfterAtomicExchangeAcceptance() throws {
@@ -191,12 +201,16 @@ final class TaskChatKernelIdentityTests: XCTestCase {
     let body = nextFunction.map { String(rest[..<$0.lowerBound]) } ?? String(rest)
 
     XCTAssertFalse(body.contains("TaskAgentStatusRegistry.shared.markFailed"))
-    XCTAssertTrue(body.contains("appendFailureTranscriptMessage(errorText"))
+    XCTAssertTrue(body.contains("producingRunProjection.terminalMessageID(for: projection)"))
+    XCTAssertTrue(body.contains("requestJournalRefreshForRuntimeFailure("))
+    XCTAssertFalse(body.contains("scheduleJournalUpdate("))
+    XCTAssertFalse(source.contains("bindActive("), "surface-only projections must not bind run authority")
+    XCTAssertFalse(source.contains("TaskChatRuntime.recordJournalMessage(\n                    workstreamId: self.workstreamId"))
   }
 
   func testTerminalFailureFinalizeDoesNotPersistFailureTranscriptTwice() throws {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
-    guard let branchRange = source.range(of: "if terminalStatus == .failed || terminalStatus == .timedOut || terminalStatus == .orphaned {") else {
+    guard let branchRange = source.range(of: "if terminalDisposition != .succeeded {") else {
       return XCTFail("terminal failure branch missing")
     }
     let rest = source[branchRange.lowerBound...]
@@ -205,10 +219,10 @@ final class TaskChatKernelIdentityTests: XCTestCase {
     }
     let branch = String(rest[..<elseRange.lowerBound])
 
-    XCTAssertTrue(branch.contains("surfaceCurrentRuntimeFailureIfNeeded(fallbackMessage: \"Agent failed\")"))
     XCTAssertTrue(
-      branch.contains("await finishJournalUpdate(messageId: aiMessageId, status: .failed, lease: lease)")
+      source.contains("try await terminalizeJournalMessage(")
     )
+    XCTAssertFalse(branch.contains("status: .failed"))
     XCTAssertFalse(branch.contains("persistMessage("))
   }
 
@@ -222,8 +236,81 @@ final class TaskChatKernelIdentityTests: XCTestCase {
       source.contains("streamingBuffer.completeRemainingToolCalls(")
     )
     XCTAssertTrue(source.contains("completeRemainingToolCalls(messageId: aiMessageId, terminalStatus: .failed)"))
-    XCTAssertTrue(source.contains("terminalStatus: failedByUserStop ? .completed : .failed"))
-    XCTAssertTrue(source.contains("completeRemainingToolCalls(messageId: activeAssistantMessageId, terminalStatus: .failed)"))
+    XCTAssertTrue(source.contains("terminalStatus: .failed"))
+    XCTAssertFalse(
+      source.contains("completeRemainingToolCalls(messageId: producingMessageID"),
+      "ambient runtime projections must never terminalize transcript tool blocks")
+  }
+
+  func testDelayedEarlierRunFailureCannotTerminalizeCurrentProducingTurn() {
+    var producing = TaskChatProducingRunProjection()
+    producing.begin(assistantMessageID: "assistant-r2")
+    XCTAssertTrue(producing.bindResult(
+      assistantMessageID: "assistant-r2",
+      runID: "run-r2",
+      attemptID: "attempt-r2"))
+
+    XCTAssertNil(
+      producing.terminalMessageID(for: projection(
+        runID: "run-r1",
+        attemptID: "attempt-r1",
+        status: .failed)),
+      "a delayed R1 terminal projection on the same surface must leave R2 untouched")
+    XCTAssertEqual(
+      producing.terminalMessageID(for: projection(
+        runID: "run-r2",
+        attemptID: "attempt-r2",
+        status: .failed)),
+      "assistant-r2")
+  }
+
+  func testTaskChatTerminalDispositionFailsClosedForUnknownAndCancelled() {
+    XCTAssertEqual(TaskChatTerminalDisposition.classify(.succeeded), .succeeded)
+    XCTAssertEqual(TaskChatTerminalDisposition.classify(.cancelled), .cancelled)
+    XCTAssertEqual(TaskChatTerminalDisposition.classify(.invalid("future_terminal")), .invalid)
+    XCTAssertEqual(TaskChatTerminalDisposition.classify(.invalid("running")), .invalid)
+  }
+
+  func testTaskChatTerminalizationCarriesExactAttemptAndMaterialPayload() {
+    let terminalization = KernelJournalTurnTerminalization(
+      turnId: "assistant-r2",
+      producingRunId: "run-r2",
+      producingAttemptId: "attempt-r2",
+      disposition: .accept,
+      content: "final answer",
+      contentBlocksJSON: #"[{"id":"text-1","type":"text","text":"final answer"}]"#,
+      resourcesJSON: "[]")
+
+    XCTAssertEqual(terminalization.dictionary["turnId"] as? String, "assistant-r2")
+    XCTAssertEqual(terminalization.dictionary["producingRunId"] as? String, "run-r2")
+    XCTAssertEqual(terminalization.dictionary["producingAttemptId"] as? String, "attempt-r2")
+    XCTAssertEqual(terminalization.dictionary["disposition"] as? String, "accept")
+    XCTAssertEqual(terminalization.dictionary["content"] as? String, "final answer")
+    XCTAssertNotNil(terminalization.dictionary["replaceContentBlocks"] as? [Any])
+    XCTAssertNotNil(terminalization.dictionary["replaceResources"] as? [Any])
+    XCTAssertNil(terminalization.dictionary["status"], "Swift must not choose canonical terminal state")
+  }
+
+  private func projection(
+    runID: String,
+    attemptID: String,
+    status: AgentRunProjectionStatus
+  ) -> AgentRunProjection {
+    AgentRunProjection(
+      surface: .workstream(workstreamId: "workstream-1"),
+      sessionId: "session-1",
+      runId: runID,
+      attemptId: attemptID,
+      adapterSessionId: nil,
+      status: status,
+      statusText: nil,
+      errorMessage: status == .failed ? "failed" : nil,
+      failure: nil,
+      updatedAt: Date(),
+      completedAt: status.isTerminal ? Date() : nil,
+      costUsd: nil,
+      inputTokens: nil,
+      outputTokens: nil)
   }
 
   func testCoordinatorStopsWritingLegacyTaskSessionIdentity() throws {

@@ -120,11 +120,48 @@ import { StaleAdapterBindingError } from "./kernel-types.js";
 
 import { KernelCore } from "./kernel-core.js";
 import { ensureAgentSpawnJournalIfPresent } from "./agent-spawn-journal.js";
+import { discardProducingJournalTurnForRunAttempt } from "./conversation-journal.js";
 
 export class KernelRuns extends KernelCore {
   async executeRun(input: ExecuteAgentRunInput): Promise<KernelRunResult> {
     const accepted = this.createAcceptedRun(input);
-    return this.executeAcceptedRun(input, accepted);
+    try {
+      return await this.executeAcceptedRun(input, accepted);
+    } catch (error) {
+      const latestAttemptRow = this.store.getOptionalRow(
+        "SELECT * FROM run_attempts WHERE run_id = ? ORDER BY attempt_no DESC LIMIT 1",
+        [accepted.run.runId],
+      );
+      if (latestAttemptRow) {
+        const attempt = attemptFromRow(latestAttemptRow);
+        const run = this.readRun(accepted.run.runId);
+        this.withTransaction(() => {
+          if (!TERMINAL_STATUSES.includes(run.status) && !TERMINAL_STATUSES.includes(attempt.status)) {
+            const failure = failureFromError(error, {
+              code: "post_admission_execution_failed",
+              source: "runtime",
+              retryable: false,
+            });
+            this.finishAttemptAndRun({
+              sessionId: accepted.session.sessionId,
+              runId: run.runId,
+              attemptId: attempt.attemptId,
+              status: "failed",
+              finalText: null,
+              errorCode: failure.code,
+              errorMessage: failure.userMessage,
+              failure,
+            });
+          }
+          discardProducingJournalTurnForRunAttempt(this.store, {
+            ownerId: accepted.session.ownerId,
+            runId: run.runId,
+            attemptId: attempt.attemptId,
+          });
+        });
+      }
+      throw error;
+    }
   }
 
   revokeActiveRunsForOwner(
@@ -160,6 +197,11 @@ export class KernelRuns extends KernelCore {
             errorCode: "owner_authority_revoked",
             errorMessage: `Run owner authority was revoked: ${reason}`,
             failure: null,
+          });
+          discardProducingJournalTurnForRunAttempt(this.store, {
+            ownerId,
+            runId,
+            attemptId: attempt.attemptId,
           });
           return;
         }
@@ -435,6 +477,14 @@ export class KernelRuns extends KernelCore {
         type: "run.cancelling",
         payload: { runId, attemptId: attempt?.attemptId ?? null },
       });
+      if (attempt) {
+        discardProducingJournalTurnForRunAttempt(this.store, {
+          ownerId: this.readSession(run.sessionId).ownerId,
+          runId,
+          attemptId: attempt.attemptId,
+          nowMs: requestedAt,
+        });
+      }
     });
 
     let dispatchAttempted = false;

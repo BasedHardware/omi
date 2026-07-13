@@ -57,6 +57,7 @@ export interface KernelSessionResolutionInput {
 export interface ExecuteAgentRunInput extends KernelSessionResolutionInput {
   clientId: string;
   requestId: string;
+  producingTurnId?: string;
   idempotencyKey?: string;
   prompt: string;
   promptBlocks?: PromptBlock[];
@@ -446,4 +447,14 @@ export interface AgentRuntimeKernelOptions {
   artifactStorage?: OmiArtifactStorage;
   recoverRunInput?: KernelRunRecoveryPolicy;
   onToolCapabilityRejected?: (code: RunToolCapabilityRejectCode) => void;
+  /**
+   * Canonical execution-profile repository. Production uses the immutable
+   * SQLite profile reader; tests with synthetic adapters may inject an
+   * equivalent authoritative repository instead of reviving legacy columns.
+   */
+  toolCapabilityProfileForSession?: (sessionId: string) => {
+    generation: number;
+    adapterId: string;
+    executionRole: AgentExecutionRole;
+  };
 }

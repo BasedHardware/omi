@@ -37,6 +37,67 @@ struct ChatRunAccountingPolicy: Equatable {
     }
 }
 
+struct OwnerIsolationKernelProbeReceipt: Equatable {
+    let ownerID: String
+    let conversationID: String
+    let sessionID: String
+    let turns: [KernelJournalTurn]
+}
+
+/// Non-production owner-isolation probes need kernel ownership evidence even
+/// when their synthetic owner intentionally has no Firebase credential. This
+/// seam admits only an owner handshake, one canonical surface mapping, and one
+/// journal exchange; it never opens a managed-model execution lane.
+@MainActor
+enum OwnerIsolationKernelProbe {
+    static func run(
+        ownerID: String,
+        query: String,
+        response: String,
+        registerControlOnlyRuntime: @MainActor () async throws -> Void,
+        synchronizeOwner: @MainActor () async -> Bool,
+        resolveSurface: @MainActor () async throws -> (conversationID: String, sessionID: String),
+        recordExchange: @MainActor ([KernelJournalTurnWrite]) async throws -> [KernelJournalTurn]
+    ) async throws -> OwnerIsolationKernelProbeReceipt {
+        try await registerControlOnlyRuntime()
+        guard await synchronizeOwner() else { throw BridgeError.authMissing }
+        let surface = try await resolveSurface()
+        let now = Int(Date().timeIntervalSince1970 * 1000)
+        let continuityID = UUID().uuidString
+        let turns = [
+            KernelJournalTurnWrite(
+                turnId: continuityID,
+                role: "user",
+                origin: "typed_chat",
+                status: .completed,
+                content: query,
+                contentBlocksJSON: "[]",
+                resourcesJSON: "[]",
+                metadataJSON: #"{"harness":"owner_isolation_probe"}"#,
+                createdAtMs: now
+            ),
+            KernelJournalTurnWrite(
+                turnId: "\(continuityID)-assistant",
+                role: "assistant",
+                origin: "typed_chat",
+                status: .completed,
+                content: response,
+                contentBlocksJSON: "[]",
+                resourcesJSON: "[]",
+                metadataJSON: #"{"harness":"owner_isolation_probe"}"#,
+                createdAtMs: now
+            ),
+        ]
+        let recorded = try await recordExchange(turns)
+        return OwnerIsolationKernelProbeReceipt(
+            ownerID: ownerID,
+            conversationID: surface.conversationID,
+            sessionID: surface.sessionID,
+            turns: recorded
+        )
+    }
+}
+
 private struct ChatJournalTerminalTarget {
     let surface: AgentSurfaceReference
     let assistantMessageId: String
@@ -1044,8 +1105,19 @@ private var activeBridgeSendGeneration: Int?
         agentClient = session
         return session
     }
+
+    /// Single fail-closed admission boundary for query results consumed by
+    /// ChatProvider surfaces. Missing, unknown, and non-success terminal states
+    /// must never become visible answer text or terminal journal success.
+    @discardableResult
+    static func requireSuccessfulQueryResult(
+        _ result: AgentClient.QueryResult
+    ) throws -> AgentClient.QueryResult {
+        try result.requireSucceeded()
+    }
+
     lazy var kernelTurnProjection = KernelTurnProjection(host: self)
-    private var journalUpdateTasks: [String: Task<Void, Never>] = [:]
+    private let journalWriteCoordinator = ChatJournalWriteCoordinator()
     private var journalOwnerByMessageID: [String: String] = [:]
     private var journalTerminalTargets = ChatTerminalTargetRegistry<ChatJournalTerminalTarget>()
     private var agentBridgeStarted = false
@@ -1508,8 +1580,7 @@ private var activeBridgeSendGeneration: Int?
 
     private func resetSessionStateForAuthChange() {
         kernelTurnProjection.invalidateOwnerState()
-        for task in journalUpdateTasks.values { task.cancel() }
-        journalUpdateTasks.removeAll()
+        journalWriteCoordinator.cancelAll()
         journalOwnerByMessageID.removeAll()
         journalTerminalTargets = ChatTerminalTargetRegistry<ChatJournalTerminalTarget>()
         messages.removeAll()
@@ -2506,7 +2577,7 @@ private var activeBridgeSendGeneration: Int?
                 onToolActivity: { _, _, _, _ in },
                 onThinkingDelta: { _ in }
             )
-            return result.text
+            return try Self.requireSuccessfulQueryResult(result).text
         } catch {
             log("ChatLab: query error: \(error)")
             return "[Error: \(error.localizedDescription)]"
@@ -2996,7 +3067,6 @@ private var activeBridgeSendGeneration: Int?
         userMessage: ChatMessage,
         assistantMessage: ChatMessage,
         origin: String,
-        delivery: KernelJournalDelivery,
         appId: String?,
         sessionId: String?,
         messageSource: String
@@ -3010,7 +3080,6 @@ private var activeBridgeSendGeneration: Int?
                 surface: surface,
                 turns: turns,
                 origin: origin,
-                delivery: delivery,
                 continuityKey: continuityKey,
                 appId: appId,
                 sessionId: sessionId,
@@ -3134,9 +3203,7 @@ private var activeBridgeSendGeneration: Int?
         guard let message = messages.first(where: { $0.id == messageId }) else { return }
         guard let ownerID = journalOwnerByMessageID[messageId] ?? runtimeOwnerId else { return }
         let targetSurface = surface ?? mainChatSurfaceReference()
-        let previous = journalUpdateTasks[messageId]
-        let task = Task { @MainActor [weak self] in
-            _ = await previous?.value
+        journalWriteCoordinator.schedule(messageID: messageId) { @MainActor [weak self] in
             guard let self else { return }
             _ = await self.kernelTurnProjection.updateTurn(
                 surface: targetSurface,
@@ -3145,7 +3212,6 @@ private var activeBridgeSendGeneration: Int?
                 ownerID: ownerID
             )
         }
-        journalUpdateTasks[messageId] = task
     }
 
     private func finishJournalUpdate(
@@ -3154,7 +3220,6 @@ private var activeBridgeSendGeneration: Int?
         surface: AgentSurfaceReference? = nil,
         ownerID: String
     ) async -> Bool {
-        _ = await journalUpdateTasks.removeValue(forKey: messageId)?.value
         let targetSurface = surface ?? mainChatSurfaceReference()
         if let message = messages.first(where: { $0.id == messageId }) {
             return await kernelTurnProjection.updateTurn(
@@ -3182,12 +3247,51 @@ private var activeBridgeSendGeneration: Int?
         guard let target = journalTerminalTargets.claim(generation: generation) else {
             return false
         }
+        guard await journalWriteCoordinator.beginTerminalization(
+            messageID: target.assistantMessageId
+        ) else {
+            target.onFinalized?(false)
+            return false
+        }
         let accepted = await finishJournalUpdate(
             messageId: target.assistantMessageId,
             status: status,
             surface: target.surface,
             ownerID: target.ownerID
         )
+        journalOwnerByMessageID.removeValue(forKey: target.assistantMessageId)
+        target.onFinalized?(accepted)
+        return accepted
+    }
+
+    private func finishJournalTarget(
+        generation: Int,
+        queryResult: AgentClient.QueryResult,
+        disposition: KernelJournalTerminalDisposition
+    ) async -> Bool {
+        guard let target = journalTerminalTargets.claim(generation: generation) else {
+            return false
+        }
+        guard await journalWriteCoordinator.beginTerminalization(
+            messageID: target.assistantMessageId
+        ) else {
+            target.onFinalized?(false)
+            return false
+        }
+        let message = messages.first(where: { $0.id == target.assistantMessageId })
+        let resultResources = queryResult.artifacts.map(ChatResource.artifact)
+            + queryResult.completionDeltaArtifacts.map(ChatResource.artifact)
+        let accepted = await kernelTurnProjection.terminalizeTurn(
+            surface: target.surface,
+            turnId: target.assistantMessageId,
+            message: message,
+            producingRunId: queryResult.runId,
+            producingAttemptId: queryResult.attemptId,
+            disposition: disposition,
+            acceptedContent: queryResult.text,
+            acceptedResources: resultResources,
+            ownerID: target.ownerID
+        ) != nil
         journalOwnerByMessageID.removeValue(forKey: target.assistantMessageId)
         target.onFinalized?(accepted)
         return accepted
@@ -3695,8 +3799,6 @@ private var activeBridgeSendGeneration: Int?
         let capturedSessionId = sessionId
         let capturedAppId = overrideAppId ?? selectedAppId
         let journalOrigin = journalOrigin(for: resolvedSurface)
-        let journalDelivery: KernelJournalDelivery = ["task_chat", "workstream"].contains(resolvedSurface.surfaceKind)
-            ? .local : .backend
         let userMessage = ChatMessage(
             id: userMessageId,
             clientTurnId: turnAttemptId,
@@ -3723,7 +3825,6 @@ private var activeBridgeSendGeneration: Int?
             userMessage: userMessage,
             assistantMessage: aiMessage,
             origin: journalOrigin,
-            delivery: journalDelivery,
             appId: capturedAppId,
             sessionId: capturedSessionId,
             messageSource: journalOrigin
@@ -3777,6 +3878,7 @@ private var activeBridgeSendGeneration: Int?
         let responseMetrics = ChatResponseMetrics()
         var completedResponseText: String?
         var screenContextEligibleForTurn = false
+        var correlatedTerminalResult: AgentClient.QueryResult?
 
         // Stall detection.
         // The detector observes every bridge event (text deltas, tool
@@ -4092,6 +4194,7 @@ private var activeBridgeSendGeneration: Int?
                     mode: chatMode.rawValue,
                     imageData: effectiveImageData,
                     attachments: Self.queryAttachments(attachmentsForMessage),
+                    producingTurnId: aiMessageId,
                     expectedContext: kernelContext.snapshot.freshness,
                     onTextDelta: textDeltaHandler,
                     onToolActivity: toolActivityHandler,
@@ -4115,9 +4218,11 @@ private var activeBridgeSendGeneration: Int?
                 throw error
             }
             await callbackQueue.drain()
+            correlatedTerminalResult = queryResult
             if activeBridgeSendGeneration == sendGen {
                 activeBridgeSendGeneration = nil
             }
+            try Self.requireSuccessfulQueryResult(queryResult)
 
             let watchdogFiredBeforeResult = sendWatchdogFiredGeneration == sendGen
             let toolStallAbortFiredBeforeResult = sendToolStallAbortGeneration == sendGen
@@ -4192,7 +4297,11 @@ private var activeBridgeSendGeneration: Int?
                 // The projection may have removed an empty placeholder already.
                 // finishJournalUpdate falls back to a status-only kernel update,
                 // which terminalizes the canonical row without late result data.
-                _ = await finishJournalTarget(generation: sendGen, status: .failed)
+                _ = await finishJournalTarget(
+                    generation: sendGen,
+                    queryResult: queryResult,
+                    disposition: .discard
+                )
 
                 if sendGeneration == sendGen {
                     if let timeoutMessage = ChatProvider.stoppedTurnErrorMessage(
@@ -4303,7 +4412,8 @@ private var activeBridgeSendGeneration: Int?
                     guard let self else { return false }
                     return await self.finishJournalTarget(
                         generation: sendGen,
-                        status: .completed
+                        queryResult: queryResult,
+                        disposition: .accept
                     )
                 }
             )
@@ -4431,7 +4541,15 @@ private var activeBridgeSendGeneration: Int?
                     }
                 }
                 clearChatTelemetryState(for: sendGen)
-                _ = await finishJournalTarget(generation: sendGen, status: .failed)
+                if let correlatedTerminalResult {
+                    _ = await finishJournalTarget(
+                        generation: sendGen,
+                        queryResult: correlatedTerminalResult,
+                        disposition: .discard
+                    )
+                } else {
+                    _ = await finishJournalTarget(generation: sendGen, status: .failed)
+                }
                 releaseSendLock(sendGeneration: sendGen)
                 log("ChatProvider: discarded late failure for revoked generation \(sendGen)")
                 return nil
@@ -4510,7 +4628,21 @@ private var activeBridgeSendGeneration: Int?
                 }
             }
             clearChatTelemetryState(for: sendGen)
-            _ = await finishJournalTarget(generation: sendGen, status: .failed)
+            if let correlatedTerminalResult {
+                let disposition: KernelJournalTerminalDisposition
+                if case .invalid = correlatedTerminalResult.terminalStatus {
+                    disposition = .discard
+                } else {
+                    disposition = .accept
+                }
+                _ = await finishJournalTarget(
+                    generation: sendGen,
+                    queryResult: correlatedTerminalResult,
+                    disposition: disposition
+                )
+            } else {
+                _ = await finishJournalTarget(generation: sendGen, status: .failed)
+            }
 
             // Preserve only a bounded error class in analytics. Raw details stay
             // in the local log and Sentry error above.
@@ -5496,17 +5628,77 @@ private var activeBridgeSendGeneration: Int?
     resetSessionStateForAuthChange()
 
     let tracer = QueryTracer(query: trimmedQuery, inputMode: .text)
-    await QueryTracerContext.$current.withValue(tracer) {
-      _ = await sendMessage(trimmedQuery)
+    tracer.captureRequest(
+      systemPrompt: "Non-production owner-isolation kernel control probe.",
+      messages: [["role": "user", "content": trimmedQuery]])
+    tracer.begin("bridge_ensure", metadata: ["mode": "control_only_kernel_probe"])
+    let runtime = AgentRuntimeProcess.shared
+    let probeClientID = "owner-isolation-probe-\(UUID().uuidString.lowercased())"
+    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+      expectedOwnerID: trimmedOwnerB)
+    else {
+      tracer.end("bridge_ensure", metadata: ["error": "owner_authorization_missing"])
+      tracer.finalize(tokenCount: 0, model: "kernel-control-probe")
+      return ["error": "owner B authorization is unavailable"]
     }
+    do {
+      let surface = mainChatSurfaceReference()
+      let receipt = try await OwnerIsolationKernelProbe.run(
+        ownerID: trimmedOwnerB,
+        query: trimmedQuery,
+        response: "PROBE",
+        registerControlOnlyRuntime: {
+          try await runtime.registerClient(
+            clientId: probeClientID,
+            harnessMode: "piMono",
+            authorizationSnapshot: authorization)
+        },
+        synchronizeOwner: {
+          await runtime.refreshRuntimeOwner(
+            expectedOwnerId: trimmedOwnerB,
+            authorizationSnapshot: authorization)
+        },
+        resolveSurface: {
+          let resolved = try await runtime.resolveSurfaceSession(
+            clientId: probeClientID,
+            surface: surface,
+            title: nil,
+            creationProfile: nil,
+            authorizationSnapshot: authorization)
+          return (resolved.conversationId, resolved.sessionId)
+        },
+        recordExchange: { turns in
+          try await runtime.recordJournalExchange(
+            clientId: probeClientID,
+            surface: surface,
+            ownerID: trimmedOwnerB,
+            turns: turns,
+            authorizationSnapshot: authorization).turns
+        }
+      )
+      for turn in receipt.turns { projectJournalTurn(turn) }
+      tracer.end("bridge_ensure")
+      tracer.captureResponse(text: "PROBE")
+      tracer.finalize(tokenCount: 0, model: "kernel-control-probe")
+      currentError = nil
+      errorMessage = nil
+      await runtime.unregisterClient(clientId: probeClientID)
 
-    var detail = automationMainChatSnapshot(limit: 20)
-    detail["owner_a"] = ownerA
-    detail["owner_b"] = trimmedOwnerB
-    detail["probe_query"] = trimmedQuery
-    detail["auth_user_id"] = UserDefaults.standard.string(forKey: .authUserId) ?? ""
-    detail["owner_override"] = UserDefaults.standard.string(forKey: .automationOwnerOverride) ?? ""
-    return detail
+      var detail = automationMainChatSnapshot(limit: 20)
+      detail["owner_a"] = ownerA
+      detail["owner_b"] = trimmedOwnerB
+      detail["probe_query"] = trimmedQuery
+      detail["auth_user_id"] = UserDefaults.standard.string(forKey: .authUserId) ?? ""
+      detail["owner_override"] = UserDefaults.standard.string(forKey: .automationOwnerOverride) ?? ""
+      detail["conversation_id"] = receipt.conversationID
+      detail["agent_session_id"] = receipt.sessionID
+      return detail
+    } catch {
+      await runtime.unregisterClient(clientId: probeClientID)
+      tracer.end("bridge_ensure", metadata: ["error": "kernel_control_probe_failed"])
+      tracer.finalize(tokenCount: 0, model: "kernel-control-probe")
+      return ["error": "owner B kernel probe failed: \(error.localizedDescription)"]
+    }
   }
 
   /// Undo automationSwapTestOwner: clear the owner override (and heal a legacy

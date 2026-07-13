@@ -103,6 +103,25 @@ enum RealtimeHubLifecyclePolicy {
   }
 }
 
+/// Selects the sole journal owner after realtime `spawn_agent` admission. The
+/// spawn RPC atomically records the canonical exchange; provider turn_done may
+/// refresh that projection, but it must never submit a second mutation for the
+/// same continuity identity.
+@MainActor
+enum RealtimeTurnJournalAuthority {
+  static func persist(
+    turnOwnerID: String,
+    acceptedSpawnOwnerID: String?,
+    refreshAcceptedSpawn: @escaping @MainActor () async -> Bool,
+    recordProviderExchange: @escaping @MainActor () async -> Bool
+  ) async -> Bool {
+    if acceptedSpawnOwnerID == turnOwnerID {
+      return await refreshAcceptedSpawn()
+    }
+    return await recordProviderExchange()
+  }
+}
+
 /// Immutable account identity attached to a realtime socket, its context, and
 /// every token mint that may create or replace it. `signedOut` is a real scope,
 /// distinct from the absence of a session, so a later sign-in cannot inherit a
@@ -137,6 +156,28 @@ struct RealtimeHubOwnerBoundarySnapshot: Equatable {
   let hasPendingOwnerWork: Bool
   let hubConnected: Bool
   let turnAudioByteCount: Int
+}
+
+/// Exact non-production capability for the hermetic local-profile transport.
+/// A process-wide "test mode" boolean is not enough: the authority is bound to
+/// one physical session and one immutable owner scope, so a replaced socket or
+/// an owner transition cannot inherit the provider-warm bypass.
+struct RealtimeLocalProfileTransportAuthority: Equatable {
+  let sourceID: ObjectIdentifier
+  let ownerScope: RealtimeHubOwnerScope
+  let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+
+  func accepts(
+    sourceID candidateSourceID: ObjectIdentifier?,
+    currentOwnerID: String?,
+    localProfileEnabled: Bool,
+    authorizationIsCurrent: Bool
+  ) -> Bool {
+    localProfileEnabled
+      && candidateSourceID == sourceID
+      && ownerScope.isCurrent(currentOwnerID: currentOwnerID)
+      && authorizationIsCurrent
+  }
 }
 #endif
 
@@ -767,6 +808,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// immutable and the object identifier prevents a scope from drifting onto a
   /// different socket through an independent property assignment.
   private var sessionOwnerBinding: PhysicalSessionOwnerBinding?
+#if DEBUG
+  /// Installed only for the lifetime of one local-profile `ptt_test_turn`.
+  /// Production builds have no provider-warm bypass surface.
+  private var localProfileTransportAuthority: RealtimeLocalProfileTransportAuthority?
+#endif
   private var sessionOwnerScope: RealtimeHubOwnerScope? {
     guard let session, let binding = sessionOwnerBinding,
       binding.sourceID == ObjectIdentifier(session)
@@ -1025,6 +1071,19 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private func isOwnerScopeCurrent(_ scope: RealtimeHubOwnerScope) -> Bool {
     scope.isCurrent(currentOwnerID: RuntimeOwnerIdentity.currentOwnerId())
   }
+
+#if DEBUG
+  private func isAuthorizedLocalProfileTransport(_ source: RealtimeHubSession? = nil) -> Bool {
+    guard let authority = localProfileTransportAuthority else { return false }
+    let candidate = source ?? session
+    return authority.accepts(
+      sourceID: candidate.map(ObjectIdentifier.init),
+      currentOwnerID: RuntimeOwnerIdentity.currentOwnerId(),
+      localProfileEnabled: DesktopLocalProfile.isEnabled,
+      authorizationIsCurrent: RuntimeOwnerIdentity.isAuthorizationCurrent(
+        authority.authorizationSnapshot))
+  }
+#endif
 
   /// Account replacement is a hard physical boundary: detach the old socket,
   /// cancel any reducer turn still owned by it, and discard its rendered context
@@ -1697,6 +1756,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
 
     let localOwnerScope = currentOwnerScope
+    guard let localOwnerID = localOwnerScope.authenticatedOwnerID,
+      let localAuthorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+        expectedOwnerID: localOwnerID)
+    else {
+      return ["error": "local-profile realtime transport requires an authenticated owner"]
+    }
     teardownSession()
     let context = voiceSessionContext(for: localOwnerScope)
     sessionVoiceContextFreshnessIdentity = context.snapshotFreshnessIdentity
@@ -1714,13 +1779,27 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     sessionOwnerBinding = PhysicalSessionOwnerBinding(
       sourceID: ObjectIdentifier(localSession),
       ownerScope: localOwnerScope)
+    localProfileTransportAuthority = RealtimeLocalProfileTransportAuthority(
+      sourceID: ObjectIdentifier(localSession),
+      ownerScope: localOwnerScope,
+      authorizationSnapshot: localAuthorization)
+    defer {
+      if session === localSession {
+        teardownSession()
+      }
+    }
     localSession.markReadyForTesting()
-    guard await waitUntilActive(timeout: min(3, max(1, timeout))) else {
+    guard
+      await waitUntilLocalProfileTransportReady(
+        localSession,
+        ownerScope: localOwnerScope,
+        timeout: min(3, max(1, timeout)))
+    else {
       return ["error": "local-profile realtime transport did not become active"]
     }
 
     lastTurnDiagnostics = [:]
-    let turnID = VoiceTurnCoordinator.shared.begin(intent: .hold)
+    let turnID = VoiceTurnCoordinator.shared.begin(intent: .automation)
     VoiceTurnCoordinator.shared.send(
       .selectRoute(turnID: turnID, route: .hub(sessionID: voiceSessionID)))
     beginTurn(turnID: turnID)
@@ -1728,9 +1807,29 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       feedAudio(Data(pcm16k.prefix(3_200)), turnID: turnID)
     }
     VoiceTurnCoordinator.shared.send(.finalize(turnID: turnID))
-    guard commitTurn() == .accepted, let responseID = voiceResponseID else {
+    let commitResult = commitTurn()
+    guard commitResult == .accepted, let responseID = voiceResponseID else {
+      let failedTurn = VoiceTurnCoordinator.shared.activeTurn
+      let recentTimeline = VoiceTurnCoordinator.shared.timelineSnapshot().suffix(6).map {
+        "\($0.sequence):\($0.event):"
+          + "\($0.phaseBefore.map(VoiceTurnCoordinator.phaseLabel) ?? "idle")->"
+          + "\($0.phaseAfter.map(VoiceTurnCoordinator.phaseLabel) ?? "idle")"
+      }.joined(separator: ",")
+      let phase = failedTurn.map { VoiceTurnCoordinator.phaseLabel($0.phase) } ?? "idle"
+      let route = failedTurn.map { VoiceTurnCoordinator.routeLabel($0.route) } ?? "none"
+      let owner = failedTurn?.ownerID ?? "none"
+      log(
+        "RealtimeHub: local-profile synthetic commit rejected result=\(commitResult) "
+          + "phase=\(phase) route=\(route) owner=\(owner) timeline=[\(recentTimeline)]")
       VoiceTurnCoordinator.shared.send(.finish(turnID: turnID, reason: .providerFailed))
-      return ["error": "local-profile realtime reducer rejected the synthetic commit"]
+      return [
+        "error": "local-profile realtime reducer rejected the synthetic commit",
+        "commit_result": "\(commitResult)",
+        "phase": phase,
+        "route": route,
+        "owner": owner,
+        "recent_timeline": recentTimeline,
+      ]
     }
 
     let eventIdentity = RealtimeHubEventIdentity(turnID: turnID, responseID: responseID)
@@ -1794,6 +1893,30 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       try? await Task.sleep(nanoseconds: 50_000_000)
     }
     return ["error": "local-profile voice turn did not finalize within \(Int(timeout))s"]
+  }
+
+  /// Waits on the exact hermetic socket without entering `ensureWarm()` or
+  /// comparing it with the user's provider preference. Both operations are
+  /// correct for production warm sessions and wrong for an offline transport.
+  private func waitUntilLocalProfileTransportReady(
+    _ source: RealtimeHubSession,
+    ownerScope: RealtimeHubOwnerScope,
+    timeout: TimeInterval
+  ) async -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    repeat {
+      guard localProfileTransportAuthority?.ownerScope == ownerScope,
+        isAuthorizedLocalProfileTransport(source),
+        source === session
+      else { return false }
+      if hubConnected, await source.activityWindowOpen() { return true }
+      try? await Task.sleep(nanoseconds: 50_000_000)
+      if Task.isCancelled { return false }
+    } while Date() < deadline
+    guard isAuthorizedLocalProfileTransport(source), source === session, hubConnected else {
+      return false
+    }
+    return await source.activityWindowOpen()
   }
 
   private nonisolated static func localProfileSpawnArgumentsJSON(
@@ -2000,6 +2123,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// client-direct with the user's key. Otherwise, if signed in → mint a server-side
   /// ephemeral token and connect with it.
   func ensureWarm() {
+#if DEBUG
+    // The local-profile action owns an already-installed hermetic transport.
+    // Re-entering normal warm-up here would replace it and mint a real provider
+    // token while the offline gauntlet is exercising the production reducer.
+    if isAuthorizedLocalProfileTransport() { return }
+#endif
     guard !RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress else {
       log("RealtimeHub: warm start denied during effective-owner transition")
       return
@@ -2492,29 +2621,33 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       return false
     }
     let surface = FloatingControlBarManager.shared.mainChatSurfaceReference()
-    if let accepted = acceptedSpawnJournalReceiptByContinuityKey[idempotencyKey],
-      accepted.ownerID == ownerID
-    {
-      guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
-      await FloatingControlBarManager.shared.refreshKernelJournal(surface: surface)
-      return AuthorizedToolExecution.isOwnerCurrent(ownerID)
-    }
-    guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
-    for attempt in 0..<2 {
-      guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
-      let accepted = await FloatingControlBarManager.shared.recordExchange(
-        surface: surface,
-        ownerID: ownerID,
-        userText: userText,
-        assistantText: assistantText,
-        origin: "realtime_voice",
-        continuityKey: idempotencyKey)
-      guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
-      if accepted { return true }
-      if attempt == 0 { try? await Task.sleep(nanoseconds: 250_000_000) }
-    }
-    log("RealtimeHub: kernel journal rejected voice turn (code=journal_record_failed)")
-    return false
+    let acceptedSpawnOwnerID = acceptedSpawnJournalReceiptByContinuityKey[idempotencyKey]?.ownerID
+    return await RealtimeTurnJournalAuthority.persist(
+      turnOwnerID: ownerID,
+      acceptedSpawnOwnerID: acceptedSpawnOwnerID,
+      refreshAcceptedSpawn: {
+        guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
+        await FloatingControlBarManager.shared.refreshKernelJournal(surface: surface)
+        return AuthorizedToolExecution.isOwnerCurrent(ownerID)
+      },
+      recordProviderExchange: {
+        guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
+        for attempt in 0..<2 {
+          guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
+          let accepted = await FloatingControlBarManager.shared.recordExchange(
+            surface: surface,
+            ownerID: ownerID,
+            userText: userText,
+            assistantText: assistantText,
+            origin: "realtime_voice",
+            continuityKey: idempotencyKey)
+          guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
+          if accepted { return true }
+          if attempt == 0 { try? await Task.sleep(nanoseconds: 250_000_000) }
+        }
+        log("RealtimeHub: kernel journal rejected voice turn (code=journal_record_failed)")
+        return false
+      })
   }
 
   /// Imports at most 200 entries per pass from the retired Swift queue. This is
@@ -2615,6 +2748,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     sessionProvider = nil
     sessionAuth = nil
     sessionOwnerBinding = nil
+#if DEBUG
+    localProfileTransportAuthority = nil
+#endif
     hubConnected = false  // no live session → PTT falls back to the cascade until re-warm
     sessionVoiceContextFreshnessIdentity = ""
     geminiSessionNeedsTurnBoundary = false

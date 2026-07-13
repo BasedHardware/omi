@@ -21,7 +21,7 @@ describe("SqliteAgentStore", () => {
     store.migrate();
     store.migrate();
 
-    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(26);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(27);
     expect(tableNames(store)).toEqual([
       "adapter_bindings",
       "artifacts",

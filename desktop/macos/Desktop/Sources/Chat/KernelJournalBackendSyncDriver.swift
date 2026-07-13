@@ -103,6 +103,7 @@ actor KernelJournalBackendSyncDriver {
     let attemptCount: Int
     let deliveryGeneration: Int
     let payloadHash: String
+    let journalRevision: Int
     let text: String
     let sender: String
     let appId: String?
@@ -128,6 +129,8 @@ actor KernelJournalBackendSyncDriver {
         deliveryGeneration > 0,
         let payloadHash = payload["payloadHash"] as? String,
         !payloadHash.isEmpty,
+        let journalRevision = payload["journalRevision"] as? Int,
+        (1...9_007_199_254_740_991).contains(journalRevision),
         let text = payload["text"] as? String,
         let sender = payload["sender"] as? String,
         ["human", "ai"].contains(sender),
@@ -142,6 +145,7 @@ actor KernelJournalBackendSyncDriver {
       self.attemptCount = attemptCount
       self.deliveryGeneration = deliveryGeneration
       self.payloadHash = payloadHash
+      self.journalRevision = journalRevision
       self.text = text
       self.sender = sender
       self.appId = payload["appId"] as? String
@@ -368,6 +372,7 @@ actor KernelJournalBackendSyncDriver {
         metadata: request.metadata,
         clientMessageId: request.turnId,
         messageSource: request.messageSource,
+        journalRevision: request.journalRevision,
         expectedOwnerId: request.ownerId
       )
     } catch {
@@ -459,7 +464,7 @@ actor KernelJournalBackendSyncDriver {
     )
   }
 
-  private nonisolated static func reconcileProjection(_ row: ChatMessageDB) -> ReconcileTurn {
+  nonisolated static func reconcileProjection(_ row: ChatMessageDB) -> ReconcileTurn {
     let metadata = metadataProjection(row.metadata)
     return ReconcileTurn(
       remoteId: row.id,

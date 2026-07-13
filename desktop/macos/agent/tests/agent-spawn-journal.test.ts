@@ -69,6 +69,7 @@ describe("durable agent-spawn producer journal", () => {
       producingRunId: accepted.run.runId,
       status: "completed",
     });
+    expect(first.assistantTurn.createdAtMs).toBe(first.userTurn.createdAtMs + 1);
     expect(first.assistantTurn.contentBlocks).toEqual([
       {
         type: "agentSpawn",
@@ -148,6 +149,43 @@ describe("durable agent-spawn producer journal", () => {
     })).rejects.toThrow(/Leaf workers cannot create/);
     expect(store.getRow("SELECT COUNT(*) AS count FROM conversation_turns").count).toBe(0);
     expect(store.allRows("SELECT run_id FROM runs")).toEqual([]);
+    store.close();
+  });
+
+  it("rejects trusted direct producerTurnId metadata before accepting a child run", async () => {
+    const root = newRoot();
+    const { store, kernel } = createKernelHarness(join(root, "direct-producer-turn.sqlite"), "acp");
+    const caller = resolveSurfaceSession(store, {
+      ownerId: "owner",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "default" },
+      defaultAdapterId: "acp",
+    }, () => 1);
+    const pillId = "897e3ef1-9dbb-41ca-9ac8-8ec52112f387";
+    const rejected = JSON.parse(await handleAgentControlToolCall({
+      kernel,
+      callerSessionId: caller.agentSessionId,
+      executionRole: "coordinator",
+      providerBoundary: "local_user:acp",
+      defaultAdapterId: "acp",
+      trustedUserControl: true,
+      getOwnerId: () => "owner",
+    }, "spawn_agent", {
+      objective: "Must not be accepted",
+      originSurfaceKind: "main_chat",
+      externalRefId: pillId,
+      metadata: {
+        producerJournal: {
+          ...producerDescriptor(pillId),
+          producerTurnId: "forged-producing-turn",
+        },
+      },
+    }));
+    expect(rejected).toMatchObject({
+      ok: false,
+      error: { message: expect.stringMatching(/producerTurnId is reserved for kernel-authorized/i) },
+    });
+    expect(store.getRow("SELECT COUNT(*) AS count FROM runs").count).toBe(0);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM conversation_turns").count).toBe(0);
     store.close();
   });
 
