@@ -93,6 +93,14 @@ class RunnerBehaviorTests(unittest.TestCase):
         selected = {check.id for check in resolve_checks(manifest, ["app/lib/widgets/example.dart"], "ci")}
         self.assertIn("brand-ui", selected)
         self.assertNotIn("backend-async-blockers", selected)
+        self.assertNotIn("backend-route-policy-baseline", selected)
+
+    def test_backend_route_change_selects_route_policy_baseline_in_both_lanes(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        changed = ["backend/routers/chat_sessions.py"]
+        for lane in ("local", "ci"):
+            selected = {check.id for check in resolve_checks(manifest, changed, lane)}
+            self.assertIn("backend-route-policy-baseline", selected)
 
     def test_failure_is_propagated(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
