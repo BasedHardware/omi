@@ -136,6 +136,26 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
     XCTAssertEqual(CloudConnectorGuidanceOverlay.dragCardInitialAlpha(reduceMotion: true), 1)
   }
 
+  /// The drag card sits centered in the bottom quarter of the screen (below the
+  /// Settings list, never covering the drop target), x-centered on the anchor.
+  @MainActor
+  func testDragCardSitsInBottomQuarterOfScreen() {
+    let visible = CGRect(x: 0, y: 0, width: 1600, height: 1000)
+    let card = CGSize(width: 180, height: 164)
+    let anchor = CGRect(x: 900, y: 300, width: 600, height: 500)
+
+    let frame = CloudConnectorGuidanceOverlay.dragCardFrame(
+      anchor: anchor, cardSize: card, visibleFrame: visible)
+    XCTAssertEqual(frame.midX, anchor.midX)
+    XCTAssertLessThanOrEqual(frame.maxY, visible.minY + visible.height / 4)
+
+    // No anchor → centered on the screen, still in the bottom quarter.
+    let centered = CloudConnectorGuidanceOverlay.dragCardFrame(
+      anchor: nil, cardSize: card, visibleFrame: visible)
+    XCTAssertEqual(centered.midX, visible.midX)
+    XCTAssertLessThanOrEqual(centered.maxY, visible.minY + visible.height / 4)
+  }
+
   func testCaptureKitFailureDoesNotOverrideGrantedTccPermission() {
     XCTAssertFalse(
       ScreenRecordingPermissionPolicy.shouldMarkCaptureKitBroken(tccGranted: true),

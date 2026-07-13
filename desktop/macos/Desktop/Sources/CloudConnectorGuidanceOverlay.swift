@@ -226,7 +226,7 @@ final class CloudConnectorGuidanceOverlay {
     let dragTargetState = ScreenRecordingDragTargetState(frame: anchor)
     self.dragTargetState = dragTargetState
     let screen = Self.screen(forAnchor: anchor)
-    let frame = Self.instructionCardFrame(
+    let frame = Self.dragCardFrame(
       anchor: anchor, cardSize: cardSize, visibleFrame: screen.visibleFrame)
 
     lastAutomationState = [
@@ -286,10 +286,20 @@ final class CloudConnectorGuidanceOverlay {
     guard let window, let size = dragCardSize else { return }
     dragTargetState?.frame = anchor
     let screen = Self.screen(forAnchor: anchor)
-    let frame = Self.instructionCardFrame(
+    let frame = Self.dragCardFrame(
       anchor: anchor, cardSize: size, visibleFrame: screen.visibleFrame)
     window.setFrame(frame, display: true)
     lastAutomationState?["panelFrame"] = Self.string(frame)
+  }
+
+  /// Drag-card placement: horizontally centered on the anchor (Settings window)
+  /// when there is one, and vertically centered within the bottom quarter of the
+  /// screen — below the Settings list, so the card never covers the drop target.
+  static func dragCardFrame(anchor: CGRect?, cardSize: CGSize, visibleFrame: CGRect) -> CGRect {
+    let x = (anchor ?? visibleFrame).midX - cardSize.width / 2
+    let y = visibleFrame.minY + (visibleFrame.height / 4 - cardSize.height) / 2
+    let proposed = CGRect(x: x, y: y, width: cardSize.width, height: cardSize.height)
+    return SpatialOverlayGeometry.clamped(proposed, to: visibleFrame, padding: 12)
   }
 
   static func dragCardInitialAlpha(reduceMotion: Bool) -> CGFloat {
