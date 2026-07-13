@@ -146,10 +146,18 @@ TRIAL_LENGTH_SECONDS = 3 * 24 * 60 * 60  # 3 days
 # (Neo questions, data-intake caps) are untouched.
 TRIAL_PAYWALL_ENABLED = os.getenv('TRIAL_PAYWALL_ENABLED', 'false').lower() == 'true'
 
-# Platform identifiers that count as desktop for paywall purposes. The Swift
-# client sends X-App-Platform: macos and the listen WS uses source=desktop.
-# Anything else (ios, android, omi device, phone_call, unknown) is exempt.
-_TRIAL_PAYWALL_DESKTOP_TOKENS = {"macos", "desktop"}
+# X-App-Platform header values that identify a desktop client. macOS and Windows
+# are the two desktop OSes; both get the desktop plan catalog, the desktop trial
+# paywall, and desktop entitlement treatment. This is the single source of truth
+# for "is this a desktop platform" — every desktop-vs-mobile gate below reads
+# from here so a new desktop OS is wired in one place.
+DESKTOP_PLATFORMS = {'macos', 'windows'}
+
+# Platform identifiers that count as desktop for paywall purposes. The desktop
+# clients send X-App-Platform: macos / windows and the listen WS uses
+# source=desktop. Anything else (ios, android, omi device, phone_call, unknown)
+# is exempt.
+_TRIAL_PAYWALL_DESKTOP_TOKENS = DESKTOP_PLATFORMS | {"desktop"}
 
 # Cache the (slow) Firebase Auth + Firestore lookup result for a few minutes
 # so chat-quota polling doesn't fan out to Firebase on every request.
@@ -433,8 +441,8 @@ _MOBILE_PLATFORM_TOKENS = {'ios', 'android'}
 def _platform_hidden_plans(platform: Optional[str]) -> Set[PlanType]:
     """Plans that are hidden from the purchase catalog for the given platform.
 
-    Desktop (macOS) sells Operator + Architect (pricier tier with usage-based
-    overage on Operator), so Neo is dropped from the desktop picker.
+    Desktop (macOS / Windows) sells Operator + Architect (pricier tier with
+    usage-based overage on Operator), so Neo is dropped from the desktop picker.
 
     Mobile (ios/android): Neo is deprecated for new acquisition — it's hidden
     from the purchase catalog on every mobile build so brand-new / never-paid
@@ -445,7 +453,7 @@ def _platform_hidden_plans(platform: Optional[str]) -> Set[PlanType]:
     Web and any other client are left alone — their catalog is unchanged.
     """
     p = (platform or '').lower()
-    if p == 'macos' or p in _MOBILE_PLATFORM_TOKENS:
+    if p in DESKTOP_PLATFORMS or p in _MOBILE_PLATFORM_TOKENS:
         return {PlanType.unlimited}
     return set()
 
@@ -499,19 +507,38 @@ def filter_plans_for_user(
     return out
 
 
-# Minimum desktop build that ships with the new plan catalog + quota UI.
+# Minimum macOS desktop build that ships with the new plan catalog + quota UI.
 NEW_PLANS_MIN_DESKTOP_VERSION = os.getenv('NEW_PLANS_MIN_DESKTOP_VERSION', '0.11.324')
+
+# Minimum Windows desktop build that ships the new plan catalog. Windows is
+# pre-release and versions independently of macOS, so this defaults permissive
+# ('0.0.0' → every Windows build qualifies); set a floor once Windows ships a
+# build that must be gated out.
+NEW_PLANS_MIN_WINDOWS_VERSION = os.getenv('NEW_PLANS_MIN_WINDOWS_VERSION', '0.0.0')
 
 # Minimum mobile build that ships with the `operator` enum value and new plan UI.
 # Mobile builds below this version get the legacy catalog with operator→unlimited mapping.
 NEW_PLANS_MIN_MOBILE_VERSION = os.getenv('NEW_PLANS_MIN_MOBILE_VERSION', '1.0.530')
 
+# Per-desktop-platform minimum client version that understands the Operator +
+# Architect plan shape. Desktop platforms fail *open* (a missing/unparseable
+# version still gets the new catalog); mobile fails *closed* (old builds crash
+# on the operator enum).
+_NEW_PLANS_MIN_DESKTOP_VERSION_BY_PLATFORM = {
+    'macos': NEW_PLANS_MIN_DESKTOP_VERSION,
+    'windows': NEW_PLANS_MIN_WINDOWS_VERSION,
+}
+
 
 def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -> bool:
     """True iff this caller's client understands the Operator + Architect plan shape.
 
-    Desktop (macOS): any build at or above NEW_PLANS_MIN_DESKTOP_VERSION qualifies.
-    Mobile (android/ios): any build at or above NEW_PLANS_MIN_MOBILE_VERSION qualifies.
+    Desktop (macOS / Windows): any build at or above the platform's minimum
+    qualifies; a missing or unparseable version defaults to the new catalog
+    (macOS shipped it long ago, Windows is pre-release).
+    Mobile (android/ios): any build at or above NEW_PLANS_MIN_MOBILE_VERSION
+    qualifies; a missing or unparseable version defaults to the legacy catalog
+    (old mobile builds crash on the operator enum).
     Unknown platform: legacy catalog.
     """
     if not platform:
@@ -519,15 +546,15 @@ def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -
 
     platform_lower = platform.lower()
 
-    if platform_lower == 'macos':
+    if platform_lower in DESKTOP_PLATFORMS:
         if not app_version:
             return True
         try:
-            return compare_versions(app_version, NEW_PLANS_MIN_DESKTOP_VERSION) >= 0
+            return compare_versions(app_version, _NEW_PLANS_MIN_DESKTOP_VERSION_BY_PLATFORM[platform_lower]) >= 0
         except Exception:
             return True
 
-    if platform_lower in ('android', 'ios'):
+    if platform_lower in _MOBILE_PLATFORM_TOKENS:
         if not app_version:
             return False
         try:
