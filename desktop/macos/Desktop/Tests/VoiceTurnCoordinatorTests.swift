@@ -376,7 +376,6 @@ final class VoiceTurnCoordinatorTests: XCTestCase {
       (.omniSTT, "omni_stt"),
       (.deepgramBatch, "deepgram_batch"),
       (.deepgramLive, "deepgram_live"),
-      (.agentFollowUp, "agent_follow_up"),
     ]
     for (route, expected) in routes {
       XCTAssertEqual(VoiceTurnCoordinator.routeLabel(route), expected, "turn=\(turnID)")

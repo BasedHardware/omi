@@ -153,15 +153,20 @@ struct FloatingControlBarView: View {
     }
 
     private var showingNotchWaveform: Bool {
-        state.isVoiceListening && !state.isVoiceFollowUp && !state.showingAIConversation
+        state.isVoiceListening && state.pttHintText.isEmpty
     }
 
     /// The notch "thinking" state: a PTT query is committed and being processed,
     /// with no live listening or open conversation surface. Shows the spinning
-    /// Omi mark in the left notch lobe.
+    /// Omi mark in the left notch lobe (chat already has its own loading UI).
     private var showingNotchThinking: Bool {
         (state.isThinking || state.isVoiceResponseWaiting)
-            && !state.showingAIConversation && !state.isVoiceListening
+            && !state.showingAIConversation
+            && !state.isVoiceListening
+    }
+
+    private var showingPTTStatusBanner: Bool {
+        !state.pttHintText.isEmpty
     }
 
     private var shouldUseOmiChatOverlayHitTarget: Bool {
@@ -170,13 +175,21 @@ struct FloatingControlBarView: View {
 
     private var unifiedFloatingSurface: some View {
         VStack(spacing: 0) {
-            if state.usesNotchIsland {
+            if state.usesNotchIsland || state.showingAIConversation {
                 notchChrome
             } else {
                 // No camera housing to blend into — the pill surface starts
                 // with a slim top inset instead of the notch chrome band.
                 Color.clear
                     .frame(height: FloatingControlBarWindow.pillSurfaceTopPadding)
+            }
+
+            if showingPTTStatusBanner {
+                pttStatusBanner
+                    .frame(height: FloatingControlBarWindow.pttHintRowHeight)
+                    .padding(.horizontal, OmiSpacing.md)
+                    .padding(.bottom, OmiSpacing.xs)
+                    .transition(.opacity)
             }
 
             if shouldShowNotchHoverMenu {
@@ -199,14 +212,6 @@ struct FloatingControlBarView: View {
                 } else {
                     pillAgentListMenu
                 }
-            }
-
-            if state.usesNotchIsland && !state.pttHintText.isEmpty && !state.showingAIConversation {
-                notchPttHintRow
-                    .frame(height: FloatingControlBarWindow.pttHintRowHeight)
-                    .padding(.horizontal, OmiSpacing.md)
-                    .padding(.bottom, OmiSpacing.xs)
-                    .transition(.opacity)
             }
 
             if state.showingAIConversation {
@@ -363,7 +368,7 @@ struct FloatingControlBarView: View {
         let hasExpandedSurface = state.showingAIConversation
             || state.currentNotification != nil
             || shouldShowNotchHoverMenu
-            || !state.pttHintText.isEmpty
+            || showingPTTStatusBanner
         guard hasExpandedSurface else {
             return CGSize(width: notchChromeWidth, height: notchChromeHeight)
         }
@@ -493,22 +498,6 @@ struct FloatingControlBarView: View {
         .accessibilityHint("Open settings")
     }
 
-    /// Transient too-short PTT hint shown below the notch chrome (notch layout has
-    /// no inline text spot, unlike the pill's `voiceListeningView`). White/neutral,
-    /// no toast; cleared on the same ~2s lifecycle as `pttHintText`.
-    private var notchPttHintRow: some View {
-        HStack(spacing: OmiSpacing.xs) {
-            Image(systemName: "mic.fill")
-                .scaledFont(size: OmiType.caption, weight: .semibold)
-                .foregroundColor(.white.opacity(0.9))
-            Text(state.pttHintText)
-                .scaledFont(size: 12, weight: .medium)
-                .foregroundColor(.white)
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
     private var notchOmiChatRow: some View {
         Button {
             openOmiChatFromNotchRow()
@@ -597,14 +586,38 @@ struct FloatingControlBarView: View {
         FloatingControlBarWindow.notchChromeHeight(for: window?.screen ?? NSScreen.main)
     }
 
+    /// Full-width readable status strip under chrome / pill for too-short PTT
+    /// taps and mic errors. Keeps long copy out of the narrow logo/mic slot.
+    private var pttStatusBanner: some View {
+        HStack(spacing: OmiSpacing.xs) {
+            Image(systemName: "mic.fill")
+                .scaledFont(size: OmiType.caption, weight: .semibold)
+                .foregroundColor(.white.opacity(0.9))
+            Text(state.pttHintText)
+                .scaledFont(size: 12, weight: .medium)
+                .foregroundColor(.white)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     /// Collapsed pill / hover bar chrome. Conversations, notifications-with-
     /// chat, and the agent list all render on `unifiedFloatingSurface` — this
     /// chrome only ever shows the idle pill, hover hints, and voice states.
     private var barChrome: some View {
         VStack(spacing: 0) {
             controlBarView
+
+            if showingPTTStatusBanner {
+                pttStatusBanner
+                    .frame(height: FloatingControlBarWindow.pttHintRowHeight)
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, OmiSpacing.xs)
+                    .transition(.opacity)
+            }
         }
-        .frame(maxWidth: barNeedsFullWidth ? .infinity : nil, alignment: .top)
+        .frame(maxWidth: barNeedsFullWidth || showingPTTStatusBanner ? .infinity : nil, alignment: .top)
         .overlay(alignment: .topTrailing) {
             if isHovering && !state.isVoiceListening {
                 Button {
@@ -1117,14 +1130,19 @@ struct FloatingControlBarView: View {
         let allowsHoverExpansion = isHovering && !state.isVoiceResponseGlowActive
         return Group {
             if !state.pttHintText.isEmpty {
-                // Too-short PTT hint takes precedence over every other bar state
-                // (incl. follow-up turns) for its brief window.
-                voiceListeningView
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .frame(height: 42)
-                    .transition(.opacity)
-            } else if state.isVoiceListening && !state.isVoiceFollowUp {
+                // Too-short / error copy lives in `pttStatusBanner` below — keep
+                // the pill chrome as the idle strip so we don't stack two mics.
+                PillStatusObservingView(manager: agentPills) { pills in
+                    let agentGroup = state.isVoiceResponseGlowActive
+                        ? nil
+                        : NotchAgentStatusGroup.aggregate(for: pills)
+                    compactCircleView(agentGroup: agentGroup)
+                        .modifier(AgentStatusGlow(group: agentGroup))
+                }
+                .frame(height: 14)
+                .padding(.vertical, 5)
+                .transition(.opacity)
+            } else if state.isVoiceListening {
                 voiceListeningView
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
@@ -1336,30 +1354,22 @@ struct FloatingControlBarView: View {
 
     private var voiceListeningView: some View {
         HStack(spacing: 7) {
-            if !state.pttHintText.isEmpty {
-                // Too-short PTT tap: inline hint instead of the live waveform.
-                Image(systemName: "mic.fill")
-                    .scaledFont(size: 12, weight: .semibold)
-                    .foregroundColor(.white)
-                Text(state.pttHintText)
-                    .scaledFont(size: OmiType.caption, weight: .medium)
-                    .foregroundColor(.white)
-            } else {
+            if state.pttHintText.isEmpty {
                 // Playful realtime mic waveform (replaces the old pulsing red dot)
                 VoiceWaveformBars(isActive: state.isVoiceListening)
+            }
 
-                Image(systemName: "mic.fill")
-                    .scaledFont(size: 12, weight: .semibold)
-                    .foregroundColor(.white)
+            Image(systemName: "mic.fill")
+                .scaledFont(size: 12, weight: .semibold)
+                .foregroundColor(.white)
 
-                if state.isVoiceLocked {
-                    Image(systemName: "lock.fill")
-                        .scaledFont(size: OmiType.micro, weight: .bold)
-                        .foregroundColor(.orange)
-                        .frame(width: 18, height: 18)
-                        .background(Color.orange.opacity(0.2))
-                        .cornerRadius(4)
-                }
+            if state.isVoiceLocked && state.pttHintText.isEmpty {
+                Image(systemName: "lock.fill")
+                    .scaledFont(size: OmiType.micro, weight: .bold)
+                    .foregroundColor(.orange)
+                    .frame(width: 18, height: 18)
+                    .background(Color.orange.opacity(0.2))
+                    .cornerRadius(4)
             }
         }
     }
@@ -1409,10 +1419,13 @@ struct FloatingControlBarView: View {
         let height = lastInputEditorHeight > 0
             ? lastInputEditorHeight
             : FloatingControlBarWindow.notchInputPanelMinimumContentHeight
-        let topBand = state.usesNotchIsland
+        let topBand = (state.usesNotchIsland || state.showingAIConversation)
             ? notchChromeHeight
             : FloatingControlBarWindow.pillSurfaceTopPadding
-        let baseHeight = topBand + height + FloatingControlBarWindow.notchInputPanelVerticalPadding
+        let statusBanner = showingPTTStatusBanner
+            ? FloatingControlBarWindow.pttStatusBannerBudget
+            : 0
+        let baseHeight = topBand + statusBanner + height + FloatingControlBarWindow.notchInputPanelVerticalPadding
         let headerBudget = !agentPills.pills.isEmpty
             ? FloatingControlBarWindow.notchChatHeaderVerticalBudget
             : 0
@@ -1440,8 +1453,6 @@ struct FloatingControlBarView: View {
             ),
             userInput: state.displayedQuery,
             chatHistory: state.derivedChatHistory(from: provider),
-            isVoiceFollowUp: state.isVoiceFollowUp,
-            voiceFollowUpTranscript: state.voiceFollowUpTranscript,
             canClearVisibleConversation: false,
             showsHeader: false,
             onClearVisibleConversation: onClearVisibleConversation,
@@ -1700,10 +1711,6 @@ private struct AgentMainChatView: View {
         _followUpText = State(initialValue: ChatDraftStore.shared.text(for: .floatingAgent(pill.id)))
     }
 
-    private var isRecording: Bool {
-        manager.recordingPillID == pill.id
-    }
-
     private var isRunning: Bool {
         guard !hasFinalAssistantOutput else { return false }
         switch pill.status {
@@ -1758,7 +1765,6 @@ private struct AgentMainChatView: View {
                         String(message.isStreaming),
                     ].joined(separator: "\u{1F}")
                 }.joined(separator: "\u{1E}"),
-                String(isRecording),
             ].joined(separator: "\u{1D}")
         )
     }
@@ -1777,11 +1783,6 @@ private struct AgentMainChatView: View {
             ) {
                 conversationContent
                     .id(pill.contentRevision)
-
-                if isRecording {
-                    voiceFollowUpView
-                        .id("agentVoiceFollowUp")
-                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -2094,23 +2095,6 @@ private struct AgentMainChatView: View {
         }
     }
 
-    private var voiceFollowUpView: some View {
-        HStack(spacing: OmiSpacing.sm) {
-            VoiceWaveformBars(isActive: true)
-            Image(systemName: "mic.fill")
-                .scaledFont(size: 14, weight: .semibold)
-                .foregroundColor(.white)
-            Text("Listening...")
-                .scaledFont(size: OmiType.body)
-                .foregroundColor(.white.opacity(0.62))
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, OmiSpacing.sm)
-        .background(Color.white.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous))
-    }
-
     private var followUpInput: some View {
         VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             if !attachments.isEmpty {
@@ -2122,17 +2106,6 @@ private struct AgentMainChatView: View {
             }
 
             HStack(spacing: OmiSpacing.xs) {
-                Button {
-                    manager.toggleFollowUpVoice(for: pill)
-                } label: {
-                    Image(systemName: isRecording ? "stop.circle.fill" : "mic.fill")
-                        .scaledFont(size: 17, weight: .semibold)
-                        .foregroundColor(isRecording ? Color.white : .secondary)
-                        .frame(width: 24, height: 24)
-                }
-                .buttonStyle(.plain)
-                .help(isRecording ? "Stop voice follow-up" : "Voice follow-up")
-
                 TextField("Ask this agent...", text: $followUpText)
                     .textFieldStyle(.plain)
                     .scaledFont(size: OmiType.body)

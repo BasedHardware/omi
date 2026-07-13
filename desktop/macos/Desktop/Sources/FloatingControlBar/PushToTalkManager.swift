@@ -120,10 +120,6 @@ class PushToTalkManager: ObservableObject {
   // Realtime-as-hub (Phase 1): when active, the realtime model is THE hub — it does
   // in-session STT + reasoning + routing (tool choice) + speaks the reply. Mic PCM is
   // streamed to RealtimeHubController; there is no transcript→router→ChatProvider hop.
-  /// When set, the next finalized PTT turn is a voice follow-up to this agent pill:
-  /// it uses the realtime omni STT and routes the transcript into the pill's agent
-  /// session (RealtimeHub pipeline), NOT the floating bar or the hub model.
-  private var followUpPill: AgentPill?
   // Mic chunks captured before the relay finishes connecting (raw 16k PCM),
   // flushed once the service exists so the user's first words aren't clipped.
   private var omniPreconnectBuffer: [Data] = []
@@ -312,7 +308,7 @@ class PushToTalkManager: ObservableObject {
     switch route {
     case .hub, .hubWarmWait:
       return true
-    case .undecided, .omniSTT, .deepgramBatch, .deepgramLive, .agentFollowUp:
+    case .undecided, .omniSTT, .deepgramBatch, .deepgramLive:
       return false
     }
   }
@@ -439,7 +435,7 @@ class PushToTalkManager: ObservableObject {
       return
     }
     if isBlockedByUsageLimit() { return }
-    _ = voiceTurnCoordinator.begin(intent: followUpPill == nil ? .hold : .agentFollowUp)
+    _ = voiceTurnCoordinator.begin(intent: .hold)
     RealtimeHubController.shared.prefetchVoiceContextSnapshotIfNeeded()
     // Reset the overflow flag under the buffer lock so it's atomic w.r.t. the
     // audio thread's appendBatchAudioBounded (fresh turn → allow the warning again).
@@ -547,10 +543,6 @@ class PushToTalkManager: ObservableObject {
     contextCaptureTask?.cancel()
     contextCaptureTask = nil
     micCaptureStartInFlight = false
-    if followUpPill != nil {
-      followUpPill = nil
-      AgentPillsManager.shared.recordingPillID = nil
-    }
     stopAudioTranscription(discardBufferedAudio: discardBufferedAudio)
     transcriptSegments = []
     seenFinalSegmentIDs.removeAll()
@@ -611,36 +603,6 @@ class PushToTalkManager: ObservableObject {
   func cancelListening() {
     guard !isIdle else { return }
     log("PushToTalkManager: cancelling listening")
-    stopListening()
-  }
-
-  // MARK: - Agent voice follow-up
-
-  /// Begin a voice follow-up to a specific agent pill (the pill's mic button). Reuses
-  /// the realtime omni STT capture; the transcript routes to the agent's session via
-  /// AgentPillsManager.continueAgent (not the floating bar / hub model).
-  func startPillFollowUp(for pill: AgentPill) {
-    guard isIdle else {
-      log("PushToTalkManager: follow-up ignored — PTT busy (phase=\(String(describing: phase)))")
-      AgentPillsManager.shared.recordingPillID = nil
-      return
-    }
-    log("PushToTalkManager: voice follow-up START for agent \(pill.title)")
-    followUpPill = pill
-    startListening()
-  }
-
-  /// End the in-progress voice follow-up (second mic tap) and send it to the agent.
-  func endPillFollowUp() {
-    guard followUpPill != nil, !isIdle else { return }
-    log("PushToTalkManager: voice follow-up END — finalizing")
-    finalize()
-  }
-
-  /// Cancel an in-progress voice follow-up for a pill that was dismissed.
-  func cancelPillFollowUp(for pillID: UUID) {
-    guard followUpPill?.id == pillID else { return }
-    log("PushToTalkManager: voice follow-up CANCEL for dismissed agent")
     stopListening()
   }
 
@@ -1258,34 +1220,6 @@ class PushToTalkManager: ObservableObject {
       log("PushToTalkManager: refusing provider dispatch after authenticated owner changed")
       return
     }
-    // Voice follow-up to an agent pill: route the transcript into THAT agent's session
-    // (RealtimeHub pipeline) instead of the floating bar.
-    if let pill = followUpPill {
-      followUpPill = nil
-      AgentPillsManager.shared.recordingPillID = nil
-      activeTracer = nil
-      let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
-      if q.isEmpty {
-        log("PushToTalkManager: voice follow-up empty — not sending")
-      } else {
-        guard voiceTurnCoordinator.requireCurrentOwner(for: turnID) != nil else { return }
-        log("PushToTalkManager: routing voice follow-up → agent (\(q.count) chars)")
-        let completionToken = currentVoiceTurnID.flatMap {
-          voiceTurnCoordinator.nonHubCompletionToken(for: $0)
-        }
-        AgentPillsManager.shared.continueAgent(from: pill, text: q) { outcome in
-          guard let completionToken else { return }
-          VoiceTurnCoordinator.shared.completeNonHubProvider(
-            completionToken,
-            outcome: outcome)
-        }
-        if completionToken == nil, let turnID = currentVoiceTurnID {
-          log("PushToTalkManager: agent follow-up missing provider completion identity")
-          voiceTurnCoordinator.send(.finish(turnID: turnID, reason: .providerFailed))
-        }
-      }
-      return
-    }
     // QueryTracer: hand the PTT tracer to the floating-bar query via TaskLocal so
     // routing, the LLM call, and TTS all record into this same trace. Ownership
     // moves out of activeTracer here; the unstructured Task spawned inside
@@ -1385,16 +1319,6 @@ class PushToTalkManager: ObservableObject {
     // + spoken reply). Stream mic PCM to the hub and skip both the omni/Deepgram
     // STT path AND the transcript→router→ChatProvider hop. The Haiku classify()
     // router is bypassed — routing is the model's tool choice.
-    // Voice follow-up to an agent: always use the omni STT (we need a transcript to
-    // route to the agent), never the hub model — the hub would answer it itself.
-    if followUpPill != nil {
-      if let turnID = currentVoiceTurnID {
-        voiceTurnCoordinator.send(.selectRoute(turnID: turnID, route: .agentFollowUp))
-      }
-      _ = startOmniTranscription()
-      return
-    }
-
     if RealtimeHubController.shared.isActive {
       if let turnID = currentVoiceTurnID {
         voiceTurnCoordinator.send(.selectRoute(turnID: turnID, route: .hub(sessionID: nil)))
@@ -1881,9 +1805,7 @@ extension PushToTalkManager {
     let delegateProxy = VoiceTurnOmniDelegateProxy(owner: self, identity: identity)
     omniDelegateProxy = delegateProxy
     let provider = RealtimeOmniSettings.shared.effectiveProvider
-    if let turnID = currentVoiceTurnID,
-      voiceTurnCoordinator.activeTurn?.route != .agentFollowUp
-    {
+    if let turnID = currentVoiceTurnID {
       voiceTurnCoordinator.send(.selectRoute(turnID: turnID, route: .omniSTT))
     }
     if captureAlreadyRunning {

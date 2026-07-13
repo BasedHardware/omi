@@ -546,7 +546,6 @@ final class VoiceTurnCoordinator {
     case .omniSTT: return "omni_stt"
     case .deepgramBatch: return "deepgram_batch"
     case .deepgramLive: return "deepgram_live"
-    case .agentFollowUp: return "agent_follow_up"
     }
   }
 
