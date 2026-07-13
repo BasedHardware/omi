@@ -350,6 +350,13 @@ class TestIsTrialPaywalledBehavioral:
     def test_macos_expired_returns_true(self):
         assert self._sub.is_trial_paywalled('uid1', 'macos') is True
 
+    def test_windows_expired_returns_true(self):
+        # Windows is a desktop platform: it must be subject to the desktop trial
+        # paywall exactly like macOS (regression for the platform defect where
+        # only 'macos'/'desktop' were recognized as desktop tokens).
+        assert self._sub.is_trial_paywalled('uid1', 'windows') is True
+        assert self._sub.is_trial_paywalled('uid1', 'WINDOWS') is True
+
     def test_ios_returns_false(self):
         assert self._sub.is_trial_paywalled('uid1', 'ios') is False
         self._mock_expired.assert_not_called()
