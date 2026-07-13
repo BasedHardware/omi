@@ -293,10 +293,15 @@ pub fn CharacterOverlay(props: CharacterOverlayProps) -> Element {
                     Ok(AgentEvent::Init { .. }) => {
                         av_state.set("state-thinking".to_string());
                     }
-                    Ok(AgentEvent::Result { text, .. }) => {
+                    Ok(AgentEvent::Result { text, from_voice, .. }) => {
                         av_state.set("state-idle".to_string());
 
                         if text.is_empty() {
+                            continue;
+                        }
+
+                        if !from_voice {
+                            let _ = action_tx_inner.send(CharacterAction::SpeechFinished);
                             continue;
                         }
 
