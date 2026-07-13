@@ -6,6 +6,7 @@ description: >
   and confirm there is no Bring Your Own Keys step and the 2nd-brain label has no background.
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingNotificationStepView.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingFlow.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingStepScaffold.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingView.swift

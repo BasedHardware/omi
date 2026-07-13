@@ -29,6 +29,14 @@ export function messageFrom(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+const CONTEXT_SNAPSHOT_PROJECTION_MISMATCH = "context_snapshot_projection_mismatch";
+
+export function unexpectedQueryErrorDiagnostic(error: unknown): string | null {
+  const message = messageFrom(error);
+  if (message === CONTEXT_SNAPSHOT_PROJECTION_MISMATCH) return null;
+  return `Unhandled query error: ${String(error)}`;
+}
+
 export function failureFromError(
   error: unknown,
   fallback: Omit<RuntimeFailure, "userMessage"> & { userMessage?: string }

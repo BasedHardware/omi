@@ -57,6 +57,11 @@ checks:
     triggers: ["backend/**/*.py", "backend/agent-proxy/**", "backend/scripts/scan_async_blockers.py"]
     lanes: ["local", "ci"]
     reason: "backend Python changed"
+  - id: backend-route-policy-baseline
+    command: ["python3", "backend/scripts/check_route_policy_baseline.py", "--base-ref", "{base}"]
+    triggers: ["backend/**/*.py", "backend/route_policy_manifest.yaml", "backend/route_policy_legacy_missing_routes.txt", "backend/scripts/check_route_policy_baseline.py"]
+    lanes: ["local", "ci"]
+    reason: "new backend routes must declare reviewed policy instead of growing the legacy baseline"
   - id: lifecycle-headers
     command: ["python3", ".github/scripts/check_lifecycle_headers.py", "--changed-files", "{changed_files}"]
     triggers: ["all"]
@@ -104,6 +109,8 @@ checks:
     reason: "desktop Swift production or test structure changed"
 
 exempt:
+  - path: ".github/scripts/check-desktop-auto-beta-candidate.py"
+    reason: "release pipeline check requires published candidate artifacts and workflow inputs"
   - path: ".github/scripts/check-desktop-prod-promotion-policy.py"
     reason: "release-policy full-tree check, not diff-scoped"
   - path: ".github/scripts/check-desktop-release-promotion.py"

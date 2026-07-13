@@ -11,31 +11,12 @@ import { AdapterRuntimeError, failureFromError } from "./failures.js";
 import {
   clearOwnerSurfaceState,
   importLegacyMainChatSessions,
-  mergeFloatingChatIntoMainChat,
   resolveSurfaceSession,
   type LegacyMainChatSessionEntry,
+  type LegacyMainChatSessionImportReceipt,
   type ResolveSurfaceSessionInput,
   type ResolveSurfaceSessionResult,
-  type SurfaceRef,
 } from "./surface-session.js";
-import {
-  appendConversationTurn,
-  clearOwnerMainChatTurns,
-  conversationIdForSession,
-  getMainChatTurnTail,
-  importConversationTurnsForSurface,
-  projectCrossSurfaceTurn,
-  recordSurfaceTurn as persistSurfaceTurn,
-  type ConversationTurnImportEntry,
-  type RecordSurfaceTurnResult,
-} from "./conversation-turns.js";
-import {
-  acknowledgeCompletionDelta,
-  assembleTurnContext,
-  bindingCarriesNativeHistory,
-  getVoiceSeedContext,
-  getVoiceSeedSnapshot,
-} from "./turn-context.js";
 import type {
   AdapterBinding,
   AgentArtifact,
@@ -44,7 +25,6 @@ import type {
   AgentSession,
   AgentStore,
   AgentGrant,
-  ConversationTurn,
   NewAgentArtifact,
   NewAgentGrant,
   RunAttempt,
@@ -55,7 +35,6 @@ import type {
 } from "./types.js";
 import { buildDesktopActionQueue } from "./desktop-action-queue.js";
 import { buildDesktopContextPacket, type DesktopContextPacketBuildInput } from "./desktop-context-packet.js";
-import { routeDesktopIntent } from "./desktop-intent-router.js";
 import { OmiArtifactStorage } from "./artifact-storage.js";
 import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -142,8 +121,106 @@ import type {
 import { StaleAdapterBindingError } from "./kernel-types.js";
 
 import { KernelArtifacts } from "./kernel-artifacts.js";
+import {
+  configureDefaultExecutionProfile,
+  migrateSessionExecutionProfile,
+  readDefaultExecutionProfilePreference,
+  readSessionExecutionProfile,
+  type MigrateSessionExecutionProfileInput,
+  type MigrateSessionExecutionProfileResult,
+} from "./session-execution-profile.js";
+import type { DefaultExecutionProfilePreference, SessionExecutionProfile } from "./types.js";
+import {
+  buildContextSnapshot,
+  updateContextSource,
+  type ContextSourceUpdateInput,
+  type ContextSourceUpdateResult,
+} from "./context-snapshot.js";
+import type { ContextSnapshotProjection } from "../protocol.js";
+import {
+  ensureAgentSpawnJournal,
+  type EnsureAgentSpawnJournalInput,
+  type EnsureAgentSpawnJournalResult,
+} from "./agent-spawn-journal.js";
 
 export class KernelSessions extends KernelArtifacts {
+  ownedSession(sessionId: string, ownerId: string): AgentSession {
+    const session = this.readSession(sessionId);
+    this.assertSessionOwner(session, ownerId);
+    return session;
+  }
+
+  defaultExecutionProfilePreference(ownerId: string): DefaultExecutionProfilePreference | undefined {
+    return readDefaultExecutionProfilePreference(this.store, ownerId);
+  }
+
+  configureDefaultExecutionProfile(input: {
+    ownerId: string;
+    adapterId: string;
+    modelProfile: string | null;
+    workingDirectory: string;
+    expectedPreferenceGeneration?: number;
+  }): DefaultExecutionProfilePreference {
+    return configureDefaultExecutionProfile(this.store, input, Date.now());
+  }
+
+  contextSnapshot(sessionId: string, ownerId: string, surfaceKind?: string): ContextSnapshotProjection {
+    return buildContextSnapshot(this.store, sessionId, ownerId, Date.now(), surfaceKind);
+  }
+
+  contextSnapshotForExactSurface(
+    ownerId: string,
+    surface: { surfaceKind: string; externalRefKind: string; externalRefId: string },
+  ): ContextSnapshotProjection {
+    const mapping = this.store.getRow(
+      `SELECT agent_session_id FROM surface_conversations
+       WHERE owner_id = ? AND surface_kind = ? AND external_ref_kind = ? AND external_ref_id = ?`,
+      [ownerId, surface.surfaceKind, surface.externalRefKind, surface.externalRefId],
+    );
+    return buildContextSnapshot(
+      this.store,
+      String(mapping.agent_session_id),
+      ownerId,
+      Date.now(),
+      surface.surfaceKind,
+    );
+  }
+
+  updateContextSource(input: ContextSourceUpdateInput): ContextSourceUpdateResult {
+    return updateContextSource(this.store, input);
+  }
+
+  ensureAgentSpawnJournal(input: EnsureAgentSpawnJournalInput): EnsureAgentSpawnJournalResult {
+    return ensureAgentSpawnJournal(this.store, input);
+  }
+
+  sessionExecutionProfile(sessionId: string, ownerId: string): SessionExecutionProfile {
+    const session = this.readSession(sessionId);
+    this.assertSessionOwner(session, ownerId);
+    return readSessionExecutionProfile(this.store, sessionId);
+  }
+
+  migrateSessionExecutionProfile(
+    input: MigrateSessionExecutionProfileInput,
+  ): MigrateSessionExecutionProfileResult {
+    return this.withTransaction(() => {
+      const result = migrateSessionExecutionProfile(this.store, input, Date.now());
+      this.appendEvent({
+        sessionId: input.sessionId,
+        type: "session.execution_profile_migrated",
+        payload: {
+          previousGeneration: result.previous.generation,
+          profileGeneration: result.profile.generation,
+          adapterId: result.profile.adapterId,
+          executionRole: result.profile.executionRole,
+          staleBindingIds: result.staleBindingIds,
+          reason: input.reason,
+        },
+      });
+      return result;
+    });
+  }
+
   executionPolicyForSession(sessionId: string): Pick<AgentSession, "executionRole" | "providerBoundary" | "defaultAdapterId"> {
     const session = this.readSession(sessionId);
     return {
@@ -194,7 +271,7 @@ export class KernelSessions extends KernelArtifacts {
          LIMIT ?`,
         [...values, limit],
       )
-      .map(sessionFromRow);
+      .map((row) => this.readSession(String(row.session_id)));
 
     return sessions.map((session) => ({
       session,
@@ -207,104 +284,14 @@ export class KernelSessions extends KernelArtifacts {
     return resolveSurfaceSession(this.store, input, () => Date.now());
   }
 
-  importLegacyMainChatSessions(input: { ownerId: string; entries: LegacyMainChatSessionEntry[] }): number {
+  importLegacyMainChatSessions(
+    input: { ownerId: string; entries: LegacyMainChatSessionEntry[] },
+  ): LegacyMainChatSessionImportReceipt {
     return importLegacyMainChatSessions(this.store, input, () => Date.now());
-  }
-
-  mergeFloatingChatIntoMainChat(input: { ownerId: string; chatId?: string }): {
-    mergedTurns: number;
-    removedFloatingMapping: boolean;
-  } {
-    return mergeFloatingChatIntoMainChat(this.store, input, () => Date.now());
-  }
-
-  importConversationTurns(input: {
-    ownerId: string;
-    surfaceRef: SurfaceRef;
-    turns: ConversationTurnImportEntry[];
-  }): number {
-    return importConversationTurnsForSurface(this.store, {
-      ownerId: input.ownerId,
-      surfaceRef: input.surfaceRef,
-      turns: input.turns,
-      nowMs: () => Date.now(),
-    });
-  }
-
-  recordSurfaceTurn(input: {
-    ownerId: string;
-    surfaceRef: SurfaceRef;
-    userText: string;
-    assistantText: string;
-    origin: string;
-    interrupted?: boolean;
-    idempotencyKey?: string;
-  }): RecordSurfaceTurnResult {
-    return this.withTransaction(() =>
-      persistSurfaceTurn(this.store, {
-        ...input,
-        nowMs: Date.now(),
-      }),
-    );
-  }
-
-  getVoiceSeedContext(input: { conversationId: string }): string {
-    return getVoiceSeedContext(this.store, input.conversationId);
-  }
-
-  getVoiceSeedSnapshot(input: { conversationId: string }): {
-    context: string;
-    idempotencyKeys: string[];
-  } {
-    return getVoiceSeedSnapshot(this.store, input.conversationId);
-  }
-
-  getVoiceSeedContextForSurface(input: { ownerId: string; surfaceRef: SurfaceRef }): {
-    conversationId: string;
-    context: string;
-    idempotencyKeys: string[];
-  } {
-    const resolved = resolveSurfaceSession(this.store, input, () => Date.now());
-    const snapshot = getVoiceSeedSnapshot(this.store, resolved.conversationId);
-    return {
-      conversationId: resolved.conversationId,
-      context: snapshot.context,
-      idempotencyKeys: snapshot.idempotencyKeys,
-    };
   }
 
   clearOwnerState(ownerId: string): { invalidatedBindingIds: string[] } {
     return clearOwnerSurfaceState(this.store, ownerId, () => Date.now());
-  }
-
-  clearOwnerMainChatTurns(ownerId: string, chatId = "default"): {
-    conversationId: string | null;
-    deletedTurns: number;
-  } {
-    return clearOwnerMainChatTurns(this.store, ownerId, chatId);
-  }
-
-  getMainChatTurnTail(ownerId: string, limit = 8, chatId = "default"): {
-    conversationId: string | null;
-    turns: ConversationTurn[];
-  } {
-    return getMainChatTurnTail(this.store, ownerId, limit, chatId);
-  }
-
-  projectCrossSurfaceTurn(input: {
-    ownerId: string;
-    targetSurfaceRef?: SurfaceRef;
-    userText: string;
-    assistantText: string;
-    origin: string;
-    idempotencyKey?: string;
-  }): RecordSurfaceTurnResult {
-    return this.withTransaction(() =>
-      projectCrossSurfaceTurn(this.store, {
-        ...input,
-        nowMs: Date.now(),
-      }),
-    );
   }
 
   invalidateBindings(input: InvalidateBindingsInput): InvalidateBindingsResult {

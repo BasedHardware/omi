@@ -378,6 +378,17 @@ class AudioCaptureService: @unchecked Sendable {
         log("AudioCapture: Stopped capturing")
     }
 
+    /// Wait until every CoreAudio stop/destroy operation already enqueued by
+    /// `stopCapture()` has completed. Effective-owner replacement uses this as
+    /// a hard physical boundary before the new owner becomes visible.
+    func waitForPhysicalStop() async {
+        await withCheckedContinuation { continuation in
+            audioQueue.async {
+                continuation.resume()
+            }
+        }
+    }
+
     /// Check if currently capturing
     var capturing: Bool {
         return isCapturing
@@ -771,6 +782,10 @@ class AudioCaptureService: @unchecked Sendable {
     private static let maxRetries = 3
 
     private func reconfigureAfterChange(retryCount: Int) {
+        guard Self.shouldRunDeferredReconfiguration(
+            isCapturing: isCapturing,
+            isReconfiguring: isReconfiguring
+        ) else { return }
         let newDeviceID: AudioDeviceID
         do {
             newDeviceID = try resolveInputDeviceID()
@@ -848,6 +863,13 @@ class AudioCaptureService: @unchecked Sendable {
 
         log("AudioCapture: Restarted with new configuration")
         isReconfiguring = false
+    }
+
+    nonisolated static func shouldRunDeferredReconfiguration(
+        isCapturing: Bool,
+        isReconfiguring: Bool
+    ) -> Bool {
+        isCapturing && isReconfiguring
     }
 
     private func retryOrGiveUp(retryCount: Int) {

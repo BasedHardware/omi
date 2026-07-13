@@ -446,11 +446,14 @@ actor FocusAssistant: ProactiveAssistant {
     }
 
     private func processFrame(_ frame: CapturedFrame) async {
+        guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
         guard await isEnabled else { return }
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
         do {
             guard let analysis = try await analyzeScreenshot(jpegData: frame.jpegData) else {
                 return
             }
+            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
 
             // Success — reset error backoff
             consecutiveErrorCount = 0
@@ -487,14 +490,22 @@ actor FocusAssistant: ProactiveAssistant {
 
                 // Track distraction detected (use frame.windowTitle which has the actual window title)
                 await MainActor.run {
+                    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
                     AnalyticsManager.shared.distractionDetected(app: analysis.appOrSite, windowTitle: frame.windowTitle)
                 }
+                guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
 
                 // Save to SQLite and sync to backend
-                await saveFocusSessionToSQLite(analysis: analysis, screenshotId: frame.screenshotId, windowTitle: frame.windowTitle)
+                await saveFocusSessionToSQLite(
+                    analysis: analysis,
+                    screenshotId: frame.screenshotId,
+                    windowTitle: frame.windowTitle,
+                    ownerID: ownerID)
+                guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
 
                 // Update FocusStorage UI state (sessions list, currentStatus, currentApp)
-                Task { @MainActor in
+                Task { @MainActor [ownerID] in
+                    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
                     FocusStorage.shared.addSession(from: analysis)
                 }
 
@@ -505,14 +516,17 @@ actor FocusAssistant: ProactiveAssistant {
                 let cooldownSeconds = await MainActor.run {
                     FocusAssistantSettings.shared.cooldownIntervalSeconds
                 }
+                guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
                 analysisCooldownEndTime = Date().addingTimeInterval(cooldownSeconds)
                 log("Focus: Started \(Int(cooldownSeconds))s analysis cooldown")
 
                 // Expose cooldown end time to UI
                 let cooldownEndTime = analysisCooldownEndTime
                 await MainActor.run {
+                    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
                     FocusStorage.shared.updateCooldownEndTime(cooldownEndTime)
                 }
+                guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
 
                 if let message = analysis.message {
                     let fullMessage = "\(analysis.appOrSite) - \(message)"
@@ -521,6 +535,7 @@ actor FocusAssistant: ProactiveAssistant {
                     let notificationsEnabled = await MainActor.run {
                         FocusAssistantSettings.shared.notificationsEnabled
                     }
+                    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
 
                     let context = FloatingBarNotificationContext(
                         sourceTitle: "Focus",
@@ -534,11 +549,13 @@ actor FocusAssistant: ProactiveAssistant {
                     )
 
                     await MainActor.run {
+                        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
                         // Track focus alert shown
                         AnalyticsManager.shared.focusAlertShown(app: analysis.appOrSite)
 
                         if notificationsEnabled {
                             NotificationService.shared.sendNotification(
+                                ownerID: ownerID,
                                 title: "Focus",
                                 message: fullMessage,
                                 assistantId: identifier,
@@ -557,10 +574,16 @@ actor FocusAssistant: ProactiveAssistant {
                 lastNotifiedState = .focused
 
                 // Save to SQLite and sync to backend
-                await saveFocusSessionToSQLite(analysis: analysis, screenshotId: frame.screenshotId, windowTitle: frame.windowTitle)
+                await saveFocusSessionToSQLite(
+                    analysis: analysis,
+                    screenshotId: frame.screenshotId,
+                    windowTitle: frame.windowTitle,
+                    ownerID: ownerID)
+                guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
 
                 // Update FocusStorage UI state (sessions list, currentStatus, currentApp)
-                Task { @MainActor in
+                Task { @MainActor [ownerID] in
+                    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
                     FocusStorage.shared.addSession(from: analysis)
                 }
 
@@ -568,8 +591,10 @@ actor FocusAssistant: ProactiveAssistant {
                 if wasDistracted {
                     // Track focus restored
                     await MainActor.run {
+                        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
                         AnalyticsManager.shared.focusRestored(app: analysis.appOrSite)
                     }
+                    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
 
                     // Trigger the glow effect
                     onRefocus?()
@@ -579,6 +604,7 @@ actor FocusAssistant: ProactiveAssistant {
                         let notificationsEnabled = await MainActor.run {
                             FocusAssistantSettings.shared.notificationsEnabled
                         }
+                        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
                         let context = FloatingBarNotificationContext(
                             sourceTitle: "Focus",
                             assistantId: identifier,
@@ -591,7 +617,9 @@ actor FocusAssistant: ProactiveAssistant {
                         )
                         if notificationsEnabled {
                             await MainActor.run {
+                                guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
                                 NotificationService.shared.sendNotification(
+                                    ownerID: ownerID,
                                     title: "Focus",
                                     message: message,
                                     assistantId: identifier,
@@ -728,7 +756,13 @@ actor FocusAssistant: ProactiveAssistant {
     // MARK: - Storage
 
     /// Save focus session to SQLite (both tables) and sync to backend
-    private func saveFocusSessionToSQLite(analysis: ScreenAnalysis, screenshotId: Int64?, windowTitle: String? = nil) async {
+    private func saveFocusSessionToSQLite(
+        analysis: ScreenAnalysis,
+        screenshotId: Int64?,
+        windowTitle: String? = nil,
+        ownerID: String
+    ) async {
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
         // Save to focus_sessions table (for detailed tracking)
         let focusRecord = FocusSessionRecord(
             screenshotId: screenshotId,
@@ -742,6 +776,7 @@ actor FocusAssistant: ProactiveAssistant {
         var focusSessionId: Int64?
         do {
             let inserted = try await ProactiveStorage.shared.insertFocusSession(focusRecord)
+            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
             focusSessionId = inserted.id
             log("Focus: Saved to focus_sessions (id: \(inserted.id ?? -1), status: \(analysis.status.rawValue))")
         } catch {
@@ -749,10 +784,20 @@ actor FocusAssistant: ProactiveAssistant {
         }
 
         // Save to unified memories table (for search/filter)
-        let memoryId = await saveFocusToMemoriesTable(analysis: analysis, screenshotId: screenshotId, windowTitle: windowTitle)
+        let memoryId = await saveFocusToMemoriesTable(
+            analysis: analysis,
+            screenshotId: screenshotId,
+            windowTitle: windowTitle,
+            ownerID: ownerID)
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
 
         // Sync to backend once and update both tables with backendId
-        if let backendId = await syncFocusSessionToBackend(analysis: analysis, windowTitle: windowTitle) {
+        if let backendId = await syncFocusSessionToBackend(
+            analysis: analysis,
+            windowTitle: windowTitle,
+            ownerID: ownerID)
+        {
+            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
             // Update focus_sessions table
             if let recordId = focusSessionId {
                 do {
@@ -761,6 +806,7 @@ actor FocusAssistant: ProactiveAssistant {
                         backendId: backendId,
                         synced: true
                     )
+                    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
                 } catch {
                     logError("Focus: Failed to update focus_sessions sync status", error: error)
                 }
@@ -770,6 +816,7 @@ actor FocusAssistant: ProactiveAssistant {
             if let memId = memoryId {
                 do {
                     try await MemoryStorage.shared.markSynced(id: memId, backendId: backendId)
+                    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
                 } catch {
                     logError("Focus: Failed to update memories sync status", error: error)
                 }
@@ -779,7 +826,13 @@ actor FocusAssistant: ProactiveAssistant {
 
     /// Save focus event to unified memories table for search/filter
     /// Returns the inserted memory ID if successful
-    private func saveFocusToMemoriesTable(analysis: ScreenAnalysis, screenshotId: Int64?, windowTitle: String? = nil) async -> Int64? {
+    private func saveFocusToMemoriesTable(
+        analysis: ScreenAnalysis,
+        screenshotId: Int64?,
+        windowTitle: String? = nil,
+        ownerID: String
+    ) async -> Int64? {
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
         // Build content for the memory
         let statusText = analysis.status == .focused ? "Focused" : "Distracted"
         let content = "\(statusText) on \(analysis.appOrSite): \(analysis.description)"
@@ -817,6 +870,7 @@ actor FocusAssistant: ProactiveAssistant {
 
         do {
             let insertedMemory = try await MemoryStorage.shared.insertLocalMemory(memoryRecord)
+            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
             log("Focus: Saved to memories (id: \(insertedMemory.id ?? -1)) with tags \(tags)")
             return insertedMemory.id
         } catch {
@@ -826,7 +880,12 @@ actor FocusAssistant: ProactiveAssistant {
     }
 
     /// Sync focus session to backend as a memory with focus tags, returns backend ID if successful
-    private func syncFocusSessionToBackend(analysis: ScreenAnalysis, windowTitle: String? = nil) async -> String? {
+    private func syncFocusSessionToBackend(
+        analysis: ScreenAnalysis,
+        windowTitle: String? = nil,
+        ownerID: String
+    ) async -> String? {
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
         do {
             // Build content for the memory
             let statusText = analysis.status == .focused ? "Focused" : "Distracted"
@@ -848,8 +907,10 @@ actor FocusAssistant: ProactiveAssistant {
                 category: .system,
                 tags: tags,
                 source: "desktop",
-                windowTitle: windowTitle
+                windowTitle: windowTitle,
+                expectedOwnerId: ownerID
             )
+            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
 
             log("Focus: Synced as memory to backend (id: \(response.id))")
             return response.id

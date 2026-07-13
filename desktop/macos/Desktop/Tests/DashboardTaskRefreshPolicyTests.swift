@@ -23,12 +23,20 @@ final class DashboardTaskRefreshPolicyTests: XCTestCase {
         let source = try String(contentsOf: sourceURL)
 
         XCTAssertTrue(
-            source.contains("private static var inFlightRefreshTask: Task<Void, Never>?"),
-            "Dashboard refresh must have an explicit shared in-flight task instead of a drop-on-floor boolean guard"
+            source.contains("private static var inFlightRefreshes: [String: InFlightRefresh]"),
+            "Dashboard refresh must track shared in-flight work per authenticated owner"
         )
         XCTAssertTrue(
-            source.contains("await inFlightRefreshTask.value\n            await store.loadDashboardTasks()"),
-            "Concurrent dashboard refresh callers should await the in-flight refresh and then reload local dashboard state before returning"
+            source.contains("if let inFlight = inFlightRefreshes[expectedOwnerID]")
+                && source.contains("isCurrent(inFlight.authorizationSnapshot)")
+                && source.contains("await inFlight.task.value"),
+            "Concurrent callers may join only the current owner's exact authorized refresh"
+        )
+        XCTAssertTrue(
+            source.contains("await store.loadDashboardTasks(")
+                && source.contains("expectedOwnerID: expectedOwnerID")
+                && source.contains("authorizationSnapshot: authorizationSnapshot"),
+            "A joined caller must reload dashboard state under its admitted owner snapshot"
         )
     }
 

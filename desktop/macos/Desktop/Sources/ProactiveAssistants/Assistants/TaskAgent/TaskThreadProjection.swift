@@ -1,13 +1,16 @@
 import Foundation
 
 protocol TaskWorkstreamAPI {
-  func workflowControl() async throws -> OmiAPI.TaskWorkflowControl
+  func workflowControl(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> OmiAPI.TaskWorkflowControl
   func resolveTaskIntent(
     taskId: String,
     title: String?,
     objective: String?,
     idempotencyKey: String,
-    accountGeneration: Int
+    accountGeneration: Int,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> OmiAPI.WorkIntentReceipt
   func resolveGoalIntent(
     goalId: String,
@@ -15,21 +18,27 @@ protocol TaskWorkstreamAPI {
     objective: String,
     anchorTaskDescription: String,
     idempotencyKey: String,
-    accountGeneration: Int
+    accountGeneration: Int,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> OmiAPI.WorkIntentReceipt
-  func detail(workstreamId: String) async throws -> OmiAPI.WorkstreamDetailProjection
+  func detail(
+    workstreamId: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> OmiAPI.WorkstreamDetailProjection
   func createArtifact(
     workstreamId: String,
     artifact: OmiAPI.ArtifactDescriptorCreate,
     idempotencyKey: String,
-    accountGeneration: Int
+    accountGeneration: Int,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> OmiAPI.ArtifactDescriptor
   func upsertCheckpoint(
     workstreamId: String,
     runtimeId: String,
     checkpoint: OmiAPI.ContinuationCheckpointUpsert,
     idempotencyKey: String,
-    accountGeneration: Int
+    accountGeneration: Int,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> OmiAPI.ContinuationCheckpoint
 }
 
@@ -38,7 +47,8 @@ extension TaskWorkstreamAPI {
     workstreamId: String,
     artifact: OmiAPI.ArtifactDescriptorCreate,
     idempotencyKey: String,
-    accountGeneration: Int
+    accountGeneration: Int,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> OmiAPI.ArtifactDescriptor {
     throw TaskWorkstreamContinuityError.invalidRuntimeResponse
   }
@@ -48,15 +58,21 @@ extension TaskWorkstreamAPI {
     runtimeId: String,
     checkpoint: OmiAPI.ContinuationCheckpointUpsert,
     idempotencyKey: String,
-    accountGeneration: Int
+    accountGeneration: Int,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> OmiAPI.ContinuationCheckpoint {
     throw TaskWorkstreamContinuityError.invalidRuntimeResponse
   }
 }
 
 struct LiveTaskWorkstreamAPI: TaskWorkstreamAPI {
-  func workflowControl() async throws -> OmiAPI.TaskWorkflowControl {
-    try await APIClient.shared.getCandidateWorkflowControl()
+  func workflowControl(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> OmiAPI.TaskWorkflowControl {
+    try await APIClient.shared.getCandidateWorkflowControl(
+      expectedOwnerId: authorizationSnapshot.ownerID,
+      authorizationSnapshot: authorizationSnapshot
+    )
   }
 
   func resolveTaskIntent(
@@ -64,14 +80,16 @@ struct LiveTaskWorkstreamAPI: TaskWorkstreamAPI {
     title: String?,
     objective: String?,
     idempotencyKey: String,
-    accountGeneration: Int
+    accountGeneration: Int,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> OmiAPI.WorkIntentReceipt {
     try await APIClient.shared.resolveTaskWorkIntent(
       taskId: taskId,
       title: title,
       objective: objective,
       idempotencyKey: idempotencyKey,
-      accountGeneration: accountGeneration
+      accountGeneration: accountGeneration,
+      authorizationSnapshot: authorizationSnapshot
     )
   }
 
@@ -81,7 +99,8 @@ struct LiveTaskWorkstreamAPI: TaskWorkstreamAPI {
     objective: String,
     anchorTaskDescription: String,
     idempotencyKey: String,
-    accountGeneration: Int
+    accountGeneration: Int,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> OmiAPI.WorkIntentReceipt {
     try await APIClient.shared.resolveGoalWorkIntent(
       goalId: goalId,
@@ -89,25 +108,34 @@ struct LiveTaskWorkstreamAPI: TaskWorkstreamAPI {
       objective: objective,
       anchorTaskDescription: anchorTaskDescription,
       idempotencyKey: idempotencyKey,
-      accountGeneration: accountGeneration
+      accountGeneration: accountGeneration,
+      authorizationSnapshot: authorizationSnapshot
     )
   }
 
-  func detail(workstreamId: String) async throws -> OmiAPI.WorkstreamDetailProjection {
-    try await APIClient.shared.getWorkstreamDetail(workstreamId: workstreamId)
+  func detail(
+    workstreamId: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> OmiAPI.WorkstreamDetailProjection {
+    try await APIClient.shared.getWorkstreamDetail(
+      workstreamId: workstreamId,
+      authorizationSnapshot: authorizationSnapshot
+    )
   }
 
   func createArtifact(
     workstreamId: String,
     artifact: OmiAPI.ArtifactDescriptorCreate,
     idempotencyKey: String,
-    accountGeneration: Int
+    accountGeneration: Int,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> OmiAPI.ArtifactDescriptor {
     try await APIClient.shared.createWorkstreamArtifact(
       workstreamId: workstreamId,
       artifact: artifact,
       idempotencyKey: idempotencyKey,
-      accountGeneration: accountGeneration
+      accountGeneration: accountGeneration,
+      authorizationSnapshot: authorizationSnapshot
     )
   }
 
@@ -116,14 +144,16 @@ struct LiveTaskWorkstreamAPI: TaskWorkstreamAPI {
     runtimeId: String,
     checkpoint: OmiAPI.ContinuationCheckpointUpsert,
     idempotencyKey: String,
-    accountGeneration: Int
+    accountGeneration: Int,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> OmiAPI.ContinuationCheckpoint {
     try await APIClient.shared.upsertWorkstreamCheckpoint(
       workstreamId: workstreamId,
       runtimeId: runtimeId,
       checkpoint: checkpoint,
       idempotencyKey: idempotencyKey,
-      accountGeneration: accountGeneration
+      accountGeneration: accountGeneration,
+      authorizationSnapshot: authorizationSnapshot
     )
   }
 }

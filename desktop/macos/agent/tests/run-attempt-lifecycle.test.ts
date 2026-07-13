@@ -37,34 +37,32 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     store.close();
   });
 
-  it("replaces an active binding when cwd changes", async () => {
+  it("keeps the session binding pinned when a legacy follow-up supplies a different cwd", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
 
     await kernel.executeRun({ ...baseRunInput, cwd: "/tmp/project-a" });
     await kernel.executeRun({ ...baseRunInput, requestId: "request-cwd-b", cwd: "/tmp/project-b" });
 
-    expect(adapter.opened).toHaveLength(2);
-    expect(adapter.resumed).toHaveLength(0);
+    expect(adapter.opened).toHaveLength(1);
+    expect(adapter.resumed).toHaveLength(1);
     const bindings = store.allRows("SELECT binding_generation, status, cwd FROM adapter_bindings ORDER BY binding_generation");
     expect(bindings).toEqual([
-      expect.objectContaining({ binding_generation: 1, status: "stale", cwd: "/tmp/project-a" }),
-      expect.objectContaining({ binding_generation: 2, status: "active", cwd: "/tmp/project-b" }),
+      expect.objectContaining({ binding_generation: 1, status: "active", cwd: "/tmp/project-a" }),
     ]);
     store.close();
   });
 
-  it("replaces an active binding when system prompt changes", async () => {
+  it("ignores legacy per-query system prompt changes and reuses the kernel policy binding", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
 
     await kernel.executeRun({ ...baseRunInput, systemPrompt: "prompt-a" });
     await kernel.executeRun({ ...baseRunInput, requestId: "request-system-prompt-b", systemPrompt: "prompt-b" });
 
-    expect(adapter.opened).toHaveLength(2);
-    expect(adapter.resumed).toHaveLength(0);
+    expect(adapter.opened).toHaveLength(1);
+    expect(adapter.resumed).toHaveLength(1);
     const bindings = store.allRows("SELECT binding_generation, status, system_prompt_hash FROM adapter_bindings ORDER BY binding_generation");
-    expect(bindings[0]).toMatchObject({ binding_generation: 1, status: "stale" });
-    expect(bindings[1]).toMatchObject({ binding_generation: 2, status: "active" });
-    expect(bindings[0].system_prompt_hash).not.toBe(bindings[1].system_prompt_hash);
+    expect(bindings).toEqual([expect.objectContaining({ binding_generation: 1, status: "active" })]);
+    expect(adapter.opened[0].systemPrompt).toContain("desktop kernel is the authority");
     store.close();
   });
 
@@ -118,11 +116,8 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     expect(openedContextFile).toBeTruthy();
     expect(resumedContextFile).toBe(openedContextFile);
     expect(openedContextFile).not.toContain("stale-request-path");
-    expect(JSON.parse(readFileSync(openedContextFile!, "utf8"))).toMatchObject({
-      requestId: "request-2",
-      clientId: "client-b",
-      runId: adapter.executed[1].runId,
-      attemptId: adapter.executed[1].attemptId,
+    expect(JSON.parse(readFileSync(openedContextFile!, "utf8"))).toEqual({
+      capabilityRef: adapter.executed[1].toolCapabilityRef,
     });
     store.close();
   });

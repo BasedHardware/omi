@@ -463,8 +463,49 @@ enum UnifiedFilterTag: Identifiable, Hashable {
 
 @MainActor
 class TasksViewModel: ObservableObject {
+    typealias SortOrderUpdate = (id: String, sortOrder: Int, indentLevel: Int)
+
+    struct SortOrderSyncOperations {
+        let updateStorage: (_ updates: [SortOrderUpdate], _ authorization: LocalMutationAuthorization) async throws -> Void
+        let updateBackend: (
+            _ updates: [SortOrderUpdate],
+            _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+        ) async throws -> Void
+
+        static let live = SortOrderSyncOperations(
+            updateStorage: { updates, authorization in
+                try await ActionItemStorage.shared.updateSortOrders(
+                    updates.map {
+                        (backendId: $0.id, sortOrder: $0.sortOrder, indentLevel: $0.indentLevel)
+                    },
+                    authorization: authorization
+                )
+            },
+            updateBackend: { updates, authorizationSnapshot in
+                try await APIClient.shared.batchUpdateSortOrders(
+                    updates,
+                    expectedOwnerId: authorizationSnapshot.ownerID,
+                    authorizationSnapshot: authorizationSnapshot
+                )
+            }
+        )
+    }
+
+    private struct OwnerLease: Equatable, Sendable {
+        let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+        let generation: UInt64
+
+        var ownerID: String { authorizationSnapshot.ownerID }
+    }
+
     // Use shared TasksStore as single source of truth
     private let store = TasksStore.shared
+    private let ownerIDProvider: @MainActor () -> String?
+    private let sortOrderSyncOperations: SortOrderSyncOperations
+    private let orderingDefaults: UserDefaults
+    private var activeOwnerID: String?
+    private var ownerGeneration: UInt64 = 0
+    private var suppressOrderingPersistence = false
 
     /// Set by TasksPage so delete operations can purge in-memory chat states.
     weak var chatCoordinator: TaskChatCoordinator?
@@ -716,7 +757,7 @@ class TasksViewModel: ObservableObject {
     /// Debounced task for syncing sort orders to SQLite + backend
     private var sortOrderSyncTask: Task<Void, Never>?
     @Published private(set) var sortOrderSyncFailure: TaskSortOrderSyncFailure?
-    private var pendingSortOrderUpdates: [(id: String, sortOrder: Int, indentLevel: Int)] = []
+    private var pendingSortOrderUpdates: [SortOrderUpdate] = []
     var hasPendingSortOrderRetry: Bool { !pendingSortOrderUpdates.isEmpty }
 
     private var cancellables = Set<AnyCancellable>()
@@ -775,11 +816,34 @@ class TasksViewModel: ObservableObject {
     var error: String? { store.error }
     var tasks: [TaskActionItem] { store.tasks }
 
-    init() {
+    init(
+        ownerIDProvider: @escaping @MainActor () -> String? = {
+            RuntimeOwnerIdentity.currentOwnerId()
+        },
+        sortOrderSyncOperations: SortOrderSyncOperations = .live,
+        orderingDefaults: UserDefaults = .standard
+    ) {
+        self.ownerIDProvider = ownerIDProvider
+        self.sortOrderSyncOperations = sortOrderSyncOperations
+        self.orderingDefaults = orderingDefaults
+        activeOwnerID = Self.normalizedOwnerID(ownerIDProvider())
+        if let activeOwnerID {
+            adoptUnscopedLegacyOrderingDefaults(for: activeOwnerID)
+        } else {
+            removeUnscopedLegacyOrderingDefaults()
+        }
         // Load saved order, indent levels, and saved filter views
         loadCategoryOrder()
         loadIndentLevels()
         loadSavedFilterViews()
+
+        NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)
+            .sink { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.resetOwnerOrderingProjection()
+                }
+            }
+            .store(in: &cancellables)
 
         // Forward store changes to trigger view updates and recompute caches
         // Debounced so surgical single-item updates don't cause a redundant full recompute
@@ -799,37 +863,138 @@ class TasksViewModel: ObservableObject {
 
     private static let categoryOrderKey = "TasksCategoryOrder"
     private static let indentLevelsKey = "TasksIndentLevels"
+    private static let sortOrderMigrationKey = "TasksSortOrderMigrated"
+
+    private static func ownerScopedKey(_ key: String, ownerID: String) -> String {
+        "\(key).owner.\(ownerID)"
+    }
+
+    private static func normalizedOwnerID(_ ownerID: String?) -> String? {
+        guard let ownerID else { return nil }
+        let normalized = ownerID.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalized.isEmpty ? nil : normalized
+    }
+
+    private func captureOwnerLease() -> OwnerLease? {
+        guard let ownerID = Self.normalizedOwnerID(ownerIDProvider()) else { return nil }
+        if activeOwnerID != ownerID {
+            resetOwnerOrderingProjection(scheduleOwnerActivation: false)
+            activeOwnerID = ownerID
+            loadOwnerOrderingProjection(ownerID: ownerID)
+        }
+        guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+            expectedOwnerID: ownerID
+        ) else { return nil }
+        return OwnerLease(
+            authorizationSnapshot: authorizationSnapshot,
+            generation: ownerGeneration
+        )
+    }
+
+    private func isCurrent(_ lease: OwnerLease) -> Bool {
+        activeOwnerID == lease.ownerID
+            && ownerGeneration == lease.generation
+            && RuntimeOwnerIdentity.isAuthorizationCurrent(lease.authorizationSnapshot)
+    }
+
+    private func resetOwnerOrderingProjection(scheduleOwnerActivation: Bool = true) {
+        ownerGeneration &+= 1
+        sortOrderSyncTask?.cancel()
+        sortOrderSyncTask = nil
+        activeOwnerID = nil
+        suppressOrderingPersistence = true
+        categoryOrder = [:]
+        indentLevels = [:]
+        suppressOrderingPersistence = false
+        pendingSortOrderUpdates = []
+        sortOrderSyncFailure = nil
+        suppressDatabaseRequery = false
+        suppressRequeryGeneration &+= 1
+        removeUnscopedLegacyOrderingDefaults()
+        guard scheduleOwnerActivation else { return }
+        Task { @MainActor [weak self] in
+            await Task.yield()
+            guard let self, let lease = self.captureOwnerLease() else { return }
+            self.migrateUserDefaultsToSortOrder(lease: lease)
+        }
+    }
+
+    private func loadOwnerOrderingProjection(ownerID: String) {
+        suppressOrderingPersistence = true
+        defer { suppressOrderingPersistence = false }
+        let categoryKey = Self.ownerScopedKey(Self.categoryOrderKey, ownerID: ownerID)
+        if let data = orderingDefaults.dictionary(forKey: categoryKey) as? [String: [String]] {
+            categoryOrder = Dictionary(lastWriteWins: data.compactMap { key, ids in
+                TaskCategory(rawValue: key).map { ($0, ids) }
+            })
+        } else {
+            categoryOrder = [:]
+        }
+        let indentKey = Self.ownerScopedKey(Self.indentLevelsKey, ownerID: ownerID)
+        indentLevels = orderingDefaults.dictionary(forKey: indentKey) as? [String: Int] ?? [:]
+    }
+
+    private func removeUnscopedLegacyOrderingDefaults() {
+        orderingDefaults.removeObject(forKey: Self.categoryOrderKey)
+        orderingDefaults.removeObject(forKey: Self.indentLevelsKey)
+        orderingDefaults.removeObject(forKey: Self.sortOrderMigrationKey)
+    }
+
+    /// Adopt the pre-owner-scoping fallback exactly once for the owner active at
+    /// launch. A later account must never inherit another owner's ordering.
+    private func adoptUnscopedLegacyOrderingDefaults(for ownerID: String) {
+        let scopedCategoryKey = Self.ownerScopedKey(Self.categoryOrderKey, ownerID: ownerID)
+        if orderingDefaults.object(forKey: scopedCategoryKey) == nil,
+           let legacyOrder = orderingDefaults.object(forKey: Self.categoryOrderKey) {
+            orderingDefaults.set(legacyOrder, forKey: scopedCategoryKey)
+        }
+
+        let scopedIndentKey = Self.ownerScopedKey(Self.indentLevelsKey, ownerID: ownerID)
+        if orderingDefaults.object(forKey: scopedIndentKey) == nil,
+           let legacyIndents = orderingDefaults.object(forKey: Self.indentLevelsKey) {
+            orderingDefaults.set(legacyIndents, forKey: scopedIndentKey)
+        }
+
+        // The former global completion bit cannot authorize skipping migration
+        // for every future owner, so it is deliberately not copied.
+        removeUnscopedLegacyOrderingDefaults()
+    }
 
     private func loadCategoryOrder() {
-        guard let data = UserDefaults.standard.dictionary(forKey: Self.categoryOrderKey) as? [String: [String]] else {
-            return
-        }
-        var order: [TaskCategory: [String]] = [:]
-        for (key, ids) in data {
-            if let category = TaskCategory(rawValue: key) {
-                order[category] = ids
-            }
-        }
-        categoryOrder = order
+        guard let ownerID = activeOwnerID else { return }
+        loadOwnerOrderingProjection(ownerID: ownerID)
     }
 
     private func saveCategoryOrder() {
+        guard !suppressOrderingPersistence,
+              let ownerID = activeOwnerID,
+              Self.normalizedOwnerID(ownerIDProvider()) == ownerID else { return }
         var data: [String: [String]] = [:]
         for (category, ids) in categoryOrder {
             data[category.rawValue] = ids
         }
-        UserDefaults.standard.set(data, forKey: Self.categoryOrderKey)
+        orderingDefaults.set(
+            data,
+            forKey: Self.ownerScopedKey(Self.categoryOrderKey, ownerID: ownerID)
+        )
     }
 
     private func loadIndentLevels() {
-        guard let data = UserDefaults.standard.dictionary(forKey: Self.indentLevelsKey) as? [String: Int] else {
-            return
-        }
-        indentLevels = data
+        guard let ownerID = activeOwnerID else { return }
+        let key = Self.ownerScopedKey(Self.indentLevelsKey, ownerID: ownerID)
+        suppressOrderingPersistence = true
+        indentLevels = orderingDefaults.dictionary(forKey: key) as? [String: Int] ?? [:]
+        suppressOrderingPersistence = false
     }
 
     private func saveIndentLevels() {
-        UserDefaults.standard.set(indentLevels, forKey: Self.indentLevelsKey)
+        guard !suppressOrderingPersistence,
+              let ownerID = activeOwnerID,
+              Self.normalizedOwnerID(ownerIDProvider()) == ownerID else { return }
+        orderingDefaults.set(
+            indentLevels,
+            forKey: Self.ownerScopedKey(Self.indentLevelsKey, ownerID: ownerID)
+        )
     }
 
     // MARK: - Drag-and-Drop Methods
@@ -947,6 +1112,7 @@ class TasksViewModel: ObservableObject {
 
     /// Move a task within a category
     func moveTask(_ task: TaskActionItem, toIndex targetIndex: Int, inCategory category: TaskCategory) {
+        guard let lease = captureOwnerLease() else { return }
         log("REORDER: moveTask(\(task.id), toIndex: \(targetIndex), inCategory: \(category.rawValue))")
         var order = categoryOrder[category] ?? categorizedTasks[category]?.map { $0.id } ?? []
 
@@ -984,7 +1150,7 @@ class TasksViewModel: ObservableObject {
         recomputeDisplayCaches()
 
         // Schedule debounced sync to SQLite + backend
-        scheduleSortOrderSync()
+        scheduleSortOrderSync(lease: lease)
     }
 
     /// Move a task to first position in category
@@ -994,6 +1160,7 @@ class TasksViewModel: ObservableObject {
 
     /// Move a task to a specific position, handling cross-category moves by updating due_at
     func moveTaskToCategory(_ task: TaskActionItem, toIndex index: Int, inCategory targetCategory: TaskCategory) {
+        guard let lease = captureOwnerLease() else { return }
         let sourceCategory = currentCategoryFor(task)
 
         if sourceCategory != targetCategory {
@@ -1012,12 +1179,17 @@ class TasksViewModel: ObservableObject {
             }
 
             // Update due_at via async store call, then reorder
-            Task {
-                await updateTaskDetails(task, dueAt: newDueAt)
-                await MainActor.run {
-                    recomputeAllCaches()
-                    moveTask(task, toIndex: index, inCategory: targetCategory)
-                }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                await self.updateTaskDetails(
+                    task,
+                    dueAt: newDueAt,
+                    expectedOwnerID: lease.ownerID,
+                    authorizationSnapshot: lease.authorizationSnapshot
+                )
+                guard self.isCurrent(lease) else { return }
+                self.recomputeAllCaches()
+                self.moveTask(task, toIndex: index, inCategory: targetCategory)
             }
         } else {
             // Same category: just reorder
@@ -1048,18 +1220,20 @@ class TasksViewModel: ObservableObject {
     }
 
     func incrementIndent(for taskId: String) {
+        guard let lease = captureOwnerLease() else { return }
         let current = getIndentLevel(for: taskId)
         if current < 3 {
             indentLevels[taskId] = current + 1
-            scheduleSortOrderSync()
+            scheduleSortOrderSync(lease: lease)
         }
     }
 
     func decrementIndent(for taskId: String) {
+        guard let lease = captureOwnerLease() else { return }
         let current = getIndentLevel(for: taskId)
         if current > 0 {
             indentLevels[taskId] = current - 1
-            scheduleSortOrderSync()
+            scheduleSortOrderSync(lease: lease)
         }
     }
 
@@ -1209,17 +1383,19 @@ class TasksViewModel: ObservableObject {
     // MARK: - Sort Order Sync
 
     /// Debounced sync of sort orders to SQLite + backend API (500ms)
-    private func scheduleSortOrderSync() {
+    private func scheduleSortOrderSync(lease expectedLease: OwnerLease? = nil) {
+        guard let lease = expectedLease ?? captureOwnerLease(), isCurrent(lease) else { return }
         sortOrderSyncTask?.cancel()
-        sortOrderSyncTask = Task { [weak self] in
+        sortOrderSyncTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 500_000_000) // 500ms debounce
-            guard !Task.isCancelled else { return }
-            await self?.syncSortOrders()
+            guard !Task.isCancelled, let self, self.isCurrent(lease) else { return }
+            await self.syncSortOrders(lease: lease)
         }
     }
 
     /// Collect current sort orders from all categories and write to SQLite + backend
-    private func syncSortOrders() async {
+    private func syncSortOrders(lease expectedLease: OwnerLease? = nil) async {
+        guard let lease = expectedLease ?? captureOwnerLease(), isCurrent(lease) else { return }
         // moveTask sets suppressDatabaseRequery=true to block stale SQLite requeries
         // during the debounce window. Capture the ownership token at entry and only
         // clear if it still matches — a newer drag that bumped the generation while
@@ -1228,20 +1404,22 @@ class TasksViewModel: ObservableObject {
         // errors / cancellation) so we don't leave the flag stuck on.
         let gen = suppressRequeryGeneration
         defer {
-            if gen == suppressRequeryGeneration {
-                suppressDatabaseRequery = false
+            if isCurrent(lease) {
+                if gen == suppressRequeryGeneration {
+                    suppressDatabaseRequery = false
+                }
+                // Recompute caches after syncing sort orders. When non-status filters are
+                // active, recomputeAllCaches will now re-query SQLite (if the flag is
+                // cleared) and pick up any membership changes from the debounce window.
+                recomputeAllCaches()
             }
-            // Recompute caches after syncing sort orders. When non-status filters are
-            // active, recomputeAllCaches will now re-query SQLite (if the flag is
-            // cleared) and pick up any membership changes from the debounce window.
-            recomputeAllCaches()
         }
         let updates = collectSortOrderUpdates()
-        await syncSortOrderUpdates(updates)
+        await syncSortOrderUpdates(updates, lease: lease)
     }
 
-    private func collectSortOrderUpdates() -> [(id: String, sortOrder: Int, indentLevel: Int)] {
-        var updates: [(id: String, sortOrder: Int, indentLevel: Int)] = []
+    private func collectSortOrderUpdates() -> [SortOrderUpdate] {
+        var updates: [SortOrderUpdate] = []
 
         for category in TaskCategory.allCases {
             let orderedTasks = getOrderedTasks(for: category)
@@ -1261,49 +1439,57 @@ class TasksViewModel: ObservableObject {
         return updates
     }
 
-    private func syncSortOrderUpdates(_ updates: [(id: String, sortOrder: Int, indentLevel: Int)]) async {
-        guard !updates.isEmpty else { return }
+    private func syncSortOrderUpdates(_ updates: [SortOrderUpdate], lease: OwnerLease) async {
+        guard !updates.isEmpty, isCurrent(lease) else { return }
 
         var storageErrorDescription: String?
         var backendErrorDescription: String?
 
         // Write to SQLite
-        let storageUpdates = updates.map { (backendId: $0.id, sortOrder: $0.sortOrder, indentLevel: $0.indentLevel) }
         do {
-            try await ActionItemStorage.shared.updateSortOrders(storageUpdates)
+            try await sortOrderSyncOperations.updateStorage(
+                updates,
+                LocalMutationAuthorization {
+                    RuntimeOwnerIdentity.isAuthorizationCurrent(lease.authorizationSnapshot)
+                }
+            )
         } catch {
+            guard isCurrent(lease) else { return }
             storageErrorDescription = String(describing: error)
             log("TasksVM: Failed to write sort orders to SQLite: \(error)")
         }
+        guard isCurrent(lease) else { return }
 
         // Sync to backend API
         do {
-            try await APIClient.shared.batchUpdateSortOrders(updates)
+            try await sortOrderSyncOperations.updateBackend(
+                updates,
+                lease.authorizationSnapshot
+            )
+            guard isCurrent(lease) else { return }
             log("TasksVM: Synced \(updates.count) sort orders to backend")
         } catch {
+            guard isCurrent(lease) else { return }
             backendErrorDescription = String(describing: error)
             log("TasksVM: Failed to sync sort orders to backend: \(error)")
         }
 
+        guard isCurrent(lease) else { return }
         if storageErrorDescription == nil, backendErrorDescription == nil {
-            await MainActor.run {
-                self.clearSortOrderSyncFailure()
-            }
+            clearSortOrderSyncFailure()
         } else {
-            await MainActor.run {
-                self.recordSortOrderSyncFailure(
-                    storageErrorDescription: storageErrorDescription,
-                    backendErrorDescription: backendErrorDescription,
-                    updates: updates
-                )
-            }
+            recordSortOrderSyncFailure(
+                storageErrorDescription: storageErrorDescription,
+                backendErrorDescription: backendErrorDescription,
+                updates: updates
+            )
         }
     }
 
     func recordSortOrderSyncFailure(
         storageErrorDescription: String?,
         backendErrorDescription: String?,
-        updates: [(id: String, sortOrder: Int, indentLevel: Int)]
+        updates: [SortOrderUpdate]
     ) {
         pendingSortOrderUpdates = updates
         sortOrderSyncFailure = TaskSortOrderSyncFailure(
@@ -1317,48 +1503,57 @@ class TasksViewModel: ObservableObject {
         sortOrderSyncFailure = nil
     }
 
-    func retrySortOrderSync() {
+    @discardableResult
+    func retrySortOrderSync() -> Task<Void, Never>? {
+        guard let lease = captureOwnerLease() else { return nil }
         sortOrderSyncTask?.cancel()
         let updates = pendingSortOrderUpdates
-        sortOrderSyncTask = Task { [weak self] in
-            guard let self else { return }
+        let task = Task { @MainActor [weak self] in
+            guard let self, self.isCurrent(lease) else { return }
             if updates.isEmpty {
-                await self.syncSortOrders()
+                await self.syncSortOrders(lease: lease)
                 return
             }
             self.suppressDatabaseRequery = true
             self.suppressRequeryGeneration += 1
             let gen = self.suppressRequeryGeneration
             defer {
-                // Only clear if a newer drag hasn't taken ownership (see syncSortOrders).
-                if gen == self.suppressRequeryGeneration {
-                    self.suppressDatabaseRequery = false
+                if self.isCurrent(lease) {
+                    // Only clear if a newer drag hasn't taken ownership (see syncSortOrders).
+                    if gen == self.suppressRequeryGeneration {
+                        self.suppressDatabaseRequery = false
+                    }
+                    self.recomputeAllCaches()
                 }
-                self.recomputeAllCaches()
             }
-            await self.syncSortOrderUpdates(updates)
+            await self.syncSortOrderUpdates(updates, lease: lease)
         }
+        sortOrderSyncTask = task
+        return task
     }
 
     // MARK: - UserDefaults-to-SortOrder Migration
 
     /// One-time migration: read existing UserDefaults ordering and write as sortOrder to SQLite + backend
-    private func migrateUserDefaultsToSortOrder() {
-        let migrationKey = "TasksSortOrderMigrated"
-        guard !UserDefaults.standard.bool(forKey: migrationKey) else { return }
+    private func migrateUserDefaultsToSortOrder(lease expectedLease: OwnerLease? = nil) {
+        guard let lease = expectedLease ?? captureOwnerLease(), isCurrent(lease) else { return }
+        let migrationKey = Self.ownerScopedKey(Self.sortOrderMigrationKey, ownerID: lease.ownerID)
+        guard !orderingDefaults.bool(forKey: migrationKey) else { return }
 
         // Only migrate if there's existing UserDefaults ordering data
         let hasOrder = !categoryOrder.isEmpty
         let hasIndents = !indentLevels.isEmpty
         guard hasOrder || hasIndents else {
-            UserDefaults.standard.set(true, forKey: migrationKey)
+            guard isCurrent(lease) else { return }
+            orderingDefaults.set(true, forKey: migrationKey)
             return
         }
 
-        Task { [weak self] in
-            guard let self else { return }
-            await self.syncSortOrders()
-            UserDefaults.standard.set(true, forKey: migrationKey)
+        sortOrderSyncTask = Task { @MainActor [weak self] in
+            guard let self, self.isCurrent(lease) else { return }
+            await self.syncSortOrders(lease: lease)
+            guard self.isCurrent(lease) else { return }
+            self.orderingDefaults.set(true, forKey: migrationKey)
             log("TasksVM: Migrated UserDefaults ordering to sortOrder")
         }
     }
@@ -2504,16 +2699,25 @@ class TasksViewModel: ObservableObject {
         dueAt: Date? = nil,
         clearDueAt: Bool = false,
         priority: String? = nil,
-        recurrenceRule: String? = nil
+        recurrenceRule: String? = nil,
+        expectedOwnerID: String? = nil,
+        authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
     ) async {
+        guard let authorizationSnapshot = suppliedAuthorizationSnapshot
+            ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: expectedOwnerID)
+        else { return }
         await store.updateTask(
             task,
             description: description,
             dueAt: dueAt,
             clearDueAt: clearDueAt,
             priority: priority,
-            recurrenceRule: recurrenceRule
+            recurrenceRule: recurrenceRule,
+            expectedOwnerID: authorizationSnapshot.ownerID
         )
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+            return
+        }
         // Read the updated task back from the store for surgical update
         if let updated = store.tasks.first(where: { $0.id == task.id }) {
             // Keep optimistic clear when a stale read still has dueAt set.

@@ -46,7 +46,7 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
   func run(timeoutSeconds: Double) async -> [String: String] {
     let s = RealtimeHubSession(
       provider: provider, auth: auth,
-      instructions: RealtimeHubTools.systemInstruction(aboutUser: ""),
+      instructions: RealtimeHubTools.systemInstruction(),
       delegate: self)
     session = s
     let rate = s.requiredInputSampleRate
@@ -194,9 +194,14 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
         auth = .byokKey(key)
       } else {
         let p = provider == .openai ? "openai" : "gemini"
+        guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else {
+          return ["error": "ephemeral mint requires a stable authenticated owner"]
+        }
         let token: String
         do {
-          token = try await APIClient.shared.mintRealtimeToken(provider: p)
+          token = try await APIClient.shared.mintRealtimeToken(
+            provider: p,
+            expectedOwnerID: ownerID)
         } catch {
           return [
             "error": "ephemeral mint failed for \(p)",

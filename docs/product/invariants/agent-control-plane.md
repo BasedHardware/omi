@@ -18,6 +18,57 @@ must name the invariant they affect and update the matching guard test.
 - Select an adapter outside the session's persisted provider boundary.
 - Grant leaf workers agent-management tools or nested-agent authority.
 - Persist a successful run while a required control operation remains failed.
+- Let request/client correlation, a Swift callback, or possession of an opaque
+  capability reference authorize a physical tool invocation.
+- Mutate a live session's adapter/model/cwd because the default preference
+  changed; defaults apply to new sessions and migration is explicit.
+- Assemble policy or model context from Swift-supplied prompt fragments.
+
+## Converged authority contract
+
+- The kernel routes a typed intent proposal and applies the resulting control
+  action in one boundary. Swift does not run a second semantic classifier.
+- Each session pins an immutable, generation-numbered execution profile. An
+  idle session can migrate only through an expected-generation transaction;
+  active runs reject migration.
+- Each accepted run pins one versioned, generation-numbered ContextSnapshot.
+  Source updates declare `available`, `empty`, `unavailable`, or `redacted`;
+  kernel policy, renderer version, recent turns, and capability projection are
+  not caller-selected prompt text.
+- Run/attempt capability checks stay inside the kernel. Before Swift sees a
+  physical command, the kernel persists a single-use invocation as `prepared`
+  and transitions it to `dispatched`. Restart changes `prepared` to `failed`
+  and `dispatched` to `outcome_unknown`; non-idempotent writes are never
+  automatically replayed.
+- An accepted control invocation holds a kernel execution lease, not request
+  lifetime authority. The lease revalidates owner, live run/attempt, and pinned
+  execution profile at each physical effect boundary, propagates abort to
+  in-flight adapter work, and terminalizes revocation as `failed` before
+  dispatch or `outcome_unknown` after dispatch. A multi-agent control call
+  revalidates between siblings, retains every admitted child, and immediately
+  cancels admitted siblings if a later admission fails; cleanup failures expose
+  the admitted run IDs instead of leaving invisible work.
+- Every local runtime harness establishes the signed-in owner before its first
+  owner-scoped RPC, even when the adapter needs no Firebase token. Query,
+  interrupt, warmup, and session-invalidation transport mutations reject a
+  caller owner that differs from the active runtime owner.
+- Owner replacement is a correlated pre-visibility barrier. Node first makes
+  the previous owner inert, synchronously terminalizes its foreground/external
+  runs, pending tool claims, and session bindings, then returns an exact-owner
+  receipt. Swift fully drains physical tool tasks and stops the child process
+  before the replacement owner can become visible; a missing, malformed, or
+  timed-out receipt also fails closed by confirming process exit.
+- Swift owner-scoped work carries an immutable owner plus authorization
+  generation through startup, wire admission, response routing, callbacks,
+  credentials, and local/API mutations. Signing out and back into the same uid
+  is a new generation and cannot revive an earlier continuation.
+- Swift validates and executes only `authorized_tool_execution`, echoing the
+  complete immutable claim tuple and generated manifest digest. Ordinary
+  `tool_use` events are display-only.
+- Workstream consolidation moves task-scoped history through the canonical
+  journal migration transaction, preserving typed payloads, revisions, outbox
+  state, sequencing, and restart visibility; it never inserts or deletes turn
+  rows directly.
 
 ## Surfaces
 
@@ -35,6 +86,12 @@ Documented per-invariant in the canonical invariants doc, including:
 - `desktop/macos/agent/tests/control-tools.test.ts`
 - `desktop/macos/agent/tests/sqlite-store.test.ts`
 - `desktop/macos/agent/tests/workstream-continuity.test.ts`
+- `desktop/macos/agent/tests/desktop-intent-router.test.ts`
+- `desktop/macos/agent/tests/session-execution-profile.test.ts`
+- `desktop/macos/agent/tests/run-tool-capability.test.ts`
+- `desktop/macos/agent/tests/convergence-authority-ratchet.test.ts`
+- `desktop/macos/Desktop/Tests/AuthorizedToolExecutionTests.swift`
+- `desktop/macos/Desktop/Tests/KernelContractWireTests.swift`
 
 ## Path globs
 

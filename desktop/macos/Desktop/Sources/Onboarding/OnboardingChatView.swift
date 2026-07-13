@@ -768,11 +768,10 @@ struct OnboardingChatView: View {
     let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else { return }
 
-    // Clear quick replies and unblock any pending ask_followup
+    // Clear quick replies; ask_followup publishes UI and completes immediately.
     quickReplyOptions = []
     quickReplyQuestion = ""
     isTaskSelectionFollowup = false
-    ChatToolExecutor.resumeFollowup(with: text)
 
     Task {
       if awaitingGoalInput {
@@ -853,7 +852,7 @@ struct OnboardingChatView: View {
         }
       }
     } else {
-      // Regular quick reply — resume the blocked ask_followup tool, then send as message
+      // Regular quick reply — send the selected response as a new message.
       let shouldCreateFromSelection = awaitingGoalInput && !isTypeYourOwnOption(option)
       if shouldCreateFromSelection {
         awaitingGoalInput = false
@@ -866,7 +865,6 @@ struct OnboardingChatView: View {
       } else if isTypeYourOwnOption(option) && wasTaskSelectionFollowup {
         awaitingDailyTaskInput = true
       }
-      ChatToolExecutor.resumeFollowup(with: option)
       Task {
         if shouldCreateFromSelection {
           await maybeCreateGoal(from: option, source: "selected")
@@ -1167,10 +1165,11 @@ struct OnboardingChatView: View {
     permissionHelpTimer = nil
 
     guard let permType = permissionType else { return }
+    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
     // Only fire once per permission type
     guard !permissionHelpShown.contains(permType) else { return }
 
-    let workItem = DispatchWorkItem { [permType] in
+    let workItem = DispatchWorkItem { [permType, ownerID] in
       // Check permission is still pending — either via pendingPermissionType
       // or via a permission-related question still showing (e.g. FDA "Done!" buttons)
       let stillPending =
@@ -1178,7 +1177,7 @@ struct OnboardingChatView: View {
         || (!quickReplyOptions.isEmpty
           && self.permissionType(for: quickReplyQuestion, options: quickReplyOptions) == permType)
       guard stillPending else { return }
-      showPermissionHelpNotification(for: permType)
+      showPermissionHelpNotification(for: permType, ownerID: ownerID)
     }
     permissionHelpTimer = workItem
     DispatchQueue.main.asyncAfter(deadline: .now() + 15, execute: workItem)
@@ -1186,7 +1185,7 @@ struct OnboardingChatView: View {
   }
 
   /// Take a screenshot, send it to Gemini for analysis, and show the result in the floating bar.
-  private func showPermissionHelpNotification(for permType: String) {
+  private func showPermissionHelpNotification(for permType: String, ownerID: String) {
     // Mark as shown immediately so we don't fire again
     permissionHelpShown.insert(permType)
     log("OnboardingChat: Permission help timer fired for \(permType), capturing screenshot")
@@ -1196,6 +1195,7 @@ struct OnboardingChatView: View {
       await MainActor.run {
         let permLabel = permissionDisplayName(permType)
         FloatingControlBarManager.shared.showNotification(
+          ownerID: ownerID,
           title: "Need help with \(permLabel)?",
           message: helpMessage,
           assistantId: "onboarding",

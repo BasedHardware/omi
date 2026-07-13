@@ -31,7 +31,9 @@ extension SettingsContentView {
             Button("Sign Out") {
               appState.stopTranscription()
               ProactiveAssistantsPlugin.shared.stopMonitoring()
-              try? AuthService.shared.signOut()
+              Task {
+                try? await AuthService.shared.signOut()
+              }
             }
             .buttonStyle(OmiButtonStyle(.primary, size: .compact))
             .disabled(isDeletingAccount)

@@ -302,7 +302,7 @@ final class ChatErrorStateTests: XCTestCase {
   func testSavedUserDefaultsSessionIsValidatedBeforeUse() throws {
     let source = try sourceFile("AuthService.swift")
 
-    XCTAssertTrue(source.contains("validateRestoredSession()"))
+    XCTAssertTrue(source.contains("validateRestoredSession(attempt: attempt)"))
     XCTAssertTrue(source.contains("refreshSingleFlight(auth: self)"))
     XCTAssertTrue(source.contains("Restored session validated via forced refresh"))
     XCTAssertTrue(source.contains("Restored session validation deferred - preserving credentials for retry"))
@@ -325,15 +325,20 @@ final class ChatErrorStateTests: XCTestCase {
     XCTAssertNotNil(range)
     let snippet = String(source[range!.lowerBound...]).prefix(200)
     XCTAssertTrue(snippet.contains("invalidateSession(reason: .restoredSessionInvalid)"))
-    let methodStart = source.range(of: "private func validateRestoredSessionNow() async")
+    let methodStart = source.range(of: "private func validateRestoredSessionNow(attempt:")
     XCTAssertNotNil(methodStart)
-    let method = String(source[methodStart!.lowerBound...]).prefix(1200)
-    XCTAssertTrue(method.contains("storedIdToken == nil") || method.contains("storedRefreshToken == nil"))
+    let methodEnd = source.range(
+      of: "// MARK: - Auth State Listener",
+      range: methodStart!.upperBound..<source.endIndex)
+    XCTAssertNotNil(methodEnd)
+    let method = String(source[methodStart!.lowerBound..<methodEnd!.lowerBound])
+    XCTAssertTrue(method.contains("sessionCoordinator.phase == .needsReauth"))
+    XCTAssertTrue(method.contains("storedIdToken == nil && storedRefreshToken == nil"))
   }
 
   func testRestoredSessionValidationForceRefreshesOnLaunch() throws {
     let source = try sourceFile("AuthService.swift")
-    let validationRange = source.range(of: "private func validateRestoredSessionNow() async")
+    let validationRange = source.range(of: "private func validateRestoredSessionNow(attempt:")
     XCTAssertNotNil(validationRange)
     let snippet = String(source[validationRange!.lowerBound...])
 

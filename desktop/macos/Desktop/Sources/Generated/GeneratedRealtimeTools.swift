@@ -523,7 +523,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "check_permission_status",
-    "description": "Check whether Omi has the requested macOS permission. This is a fast local action; use it directly when the user asks to check permissions, never by spawning an agent.",
+    "description": "Check whether Omi has the requested macOS permission through the kernel-authorized native executor.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -546,7 +546,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "request_permission",
-    "description": "Request Omi's macOS permission directly by opening the native prompt or the relevant System Settings pane. Use for Screen Recording, microphone, notifications, Accessibility, Automation, or Full Disk Access. Never use spawn_agent for a permission request.",
+    "description": "Request Omi's macOS permission through the kernel-authorized native executor by opening the native prompt or relevant System Settings pane. Supports Screen Recording, microphone, notifications, Accessibility, Automation, and Full Disk Access.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -581,7 +581,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "create_calendar_event",
-    "description": "Create a Google Calendar event for the user. Use for simple calendar requests like 'put this on my calendar', 'schedule lunch tomorrow', or 'create an event'. Requires start_time and end_time as ISO-8601 strings with timezone. Use spawn_agent instead for multi-step scheduling, finding availability, rescheduling, deleting, or coordinating with people.",
+    "description": "Create one specified Google Calendar event. Requires start_time and end_time as ISO-8601 strings with timezone. This capability does not find availability, reschedule, delete, or coordinate with people.",
     "parameters": {
       "type": "object",
       "properties": {

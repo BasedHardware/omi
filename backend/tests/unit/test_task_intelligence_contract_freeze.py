@@ -142,6 +142,35 @@ def test_source_manifest_negative_check_rejects_scanner_discovered_unregistered_
         validate_source_manifest(manifest, discovered_anchors=discovered)
 
 
+@pytest.mark.parametrize(
+    'dependency_path',
+    [
+        'backend/venv/lib/python3.11/site-packages/dependency_fixture.py',
+        'backend/.venv/lib/python3.11/site-packages/dependency_fixture.py',
+        'backend/vendor/site-packages/dependency_fixture.py',
+    ],
+)
+def test_writer_scanner_ignores_non_utf8_dependency_trees(tmp_path, dependency_path):
+    dependency = tmp_path / dependency_path
+    dependency.parent.mkdir(parents=True, exist_ok=True)
+    # Valid Big5 source fixture, deliberately invalid UTF-8. Dependency code
+    # must be excluded before the production writer parser reads it.
+    dependency.write_bytes(b'# -*- coding: big5 -*-\n# \xa4\x40\n')
+
+    project_writer = tmp_path / 'backend' / 'services' / 'new_writer.py'
+    project_writer.parent.mkdir(parents=True, exist_ok=True)
+    project_writer.write_text(
+        'from database import action_items as action_items_db\n'
+        'def write(uid, data):\n'
+        '    return action_items_db.create_action_item(uid, data)\n',
+        encoding='utf-8',
+    )
+
+    assert discover_backend_writer_anchors(repository_root=tmp_path) == {
+        ('backend/services/new_writer.py', 'action_items_db.create_action_item')
+    }
+
+
 def test_source_manifest_rejects_stale_writer_anchor(discovered_writer_anchors):
     manifest = deepcopy(load_source_manifest())
     manifest['sources'][0]['writer_anchors'].append(

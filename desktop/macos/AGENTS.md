@@ -57,7 +57,7 @@ Merging `desktop/macos/**` changes queues them for the next daily or manually di
    - Creates DMG + Sparkle ZIP
    - Runs `scripts/smoke-signed-desktop-artifact.sh` on the signed app, Sparkle ZIP, and DMG before publishing, including a mandatory in-app synthetic Keychain write/read/delete canary
    - Publishes an immutable non-live GitHub candidate with smoke evidence
-3. **Automatic qualification** (`scripts/qualify-desktop-beta.sh --automatic`) — verifies published asset digests against signed-smoke evidence, runs the static release checks, rebuilds the exact tag, runs hermetic T2 plus the fault-injection suite, and writes canonical `qualifiedBeta*` evidence metadata
+3. **Trusted macOS qualification runner** (`desktop_qualify_beta.yml`) — dispatched by Codemagic after candidate publication and restricted to the `self-hosted`, `macos`, `omi-desktop-qualification` runner. It verifies published asset digests against signed-smoke evidence, runs the static release checks, rebuilds the exact tag, runs hermetic T2 plus the fault-injection suite, and writes canonical `qualifiedBeta*` evidence metadata. The runner must be an administrator-managed Mac with Docker Desktop; it must never execute pull-request or arbitrary-ref workflows.
 4. **Automatic beta promotion** (`desktop_promote_beta.yml`) — rejects stale automatic targets, honors `DESKTOP_AUTO_BETA_ENABLED=false` as an emergency pause, validates digest-matched evidence, registers the immutable manifest, and atomically advances the explicit beta pointer
 
 The shared Python backend must contain the manifest/pointer endpoints before the first beta promotion. Deploy it separately with `gcp_backend.yml`; merging desktop code does not deploy the prod backend. Static GCS/CDN feed ownership remains follow-up work and is not the channel source of truth.
@@ -279,7 +279,8 @@ It is self-driving for agents: it runs the risky Swift lifecycle/state tests, fo
 
 Invariant: Main Chat, Home chat, and floating/notch chat are one timeline over one
 `ChatProvider` (`historyChatProvider`). Kernel `main_chat` turns are the durable
-source of truth; UI may optimistic-render, then must not double-apply the same turn.
+source of truth; journal acceptance publishes the immediate pending projection,
+and UI must never append a pre-journal turn.
 
 Rules (fail the PR if any break):
 1. **Single provider + floating viewport** — floating presentation is chrome + a
@@ -291,26 +292,24 @@ Rules (fail the PR if any break):
    turn handler (one replaceable slot). Speculative warm and other surfaces must
    reuse `mainInstance`; never construct a second `ChatProvider()` that calls
    `attachClient` / `setTurnRecordedHandler` on the shared runtime.
-3. **One idempotency key per logical turn** — every optimistic
-   `stageOptimisticTurn` / kernel write MUST share the SAME key with
-   `recordSurfaceTurn` / `projectCrossSurfaceTurn`. Stage first for sync UI,
-   then let `KernelTurnProjection.apply` `promoteOptimisticTurn` (in-place,
-   no append) when `turn_recorded` arrives. Keys are opaque strings; never
-   dedupe by assistant/user text.
-4. **Kernel apply is idempotent** — `KernelTurnProjection.apply` promotes
-   pending optimistic turns or appends via `recordCompletedTurn`; already-seen
-   continuity keys are ignored. Empty keys do not suppress.
+3. **One idempotency key per logical turn** — call `recordJournalExchange` (or
+   the corresponding kernel control RPC) with one opaque continuity key and
+   await acceptance before binding a visible row. Direct-control spawn receipts
+   already materialize their exchange; refresh that journal instead of issuing a
+   second write. Never dedupe by assistant/user text.
+4. **Kernel apply is idempotent** — `KernelTurnProjection` upserts only by the
+   canonical turn ID published by ordered journal replay. Rejection must leave no
+   visible row, and replay/acknowledgement must replace rather than append.
 5. **Cross-surface agent identity is structured** — `agentSpawn` / `agentCompletion`
    content blocks (plus tool-block `spawnedAgentID` / sessionId / runId lines) are
-   authoritative. Persist structured blocks through `saveMessage` metadata key
-   `content_blocks` (via `ChatContentBlockCodec`) so they survive reload; kernel
-   apply still materializes `agentCompletion` from bracket text when a turn
-   arrives without an optimistic stage. Legacy `[Background agent id=…]` bracket
+   authoritative. Persist structured blocks through the kernel journal/outbox so
+   they survive reload; kernel apply still materializes `agentCompletion` from
+   bracket text for legacy rows. Legacy `[Background agent id=…]` bracket
    text remains dual-read only. Do not invent new free-text formats; extend the
    schema + tests together.
-   Proactive notifications stage under continuity key `notification:<uuid>`
-   (origin `proactive_notification`) — same stage/promote path as other surface
-   turns; do not reintroduce `appendAssistantMessage` for timeline writes.
+   Proactive notifications use continuity key `notification:<uuid>` (origin
+   `proactive_notification`) and enter the notification-to-chat cache only after
+   journal acceptance; do not reintroduce local timeline append paths.
 6. **Pill cache is derived** — open-by-id hydrates from kernel (`listFloatingAgentPills`
    / `listAgentSessions` / `inspectAgentRun`) when the in-memory pill is missing;
    refresh-on-miss is a fast path only. Success = resolvable agent after hydrate.

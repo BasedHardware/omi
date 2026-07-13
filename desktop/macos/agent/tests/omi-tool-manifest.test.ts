@@ -85,6 +85,8 @@ describe("omi tool manifest", () => {
   it("keeps directed provider routing on the canonical spawn_agent schema", () => {
     const spawnAgent = toolsForAdapter("pi-mono").find((tool) => tool.name === "spawn_agent");
 
+    expect(spawnAgent?.inputSchema.required).toEqual(["objective"]);
+    expect(spawnAgent?.inputSchema.properties).not.toHaveProperty("originSurfaceKind");
     expect(spawnAgent?.inputSchema.properties.provider).toMatchObject({
       enum: ["openclaw", "hermes"],
     });

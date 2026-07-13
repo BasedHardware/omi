@@ -38,16 +38,25 @@ final class RealtimeHubToolFailureTypingTests: XCTestCase {
     XCTAssertEqual(RealtimeHubToolFailureKind.classify(transport), .backendTransport)
   }
 
-  func testRealtimeToolCatchPathUsesTypedFailureOutput() throws {
+  func testRealtimeToolDispatchHasNoPhysicalSideEffectBeforeKernelAuthorization() throws {
     let source = try realtimeHubControllerSource()
+    let requestStart = try XCTUnwrap(source.range(of: "func hubDidRequestTool("))
+    let requestEnd = try XCTUnwrap(
+      source.range(
+        of: "func hubDidFinishTurn(",
+        range: requestStart.upperBound..<source.endIndex))
+    let requestSource = String(source[requestStart.lowerBound..<requestEnd.lowerBound])
 
-    XCTAssertTrue(source.contains("RealtimeHubToolFailure.classify(error)"))
-    XCTAssertTrue(source.contains("failure_type=\\(failure.kind.rawValue)"))
-    XCTAssertTrue(source.contains("out = failure.userFacingOutput(base: errorText)"))
-    XCTAssertFalse(source.contains("out = errorText }"))
+    XCTAssertTrue(requestSource.contains(".toolStartedScoped("))
+    XCTAssertTrue(requestSource.contains("invokeExternallyAuthorizedTool("))
+    XCTAssertFalse(requestSource.contains("ChatToolExecutor.execute"))
+    XCTAssertFalse(requestSource.contains("APIClient.shared.tool"))
+    XCTAssertFalse(requestSource.contains("ScreenCaptureManager.captureScreen"))
+    XCTAssertFalse(requestSource.contains("Self.click(at:"))
+    XCTAssertTrue(source.contains("private func executeAuthorizedRealtimeTool("))
   }
 
-  func testBeginTurnDoesNotUploadSpeculativeScreenshotPixels() throws {
+  func testBeginTurnNeverCapturesOrUploadsAmbientScreenshotPixels() throws {
     let source = try realtimeHubControllerSource()
     let beginRange = try XCTUnwrap(source.range(of: "func beginTurn(turnID requestedTurnID:"))
     let nextRange = try XCTUnwrap(
@@ -56,8 +65,12 @@ final class RealtimeHubToolFailureTypingTests: XCTestCase {
         range: beginRange.upperBound..<source.endIndex))
     let beginTurnSource = String(source[beginRange.lowerBound..<nextRange.lowerBound])
 
-    XCTAssertTrue(beginTurnSource.contains("speculativeScreenshot = jpeg"))
+    XCTAssertFalse(beginTurnSource.contains("ScreenCaptureManager.captureScreen"))
+    XCTAssertFalse(beginTurnSource.contains("speculativeScreenshot"))
     XCTAssertFalse(beginTurnSource.contains("sendVideoFrame"))
+    XCTAssertFalse(source.contains("voiceTurnScreenContextEnvelopeJSON"))
+    XCTAssertFalse(source.contains("sendVoiceTurnScreenContextIfNeeded"))
+    XCTAssertTrue(source.contains("effect: { [ScreenCaptureManager.captureScreenJPEG()] }"))
   }
 
   private struct DummyDecodeError: Error {}

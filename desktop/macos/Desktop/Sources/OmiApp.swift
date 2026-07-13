@@ -428,7 +428,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       let options = FirebaseOptions(contentsOfFile: path)
     {
       FirebaseApp.configure(options: options)
-      AuthService.shared.configure()
+      Task { @MainActor in
+        await AuthService.shared.configure()
+      }
     } else {
       log("Firebase configure skipped (plistPath=\(plistPath ?? "nil"))")
     }
@@ -475,11 +477,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     AnalyticsManager.shared.trackFirstLaunchIfNeeded()
-
-    // Set per-user database path before any async tasks can trigger DB initialization.
-    // This is synchronous and must happen before ViewModelContainer initializes SQLite.
-    let userId = UserDefaults.standard.string(forKey: "auth_userId")
-    RewindDatabase.currentUserId = (userId?.isEmpty == false) ? userId : "anonymous"
 
     // Start resource monitoring (memory, CPU, disk)
     ResourceMonitor.shared.start()
@@ -1077,7 +1074,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   @MainActor @objc private func signOut() {
     AnalyticsManager.shared.menuBarActionClicked(action: "sign_out")
     ProactiveAssistantsPlugin.shared.stopMonitoring()
-    try? AuthService.shared.signOut()
+    Task { @MainActor in
+      try? await AuthService.shared.signOut()
+    }
   }
 
   @MainActor @objc private func quitApp() {
