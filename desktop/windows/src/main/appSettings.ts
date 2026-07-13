@@ -6,6 +6,7 @@ import { app } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync } from 'fs'
 import { DEFAULT_RECORD_HOTKEY } from './shortcuts'
+import { OVERLAY_ACCELERATOR } from './overlay/shortcut'
 import type { MeetingMode, MeetingSettings } from '../shared/types'
 
 export type AppSettings = {
@@ -13,6 +14,11 @@ export type AppSettings = {
   closeToTrayNoticeShown: boolean
   /** Electron accelerator that toggles mic recording. */
   recordHotkey: string
+  /** Electron accelerator that summons the floating bar. Persisted so a rebind
+   *  survives restarts and main can register it at launch (a taken chord then
+   *  fails loudly in Settings instead of only a console.warn). Kept in step with
+   *  the legacy renderer `overlayShortcut` preference by the Settings rebind. */
+  summonHotkey: string
   /** Exclude the bar/HUD from screen capture (WDA_EXCLUDEFROMCAPTURE). User
    *  toggle, default on — consistent with the old overlay's behavior. */
   hudContentProtection: boolean
@@ -57,9 +63,14 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
     typeof r.recordHotkey === 'string' && r.recordHotkey.trim()
       ? r.recordHotkey.trim()
       : DEFAULT_RECORD_HOTKEY
+  const summon =
+    typeof r.summonHotkey === 'string' && r.summonHotkey.trim()
+      ? r.summonHotkey.trim()
+      : OVERLAY_ACCELERATOR
   return {
     closeToTrayNoticeShown: r.closeToTrayNoticeShown === true,
     recordHotkey: hotkey,
+    summonHotkey: summon,
     hudContentProtection: r.hudContentProtection !== false,
     meeting: sanitizeMeeting(r.meeting),
     lastShownChangelogVersion:

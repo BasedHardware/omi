@@ -45,3 +45,10 @@ export function resumeOverlayShortcut(): boolean {
 export function getOverlayAccelerator(): string {
   return slot.getAccelerator()
 }
+
+/** Current summon chord + whether the OS actually claimed it (false → another app
+ *  owns it, so the hardcoded/default chord silently failed to register). Shown in
+ *  Settings → Shortcuts so a conflict is visible instead of a dead shortcut. */
+export function getOverlaySummonState(): { accelerator: string; registered: boolean } {
+  return { accelerator: slot.getAccelerator(), registered: slot.isRegistered() }
+}
