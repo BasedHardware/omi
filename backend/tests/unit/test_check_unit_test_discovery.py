@@ -76,6 +76,19 @@ def test_commented_out_or_deselected_references_are_not_coverage():
     )
 
 
+def test_deselecting_one_test_does_not_orphan_a_file_that_still_runs():
+    line = (
+        'python -m pytest tests/container/test_parakeet_smoke.py -v '
+        '--deselect tests/container/test_parakeet_smoke.py::test_flaky'
+    )
+    assert _runs_reference(line, 'tests/container/test_parakeet_smoke.py')
+
+
+def test_backslash_continuation_keeps_path_attached_to_its_invocation():
+    text = 'python -m pytest \\\n  tests/container/test_parakeet_smoke.py -v \\\n  --tb=short'
+    assert _runs_reference(text, 'tests/container/test_parakeet_smoke.py')
+
+
 def test_missing_workflow_file_is_an_error():
     errors = workflow_map_errors(
         {'backend-hermetic-e2e.yml': '', 'desktop-backend-contracts.yml': 'x', 'parakeet_gpu_tests.yml': 'x'}

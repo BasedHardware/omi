@@ -85,16 +85,24 @@ def load_workflow_texts(workflows_dir: Path) -> dict[str, str]:
 
 
 def _runs_reference(text: str, needle: str) -> bool:
-    """True when a non-comment line both names the needle and looks like an
-    invocation (pytest/run) — a commented-out, --deselect'ed, or prose mention
-    must not count as coverage."""
-    for raw_line in text.splitlines():
+    """True when a non-comment invocation line (pytest/run.sh) names the needle
+    as a run target — a commented-out mention, a --deselect/--ignore target, or
+    prose must not count as coverage. Backslash continuations are joined so a
+    path on a wrapped line still belongs to its invocation."""
+    joined = text.replace('\\\n', ' ')
+    for raw_line in joined.splitlines():
         line = raw_line.strip()
         if line.startswith('#') or needle not in line:
             continue
-        if '--deselect' in line or '--ignore' in line:
+        if 'pytest' not in line and 'run.sh' not in line:
             continue
-        if 'pytest' in line or 'run.sh' in line:
+        tokens = line.split()
+        for index, token in enumerate(tokens):
+            if needle not in token:
+                continue
+            previous = tokens[index - 1] if index else ''
+            if previous in ('--deselect', '--ignore') or token.startswith(('--deselect=', '--ignore=')):
+                continue
             return True
     return False
 
