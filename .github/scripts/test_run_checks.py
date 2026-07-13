@@ -12,7 +12,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 
-from run_checks import Check, execute_checks, load_manifest, resolve_checks, validate_manifest
+from run_checks import Check, command_for_check, execute_checks, load_manifest, resolve_checks, validate_manifest
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -106,8 +106,6 @@ class RunnerBehaviorTests(unittest.TestCase):
             self.assertIn("backend-route-policy-baseline", selected)
 
     def test_labels_json_placeholder_is_substituted(self) -> None:
-        from run_checks import command_for_check
-
         check = Check(
             "labels",
             ("python3", "x.py", "--labels-json", "{labels_json}", "--base", "{base}"),

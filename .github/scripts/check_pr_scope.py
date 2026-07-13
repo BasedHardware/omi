@@ -12,7 +12,8 @@ against the multi-regression PR shape.
 Policy (production-source lines = added + deleted, excluding tests, docs,
 l10n, lockfiles, and generated files):
 
-- >= WARN_LINES:  warning annotation — consider splitting.
+- >= WARN_LINES:  warning annotation — consider splitting (silenced by the
+  same overrides as the fail tier).
 - >= FAIL_LINES:  check fails. Split the PR, or a maintainer applies the
   ``scope-approved`` label (label events re-trigger CI). Local lane: export
   ``OMI_SCOPE_APPROVED=1`` to acknowledge and push. Emergency reverts use the
@@ -85,7 +86,7 @@ def count_production_lines(numstat_output: str) -> tuple[int, list[tuple[int, st
     per_file: list[tuple[int, str]] = []
     # -z records: "added\tdeleted\tpath\0" with the path raw (no C-quoting).
     for record in numstat_output.split('\0'):
-        parts = record.split('\t')
+        parts = record.split('\t', 2)
         if len(parts) != 3:
             continue
         added, deleted, path = parts
