@@ -911,13 +911,20 @@ async def _run_full_pipeline_background_async(
                 # Lua transaction. Legacy jobs retain their job-scoped guard.
                 should_meter = bool(content_id) or await run_blocking(db_executor, try_mark_once, job_id, 'speech_ms')
                 if should_meter:
-                    source = 'sync_backfill' if sync_lane == SyncLane.BACKFILL.value else 'sync_fresh'
+                    # Use a distinct local for the metering source. Reassigning `source`
+                    # here clobbered the ConversationSource parameter, so later
+                    # conversation creation received the metering string
+                    # ('sync_fresh'/'sync_backfill'), which coerces to
+                    # ConversationSource.unknown — every v2-synced new conversation was
+                    # stored with source=unknown. Mirrors the v1 endpoint's meter_source
+                    # local.
+                    meter_source = 'sync_backfill' if sync_lane == SyncLane.BACKFILL.value else 'sync_fresh'
                     await run_blocking(
                         db_executor,
                         record_speech_ms,
                         uid,
                         total_speech_ms,
-                        source=source,
+                        source=meter_source,
                         idempotency_key=content_id,
                         raise_on_error=bool(content_id),
                     )
