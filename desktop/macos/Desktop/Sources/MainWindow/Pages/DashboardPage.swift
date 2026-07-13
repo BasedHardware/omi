@@ -2466,9 +2466,9 @@ private struct HomeCanvasBackground: View {
     var body: some View {
         ZStack {
             OmiAdaptiveMaterialBackground(
-                material: .ultraThinMaterial,
+                material: .regularMaterial,
                 fallback: HomePalette.paper,
-                materialOverlay: Color.black.opacity(0.28)
+                materialOverlay: Color.black.opacity(0.14)
             )
 
             // Neutral key light high behind the wordmark, with a soft ambient
