@@ -1,14 +1,85 @@
-import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios'
+import axios, {
+  type AxiosInstance,
+  type AxiosResponse,
+  type InternalAxiosRequestConfig
+} from 'axios'
 import { auth } from './firebase'
+import { forceReauth, refreshIdToken } from './authSession'
 
 // Retried statuses: 429 (rate limited) and 503 (transient). Anything else fails
-// fast as before.
+// fast as before. 401 is handled separately (refresh → retry → reauth).
 const RETRY_STATUSES = new Set([429, 503])
 const MAX_RETRIES = 5
 
 // __noRetry lets a caller (e.g. the paced bulk-delete loop) own 429 handling
 // itself, so the interceptor's short backoff doesn't fight a longer rate window.
-type RetryConfig = InternalAxiosRequestConfig & { __retryCount?: number; __noRetry?: boolean }
+// __reauthTried marks that a 401 already triggered one forced-refresh retry, so a
+// still-401 response after that goes straight to reauth instead of looping.
+// __sessionPreserving is the macOS RequestAuthPolicy.sessionPreserving knob: a
+// background poller sets it so a dead-session 401 rejects as unauthorized WITHOUT
+// kicking the user to the sign-in screen (it still gets the refresh+retry).
+type RetryConfig = InternalAxiosRequestConfig & {
+  __retryCount?: number
+  __noRetry?: boolean
+  __reauthTried?: boolean
+  __sessionPreserving?: boolean
+}
+
+/**
+ * Shared axios response-error handler for the Firebase-authed clients. Extracted
+ * (rather than inlined in the interceptor) so the 401 refresh→retry→reauth path
+ * is unit-testable with a fake client. `client` is the axios instance used to
+ * re-issue a retried request.
+ */
+export async function responseErrorHandler(
+  client: AxiosInstance,
+  error: { config?: RetryConfig; response?: { status?: number; headers?: Record<string, unknown> } }
+): Promise<AxiosResponse> {
+  const config = error.config
+  const status = error.response?.status
+
+  // 401: the backend rejected our Firebase token. Force-refresh once and retry.
+  // Mirrors macOS refresh→retry→classify: a DEFINITIVE death (no user, permanent
+  // refresh failure, or a still-401 after a fresh token) routes to sign-in; a
+  // TRANSIENT refresh failure (network blip) keeps the session and just rejects,
+  // so we never kick the user to Login on a blip. __noRetry opts a caller out
+  // entirely; __sessionPreserving (background pollers) still refreshes+retries but
+  // never forces reauth on death.
+  if (status === 401 && config && !config.__noRetry) {
+    const preserving = config.__sessionPreserving === true
+    if (!config.__reauthTried) {
+      const outcome = await refreshIdToken()
+      if (outcome.status === 'ok') {
+        config.__reauthTried = true // consumed our one retry
+        config.headers.Authorization = `Bearer ${outcome.token}`
+        return client(config)
+      }
+      if (outcome.status === 'transient') return Promise.reject(error) // keep session, retry later
+      // outcome.status === 'dead' → fall through to reauth
+    }
+    // Definitive death (dead refresh on the first pass, or a post-refresh 401 with
+    // __reauthTried already set). Surface reauth (light: routes to Login, no data
+    // wipe) unless this request opted to preserve the session.
+    if (!preserving) await forceReauth()
+    return Promise.reject(error)
+  }
+
+  // Back off and retry on rate limits / transient errors. Bulk operations (e.g.
+  // paging or deleting thousands of memories) otherwise trip the server's request
+  // cap and surface a raw 429. Respects Retry-After when present, else exponential
+  // backoff with jitter.
+  if (!config || config.__noRetry || status === undefined || !RETRY_STATUSES.has(status))
+    return Promise.reject(error)
+  config.__retryCount = (config.__retryCount ?? 0) + 1
+  if (config.__retryCount > MAX_RETRIES) return Promise.reject(error)
+  const retryAfter = Number(error.response?.headers?.['retry-after'])
+  const waitMs =
+    Number.isFinite(retryAfter) && retryAfter > 0
+      ? retryAfter * 1000
+      : Math.min(1000 * 2 ** (config.__retryCount - 1), 16_000) + Math.random() * 400
+  await new Promise((resolve) => setTimeout(resolve, waitMs))
+  return client(config)
+}
 
 function makeClient(baseURL: string): AxiosInstance {
   // 12s is enough for normal Omi responses and short enough that a stuck
@@ -31,25 +102,7 @@ function makeClient(baseURL: string): AxiosInstance {
     return config
   })
 
-  // Back off and retry on rate limits. Bulk operations (e.g. paging or deleting
-  // thousands of memories) otherwise trip the server's request cap and surface a
-  // raw 429 to the user. Respects a Retry-After header when present, else uses
-  // exponential backoff with jitter.
-  client.interceptors.response.use(undefined, async (error) => {
-    const config = error.config as RetryConfig | undefined
-    const status = error.response?.status as number | undefined
-    if (!config || config.__noRetry || status === undefined || !RETRY_STATUSES.has(status))
-      return Promise.reject(error)
-    config.__retryCount = (config.__retryCount ?? 0) + 1
-    if (config.__retryCount > MAX_RETRIES) return Promise.reject(error)
-    const retryAfter = Number(error.response?.headers?.['retry-after'])
-    const waitMs =
-      Number.isFinite(retryAfter) && retryAfter > 0
-        ? retryAfter * 1000
-        : Math.min(1000 * 2 ** (config.__retryCount - 1), 16_000) + Math.random() * 400
-    await new Promise((resolve) => setTimeout(resolve, waitMs))
-    return client(config)
-  })
+  client.interceptors.response.use(undefined, (error) => responseErrorHandler(client, error))
 
   return client
 }

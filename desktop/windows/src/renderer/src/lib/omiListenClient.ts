@@ -46,7 +46,8 @@ let nextSessionId = 1
 export async function startOmiListen(
   source: ListenSource,
   cb: OmiListenCallbacks,
-  mode: Extract<ListenMode, 'conversation' | 'transcribe'> = 'conversation'
+  mode: Extract<ListenMode, 'conversation' | 'transcribe'> = 'conversation',
+  clientConversationId?: string
 ): Promise<OmiListenHandle> {
   const user = auth.currentUser
   if (!user) throw new Error('Omi v4/listen requires sign-in.')
@@ -105,7 +106,8 @@ export async function startOmiListen(
       source,
       token,
       language: getPreferences().language,
-      mode
+      mode,
+      clientConversationId
     })
   } catch (e) {
     unsubMsg()

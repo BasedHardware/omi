@@ -8,6 +8,7 @@ import {
 } from './localAgentProtocol'
 import { orderFloorSections, relationshipItems, type KindedSection } from './floorContext'
 import { rankMemories } from './memoryRank'
+import { getMemoryCache, setMemoryCache } from './localAgentMemoryCache'
 import type { Memory } from '../hooks/useMemories'
 
 const AGENT_MODEL = 'claude-haiku-4-5-20251001'
@@ -35,18 +36,22 @@ type ChatCompletion = { choices?: { message?: { content?: string } }[] }
 const clip = (s: string): string =>
   s.length > MAX_MEMORY_CHARS ? `${s.slice(0, MAX_MEMORY_CHARS).trimEnd()}…` : s
 
-// Memories are the MEANING source; fetched once per session and reused.
-let memoryCache: Memory[] | null = null
+// Memories are the MEANING source; fetched once per session and reused. The cache
+// lives in localAgentMemoryCache (a leaf module) so sign-out teardown can clear it
+// without an import cycle back through firebase/apiClient.
 async function loadMemories(): Promise<Memory[]> {
-  if (memoryCache) return memoryCache
+  const cached = getMemoryCache()
+  if (cached) return cached
+  let memories: Memory[]
   try {
     const r = await omiApi.get('/v3/memories', { params: { limit: 100, offset: 0 } })
     const data = r.data as { memories?: Memory[] } | Memory[]
-    memoryCache = Array.isArray(data) ? data : (data.memories ?? [])
+    memories = Array.isArray(data) ? data : (data.memories ?? [])
   } catch {
-    memoryCache = []
+    memories = []
   }
-  return memoryCache
+  setMemoryCache(memories)
+  return memories
 }
 
 const SYSTEM_PROMPT = [
@@ -90,11 +95,13 @@ async function snapshotSections(): Promise<KindedSection[]> {
   const cards = nodes.filter((n) => n.nodeType === 'card').map((n) => n.summary)
   if (cards.length) out.push({ kind: 'overview', heading: 'Overview', items: cards })
   const tech = pick('technology')
-  if (tech.length) out.push({ kind: 'tech', heading: 'Programming languages & technologies', items: tech })
+  if (tech.length)
+    out.push({ kind: 'tech', heading: 'Programming languages & technologies', items: tech })
   const ent = nodes
     .filter((n) => ['project', 'person', 'org', 'interest'].includes(n.nodeType))
     .map((n) => `${n.label} (${n.nodeType}): ${n.summary}`)
-  if (ent.length) out.push({ kind: 'entities', heading: 'Projects, people & interests', items: ent })
+  if (ent.length)
+    out.push({ kind: 'entities', heading: 'Projects, people & interests', items: ent })
   // Tier 1: surface the labeled relationships synthesis built (macOS's signature).
   const rels = relationshipItems(nodes, graph.edges)
   if (rels.length) out.push({ kind: 'relationships', heading: 'How they relate', items: rels })
@@ -188,9 +195,15 @@ export async function gatherLocalContext(userText: string): Promise<string> {
     // the remaining sections are intent-routed so the question-relevant one comes
     // next and survives formatContextBlock's end-trimming. Agent enrichment, when
     // enabled, is appended last.
-    const overview = floor.filter((s) => s.kind === 'overview').map(({ heading, items }) => ({ heading, items }))
+    const overview = floor
+      .filter((s) => s.kind === 'overview')
+      .map(({ heading, items }) => ({ heading, items }))
     const rest = floor.filter((s) => s.kind !== 'overview')
-    return formatContextBlock([...overview, ...orderFloorSections(rest, userText), ...agentSections])
+    return formatContextBlock([
+      ...overview,
+      ...orderFloorSections(rest, userText),
+      ...agentSections
+    ])
   } catch {
     return ''
   }

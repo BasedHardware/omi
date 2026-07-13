@@ -2,27 +2,30 @@
 // the capture window — started/stopped by main's meeting monitor via
 // 'meeting-capture-start' / 'meeting-capture-stop' commands.
 //
-// ─── PHASE 3 INTEGRATION SEAM ──────────────────────────────────────────────
-// `startMeetingSession` is the single adapter between meeting detection and
-// the capture stack. It currently drives the SAME session APIs the UI's
-// screen-record mode uses (startTranscription → startOmiListen → audio-start
-// commands for the mic + system lanes) and saves a local conversation on stop,
-// mirroring useRecorder's screen path. When feat/windows-conv-sync (Phase 3)
-// lands, swap THIS FUNCTION's body for the screen-session from-segments sync
-// flow — the meeting monitor, command protocol, and MeetingSessionHost do not
-// change. One function, one call site.
+// LANE WIRING (matches useRecorder's screen path):
+//  - System (remote) lane: transcription-only ('transcribe'). It is saved LOCALLY
+//    only, so it never needs a server-side conversation — riding transcribe-stream
+//    keeps it out of the backend's racy per-uid /v4/listen conversation pointer,
+//    the same reason the screen recorder uses 'transcribe' for its system lane.
+//  - Mic lane: backend-owned /v4/listen ('conversation') — the cloud creates its
+//    own titled conversation from the mic stream. Opened here ONLY when no
+//    continuous mic session is already running.
 //
-// LOCAL-SAVE POLICY (matches useRecorder's screen path exactly): the mic lane is
-// backend-owned — the cloud creates its own titled conversation from that
-// stream — so the local "Meeting" row saves ONLY the system-audio (remote-side)
-// transcript. Saving mic lines too would duplicate the mic transcript (once
-// server-side, once local). Note for Phase 3: if the continuous-mic session is
-// already running, this mic lane opens a SECOND concurrent /v4/listen mic
-// session for the same audio (same overlap the manual screen recorder already
-// has); the from-segments sync flow that replaces this body resolves it.
-// ───────────────────────────────────────────────────────────────────────────
+// C6 (double mic-session race): if the always-on continuous mic session is
+// running, it ALREADY streams the mic to /v4/listen. Opening a second mic
+// /v4/listen for the same audio spawns a duplicate, racing conversation socket
+// (the backend coalesces same-uid conversation sockets). So the mic lane DEFERS
+// to the continuous session when `isLiveMicSessionActive()` — the meeting then
+// captures only the remote/system side. When nothing else owns the mic, the
+// meeting opens the mic lane itself.
+//
+// LOCAL-SAVE POLICY: the local "Meeting" row saves ONLY the system-audio
+// (remote-side) transcript. The mic side is backend-owned (its own cloud
+// conversation, via either the continuous session or this meeting's mic lane), so
+// saving mic lines here too would duplicate it.
 import { startTranscription, type TranscriptionHandle } from '../lib/transcriptionClient'
-import type { TranscriptLine } from '../../../shared/types'
+import { isLiveMicSessionActive } from './liveMicSession'
+import type { ListenSource, TranscriptLine } from '../../../shared/types'
 
 export type MeetingSessionHandle = {
   /** Finalize: stop both lanes and save the conversation. Resolves when saved. */
@@ -48,29 +51,44 @@ export async function startMeetingSession(args: {
   let stopped = false
 
   // Both lanes ride the normal capture path: startTranscription opens the
-  // main-process /v4/listen WS and issues the audio-start command that
-  // AudioSessionHost (this window) services with a VAD-gated stream — the mic
-  // lane feeds the backend's own conversation pipeline, the system lane
-  // carries the meeting's remote side (the only one we save locally).
-  const startLane = (source: 'mic' | 'system'): Promise<TranscriptionHandle> =>
-    startTranscription(source, {
-      onLine: (line) => {
-        if (!stopped && source === 'system') systemLines.push(line)
+  // main-process listen WS and issues the audio-start command that
+  // AudioSessionHost (this window) services with a VAD-gated stream. The system
+  // lane is transcription-only ('transcribe') and saved locally; the mic lane is
+  // backend-owned ('conversation').
+  const startLane = (
+    source: ListenSource,
+    mode: 'conversation' | 'transcribe'
+  ): Promise<TranscriptionHandle> =>
+    startTranscription(
+      source,
+      {
+        onLine: (line) => {
+          if (!stopped && source === 'system') systemLines.push(line)
+        },
+        onInterim: () => {},
+        onBackend: () => {},
+        onError: (e) => {
+          console.warn(`[meeting-session] ${source} lane error:`, e.message)
+          if (!stopped) args.onError(`${source}: ${e.message}`)
+        }
       },
-      onInterim: () => {},
-      onBackend: () => {},
-      onError: (e) => {
-        console.warn(`[meeting-session] ${source} lane error:`, e.message)
-        if (!stopped) args.onError(`${source}: ${e.message}`)
-      }
-    })
+      mode
+    )
+
+  // The remote/system side is always captured. The mic lane is opened here only
+  // if no continuous mic session already owns the mic (C6) — otherwise we'd open a
+  // second, racing /v4/listen for the same audio.
+  const lanes: { source: ListenSource; mode: 'conversation' | 'transcribe' }[] = [
+    { source: 'system', mode: 'transcribe' }
+  ]
+  if (!isLiveMicSessionActive()) lanes.push({ source: 'mic', mode: 'conversation' })
 
   // allSettled (not all): if one lane fails to start, the sibling lane has
   // ALREADY opened its WS + acquired its stream — Promise.all's reject would
   // strand that resolved handle with no reference (a hot mic with no way to
   // stop it). Collect every fulfilled handle so a failure can tear them ALL
   // down before rethrowing.
-  const results = await Promise.allSettled([startLane('mic'), startLane('system')])
+  const results = await Promise.allSettled(lanes.map((l) => startLane(l.source, l.mode)))
   const handles = results
     .filter((r): r is PromiseFulfilledResult<TranscriptionHandle> => r.status === 'fulfilled')
     .map((r) => r.value)

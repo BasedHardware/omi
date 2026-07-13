@@ -5,6 +5,7 @@ import { categorize } from '../usage/category'
 import { isNewLocalDay } from '../usage/usageDay'
 import { buildRewindSearchQuery } from '../rewind/rewindSearchQuery'
 import { addColumnIfMissing as ensureColumn, runMigrations } from './dbMigrations'
+import { wipeUserDataOn } from './dbWipe'
 import type {
   AppUsageRecord,
   ChatMessage,
@@ -382,6 +383,13 @@ export function replaceIndexedFiles(records: IndexedFileRecord[]): void {
 
 export function clearIndexedFiles(): void {
   get().prepare('DELETE FROM indexed_files').run()
+}
+
+// Clear every user-scoped table on sign-out (see dbWipe.ts for scope + rationale).
+// wipeUserDataOn lives in the better-sqlite3-free dbWipe.ts so it is unit-testable
+// under plain-node vitest, which can't load this module's Electron-ABI native dep.
+export function wipeUserData(): void {
+  wipeUserDataOn(get())
 }
 
 export function getFileIndexStats(): { filesIndexed: number; byType: Record<string, number> } {

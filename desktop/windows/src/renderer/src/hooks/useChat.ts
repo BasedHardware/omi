@@ -6,14 +6,36 @@ import { readCurrentScreen } from '../lib/screenContext'
 import { looksLikeAction, looksLikeRawPlan, planActions } from '../lib/actionPlanner'
 import { callAgentLLM } from '../lib/agentLLM'
 import { detectAgentTask, resolveTaskCwd } from '../lib/agentTask'
-import type { AutomationPlan, CodingAgentEvent } from '../../../shared/types'
+import type { AutomationPlan, CodingAgentEvent, ChatCitation } from '../../../shared/types'
 import { getPreferences } from '../lib/preferences'
+import { CHAT_INFINITE_ID_KEY } from '../lib/chatStorageKeys'
 import { resolveChatId, mergeChatMessages } from '../lib/chatConversation'
+import { parseDoneMessage, type DoneMessage } from '../lib/messagesSse'
 import { speakText } from '../lib/voice/voiceController'
 
-export type ChatMsg = { id?: string; role: 'user' | 'assistant'; content: string }
+export type ChatMsg = {
+  id?: string
+  role: 'user' | 'assistant'
+  content: string
+  // --- Finalized from the terminal `done:` SSE frame (assistant only). Mirrors
+  // the persisted ChatMessage shape so the data survives a round-trip to SQLite. ---
+  /** Server (Firestore) message id — the handle for rating/report/share. */
+  serverId?: string
+  /** Conversations the answer cited (backend already stripped `[n]` from content). */
+  citations?: ChatCitation[]
+  /** Inline chart payload, if the answer produced one (opaque — no chart UI yet). */
+  chartData?: unknown
+  /** Whether the backend flagged this turn for an NPS prompt. */
+  askForNps?: boolean
+}
 
 const OMI_BASE = import.meta.env.VITE_OMI_API_BASE as string
+
+// Hard ceiling on a single streamed reply. Mirrors the macOS client's per-send
+// watchdog (ChatProvider.swift): if the SAME generation is still in flight after
+// this long, abort the fetch, unlatch the engine, and surface a timeout so a
+// wedged stream can't strand the chat forever.
+export const CHAT_STREAM_TIMEOUT_MS = 180_000
 
 export type UseChat = {
   history: ChatMsg[]
@@ -85,10 +107,10 @@ export function useChat(): UseChat {
     chatIdRef.current = resolveChatId(
       mode,
       {
-        get: () => localStorage.getItem('omi-chat-infinite-id'),
+        get: () => localStorage.getItem(CHAT_INFINITE_ID_KEY),
         set: (id) => {
           try {
-            localStorage.setItem('omi-chat-infinite-id', id)
+            localStorage.setItem(CHAT_INFINITE_ID_KEY, id)
           } catch {
             /* private mode / quota */
           }
@@ -106,6 +128,14 @@ export function useChat(): UseChat {
   // Coding-agent task currently streaming into this thread, so reset (the
   // overlay's Esc) can actually stop the agent subprocess, not just the UI.
   const activeAgentTaskRef = useRef<string | null>(null)
+  // Generation counter + abort handle for the in-flight chat stream. Every send
+  // opens a new generation; reset()/dismiss bumps the counter AND aborts the
+  // fetch/reader, so a dismissed reply that is still draining can neither write
+  // into history/SQLite nor unlatch the busy flag out from under a newer send
+  // (the C5 zombie-reply + interleaving class). Only the `/v2/messages` stream
+  // path uses these; the agent path has its own cancel via activeAgentTaskRef.
+  const genRef = useRef(0)
+  const abortRef = useRef<AbortController | null>(null)
 
   // The single engine-busy latch. `sendingRef` is the SYNCHRONOUS mirror the
   // re-entrancy guard + infinite-load effect read; `sending` is the REACTIVE
@@ -151,7 +181,11 @@ export function useChat(): UseChat {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const persistChat = async (thread: ChatMsg[]): Promise<void> => {
+  // `stillValid`, when provided, is re-checked AFTER the async merge-read and
+  // right before the write, so a reset()/dismiss that lands mid-persist cancels
+  // the write instead of committing a dismissed (zombie) reply into the thread.
+  const persistChat = async (thread: ChatMsg[], stillValid?: () => boolean): Promise<void> => {
+    if (stillValid && !stillValid()) return
     if (!chatIdRef.current) {
       chatIdRef.current = `chat-${crypto.randomUUID()}`
     }
@@ -175,6 +209,7 @@ export function useChat(): UseChat {
     const transcript = toStore
       .map((m) => `${m.role === 'user' ? 'You' : 'Omi'}: ${m.content}`)
       .join('\n\n')
+    if (stillValid && !stillValid()) return
     try {
       await window.omi.insertLocalConversation({
         id: chatIdRef.current,
@@ -241,6 +276,14 @@ export function useChat(): UseChat {
     const detection = detectAgentTask(text)
     if (!detection) return false
 
+    // Capture this send's generation (send() bumped genRef just before calling
+    // us). reset()/dismiss bumps genRef and cancels the task, so `isCurrent()`
+    // goes false and every state write below is dropped — a dismissed agent task
+    // must not resurface its thread, steal the busy latch, or clear the orb pose
+    // out from under a newer send (same class as the streaming-path C5 guard).
+    const myGen = genRef.current
+    const isCurrent = (): boolean => genRef.current === myGen
+
     const prefs = getPreferences()
     let agents: Awaited<ReturnType<typeof window.omi.codingAgentList>>
     try {
@@ -250,9 +293,10 @@ export function useChat(): UseChat {
     }
 
     const finish = (content: string): void => {
+      if (!isCurrent()) return
       const msg: ChatMsg = { id: crypto.randomUUID(), role: 'assistant', content }
       setHistory((h) => [...h, msg])
-      void persistChat([...baseHistory, userMsg, msg])
+      void persistChat([...baseHistory, userMsg, msg], isCurrent)
       setBusy(false)
     }
 
@@ -305,6 +349,9 @@ export function useChat(): UseChat {
     let lastPersist = Date.now()
     const unsubscribe = window.omi.onCodingAgentEvent((event: CodingAgentEvent) => {
       if (event.taskId !== taskId) return
+      // A dismissed task (reset bumped the generation) drops all further renders
+      // and persists — its events keep arriving until codingAgentCancel lands.
+      if (!isCurrent()) return
       if (event.type === 'agent_selected') {
         header = event.fallback
           ? `**${event.displayName}** took over the task.`
@@ -319,11 +366,14 @@ export function useChat(): UseChat {
       render()
       if (Date.now() - lastPersist > 1500) {
         lastPersist = Date.now()
-        void persistChat([
-          ...baseHistory,
-          userMsg,
-          { id: assistantId, role: 'assistant', content: compose(false) }
-        ])
+        void persistChat(
+          [
+            ...baseHistory,
+            userMsg,
+            { id: assistantId, role: 'assistant', content: compose(false) }
+          ],
+          isCurrent
+        )
       }
     })
 
@@ -349,17 +399,24 @@ export function useChat(): UseChat {
     } catch (e) {
       statusNotes += `_Error: ${(e as Error).message}_\n`
     } finally {
+      // Cleanup that must ALWAYS run (even for a dismissed task): stop clearing a
+      // ref a newer task now owns, and release the event listener to avoid a leak.
       if (activeAgentTaskRef.current === taskId) activeAgentTaskRef.current = null
-      setAgentActive(false)
       unsubscribe()
       activity = null
-      render(true)
-      void persistChat([
-        ...baseHistory,
-        userMsg,
-        { id: assistantId, role: 'assistant', content: compose(true) }
-      ])
-      setBusy(false)
+      // State writes only for the still-current generation. A dismissed task was
+      // already torn down by reset() (busy unlatched, history cleared, orb pose
+      // dropped, subprocess cancelled) — re-running these would resurface the
+      // cancelled thread and steal the latch/pose from a newer send.
+      if (isCurrent()) {
+        setAgentActive(false)
+        render(true)
+        void persistChat(
+          [...baseHistory, userMsg, { id: assistantId, role: 'assistant', content: compose(true) }],
+          isCurrent
+        )
+        setBusy(false)
+      }
     }
     return true
   }
@@ -369,6 +426,13 @@ export function useChat(): UseChat {
     if (!text.trim() || sendingRef.current) return
     const fromVoice = !!opts?.fromVoice
     setBusy(true)
+    // Open a new generation. reset()/dismiss bumps genRef, so `isCurrent()` goes
+    // false for this send and every write it attempts thereafter is dropped —
+    // that is what stops a dismissed reply from resurfacing or unlatching a newer
+    // send (C5). Only the `/v2/messages` streaming path below checks it; the
+    // agent/plan branches finish synchronously enough to keep their own flow.
+    const myGen = ++genRef.current
+    const isCurrent = (): boolean => genRef.current === myGen
     const userMsg: ChatMsg = { id: crypto.randomUUID(), role: 'user', content: text }
     const baseHistory = history
     // Show the user's message immediately, BEFORE the (potentially ~2s) action-
@@ -415,17 +479,43 @@ export function useChat(): UseChat {
       return
     }
     const assistantId = crypto.randomUUID()
-    const buildThread = (assistant: string): ChatMsg[] => [
-      ...baseHistory,
-      userMsg,
-      { id: assistantId, role: 'assistant', content: assistant }
-    ]
-    setHistory((h) => [...h, { id: assistantId, role: 'assistant', content: '' }])
+    const assistantMsg = (content: string): ChatMsg => ({
+      id: assistantId,
+      role: 'assistant',
+      content
+    })
+    const buildThread = (assistant: ChatMsg): ChatMsg[] => [...baseHistory, userMsg, assistant]
+    // Replace the last (assistant) bubble in-place with `msg`, but only while this
+    // generation is still current — a stale reader must never touch state.
+    const renderAssistant = (msg: ChatMsg): void => {
+      if (!isCurrent()) return
+      setHistory((h) => {
+        const next = [...h]
+        next[next.length - 1] = msg
+        return next
+      })
+    }
+    setHistory((h) => [...h, assistantMsg('')])
 
-    void persistChat(buildThread(''))
+    void persistChat(buildThread(assistantMsg('')), isCurrent)
     let lastPersist = Date.now()
 
     let assistantText = ''
+    let finalMsg: ChatMsg = assistantMsg('')
+    // AbortController so reset()/dismiss tears the fetch + reader down promptly
+    // rather than leaving it draining in the background.
+    const ac = new AbortController()
+    abortRef.current = ac
+    // Per-send watchdog (macOS parity): abort a wedged stream at the deadline, but
+    // ONLY if this same generation is still current — a newer send/reset has its
+    // own controller and generation, so an earlier send's watchdog can never abort
+    // it. `timedOut` steers the catch below to the user-facing timeout message.
+    let timedOut = false
+    const watchdog = setTimeout(() => {
+      if (!isCurrent()) return
+      timedOut = true
+      ac.abort()
+    }, CHAT_STREAM_TIMEOUT_MS)
     try {
       const token = await auth.currentUser?.getIdToken()
       // Hybrid pre-step: gather context to PREPEND to the text we send (not what we
@@ -453,7 +543,8 @@ export function useChat(): UseChat {
           // Windows-appropriate answers instead of defaulting to macOS steps.
           'X-App-Platform': 'windows'
         },
-        body: JSON.stringify({ text: textToSend })
+        body: JSON.stringify({ text: textToSend }),
+        signal: ac.signal
       })
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
 
@@ -462,15 +553,23 @@ export function useChat(): UseChat {
       // leaks into the rendered reply. The backend also (a) emits ephemeral
       // "thinking" status events whose payload starts with `think:` ("Checking
       // action items", "Searching memories") — those aren't part of the reply,
-      // so drop them — and (b) encodes reply newlines as the literal token
-      // `__CRLF__` so they survive single-line SSE framing; restore those.
+      // so drop them; (b) emits a terminal `done:` frame (handled below) and an
+      // occasional `message:` frame (base64 JSON for a file-chat side message) —
+      // neither is reply text, so drop them so the raw base64 never leaks into the
+      // bubble; and (c) encodes reply newlines as the literal token `__CRLF__` so
+      // they survive single-line SSE framing; restore those.
       const parseChunk = (line: string): string | null => {
-        if (!line || line.startsWith('done:')) return null
+        if (!line || line.startsWith('done:') || line.startsWith('message:')) return null
         const content = line.startsWith('data:') ? line.slice(5).replace(/^ /, '') : line
         if (content.startsWith('think:')) return null
         return content.replace(/__CRLF__/g, '\n')
       }
 
+      // The terminal `done:` frame carries the AUTHORITATIVE final message: a
+      // base64 ResponseMessage whose text has the `[n]` citation markers stripped
+      // and which carries the server id + cited conversations + chart/NPS data.
+      // We capture it here and let it win over the streamed text (C4).
+      let donePayload: DoneMessage | null = null
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
@@ -481,28 +580,42 @@ export function useChat(): UseChat {
         const lines = buffer.split('\n')
         buffer = lines.pop() ?? ''
         for (const line of lines) {
+          if (line.startsWith('done:')) {
+            donePayload = parseDoneMessage(line) ?? donePayload
+            continue
+          }
           const chunk = parseChunk(line)
           if (chunk === null) continue
           assistantText += chunk
-          setHistory((h) => {
-            const next = [...h]
-            next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
-            return next
-          })
+          renderAssistant(assistantMsg(assistantText))
         }
-        if (Date.now() - lastPersist > 1500) {
+        if (isCurrent() && Date.now() - lastPersist > 1500) {
           lastPersist = Date.now()
-          void persistChat(buildThread(assistantText))
+          void persistChat(buildThread(assistantMsg(assistantText)), isCurrent)
         }
       }
-      const tail = parseChunk(buffer)
-      if (tail !== null) {
-        assistantText += tail
-        setHistory((h) => {
-          const next = [...h]
-          next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
-          return next
-        })
+      if (buffer.startsWith('done:')) {
+        donePayload = parseDoneMessage(buffer) ?? donePayload
+      } else {
+        const tail = parseChunk(buffer)
+        if (tail !== null) {
+          assistantText += tail
+          renderAssistant(assistantMsg(assistantText))
+        }
+      }
+      // Prefer the done payload's citation-stripped text and attach its metadata;
+      // fall back to the streamed text if the stream ended without a done frame.
+      if (donePayload) {
+        assistantText = donePayload.text || assistantText
+        finalMsg = {
+          ...assistantMsg(assistantText),
+          serverId: donePayload.id,
+          citations: donePayload.citations.length ? donePayload.citations : undefined,
+          chartData: donePayload.chartData,
+          askForNps: donePayload.askForNps || undefined
+        }
+      } else {
+        finalMsg = assistantMsg(assistantText)
       }
       // The conversational backend sometimes answers an action-intent message
       // with raw plan JSON (when it reached chat WITHOUT our planner — e.g. a
@@ -510,33 +623,48 @@ export function useChat(): UseChat {
       if (looksLikeRawPlan(assistantText)) {
         assistantText =
           'It looks like you want me to do something in an app. Phrase it as a direct command (e.g. "type report in the search box") with that app focused, and I\'ll show you a plan to approve.'
-        setHistory((h) => {
-          const next = [...h]
-          next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
-          return next
-        })
+        finalMsg = assistantMsg(assistantText)
       }
-      // Voice turn: speak the assembled reply (only on the success path — an
-      // error/partial is handled below and never spoken).
-      maybeSpeak(assistantText, fromVoice)
+      renderAssistant(finalMsg)
+      // Voice turn: speak the assembled reply (only on the success path, and only
+      // if this generation wasn't dismissed — never speak a zombie reply).
+      if (isCurrent()) maybeSpeak(assistantText, fromVoice)
     } catch (e) {
-      assistantText = `Error: ${(e as Error).message}`
-      setHistory((h) => {
-        const next = [...h]
-        next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
-        return next
-      })
+      // A reset()/dismiss aborts the fetch, which rejects here — but the generation
+      // is already stale, so we must NOT surface an error bubble for it. A watchdog
+      // timeout aborts the SAME generation, so it stays current and surfaces the
+      // macOS-parity timeout copy instead of the raw "aborted" error.
+      if (isCurrent()) {
+        assistantText = timedOut
+          ? 'Response took too long. Try again.'
+          : `Error: ${(e as Error).message}`
+        finalMsg = assistantMsg(assistantText)
+        renderAssistant(finalMsg)
+      }
     } finally {
-      setBusy(false)
-      await persistChat(buildThread(assistantText))
+      clearTimeout(watchdog)
+      if (abortRef.current === ac) abortRef.current = null
+      // Only the current generation may unlatch the busy flag and persist. A stale
+      // (dismissed) generation leaves both alone: reset() already unlatched, and a
+      // newer send may now own the latch — clobbering either would reintroduce the
+      // interleaving/zombie bug.
+      if (isCurrent()) {
+        setBusy(false)
+        await persistChat(buildThread(finalMsg), isCurrent)
+      }
     }
   }
 
   // Start a fresh thread: drop the history and forget the persisted-conversation
-  // id so the next send creates a new local conversation. A reply still streaming
-  // when this is called will keep writing into the (now-empty) history — Esc-reset
-  // mid-stream is a rare edge we don't guard against here.
+  // id so the next send creates a new local conversation.
   const reset = (): void => {
+    // Invalidate any in-flight chat generation and abort its fetch/reader. Bumping
+    // genRef makes the stale reader's `isCurrent()` false, so it can no longer
+    // write to history or SQLite or unlatch the busy flag (C5); the abort stops
+    // the reader promptly instead of leaving it draining.
+    genRef.current++
+    abortRef.current?.abort()
+    abortRef.current = null
     // Esc while an agent task is running cancels the task (aborts the attempt
     // and tears the adapter subprocess down), not just the on-screen thread.
     if (activeAgentTaskRef.current) {

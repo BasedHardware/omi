@@ -40,10 +40,13 @@ function extractList(data: unknown): Memory[] {
 // reassign it, so UI coloring must not depend on it.
 export type CreateMemoryExtra = { category?: string; tags?: string[] }
 
-// Match the server KG's build budget (it's built from up to 500 memories), so
-// the brain map can scope itself to roughly the same memory set the graph was
-// derived from rather than just the first 100. Also lets the Memories list show
-// more than one page.
+// The server ignores this `limit` at offset 0: both the legacy and canonical
+// read paths force limit to 5000 whenever offset is 0 (backend/routers/
+// memories.py), so this single call already returns up to 5000 memories —
+// comfortably past the KG's ~500-memory build budget and enough for the
+// Memories page to show more than one page's worth. The `limit: 500` value is
+// vestigial documentation of intent, not an effective cap; Memories.tsx bounds
+// what it actually renders via its own RENDER_CAP.
 async function fetchMemories(): Promise<Memory[]> {
   const r = await omiApi.get('/v3/memories', { params: { limit: 500, offset: 0 } })
   // The server doesn't return memories newest-first, so freshly created/imported
@@ -54,11 +57,36 @@ async function fetchMemories(): Promise<Memory[]> {
   )
 }
 
+// Shared by editMemory and setMemoryVisibility: both PATCH a single field and
+// send it as a QUERY param, not a JSON body — that's the backend's actual
+// contract for PATCH /v3/memories/{id}[/visibility] (see edit_memory /
+// update_memory_visibility in backend/routers/memories.py, plain `value: str`
+// function args, which FastAPI binds as query params for non-model types).
+// Optimistic; reverts the cache on failure so the UI doesn't show a save that
+// didn't happen.
+async function patchMemoryOptimistic(
+  id: string,
+  urlPath: string,
+  value: string,
+  apply: (m: Memory) => Memory
+): Promise<void> {
+  const prev = cache.list ?? []
+  publish(prev.map((m) => (m.id === id ? apply(m) : m)))
+  try {
+    await omiApi.patch(urlPath, null, { params: { value } })
+  } catch (e) {
+    publish(prev)
+    throw e
+  }
+}
+
 export function useMemories(): {
   memories: Memory[]
   loading: boolean
   error: string | null
   createMemory: (content: string, extra?: CreateMemoryExtra) => Promise<void>
+  editMemory: (id: string, content: string) => Promise<void>
+  setMemoryVisibility: (id: string, visibility: 'public' | 'private') => Promise<void>
   refresh: () => Promise<void>
 } {
   const [memories, setMemories] = useState<Memory[]>(cache.list ?? [])
@@ -113,11 +141,29 @@ export function useMemories(): {
     publish(await fetchMemories())
   }
 
+  // Edit a memory's content.
+  const editMemory = async (id: string, content: string): Promise<void> => {
+    const text = content.trim()
+    if (!text) return
+    await patchMemoryOptimistic(id, `/v3/memories/${id}`, text, (m) => ({ ...m, content: text }))
+  }
+
+  // Same query-param contract as editMemory, for PATCH /v3/memories/{id}/visibility.
+  const setMemoryVisibility = async (
+    id: string,
+    visibility: 'public' | 'private'
+  ): Promise<void> => {
+    await patchMemoryOptimistic(id, `/v3/memories/${id}/visibility`, visibility, (m) => ({
+      ...m,
+      visibility
+    }))
+  }
+
   // Re-pull the server list and broadcast to all mounts. Used after a bulk
   // import so the Memories page and export count reflect the new memories.
   const refresh = async (): Promise<void> => {
     publish(await fetchMemories())
   }
 
-  return { memories, loading, error, createMemory, refresh }
+  return { memories, loading, error, createMemory, editMemory, setMemoryVisibility, refresh }
 }

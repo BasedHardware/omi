@@ -34,18 +34,40 @@ function apiError(e: unknown): string {
   )
 }
 
+// Page through /v1/action-items following `has_more` (Mac pages at 100) instead
+// of relying on a single request with a hard cap — a hard `limit` alone silently
+// truncates users with more items than the cap. `pageCap` bounds a runaway loop
+// if the server ever reports `has_more: true` forever.
+const TASKS_PAGE_SIZE = 100
+
+async function fetchAllActionItems(pageCap = 100): Promise<ActionItem[]> {
+  const all: ActionItem[] = []
+  let offset = 0
+  for (let page = 0; page < pageCap; page++) {
+    const res = await omiApi.get('/v1/action-items', {
+      params: { limit: TASKS_PAGE_SIZE, offset }
+    })
+    const data = res.data as ActionItem[] | ActionItemsResponse
+    const batch = Array.isArray(data) ? data : (data.action_items ?? [])
+    all.push(...batch)
+    const hasMore = Array.isArray(data) ? batch.length === TASKS_PAGE_SIZE : Boolean(data.has_more)
+    if (!hasMore || batch.length === 0) break
+    offset += TASKS_PAGE_SIZE
+  }
+  return all
+}
+
 // Fetch action items plus a best-effort conversation title/emoji map for the
 // per-task source links. A failed conversations call still yields the tasks.
 async function fetchAll(): Promise<{ items: ActionItem[]; convs: Record<string, ConvMeta> }> {
   const [aiRes, convRes] = await Promise.allSettled([
-    omiApi.get('/v1/action-items', { params: { limit: 300, offset: 0 } }),
+    fetchAllActionItems(),
     omiApi.get<CloudConversation[]>('/v1/conversations', {
       params: { limit: 200, offset: 0, statuses: 'completed,processing' }
     })
   ])
   if (aiRes.status === 'rejected') throw aiRes.reason
-  const data = aiRes.value.data as ActionItem[] | ActionItemsResponse
-  const list = Array.isArray(data) ? data : (data.action_items ?? [])
+  const list = aiRes.value
 
   const map: Record<string, ConvMeta> = {}
   if (convRes.status === 'fulfilled' && Array.isArray(convRes.value.data)) {
@@ -156,8 +178,12 @@ export function Tasks(): React.JSX.Element {
     }
   }, [])
 
+  // Stale-while-revalidate: cached items (used as initial state above) render
+  // instantly, but every mount still fetches in the background — a revisit used
+  // to stick with whatever was cached on the *first* visit of the session, with
+  // no way to see updates short of the manual refresh button (Home's task
+  // widget, by contrast, refreshes on every mount + focus; see below).
   useEffect(() => {
-    if (cache.loaded) return
     let cancelled = false
     ;(async () => {
       try {
@@ -176,6 +202,17 @@ export function Tasks(): React.JSX.Element {
       cancelled = true
     }
   }, [])
+
+  // Refetch on window focus so tasks changed elsewhere (Home widget, another
+  // device) show up without a manual refresh — same freshness pattern
+  // QuickTaskWidget uses for the Home dashboard preview.
+  useEffect(() => {
+    const onFocus = (): void => {
+      void load()
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [load])
 
   const onRefresh = async (): Promise<void> => {
     if (refreshing) return

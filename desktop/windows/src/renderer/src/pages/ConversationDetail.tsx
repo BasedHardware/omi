@@ -244,11 +244,20 @@ export function ConversationDetail({
     )
     try {
       if (item.id) {
-        await omiApi.patch(`/v1/action-items/${item.id}/completed`, { completed: next })
+        // `completed` is bound as a query param on this endpoint, not a body
+        // field (backend/routers/action_items.py toggle_action_item_completion)
+        // — a JSON body is silently ignored and the missing required query
+        // param 422s.
+        await omiApi.patch(`/v1/action-items/${item.id}/completed`, null, {
+          params: { completed: next }
+        })
       } else if (id) {
+        // Embedded action items on a conversation never carry an `id` (the backend's
+        // embedded model has none) — this is the only path ever taken in practice.
+        // The backend requires parallel arrays, not a single-item shape.
         await omiApi.patch(`/v1/conversations/${id}/action-items`, {
-          action_item_idx: idx,
-          completed: next
+          items_idx: [idx],
+          values: [next]
         })
       }
     } catch (e) {
