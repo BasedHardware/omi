@@ -276,6 +276,14 @@ export function useChat(): UseChat {
     const detection = detectAgentTask(text)
     if (!detection) return false
 
+    // Capture this send's generation (send() bumped genRef just before calling
+    // us). reset()/dismiss bumps genRef and cancels the task, so `isCurrent()`
+    // goes false and every state write below is dropped — a dismissed agent task
+    // must not resurface its thread, steal the busy latch, or clear the orb pose
+    // out from under a newer send (same class as the streaming-path C5 guard).
+    const myGen = genRef.current
+    const isCurrent = (): boolean => genRef.current === myGen
+
     const prefs = getPreferences()
     let agents: Awaited<ReturnType<typeof window.omi.codingAgentList>>
     try {
@@ -285,9 +293,10 @@ export function useChat(): UseChat {
     }
 
     const finish = (content: string): void => {
+      if (!isCurrent()) return
       const msg: ChatMsg = { id: crypto.randomUUID(), role: 'assistant', content }
       setHistory((h) => [...h, msg])
-      void persistChat([...baseHistory, userMsg, msg])
+      void persistChat([...baseHistory, userMsg, msg], isCurrent)
       setBusy(false)
     }
 
@@ -340,6 +349,9 @@ export function useChat(): UseChat {
     let lastPersist = Date.now()
     const unsubscribe = window.omi.onCodingAgentEvent((event: CodingAgentEvent) => {
       if (event.taskId !== taskId) return
+      // A dismissed task (reset bumped the generation) drops all further renders
+      // and persists — its events keep arriving until codingAgentCancel lands.
+      if (!isCurrent()) return
       if (event.type === 'agent_selected') {
         header = event.fallback
           ? `**${event.displayName}** took over the task.`
@@ -354,11 +366,14 @@ export function useChat(): UseChat {
       render()
       if (Date.now() - lastPersist > 1500) {
         lastPersist = Date.now()
-        void persistChat([
-          ...baseHistory,
-          userMsg,
-          { id: assistantId, role: 'assistant', content: compose(false) }
-        ])
+        void persistChat(
+          [
+            ...baseHistory,
+            userMsg,
+            { id: assistantId, role: 'assistant', content: compose(false) }
+          ],
+          isCurrent
+        )
       }
     })
 
@@ -384,17 +399,24 @@ export function useChat(): UseChat {
     } catch (e) {
       statusNotes += `_Error: ${(e as Error).message}_\n`
     } finally {
+      // Cleanup that must ALWAYS run (even for a dismissed task): stop clearing a
+      // ref a newer task now owns, and release the event listener to avoid a leak.
       if (activeAgentTaskRef.current === taskId) activeAgentTaskRef.current = null
-      setAgentActive(false)
       unsubscribe()
       activity = null
-      render(true)
-      void persistChat([
-        ...baseHistory,
-        userMsg,
-        { id: assistantId, role: 'assistant', content: compose(true) }
-      ])
-      setBusy(false)
+      // State writes only for the still-current generation. A dismissed task was
+      // already torn down by reset() (busy unlatched, history cleared, orb pose
+      // dropped, subprocess cancelled) — re-running these would resurface the
+      // cancelled thread and steal the latch/pose from a newer send.
+      if (isCurrent()) {
+        setAgentActive(false)
+        render(true)
+        void persistChat(
+          [...baseHistory, userMsg, { id: assistantId, role: 'assistant', content: compose(true) }],
+          isCurrent
+        )
+        setBusy(false)
+      }
     }
     return true
   }

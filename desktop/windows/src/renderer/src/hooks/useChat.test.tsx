@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act, cleanup } from '@testing-library/react'
-import type { ChatMessage } from '../../../shared/types'
+import type { ChatMessage, CodingAgentEvent } from '../../../shared/types'
 
 // useChat is the app's single chat engine. These tests cover the two wiring
 // fixes: C4 — the terminal `done:` payload (citation-stripped text + server id +
@@ -25,7 +25,16 @@ vi.mock('../lib/actionPlanner', () => ({
   planActions: vi.fn()
 }))
 vi.mock('../lib/agentLLM', () => ({ callAgentLLM: vi.fn() }))
-vi.mock('../lib/agentTask', () => ({ detectAgentTask: () => null, resolveTaskCwd: vi.fn() }))
+// detectAgentTask is controllable per-test: default null (fall through to chat),
+// overridden to return a detection for the agent-task path test.
+const agentMocks = vi.hoisted(() => ({
+  detectAgentTask: vi.fn<(t: string) => { agentId?: string; prompt: string } | null>(() => null),
+  resolveTaskCwd: vi.fn(async () => '/tmp/cwd')
+}))
+vi.mock('../lib/agentTask', () => ({
+  detectAgentTask: agentMocks.detectAgentTask,
+  resolveTaskCwd: agentMocks.resolveTaskCwd
+}))
 vi.mock('../lib/preferences', () => ({
   getPreferences: () => ({
     chatHistoryMode: 'per-launch',
@@ -92,12 +101,24 @@ function makeManualStream(signal?: AbortSignal): {
 let streams: ReturnType<typeof makeManualStream>[] = []
 let signals: Array<AbortSignal | undefined> = []
 let persisted: ChatMessage[][] = []
+// Coding-agent bridge harness (agent-task path).
+let agentEventCb: ((e: CodingAgentEvent) => void) | null = null
+let agentRunTaskId: string | null = null
+let agentRunResolve: ((r: { ok: boolean; text?: string; error?: string }) => void) | null = null
+const codingAgentCancelSpy = vi.fn(async () => {})
 
 beforeEach(() => {
   vi.clearAllMocks()
   streams = []
   signals = []
   persisted = []
+  agentEventCb = null
+  agentRunTaskId = null
+  agentRunResolve = null
+  agentMocks.detectAgentTask.mockReset()
+  agentMocks.detectAgentTask.mockReturnValue(null)
+  agentMocks.resolveTaskCwd.mockReset()
+  agentMocks.resolveTaskCwd.mockResolvedValue('/tmp/cwd')
   global.fetch = vi.fn(async (_url: unknown, init?: { signal?: AbortSignal }) => {
     const s = makeManualStream(init?.signal)
     streams.push(s)
@@ -111,7 +132,24 @@ beforeEach(() => {
       // Snapshot the thread as-persisted so later mutations can't rewrite history.
       persisted.push(JSON.parse(JSON.stringify(c.messages ?? [])))
     },
-    notifyConversationsChanged: vi.fn()
+    notifyConversationsChanged: vi.fn(),
+    // Coding-agent bridge (used only by the agent-task path test).
+    codingAgentList: async () => [
+      { id: 'claude', connected: true, displayName: 'Claude', installHint: null }
+    ],
+    onCodingAgentEvent: (cb: (e: CodingAgentEvent) => void) => {
+      agentEventCb = cb
+      return () => {
+        if (agentEventCb === cb) agentEventCb = null
+      }
+    },
+    codingAgentRun: (opts: { taskId: string }) => {
+      agentRunTaskId = opts.taskId
+      return new Promise((res) => (agentRunResolve = res))
+    },
+    codingAgentCancel: codingAgentCancelSpy,
+    kgSearchFiles: async () => [],
+    kgExecuteSql: async () => ({ columns: [], rows: [] })
   }
 })
 afterEach(() => cleanup())
@@ -327,5 +365,70 @@ describe('useChat — C5 stream watchdog (180s)', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('useChat — C5 abort on reset (agent-task path)', () => {
+  it('reset during an in-flight agent task persists nothing from it and never steals the latch', async () => {
+    // First send is an agent task; later sends fall through to normal chat.
+    agentMocks.detectAgentTask.mockReturnValueOnce({ prompt: 'refactor the parser' })
+    const { result } = renderHook(() => useChat())
+
+    // Kick off the agent task (codingAgentRun stays pending until we resolve it).
+    await act(async () => {
+      void result.current.send('use an agent to refactor the parser')
+      for (let k = 0; k < 100 && !agentRunTaskId; k++) await flush()
+    })
+    expect(agentRunTaskId).toBeTruthy()
+    expect(result.current.sending).toBe(true)
+    expect(result.current.agentActive).toBe(true)
+
+    // The agent streams some output into the bubble.
+    await act(async () => {
+      agentEventCb?.({
+        taskId: agentRunTaskId as string,
+        type: 'text_delta',
+        text: 'zombie agent output'
+      } as CodingAgentEvent)
+      await flush()
+    })
+
+    // Dismiss mid-task: cancels the subprocess, clears UI, unlatches, bumps gen.
+    act(() => result.current.reset())
+    expect(codingAgentCancelSpy).toHaveBeenCalledWith(agentRunTaskId)
+    expect(result.current.sending).toBe(false)
+    expect(result.current.agentActive).toBe(false)
+    expect(result.current.history).toEqual([])
+
+    // A fresh chat send takes over and starts streaming (holds the busy latch).
+    await act(async () => {
+      void result.current.send('what is next')
+      await waitForStream(0)
+      streams[0].push('data: clean answer\n')
+      await flush()
+    })
+    expect(result.current.sending).toBe(true)
+    expect(lastAssistant(result.current.history)?.content).toBe('clean answer')
+
+    // NOW the dismissed agent run finally resolves. Its finally must NOT persist
+    // the cancelled thread, unlatch the newer send, or clear the orb pose.
+    await act(async () => {
+      agentRunResolve?.({ ok: true, text: 'zombie final answer' })
+      await flush()
+    })
+    expect(result.current.sending).toBe(true) // still owned by the chat send
+    const anyZombie = persisted.some((thread) => thread.some((m) => /zombie/i.test(m.content)))
+    expect(anyZombie).toBe(false)
+
+    // The chat send completes cleanly and owns the final state.
+    await act(async () => {
+      streams[0].push(`done: ${b64(JSON.stringify({ id: 'srv-x', text: 'clean answer' }))}\n\n`)
+      streams[0].close()
+      await flush()
+    })
+    expect(result.current.sending).toBe(false)
+    expect(lastAssistant(result.current.history)?.content).toBe('clean answer')
+    const finalThread = persisted.at(-1) as ChatMessage[]
+    expect(finalThread.some((m) => /zombie/i.test(m.content))).toBe(false)
   })
 })
