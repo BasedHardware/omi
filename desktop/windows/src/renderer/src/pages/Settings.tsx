@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { onSettingsTabRequest, consumeSettingsTabRequest } from '../lib/settingsNav'
 import { SettingsSearchProvider } from '../components/settings/SettingsSearchProvider'
 import { useSettingsSearch } from '../components/settings/searchContext'
 import { SettingsTabRail } from '../components/settings/SettingsTabRail'
@@ -37,6 +38,18 @@ function SettingsInner(): React.JSX.Element {
   const [active, setActive] = useState<SettingsTabId>('general')
   const { query, setQuery } = useSettingsSearch()
   const navigate = useNavigate()
+
+  // Deep-link consumer: callers elsewhere (e.g. the usage-limit popup's Upgrade
+  // button) request a tab via settingsNav before/after this view mounts; the
+  // buffered replay in onSettingsTabRequest covers the navigate-then-mount race.
+  useEffect(
+    () =>
+      onSettingsTabRequest((tab) => {
+        setActive(tab)
+        consumeSettingsTabRequest()
+      }),
+    []
+  )
 
   return (
     <div className="flex h-full min-h-0">
