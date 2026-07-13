@@ -17,7 +17,7 @@ import 'package:omi/utils/logger.dart';
 class ServiceManager {
   late IMicRecorderService _mic;
   late IMicRecorderService _phoneMic;
-  late IDeviceService _device;
+  late DeviceService _device;
   late ISocketService _socket;
   late IWalService _wal;
   static ServiceManager? _instance;
@@ -62,7 +62,7 @@ class ServiceManager {
   /// elsewhere. Chat voice memos and speech profile keep using [mic].
   IMicRecorderService get phoneMic => _phoneMic;
 
-  IDeviceService get device => _device;
+  DeviceService get device => _device;
 
   ISocketService get socket => _socket;
 
@@ -168,7 +168,11 @@ class BackgroundService {
     _status = BackgroundServiceStatus.initiated;
 
     await _service.configure(
-      iosConfiguration: IosConfiguration(autoStart: false, onForeground: onStart, onBackground: onIosBackground),
+      iosConfiguration: IosConfiguration(
+        autoStart: false,
+        onForeground: onStart,
+        onBackground: onIosBackground,
+      ),
       androidConfiguration: AndroidConfiguration(
         autoStart: false,
         onStart: onStart,
@@ -354,7 +358,9 @@ class MicRecorderService implements IMicRecorderService {
     Function(bool began)? onInterruption,
   }) async {
     if (_status == RecorderServiceStatus.recording) {
-      throw Exception("Recorder is recording, please stop it before start new recording.");
+      throw Exception(
+        "Recorder is recording, please stop it before start new recording.",
+      );
     }
     if (_status == RecorderServiceStatus.initialising) {
       throw Exception("Recorder is initialising");
