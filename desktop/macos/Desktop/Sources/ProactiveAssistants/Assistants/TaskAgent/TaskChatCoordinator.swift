@@ -415,7 +415,13 @@ final class TaskChatCoordinator: ObservableObject {
     // Never send this task's prompt into another task's thread.
     guard activeTaskId == task.id, let state = activeTaskState, !state.isSending else { return }
     // Stamp before sending: RecurringTaskScheduler gates re-investigation on this.
-    try? await ActionItemStorage.shared.updateAgentStartedAt(taskId: task.id, startedAt: Date())
+    try? await ActionItemStorage.shared.updateAgentStartedAt(
+      taskId: task.id,
+      startedAt: Date(),
+      authorization: LocalMutationAuthorization {
+        RuntimeOwnerIdentity.isAuthorizationCurrent(lease.authorizationSnapshot)
+      }
+    )
     await state.sendMessage(
       TaskAgentSettings.shared.buildCanonicalTaskPrompt(for: task),
       taskContext: activeContextPacket
