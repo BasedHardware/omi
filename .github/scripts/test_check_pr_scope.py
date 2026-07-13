@@ -13,8 +13,7 @@ from check_pr_scope import (
     count_production_lines,
     evaluate,
     is_production_source,
-    resolve_enforcement,
-    unquote_git_path,
+    resolve_waiver,
 )
 
 
@@ -60,65 +59,55 @@ class ClassificationTests(unittest.TestCase):
             self.assertFalse(is_production_source(path), path)
 
 
-class GitPathTests(unittest.TestCase):
-    def test_unquote_non_ascii(self) -> None:
-        self.assertEqual(unquote_git_path('"docs/weird \\303\\274.md"'), 'docs/weird ü.md')
-
-    def test_unquoted_passthrough(self) -> None:
-        self.assertEqual(unquote_git_path('backend/utils/a.py'), 'backend/utils/a.py')
-
-    def test_quoted_docs_path_is_excluded_after_unquoting(self) -> None:
-        numstat = '9\t0\t"docs/weird \\303\\274.md"\n'
-        total, per_file = count_production_lines(numstat)
-        self.assertEqual((total, per_file), (0, []))
-
-
 class CountingTests(unittest.TestCase):
     def test_counts_production_only_and_skips_binary(self) -> None:
         numstat = (
-            '10\t5\tbackend/utils/a.py\n'
-            '3\t0\tbackend/tests/unit/test_a.py\n'
-            '-\t-\tapp/assets/img.png\n'
-            '7\t2\tapp/lib/b.dart\n'
+            '10\t5\tbackend/utils/a.py\0'
+            '3\t0\tbackend/tests/unit/test_a.py\0'
+            '-\t-\tapp/assets/img.png\0'
+            '7\t2\tapp/lib/b.dart\0'
         )
         total, per_file = count_production_lines(numstat)
         self.assertEqual(total, 24)
         self.assertEqual([p for _, p in per_file], ['backend/utils/a.py', 'app/lib/b.dart'])
 
+    def test_z_records_keep_non_ascii_paths_raw_and_classified(self) -> None:
+        # With -z, git emits the real filename (no C-quoting), so suffix
+        # excludes match non-ASCII names.
+        numstat = '9\t0\tdocs/weird ü.md\0'
+        self.assertEqual(count_production_lines(numstat), (0, []))
+
 
 class EnforcementTests(unittest.TestCase):
-    def test_thresholds_and_label_override(self) -> None:
+    def test_thresholds_label_and_waiver(self) -> None:
         cases = [
-            (100, set(), True, 0, '::notice'),
-            (WARN_LINES, set(), True, 0, '::warning'),
-            (FAIL_LINES, set(), True, 1, '::error'),
-            (FAIL_LINES, {OVERRIDE_LABEL}, True, 0, '::notice'),
-            (FAIL_LINES, {'unrelated'}, True, 1, '::error'),
-            (FAIL_LINES, set(), False, 0, '::notice'),
+            (100, set(), None, 0, '::notice'),
+            (WARN_LINES, set(), None, 0, '::warning'),
+            (WARN_LINES, {OVERRIDE_LABEL}, None, 0, '::notice'),  # label silences the warn tier
+            (WARN_LINES, set(), 'push event', 0, '::notice'),
+            (FAIL_LINES, set(), None, 1, '::error'),
+            (FAIL_LINES, {OVERRIDE_LABEL}, None, 0, '::notice'),
+            (FAIL_LINES, {'unrelated'}, None, 1, '::error'),
+            (FAIL_LINES, set(), 'push event', 0, '::notice'),
         ]
-        for total, labels, enforce, want_code, want_prefix in cases:
-            message, code = evaluate(total, labels, enforce=enforce, enforce_reason='test')
-            self.assertEqual(code, want_code, (total, labels, enforce))
+        for total, labels, waiver, want_code, want_prefix in cases:
+            message, code = evaluate(total, labels, waiver_reason=waiver)
+            self.assertEqual(code, want_code, (total, labels, waiver))
             self.assertTrue(message.startswith(want_prefix), message)
 
-    def test_revert_body_disables_enforcement(self) -> None:
-        enforce, reason = resolve_enforcement('Reverts BasedHardware/omi#8429', {})
-        self.assertFalse(enforce)
-        self.assertIn('revert', reason)
+    def test_push_event_waives(self) -> None:
+        self.assertIn('push', resolve_waiver({'GITHUB_EVENT_NAME': 'push'}) or '')
 
-    def test_non_revert_body_enforces(self) -> None:
-        enforce, _ = resolve_enforcement('Fixes the thing. See #123.', {})
-        self.assertTrue(enforce)
+    def test_local_env_override_waives(self) -> None:
+        self.assertIn(LOCAL_OVERRIDE_ENV, resolve_waiver({LOCAL_OVERRIDE_ENV: '1'}) or '')
 
-    def test_push_event_disables_enforcement(self) -> None:
-        enforce, reason = resolve_enforcement('', {'GITHUB_EVENT_NAME': 'push'})
-        self.assertFalse(enforce)
-        self.assertIn('push', reason)
+    def test_pull_request_event_enforces(self) -> None:
+        self.assertIsNone(resolve_waiver({'GITHUB_EVENT_NAME': 'pull_request'}))
 
-    def test_local_env_override_disables_enforcement(self) -> None:
-        enforce, reason = resolve_enforcement('', {LOCAL_OVERRIDE_ENV: '1'})
-        self.assertFalse(enforce)
-        self.assertIn(LOCAL_OVERRIDE_ENV, reason)
+    def test_no_author_editable_waiver_exists(self) -> None:
+        # The waiver must come from maintainer-controlled signals only
+        # (label, env, event type) — never from PR body/title text.
+        self.assertIsNone(resolve_waiver({}))
 
 
 if __name__ == '__main__':

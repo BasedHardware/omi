@@ -15,15 +15,16 @@ l10n, lockfiles, and generated files):
 - >= WARN_LINES:  warning annotation — consider splitting.
 - >= FAIL_LINES:  check fails. Split the PR, or a maintainer applies the
   ``scope-approved`` label (label events re-trigger CI). Local lane: export
-  ``OMI_SCOPE_APPROVED=1`` to acknowledge and push.
-- Revert PRs (body carries GitHub's ``Reverts owner/repo#N`` marker) are
-  notice-only: AGENTS.md requires reverts to merge immediately.
+  ``OMI_SCOPE_APPROVED=1`` to acknowledge and push. Emergency reverts use the
+  same overrides — an author-editable signal (body/title text) must not be
+  able to waive a maintainer-controlled gate.
 - ``push`` events (post-merge main) are notice-only: there is nothing left
   to gate.
 
 Diffing matches ``scripts/changed-files`` policy: ``--no-renames``, so a moved
-file cannot escape classification via rename notation, and quoted non-ASCII
-paths are unquoted before classification.
+file cannot escape classification via rename notation (a pure move therefore
+counts both sides — the label/env override is the escape), and ``-z`` output
+keeps non-ASCII paths raw.
 
 Runs from the checks manifest (local + ci lanes). Stdlib-only.
 """
@@ -36,15 +37,11 @@ import os
 import re
 import subprocess
 import sys
-from pathlib import Path
 
 WARN_LINES = 1500
 FAIL_LINES = 3000
 OVERRIDE_LABEL = 'scope-approved'
 LOCAL_OVERRIDE_ENV = 'OMI_SCOPE_APPROVED'
-
-# GitHub's auto-generated revert PR body ("Reverts owner/repo#123").
-_REVERT_BODY_RE = re.compile(r'^Reverts \S+/\S+#\d+', re.MULTILINE)
 
 # Paths whose churn does not count toward reviewable production source.
 # Covers every test convention present in this repo: Python/Dart (tests/,
@@ -78,31 +75,22 @@ _EXCLUDED_PATTERNS = (
 _EXCLUDED_RE = re.compile('|'.join(f'(?:{p})' for p in _EXCLUDED_PATTERNS))
 
 
-def unquote_git_path(path: str) -> str:
-    """Undo git's C-style quoting of non-ASCII paths (core.quotePath default)."""
-    if len(path) >= 2 and path.startswith('"') and path.endswith('"'):
-        inner = path[1:-1]
-        decoded = inner.encode('latin-1', 'backslashreplace').decode('unicode_escape')
-        return decoded.encode('latin-1', 'replace').decode('utf-8', 'replace')
-    return path
-
-
 def is_production_source(path: str) -> bool:
     return not _EXCLUDED_RE.search(path)
 
 
 def count_production_lines(numstat_output: str) -> tuple[int, list[tuple[int, str]]]:
-    """Sum added+deleted lines over production-source files from `git diff --numstat`."""
+    """Sum added+deleted lines over production files from `git diff --numstat -z` output."""
     total = 0
     per_file: list[tuple[int, str]] = []
-    for line in numstat_output.splitlines():
-        parts = line.split('\t')
+    # -z records: "added\tdeleted\tpath\0" with the path raw (no C-quoting).
+    for record in numstat_output.split('\0'):
+        parts = record.split('\t')
         if len(parts) != 3:
             continue
         added, deleted, path = parts
         if added == '-' or deleted == '-':  # binary
             continue
-        path = unquote_git_path(path)
         if not is_production_source(path):
             continue
         changed = int(added) + int(deleted)
@@ -112,19 +100,15 @@ def count_production_lines(numstat_output: str) -> tuple[int, list[tuple[int, st
     return total, per_file
 
 
-def evaluate(total: int, labels: set[str], *, enforce: bool = True, enforce_reason: str = '') -> tuple[str, int]:
-    """Return (github annotation line, exit code)."""
+def evaluate(total: int, labels: set[str], *, waiver_reason: str | None = None) -> tuple[str, int]:
+    """Return (github annotation line, exit code). waiver_reason=None means enforce."""
+    if OVERRIDE_LABEL in labels:
+        waiver_reason = waiver_reason or f"'{OVERRIDE_LABEL}' label"
     if total >= FAIL_LINES:
-        if OVERRIDE_LABEL in labels:
-            return (
-                f"::notice title=PR scope::{total} changed production-source lines >= {FAIL_LINES}; "
-                f"allowed by '{OVERRIDE_LABEL}' label.",
-                0,
-            )
-        if not enforce:
+        if waiver_reason:
             return (
                 f'::notice title=PR scope::{total} changed production-source lines >= {FAIL_LINES}; '
-                f'not enforced: {enforce_reason}.',
+                f'allowed: {waiver_reason}.',
                 0,
             )
         return (
@@ -135,6 +119,12 @@ def evaluate(total: int, labels: set[str], *, enforce: bool = True, enforce_reas
             1,
         )
     if total >= WARN_LINES:
+        if waiver_reason:
+            return (
+                f'::notice title=PR scope::{total} changed production-source lines >= {WARN_LINES}; '
+                f'allowed: {waiver_reason}.',
+                0,
+            )
         return (
             f"::warning title=PR scope::{total} changed production-source lines >= {WARN_LINES}. "
             f"Consider splitting; historically PRs above this size shipped regressions.",
@@ -143,33 +133,38 @@ def evaluate(total: int, labels: set[str], *, enforce: bool = True, enforce_reas
     return (f'::notice title=PR scope::{total} changed production-source lines (limit {FAIL_LINES}).', 0)
 
 
-def resolve_enforcement(pr_body: str, environ: dict[str, str]) -> tuple[bool, str]:
-    """Decide whether the fail threshold is enforced for this invocation."""
+def resolve_waiver(environ: dict[str, str]) -> str | None:
+    """Non-None reason means the fail/warn tiers are waived for this invocation."""
     if environ.get('GITHUB_EVENT_NAME', '') == 'push':
-        return False, 'push event (already merged; nothing to gate)'
-    if _REVERT_BODY_RE.search(pr_body):
-        return False, 'revert PR (AGENTS.md: reverts merge immediately)'
+        return 'push event (already merged; nothing to gate)'
     if environ.get(LOCAL_OVERRIDE_ENV) == '1':
-        return False, f'{LOCAL_OVERRIDE_ENV}=1 override'
-    return True, ''
+        return f'{LOCAL_OVERRIDE_ENV}=1 override'
+    return None
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--base', required=True, help='diff base ref/sha (merge-base diff: base...HEAD)')
+    parser.add_argument('--base', required=True, help='diff base (pre-resolved to the merge-base by run_checks.py)')
+    parser.add_argument('--head', default='HEAD', help='diff head ref/sha')
     parser.add_argument('--labels-json', default='[]', help='JSON array of PR label names')
-    parser.add_argument('--pr-body-file', default='', help='path to the PR body text (revert detection)')
     args = parser.parse_args()
 
     # --no-renames mirrors scripts/changed-files: a moved file must not escape
-    # classification via rename notation ("dir/{old => new}").
-    numstat = subprocess.run(
-        ['git', 'diff', '--numstat', '--no-renames', f'{args.base}...HEAD'],
+    # classification via rename notation ("dir/{old => new}"); -z keeps
+    # non-ASCII paths raw instead of C-quoted.
+    diff = subprocess.run(
+        ['git', 'diff', '--numstat', '--no-renames', '-z', f'{args.base}...{args.head}'],
         capture_output=True,
         text=True,
-        check=True,
-    ).stdout
-    total, per_file = count_production_lines(numstat)
+        check=False,
+    )
+    if diff.returncode != 0:
+        print(
+            f'::error title=PR scope::git diff {args.base}...{args.head} failed '
+            f'(is the base fetched?): {diff.stderr.strip()}'
+        )
+        return 1
+    total, per_file = count_production_lines(diff.stdout)
 
     try:
         labels = {str(label) for label in json.loads(args.labels_json)}
@@ -177,15 +172,9 @@ def main() -> int:
         print(f'::warning title=PR scope::could not parse --labels-json {args.labels_json!r}; ignoring labels.')
         labels = set()
 
-    pr_body = ''
-    if args.pr_body_file and Path(args.pr_body_file).is_file():
-        pr_body = Path(args.pr_body_file).read_text(encoding='utf-8', errors='replace')
-
-    enforce, enforce_reason = resolve_enforcement(pr_body, dict(os.environ))
-
     for changed, path in per_file[:10]:
         print(f'  {changed:>6}  {path}')
-    message, code = evaluate(total, labels, enforce=enforce, enforce_reason=enforce_reason)
+    message, code = evaluate(total, labels, waiver_reason=resolve_waiver(dict(os.environ)))
     print(message)
     return code
 
