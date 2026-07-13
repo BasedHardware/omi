@@ -81,19 +81,51 @@ export async function responseErrorHandler(
   return client(config)
 }
 
+// Real app version, resolved once at startup from the main process (app:get-version
+// IPC). apiClient is imported at module load — long before that async call lands —
+// so the interceptor reads this lazily and simply omits X-App-Version until it's
+// known, never blocking a request on it. The backend version-gates features on the
+// (platform, version) pair, so an absent version is treated as an unknown one.
+let appVersion: string | undefined
+
+/** Record the resolved app version so the interceptor stamps X-App-Version.
+ *  Exported as the startup hook and the test seam. */
+export function setAppVersion(version: string | undefined): void {
+  appVersion = version
+}
+
+/**
+ * Stamp the platform-identity headers the backend version-gates features on.
+ * Both are applied here (not just as axios `create` defaults) so every outgoing
+ * request carries the pair and a single unit test can pin them. X-App-Version is
+ * omitted until the async version lookup lands — never blocks a request.
+ */
+export function applyPlatformHeaders<T extends InternalAxiosRequestConfig>(config: T): T {
+  config.headers['X-App-Platform'] = 'windows'
+  if (appVersion) config.headers['X-App-Version'] = appVersion
+  return config
+}
+
+// Fire the one-time version lookup. Fire-and-forget: any request issued before it
+// resolves just goes out without X-App-Version (see applyPlatformHeaders). Guarded
+// on `window` so importing this module in a non-renderer context (tests) is inert.
+if (typeof window !== 'undefined') {
+  void window.omi
+    ?.getAppVersion?.()
+    .then((v) => setAppVersion(v?.version))
+    .catch(() => {})
+}
+
 function makeClient(baseURL: string): AxiosInstance {
   // 12s is enough for normal Omi responses and short enough that a stuck
   // request doesn't lock the UI in a perpetual loading state.
-  const client = axios.create({
-    baseURL,
-    timeout: 12_000,
-    // Platform tag on every request — same convention as the macOS/Flutter
-    // clients (their shared header builders), so the backend can give
-    // Windows-appropriate answers and attribute quota correctly.
-    headers: { 'X-App-Platform': 'windows' }
-  })
+  const client = axios.create({ baseURL, timeout: 12_000 })
 
   client.interceptors.request.use(async (config) => {
+    // Platform + version tag on every request — same convention as the macOS/
+    // Flutter clients (their shared header builders), so the backend can give
+    // Windows-appropriate answers, version-gate features, and attribute quota.
+    applyPlatformHeaders(config)
     const user = auth.currentUser
     if (user) {
       const token = await user.getIdToken()

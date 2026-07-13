@@ -15,7 +15,9 @@ vi.mock('./authSession', () => ({
   forceReauth: h.forceReauth
 }))
 
-import { responseErrorHandler } from './apiClient'
+import { applyPlatformHeaders, responseErrorHandler, setAppVersion } from './apiClient'
+
+type HeaderConfig = { headers: Record<string, unknown> }
 
 // A stand-in axios instance: records the retried request and echoes success.
 function fakeClient() {
@@ -118,5 +120,30 @@ describe('responseErrorHandler — 401 handling', () => {
     ).rejects.toBeDefined()
     expect(calls).toHaveLength(0)
     expect(h.forceReauth).not.toHaveBeenCalled()
+  })
+})
+
+describe('applyPlatformHeaders — platform identity headers', () => {
+  afterEach(() => setAppVersion(undefined)) // reset the module-level version
+
+  it('always stamps X-App-Platform: windows', () => {
+    const config = { headers: {} } as unknown as HeaderConfig
+    applyPlatformHeaders(config as never)
+    expect(config.headers['X-App-Platform']).toBe('windows')
+  })
+
+  it('pins BOTH platform and version once the app version is known', () => {
+    setAppVersion('0.11.324')
+    const config = { headers: {} } as unknown as HeaderConfig
+    applyPlatformHeaders(config as never)
+    expect(config.headers['X-App-Platform']).toBe('windows')
+    expect(config.headers['X-App-Version']).toBe('0.11.324')
+  })
+
+  it('omits X-App-Version until the version resolves (never blocks a request)', () => {
+    const config = { headers: {} } as unknown as HeaderConfig
+    applyPlatformHeaders(config as never)
+    expect(config.headers['X-App-Platform']).toBe('windows')
+    expect('X-App-Version' in config.headers).toBe(false)
   })
 })
