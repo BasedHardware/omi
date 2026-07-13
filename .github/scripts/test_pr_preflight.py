@@ -65,7 +65,7 @@ class MetadataTests(unittest.TestCase):
 class SelectionTests(unittest.TestCase):
     def test_pre_push_wrapper_reuses_current_bash_interpreter(self) -> None:
         wrapper = PRE_PUSH_SINGLEFLIGHT.read_text(encoding="utf-8")
-        self.assertIn("exec python3 -X utf8 ", wrapper)
+        self.assertIn("export PYTHONUTF8=1\nexec python3 ", wrapper)
         self.assertIn(' -- "$BASH" scripts/pre-push "$@"', wrapper)
 
     def test_make_preflight_resolves_pr_metadata_before_running_checks(self) -> None:
@@ -79,7 +79,7 @@ class SelectionTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn(
-            "python3 .github/scripts/pr_preflight.py --lane local --base origin/main",
+            "PYTHONUTF8=1 python3 .github/scripts/pr_preflight.py --lane local --base origin/main",
             result.stdout,
         )
 
