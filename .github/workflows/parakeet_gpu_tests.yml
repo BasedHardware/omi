@@ -263,7 +263,7 @@ jobs:
 
       - name: Wait for job completion
         run: |
-          echo "Waiting for GPU test job to complete (timeout: 30 min)..."
+          echo "Waiting for GPU test job to complete (timeout: 45 min)..."
           kubectl -n ${{ env.NAMESPACE }} wait --for=condition=complete \
             --timeout=2700s job/${{ env.JOB_NAME }} 2>&1 || true
 
