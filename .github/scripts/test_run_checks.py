@@ -38,7 +38,10 @@ def deterministic_workflow_references(workflows_dir: Path) -> set[str]:
             path = match.group("path")
             name = Path(path).name
             if (
-                (path.startswith(".github/scripts/") and (name.startswith(("check_", "check-")) or name.endswith("-count.py")))
+                (
+                    path.startswith(".github/scripts/")
+                    and (name.startswith(("check_", "check-")) or name.endswith("-count.py"))
+                )
                 or (path.startswith("backend/scripts/") and name.startswith(("scan_", "check_")))
                 or (path.startswith("desktop/macos/scripts/") and name.startswith(("check_", "check-")))
             ):
@@ -101,6 +104,28 @@ class RunnerBehaviorTests(unittest.TestCase):
         for lane in ("local", "ci"):
             selected = {check.id for check in resolve_checks(manifest, changed, lane)}
             self.assertIn("backend-route-policy-baseline", selected)
+
+    def test_labels_json_placeholder_is_substituted(self) -> None:
+        from run_checks import command_for_check
+
+        check = Check(
+            "labels",
+            ("python3", "x.py", "--labels-json", "{labels_json}", "--base", "{base}"),
+            ("all",),
+            ("ci",),
+            "fixture",
+        )
+        command = command_for_check(
+            check,
+            changed_files_path=Path("cf.txt"),
+            base="abc123",
+            head="HEAD",
+            pr_body_file=Path("body.txt"),
+            skip_changelog=False,
+            labels_json='["scope-approved"]',
+        )
+        self.assertEqual(command[3], '["scope-approved"]')
+        self.assertEqual(command[5], "abc123")
 
     def test_failure_is_propagated(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
