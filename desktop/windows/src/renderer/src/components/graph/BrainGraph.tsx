@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, Billboard, Text, Line } from '@react-three/drei'
 import * as THREE from 'three'
@@ -451,11 +451,16 @@ export function BrainGraph({
     onVisibleChangeRef.current?.(showCanvas)
   }, [showCanvas])
 
+  // Stable identity (reads onVisibleChangeRef, never the raw prop) so passing
+  // it to useWebglRecovery doesn't re-run that hook's effect every render.
+  const handleContextLost = useCallback(() => onVisibleChangeRef.current?.(false), [])
+
   // Remount the canvas subtree on webglcontextlost so a GPU-process crash
   // (SwiftShader included) yields a fresh context instead of Chromium's
   // broken-image placeholder. Covers direct mounts (Onboarding) that bypass
-  // LazyBrainGraph's own recovery wrapper.
-  const recoveryKey = useWebglRecovery(hostRef)
+  // LazyBrainGraph's own recovery wrapper. onContextLost reports the loss to
+  // the caller (e.g. Memories.tsx) immediately, ahead of the debounced remount.
+  const recoveryKey = useWebglRecovery(hostRef, handleContextLost)
 
   return (
     <div ref={hostRef} className="absolute inset-0">
@@ -469,19 +474,7 @@ export function BrainGraph({
         dpr={[1, 2]}
         frameloop={frameLoop}
         gl={{ antialias: true, alpha: true }}
-        onCreated={(state) => {
-          // A lost WebGL context (GPU crash/reset — more likely under dev's
-          // forced software rendering, but not exclusive to it) otherwise
-          // leaves the canvas showing whatever the browser draws for a dead
-          // context instead of our content, with nothing here to notice or
-          // recover. This can't un-lose the context, but it lets a caller
-          // (e.g. Memories.tsx's onVisibleChange wiring) fall back to its own
-          // loading/placeholder state instead of leaving that up.
-          state.gl.domElement.addEventListener('webglcontextlost', () => {
-            onVisibleChangeRef.current?.(false)
-          })
-          onReady?.()
-        }}
+        onCreated={() => onReady?.()}
       >
         <GraphScene
           graph={graph}

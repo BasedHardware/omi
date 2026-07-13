@@ -31,6 +31,7 @@ import type {
   CodingAgentId,
   CodingAgentRunArgs
 } from '../shared/types'
+import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
 
 const omi: OmiBridgeApi = {
   getCaptureSources: () => ipcRenderer.invoke('capture:getSources'),
@@ -54,8 +55,8 @@ const omi: OmiBridgeApi = {
   },
   onGpuContextLost: (cb: () => void) => {
     const listener = (): void => cb()
-    ipcRenderer.on('gpu:context-lost', listener)
-    return () => ipcRenderer.removeListener('gpu:context-lost', listener)
+    ipcRenderer.on(GPU_CONTEXT_LOST_CHANNEL, listener)
+    return () => ipcRenderer.removeListener(GPU_CONTEXT_LOST_CHANNEL, listener)
   },
   listenStart: (args: ListenStartArgs) => ipcRenderer.invoke('omi-listen:start', args),
   listenStop: (sessionId: string) => ipcRenderer.invoke('omi-listen:stop', sessionId),

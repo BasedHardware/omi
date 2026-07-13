@@ -3,9 +3,10 @@
 // register/rebind/suspend/resume implementation. Public API is preserved for
 // callers (overlay/ipc.ts, index.ts) and the existing tests.
 import { createShortcutSlot } from '../shortcuts'
+import { DEFAULT_SUMMON_HOTKEY } from '../../shared/hotkeyDefaults'
 
 /** Default summon shortcut. User-rebindable during onboarding (and persisted). */
-export const OVERLAY_ACCELERATOR = 'Shift+Space'
+export const OVERLAY_ACCELERATOR = DEFAULT_SUMMON_HOTKEY
 
 const slot = createShortcutSlot(OVERLAY_ACCELERATOR)
 

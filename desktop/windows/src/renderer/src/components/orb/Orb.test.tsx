@@ -57,15 +57,72 @@ describe('Orb — WebGL-unavailable resilience', () => {
   })
 
   it('remounts a fresh canvas when the context is lost after build (no frozen/broken orb)', () => {
-    const { container } = render(<Orb size={26} state="idle" />)
-    const first = container.querySelector('canvas') as HTMLCanvasElement
-    // A GPU-process reset fires webglcontextlost on the live canvas. Without the
-    // recovery handler getContext() keeps returning the dead context → a frozen
-    // tiny orb; the fix remounts a brand-new canvas element (keyed on retryNonce).
-    act(() => {
-      first.dispatchEvent(new Event('webglcontextlost', { cancelable: true }))
-    })
-    const next = container.querySelector('canvas') as HTMLCanvasElement
-    expect(next).not.toBe(first)
+    // Recovery now goes through the shared useWebglRecovery hook (debounced),
+    // so the remount lands after its debounce window rather than synchronously.
+    vi.useFakeTimers()
+    try {
+      const { container } = render(<Orb size={26} state="idle" />)
+      const first = container.querySelector('canvas') as HTMLCanvasElement
+      // A GPU-process reset fires webglcontextlost on the live canvas. Without the
+      // recovery handler getContext() keeps returning the dead context → a frozen
+      // tiny orb; the fix remounts a brand-new canvas element.
+      act(() => {
+        first.dispatchEvent(new Event('webglcontextlost', { cancelable: true }))
+      })
+      // Static mark reappears immediately (ahead of the debounced remount).
+      expect(container.querySelector('img')).not.toBeNull()
+      act(() => vi.advanceTimersByTime(700))
+      const next = container.querySelector('canvas') as HTMLCanvasElement
+      expect(next).not.toBe(first)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('caps remounts on a context-loss storm so recovery cannot remount unbounded', async () => {
+    // Isolate from the construction-retry loop: jsdom always fails REAL WebGL2
+    // construction, which on its own remounts a new canvas every ORB_RETRY_MS
+    // and would confound a canvas-identity count. Stub OrbAnimator to succeed so
+    // the only remounts here come from useWebglRecovery's context-loss recovery
+    // (RECOVER_MAX=4 per RECOVER_WINDOW_MS) — the thing under test.
+    vi.resetModules()
+    /* eslint-disable @typescript-eslint/no-empty-function -- no-op OrbAnimator stub */
+    vi.doMock('../../orb/orbAnimator', () => ({
+      OrbAnimator: class {
+        dispose(): void {}
+        setState(): void {}
+        setSpeechActive(): void {}
+        setVisible(): void {}
+        summon(): void {}
+        setAmplitude(): void {}
+      }
+    }))
+    /* eslint-enable @typescript-eslint/no-empty-function */
+    const { Orb: IsolatedOrb } = await import('./Orb')
+    vi.useFakeTimers()
+    try {
+      const { container } = render(<IsolatedOrb size={26} state="idle" />)
+      const canvases = new Set<HTMLCanvasElement>()
+      for (let i = 0; i < 8; i++) {
+        const current = container.querySelector('canvas') as HTMLCanvasElement
+        canvases.add(current)
+        // Async + advanceTimersByTimeAsync so the MutationObserver microtask that
+        // rebinds useWebglRecovery's listener to the just-remounted canvas gets a
+        // chance to run before the next iteration's dispatch (plain
+        // advanceTimersByTime never yields to the microtask queue, so the
+        // listener would stay stuck on the very first canvas).
+        await act(async () => {
+          current.dispatchEvent(new Event('webglcontextlost', { cancelable: true }))
+          await vi.advanceTimersByTimeAsync(700)
+        })
+      }
+      // Bounded to the cap: the original canvas plus at most 4 recoveries (5
+      // total), never one remount per loss (8).
+      expect(canvases.size).toBe(5)
+    } finally {
+      vi.useRealTimers()
+      vi.doUnmock('../../orb/orbAnimator')
+      vi.resetModules()
+    }
   })
 })

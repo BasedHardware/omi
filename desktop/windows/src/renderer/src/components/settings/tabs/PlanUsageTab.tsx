@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { useSearchableRow } from '../searchContext'
 import { toast } from '../../../lib/toast'
+import { BillingCard } from '../billing/BillingCard'
 import { CurrentPlanCard } from '../billing/CurrentPlanCard'
 import { ChatUsageCard } from '../billing/ChatUsageCard'
 import { OverageCard } from '../billing/OverageCard'
@@ -197,34 +198,30 @@ export function PlanUsageTab(): React.JSX.Element {
       />
 
       {subscription.deprecated ? (
-        <div className="surface-card border border-amber-400/25 p-5">
-          <div className="flex items-start gap-3.5">
-            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-400/10">
-              <AlertTriangle className="h-[18px] w-[18px] text-amber-400" strokeWidth={1.9} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-[15px] font-semibold text-text-primary">Plan Retiring</div>
-              <p className="mt-1 text-sm text-text-tertiary">
-                {subscription.deprecation_message ??
-                  'Your Unlimited plan is being retired. Try the new Operator plan — same great features at $49/mo.'}
-              </p>
-            </div>
-            {showCatalog ? (
-              <button onClick={jumpToOperator} className="btn-ghost ml-2 shrink-0">
+        <BillingCard
+          icon={AlertTriangle}
+          iconTone="amber"
+          className="border border-amber-400/25"
+          title="Plan Retiring"
+          subtitle={
+            subscription.deprecation_message ??
+            'Your Unlimited plan is being retired. Try the new Operator plan — same great features at $49/mo.'
+          }
+          trailing={
+            showCatalog ? (
+              <button onClick={jumpToOperator} className="btn-ghost">
                 Try Operator
               </button>
-            ) : null}
-          </div>
-        </div>
+            ) : undefined
+          }
+        />
       ) : null}
 
       {quota ? <ChatUsageCard quota={quota} isOveragePlan={isOveragePlan} /> : null}
 
       {overage?.is_overage_plan ? <OverageCard overage={overage} /> : null}
 
-      {trial && isTrialActive(trial) ? (
-        <TrialCard trial={trial} onViewPlans={jumpToOperator} />
-      ) : trial?.trial_expired ? (
+      {trial && (isTrialActive(trial) || trial.trial_expired) ? (
         <TrialCard trial={trial} onViewPlans={jumpToOperator} />
       ) : null}
 

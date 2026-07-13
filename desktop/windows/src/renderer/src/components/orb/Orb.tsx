@@ -3,10 +3,11 @@
 // OrbAnimator (self-throttled rAF: 30fps idle / 60fps active / 0fps hidden)
 // and wires REAL app signals: state, speech activity (PTT capturing / VAD
 // gate), and a live amplitude source sampled while speech is active.
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { OrbAnimator } from '../../orb/orbAnimator'
 import { ORB_PRESETS, DEFAULT_ORB_PARAMS, type OrbState } from '../../orb/choreography'
 import type { WaveformSource } from '../../../../shared/types'
+import { useWebglRecovery } from '../../lib/useWebglRecovery'
 import omiLogo from '../../assets/omi-logo.png'
 
 // WebGL/SwiftShader can be transiently unavailable while the GPU process spins up
@@ -89,6 +90,7 @@ export function Orb({
 }: OrbProps): React.JSX.Element {
   const cssW = width ?? size
   const cssH = height ?? size
+  const hostRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animatorRef = useRef<OrbAnimator | null>(null)
   // The orb reveals only once its WebGL animator is built; until then the static
@@ -101,6 +103,20 @@ export function Orb({
   const sourceRef = useRef(amplitudeSource)
   // eslint-disable-next-line react-hooks/refs -- latest-ref for the sampling interval
   sourceRef.current = amplitudeSource
+
+  // Runtime context-loss recovery, via the same shared hook BrainGraph uses.
+  // A context lost AFTER a successful build (GPU-process crash / SwiftShader
+  // reset — SwiftShader lives in the GPU process even with hardware accel off)
+  // fires `webglcontextlost` and leaves this element with a dead context that
+  // getContext() can never revive, i.e. a frozen/broken tiny orb. The hook
+  // debounces and caps remounts (a GPU crash-loop must not remount the orb
+  // unbounded); onContextLost drops to the static mark immediately, on every
+  // loss, ahead of the debounced/capped remount itself. The hook's
+  // MutationObserver tracks whatever canvas currently lives under hostRef, so
+  // it tolerates the canvas being replaced by retryNonce too.
+  // Stable identity so it doesn't re-run the hook's effect on every render.
+  const handleContextLost = useCallback(() => setReady(false), [])
+  const recoveryKey = useWebglRecovery(hostRef, handleContextLost)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -150,27 +166,7 @@ export function Orb({
       animatorRef.current = null
       animator?.dispose()
     }
-  }, [cssW, cssH, preset, retryNonce])
-
-  // Runtime context-loss recovery. The build effect above only retries when
-  // CONSTRUCTION fails (WebGL not up yet); a context lost AFTER a successful
-  // build (GPU-process crash / SwiftShader reset — SwiftShader lives in the GPU
-  // process even with hardware accel off) fires `webglcontextlost` and leaves
-  // this element with a dead context that getContext() can never revive, i.e. a
-  // frozen/broken tiny orb. Drop to the static mark and remount a fresh canvas
-  // (retryNonce is the canvas key), reusing the same recovery the retry path
-  // uses. Re-attaches per canvas via the retryNonce dep.
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const onContextLost = (e: Event): void => {
-      e.preventDefault()
-      setReady(false)
-      setRetryNonce((n) => n + 1)
-    }
-    canvas.addEventListener('webglcontextlost', onContextLost)
-    return () => canvas.removeEventListener('webglcontextlost', onContextLost)
-  }, [retryNonce])
+  }, [cssW, cssH, preset, retryNonce, recoveryKey])
 
   // `ready` is in each dep list so that when a RETRY finally builds a fresh
   // animator (ready flips false→true), the app's current state / visibility /
@@ -214,18 +210,20 @@ export function Orb({
   // glyph is ever visible, and the orb fades in the moment WebGL comes up.
   return (
     <div
+      ref={hostRef}
       className={className}
       style={{ position: 'relative', width: cssW, height: cssH }}
       aria-hidden
     >
       <canvas
-        // Fresh canvas per retry. getContext('webgl2') is idempotent per element:
-        // once this canvas hands back a context that later becomes lost (the boot
-        // GPU handshake, or a GPU-process reset), every subsequent getContext on
-        // the SAME element returns that same dead context, so retrying in place
-        // can never recover. Keying on retryNonce remounts a brand-new canvas, so
-        // each retry gets a genuinely fresh context off the (now-ready) GPU.
-        key={retryNonce}
+        // Fresh canvas per retry AND per hook-driven recovery. getContext('webgl2')
+        // is idempotent per element: once this canvas hands back a context that
+        // later becomes lost (the boot GPU handshake, or a GPU-process reset),
+        // every subsequent getContext on the SAME element returns that same dead
+        // context, so retrying in place can never recover. Keying on both nonces
+        // remounts a brand-new canvas on either signal, so each retry/recovery
+        // gets a genuinely fresh context off the (now-ready) GPU.
+        key={`${retryNonce}:${recoveryKey}`}
         ref={canvasRef}
         style={{
           width: cssW,

@@ -15,6 +15,8 @@ import { supportsMica } from './windowsVersion'
 import { APP_BG_HEX, WCO_SYMBOL_HEX } from '../shared/chrome'
 import iconPath from '../../resources/icon.png?asset'
 import { listCaptureSources } from './ipc/capture'
+import { isAllowedExternalScheme } from './externalUrl'
+import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
 import {
   registerOmiListenHandlers,
   startTestListenSession,
@@ -222,7 +224,7 @@ app.on('child-process-gone', (_e, details) => {
   // Clean exits are intentional teardown — skip.
   if (details.type === 'GPU' && details.reason !== 'clean-exit') {
     for (const w of BrowserWindow.getAllWindows()) {
-      if (!w.isDestroyed()) w.webContents.send('gpu:context-lost')
+      if (!w.isDestroyed()) w.webContents.send(GPU_CONTEXT_LOST_CHANNEL)
     }
   }
 })
@@ -389,15 +391,11 @@ function createWindow(): BrowserWindow {
     // a file://, UNC, or custom-protocol URL; passing those to shell.openExternal
     // enables NTLM-hash leak / protocol-handler abuse. Defense-in-depth alongside
     // the renderer's Markdown scheme allow-list.
-    try {
-      const scheme = new URL(url).protocol
-      if (scheme === 'http:' || scheme === 'https:' || scheme === 'mailto:') {
-        shell.openExternal(url)
-      } else {
-        console.warn('[main] blocked external open of non-web URL scheme:', scheme)
-      }
-    } catch {
-      console.warn('[main] blocked external open of unparseable URL')
+    if (isAllowedExternalScheme(url, ['http', 'https', 'mailto'])) {
+      shell.openExternal(url)
+    } else {
+      // Never log the raw URL — it may carry a token/secret in its query string.
+      console.warn('[main] blocked external open of a non-web or unparseable URL')
     }
     return { action: 'deny' }
   })

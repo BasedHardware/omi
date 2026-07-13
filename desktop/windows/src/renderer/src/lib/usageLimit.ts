@@ -1,32 +1,23 @@
 import type { ChatUsageQuota } from './omiApi.generated'
+import { createSignal } from './signal'
 
 // Global usage-limit popup channel. Anywhere in the app can raise the modal via
 // showUsageLimit(); the host (UsageLimitPopupHost) subscribes via onUsageLimit.
-// Same tiny pub/sub shape as lib/toast — no external deps, no React coupling.
 
 export type UsageLimitReason = 'chat' | 'transcription' | 'trial_expired'
 
-const listeners = new Set<(reason: UsageLimitReason | null) => void>()
-let current: UsageLimitReason | null = null
-
-function emit(): void {
-  listeners.forEach((cb) => cb(current))
-}
+const signal = createSignal<UsageLimitReason | null>(null)
 
 export function onUsageLimit(cb: (reason: UsageLimitReason | null) => void): () => void {
-  listeners.add(cb)
-  cb(current)
-  return () => listeners.delete(cb)
+  return signal.subscribe(cb)
 }
 
 export function showUsageLimit(reason: UsageLimitReason): void {
-  current = reason
-  emit()
+  signal.set(reason)
 }
 
 export function dismissUsageLimit(): void {
-  current = null
-  emit()
+  signal.set(null)
 }
 
 // ── Chat-quota trigger ──────────────────────────────────────────────────────
@@ -40,7 +31,7 @@ let chatQuotaPopupShown = false
 /** Test-only: reset the once-per-session guard. */
 export function __resetUsageLimitSession(): void {
   chatQuotaPopupShown = false
-  current = null
+  signal.set(null)
 }
 
 /**

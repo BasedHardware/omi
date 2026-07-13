@@ -4,6 +4,11 @@
  *  buffer (omiListen) — so the two windows can't silently diverge. */
 export const PCM_PENDING_MAX_BYTES = 16000 * 2 * 5
 
+/** IPC channel main broadcasts on a GPU-process crash (app.on('child-process-gone')
+ *  in main/index.ts) so every window's WebGL surfaces can remount. Shared so the
+ *  main-side send and the preload-side listener can't silently drift apart. */
+export const GPU_CONTEXT_LOST_CHANNEL = 'gpu:context-lost'
+
 export type CaptureSource = {
   id: string
   name: string

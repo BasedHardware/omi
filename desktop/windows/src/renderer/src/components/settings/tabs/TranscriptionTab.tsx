@@ -13,7 +13,7 @@
 // toggles the on-device silence gate on the ambient capture lanes
 // (AudioSessionHost reads `vadGateEnabled` at session start).
 //
-// Deliberately NOT built (no Windows machinery — see the settings-parity report):
+// Deliberately NOT built — no Windows machinery for either of these:
 //  - Custom vocabulary (PATCH /v1/users/transcription-preferences carries
 //    vocabulary + single_language_mode, but nothing plumbs keywords into the
 //    listen/PTT params — a dead control until that lands).

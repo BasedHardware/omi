@@ -11,6 +11,16 @@ const ICON_TONE: Record<IconTone, string> = {
   // Mac accents Architect/CTAs purple; per INV-UI-1 nothing here is purple.
 }
 
+// Icon-chip background. Amber gets a tinted chip (matches the Plan Retiring
+// banner and the "you're over your limit" state) — everything else stays the
+// neutral glass tint so a routine tone doesn't read as a warning.
+const ICON_CHIP_BG: Record<IconTone, string> = {
+  neutral: 'bg-white/[0.06]',
+  green: 'bg-white/[0.06]',
+  amber: 'bg-amber-400/10',
+  yellow: 'bg-white/[0.06]'
+}
+
 /**
  * Shared shell for the billing cards — a dark glass card (Windows `surface-card`
  * idiom) with the Mac composition: a leading tinted icon, a title + subtitle
@@ -29,7 +39,12 @@ export function BillingCard(props: {
   return (
     <div className={cn('surface-card p-5', className)}>
       <div className="flex items-start gap-3.5">
-        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.06]">
+        <div
+          className={cn(
+            'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl',
+            ICON_CHIP_BG[iconTone]
+          )}
+        >
           <Icon className={cn('h-[18px] w-[18px]', ICON_TONE[iconTone])} strokeWidth={1.9} />
         </div>
         <div className="min-w-0 flex-1">

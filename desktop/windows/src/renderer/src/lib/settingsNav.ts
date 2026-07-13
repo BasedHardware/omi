@@ -1,4 +1,5 @@
 import type { SettingsTabId } from '../components/settings/tabs'
+import { createSignal } from './signal'
 
 // One-shot channel for deep-linking into a specific Settings tab. A caller (e.g.
 // the usage-limit popup's "Upgrade" button) navigates to /settings and requests
@@ -6,25 +7,24 @@ import type { SettingsTabId } from '../components/settings/tabs'
 // Pub/sub rather than a route param so it survives the existing local tab state
 // without reworking the router.
 
-let pending: SettingsTabId | null = null
-const listeners = new Set<(tab: SettingsTabId) => void>()
+const signal = createSignal<SettingsTabId | null>(null)
 
 /** Ask Settings to open a specific tab. Delivered immediately if a consumer is
  *  listening, otherwise buffered until one subscribes. */
 export function requestSettingsTab(tab: SettingsTabId): void {
-  pending = tab
-  listeners.forEach((cb) => cb(tab))
+  signal.set(tab)
 }
 
 /** Subscribe to tab requests. Replays a buffered request on subscribe so a
- *  navigate-then-mount ordering still delivers. Returns an unsubscribe fn. */
+ *  navigate-then-mount ordering still delivers. Returns an unsubscribe fn. A
+ *  null current value (nothing pending) is never delivered to `cb`. */
 export function onSettingsTabRequest(cb: (tab: SettingsTabId) => void): () => void {
-  listeners.add(cb)
-  if (pending) cb(pending)
-  return () => listeners.delete(cb)
+  return signal.subscribe((tab) => {
+    if (tab != null) cb(tab)
+  })
 }
 
 /** Clear a consumed request so it isn't replayed to the next subscriber. */
 export function consumeSettingsTabRequest(): void {
-  pending = null
+  signal.set(null)
 }

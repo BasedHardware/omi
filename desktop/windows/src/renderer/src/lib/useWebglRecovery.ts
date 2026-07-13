@@ -33,7 +33,10 @@ const RECOVER_DEBOUNCE_MS = 600
 const RECOVER_MAX = 4
 const RECOVER_WINDOW_MS = 60_000
 
-export function useWebglRecovery(hostRef: React.RefObject<HTMLElement | null>): number {
+export function useWebglRecovery(
+  hostRef: React.RefObject<HTMLElement | null>,
+  onContextLost?: () => void
+): number {
   const [recoveryKey, setRecoveryKey] = useState(0)
 
   useEffect(() => {
@@ -74,6 +77,7 @@ export function useWebglRecovery(hostRef: React.RefObject<HTMLElement | null>): 
       // stands in instead, matching the Orb's "hidden canvas, never a broken
       // glyph" fallback). The remount replaces this element with a fresh one.
       if (e.target instanceof HTMLElement) e.target.style.visibility = 'hidden'
+      onContextLost?.()
       scheduleRemount()
     }
 
@@ -104,7 +108,7 @@ export function useWebglRecovery(hostRef: React.RefObject<HTMLElement | null>): 
       if (timer) clearTimeout(timer)
       offGpu?.()
     }
-  }, [hostRef])
+  }, [hostRef, onContextLost])
 
   return recoveryKey
 }

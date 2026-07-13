@@ -19,9 +19,9 @@
 // silent-failure fix: a persisted/conflicting chord previously failed with only a
 // console.warn at boot).
 //
-// Deliberately NOT built (no Windows machinery — see the settings-parity report):
+// Deliberately NOT built — no Windows machinery for any of these (all macOS-only):
 // disabling a global chord, double-tap-to-lock, PTT sound cues, and mute-audio-
-// while-talking (all macOS-only).
+// while-talking.
 import { useEffect, useState } from 'react'
 import { Keyboard, MessageSquareText } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -30,10 +30,7 @@ import { setPreferences } from '../../../lib/preferences'
 import { SettingRow } from '../SettingRow'
 import { acceleratorToTokens, DEFAULT_OVERLAY_ACCELERATOR } from '../../../lib/overlayShortcut'
 import { useChordRecorder } from '../../../hooks/useChordRecorder'
-
-// Mirrors main's DEFAULT_RECORD_HOTKEY (src/main/shortcuts.ts) — that module
-// imports electron, so it can't be imported into the renderer; keep in step.
-const DEFAULT_RECORD_ACCEL = 'Ctrl+Space'
+import { DEFAULT_RECORD_HOTKEY } from '../../../../../shared/hotkeyDefaults'
 
 export function ShortcutsTab(): React.JSX.Element {
   return (
@@ -56,7 +53,7 @@ export function ShortcutsTab(): React.JSX.Element {
         title="Record hotkey"
         subtitle="Global shortcut to start and stop recording."
         keywords="hotkey shortcut record accelerator keybinding rebind mic custom"
-        defaultAccel={DEFAULT_RECORD_ACCEL}
+        defaultAccel={DEFAULT_RECORD_HOTKEY}
         load={() => window.omi?.getRecordHotkey?.() ?? Promise.resolve(null)}
         commit={(next) =>
           window.omi?.setRecordHotkey?.(next) ?? Promise.resolve({ ok: false, registered: false })

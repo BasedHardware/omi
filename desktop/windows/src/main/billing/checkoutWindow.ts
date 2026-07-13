@@ -1,5 +1,6 @@
 import { BrowserWindow, ipcMain, shell } from 'electron'
 import type { CheckoutOutcome } from '../../shared/types'
+import { isAllowedExternalScheme } from '../externalUrl'
 
 // Stripe checkout / customer-portal support for the Plan & Usage settings tab.
 //
@@ -100,14 +101,9 @@ export function registerBillingIpc(): void {
   // Customer portal opens in the system browser (Mac parity). Guard the scheme
   // the same way the main window's window-open handler does.
   ipcMain.handle('billing:openExternal', (_e, url: string) => {
-    try {
-      const scheme = new URL(String(url)).protocol
-      if (scheme === 'https:' || scheme === 'http:') {
-        void shell.openExternal(String(url))
-        return true
-      }
-    } catch {
-      // fall through
+    if (isAllowedExternalScheme(String(url), ['http', 'https'])) {
+      void shell.openExternal(String(url))
+      return true
     }
     console.warn('[main] billing: blocked external open of non-web URL')
     return false

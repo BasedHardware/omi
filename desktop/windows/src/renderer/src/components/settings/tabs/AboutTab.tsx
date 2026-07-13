@@ -12,7 +12,7 @@
 //
 // Privacy Policy is intentionally not a link here: Omi's privacy content lives in
 // the dedicated Privacy tab, and there is no confirmed standalone public URL to
-// link without guessing (see the settings-parity report).
+// link without guessing.
 import { useEffect, useState } from 'react'
 import {
   Info,

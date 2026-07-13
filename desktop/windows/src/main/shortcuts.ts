@@ -6,9 +6,10 @@
 // behind a slot (rather than scattered register() calls) is what lets rebinding
 // release exactly the right chord and lets suspend/resume round-trip cleanly.
 import { globalShortcut } from 'electron'
+import { DEFAULT_RECORD_HOTKEY } from '../shared/hotkeyDefaults'
 
 /** Default mic record chord. Rebindable + persisted (see appSettings). */
-export const DEFAULT_RECORD_HOTKEY = 'Ctrl+Space'
+export { DEFAULT_RECORD_HOTKEY } from '../shared/hotkeyDefaults'
 
 export interface ShortcutSlot {
   /** Attach the handler and claim an accelerator (the default, or `accelerator`
