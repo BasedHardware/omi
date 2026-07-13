@@ -150,6 +150,35 @@ async def test_frame_payloads_and_order():
 
 
 @pytest.mark.anyio
+async def test_finalization_job_identity_survives_pusher_reconnect():
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws)
+    await session.connect()
+
+    await session.request_conversation_processing('conv-1', 'job-1', 3)
+    session.pusher_connected = False
+    await session.connect()
+
+    finalization_frames = [frame_json(frame) for frame in ws.sent if frame_type(frame) == 104]
+    assert finalization_frames == [
+        {
+            'conversation_id': 'conv-1',
+            'language': 'en',
+            'byok_keys': {'openai': 'key'},
+            'finalization_job_id': 'job-1',
+            'dispatch_generation': 3,
+        },
+        {
+            'conversation_id': 'conv-1',
+            'language': 'en',
+            'byok_keys': {'openai': 'key'},
+            'finalization_job_id': 'job-1',
+            'dispatch_generation': 3,
+        },
+    ]
+
+
+@pytest.mark.anyio
 async def test_pending_conversation_and_speaker_sample_replay_uses_target_rate_for_multi_channel():
     ws = FakePusherWebSocket()
     connect_calls = []

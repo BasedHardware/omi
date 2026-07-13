@@ -104,7 +104,13 @@ class ListenPusherSession:
     def transcript_send(self, segments: List[Dict[str, Any]]) -> None:
         self.segment_buffers.extend(segments)
 
-    def _buffer_pending_conversation_request(self, conversation_id: str):
+    def _buffer_pending_conversation_request(
+        self,
+        conversation_id: str,
+        *,
+        finalization_job_id: Optional[str] = None,
+        dispatch_generation: Optional[int] = None,
+    ):
         existing = self.pending_conversation_requests.get(conversation_id)
         if existing is None and len(self.pending_conversation_requests) >= self.config.max_pending_requests:
             oldest_id = min(
@@ -119,19 +125,35 @@ class ListenPusherSession:
         self.pending_conversation_requests[conversation_id] = {
             'sent_at': self.deps.now(),
             'retries': (existing or {}).get('retries', 0),
+            'finalization_job_id': finalization_job_id or (existing or {}).get('finalization_job_id'),
+            'dispatch_generation': dispatch_generation or (existing or {}).get('dispatch_generation'),
         }
         self.pending_request_event.set()
 
-    async def request_conversation_processing(self, conversation_id: str):
-        """Request pusher to process a conversation."""
+    async def request_conversation_processing(
+        self,
+        conversation_id: str,
+        finalization_job_id: Optional[str] = None,
+        dispatch_generation: Optional[int] = None,
+    ):
+        """Request pusher to process a conversation through its durable lease."""
         if not self.pusher_connected or not self.pusher_ws:
             logger.info(
                 f"Pusher not connected for {conversation_id}, will retry on reconnect {self.uid} {self.session_id}"
             )
-            self._buffer_pending_conversation_request(conversation_id)
+            self._buffer_pending_conversation_request(
+                conversation_id,
+                finalization_job_id=finalization_job_id,
+                dispatch_generation=dispatch_generation,
+            )
             return False
         try:
-            self._buffer_pending_conversation_request(conversation_id)
+            self._buffer_pending_conversation_request(
+                conversation_id,
+                finalization_job_id=finalization_job_id,
+                dispatch_generation=dispatch_generation,
+            )
+            pending = self.pending_conversation_requests[conversation_id]
             data = bytearray()
             data.extend(struct.pack("I", 104))
             payload: Dict[str, Any] = {
@@ -139,6 +161,9 @@ class ListenPusherSession:
                 "language": self.config.language,
                 "byok_keys": self.deps.get_byok_keys(),
             }
+            if pending.get('finalization_job_id'):
+                payload['finalization_job_id'] = pending['finalization_job_id']
+                payload['dispatch_generation'] = pending.get('dispatch_generation') or 1
             data.extend(bytes(json.dumps(payload), "utf-8"))
             await self.pusher_ws.send(cast(bytes, data))
             logger.info(f"Sent process_conversation request to pusher: {conversation_id} {self.uid} {self.session_id}")
@@ -299,7 +324,11 @@ class ListenPusherSession:
                 logger.warning(
                     f"Retrying process_conversation for {cid} (attempt {info['retries']}/{MAX_RETRIES_PER_REQUEST}) {self.uid} {self.session_id}"
                 )
-                await self.request_conversation_processing(cid)
+                await self.request_conversation_processing(
+                    cid,
+                    info.get('finalization_job_id'),
+                    info.get('dispatch_generation'),
+                )
 
     async def _flush(self):
         await self._audio_bytes_flush(auto_reconnect=False)
@@ -430,8 +459,13 @@ class ListenPusherSession:
                     f"Reconnected to pusher, re-sending {len(self.pending_conversation_requests)} pending requests {self.uid} {self.session_id}"
                 )
                 for cid in list(self.pending_conversation_requests.keys()):
-                    self.pending_conversation_requests[cid]['sent_at'] = self.deps.now()
-                    await self.request_conversation_processing(cid)
+                    pending = self.pending_conversation_requests[cid]
+                    pending['sent_at'] = self.deps.now()
+                    await self.request_conversation_processing(
+                        cid,
+                        pending.get('finalization_job_id'),
+                        pending.get('dispatch_generation'),
+                    )
             if self.pending_speaker_sample_requests:
                 buffered = list(self.pending_speaker_sample_requests)
                 self.pending_speaker_sample_requests.clear()

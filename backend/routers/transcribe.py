@@ -88,6 +88,8 @@ from utils.client_device import (
     resolve_client_device_from_websocket_auth_message,
 )
 from utils.pusher import PusherCircuitBreakerOpen
+from services.conversation_finalization import prepare_listen_finalization
+from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
 from utils.request_validation import ImageChunkEnvelope
 from utils.speaker_identification import detect_speaker_from_text
 from utils.stt.streaming import (
@@ -877,6 +879,36 @@ async def _stream_handler(
                 )
             )
 
+    async def _schedule_conversation_finalization(conversation_id: str) -> bool:
+        """Persist finalization ownership before handing it to pusher or Tasks."""
+        if not request_conversation_processing and not is_listen_finalization_dispatch_enabled():
+            logger.warning(f"Pusher not enabled, cannot finalize {conversation_id} {uid} {session_id}")
+            return False
+
+        finalization = await run_blocking(
+            db_executor,
+            prepare_listen_finalization,
+            uid,
+            conversation_id,
+            has_byok_keys=bool(get_byok_keys()),
+        )
+        route = finalization['route']
+        if route == 'pusher':
+            if not request_conversation_processing:
+                logger.warning(f"Pusher not enabled, leaving finalization queued {conversation_id} {uid} {session_id}")
+                return False
+            await request_conversation_processing(
+                conversation_id,
+                finalization['job_id'],
+                finalization['dispatch_generation'],
+            )
+            on_conversation_processing_started(conversation_id)
+            return True
+        if route in {'cloud_tasks', 'queued', 'blocked_byok'}:
+            on_conversation_processing_started(conversation_id)
+            return True
+        return route == 'noop'
+
     async def cleanup_processing_conversations():
         processing = conversations_db.get_processing_conversations(uid)
         if not processing:
@@ -885,13 +917,12 @@ async def _stream_handler(
         logger.info(f'finalize_processing_conversations len(processing): {len(processing)} {uid} {session_id}')
         if len(processing) == 0:
             return
-        if not request_conversation_processing:
+        if not request_conversation_processing and not is_listen_finalization_dispatch_enabled():
             logger.warning(f"Pusher not enabled, cannot reprocess {len(processing)} conversations {uid} {session_id}")
             return
 
         for conversation in processing:
-            # Route to pusher — buffer if disconnected, send when connected (#6061)
-            await request_conversation_processing(conversation['id'])
+            await _schedule_conversation_finalization(conversation['id'])
 
     async def process_pending_conversations(timed_out_id: Optional[str]):
         await asyncio.sleep(7.0)
@@ -1014,16 +1045,14 @@ async def _stream_handler(
         if conversation:
             has_content = conversation.get('transcript_segments') or conversation.get('photos')
             if has_content:
-                if not request_conversation_processing:
+                if not request_conversation_processing and not is_listen_finalization_dispatch_enabled():
                     logger.warning(
                         f"Pusher not enabled, skipping conversation {conversation_id} (stays in_progress) {uid} {session_id}"
                     )
                     return False
-                # Mark processing + buffer for pusher — never process locally (#6061)
-                conversations_db.update_conversation_status(uid, conversation_id, ConversationStatus.processing)
-                on_conversation_processing_started(conversation_id)
-                await request_conversation_processing(conversation_id)
-                return True
+                # Persist the finalization outbox before a live handoff. The
+                # listen process never runs process_conversation inline.
+                return await _schedule_conversation_finalization(conversation_id)
             else:
                 logger.info(f'Clean up the conversation {conversation_id}, reason: no content {uid} {session_id}')
                 conversations_db.delete_conversation(uid, conversation_id)
