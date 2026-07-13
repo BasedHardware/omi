@@ -29,8 +29,16 @@ import {
  *   just the name the endpoint expects.
  *
  * The caller appends `&uid=` for conversation mode only (PTT is header-auth only).
+ *
+ * `clientConversationId` (conversation mode only): forwarded as
+ * `client_conversation_id` so a reconnect resumes the SAME server-side conversation
+ * (see ListenStartArgs). Ignored for the transcription-only endpoints.
  */
-export function buildListenEndpoint(mode: ListenMode, language: string): string {
+export function buildListenEndpoint(
+  mode: ListenMode,
+  language: string,
+  clientConversationId?: string
+): string {
   const lang = encodeURIComponent(language || 'en')
   if (mode === 'ptt' || mode === 'transcribe') {
     return (
@@ -49,7 +57,59 @@ export function buildListenEndpoint(mode: ListenMode, language: string): string 
     '&channels=1' +
     '&include_speech_profile=true' +
     '&source=desktop' +
-    '&speaker_auto_assign=enabled'
+    '&speaker_auto_assign=enabled' +
+    (clientConversationId
+      ? `&client_conversation_id=${encodeURIComponent(clientConversationId)}`
+      : '')
+  )
+}
+
+// ── Silence keepalive (conversation /v4/listen only) ──────────────────────────
+// The backend closes a /v4/listen socket after 90s with no received data
+// (transcribe.py inactivity_timeout, close 1001). The renderer VAD gate drops
+// silence before feeding, so a quiet stretch ≥90s would silently starve the
+// socket and kill live transcription. During gated silence we send the documented
+// silence keepalive (b'\x00'*320): it resets the backend's last_activity_time
+// WITHOUT advancing the conversation's finished_at, so the socket survives long
+// pauses while the backend's own VAD/lifecycle still decides conversation
+// boundaries (see docs/.../listen_pusher_pipeline.mdx §6). Mac streams ALL audio
+// so its socket never starves; we keep the gate (a tested bandwidth optimization —
+// see soak.ts / run-vad-playback.mjs) and add the keepalive instead.
+const KEEPALIVE_IDLE_MS = 30_000 // send a keepalive after this long with no real audio (well under 90s)
+const SERVICE_CHECK_MS = 15_000 // how often to service the socket (keepalive + watchdog)
+// A conversation socket that receives nothing (not even the ~10s ping) for this
+// long is a dead/half-open connection TCP hasn't reset — force-close it so the
+// client reconnects. Matches the macOS reference (60s stale threshold).
+const WATCHDOG_STALE_MS = 60_000
+// 320 zero bytes = 10ms of 16kHz mono s16le silence — the exact frame the pipeline
+// contract names. Kept as a fresh Buffer per session send is unnecessary (ws copies
+// on send); a shared frozen frame is fine.
+const KEEPALIVE_FRAME = Buffer.alloc(320)
+
+/** Pure decision: should this session emit a silence keepalive now? Only the
+ *  long-lived conversation socket starves on silence (PTT/transcribe are short and
+ *  explicitly finalized); only when OPEN; only after the idle threshold. */
+export function shouldSendKeepalive(
+  mode: ListenMode,
+  readyState: number,
+  msSinceLastFeed: number
+): boolean {
+  return (
+    mode === 'conversation' && readyState === WebSocket.OPEN && msSinceLastFeed >= KEEPALIVE_IDLE_MS
+  )
+}
+
+/** Pure decision: has this conversation socket gone silent long enough to be
+ *  considered dead (no inbound frame incl. ping)? OPEN conversation sockets only. */
+export function isSocketStale(
+  mode: ListenMode,
+  readyState: number,
+  msSinceLastMessage: number
+): boolean {
+  return (
+    mode === 'conversation' &&
+    readyState === WebSocket.OPEN &&
+    msSinceLastMessage >= WATCHDOG_STALE_MS
   )
 }
 
@@ -66,6 +126,16 @@ type Session = {
   // We buffer those pre-OPEN chunks (bounded) and flush them on 'open'.
   pending: Buffer[]
   pendingBytes: number
+  // Epoch ms of the last REAL audio chunk fed (not keepalives). Drives the silence
+  // keepalive so a gated-silent conversation socket never starves past 90s.
+  lastFeedAt: number
+  // Epoch ms of the last message RECEIVED from the backend (incl. pings, which
+  // arrive ~every 10s). Drives the watchdog: a half-open socket that TCP hasn't
+  // reset stops delivering pings, so no message for WATCHDOG_STALE_MS means the
+  // socket is dead and must be force-closed so the client reconnects.
+  lastMessageAt: number
+  // Conversation mode only: periodic idleness check (keepalive + watchdog).
+  keepaliveTimer: ReturnType<typeof setInterval> | null
 }
 
 const sessions = new Map<string, Session>()
@@ -106,7 +176,10 @@ export function startTestListenSession(sessionId: string, source: 'mic' | 'syste
     mode: 'conversation',
     closed: false,
     pending: [],
-    pendingBytes: 0
+    pendingBytes: 0,
+    lastFeedAt: Date.now(),
+    lastMessageAt: Date.now(),
+    keepaliveTimer: null
   })
   return true
 }
@@ -140,6 +213,10 @@ function killSession(id: string, s: Session, why: string): void {
   s.closed = true
   s.pending = []
   s.pendingBytes = 0
+  if (s.keepaliveTimer) {
+    clearInterval(s.keepaliveTimer)
+    s.keepaliveTimer = null
+  }
   sessions.delete(id)
   try {
     s.ws.close()
@@ -170,7 +247,7 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
     }
   }
 
-  const base = buildListenEndpoint(mode, args.language)
+  const base = buildListenEndpoint(mode, args.language, args.clientConversationId)
   let url = base
   if (mode === 'conversation') {
     // Decode (not verify) the JWT to derive the uid for the query param; the
@@ -203,7 +280,10 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
     mode,
     closed: false,
     pending: [],
-    pendingBytes: 0
+    pendingBytes: 0,
+    lastFeedAt: Date.now(),
+    lastMessageAt: Date.now(),
+    keepaliveTimer: null
   }
   sessions.set(args.sessionId, session)
   const t0 = Date.now()
@@ -227,10 +307,24 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
       session.pending = []
       session.pendingBytes = 0
     }
+    // Reset the idle/liveness clocks at connect (a slow handshake shouldn't count
+    // as silence) and start servicing the long-lived conversation socket.
+    session.lastFeedAt = Date.now()
+    session.lastMessageAt = Date.now()
+    if (mode === 'conversation' && !session.keepaliveTimer) {
+      session.keepaliveTimer = setInterval(
+        () => serviceConversationSocket(session),
+        SERVICE_CHECK_MS
+      )
+      session.keepaliveTimer.unref?.() // never keep the process alive just to service a socket
+    }
     emit(session.ownerId, { sessionId: args.sessionId, kind: 'connected' })
   })
 
   ws.on('message', (data, isBinary) => {
+    // Any inbound frame — including the ~10s heartbeat ping — proves the socket is
+    // still alive; stamp it BEFORE filtering pings so the watchdog sees liveness.
+    session.lastMessageAt = Date.now()
     if (isBinary) return // both endpoints send text only; ignore stray binary
     const text = data.toString().trim()
     if (text === 'ping' || text === '') return
@@ -272,6 +366,10 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
   ws.on('close', (code, reasonBuf) => {
     if (session.closed) return
     session.closed = true
+    if (session.keepaliveTimer) {
+      clearInterval(session.keepaliveTimer)
+      session.keepaliveTimer = null
+    }
     sessions.delete(args.sessionId)
     const reason = reasonBuf.toString()
     console.log(
@@ -286,10 +384,38 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
   })
 }
 
+/** Periodic service for a conversation socket: first the watchdog (force-close a
+ *  dead/half-open socket so the client reconnects), then the silence keepalive
+ *  (b'\x00'*320 during gated silence so the backend's 90s inactivity timer never
+ *  fires). Keepalives are NOT counted in listenStats — they're transport padding,
+ *  not fed audio, so the soak/gate harnesses still see a flat byte delta across
+ *  silence. */
+function serviceConversationSocket(s: Session): void {
+  if (s.closed) return
+  if (isSocketStale(s.mode, s.ws.readyState, Date.now() - s.lastMessageAt)) {
+    console.log(
+      `[omi-listen] watchdog: no data for ${Date.now() - s.lastMessageAt}ms — forcing reconnect`
+    )
+    try {
+      s.ws.close(1000, 'watchdog: stale')
+    } catch {
+      /* ignore — close handler still fires */
+    }
+    return
+  }
+  if (!shouldSendKeepalive(s.mode, s.ws.readyState, Date.now() - s.lastFeedAt)) return
+  try {
+    s.ws.send(KEEPALIVE_FRAME)
+  } catch {
+    /* ignore — a failing send means the socket is already dying; close will fire */
+  }
+}
+
 function feedSession(sessionId: string, pcm: ArrayBuffer): void {
   const s = sessions.get(sessionId)
   if (!s) return
   recordFed(s.mode, s.source, pcm.byteLength)
+  s.lastFeedAt = Date.now()
   if (s.ws.readyState === WebSocket.OPEN) {
     s.ws.send(pcm)
     return
