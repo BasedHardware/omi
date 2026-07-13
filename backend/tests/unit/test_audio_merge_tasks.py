@@ -15,9 +15,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# routers.sync (imported inside TestV2HandlerRetrySemantics) constructs Typesense /
-# OpenAI clients at import; provide hermetic dummy config so the import succeeds
-# without network. Matches the OPENAI_API_KEY default that conftest already sets.
+# routers.sync (imported at module scope below) constructs Typesense / OpenAI
+# clients at import; provide hermetic dummy config so the import succeeds without
+# network. Matches the OPENAI_API_KEY default that conftest already sets.
 os.environ.setdefault('TYPESENSE_API_KEY', 'test-typesense-key')
 os.environ.setdefault('TYPESENSE_HOST', 'localhost')
 os.environ.setdefault('TYPESENSE_HOST_PORT', '8108')
