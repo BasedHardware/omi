@@ -1,5 +1,18 @@
 # Windows Core-Feature Wiring Audit — vs Mac (proven reference)
 
+> **Status 2026-07-13 — branch `fix/windows-wiring-criticals`:** C1-C9 fixed (C10 needed no
+> change — Windows was already correct). Also fixed from the Majors: listen reconnect/resume
+> (`client_conversation_id`), 401 refresh/reauth (transient-vs-definitive), sign-out teardown +
+> account-switch wipe guard, outbox background sweep, Tasks pagination/refresh, plus an audit-found
+> agent-task reset race in useChat. Verified: 1324 hermetic tests green, Opus audit SHIP verdict,
+> live runtime pass (5 PASS / 2 env-blocked PARTIAL). **Deferred, still open:** BYOK on the listen
+> socket (no Windows BYOK key store exists — feature, not wiring), app-crash-mid-recording segment
+> durability (Stream 4), Firebase token storage → DPAPI safeStorage (dedicated task; plan in the
+> shell-auth report), Gemini barge-in, device-change handling, meeting-toast retry, Rewind
+> keyframe/battery/suspend, crash detection, KG grounding (their streams). Runtime notes: chat
+> `reset()` has no main-window UI trigger yet (bar-only path); live sessions visibly resume via
+> client_conversation_id (~90-113s client-initiated rotations, zero 1001 closes).
+
 > 2026-07-13. Ten parallel auditors compared the Windows app's **already-shipped** subsystems
 > against the working Mac app and the backend contracts. This is about wiring correctness of
 > what exists — feature *gaps* live in the parity audit (00-INDEX.md) and the split plan
