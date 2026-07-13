@@ -319,6 +319,7 @@ Files ending in `.gen.dart` or `.g.dart` are auto-generated — don't format man
 - Make individual commits per feature or testable surface, not per file or unrelated bulk changes.
 - If push fails (remote ahead): `git pull --rebase && git push`.
 - Never push or create PRs unless explicitly asked — commit locally by default.
+- **Before pushing a PR (opening or updating one), run the full CI pipeline locally first.** Replicate every workflow job the PR will trigger (component test suites, coverage/hygiene gates, contracts — see `.github/workflows/`) on the same tree, and fix failures before pushing. Push only when the local run is clean.
 
 ### RELEASE Command
 Create a branch from `main`, make individual commits per feature or testable surface, push and open a PR, merge without squash, then switch back to `main` and pull.
