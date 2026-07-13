@@ -105,8 +105,21 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: OPENAI_API_KEY
+  - name: OMI_LLM_GATEWAY_URL
+    value: "http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080"
   - name: OMI_ENV_STAGE
     value: "prod"
+  - name: OMI_LLM_GATEWAY_FEATURE_MODE
+    value: "gateway"
+  - name: OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE
+    value: "true"
+  - name: OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION
+    value: "true"
+  - name: OMI_LLM_GATEWAY_SERVICE_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: OMI_LLM_GATEWAY_SERVICE_TOKEN
   - name: MEMORY_MODE
     value: "off"
   - name: MEMORY_ENABLED_USERS

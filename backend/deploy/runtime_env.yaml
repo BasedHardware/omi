@@ -513,10 +513,26 @@ environments:
           HOSTED_TRANSLATION_API_URL:
             value: http://nllb.omi.me
             category: service_discovery
+          OMI_LLM_GATEWAY_URL:
+            value: http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080
+            category: service_discovery
           SERVICE_ACCOUNT_JSON:
             secret:
               name: prod-omi-backend-secrets
               key: SERVICE_ACCOUNT_JSON
+          OMI_LLM_GATEWAY_FEATURE_MODE:
+            value: gateway
+            category: rollout
+          OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
+            value: 'true'
+            category: rollout
+          OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+            value: 'true'
+            category: rollout
+          OMI_LLM_GATEWAY_SERVICE_TOKEN:
+            secret:
+              name: prod-omi-backend-secrets
+              key: OMI_LLM_GATEWAY_SERVICE_TOKEN
           MEMORY_MODE:
             value: "off"
             category: memory_rollout
@@ -582,6 +598,18 @@ environments:
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omi.me
               category: service_discovery
+            OMI_LLM_GATEWAY_URL:
+              value: http://172.16.160.108
+              category: service_discovery
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
+              value: 'true'
+              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+              value: 'true'
+              category: rollout
             POSTHOG_HOST:
               value: https://app.posthog.com
               category: telemetry
@@ -634,6 +662,9 @@ environments:
             MODULATE_API_KEY:
               secret: MODULATE_API_KEY
               version: latest
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
         backend-sync: &prod_backend_sync
           env:
             SYNC_LEDGER_FENCE_MODE:
@@ -666,6 +697,18 @@ environments:
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omi.me
               category: service_discovery
+            OMI_LLM_GATEWAY_URL:
+              value: http://172.16.160.108
+              category: service_discovery
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
+              value: 'true'
+              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+              value: 'true'
+              category: rollout
             POSTHOG_HOST:
               value: https://app.posthog.com
               category: telemetry
@@ -710,6 +753,9 @@ environments:
             MODULATE_API_KEY:
               secret: MODULATE_API_KEY
               version: latest
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
         backend-sync-backfill:
           <<: *prod_backend_sync
           provisional: true
@@ -721,6 +767,18 @@ environments:
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omi.me
               category: service_discovery
+            OMI_LLM_GATEWAY_URL:
+              value: http://172.16.160.108
+              category: service_discovery
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
+              value: 'true'
+              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+              value: 'true'
+              category: rollout
             POSTHOG_HOST:
               value: https://app.posthog.com
               category: telemetry
@@ -760,6 +818,9 @@ environments:
               version: latest
             MODULATE_API_KEY:
               secret: MODULATE_API_KEY
+              version: latest
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
       jobs:
         notifications-job:
