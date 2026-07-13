@@ -1,6 +1,11 @@
 import { auth } from './firebase'
 import { startOmiListen, type OmiListenHandle } from './omiListenClient'
-import type { BackendSegment, ListenMode, ListenSource, TranscriptLine } from '../../../shared/types'
+import type {
+  BackendSegment,
+  ListenMode,
+  ListenSource,
+  TranscriptLine
+} from '../../../shared/types'
 
 /** The session modes this client can drive ('ptt' rides lib/ptt/ instead). */
 export type TranscriptionMode = Extract<ListenMode, 'conversation' | 'transcribe'>
@@ -85,7 +90,8 @@ async function startWithOmi(
   source: ListenSource,
   cb: TranscriptionCallbacks,
   onLost: (reason: string) => void,
-  mode: TranscriptionMode
+  mode: TranscriptionMode,
+  clientConversationId?: string
 ): Promise<OmiListenHandle | null> {
   if (!auth.currentUser) return null
   let outcome: 'pending' | 'omi' | 'failed' = 'pending'
@@ -172,7 +178,8 @@ async function startWithOmi(
           }
         }
       },
-      mode
+      mode,
+      clientConversationId
     )
       .then((h) => {
         // startOmiListen resolves as soon as the WS is *created* — long before
@@ -218,7 +225,8 @@ async function startWithOmi(
 export async function startTranscription(
   source: ListenSource,
   cb: TranscriptionCallbacks,
-  mode: TranscriptionMode = 'conversation'
+  mode: TranscriptionMode = 'conversation',
+  clientConversationId?: string
 ): Promise<TranscriptionHandle> {
   let active: OmiListenHandle | null = null
 
@@ -228,7 +236,8 @@ export async function startTranscription(
     (reason) => {
       cb.onError(new Error(`Omi transcription stopped: ${reason}`))
     },
-    mode
+    mode,
+    clientConversationId
   )
 
   if (omi) {
