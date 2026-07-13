@@ -24,7 +24,11 @@ import type { CheckoutOutcome } from '../../../shared/types'
 // (the backend version-gates the plan catalog on it).
 
 export function fetchSubscription(): Promise<UserSubscriptionResponse> {
-  return omiApi.get('/v1/users/me/subscription').then((r) => r.data as UserSubscriptionResponse)
+  return omiApi.get('/v1/users/me/subscription').then((r) => {
+    const data = r.data as UserSubscriptionResponse
+    reportLegacyCatalog(data.available_plans)
+    return data
+  })
 }
 
 export function fetchChatQuota(): Promise<ChatUsageQuota> {
@@ -37,6 +41,92 @@ export function fetchTrial(): Promise<TrialMetadata> {
 
 export function fetchOverageInfo(): Promise<OverageInfoResponse> {
   return omiApi.get('/v1/payments/overage-info').then((r) => r.data as OverageInfoResponse)
+}
+
+// ── Legacy-catalog canary ────────────────────────────────────────────────────
+// The backend version-gates the plan catalog on X-App-Platform/X-App-Version. If
+// it doesn't recognize this client's platform it serves the pre-Operator/Architect
+// LEGACY catalog (adapt_plans_for_legacy_client in backend/utils/subscription.py):
+// it DROPS the operator + pro plans entirely and RENAMES titles to "Unlimited
+// Plan"/"Omi Pro". A desktop client must always get the new catalog (Neo /
+// Operator / Architect); the legacy shape means our platform identity wasn't
+// recognized — the exact class of defect that once rendered as "real live data".
+// We do NOT block rendering (fail-open UX — the catalog still renders), the canary
+// just makes the divergence impossible to miss in logs/verification.
+
+// Titles the legacy adapter renames plans to. Their presence proves legacy shape.
+const LEGACY_PLAN_TITLES = new Set(['Omi Pro', 'Unlimited Plan'])
+
+/**
+ * Mechanical legacy-shape detection, derived from adapt_plans_for_legacy_client.
+ * A correct desktop catalog always contains an 'operator' plan and never uses the
+ * legacy titles; the adapter guarantees the inverse. An empty catalog is NOT
+ * legacy (nothing served yet) — only a populated, legacy-shaped one trips it.
+ */
+export function detectLegacyCatalog(plans: SubscriptionPlan[] | undefined): {
+  legacy: boolean
+  reasons: string[]
+} {
+  const list = plans ?? []
+  if (list.length === 0) return { legacy: false, reasons: [] }
+  const reasons: string[] = []
+  if (!list.some((p) => p.id === 'operator')) reasons.push("no 'operator' plan in catalog")
+  const legacyTitles = list.map((p) => p.title).filter((t) => LEGACY_PLAN_TITLES.has(t))
+  if (legacyTitles.length > 0)
+    reasons.push(`legacy plan titles present: ${legacyTitles.join(', ')}`)
+  return { legacy: reasons.length > 0, reasons }
+}
+
+// Report once per session — this is a config-level divergence (the backend doesn't
+// know our platform), not a per-request event, so repeating it is pure noise.
+let legacyCatalogReported = false
+
+/** Reset the once-per-session guard (test seam). */
+export function resetLegacyCatalogReport(): void {
+  legacyCatalogReported = false
+}
+
+/**
+ * Fire the canary if `plans` is the legacy catalog: a loud, structured
+ * console.error (no renderer-side recordFallback exists) plus a one-shot Sentry
+ * capture when Sentry is wired. Returns whether the catalog was legacy. Never
+ * throws and never blocks rendering. See the section comment for why.
+ */
+export function reportLegacyCatalog(plans: SubscriptionPlan[] | undefined): boolean {
+  const { legacy, reasons } = detectLegacyCatalog(plans)
+  if (!legacy) return false
+  console.error(
+    '[billing:legacy-catalog] Legacy plan catalog served to the Windows desktop client — ' +
+      'backend did not recognize this platform/version, so it returned the pre-Operator/' +
+      'Architect catalog instead of Operator/Architect. The plan grid is rendering the wrong ' +
+      `catalog. Signals: ${reasons.join('; ')}.`,
+    { plan_ids: plans?.map((p) => p.id), plan_titles: plans?.map((p) => p.title) }
+  )
+  if (!legacyCatalogReported) {
+    legacyCatalogReported = true
+    captureLegacyCatalog(reasons, plans)
+  }
+  return true
+}
+
+// One-shot Sentry capture, gated on a configured DSN exactly like main.tsx's init
+// (so dev builds and tests, which have no DSN, never load the SDK). Dynamic import
+// keeps the Sentry dependency out of billing.ts's static graph.
+function captureLegacyCatalog(reasons: string[], plans: SubscriptionPlan[] | undefined): void {
+  if (!import.meta.env.VITE_SENTRY_DSN) return
+  void import('@sentry/electron/renderer')
+    .then((Sentry) => {
+      Sentry.captureMessage('Legacy plan catalog served to Windows desktop client', {
+        level: 'error',
+        tags: { area: 'billing', signal: 'legacy_catalog', platform: 'windows' },
+        extra: {
+          reasons,
+          plan_ids: (plans ?? []).map((p) => p.id),
+          plan_titles: (plans ?? []).map((p) => p.title)
+        }
+      })
+    })
+    .catch(() => {})
 }
 
 // ── Plan-name resolution (BillingHelpers.currentPlanTitle) ──────────────────

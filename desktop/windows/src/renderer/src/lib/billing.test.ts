@@ -1,5 +1,8 @@
-import { describe, it, expect, vi } from 'vitest'
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest'
 import {
+  detectLegacyCatalog,
+  reportLegacyCatalog,
+  resetLegacyCatalogReport,
   isCurrentSubscriptionOperator,
   resolvePlanTitle,
   hasPaidSubscription,
@@ -448,5 +451,54 @@ describe('startCheckout', () => {
     )
     expect(res).toEqual({ kind: 'refresh_lagging' })
     expect(fetchSubscription).toHaveBeenCalledTimes(8)
+  })
+})
+
+// The shape adapt_plans_for_legacy_client emits: operator + pro dropped, architect
+// retitled "Omi Pro", unlimited retitled "Unlimited Plan". This is exactly what the
+// bug served the Windows client when the backend didn't recognize its platform.
+const LEGACY_CATALOG: SubscriptionPlan[] = [
+  { id: 'unlimited', title: 'Unlimited Plan', legacy: false, prices: [] },
+  { id: 'architect', title: 'Omi Pro', prices: [] }
+]
+
+describe('detectLegacyCatalog', () => {
+  it('flags the correct new-shape catalog as NOT legacy', () => {
+    expect(detectLegacyCatalog(CATALOG)).toEqual({ legacy: false, reasons: [] })
+  })
+
+  it('treats an empty / absent catalog as NOT legacy (nothing served yet)', () => {
+    expect(detectLegacyCatalog([])).toEqual({ legacy: false, reasons: [] })
+    expect(detectLegacyCatalog(undefined)).toEqual({ legacy: false, reasons: [] })
+  })
+
+  it('flags the legacy-adapted catalog with both mechanical signals', () => {
+    const { legacy, reasons } = detectLegacyCatalog(LEGACY_CATALOG)
+    expect(legacy).toBe(true)
+    expect(reasons.some((r) => r.includes('operator'))).toBe(true)
+    expect(reasons.some((r) => r.includes('Omi Pro') && r.includes('Unlimited Plan'))).toBe(true)
+  })
+
+  it('flags a legacy title even if an operator plan is somehow present', () => {
+    const mixed: SubscriptionPlan[] = [{ id: 'operator', title: 'Omi Pro', prices: [] }]
+    expect(detectLegacyCatalog(mixed).legacy).toBe(true)
+  })
+})
+
+describe('reportLegacyCatalog', () => {
+  beforeEach(() => resetLegacyCatalogReport())
+  afterEach(() => vi.restoreAllMocks())
+
+  it('does not fire the canary for the correct catalog', () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(reportLegacyCatalog(CATALOG)).toBe(false)
+    expect(err).not.toHaveBeenCalled()
+  })
+
+  it('fires a loud, structured console.error for a legacy catalog', () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(reportLegacyCatalog(LEGACY_CATALOG)).toBe(true)
+    expect(err).toHaveBeenCalledTimes(1)
+    expect(err.mock.calls[0][0]).toContain('[billing:legacy-catalog]')
   })
 })
