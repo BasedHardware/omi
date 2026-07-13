@@ -30,6 +30,7 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case askHigherModel = "ask_higher_model"
   case screenshot = "screenshot"
   case pointClick = "point_click"
+  case getWorkContext = "get_work_context"
 }
 
 enum GeneratedSwiftToolExecutor: String {
@@ -38,6 +39,9 @@ enum GeneratedSwiftToolExecutor: String {
 }
 
 enum GeneratedToolExecutors {
+  static let manifestVersion = 1
+  static let manifestDigest = "sha256:f4fde1cce57e9e19d861354b22de28f92e6146514551f7b9cb38668ffb0906e0"
+
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
     "search_screen_history": .semanticSearch,
     "start_file_scan": .scanFiles,
@@ -72,7 +76,8 @@ enum GeneratedToolExecutors {
     .createCalendarEvent: .chatToolExecutor,
     .askHigherModel: .realtimeHub,
     .screenshot: .realtimeHub,
-    .pointClick: .realtimeHub
+    .pointClick: .realtimeHub,
+    .getWorkContext: .chatToolExecutor
   ]
 
   static func resolve(_ name: String) -> GeneratedSwiftTool? {
@@ -128,6 +133,7 @@ enum GeneratedToolExecutors {
     case completeOnboarding
     case getEmailInsights
     case createCalendarEvent
+    case getWorkContext
     case unhandled
   }
 
@@ -160,6 +166,7 @@ enum GeneratedToolExecutors {
     case .completeOnboarding: return .completeOnboarding
     case .getEmailInsights: return .getEmailInsights
     case .createCalendarEvent: return .createCalendarEvent
+    case .getWorkContext: return .getWorkContext
     default: return .unhandled
     }
   }

@@ -18,37 +18,23 @@ import database.users as users_db
 from database.redis_db import r as redis_client
 from models.fair_use import SoftCapTrigger
 from utils.subscription import has_transcription_credits, is_paid_plan
-from utils.executors import db_executor, run_blocking
+from utils.executors import db_executor, postprocess_executor, run_blocking
+from utils.llm.fair_use_classifier import classify_user_purpose
+from utils.notifications import send_notification
 
-# Deferred imports — exception to CLAUDE.md top-level import rule.
-# classify_user_purpose: fair_use_classifier.py constructs ChatOpenAI at import time,
-#   which raises openai.OpenAIError if OPENAI_API_KEY is not set.
-# send_notification: imports firebase_admin.messaging which requires Firebase app init.
-# Both are only called in async runtime paths, never at import time.
-_classify_user_purpose: Optional[Callable[..., Any]] = None
-_send_notification: Optional[Callable[..., Any]] = None
+# Patchable lazy-held callables keep tests at a production seam without using
+# in-function imports. Both imported modules are import-pure and construct their
+# provider clients only when the callable is invoked.
+_classify_user_purpose: Callable[..., Any] = classify_user_purpose
+_send_notification: Callable[..., Any] = send_notification
 
 
 def _get_classify_user_purpose() -> Callable[..., Any]:
-    global _classify_user_purpose
-    cached: Optional[Callable[..., Any]] = _classify_user_purpose
-    if cached is None:
-        from utils.llm.fair_use_classifier import classify_user_purpose
-
-        cached = classify_user_purpose
-        _classify_user_purpose = cached
-    return cached
+    return _classify_user_purpose
 
 
 def _get_send_notification() -> Callable[..., Any]:
-    global _send_notification
-    cached: Optional[Callable[..., Any]] = _send_notification
-    if cached is None:
-        from utils.notifications import send_notification
-
-        cached = send_notification
-        _send_notification = cached
-    return cached
+    return _send_notification
 
 
 logger = logging.getLogger(__name__)
@@ -84,9 +70,23 @@ FAIR_USE_CHECK_INTERVAL_SECONDS = int(os.getenv('FAIR_USE_CHECK_INTERVAL_SECONDS
 FAIR_USE_RESTRICT_DAILY_DG_MS = int(os.getenv('FAIR_USE_RESTRICT_DAILY_DG_MS', '1800000'))  # 30 min
 
 
-def _redis_key(uid: str) -> str:
+LIVE_SPEECH_SOURCES = ('realtime', 'sync_fresh')
+_VALID_SPEECH_SOURCES = frozenset((*LIVE_SPEECH_SOURCES, 'sync_backfill'))
+
+
+def _normalize_speech_source(source: str) -> str:
+    # Compatibility for deprecated callers while keeping new Redis keys lane-specific.
+    normalized = 'sync_fresh' if source == 'sync' else source
+    return normalized if normalized in _VALID_SPEECH_SOURCES else 'realtime'
+
+
+def _redis_key(uid: str, source: str) -> str:
     """Redis sorted set key for a user's speech minute buckets."""
-    return f'fair_use:speech:{uid}'
+    return f'fair_use:v2:speech:{source}:{uid}'
+
+
+def _bucket_key(uid: str, source: str) -> str:
+    return f'fair_use:v2:bucket:{source}:{uid}'
 
 
 def _classifier_lock_key(uid: str) -> str:
@@ -114,31 +114,65 @@ def _release_lock(key: str, token: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def record_speech_ms(uid: str, speech_ms: int, source: str = 'realtime') -> None:
+_RECORD_SPEECH_ONCE_SCRIPT = """
+if redis.call('set', KEYS[1], '1', 'EX', ARGV[4], 'NX') then
+    redis.call('hincrby', KEYS[2], ARGV[1], ARGV[2])
+    redis.call('expire', KEYS[2], ARGV[4])
+    redis.call('zadd', KEYS[3], ARGV[3], ARGV[1])
+    redis.call('expire', KEYS[3], ARGV[4])
+    return 1
+end
+return 0
+"""
+
+
+def record_speech_ms(
+    uid: str,
+    speech_ms: int,
+    source: str = 'realtime',
+    idempotency_key: Optional[str] = None,
+    raise_on_error: bool = False,
+) -> None:
     """Record speech milliseconds into the current minute bucket.
 
     Uses a Redis sorted set where:
       - member = Unix minute timestamp (as string)
       - score = Unix minute timestamp (for range queries)
     The speech_ms is stored in a separate hash keyed by minute.
-    The source param is for logging/traceability only — it does not affect Redis keys.
+    Source is part of the Redis key. Live enforcement reads only realtime and
+    sync_fresh; sync_backfill is deliberately isolated from live hard caps.
     """
     if not FAIR_USE_ENABLED or speech_ms <= 0:
         return
 
     try:
+        normalized_source = _normalize_speech_source(source)
         now = int(time.time())
         bucket_minute = now // FAIR_USE_BUCKET_SECONDS
-        logger.info(f'fair_use: record_speech_ms uid={uid} ms={speech_ms} source={source}')
+        logger.info(f'fair_use: record_speech_ms uid={uid} ms={speech_ms} source={normalized_source}')
 
         pipe = redis_client.pipeline(transaction=False)
         # Increment speech_ms for this minute bucket
-        bucket_key = f'fair_use:bucket:{uid}'
+        bucket_key = _bucket_key(uid, normalized_source)
+        zset_key = _redis_key(uid, normalized_source)
+        if idempotency_key:
+            once_key = f'fair_use:v2:once:speech:{normalized_source}:{uid}:{idempotency_key}'
+            redis_client.eval(
+                _RECORD_SPEECH_ONCE_SCRIPT,
+                3,
+                once_key,
+                bucket_key,
+                zset_key,
+                str(bucket_minute),
+                speech_ms,
+                bucket_minute * FAIR_USE_BUCKET_SECONDS,
+                FAIR_USE_REDIS_RETENTION_SECONDS,
+            )
+            return
         pipe.hincrby(bucket_key, str(bucket_minute), speech_ms)
         pipe.expire(bucket_key, FAIR_USE_REDIS_RETENTION_SECONDS)
 
         # Add minute to sorted set (score = timestamp for range queries)
-        zset_key = _redis_key(uid)
         pipe.zadd(zset_key, {str(bucket_minute): bucket_minute * FAIR_USE_BUCKET_SECONDS})
         pipe.expire(zset_key, FAIR_USE_REDIS_RETENTION_SECONDS)
 
@@ -155,9 +189,11 @@ def record_speech_ms(uid: str, speech_ms: int, source: str = 'realtime') -> None
         pipe.execute()
     except Exception as e:
         logger.error(f'fair_use: Redis error recording speech for {uid}: {e}')
+        if raise_on_error:
+            raise
 
 
-def get_rolling_speech_ms(uid: str) -> Dict[str, Any]:
+def get_rolling_speech_ms(uid: str, sources: Optional[tuple[str, ...]] = None) -> Dict[str, Any]:
     """Get speech totals for rolling windows: daily (24h), 3-day (72h), weekly (168h).
 
     Returns dict with keys: daily_ms, three_day_ms, weekly_ms.
@@ -168,39 +204,48 @@ def get_rolling_speech_ms(uid: str) -> Dict[str, Any]:
 
     try:
         now = int(time.time())
-        bucket_key = f'fair_use:bucket:{uid}'
-        zset_key = _redis_key(uid)
-
-        # Get all minutes in the last 7 days from sorted set
         cutoff_weekly = now - (7 * 24 * 3600)
-        members = redis_client.zrangebyscore(zset_key, cutoff_weekly, '+inf')
-
-        if not members:
-            return result
-
-        # Fetch all bucket values in one HMGET
-        bucket_values = redis_client.hmget(bucket_key, [m.decode() if isinstance(m, bytes) else m for m in members])
-
         cutoff_daily = now - (24 * 3600)
         cutoff_3day = now - (3 * 24 * 3600)
 
-        for member, value in zip(members, bucket_values):
-            if value is None:
+        selected_sources = sources or LIVE_SPEECH_SOURCES
+        source_keys = [
+            (_bucket_key(uid, _normalize_speech_source(source)), _redis_key(uid, _normalize_speech_source(source)))
+            for source in selected_sources
+        ]
+        if sources is None:
+            # Transitional compatibility: retain the previous combined meter
+            # in live enforcement until its seven-day TTL naturally expires.
+            # New backfill is written only to the isolated v2 key.
+            source_keys.append((f'fair_use:bucket:{uid}', f'fair_use:speech:{uid}'))
+        for bucket_key, zset_key in source_keys:
+            members = redis_client.zrangebyscore(zset_key, cutoff_weekly, '+inf')
+            if not members:
                 continue
-            ms = int(value)
-            member_str = member.decode() if isinstance(member, bytes) else member
-            bucket_ts = int(member_str) * FAIR_USE_BUCKET_SECONDS
+            fields = [m.decode() if isinstance(m, bytes) else m for m in members]
+            bucket_values = redis_client.hmget(bucket_key, fields)
+            for member, value in zip(members, bucket_values):
+                if value is None:
+                    continue
+                ms = int(value)
+                member_str = member.decode() if isinstance(member, bytes) else member
+                bucket_ts = int(member_str) * FAIR_USE_BUCKET_SECONDS
 
-            result['weekly_ms'] += ms
-            if bucket_ts >= cutoff_3day:
-                result['three_day_ms'] += ms
-            if bucket_ts >= cutoff_daily:
-                result['daily_ms'] += ms
+                result['weekly_ms'] += ms
+                if bucket_ts >= cutoff_3day:
+                    result['three_day_ms'] += ms
+                if bucket_ts >= cutoff_daily:
+                    result['daily_ms'] += ms
 
         return result
     except Exception as e:
         logger.error(f'fair_use: Redis error reading speech for {uid}: {e}')
         return result
+
+
+def get_rolling_backfill_speech_ms(uid: str) -> Dict[str, Any]:
+    """Return historical recovery usage without including it in live enforcement."""
+    return get_rolling_speech_ms(uid, sources=('sync_backfill',))
 
 
 # ---------------------------------------------------------------------------
@@ -456,6 +501,29 @@ def _retry_after_seconds_from_restrict_until(restrict_until: Any) -> int | None:
     return max(seconds, 1) if seconds > 0 else None
 
 
+def normalize_expired_restriction_state(
+    uid: str, state: Dict[str, Any], *, now: datetime | None = None
+) -> Dict[str, Any]:
+    """Return effective state, persisting the existing restrict→throttle expiry transition."""
+    normalized_state = dict(state)
+    if normalized_state.get('stage', 'none') != 'restrict':
+        return normalized_state
+
+    restrict_until_raw = normalized_state.get('restrict_until')
+    if not isinstance(restrict_until_raw, datetime):
+        return normalized_state
+
+    restrict_until = _as_utc(restrict_until_raw)
+    effective_now = _as_utc(now) if now is not None else datetime.now(timezone.utc)
+    if effective_now <= restrict_until:
+        return normalized_state
+
+    fair_use_db.update_fair_use_state(uid, {'stage': 'throttle', 'restrict_until': None})
+    invalidate_enforcement_cache(uid)
+    normalized_state.update({'stage': 'throttle', 'restrict_until': None})
+    return normalized_state
+
+
 def get_hard_restriction_status(uid: str) -> tuple[bool, int | None]:
     """Return whether the user is hard-restricted and, when known, the retry window in seconds."""
     if not FAIR_USE_ENABLED or FAIR_USE_KILL_SWITCH:
@@ -465,23 +533,12 @@ def get_hard_restriction_status(uid: str) -> tuple[bool, int | None]:
 
     # Single Firestore read — get_enforcement_stage uses cache, but we need
     # restrict_until too, so read the full state once and check stage from it.
-    state = fair_use_db.get_fair_use_state(uid)
+    state = normalize_expired_restriction_state(uid, fair_use_db.get_fair_use_state(uid))
     stage = state.get('stage', 'none')
     if stage != 'restrict':
         return False, None
 
-    # Check if restriction has expired
-    restrict_until_raw = state.get('restrict_until')
-    if restrict_until_raw and isinstance(restrict_until_raw, datetime):
-        # Normalize to aware UTC for comparison (Firestore may return naive datetimes)
-        restrict_until = _as_utc(restrict_until_raw)
-        if datetime.now(timezone.utc) > restrict_until:
-            # Restriction expired, reset to throttle
-            fair_use_db.update_fair_use_state(uid, {'stage': 'throttle', 'restrict_until': None})
-            invalidate_enforcement_cache(uid)
-            return False, None
-    else:
-        restrict_until = restrict_until_raw
+    restrict_until = state.get('restrict_until')
 
     # Check if speech is over hard cap
     speech = get_rolling_speech_ms(uid)
@@ -519,7 +576,17 @@ def _dg_budget_key(uid: str) -> str:
     return f'fair_use:dg_budget:{uid}:{day}'
 
 
-def record_dg_usage_ms(uid: str, ms: int) -> None:
+_RECORD_COUNTER_ONCE_SCRIPT = """
+if redis.call('set', KEYS[1], '1', 'EX', ARGV[2], 'NX') then
+    redis.call('incrby', KEYS[2], ARGV[1])
+    redis.call('expire', KEYS[2], ARGV[2])
+    return 1
+end
+return 0
+"""
+
+
+def record_dg_usage_ms(uid: str, ms: int, idempotency_key: Optional[str] = None, raise_on_error: bool = False) -> None:
     """Atomically increment today's DG usage counter."""
     if not FAIR_USE_ENABLED or FAIR_USE_RESTRICT_DAILY_DG_MS <= 0 or ms <= 0:
         return
@@ -531,10 +598,23 @@ def record_dg_usage_ms(uid: str, ms: int) -> None:
         now = datetime.now(timezone.utc)
         tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
         seconds_until_midnight = int((tomorrow - now).total_seconds())
+        if idempotency_key:
+            ttl = seconds_until_midnight + 3600
+            redis_client.eval(
+                _RECORD_COUNTER_ONCE_SCRIPT,
+                2,
+                f'fair_use:v2:once:dg:{uid}:{idempotency_key}',
+                key,
+                ms,
+                ttl,
+            )
+            return
         pipe.expire(key, seconds_until_midnight + 3600)
         pipe.execute()
     except Exception as e:
         logger.error(f'fair_use: Redis error recording DG usage for {uid}: {e}')
+        if raise_on_error:
+            raise
 
 
 def get_dg_budget_status(uid: str) -> Dict[str, Any]:
@@ -604,7 +684,7 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: List[Dict[str, 
     """
     # Already at terminal stage — no escalation possible, skip LLM + lock (#6316)
     try:
-        current_stage = get_enforcement_stage(uid)
+        current_stage = await run_blocking(db_executor, get_enforcement_stage, uid)
         if current_stage == 'restrict':
             logger.info(f'fair_use: uid={uid} already at restrict stage, skipping classifier')
             return
@@ -615,7 +695,14 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: List[Dict[str, 
     lock_token = str(uuid.uuid4())
 
     try:
-        acquired = redis_client.set(lock_key, lock_token, nx=True, ex=FAIR_USE_CLASSIFIER_COOLDOWN_SECONDS)
+        acquired = await run_blocking(
+            db_executor,
+            redis_client.set,
+            lock_key,
+            lock_token,
+            nx=True,
+            ex=FAIR_USE_CLASSIFIER_COOLDOWN_SECONDS,
+        )
         if not acquired:
             logger.info(f'fair_use: classifier already running/recent for {uid}')
             return
@@ -625,12 +712,12 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: List[Dict[str, 
 
     try:
         # Free-exhausted users: synthetic score > 0.7, skip LLM classifier (#6083)
-        if is_free_credits_exhausted(uid):
+        if await run_blocking(db_executor, is_free_credits_exhausted, uid):
             classifier_result = {'misuse_score': 1.0, 'usage_type': 'free_exhausted'}
             logger.info(f'fair_use: free-exhausted uid={uid}, using synthetic score 1.0')
         else:
             classifier_result = await _get_classify_user_purpose()(uid)
-        escalation = escalate_enforcement(uid, triggered_caps, classifier_result)
+        escalation = await run_blocking(db_executor, escalate_enforcement, uid, triggered_caps, classifier_result)
 
         logger.info(
             'fair_use: uid=%s action=%s score=%.2f type=%s stage=%s->%s',
@@ -652,7 +739,7 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: List[Dict[str, 
     except Exception as e:
         logger.error(f'fair_use: classifier/escalation error for {uid}: {e}')
         try:
-            _release_lock(lock_key, lock_token)
+            await run_blocking(db_executor, _release_lock, lock_key, lock_token)
         except Exception:
             pass
 
@@ -691,4 +778,4 @@ async def _send_fair_use_notification(uid: str, action: str, case_ref: str = '')
         data = {'type': 'fair_use', 'action': action}
         if case_ref:
             data['case_ref'] = case_ref
-        _get_send_notification()(uid, title, body, data=data)
+        await run_blocking(postprocess_executor, _get_send_notification(), uid, title, body, data=data)

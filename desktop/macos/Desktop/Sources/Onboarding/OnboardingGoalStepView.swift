@@ -28,7 +28,7 @@ struct OnboardingGoalStepView: View {
       onSkip: onSkip,
       onForceComplete: onForceComplete
     ) {
-      VStack(alignment: .leading, spacing: 18) {
+      VStack(alignment: .leading, spacing: OmiSpacing.lg) {
         GoalChipGrid(
           items: suggestionItems,
           selectedItem: selectedSuggestion,
@@ -48,13 +48,13 @@ struct OnboardingGoalStepView: View {
         if customGoalSelected {
           TextField("Type your goal", text: $coordinator.goalDraft)
             .textFieldStyle(.plain)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
+            .padding(.horizontal, OmiSpacing.lg)
+            .padding(.vertical, OmiSpacing.md)
             .background(
-              RoundedRectangle(cornerRadius: 14, style: .continuous)
+              RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
                 .fill(OmiColors.backgroundSecondary)
                 .overlay(
-                  RoundedRectangle(cornerRadius: 14, style: .continuous)
+                  RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
                     .stroke(Color.white.opacity(0.08), lineWidth: 1)
                 )
             )
@@ -73,7 +73,7 @@ struct OnboardingGoalStepView: View {
           Button(coordinator.isSavingGoal ? "Saving…" : "Continue") {
             saveGoalAndContinue()
           }
-          .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+          .buttonStyle(OmiButtonStyle(.primary))
           .keyboardShortcut(.defaultAction)
           .disabled(coordinator.isSavingGoal)
         }
@@ -129,7 +129,7 @@ private struct GoalChipGrid: View {
   let onSelect: (String) -> Void
 
   var body: some View {
-    LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 10)], spacing: 10) {
+    LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: OmiSpacing.sm)], spacing: OmiSpacing.sm) {
       ForEach(items, id: \.self) { item in
         let isSelected = selectedItem == item
 
@@ -138,13 +138,13 @@ private struct GoalChipGrid: View {
             .font(.system(size: 13, weight: .semibold))
             .foregroundColor(isSelected ? .black : OmiColors.textSecondary)
             .frame(maxWidth: .infinity)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.md)
             .background(
-              RoundedRectangle(cornerRadius: 14, style: .continuous)
+              RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
                 .fill(isSelected ? Color.white : Color.white.opacity(0.05))
                 .overlay(
-                  RoundedRectangle(cornerRadius: 14, style: .continuous)
+                  RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
                     .stroke(Color.white.opacity(isSelected ? 0 : 0.08), lineWidth: 1)
                 )
             )

@@ -50,7 +50,11 @@ def workflow_sources(
             continue
         for pattern in patterns:
             if "*" in pattern:
-                sources.update(path.as_posix() for path in REPO_DIR.glob(pattern) if path.is_file())
+                sources.update(
+                    path.relative_to(REPO_DIR).as_posix()
+                    for path in REPO_DIR.glob(pattern)
+                    if path.is_file() and path.suffix == ".py"
+                )
             else:
                 source = REPO_DIR / pattern
                 if source.is_file():

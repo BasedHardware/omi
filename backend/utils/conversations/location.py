@@ -30,8 +30,14 @@ def get_google_maps_location(latitude: float, longitude: float) -> Optional[Geol
 
     key = os.getenv('GOOGLE_MAPS_API_KEY')
     url = f"https://maps.googleapis.com/maps/api/geocode/json?latlng={latitude},{longitude}&key={key}"
-    response = httpx.get(url)
-    data = response.json()
+    try:
+        response = httpx.get(url)
+        data = response.json()
+    except Exception as e:
+        # Transport failure (timeout/connect) or a non-JSON body (e.g. a Google 5xx HTML error page).
+        # Return None like the async twin instead of 500ing conversation create/finalize.
+        logger.error(f'get_google_maps_location error: {e}')
+        return None
     if data.get('status') != 'OK' or not data.get('results'):
         return None
     place = data['results'][0]

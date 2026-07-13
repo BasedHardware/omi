@@ -22,10 +22,13 @@ actor APIClient {
   }
 
   let session: URLSession
-  private let decoder: JSONDecoder
+  private var transport: OmiHTTPTransport
 
   /// When set, `buildHeaders` uses this instead of calling AuthService (test-only).
-  var testAuthHeader: String?
+  var testAuthHeader: String? {
+    get { transport.testAuthHeader }
+    set { transport.testAuthHeader = newValue }
+  }
 
   // Short-lived caches to deduplicate simultaneous calls from multiple services
   private var goalsCacheTime: Date?
@@ -35,93 +38,34 @@ actor APIClient {
   private var conversationsCountCache: [String: (count: Int, time: Date)] = [:]
 
   init() {
-    let config = URLSessionConfiguration.default
-    config.timeoutIntervalForRequest = 30
-    self.session = URLSession(configuration: config)
-
-    self.decoder = Self.makeDecoder()
+    let transport = OmiHTTPTransport()
+    self.transport = transport
+    self.session = transport.session
   }
 
   /// Test-only initializer that accepts a custom URLSession for request interception.
   init(session: URLSession) {
+    let transport = OmiHTTPTransport(session: session)
+    self.transport = transport
     self.session = session
-    self.decoder = Self.makeDecoder()
   }
 
-  private static func makeDecoder() -> JSONDecoder {
-    let decoder = JSONDecoder()
-    // Note: Don't use .convertFromSnakeCase - it conflicts with explicit CodingKeys
-    // Use custom date strategy to handle ISO8601 with fractional seconds
-    decoder.dateDecodingStrategy = .custom { decoder in
-      let container = try decoder.singleValueContainer()
-      let dateString = try container.decode(String.self)
-
-      // Try with fractional seconds first (API returns dates like "2026-01-25T22:51:07.159249Z")
-      let isoWithFractional = ISO8601DateFormatter()
-      isoWithFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-      if let date = isoWithFractional.date(from: dateString) {
-        return date
-      }
-
-      // Fallback to standard ISO8601 without fractional seconds
-      let iso = ISO8601DateFormatter()
-      if let date = iso.date(from: dateString) {
-        return date
-      }
-
-      throw DecodingError.dataCorruptedError(
-        in: container, debugDescription: "Invalid date format: \(dateString)")
-    }
-    return decoder
-  }
+  private var decoder: JSONDecoder { transport.decoder }
 
   // MARK: - Request Building
 
   func buildHeaders(
     requireAuth: Bool = true,
     forceRefreshAuth: Bool = false,
-    includeBYOK: Bool = true
+    includeBYOK: Bool = true,
+    expectedAuthOwnerId: String? = nil
   ) async throws -> [String: String] {
-    var headers: [String: String] = [
-      "Content-Type": "application/json",
-      "X-App-Platform": "macos",
-      "X-App-Version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
-      "X-App-Build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown",
-      "X-Device-Id-Hash": ClientDeviceService.shared.deviceIdHash,
-      "X-Request-Start-Time": String(Date().timeIntervalSince1970),
-      "X-Desktop-Request-ID": UUID().uuidString,
-    ]
-
-    if requireAuth {
-      if let testHeader = testAuthHeader {
-        headers["Authorization"] = testHeader
-      } else {
-        let authService = await MainActor.run { AuthService.shared }
-        let authHeader = try await authService.getAuthHeader(forceRefresh: forceRefreshAuth)
-        headers["Authorization"] = authHeader
-      }
-    }
-
-    // BYOK: attach user-provided keys so the backend uses them for LLM/STT
-    // calls this request triggers. Sent per-request; never stored server-side.
-    if includeBYOK, APIKeyService.isByokActive {
-      let health = await MainActor.run { CredentialHealthManager.shared }
-      let snapshot = APIKeyService.byokSnapshot
-      for (provider, entry) in snapshot {
-        let canAttach = await MainActor.run {
-          health.canUseBYOK(provider: provider, fingerprint: entry.fingerprint)
-        }
-        if canAttach {
-          headers[provider.headerName] = entry.key
-        } else {
-          log(
-            "CredentialHealth: context=build_headers failure_class=byok_invalid_suppressed"
-              + " provider=\(provider.rawValue)")
-        }
-      }
-    }
-
-    return headers
+    try await transport.buildHeaders(
+      requireAuth: requireAuth,
+      forceRefreshAuth: forceRefreshAuth,
+      includeBYOK: includeBYOK,
+      expectedAuthOwnerId: expectedAuthOwnerId
+    )
   }
 
   // MARK: - HTTP Methods
@@ -130,15 +74,30 @@ actor APIClient {
     _ endpoint: String,
     requireAuth: Bool = true,
     customBaseURL: String? = nil,
-    includeBYOK: Bool = true
+    includeBYOK: Bool = true,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> T {
+    let authPolicy = try resolvedRequestAuthPolicy(
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+    let authOwnerId = authPolicy.expectedAuthOwnerId
+    try validateExpectedOwner(authPolicy)
     let base = customBaseURL ?? baseURL
-    let url = URL(string: base + endpoint)!
+    guard let url = URL(string: base + endpoint) else {
+      throw APIError.invalidResponse
+    }
     var request = URLRequest(url: url)
     request.httpMethod = "GET"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
+    request.allHTTPHeaderFields = try await buildHeaders(
+      requireAuth: requireAuth,
+      includeBYOK: includeBYOK,
+      expectedAuthOwnerId: authOwnerId)
+    try validateExpectedOwner(authPolicy)
 
-    return try await performRequest(request)
+    return try await performRequest(
+      request,
+      authPolicy: authPolicy)
   }
 
   func post<T: Decodable, B: Encodable>(
@@ -146,41 +105,75 @@ actor APIClient {
     body: B,
     requireAuth: Bool = true,
     customBaseURL: String? = nil,
-    includeBYOK: Bool = true
+    includeBYOK: Bool = true,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> T {
+    let authPolicy = try resolvedRequestAuthPolicy(
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+    let authOwnerId = authPolicy.expectedAuthOwnerId
+    try validateExpectedOwner(authPolicy)
     let base = customBaseURL ?? baseURL
-    let url = URL(string: base + endpoint)!
+    guard let url = URL(string: base + endpoint) else {
+      throw APIError.invalidResponse
+    }
     log("APIClient: POST \(url.absoluteString)")
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
-    request.httpBody = try JSONEncoder().encode(body)
+    request.allHTTPHeaderFields = try await buildHeaders(
+      requireAuth: requireAuth,
+      includeBYOK: includeBYOK,
+      expectedAuthOwnerId: authOwnerId)
+    try validateExpectedOwner(authPolicy)
+    request.httpBody = try transport.encoder.encode(body)
 
-    return try await performRequest(request)
+    return try await performRequest(
+      request,
+      authPolicy: authPolicy)
   }
 
   func post<T: Decodable>(
     _ endpoint: String,
     requireAuth: Bool = true,
     customBaseURL: String? = nil,
-    includeBYOK: Bool = true
+    includeBYOK: Bool = true,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> T {
+    let authPolicy = try resolvedRequestAuthPolicy(
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+    let authOwnerId = authPolicy.expectedAuthOwnerId
+    try validateExpectedOwner(authPolicy)
     let base = customBaseURL ?? baseURL
-    let url = URL(string: base + endpoint)!
+    guard let url = URL(string: base + endpoint) else {
+      throw APIError.invalidResponse
+    }
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
+    request.allHTTPHeaderFields = try await buildHeaders(
+      requireAuth: requireAuth,
+      includeBYOK: includeBYOK,
+      expectedAuthOwnerId: authOwnerId)
+    try validateExpectedOwner(authPolicy)
 
-    return try await performRequest(request)
+    return try await performRequest(
+      request,
+      authPolicy: authPolicy)
   }
 
   /// Phase 2 realtime hub: ask the backend to mint a short-lived ephemeral token
   /// for `provider` ("openai"|"gemini"). The backend gates on auth + paywall.
   /// Credential failures are typed so the hub can recover deterministically instead
   /// of treating every failure as a silent fallback.
-  func mintRealtimeToken(provider: String) async throws -> String {
+  func mintRealtimeToken(
+    provider: String,
+    expectedOwnerID: String,
+    customBaseURL: String? = nil
+  ) async throws -> String {
     struct Resp: Decodable { let token: String }
-    let base = rustBackendURL
+    let base = customBaseURL ?? rustBackendURL
     guard !base.isEmpty else {
       throw CredentialHealthError.backendTransient(
         statusCode: nil,
@@ -192,18 +185,30 @@ actor APIClient {
     }
 
     let providerType = CredentialHealthManager.realtimeProvider(from: provider)
+    let authPolicy = RequestAuthPolicy.ownerBound(expectedOwnerID)
+    try validateExpectedOwner(authPolicy)
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true, includeBYOK: false)
+    request.allHTTPHeaderFields = try await buildHeaders(
+      requireAuth: true,
+      includeBYOK: false,
+      expectedAuthOwnerId: expectedOwnerID)
     request.httpBody = try JSONEncoder().encode(["provider": provider])
 
     do {
-      return try await performRealtimeMintRequest(request, provider: providerType, retriedAuth: false)
+      return try await performRealtimeMintRequest(
+        request,
+        provider: providerType,
+        authPolicy: authPolicy,
+        retriedAuth: false)
     } catch let error as RealtimeTokenMintError {
       log("APIClient: realtime token mint failed for \(provider): \(error.localizedDescription)")
       throw error
     } catch let error as CredentialHealthError {
       log("APIClient: realtime token mint failed for \(provider): \(error.localizedDescription)")
+      throw error
+    } catch let error as AuthError {
+      log("APIClient: realtime token mint rejected after owner change for \(provider)")
       throw error
     } catch {
       log("APIClient: realtime token mint failed for \(provider): \(error.localizedDescription)")
@@ -214,27 +219,31 @@ actor APIClient {
   private func performRealtimeMintRequest(
     _ request: URLRequest,
     provider: RealtimeHubProvider?,
+    authPolicy: RequestAuthPolicy,
     retriedAuth: Bool
   ) async throws -> String {
     struct Resp: Decodable { let token: String }
+    try validateExpectedOwner(authPolicy)
     let (data, response) = try await session.data(for: request)
+    try validateExpectedOwner(authPolicy)
     guard let httpResponse = response as? HTTPURLResponse else {
       throw CredentialHealthError.backendTransient(statusCode: nil, message: APIError.invalidResponse.localizedDescription)
     }
 
     if httpResponse.statusCode == 401, !retriedAuth {
-      let authService = await MainActor.run { AuthService.shared }
-      var retry = request
-      do {
-        retry.setValue(try await authService.getAuthHeader(forceRefresh: true), forHTTPHeaderField: "Authorization")
-      } catch AuthError.notSignedIn {
+      guard let retry = try await authorizedRetryRequest(
+        from: request,
+        retriedAuth: false,
+        authPolicy: authPolicy
+      ) else {
         throw CredentialHealthError.requiresLogin(message: "Please sign in again to use voice responses.")
-      } catch {
-        throw CredentialHealthError.backendTransient(statusCode: nil, message: error.localizedDescription)
       }
-
       do {
-        let token = try await performRealtimeMintRequest(retry, provider: provider, retriedAuth: true)
+        let token = try await performRealtimeMintRequest(
+          retry,
+          provider: provider,
+          authPolicy: authPolicy,
+          retriedAuth: true)
         log("CredentialHealth: context=realtime_mint_auth_retry failure_class=retry_succeeded")
         return token
       } catch let error as RealtimeTokenMintError {
@@ -246,8 +255,15 @@ actor APIClient {
       }
     }
 
+    if httpResponse.statusCode == 401 {
+      await invalidateSessionAfterUnauthorized(
+        endpoint: endpointLabel(for: request),
+        signOutOn401: authPolicy.signOutOn401)
+      throw CredentialHealthError.requiresLogin(message: "Please sign in again to use voice responses.")
+    }
+
     guard (200...299).contains(httpResponse.statusCode) else {
-      let payload = Self.extractErrorPayload(from: data)
+      let payload = OmiHTTPTransport.extractErrorPayload(from: data)
       let healthError = CredentialHealthManager.classifyHTTPFailure(
         statusCode: httpResponse.statusCode,
         payload: payload,
@@ -302,76 +318,195 @@ actor APIClient {
     }
   }
 
-  func delete(
-    _ endpoint: String,
-    requireAuth: Bool = true,
-    customBaseURL: String? = nil,
-    includeBYOK: Bool = true
+  private func performVoidRequest(
+    _ request: URLRequest,
+    authPolicy: RequestAuthPolicy = .default,
+    retriedAuth: Bool = false
   ) async throws {
-    let base = customBaseURL ?? baseURL
-    let url = URL(string: base + endpoint)!
-    var request = URLRequest(url: url)
-    request.httpMethod = "DELETE"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
-
-    let (_, response) = try await session.data(for: request)
-
-    guard let httpResponse = response as? HTTPURLResponse else {
-      throw APIError.invalidResponse
-    }
-
-    if httpResponse.statusCode == 401 {
-      throw APIError.unauthorized
-    }
+    let (_, httpResponse) = try await performAuthenticatedData(
+      for: request,
+      authPolicy: authPolicy,
+      retriedAuth: retriedAuth
+    )
 
     guard (200...299).contains(httpResponse.statusCode) else {
       throw APIError.httpError(statusCode: httpResponse.statusCode)
     }
   }
 
+  func delete(
+    _ endpoint: String,
+    requireAuth: Bool = true,
+    customBaseURL: String? = nil,
+    includeBYOK: Bool = true,
+    authPolicy: RequestAuthPolicy = .default,
+    expectedAuthOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws {
+    let effectiveAuthPolicy = try resolvedRequestAuthPolicy(
+      expectedOwnerId: expectedAuthOwnerId,
+      authorizationSnapshot: authorizationSnapshot,
+      fallback: authPolicy)
+    let authOwnerId = effectiveAuthPolicy.expectedAuthOwnerId
+    try validateExpectedOwner(effectiveAuthPolicy)
+    let base = customBaseURL ?? baseURL
+    let url = URL(string: base + endpoint)!
+    var request = URLRequest(url: url)
+    request.httpMethod = "DELETE"
+    request.allHTTPHeaderFields = try await buildHeaders(
+      requireAuth: requireAuth,
+      includeBYOK: includeBYOK,
+      expectedAuthOwnerId: authOwnerId
+    )
+    try validateExpectedOwner(effectiveAuthPolicy)
+
+    try await performVoidRequest(request, authPolicy: effectiveAuthPolicy)
+  }
+
   // MARK: - Request Execution
 
-  private func performRequest<T: Decodable>(_ request: URLRequest) async throws -> T {
-    let (data, response) = try await session.data(for: request)
+  private func invalidateSessionAfterUnauthorized(endpoint: String, signOutOn401: Bool) async {
+    guard signOutOn401 else { return }
+    await AuthSessionCoordinator.shared.handleHTTPUnauthorized(
+      endpoint: endpoint,
+      signOutOn401: true,
+      auth: AuthService.shared
+    )
+  }
 
+  private func endpointLabel(for request: URLRequest) -> String {
+    request.url?.path ?? request.url?.absoluteString ?? "unknown"
+  }
+
+  /// Refresh auth and build a retry request. Returns nil when already retried (caller should throw).
+  private func authorizedRetryRequest(
+    from request: URLRequest,
+    retriedAuth: Bool,
+    authPolicy: RequestAuthPolicy
+  ) async throws -> URLRequest? {
+    if retriedAuth {
+      await invalidateSessionAfterUnauthorized(
+        endpoint: endpointLabel(for: request),
+        signOutOn401: authPolicy.signOutOn401
+      )
+      return nil
+    }
+    let authService = await MainActor.run { AuthService.shared }
+    do {
+      var retry = request
+      let authHeader: String
+      if let expectedOwnerId = authPolicy.expectedAuthOwnerId {
+        authHeader = try await authService.getAuthHeader(
+          forceRefresh: true,
+          expectedUserId: expectedOwnerId
+        )
+      } else {
+        authHeader = try await authService.getAuthHeader(forceRefresh: true)
+      }
+      try validateExpectedOwner(authPolicy)
+      retry.setValue(authHeader, forHTTPHeaderField: "Authorization")
+      return retry
+    } catch AuthError.notSignedIn {
+      await invalidateSessionAfterUnauthorized(
+        endpoint: endpointLabel(for: request),
+        signOutOn401: authPolicy.signOutOn401
+      )
+      return nil
+    }
+  }
+
+  func performAuthenticatedData(
+    for request: URLRequest,
+    authPolicy: RequestAuthPolicy = .default,
+    retriedAuth: Bool = false
+  ) async throws -> (Data, HTTPURLResponse) {
+    try validateExpectedOwner(authPolicy)
+    let endpoint = endpointLabel(for: request)
+    let (data, response) = try await session.data(for: request)
+    try validateExpectedOwner(authPolicy)
     guard let httpResponse = response as? HTTPURLResponse else {
       throw APIError.invalidResponse
     }
 
-    // Handle 401 - token might be expired
     if httpResponse.statusCode == 401 {
-      // Try to refresh token and retry once
-      let authService = await MainActor.run { AuthService.shared }
-
-      var retryRequest = request
-      retryRequest.setValue(
-        try await authService.getAuthHeader(forceRefresh: true), forHTTPHeaderField: "Authorization")
-
-      let (retryData, retryResponse) = try await session.data(for: retryRequest)
-
-      guard let retryHttpResponse = retryResponse as? HTTPURLResponse else {
-        throw APIError.invalidResponse
+      if retriedAuth, authPolicy.returnsPersistent401Response {
+        return (data, httpResponse)
       }
-
-      if retryHttpResponse.statusCode == 401 {
+      if !retriedAuth, authPolicy.recordsAuthRetryTelemetry {
+        DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "retrying")
+      }
+      guard let retryRequest = try await authorizedRetryRequest(
+        from: request,
+        retriedAuth: retriedAuth,
+        authPolicy: authPolicy
+      ) else {
+        if authPolicy.recordsAuthRetryTelemetry {
+          DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "unauthorized")
+        }
         throw APIError.unauthorized
       }
-
-      guard (200...299).contains(retryHttpResponse.statusCode) else {
-        let detail = Self.extractErrorDetail(from: retryData)
-        throw APIError.httpError(statusCode: retryHttpResponse.statusCode, detail: detail)
+      do {
+        let result = try await performAuthenticatedData(
+          for: retryRequest,
+          authPolicy: authPolicy,
+          retriedAuth: true
+        )
+        let (_, retryResponse) = result
+        let outcome = (200...299).contains(retryResponse.statusCode) ? "succeeded" : "failed"
+        if authPolicy.recordsAuthRetryTelemetry {
+          DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: outcome)
+        }
+        return result
+      } catch {
+        if case APIError.unauthorized = error {
+          throw error
+        }
+        if authPolicy.recordsAuthRetryTelemetry {
+          DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "failed")
+        }
+        throw error
       }
-
-      return try decoder.decode(T.self, from: retryData)
     }
 
+    return (data, httpResponse)
+  }
+
+  /// An owner-bound request may finish after the app has signed out or switched
+  /// accounts. The authorization header still belongs to the original owner,
+  /// so never let that response flow into the new owner's local state.
+  private nonisolated func validateExpectedOwner(_ authPolicy: RequestAuthPolicy) throws {
+    if let authorizationSnapshot = authPolicy.authorizationSnapshot {
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+        throw AuthError.userChangedDuringRequest
+      }
+      return
+    }
+    guard let expectedOwnerId = authPolicy.expectedAuthOwnerId else { return }
+    guard AuthorizedToolExecution.isOwnerCurrent(expectedOwnerId) else {
+      throw AuthError.userChangedDuringRequest
+    }
+  }
+
+  private func performRequest<T: Decodable>(
+    _ request: URLRequest,
+    authPolicy: RequestAuthPolicy = .default,
+    retriedAuth: Bool = false
+  ) async throws -> T {
+    let (data, httpResponse) = try await performAuthenticatedData(
+      for: request,
+      authPolicy: authPolicy,
+      retriedAuth: retriedAuth
+    )
+
     guard (200...299).contains(httpResponse.statusCode) else {
-      let detail = Self.extractErrorDetail(from: data)
+      let detail = OmiHTTPTransport.extractErrorDetail(from: data)
       throw APIError.httpError(statusCode: httpResponse.statusCode, detail: detail)
     }
 
     do {
-      return try decoder.decode(T.self, from: data)
+      let decoded = try decoder.decode(T.self, from: data)
+      try validateExpectedOwner(authPolicy)
+      return decoded
     } catch let decodingError as DecodingError {
       // Log detailed decoding error for debugging
       switch decodingError {
@@ -394,67 +529,6 @@ actor APIClient {
         logError("Decoding error", error: decodingError)
       }
       throw decodingError
-    }
-  }
-
-  private static func extractErrorDetail(from data: Data) -> String? {
-    if let payload = extractErrorPayload(from: data) {
-      return payload.preferredMessage
-    }
-    guard
-      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      let detail = json["detail"] as? String
-    else { return nil }
-    return detail
-  }
-
-  private static func extractErrorPayload(from data: Data) -> APIErrorPayload? {
-    try? JSONDecoder().decode(APIErrorPayload.self, from: data)
-  }
-}
-
-// MARK: - API Errors
-
-enum APIError: LocalizedError {
-  case invalidResponse
-  case unauthorized
-  case httpError(statusCode: Int, detail: String? = nil)
-  case decodingError(Error)
-  case unsupportedTierScopedBulkMutation(String)
-  case syncRateLimited(retryAfterSeconds: Int?)
-  case syncUploadRejected(reason: String)
-
-  var detail: String? {
-    switch self {
-    case .httpError(_, let detail):
-      return detail
-    case .syncUploadRejected(let reason):
-      return reason
-    default:
-      return nil
-    }
-  }
-
-  var errorDescription: String? {
-    switch self {
-    case .invalidResponse:
-      return "Invalid response from server"
-    case .unauthorized:
-      return "Unauthorized - please sign in again"
-    case .httpError(let statusCode, let detail):
-      if let detail { return detail }
-      return "HTTP error: \(statusCode)"
-    case .decodingError(let error):
-      return "Failed to decode response: \(error.localizedDescription)"
-    case .unsupportedTierScopedBulkMutation(let operation):
-      return "Layer-scoped bulk memory \(operation) is not supported yet."
-    case .syncRateLimited(let retryAfterSeconds):
-      if let retryAfterSeconds {
-        return "Sync rate limited (retry after \(retryAfterSeconds)s)"
-      }
-      return "Sync rate limited"
-    case .syncUploadRejected(let reason):
-      return reason
     }
   }
 }
@@ -573,24 +647,20 @@ extension APIClient {
 
   /// Deletes a conversation by ID
   func deleteConversation(id: String) async throws {
-    try await delete("v1/conversations/\(id)")
+    try await delete("v1/conversations/\(id)?cascade=true")
     invalidateConversationsCountCache()
   }
 
   /// Updates the starred status of a conversation
-  func setConversationStarred(id: String, starred: Bool) async throws {
+  func setConversationStarred(id: String, starred: Bool) async throws -> ServerConversation {
     let url = URL(string: baseURL + "v1/conversations/\(id)/starred?starred=\(starred)")!
     var request = URLRequest(url: url)
     request.httpMethod = "PATCH"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
 
-    let (_, response) = try await session.data(for: request)
-    guard let httpResponse = response as? HTTPURLResponse,
-      (200...299).contains(httpResponse.statusCode)
-    else {
-      throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
-    }
+    let response: ConversationMutationResponse = try await performRequest(request)
     invalidateConversationsCountCache()
+    return response.conversation
   }
 
   /// Sets the visibility of a conversation for sharing
@@ -624,7 +694,7 @@ extension APIClient {
   }
 
   /// Updates the title of a conversation
-  func updateConversationTitle(id: String, title: String) async throws {
+  func updateConversationTitle(id: String, title: String) async throws -> ServerConversation {
     var components = URLComponents(string: baseURL + "v1/conversations/\(id)/title")!
     components.queryItems = [URLQueryItem(name: "title", value: title)]
     let url = components.url!
@@ -632,12 +702,8 @@ extension APIClient {
     request.httpMethod = "PATCH"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
 
-    let (_, response) = try await session.data(for: request)
-    guard let httpResponse = response as? HTTPURLResponse,
-      (200...299).contains(httpResponse.statusCode)
-    else {
-      throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
-    }
+    let response: ConversationMutationResponse = try await performRequest(request)
+    return response.conversation
   }
 
   /// Searches conversations with a query
@@ -806,7 +872,7 @@ extension APIClient {
   }
 
   /// Moves a conversation to a folder
-  func moveConversationToFolder(conversationId: String, folderId: String?) async throws {
+  func moveConversationToFolder(conversationId: String, folderId: String?) async throws -> ServerConversation {
     let body = MoveToFolderRequest(folderId: folderId)
     let url = URL(string: baseURL + "v1/conversations/\(conversationId)/folder")!
     var request = URLRequest(url: url)
@@ -814,13 +880,9 @@ extension APIClient {
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
     request.httpBody = try JSONEncoder().encode(body)
 
-    let (_, response) = try await session.data(for: request)
-    guard let httpResponse = response as? HTTPURLResponse,
-      (200...299).contains(httpResponse.statusCode)
-    else {
-      throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
-    }
+    let response: ConversationMutationResponse = try await performRequest(request)
     invalidateConversationsCountCache()
+    return response.conversation
   }
 
 }
@@ -861,6 +923,11 @@ enum ConversationSource: String, Codable {
   }
 }
 
+private struct ConversationMutationResponse: Decodable {
+  let status: String
+  let conversation: ServerConversation
+}
+
 enum TranscriptPresenceState: Equatable {
   case omittedFromResponse
   case lockedOrRedacted
@@ -870,7 +937,8 @@ enum TranscriptPresenceState: Equatable {
 
 struct ServerConversation: Codable, Identifiable, Equatable {
   static func == (lhs: ServerConversation, rhs: ServerConversation) -> Bool {
-    lhs.id == rhs.id && lhs.createdAt == rhs.createdAt && lhs.startedAt == rhs.startedAt
+    lhs.id == rhs.id && lhs.createdAt == rhs.createdAt && lhs.updatedAt == rhs.updatedAt
+      && lhs.startedAt == rhs.startedAt
       && lhs.finishedAt == rhs.finishedAt && lhs.structured == rhs.structured
       && lhs.status == rhs.status && lhs.discarded == rhs.discarded && lhs.deleted == rhs.deleted
       && lhs.isLocked == rhs.isLocked && lhs.starred == rhs.starred && lhs.folderId == rhs.folderId
@@ -880,6 +948,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
 
   let id: String
   let createdAt: Date
+  /// Canonical Firestore document revision. Never derived from recording timestamps.
+  let updatedAt: Date?
   let startedAt: Date?
   let finishedAt: Date?
 
@@ -907,6 +977,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   enum CodingKeys: String, CodingKey {
     case id
     case createdAt = "created_at"
+    case updatedAt = "updated_at"
     case startedAt = "started_at"
     case finishedAt = "finished_at"
     case structured
@@ -936,9 +1007,10 @@ struct ServerConversation: Codable, Identifiable, Equatable {
 
     id = wire.id
     createdAt = try Self.parseDate(wire.createdAt, decoder: decoder)
+    updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
     startedAt = try Self.parseOptionalDate(wire.startedAt, decoder: decoder)
     finishedAt = try Self.parseOptionalDate(wire.finishedAt, decoder: decoder)
-    structured = Structured(wire.structured ?? OmiAPI.Structured(actionItems: nil, category: nil, emoji: nil, events: nil, overview: nil, title: nil))
+    structured = Structured(wire.structured)
     // container.contains distinguishes `"transcript_segments": null` (present,
     // empty) from the key being absent (omitted). wire.transcriptSegments is
     // nil for both, so we must check the container directly.
@@ -984,6 +1056,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   init(
     id: String,
     createdAt: Date,
+    updatedAt: Date? = nil,
     startedAt: Date?,
     finishedAt: Date?,
     structured: Structured,
@@ -1005,6 +1078,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   ) {
     self.id = id
     self.createdAt = createdAt
+    self.updatedAt = updatedAt
     self.startedAt = startedAt
     self.finishedAt = finishedAt
     self.structured = structured
@@ -1123,7 +1197,7 @@ struct Structured: Codable, Equatable {
 
   func encode(to encoder: Encoder) throws {
     let actionItemsWire = actionItems.map {
-      OmiAPI.ActionItem(completed: $0.completed, completedAt: nil, conversationId: nil, createdAt: nil, description_: $0.description, dueAt: nil, updatedAt: nil)
+      OmiAPI.ActionItem(candidateAction: nil, captureConfidence: nil, captureKind: nil, captureOwner: nil, completed: $0.completed, completedAt: nil, concreteDeliverable: nil, conversationId: nil, createdAt: nil, description_: $0.description, dueAt: nil, ownershipConfidence: nil, targetTaskId: nil, updatedAt: nil)
     }
     let eventsWire = events.map {
       OmiAPI.Event(
@@ -1193,12 +1267,19 @@ struct ActionItem: Codable, Identifiable, Equatable {
 
   func encode(to encoder: Encoder) throws {
     let wire = OmiAPI.ActionItem(
+      candidateAction: nil,
+      captureConfidence: nil,
+      captureKind: nil,
+      captureOwner: nil,
       completed: completed,
       completedAt: nil,
+      concreteDeliverable: nil,
       conversationId: nil,
       createdAt: nil,
       description_: description,
       dueAt: nil,
+      ownershipConfidence: nil,
+      targetTaskId: nil,
       updatedAt: nil
     )
     try wire.encode(to: encoder)
@@ -2103,17 +2184,22 @@ extension APIClient {
     }
 
     if httpResponse.statusCode == 401, !retriedAuth {
-      let authService = await MainActor.run { AuthService.shared }
-      var retry = request
-      retry.setValue(try await authService.getAuthHeader(forceRefresh: true), forHTTPHeaderField: "Authorization")
+      guard let retry = try await authorizedRetryRequest(
+        from: request,
+        retriedAuth: false,
+        authPolicy: .default
+      ) else {
+        throw APIError.unauthorized
+      }
       return try await performMemoryListRequest(retry, retriedAuth: true)
     }
     if httpResponse.statusCode == 401 {
+      await invalidateSessionAfterUnauthorized(endpoint: endpointLabel(for: request), signOutOn401: true)
       throw APIError.unauthorized
     }
 
     guard (200...299).contains(httpResponse.statusCode) else {
-      let detail = Self.extractErrorDetail(from: data)
+      let detail = OmiHTTPTransport.extractErrorDetail(from: data)
       throw APIError.httpError(statusCode: httpResponse.statusCode, detail: detail)
     }
 
@@ -2142,7 +2228,8 @@ extension APIClient {
     currentActivity: String? = nil,
     source: String? = nil,
     windowTitle: String? = nil,
-    headline: String? = nil
+    headline: String? = nil,
+    expectedOwnerId: String? = nil
   ) async throws -> CreateMemoryResponse {
     struct CreateRequest: Encodable {
       let content: String
@@ -2180,7 +2267,7 @@ extension APIClient {
       windowTitle: windowTitle,
       headline: headline
     )
-    return try await post("v3/memories", body: body)
+    return try await post("v3/memories", body: body, expectedOwnerId: expectedOwnerId)
   }
 
   /// Max memories per POST /v3/memories/batch call. Must match the
@@ -2302,24 +2389,39 @@ extension APIClient {
     _ endpoint: String,
     body: B,
     requireAuth: Bool = true,
-    customBaseURL: String? = nil
+    customBaseURL: String? = nil,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> T {
+    let authPolicy = try resolvedRequestAuthPolicy(
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+    let authOwnerId = authPolicy.expectedAuthOwnerId
+    try validateExpectedOwner(authPolicy)
     let base = customBaseURL ?? baseURL
     let url = URL(string: base + endpoint)!
     var request = URLRequest(url: url)
     request.httpMethod = "PATCH"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
+    request.allHTTPHeaderFields = try await buildHeaders(
+      requireAuth: requireAuth,
+      expectedAuthOwnerId: authOwnerId)
+    try validateExpectedOwner(authPolicy)
     request.httpBody = try JSONEncoder().encode(body)
 
-    return try await performPatchRequest(request)
+    return try await performPatchRequest(
+      request,
+      authPolicy: authPolicy)
   }
 
-  private func performPatchRequest<T: Decodable>(_ request: URLRequest) async throws -> T {
+  private func performPatchRequest<T: Decodable>(
+    _ request: URLRequest,
+    authPolicy: RequestAuthPolicy = .default
+  ) async throws -> T {
     // Delegate to performRequest so PATCH gets the same 401 refresh-and-retry as
     // GET/POST. PATCH previously threw `.unauthorized` on the first 401, which
     // surfaced as a user-visible failure (e.g. the onboarding language step)
     // whenever the ID token was momentarily stale right after sign-in.
-    return try await performRequest(request)
+    return try await performRequest(request, authPolicy: authPolicy)
   }
 }
 
@@ -2524,61 +2626,20 @@ struct ActionItemsListResponse: Decodable {
 
 extension APIClient {
 
-  /// Fetches action items from the API with optional filtering and sorting
-  func getActionItems(
-    limit: Int = 100,
-    offset: Int = 0,
-    completed: Bool? = nil,
-    startDate: Date? = nil,
-    endDate: Date? = nil,
-    dueStartDate: Date? = nil,
-    dueEndDate: Date? = nil,
-    sortBy: String? = nil,
-    deleted: Bool? = nil
-  ) async throws -> ActionItemsListResponse {
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
-    var queryItems: [String] = [
-      "limit=\(limit)",
-      "offset=\(offset)",
-    ]
-
-    if let completed = completed {
-      queryItems.append("completed=\(completed)")
-    }
-
-    if let startDate = startDate {
-      queryItems.append("start_date=\(formatter.string(from: startDate))")
-    }
-
-    if let endDate = endDate {
-      queryItems.append("end_date=\(formatter.string(from: endDate))")
-    }
-
-    if let dueStartDate = dueStartDate {
-      queryItems.append("due_start_date=\(formatter.string(from: dueStartDate))")
-    }
-
-    if let dueEndDate = dueEndDate {
-      queryItems.append("due_end_date=\(formatter.string(from: dueEndDate))")
-    }
-
-    if let sortBy = sortBy {
-      queryItems.append("sort_by=\(sortBy)")
-    }
-
-    if let deleted = deleted {
-      queryItems.append("deleted=\(deleted)")
-    }
-
-    let endpoint = "v1/action-items?\(queryItems.joined(separator: "&"))"
-    return try await get(endpoint)
-  }
-
   /// Fetches one action item by backend ID.
   func getActionItem(id: String) async throws -> TaskActionItem {
-    try await get("v1/action-items/\(id)")
+    try await getActionItem(id: id, expectedOwnerId: nil)
+  }
+
+  func getActionItem(
+    id: String,
+    expectedOwnerId: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> TaskActionItem {
+    try await get(
+      "v1/action-items/\(id)",
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   /// Updates an action item
@@ -2591,52 +2652,23 @@ extension APIClient {
     priority: String? = nil,
     metadata: [String: Any]? = nil,
     goalId: String? = nil,
+    clearGoalId: Bool = false,
+    workstreamId: String? = nil,
+    clearWorkstreamId: Bool = false,
+    owner: String? = nil,
+    dueConfidence: Double? = nil,
+    provenance: [OmiAPI.EvidenceRef]? = nil,
+    status: String? = nil,
+    supersededBy: String? = nil,
+    source: String? = nil,
+    sortOrder: Int? = nil,
+    indentLevel: Int? = nil,
     relevanceScore: Int? = nil,
-    recurrenceRule: String? = nil
+    recurrenceRule: String? = nil,
+    recurrenceParentId: String? = nil,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> TaskActionItem {
-    struct UpdateRequest: Encodable {
-      let completed: Bool?
-      let description: String?
-      let dueAt: String?
-      let includeDueAt: Bool
-      let clearDueAt: Bool
-      let priority: String?
-      let metadata: String?
-      let goalId: String?
-      let relevanceScore: Int?
-      let recurrenceRule: String?
-
-      enum CodingKeys: String, CodingKey {
-        case completed, description, priority, metadata
-        case dueAt = "due_at"
-        case clearDueAt = "clear_due_at"
-        case goalId = "goal_id"
-        case relevanceScore = "relevance_score"
-        case recurrenceRule = "recurrence_rule"
-      }
-
-      func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encodeIfPresent(completed, forKey: .completed)
-        try container.encodeIfPresent(description, forKey: .description)
-        if includeDueAt {
-          if let dueAt {
-            try container.encode(dueAt, forKey: .dueAt)
-          } else {
-            try container.encodeNil(forKey: .dueAt)
-          }
-        }
-        if clearDueAt {
-          try container.encode(true, forKey: .clearDueAt)
-        }
-        try container.encodeIfPresent(priority, forKey: .priority)
-        try container.encodeIfPresent(metadata, forKey: .metadata)
-        try container.encodeIfPresent(goalId, forKey: .goalId)
-        try container.encodeIfPresent(relevanceScore, forKey: .relevanceScore)
-        try container.encodeIfPresent(recurrenceRule, forKey: .recurrenceRule)
-      }
-    }
-
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
@@ -2649,25 +2681,49 @@ extension APIClient {
       }
     }
 
-    let request = UpdateRequest(
-      completed: completed,
-      description: description,
-      dueAt: dueAt.map { formatter.string(from: $0) },
-      includeDueAt: clearDueAt || dueAt != nil,
-      clearDueAt: clearDueAt,
-      priority: priority,
+    let wire = OmiAPI.ActionItemUpdateRequest(
+      clearDueAt: taskPatchField(clearDueAt ? true : nil),
+      completed: taskPatchField(completed),
+      description_: taskPatchField(description),
+      dueAt: taskPatchField(dueAt.map { formatter.string(from: $0) }),
+      dueConfidence: taskPatchField(dueConfidence),
+      goalId: clearGoalId ? .null : taskPatchField(goalId),
+      indentLevel: taskPatchField(indentLevel),
+      owner: taskPatchField(owner.flatMap(OmiAPI.TaskOwner.init(rawValue:))),
+      priority: taskPatchField(priority.flatMap(OmiAPI.TaskPriority.init(rawValue:))),
+      provenance: taskPatchField(provenance),
+      recurrenceParentId: taskPatchField(recurrenceParentId),
+      recurrenceRule: taskPatchField(recurrenceRule),
+      sortOrder: taskPatchField(sortOrder),
+      source: taskPatchField(source),
+      status: taskPatchField(status.flatMap(OmiAPI.TaskStatus.init(rawValue:))),
+      supersededBy: taskPatchField(supersededBy),
+      workstreamId: clearWorkstreamId ? .null : taskPatchField(workstreamId)
+    )
+    let request = try taskMutationBody(
+      wire,
       metadata: metadataString,
-      goalId: goalId,
-      relevanceScore: relevanceScore,
-      recurrenceRule: recurrenceRule
+      relevanceScore: relevanceScore
     )
 
-    return try await patch("v1/action-items/\(id)", body: request)
+    return try await patch(
+      "v1/action-items/\(id)",
+      body: request,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   /// Deletes an action item
-  func deleteActionItem(id: String) async throws {
-    try await delete("v1/action-items/\(id)")
+  func deleteActionItem(
+    id: String,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws {
+    try await delete(
+      "v1/action-items/\(id)",
+      authPolicy: expectedOwnerId.map { .ownerBound($0) } ?? .default,
+      expectedAuthOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   /// Creates a new action item
@@ -2680,29 +2736,18 @@ extension APIClient {
     metadata: [String: Any]? = nil,
     relevanceScore: Int? = nil,
     recurrenceRule: String? = nil,
-    recurrenceParentId: String? = nil
+    recurrenceParentId: String? = nil,
+    goalId: String? = nil,
+    workstreamId: String? = nil,
+    owner: String? = nil,
+    dueConfidence: Double? = nil,
+    provenance: [OmiAPI.EvidenceRef]? = nil,
+    status: String? = nil,
+    sortOrder: Int? = nil,
+    indentLevel: Int? = nil,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> TaskActionItem {
-    struct CreateRequest: Encodable {
-      let description: String
-      let dueAt: String?
-      let source: String?
-      let priority: String?
-      let category: String?
-      let metadata: String?
-      let relevanceScore: Int?
-      let recurrenceRule: String?
-      let recurrenceParentId: String?
-
-      enum CodingKeys: String, CodingKey {
-        case description
-        case dueAt = "due_at"
-        case source, priority, category, metadata
-        case relevanceScore = "relevance_score"
-        case recurrenceRule = "recurrence_rule"
-        case recurrenceParentId = "recurrence_parent_id"
-      }
-    }
-
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
@@ -2715,58 +2760,63 @@ extension APIClient {
       }
     }
 
-    let request = CreateRequest(
-      description: description,
+    let wire = OmiAPI.ActionItemCreateRequest(
+      appleReminderId: nil,
+      completed: nil,
+      conversationId: nil,
+      description_: description,
       dueAt: dueAt.map { formatter.string(from: $0) },
+      dueConfidence: dueConfidence,
+      exportDate: nil,
+      exportPlatform: nil,
+      exported: nil,
+      goalId: goalId,
+      indentLevel: indentLevel,
+      isLocked: nil,
+      owner: owner.flatMap(OmiAPI.TaskOwner.init(rawValue:)),
+      priority: priority.flatMap(OmiAPI.TaskPriority.init(rawValue:)),
+      provenance: provenance,
+      recurrenceParentId: recurrenceParentId,
+      recurrenceRule: recurrenceRule,
+      sortOrder: sortOrder,
       source: source,
-      priority: priority,
+      status: status.flatMap(OmiAPI.TaskStatus.init(rawValue:)),
+      workstreamId: workstreamId
+    )
+    let request = try taskMutationBody(
+      wire,
       category: category,
       metadata: metadataString,
-      relevanceScore: relevanceScore,
-      recurrenceRule: recurrenceRule,
-      recurrenceParentId: recurrenceParentId
+      relevanceScore: relevanceScore
     )
 
-    return try await post("v1/action-items", body: request)
+    return try await post(
+      "v1/action-items",
+      body: request,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
-  /// Batch update relevance scores for multiple action items
-  func batchUpdateScores(_ scores: [(id: String, score: Int)]) async throws {
-    struct ScoreUpdate: Encodable {
-      let id: String
-      let relevance_score: Int
+  private func taskMutationBody<Wire: Encodable>(
+    _ wire: Wire,
+    category: String? = nil,
+    metadata: String? = nil,
+    relevanceScore: Int? = nil
+  ) throws -> OmiAnyCodable {
+    let data = try JSONEncoder().encode(wire)
+    guard var body = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+      throw APIError.invalidResponse
     }
-    struct BatchRequest: Encodable {
-      let scores: [ScoreUpdate]
-    }
-    struct StatusResponse: Decodable {
-      let status: String
-    }
-    let request = BatchRequest(
-      scores: scores.map { ScoreUpdate(id: $0.id, relevance_score: $0.score) })
-    let _: StatusResponse = try await patch("v1/action-items/batch-scores", body: request)
+    // Released desktop clients still send these compatibility-only fields.
+    // Canonical fields remain owned by the generated OpenAPI request DTO.
+    if let category { body["category"] = category }
+    if let metadata { body["metadata"] = metadata }
+    if let relevanceScore { body["relevance_score"] = relevanceScore }
+    return OmiAnyCodable(body)
   }
 
-  /// Batch update sort orders and indent levels for multiple action items
-  func batchUpdateSortOrders(_ updates: [(id: String, sortOrder: Int, indentLevel: Int)])
-    async throws
-  {
-    struct SortUpdate: Encodable {
-      let id: String
-      let sort_order: Int
-      let indent_level: Int
-    }
-    struct BatchRequest: Encodable {
-      let items: [SortUpdate]
-    }
-    struct StatusResponse: Decodable {
-      let status: String
-    }
-    let request = BatchRequest(
-      items: updates.map {
-        SortUpdate(id: $0.id, sort_order: $0.sortOrder, indent_level: $0.indentLevel)
-      })
-    let _: StatusResponse = try await patch("v1/action-items/batch", body: request)
+  private func taskPatchField<Value: Codable>(_ value: Value?) -> OmiAPI.OmiPatchField<Value> {
+    value.map(OmiAPI.OmiPatchField.value) ?? .omitted
   }
 
   // MARK: - Task Sharing
@@ -2782,6 +2832,300 @@ extension APIClient {
     return try await post("v1/action-items/share", body: ShareRequest(taskIds: taskIds))
   }
 
+}
+
+// MARK: - Canonical Candidates API
+
+extension APIClient {
+  func getCandidateWorkflowControl() async throws -> OmiAPI.TaskWorkflowControl {
+    try await get("v1/candidates/control")
+  }
+
+  func getCandidateWorkflowControl(
+    expectedOwnerId: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws
+    -> OmiAPI.TaskWorkflowControl
+  {
+    try await get(
+      "v1/candidates/control",
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+  }
+
+  func createCanonicalCandidate(
+    _ candidate: OmiAPI.CandidateCreate,
+    idempotencyKey: String,
+    accountGeneration: Int
+  ) async throws -> OmiAPI.CandidateRecord {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/candidates",
+      method: "POST",
+      body: candidate,
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func acceptCanonicalCandidate(
+    candidateID: String,
+    accountGeneration: Int
+  ) async throws -> OmiAPI.CandidateResolutionReceipt {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/candidates/\(candidateID)/accept",
+      method: "POST",
+      body: Optional<String>.none,
+      idempotencyKey: nil,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func getCanonicalCandidate(candidateID: String) async throws -> OmiAPI.CandidateRecord {
+    try await get("v1/candidates/\(candidateID)")
+  }
+
+  func taskIntelligenceMutation<Response: Decodable, Body: Encodable>(
+    endpoint: String,
+    method: String,
+    body: Body?,
+    idempotencyKey: String?,
+    accountGeneration: Int?,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> Response {
+    let authPolicy = try resolvedRequestAuthPolicy(
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+    let authOwnerId = authPolicy.expectedAuthOwnerId
+    try validateExpectedOwner(authPolicy)
+    guard let url = URL(string: baseURL + endpoint) else { throw APIError.invalidResponse }
+    var request = URLRequest(url: url)
+    request.httpMethod = method
+    request.allHTTPHeaderFields = try await buildHeaders(
+      expectedAuthOwnerId: authOwnerId)
+    try validateExpectedOwner(authPolicy)
+    if let accountGeneration {
+      request.setValue(String(accountGeneration), forHTTPHeaderField: "X-Account-Generation")
+    }
+    if let idempotencyKey {
+      request.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key")
+    }
+    if let body { request.httpBody = try JSONEncoder().encode(body) }
+    return try await performRequest(
+      request,
+      authPolicy: authPolicy)
+  }
+}
+
+// MARK: - Suggested task review and feedback
+
+extension APIClient {
+  func listCanonicalCandidates(status: String, limit: Int) async throws -> [OmiAPI.CandidateRecord] {
+    let encodedStatus = status.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? status
+    let response: OmiAPI.CandidateListResponse = try await get(
+      "v1/candidates?status=\(encodedStatus)&limit=\(limit)&offset=0&surface=suggested")
+    return response.candidates
+  }
+
+  func rejectCanonicalCandidate(
+    candidateID: String,
+    reason: String?,
+    accountGeneration: Int
+  ) async throws -> OmiAPI.CandidateResolutionReceipt {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/candidates/\(candidateID)/reject",
+      method: "POST",
+      body: OmiAPI.CandidateResolutionRequest(reason: reason),
+      idempotencyKey: nil,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func registerTaskIntervention(
+    _ request: OmiAPI.InterventionCreate,
+    idempotencyKey: String,
+    accountGeneration: Int
+  ) async throws -> OmiAPI.InterventionRecord {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/task-intelligence/interventions",
+      method: "POST",
+      body: request,
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func recordTaskFeedback(
+    _ request: OmiAPI.FeedbackCreate,
+    idempotencyKey: String,
+    accountGeneration: Int
+  ) async throws -> OmiAPI.FeedbackRecord {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/task-intelligence/feedback",
+      method: "POST",
+      body: request,
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func createTaskOutcome(
+    _ request: OmiAPI.OutcomeCreate,
+    idempotencyKey: String,
+    accountGeneration: Int
+  ) async throws -> OmiAPI.OutcomeRecord {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/task-intelligence/outcomes",
+      method: "POST",
+      body: request,
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func updateSuggestedTaskDescription(id: String, description: String) async throws {
+    _ = try await updateActionItem(id: id, description: description)
+  }
+}
+
+// MARK: - What Matters Now and canonical Goals
+
+extension APIClient {
+  func getWhatMattersNow(deviceID: String? = nil) async throws -> OmiAPI.WhatMattersNowProjection {
+    var endpoint = "v1/what-matters-now"
+    if let deviceID {
+      let encodedDeviceID = deviceID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? deviceID
+      endpoint += "?device_id=\(encodedDeviceID)"
+    }
+    return try await get(endpoint)
+  }
+
+  func replaceTaskContextSnapshot(
+    _ snapshot: OmiAPI.NormalizedContextSnapshot,
+    accountGeneration: Int,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> OmiAPI.SnapshotReceipt {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/task-intelligence/context-snapshot",
+      method: "PUT",
+      body: snapshot,
+      idempotencyKey: snapshot.snapshotId,
+      accountGeneration: accountGeneration,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot
+    )
+  }
+
+  func evaluateWhatMattersNow(
+    _ request: OmiAPI.EvaluationRequest,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> OmiAPI.WhatMattersNowProjection {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/what-matters-now/evaluate",
+      method: "POST",
+      body: request,
+      idempotencyKey: nil,
+      accountGeneration: nil,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot
+    )
+  }
+
+  func getCanonicalGoals(includeEnded: Bool = true) async throws -> [OmiAPI.GoalResponse] {
+    try await get("v1/goals/all?include_ended=\(includeEnded ? "true" : "false")")
+  }
+
+  func getCanonicalGoalDetail(goalID: String) async throws -> OmiAPI.GoalDetailProjection {
+    try await get("v1/goals/\(goalID)/detail")
+  }
+
+  func createCanonicalGoal(
+    title: String,
+    desiredOutcome: String,
+    whyItMatters: String?,
+    successCriteria: [String],
+    accountGeneration: Int,
+    idempotencyKey: String
+  ) async throws -> OmiAPI.GoalResponse {
+    struct Request: Encodable {
+      let title: String
+      let desired_outcome: String
+      let why_it_matters: String?
+      let success_criteria: [String]
+      let status: String
+      let source: String
+    }
+    return try await taskIntelligenceMutation(
+      endpoint: "v1/goals/canonical",
+      method: "POST",
+      body: Request(
+        title: title,
+        desired_outcome: desiredOutcome,
+        why_it_matters: whyItMatters,
+        success_criteria: successCriteria,
+        status: "background",
+        source: "user"
+      ),
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func focusCanonicalGoal(
+    goalID: String,
+    replacementGoalID: String?,
+    focusRank: Int?,
+    accountGeneration: Int,
+    idempotencyKey: String
+  ) async throws -> OmiAPI.GoalResponse {
+    struct Request: Encodable {
+      let replacement_goal_id: String?
+      let focus_rank: Int?
+    }
+    return try await taskIntelligenceMutation(
+      endpoint: "v1/goals/\(goalID)/focus",
+      method: "POST",
+      body: Request(replacement_goal_id: replacementGoalID, focus_rank: focusRank),
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func unfocusCanonicalGoal(
+    goalID: String,
+    accountGeneration: Int,
+    idempotencyKey: String
+  ) async throws -> OmiAPI.GoalResponse {
+    try await taskIntelligenceMutation(
+      endpoint: "v1/goals/\(goalID)/focus",
+      method: "DELETE",
+      body: Optional<String>.none,
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
+
+  func transitionCanonicalGoal(
+    goalID: String,
+    status: OmiAPI.GoalStatus,
+    relationshipDisposition: String = "retain",
+    accountGeneration: Int,
+    idempotencyKey: String
+  ) async throws -> OmiAPI.GoalResponse {
+    struct Request: Encodable {
+      let status: OmiAPI.GoalStatus
+      let relationship_disposition: String
+    }
+    return try await taskIntelligenceMutation(
+      endpoint: "v1/goals/\(goalID)/lifecycle",
+      method: "POST",
+      body: Request(status: status, relationship_disposition: relationshipDisposition),
+      idempotencyKey: idempotencyKey,
+      accountGeneration: accountGeneration
+    )
+  }
 }
 
 /// Response types for task sharing
@@ -2874,25 +3218,16 @@ extension APIClient {
   }
 
   /// Promotes the top-ranked staged task to action_items
-  func promoteTopStagedTask() async throws -> PromoteResponse {
-    return try await post("v1/staged-tasks/promote")
+  func promoteTopStagedTask(
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> PromoteResponse {
+    return try await post(
+      "v1/staged-tasks/promote",
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
-  /// One-time migration of existing AI tasks to staged_tasks
-  func migrateStagedTasks() async throws {
-    struct StatusResponse: Decodable { let status: String }
-    let _: StatusResponse = try await post("v1/staged-tasks/migrate")
-  }
-
-  /// Migrate conversation-extracted action items (no source field) to staged_tasks
-  func migrateConversationItemsToStaged() async throws {
-    struct MigrateResponse: Decodable {
-      let status: String
-      let migrated: Int
-      let deleted: Int
-    }
-    let _: MigrateResponse = try await post("v1/staged-tasks/migrate-conversation-items")
-  }
 }
 
 /// Response for staged task promotion
@@ -3071,445 +3406,6 @@ extension APIClient {
       endpoint += "?date=\(formatter.string(from: date))"
     }
     return try await get(endpoint)
-  }
-}
-
-// MARK: - Action Item Model (Standalone)
-
-/// Standalone action item stored in Firestore subcollection
-/// Different from ActionItem which is embedded in conversation structured data
-struct TaskActionItem: Codable, Identifiable, Equatable {
-  let id: String
-  let description: String
-  let completed: Bool
-  let createdAt: Date
-  let updatedAt: Date?
-  let dueAt: Date?
-  let completedAt: Date?
-  let conversationId: String?
-  /// Source of the task: "screenshot", "transcription:omi", "transcription:desktop", "manual"
-  let source: String?
-  /// Priority: "high", "medium", "low"
-  let priority: String?
-  /// JSON metadata string containing extra info like source_app, confidence
-  let metadata: String?
-  /// Classification category: personal, work, feature, bug, code, research, communication, finance, health, other
-  let category: String?
-  /// Soft-delete: true if this task has been deleted by AI dedup
-  let deleted: Bool?
-  /// Who deleted: "user", "ai_dedup"
-  let deletedBy: String?
-  /// When the task was soft-deleted
-  let deletedAt: Date?
-  /// AI reason for deletion (dedup explanation)
-  let deletedReason: String?
-  /// ID of the task that was kept instead of this one
-  let keptTaskId: String?
-  /// ID of the goal this task is linked to
-  let goalId: String?
-  /// Whether this task was promoted from staged_tasks
-  let fromStaged: Bool?
-  /// Recurrence rule: "daily", "weekdays", "weekly", "biweekly", "monthly"
-  let recurrenceRule: String?
-  /// ID of original parent task in recurrence chain
-  let recurrenceParentId: String?
-
-  // Ordering (synced to backend)
-  var sortOrder: Int?  // Sort position within category
-  var indentLevel: Int?  // 0-3 indent depth
-
-  // Prioritization (stored locally, not synced to backend)
-  var relevanceScore: Int?  // 0-100 relevance score from TaskPrioritizationService
-
-  // Desktop extraction context (stored locally, not synced to backend)
-  var contextSummary: String?  // Summary of screen context at extraction time
-  var currentActivity: String?  // What user was doing when task was detected
-  var agentEditedFiles: [String]?  // Files the agent previously edited
-
-  // Agent execution tracking (stored locally, not synced to backend)
-  var agentStatus: String?  // nil, "pending", "processing", "completed", "failed"
-  var agentPrompt: String?  // The prompt sent to Claude
-  var agentPlan: String?  // Claude's response/plan
-  var agentSessionId: String?  // tmux session name for the Claude session
-  var agentStartedAt: Date?  // When agent was launched
-  var agentCompletedAt: Date?  // When agent finished
-
-  // Chat session for task-scoped AI chat (stored locally, not synced to backend)
-  var chatSessionId: String?
-
-  /// Whether this task has an active recurrence rule
-  var isRecurring: Bool {
-    guard let rule = recurrenceRule, !rule.isEmpty else { return false }
-    return true
-  }
-
-  /// Custom Equatable: compares only display-relevant fields.
-  /// Skips `metadata` (JSON key ordering is non-deterministic after SQLite round-trip),
-  /// `updatedAt` (set to Date() when nil on sync), and fields lost through SQLite.
-  static func == (lhs: TaskActionItem, rhs: TaskActionItem) -> Bool {
-    lhs.id == rhs.id && lhs.description == rhs.description && lhs.completed == rhs.completed
-      && lhs.createdAt == rhs.createdAt && lhs.dueAt == rhs.dueAt && lhs.source == rhs.source
-      && lhs.priority == rhs.priority && lhs.category == rhs.category && lhs.deleted == rhs.deleted
-      && lhs.deletedBy == rhs.deletedBy && lhs.goalId == rhs.goalId
-      && lhs.recurrenceRule == rhs.recurrenceRule
-  }
-
-  enum CodingKeys: String, CodingKey {
-    case id, description, completed, source, priority, metadata, category, deleted
-    case createdAt = "created_at"
-    case updatedAt = "updated_at"
-    case dueAt = "due_at"
-    case completedAt = "completed_at"
-    case conversationId = "conversation_id"
-    case deletedBy = "deleted_by"
-    case deletedAt = "deleted_at"
-    case deletedReason = "deleted_reason"
-    case keptTaskId = "kept_task_id"
-    case goalId = "goal_id"
-    case fromStaged = "from_staged"
-    case recurrenceRule = "recurrence_rule"
-    case recurrenceParentId = "recurrence_parent_id"
-    case sortOrder = "sort_order"
-    case indentLevel = "indent_level"
-    case relevanceScore = "relevance_score"
-  }
-
-  /// Memberwise initializer for creating instances programmatically
-  init(
-    id: String,
-    description: String,
-    completed: Bool,
-    createdAt: Date,
-    updatedAt: Date? = nil,
-    dueAt: Date? = nil,
-    completedAt: Date? = nil,
-    conversationId: String? = nil,
-    source: String? = nil,
-    priority: String? = nil,
-    metadata: String? = nil,
-    category: String? = nil,
-    deleted: Bool? = nil,
-    deletedBy: String? = nil,
-    deletedAt: Date? = nil,
-    deletedReason: String? = nil,
-    keptTaskId: String? = nil,
-    goalId: String? = nil,
-    fromStaged: Bool? = nil,
-    recurrenceRule: String? = nil,
-    recurrenceParentId: String? = nil,
-    sortOrder: Int? = nil,
-    indentLevel: Int? = nil,
-    relevanceScore: Int? = nil,
-    contextSummary: String? = nil,
-    currentActivity: String? = nil,
-    agentEditedFiles: [String]? = nil,
-    agentStatus: String? = nil,
-    agentPrompt: String? = nil,
-    agentPlan: String? = nil,
-    agentSessionId: String? = nil,
-    agentStartedAt: Date? = nil,
-    agentCompletedAt: Date? = nil,
-    chatSessionId: String? = nil
-  ) {
-    self.id = id
-    self.description = description
-    self.completed = completed
-    self.createdAt = createdAt
-    self.updatedAt = updatedAt
-    self.dueAt = dueAt
-    self.completedAt = completedAt
-    self.conversationId = conversationId
-    self.source = source
-    self.priority = priority
-    self.metadata = metadata
-    self.category = category
-    self.deleted = deleted
-    self.deletedBy = deletedBy
-    self.deletedAt = deletedAt
-    self.deletedReason = deletedReason
-    self.keptTaskId = keptTaskId
-    self.goalId = goalId
-    self.fromStaged = fromStaged
-    self.recurrenceRule = recurrenceRule
-    self.recurrenceParentId = recurrenceParentId
-    self.sortOrder = sortOrder
-    self.indentLevel = indentLevel
-    self.relevanceScore = relevanceScore
-    self.contextSummary = contextSummary
-    self.currentActivity = currentActivity
-    self.agentEditedFiles = agentEditedFiles
-    self.agentStatus = agentStatus
-    self.agentPrompt = agentPrompt
-    self.agentPlan = agentPlan
-    self.agentSessionId = agentSessionId
-    self.agentStartedAt = agentStartedAt
-    self.agentCompletedAt = agentCompletedAt
-    self.chatSessionId = chatSessionId
-  }
-
-  init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    id = try container.decode(String.self, forKey: .id)
-    description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
-    completed = try container.decodeIfPresent(Bool.self, forKey: .completed) ?? false
-    createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
-    updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
-    dueAt = try container.decodeIfPresent(Date.self, forKey: .dueAt)
-    completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
-    conversationId = try container.decodeIfPresent(String.self, forKey: .conversationId)
-    source = try container.decodeIfPresent(String.self, forKey: .source)
-    priority = try container.decodeIfPresent(String.self, forKey: .priority)
-    metadata = try container.decodeIfPresent(String.self, forKey: .metadata)
-    category = try container.decodeIfPresent(String.self, forKey: .category)
-    deleted = try container.decodeIfPresent(Bool.self, forKey: .deleted)
-    deletedBy = try container.decodeIfPresent(String.self, forKey: .deletedBy)
-    deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
-    deletedReason = try container.decodeIfPresent(String.self, forKey: .deletedReason)
-    keptTaskId = try container.decodeIfPresent(String.self, forKey: .keptTaskId)
-    goalId = try container.decodeIfPresent(String.self, forKey: .goalId)
-    fromStaged = try container.decodeIfPresent(Bool.self, forKey: .fromStaged)
-    recurrenceRule = try container.decodeIfPresent(String.self, forKey: .recurrenceRule)
-    recurrenceParentId = try container.decodeIfPresent(String.self, forKey: .recurrenceParentId)
-    sortOrder = try container.decodeIfPresent(Int.self, forKey: .sortOrder)
-    indentLevel = try container.decodeIfPresent(Int.self, forKey: .indentLevel)
-    relevanceScore = try container.decodeIfPresent(Int.self, forKey: .relevanceScore)
-
-    // Local-only fields, not decoded from API
-    contextSummary = nil
-    currentActivity = nil
-    agentEditedFiles = nil
-    agentStatus = nil
-    agentPrompt = nil
-    agentPlan = nil
-    agentSessionId = nil
-    agentStartedAt = nil
-    agentCompletedAt = nil
-  }
-
-  /// Categories that trigger Claude agent execution
-  static let agentCategories: Set<String> = ["feature", "bug", "code"]
-
-  /// Get tags array from metadata or fall back to single category
-  var tags: [String] {
-    // First try to get tags from metadata JSON
-    if let metadata = metadata,
-      let data = metadata.data(using: .utf8),
-      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      let metaTags = json["tags"] as? [String], !metaTags.isEmpty
-    {
-      return metaTags
-    }
-    // Fall back to single category for backward compat
-    if let category = category {
-      return [category]
-    }
-    return []
-  }
-
-  /// Check if this task should trigger an agent (any task can trigger)
-  var shouldTriggerAgent: Bool {
-    return true
-  }
-
-  /// Parsed source classification from metadata
-  var sourceClassification: TaskSourceClassification? {
-    guard let metadata = metadata,
-      let data = metadata.data(using: .utf8),
-      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      let cat = json["source_category"] as? String,
-      let sub = json["source_subcategory"] as? String
-    else { return nil }
-    return TaskSourceClassification.from(category: cat, subcategory: sub)
-  }
-
-  /// Parse metadata JSON to extract source app name
-  var sourceApp: String? {
-    guard let metadata = metadata,
-      let data = metadata.data(using: .utf8),
-      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-    else {
-      return nil
-    }
-    return json["source_app"] as? String
-  }
-
-  /// Parse metadata JSON to extract window title
-  var windowTitle: String? {
-    guard let metadata = metadata,
-      let data = metadata.data(using: .utf8),
-      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-    else {
-      return nil
-    }
-    return json["window_title"] as? String
-  }
-
-  /// Parse metadata JSON to extract confidence score
-  var confidence: Double? {
-    guard let metadata = metadata,
-      let data = metadata.data(using: .utf8),
-      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-    else {
-      return nil
-    }
-    return json["confidence"] as? Double
-  }
-
-  /// Parse full metadata JSON dictionary
-  var parsedMetadata: [String: Any]? {
-    guard let metadata = metadata,
-      let data = metadata.data(using: .utf8),
-      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-    else {
-      return nil
-    }
-    return json
-  }
-
-  /// Whether this task has detail metadata worth showing (beyond tags/category already visible as badges)
-  var hasDetailMetadata: Bool {
-    guard let json = parsedMetadata else { return false }
-    let displayedKeys: Set<String> = ["tags", "category", "source_category", "source_subcategory"]
-    return json.keys.contains(where: { !displayedKeys.contains($0) })
-  }
-
-  /// Display-friendly source label
-  var sourceLabel: String {
-    guard let source = source else { return "Task" }
-    switch source {
-    case "screenshot": return "Screen"
-    case "transcription:omi": return "omi"
-    case "transcription:desktop": return "Desktop"
-    case "transcription:phone": return "Phone"
-    case "manual": return "Manual"
-    default: return "Task"
-    }
-  }
-
-  /// Display label: app name for screenshot tasks, generic label otherwise
-  var sourceAppLabel: String {
-    if source == "screenshot", let app = sourceApp {
-      return app
-    }
-    return sourceLabel
-  }
-
-  /// System icon name for source
-  var sourceIcon: String {
-    guard let source = source else { return "list.bullet" }
-    switch source {
-    case "screenshot": return "camera.fill"
-    case "transcription:omi": return "waveform"
-    case "transcription:desktop": return "desktopcomputer"
-    case "transcription:phone": return "iphone"
-    case "manual": return "square.and.pencil"
-    default: return "list.bullet"
-    }
-  }
-
-  /// Display-friendly category label
-  var categoryLabel: String {
-    guard let category = category else { return "" }
-    return category.capitalized
-  }
-
-  /// System icon name for category
-  var categoryIcon: String {
-    guard let category = category else { return "folder.fill" }
-    switch category {
-    case "feature": return "sparkles"
-    case "bug": return "ladybug.fill"
-    case "code": return "chevron.left.forwardslash.chevron.right"
-    case "work": return "briefcase.fill"
-    case "personal": return "person.fill"
-    case "research": return "magnifyingglass"
-    case "communication": return "bubble.left.fill"
-    case "finance": return "dollarsign.circle.fill"
-    case "health": return "heart.fill"
-    default: return "folder.fill"
-    }
-  }
-
-  /// Color for category badge
-  var categoryColor: String {
-    guard let category = category else { return "gray" }
-    switch category {
-    case "feature": return "purple"
-    case "bug": return "red"
-    case "code": return "blue"
-    case "work": return "orange"
-    case "personal": return "green"
-    case "research": return "cyan"
-    case "communication": return "indigo"
-    case "finance": return "yellow"
-    case "health": return "pink"
-    default: return "gray"
-    }
-  }
-
-  /// All meaningful task data formatted for chat context.
-  /// Add new fields here when they're added to the struct so chat always gets everything.
-  var chatContext: String {
-    let formatter = DateFormatter()
-    formatter.dateStyle = .medium
-    formatter.timeStyle = .short
-
-    var lines: [String] = []
-
-    // Core
-    lines.append("Task: \(description)")
-    if let category = category { lines.append("Category: \(category)") }
-    if !tags.isEmpty { lines.append("Tags: \(tags.joined(separator: ", "))") }
-    if let priority = priority { lines.append("Priority: \(priority)") }
-    lines.append("Status: \(completed ? "completed" : "active")")
-    lines.append("Created: \(formatter.string(from: createdAt))")
-    if let dueAt = dueAt { lines.append("Due: \(formatter.string(from: dueAt))") }
-    if let completedAt = completedAt {
-      lines.append("Completed: \(formatter.string(from: completedAt))")
-    }
-
-    // Source & origin
-    if let source = source { lines.append("Source: \(sourceLabel) (\(source))") }
-    if let app = sourceApp { lines.append("Source app: \(app)") }
-    if let title = windowTitle { lines.append("Window title: \(title)") }
-    if let conf = confidence {
-      lines.append("Extraction confidence: \(String(format: "%.0f%%", conf * 100))")
-    }
-
-    // Screen context at extraction time
-    if let ctx = contextSummary, !ctx.isEmpty { lines.append("Context when detected: \(ctx)") }
-    if let act = currentActivity, !act.isEmpty { lines.append("User activity: \(act)") }
-
-    // Relationships
-    if let convId = conversationId { lines.append("Conversation ID: \(convId)") }
-    if let goalId = goalId { lines.append("Linked goal: \(goalId)") }
-
-    // Agent work
-    if let status = agentStatus { lines.append("Agent status: \(status)") }
-    if let prompt = agentPrompt, !prompt.isEmpty {
-      lines.append("Agent prompt: \(String(prompt.prefix(1000)))")
-    }
-    if let plan = agentPlan, !plan.isEmpty {
-      lines.append("Agent plan:\n\(String(plan.prefix(2000)))")
-    }
-    if let files = agentEditedFiles, !files.isEmpty {
-      lines.append("Files edited by agent: \(files.joined(separator: ", "))")
-    }
-
-    // Raw metadata (catches anything not explicitly listed above)
-    if let meta = parsedMetadata {
-      let coveredKeys: Set<String> = [
-        "tags", "source_app", "window_title", "confidence",
-        "source_category", "source_subcategory",
-      ]
-      let extra = meta.filter { !coveredKeys.contains($0.key) }
-      if !extra.isEmpty {
-        let pairs = extra.map { "\($0.key): \($0.value)" }.sorted()
-        lines.append("Additional metadata: \(pairs.joined(separator: ", "))")
-      }
-    }
-
-    return lines.joined(separator: "\n")
   }
 }
 
@@ -4356,7 +4252,9 @@ extension APIClient {
       }
     }
     let body = UpdateRequest(singleLanguageMode: singleLanguageMode, vocabulary: vocabulary)
-    return try await patch("v1/users/transcription-preferences", body: body)
+    struct StatusResponse: Decodable { let status: String }
+    let _: StatusResponse = try await patch("v1/users/transcription-preferences", body: body)
+    return try await getTranscriptionPreferences()
   }
 
   /// Fetches user language preference
@@ -4370,12 +4268,20 @@ extension APIClient {
   /// missing") even though the backend had already saved the language, silently
   /// (pre-await-fix) or now visibly blocking the caller on a save that succeeded.
   @discardableResult
-  func updateUserLanguage(_ language: String) async throws -> SetUserLanguageResponse {
+  func updateUserLanguage(
+    _ language: String,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> SetUserLanguageResponse {
     struct UpdateRequest: Encodable {
       let language: String
     }
     let body = UpdateRequest(language: language)
-    return try await patch("v1/users/language", body: body)
+    return try await patch(
+      "v1/users/language",
+      body: body,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   /// Fetches recording permission status
@@ -4443,7 +4349,9 @@ extension APIClient {
   /// Updates user profile (onboarding data)
   func updateUserProfile(
     name: String? = nil, motivation: String? = nil, useCase: String? = nil, job: String? = nil,
-    company: String? = nil
+    company: String? = nil,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws {
     struct UpdateRequest: Encodable {
       let name: String?
@@ -4454,7 +4362,11 @@ extension APIClient {
     }
     let body = UpdateRequest(
       name: name, motivation: motivation, use_case: useCase, job: job, company: company)
-    let _: UserProfileResponse = try await patch("v1/users/profile", body: body)
+    let _: UserProfileResponse = try await patch(
+      "v1/users/profile",
+      body: body,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   /// Deletes the authenticated user's account and all server data.
@@ -5282,58 +5194,11 @@ struct EmptyBody: Encodable {}
 
 extension APIClient {
 
-  /// Save a chat message to the backend
-  func saveMessage(
-    text: String,
-    sender: String,
-    appId: String? = nil,
-    sessionId: String? = nil,
-    metadata: String? = nil,
-    clientMessageId: String? = nil,
-    messageSource: String = "desktop_chat"
-  ) async throws -> SaveMessageResponse {
-    struct SaveRequest: Encodable {
-      let text: String
-      let sender: String
-      let app_id: String?
-      let session_id: String?
-      let metadata: String?
-      let client_message_id: String?
-      let message_source: String
-    }
-    let body = SaveRequest(
-      text: text,
-      sender: sender,
-      app_id: appId,
-      session_id: sessionId,
-      metadata: metadata,
-      client_message_id: clientMessageId,
-      message_source: messageSource
-    )
-    return try await post("v2/desktop/messages", body: body)
-  }
-
-  /// Fetch chat message history
-  func getMessages(
-    appId: String? = nil,
-    limit: Int = 100,
-    offset: Int = 0
-  ) async throws -> [ChatMessageDB] {
-    var queryItems: [String] = [
-      "limit=\(limit)",
-      "offset=\(offset)",
-    ]
-
-    if let appId = appId {
-      queryItems.append("app_id=\(appId)")
-    }
-
-    let endpoint = "v2/desktop/messages?\(queryItems.joined(separator: "&"))"
-    return try await get(endpoint)
-  }
-
   /// Clear chat message history
-  func deleteMessages(appId: String? = nil) async throws -> MessageDeleteResponse {
+  func deleteMessages(
+    appId: String? = nil,
+    expectedOwnerId: String? = nil
+  ) async throws -> MessageDeleteResponse {
     var endpoint = "v2/desktop/messages"
     if let appId = appId {
       endpoint += "?app_id=\(appId)"
@@ -5342,39 +5207,15 @@ extension APIClient {
     let url = URL(string: baseURL + endpoint)!
     var request = URLRequest(url: url)
     request.httpMethod = "DELETE"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+    request.allHTTPHeaderFields = try await buildHeaders(
+      requireAuth: true,
+      expectedAuthOwnerId: expectedOwnerId
+    )
 
-    let (data, response) = try await session.data(for: request)
-
-    guard let httpResponse = response as? HTTPURLResponse else {
-      throw APIError.invalidResponse
-    }
-
-    if httpResponse.statusCode == 401 {
-      throw APIError.unauthorized
-    }
-
-    guard (200...299).contains(httpResponse.statusCode) else {
-      throw APIError.httpError(statusCode: httpResponse.statusCode)
-    }
-
-    return try decoder.decode(MessageDeleteResponse.self, from: data)
-  }
-
-  /// Fetch messages for a specific session
-  func getMessages(
-    sessionId: String,
-    limit: Int = 100,
-    offset: Int = 0
-  ) async throws -> [ChatMessageDB] {
-    let queryItems: [String] = [
-      "session_id=\(sessionId)",
-      "limit=\(limit)",
-      "offset=\(offset)",
-    ]
-
-    let endpoint = "v2/desktop/messages?\(queryItems.joined(separator: "&"))"
-    return try await get(endpoint)
+    return try await performRequest(
+      request,
+      authPolicy: expectedOwnerId.map { .ownerBound($0) } ?? .default
+    )
   }
 
   /// Rate a message (thumbs up/down)
@@ -5434,13 +5275,7 @@ extension APIClient {
     body.append("--\(boundary)--\(lineBreak)".data(using: .utf8)!)
     request.httpBody = body
 
-    let (data, response) = try await session.data(for: request)
-    guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
-    if http.statusCode == 401 { throw APIError.unauthorized }
-    guard (200...299).contains(http.statusCode) else {
-      throw APIError.httpError(statusCode: http.statusCode)
-    }
-    return try decoder.decode([ChatFileResponse].self, from: data)
+    return try await performRequest(request)
   }
 
   // MARK: - Sync local files (WAL upload)
@@ -5528,19 +5363,7 @@ extension APIClient {
   }
 
   private func performSyncLocalFilesUpload(_ request: URLRequest, retriedAuth: Bool = false) async throws -> UploadLocalFilesResult {
-    let (data, response) = try await session.data(for: request)
-    guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
-
-    if http.statusCode == 401 {
-      guard !retriedAuth else {
-        throw APIError.unauthorized
-      }
-      var retryRequest = request
-      let authService = await MainActor.run { AuthService.shared }
-      retryRequest.setValue(
-        try await authService.getAuthHeader(forceRefresh: true), forHTTPHeaderField: "Authorization")
-      return try await performSyncLocalFilesUpload(retryRequest, retriedAuth: true)
-    }
+    let (data, http) = try await performAuthenticatedData(for: request, retriedAuth: retriedAuth)
 
     if http.statusCode == 200 {
       let completed = try decoder.decode(SyncLocalFilesResultResponse.self, from: data)
@@ -5749,12 +5572,23 @@ extension APIClient {
   }
 
   /// Delete a chat session and its messages
-  func deleteChatSession(sessionId: String) async throws {
-    try await delete("v2/chat-sessions/\(sessionId)")
+  func deleteChatSession(
+    sessionId: String,
+    expectedOwnerId: String? = nil
+  ) async throws {
+    try await delete(
+      "v2/chat-sessions/\(sessionId)",
+      authPolicy: expectedOwnerId.map { .ownerBound($0) } ?? .default,
+      expectedAuthOwnerId: expectedOwnerId
+    )
   }
 
   /// Generate an initial greeting message for a new chat session
-  func getInitialMessage(sessionId: String, appId: String? = nil) async throws
+  func getInitialMessage(
+    sessionId: String,
+    appId: String? = nil,
+    expectedOwnerId: String? = nil
+  ) async throws
     -> InitialMessageResponse
   {
     struct InitialMessageRequest: Encodable {
@@ -5768,7 +5602,20 @@ extension APIClient {
     }
 
     let body = InitialMessageRequest(sessionId: sessionId, appId: appId)
-    return try await post("v2/chat/initial-message", body: body)
+    guard let expectedOwnerId else {
+      return try await post("v2/chat/initial-message", body: body)
+    }
+    guard let url = URL(string: baseURL + "v2/chat/initial-message") else {
+      throw APIError.invalidResponse
+    }
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.allHTTPHeaderFields = try await buildHeaders(
+      requireAuth: true,
+      expectedAuthOwnerId: expectedOwnerId
+    )
+    request.httpBody = try transport.encoder.encode(body)
+    return try await performRequest(request, authPolicy: .ownerBound(expectedOwnerId))
   }
 
   /// Generate a title for a chat session based on its messages
@@ -5811,74 +5658,6 @@ struct InitialMessageResponse: Codable {
   enum CodingKeys: String, CodingKey {
     case message
     case messageId = "message_id"
-  }
-}
-
-// MARK: - Chat Message Models
-
-/// Response from saving a message
-struct SaveMessageResponse: Codable {
-  let id: String
-  let createdAt: Date
-  let sessionId: String?
-  let created: Bool?
-
-  enum CodingKeys: String, CodingKey {
-    case id
-    case createdAt = "created_at"
-    case sessionId = "session_id"
-    case created
-  }
-}
-
-/// Persisted chat message from database
-struct ChatMessageDB: Codable, Identifiable {
-  let id: String
-  let text: String
-  let createdAt: Date
-  let sender: String
-  let appId: String?
-  let sessionId: String?
-  let rating: Int?
-  let reported: Bool
-  /// JSON string with extra info (attachments, etc.); see ChatMessage.decodeAttachments.
-  let metadata: String?
-
-  enum CodingKeys: String, CodingKey {
-    case id, text, sender, rating, reported, metadata
-    case createdAt = "created_at"
-    case appId = "app_id"
-    case sessionId = "session_id"
-  }
-
-  init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    id = try container.decode(String.self, forKey: .id)
-    text = try container.decodeIfPresent(String.self, forKey: .text) ?? ""
-    createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
-    sender = try container.decodeIfPresent(String.self, forKey: .sender) ?? "human"
-    appId = try container.decodeIfPresent(String.self, forKey: .appId)
-    sessionId = try container.decodeIfPresent(String.self, forKey: .sessionId)
-    rating = try container.decodeIfPresent(Int.self, forKey: .rating)
-    reported = try container.decodeIfPresent(Bool.self, forKey: .reported) ?? false
-    metadata = try container.decodeIfPresent(String.self, forKey: .metadata)
-  }
-}
-
-/// Response from deleting messages
-struct MessageDeleteResponse: Codable {
-  let status: String
-  let deletedCount: Int?
-
-  enum CodingKeys: String, CodingKey {
-    case status
-    case deletedCount = "deleted_count"
-  }
-
-  init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    status = try container.decodeIfPresent(String.self, forKey: .status) ?? "ok"
-    deletedCount = try container.decodeIfPresent(Int.self, forKey: .deletedCount)
   }
 }
 
@@ -6209,9 +5988,13 @@ extension APIClient {
     }
   }
 
-  func fetchChatUsageQuota() async -> ChatUsageQuota? {
+  func fetchChatUsageQuota(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async -> ChatUsageQuota? {
     do {
-      let res: ChatUsageQuota = try await get("v1/users/me/usage-quota")
+      let res: ChatUsageQuota = try await get(
+        "v1/users/me/usage-quota",
+        authorizationSnapshot: authorizationSnapshot)
       log(
         "APIClient: Quota plan=\(res.plan) unit=\(res.unit) used=\(res.used) limit=\(res.limit ?? -1) allowed=\(res.allowed)"
       )
@@ -6265,32 +6048,45 @@ extension APIClient {
     request.allHTTPHeaderFields = try await buildHeaders()
     request.httpBody = try JSONEncoder().encode(body)
 
-    let (data, response) = try await session.data(for: request)
-    guard let httpResponse = response as? HTTPURLResponse else {
-      throw APIError.invalidResponse
-    }
+    // This desktop-backend route can surface upstream OpenAI/BYOK credential
+    // failures as HTTP 401. Refresh the Firebase header once in case it is stale,
+    // but never let a voice-only provider failure invalidate the Omi session.
+    // Only remap to providerAuth when the body is OpenAI-shaped — a bare/Firebase
+    // 401 after refresh is a real login failure and must require re-auth.
+    let (data, httpResponse) = try await performAuthenticatedData(
+      for: request,
+      authPolicy: .providerCredentialBoundary
+    )
 
     if httpResponse.statusCode == 401 {
-      let authService = await MainActor.run { AuthService.shared }
-      _ = try await authService.getIdToken(forceRefresh: true)
-
-      var retryRequest = request
-      retryRequest.setValue(
-        try await authService.getAuthHeader(), forHTTPHeaderField: "Authorization")
-
-      let (retryData, retryResponse) = try await session.data(for: retryRequest)
-      guard let retryHttpResponse = retryResponse as? HTTPURLResponse else {
-        throw APIError.invalidResponse
+      let detail = (try? JSONDecoder().decode(APIErrorPayload.self, from: data))?.preferredMessage
+      if detail?.hasPrefix("OpenAI TTS request failed:") == true {
+        let mode: CredentialAuthMode = APIKeyService.isByokActive ? .byok : .managed
+        throw CredentialHealthError.providerAuth(
+          provider: .openai,
+          mode: mode,
+          message: mode == .byok
+            ? "Your OpenAI key was rejected. Update it in Settings."
+            : "OpenAI authentication failed. Voice responses are using fallback."
+        )
       }
-      guard retryHttpResponse.statusCode != 401 else {
-        throw APIError.unauthorized
-      }
-      guard (200...299).contains(retryHttpResponse.statusCode) else {
-        throw APIError.httpError(statusCode: retryHttpResponse.statusCode)
-      }
-      return retryData
+      await invalidateSessionAfterUnauthorized(
+        endpoint: endpointLabel(for: request),
+        signOutOn401: true
+      )
+      throw APIError.unauthorized
     }
 
+    if httpResponse.statusCode == 429 {
+      let detail = (try? JSONDecoder().decode(APIErrorPayload.self, from: data))?.preferredMessage
+      if detail?.hasPrefix("OpenAI TTS request failed:") == true {
+        throw CredentialHealthError.providerQuota(
+          provider: .openai,
+          message: "OpenAI voice quota was exceeded. Voice responses are using fallback."
+        )
+      }
+      throw APIError.httpError(statusCode: httpResponse.statusCode, detail: detail)
+    }
     guard (200...299).contains(httpResponse.statusCode) else {
       throw APIError.httpError(statusCode: httpResponse.statusCode)
     }
@@ -6389,13 +6185,19 @@ extension APIClient {
     endDate: String? = nil,
     limit: Int = 20,
     offset: Int = 0,
-    includeTranscript: Bool = true
+    includeTranscript: Bool = true,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> ToolResponse {
     var params =
       "v1/tools/conversations?limit=\(limit)&offset=\(offset)&include_transcript=\(includeTranscript)"
     if let sd = startDate { params += "&start_date=\(encodeQueryDate(sd))" }
     if let ed = endDate { params += "&end_date=\(encodeQueryDate(ed))" }
-    return try await get(params, customBaseURL: nil)
+    return try await get(
+      params,
+      customBaseURL: nil,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   func toolSearchConversations(
@@ -6403,29 +6205,52 @@ extension APIClient {
     startDate: String? = nil,
     endDate: String? = nil,
     limit: Int = 5,
-    includeTranscript: Bool = true
+    includeTranscript: Bool = true,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> ToolResponse {
     let body = SearchRequest(
       query: query, startDate: startDate, endDate: endDate, limit: limit,
       includeTranscript: includeTranscript)
-    return try await post("v1/tools/conversations/search", body: body, customBaseURL: nil)
+    return try await post(
+      "v1/tools/conversations/search",
+      body: body,
+      customBaseURL: nil,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   func toolGetMemories(
     limit: Int = 50,
     offset: Int = 0,
     startDate: String? = nil,
-    endDate: String? = nil
+    endDate: String? = nil,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> ToolResponse {
     var params = "v1/tools/memories?limit=\(limit)&offset=\(offset)"
     if let sd = startDate { params += "&start_date=\(encodeQueryDate(sd))" }
     if let ed = endDate { params += "&end_date=\(encodeQueryDate(ed))" }
-    return try await get(params, customBaseURL: nil)
+    return try await get(
+      params,
+      customBaseURL: nil,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
-  func toolSearchMemories(query: String, limit: Int = 5) async throws -> ToolResponse {
+  func toolSearchMemories(
+    query: String,
+    limit: Int = 5,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> ToolResponse {
     let body = MemorySearchRequest(query: query, limit: limit)
-    return try await post("v1/tools/memories/search", body: body, customBaseURL: nil)
+    return try await post(
+      "v1/tools/memories/search",
+      body: body,
+      customBaseURL: nil,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   func toolGetActionItems(
@@ -6435,7 +6260,9 @@ extension APIClient {
     startDate: String? = nil,
     endDate: String? = nil,
     dueStartDate: String? = nil,
-    dueEndDate: String? = nil
+    dueEndDate: String? = nil,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> ToolResponse {
     var params = "v1/tools/action-items?limit=\(limit)&offset=\(offset)"
     if let c = completed { params += "&completed=\(c)" }
@@ -6443,22 +6270,45 @@ extension APIClient {
     if let ed = endDate { params += "&end_date=\(encodeQueryDate(ed))" }
     if let dsd = dueStartDate { params += "&due_start_date=\(encodeQueryDate(dsd))" }
     if let ded = dueEndDate { params += "&due_end_date=\(encodeQueryDate(ded))" }
-    return try await get(params, customBaseURL: nil)
+    return try await get(
+      params,
+      customBaseURL: nil,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   func toolCreateActionItem(
-    description: String, dueAt: String? = nil, conversationId: String? = nil
+    description: String,
+    dueAt: String? = nil,
+    conversationId: String? = nil,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> ToolResponse {
     let body = CreateActionItemRequest(
       description: description, dueAt: dueAt, conversationId: conversationId)
-    return try await post("v1/tools/action-items", body: body, customBaseURL: nil)
+    return try await post(
+      "v1/tools/action-items",
+      body: body,
+      customBaseURL: nil,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   func toolUpdateActionItem(
-    id: String, completed: Bool? = nil, description: String? = nil, dueAt: String? = nil
+    id: String,
+    completed: Bool? = nil,
+    description: String? = nil,
+    dueAt: String? = nil,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> ToolResponse {
     let body = UpdateActionItemRequest(completed: completed, description: description, dueAt: dueAt)
-    return try await patch("v1/tools/action-items/\(id)", body: body, customBaseURL: nil)
+    return try await patch(
+      "v1/tools/action-items/\(id)",
+      body: body,
+      customBaseURL: nil,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   func toolCreateCalendarEvent(
@@ -6467,7 +6317,9 @@ extension APIClient {
     endTime: String,
     description: String? = nil,
     location: String? = nil,
-    attendees: String? = nil
+    attendees: String? = nil,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> ToolResponse {
     let body = CreateCalendarEventRequest(
       title: title,
@@ -6477,7 +6329,12 @@ extension APIClient {
       location: location,
       attendees: attendees
     )
-    return try await post("v1/tools/calendar-events", body: body, customBaseURL: nil)
+    return try await post(
+      "v1/tools/calendar-events",
+      body: body,
+      customBaseURL: nil,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   // MARK: - X (Twitter) Connector

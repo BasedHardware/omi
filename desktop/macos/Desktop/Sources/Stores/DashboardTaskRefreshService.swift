@@ -2,38 +2,85 @@ import Foundation
 
 @MainActor
 enum DashboardTaskRefreshService {
-    private static var inFlightRefreshTask: Task<Void, Never>?
+    private struct InFlightRefresh {
+        let id: UUID
+        let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+        let task: Task<Void, Never>
+    }
 
-    static func refresh(store: TasksStore) async {
-        if let inFlightRefreshTask {
-            await inFlightRefreshTask.value
-            await store.loadDashboardTasks()
+    private static var inFlightRefreshes: [String: InFlightRefresh] = [:]
+
+    static func refresh(
+        store: TasksStore,
+        expectedOwnerID: String,
+        authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    ) async {
+        let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+        if let suppliedAuthorizationSnapshot {
+            guard suppliedAuthorizationSnapshot.ownerID == expectedOwnerID,
+                  isCurrent(suppliedAuthorizationSnapshot) else { return }
+            authorizationSnapshot = suppliedAuthorizationSnapshot
+        } else {
+            guard let captured = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+                expectedOwnerID: expectedOwnerID
+            ) else { return }
+            authorizationSnapshot = captured
+        }
+        if let inFlight = inFlightRefreshes[expectedOwnerID],
+           isCurrent(inFlight.authorizationSnapshot) {
+            await inFlight.task.value
+            guard isCurrent(authorizationSnapshot) else { return }
+            await store.loadDashboardTasks(
+                expectedOwnerID: expectedOwnerID,
+                authorizationSnapshot: authorizationSnapshot
+            )
             return
         }
 
-        let task = Task {
-            await refreshNow(store: store)
+        let id = UUID()
+        let task = Task { @MainActor in
+            await refreshNow(
+                store: store,
+                authorizationSnapshot: authorizationSnapshot
+            )
         }
-        inFlightRefreshTask = task
+        inFlightRefreshes[expectedOwnerID] = InFlightRefresh(
+            id: id,
+            authorizationSnapshot: authorizationSnapshot,
+            task: task
+        )
         await task.value
-        inFlightRefreshTask = nil
+        if inFlightRefreshes[expectedOwnerID]?.id == id {
+            inFlightRefreshes[expectedOwnerID] = nil
+        }
     }
 
-    private static func refreshNow(store: TasksStore) async {
+    private static func refreshNow(
+        store: TasksStore,
+        authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    ) async {
+        guard isCurrent(authorizationSnapshot) else { return }
+        let expectedOwnerID = authorizationSnapshot.ownerID
         guard DashboardTaskRefreshPolicy.shouldSyncFromServer else {
-            await store.loadDashboardTasks()
+            await store.loadDashboardTasks(
+                expectedOwnerID: expectedOwnerID,
+                authorizationSnapshot: authorizationSnapshot
+            )
             return
         }
         guard AuthService.shared.isSignedIn else {
-            await store.loadDashboardTasks()
-            return
-        }
-        guard !AuthBackoffTracker.shared.shouldSkipRequest() else {
-            await store.loadDashboardTasks()
+            await store.loadDashboardTasks(
+                expectedOwnerID: expectedOwnerID,
+                authorizationSnapshot: authorizationSnapshot
+            )
             return
         }
 
-        await store.loadDashboardTasks()
+        await store.loadDashboardTasks(
+            expectedOwnerID: expectedOwnerID,
+            authorizationSnapshot: authorizationSnapshot
+        )
+        guard isCurrent(authorizationSnapshot) else { return }
 
         let dashboardIds = Set((store.overdueTasks + store.todaysTasks + store.tasksWithoutDueDate)
             .map(\.id)
@@ -42,8 +89,17 @@ enum DashboardTaskRefreshService {
         do {
             let calendar = Calendar.current
             let now = Date()
-            let windowItems = try await fetchDashboardWindowItems(now: now, calendar: calendar)
-            let serverTruth = await fetchExactServerTruth(forDashboardIds: dashboardIds)
+            let windowItems = try await fetchDashboardWindowItems(
+                now: now,
+                calendar: calendar,
+                authorizationSnapshot: authorizationSnapshot
+            )
+            guard isCurrent(authorizationSnapshot) else { return }
+            let serverTruth = await fetchExactServerTruth(
+                forDashboardIds: dashboardIds,
+                authorizationSnapshot: authorizationSnapshot
+            )
+            guard isCurrent(authorizationSnapshot) else { return }
             let plan = DashboardTaskReconciliationPlanner.plan(
                 localDashboardIds: dashboardIds,
                 dashboardWindowServerItems: windowItems,
@@ -53,33 +109,52 @@ enum DashboardTaskRefreshService {
                 calendar: calendar
             )
 
+            let authorization = localMutationAuthorization(snapshot: authorizationSnapshot)
             if !plan.itemsToSync.isEmpty {
-                try await ActionItemStorage.shared.syncTaskActionItems(plan.itemsToSync)
-                let visibilityReconciled = try await ActionItemStorage.shared.reconcileDashboardVisibilityFields(plan.itemsToSync)
+                try await ActionItemStorage.shared.syncTaskActionItems(
+                    plan.itemsToSync,
+                    authorization: authorization
+                )
+                guard isCurrent(authorizationSnapshot) else { return }
+                let visibilityReconciled = try await ActionItemStorage.shared.reconcileDashboardVisibilityFields(
+                    plan.itemsToSync,
+                    authorization: authorization
+                )
+                guard isCurrent(authorizationSnapshot) else { return }
                 if visibilityReconciled > 0 {
                     log("DashboardTaskRefreshService: Reconciled \(visibilityReconciled) dashboard visibility field updates")
                 }
             }
             for backendId in plan.backendIdsToHardDelete {
-                try await ActionItemStorage.shared.hardDeleteByBackendId(backendId)
+                guard isCurrent(authorizationSnapshot) else { return }
+                try await ActionItemStorage.shared.hardDeleteByBackendId(
+                    backendId,
+                    authorization: authorization
+                )
             }
+            guard isCurrent(authorizationSnapshot) else { return }
             log(
                 "DashboardTaskRefreshService: Dashboard freshness reconciled sync=\(plan.itemsToSync.count), hardDeleted=\(plan.backendIdsToHardDelete.count), visible=\(plan.dashboardVisibleServerIds.count), completed=\(plan.completedServerIds.count), movedOut=\(plan.movedOutServerIds.count) without loading Tasks page list"
             )
-            if !serverTruth.hadAuthFailure {
-                AuthBackoffTracker.shared.reportSuccess()
-            }
         } catch {
-            if case APIError.unauthorized = error {
-                AuthBackoffTracker.shared.reportAuthFailure()
+            if isCurrent(authorizationSnapshot) {
+                logError("DashboardTaskRefreshService: Dashboard freshness sync failed", error: error)
             }
-            logError("DashboardTaskRefreshService: Dashboard freshness sync failed", error: error)
         }
 
-        await store.loadDashboardTasks()
+        guard isCurrent(authorizationSnapshot) else { return }
+        await store.loadDashboardTasks(
+            expectedOwnerID: expectedOwnerID,
+            authorizationSnapshot: authorizationSnapshot
+        )
     }
 
-    private static func fetchDashboardWindowItems(now: Date, calendar: Calendar) async throws -> [TaskActionItem] {
+    private static func fetchDashboardWindowItems(
+        now: Date,
+        calendar: Calendar,
+        authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    ) async throws -> [TaskActionItem] {
+        let expectedOwnerID = authorizationSnapshot.ownerID
         let startOfToday = calendar.startOfDay(for: now)
         guard let endOfToday = calendar.date(byAdding: .day, value: 1, to: startOfToday) else {
             return []
@@ -93,7 +168,9 @@ enum DashboardTaskRefreshService {
                 offset: offset,
                 completed: false,
                 dueStartDate: sevenDaysAgo,
-                dueEndDate: endOfToday
+                dueEndDate: endOfToday,
+                expectedOwnerId: expectedOwnerID,
+                authorizationSnapshot: authorizationSnapshot
             )
         }
         async let recentItems = fetchDashboardWindowPages(limit: limit) { offset in
@@ -101,7 +178,9 @@ enum DashboardTaskRefreshService {
                 limit: limit,
                 offset: offset,
                 completed: false,
-                startDate: sevenDaysAgo
+                startDate: sevenDaysAgo,
+                expectedOwnerId: expectedOwnerID,
+                authorizationSnapshot: authorizationSnapshot
             )
         }
 
@@ -123,14 +202,20 @@ enum DashboardTaskRefreshService {
     }
 
     private static func fetchExactServerTruth(
-        forDashboardIds ids: Set<String>
+        forDashboardIds ids: Set<String>,
+        authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
     ) async -> (itemsById: [String: TaskActionItem], missingIds: Set<String>, hadAuthFailure: Bool) {
         guard !ids.isEmpty else { return ([:], [], false) }
+        let expectedOwnerID = authorizationSnapshot.ownerID
 
         let sortedIds = ids.sorted()
         let results = await DashboardExactTaskFetchLimiter.fetch(ids: sortedIds) { id in
             do {
-                let item = try await APIClient.shared.getActionItem(id: id)
+                let item = try await APIClient.shared.getActionItem(
+                    id: id,
+                    expectedOwnerId: expectedOwnerID,
+                    authorizationSnapshot: authorizationSnapshot
+                )
                 return (id, Result<TaskActionItem?, Error>.success(item))
             } catch APIError.httpError(let statusCode, _) where statusCode == 404 {
                 return (id, Result<TaskActionItem?, Error>.success(nil))
@@ -155,7 +240,6 @@ enum DashboardTaskRefreshService {
                 logError("DashboardTaskRefreshService: Exact task refresh failed for \(id)", error: error)
                 if case APIError.unauthorized = error {
                     hadAuthFailure = true
-                    AuthBackoffTracker.shared.reportAuthFailure()
                 }
             }
         }
@@ -165,5 +249,19 @@ enum DashboardTaskRefreshService {
         }
 
         return (itemsById, missingIds, hadAuthFailure)
+    }
+
+    private nonisolated static func isCurrent(
+        _ snapshot: RuntimeOwnerAuthorizationSnapshot
+    ) -> Bool {
+        RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot)
+    }
+
+    private nonisolated static func localMutationAuthorization(
+        snapshot: RuntimeOwnerAuthorizationSnapshot
+    ) -> LocalMutationAuthorization {
+        LocalMutationAuthorization {
+            isCurrent(snapshot)
+        }
     }
 }

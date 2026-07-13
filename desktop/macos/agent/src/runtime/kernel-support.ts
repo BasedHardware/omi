@@ -43,16 +43,17 @@ export function stableHash(value: string | undefined): string {
   return createHash("sha256").update(value ?? "").digest("hex");
 }
 
-const REQUEST_SCOPED_MCP_ENV_KEYS = new Set([
+const VOLATILE_MCP_ENV_KEYS = new Set([
   "OMI_BRIDGE_PIPE",
   "OMI_CONTEXT_FILE",
   "OMI_REQUEST_ID",
   "OMI_CLIENT_ID",
-  "OMI_PROTOCOL_VERSION",
   "OMI_SESSION_ID",
   "OMI_RUN_ID",
   "OMI_ATTEMPT_ID",
   "OMI_ADAPTER_SESSION_ID",
+  "OMI_PROTOCOL_VERSION",
+  "OMI_QUERY_MODE",
 ]);
 
 export function stableJsonStringify(value: unknown): string {
@@ -85,7 +86,7 @@ export function stableMcpServerConfig(value: unknown): unknown {
             return true;
           }
           const name = (entry as Record<string, unknown>).name;
-          return typeof name !== "string" || !REQUEST_SCOPED_MCP_ENV_KEYS.has(name);
+          return typeof name !== "string" || !VOLATILE_MCP_ENV_KEYS.has(name);
         })
         .sort((left, right) => {
           const leftName =
@@ -267,9 +268,25 @@ export function desktopTaskCandidateFromRow(row: Record<string, unknown>): Deskt
     proposedChangeJson: text(row.proposed_change_json),
     evidenceRefsJson: text(row.evidence_refs_json),
     confidence: Number(row.confidence),
+    ownershipConfidence: Number(row.ownership_confidence),
     requiresApproval: Number(row.requires_approval) === 1 ? 1 : 0,
-    status: text(row.status) as DesktopCandidateStatus,
+    goalRef: nullableText(row.goal_ref),
+    workstreamRef: nullableText(row.workstream_ref),
+    sourceSurface: text(row.source_surface),
+    accountGeneration: Number(row.account_generation),
+    generationReconciled: Number(row.generation_reconciled) === 1 ? 1 : 0,
+    status: text(row.status) as DesktopTaskCandidate["status"],
+    deliveryStatus: text(row.delivery_status) as DesktopTaskCandidate["deliveryStatus"],
+    deliveryAttemptCount: Number(row.delivery_attempt_count),
+    deliveryKey: text(row.delivery_key),
+    backendCandidateId: nullableText(row.backend_candidate_id),
+    backendReceiptJson: nullableText(row.backend_receipt_json),
+    backendResolutionReceiptJson: nullableText(row.backend_resolution_receipt_json),
+    backendResolutionStatus: nullableText(row.backend_resolution_status),
+    lastDeliveryErrorJson: nullableText(row.last_delivery_error_json),
     createdAtMs: Number(row.created_at_ms),
+    updatedAtMs: Number(row.updated_at_ms),
+    deliveredAtMs: nullableNumber(row.delivered_at_ms),
     resolvedAtMs: nullableNumber(row.resolved_at_ms),
   };
 }
@@ -333,7 +350,7 @@ export function taskCandidateToQueueInput(candidate: DesktopTaskCandidate): Queu
     candidateId: candidate.candidateId,
     ownerId: candidate.ownerId,
     kind: "task_candidate",
-    status: candidate.status,
+    status: candidate.status === "forwarded" ? "accepted" : candidate.status,
     createdAtMs: candidate.createdAtMs,
     sourceSessionId: candidate.sourceSessionId,
     sourceRunId: candidate.sourceRunId,
@@ -380,11 +397,14 @@ export function sessionFromRow(row: Record<string, unknown>): AgentSession {
     title: nullableText(row.title),
     status: text(row.status) as AgentSession["status"],
     surfaceKind: text(row.surface_kind),
+    executionRole: text(row.execution_role) as AgentSession["executionRole"],
+    providerBoundary: text(row.provider_boundary) as AgentSession["providerBoundary"],
     externalRefKind: nullableText(row.external_ref_kind),
     externalRefId: nullableText(row.external_ref_id),
     defaultAdapterId: text(row.default_adapter_id),
     defaultCwd: nullableText(row.default_cwd),
     modelProfile: nullableText(row.model_profile),
+    executionProfileGeneration: Number(row.current_profile_generation ?? 1),
     metadataJson: text(row.metadata_json),
     createdAtMs: Number(row.created_at_ms),
     updatedAtMs: Number(row.updated_at_ms),
@@ -402,6 +422,7 @@ export function runFromRow(row: Record<string, unknown>): AgentRun {
     idempotencyKey: nullableText(row.idempotency_key),
     status: text(row.status) as RunStatus,
     mode: text(row.mode) as RunMode,
+    profileGeneration: Number(row.profile_generation ?? 1),
     inputJson: text(row.input_json),
     systemPromptHash: nullableText(row.system_prompt_hash),
     modelProfile: nullableText(row.model_profile),
@@ -478,6 +499,7 @@ export function attemptFromRow(row: Record<string, unknown>): RunAttempt {
     attemptId: text(row.attempt_id),
     runId: text(row.run_id),
     attemptNo: Number(row.attempt_no),
+    profileGeneration: Number(row.profile_generation ?? 1),
     status: text(row.status) as AttemptStatus,
     adapterId: text(row.adapter_id),
     adapterInstanceId: text(row.adapter_instance_id),
@@ -507,6 +529,7 @@ export function bindingFromRow(row: Record<string, unknown>): AdapterBinding {
     sessionId: text(row.session_id),
     adapterId: text(row.adapter_id),
     bindingGeneration: Number(row.binding_generation),
+    profileGeneration: Number(row.profile_generation ?? 1),
     adapterNativeSessionId: nullableText(row.adapter_native_session_id),
     adapterInstanceId: nullableText(row.adapter_instance_id),
     resumeFidelity: text(row.resume_fidelity) as ResumeFidelity,
@@ -519,7 +542,6 @@ export function bindingFromRow(row: Record<string, unknown>): AdapterBinding {
     updatedAtMs: Number(row.updated_at_ms),
     lastUsedAtMs: nullableNumber(row.last_used_at_ms),
     invalidatedAtMs: nullableNumber(row.invalidated_at_ms),
-    lastDeliveredTurnCreatedAtMs: Number(row.last_delivered_turn_created_at_ms ?? 0),
   };
 }
 
@@ -582,16 +604,7 @@ export function canonicalAdapterEventType(event: OutboundMessageDraft): string |
 
 export function refreshMcpAttemptContext(
   mcpServers: Record<string, unknown>[],
-  context: {
-    ownerId: string;
-    requestId: string;
-    clientId: string;
-    protocolVersion: number;
-    sessionId: string;
-    runId: string;
-    attemptId: string;
-    adapterSessionId?: string;
-  }
+  context: { capabilityRef: string },
 ): void {
   for (const server of mcpServers) {
     const env = Array.isArray(server.env) ? server.env : [];
@@ -608,7 +621,7 @@ export function refreshMcpAttemptContext(
     if (typeof contextFilePath !== "string" || !contextFilePath.trim()) {
       continue;
     }
-    writeFileSync(contextFilePath, JSON.stringify(context), { encoding: "utf8" });
+    writeFileSync(contextFilePath, JSON.stringify({ capabilityRef: context.capabilityRef }), { encoding: "utf8" });
   }
 }
 
@@ -623,7 +636,11 @@ export function mcpServersForBinding(
       return server;
     }
     const normalized: Record<string, unknown> = { ...server };
-    const env = Array.isArray(normalized.env) ? normalized.env : [];
+    const env = (Array.isArray(normalized.env) ? normalized.env : []).filter((entry) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return true;
+      const name = (entry as Record<string, unknown>).name;
+      return typeof name !== "string" || !VOLATILE_MCP_ENV_KEYS.has(name) || name === "OMI_CONTEXT_FILE";
+    });
     normalized.env = upsertEnv(env, "OMI_CONTEXT_FILE", contextFileForBinding(sessionId, adapterId, runtimeNodeId));
     return normalized;
   });
@@ -655,6 +672,7 @@ export const runColumnMap: Record<string, string> = {
   clientId: "client_id",
   requestId: "request_id",
   idempotencyKey: "idempotency_key",
+  profileGeneration: "profile_generation",
   inputJson: "input_json",
   systemPromptHash: "system_prompt_hash",
   modelProfile: "model_profile",
@@ -678,6 +696,7 @@ export const attemptColumnMap: Record<string, string> = {
   attemptId: "attempt_id",
   runId: "run_id",
   attemptNo: "attempt_no",
+  profileGeneration: "profile_generation",
   adapterId: "adapter_id",
   adapterInstanceId: "adapter_instance_id",
   runtimeNodeId: "runtime_node_id",
@@ -703,6 +722,7 @@ export const bindingColumnMap: Record<string, string> = {
   sessionId: "session_id",
   adapterId: "adapter_id",
   bindingGeneration: "binding_generation",
+  profileGeneration: "profile_generation",
   adapterNativeSessionId: "adapter_native_session_id",
   adapterInstanceId: "adapter_instance_id",
   resumeFidelity: "resume_fidelity",
@@ -713,6 +733,4 @@ export const bindingColumnMap: Record<string, string> = {
   updatedAtMs: "updated_at_ms",
   lastUsedAtMs: "last_used_at_ms",
   invalidatedAtMs: "invalidated_at_ms",
-  lastDeliveredTurnCreatedAtMs: "last_delivered_turn_created_at_ms",
 };
-

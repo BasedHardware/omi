@@ -7,6 +7,7 @@ actor ActionItemStorage {
     static let shared = ActionItemStorage()
 
     private var _dbQueue: DatabasePool?
+    private var _dbGeneration = -1
     private var isInitialized = false
 
     private init() {}
@@ -19,7 +20,7 @@ actor ActionItemStorage {
 
     /// Ensure database is initialized before use
     private func ensureInitialized() async throws -> DatabasePool {
-        if let db = _dbQueue {
+        if let db = _dbQueue, await RewindDatabase.shared.poolGeneration() == _dbGeneration {
             return db
         }
 
@@ -31,11 +32,13 @@ actor ActionItemStorage {
             throw error
         }
 
-        guard let db = await RewindDatabase.shared.getDatabaseQueue() else {
+        let (queue, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+        guard let db = queue else {
             throw ActionItemStorageError.databaseNotInitialized
         }
 
         _dbQueue = db
+        _dbGeneration = generation
         isInitialized = true
         return db
     }
@@ -471,135 +474,77 @@ actor ActionItemStorage {
         }
     }
 
-    // MARK: - Bidirectional Sync Operations
-
-    /// Sync a single ActionItem to local storage (upsert)
-    @discardableResult
-    func syncActionItem(_ item: ActionItem, conversationId: String? = nil) async throws -> Int64 {
-        let db = try await ensureInitialized()
-
-        return try await db.write { database -> Int64 in
-            if var existingRecord = try ActionItemRecord
-                .filter(Column("backendId") == item.id)
-                .fetchOne(database) {
-                existingRecord.updateFrom(item)
-                try existingRecord.update(database)
-                guard let recordId = existingRecord.id else {
-                    throw ActionItemStorageError.syncFailed("Record ID is nil after update")
-                }
-                return recordId
-            } else {
-                // Insert new record, catching UNIQUE constraint from concurrent syncs
-                do {
-                    let newRecord = try ActionItemRecord.from(item, conversationId: conversationId).inserted(database)
-                    guard let recordId = newRecord.id else {
-                        throw ActionItemStorageError.syncFailed("Record ID is nil after insert")
-                    }
-                    return recordId
-                } catch let dbError as DatabaseError where dbError.resultCode == .SQLITE_CONSTRAINT {
-                    // Race: another sync path already inserted this backendId — update instead
-                    if var record = try ActionItemRecord.filter(Column("backendId") == item.id).fetchOne(database) {
-                        record.updateFrom(item)
-                        try record.update(database)
-                        return record.id ?? 0
-                    }
-                    throw dbError
-                }
-            }
-        }
-    }
-
-    /// Sync multiple ActionItems to local storage (batch upsert)
-    func syncActionItems(_ items: [ActionItem]) async throws {
-        let db = try await ensureInitialized()
-
-        try await db.write { database in
-            for item in items {
-                if var existingRecord = try ActionItemRecord
-                    .filter(Column("backendId") == item.id)
-                    .fetchOne(database) {
-                    existingRecord.updateFrom(item)
-                    try existingRecord.update(database)
-                } else {
-                    do {
-                        let newRecord = ActionItemRecord.from(item)
-                        try newRecord.insert(database)
-                    } catch let dbError as DatabaseError where dbError.resultCode == .SQLITE_CONSTRAINT {
-                        // Race: record already exists — update instead
-                        if var record = try ActionItemRecord.filter(Column("backendId") == item.id).fetchOne(database) {
-                            record.updateFrom(item)
-                            try record.update(database)
-                        }
-                    }
-                }
-            }
-        }
-
-        log("ActionItemStorage: Synced \(items.count) action items from backend")
-    }
-
     /// Sync multiple TaskActionItems to local storage (batch upsert with full data)
     /// - Parameter overrideStagedDeletions: When true, API data overrides local "staged" deletions
     ///   (used during full sync where we have the complete dataset). When false (default),
     ///   staged deletions are preserved to avoid un-deleting tasks during partial refreshes.
-    func syncTaskActionItems(_ items: [TaskActionItem], overrideStagedDeletions: Bool = false) async throws {
+    func syncTaskActionItems(
+        _ items: [TaskActionItem],
+        overrideStagedDeletions: Bool = false,
+        authorization: LocalMutationAuthorization
+    ) async throws {
+        try authorization.require()
         let db = try await ensureInitialized()
 
-        let (skipped, adopted) = try await db.write { database -> (Int, Int) in
-            var skipped = 0
-            var adopted = 0
-            for item in items {
-                if var existingRecord = try ActionItemRecord
-                    .filter(Column("backendId") == item.id)
-                    .fetchOne(database) {
-                    // Skip if local record is newer than incoming API data AND the
-                    // local change is very recent (< 60s). This protects in-flight
-                    // optimistic updates (e.g. toggling a task) from being overwritten
-                    // by stale auto-refresh data. Beyond 60s, trust the API as source
-                    // of truth — this prevents failed optimistic updates from persisting
-                    // forever (e.g. user toggled on desktop but API call failed/app crashed).
-                    let incomingTimestamp = item.updatedAt ?? item.createdAt
-                    let isLocalStagedGuess = overrideStagedDeletions && existingRecord.deletedBy == "staged"
-                    let isRecentLocalChange = Date().timeIntervalSince(existingRecord.updatedAt) < 60
-                    if isRecentLocalChange && existingRecord.updatedAt > incomingTimestamp && !isLocalStagedGuess {
-                        skipped += 1
-                        continue
+        let (skipped, adopted) = try await authorization.withCommitLease {
+            try await db.write { database -> (Int, Int) in
+                try authorization.require()
+                var skipped = 0
+                var adopted = 0
+                for item in items {
+                    if var existingRecord = try ActionItemRecord
+                        .filter(Column("backendId") == item.id)
+                        .fetchOne(database) {
+                        // Skip if local record is newer than incoming API data AND the
+                        // local change is very recent (< 60s). This protects in-flight
+                        // optimistic updates (e.g. toggling a task) from being overwritten
+                        // by stale auto-refresh data. Beyond 60s, trust the API as source
+                        // of truth — this prevents failed optimistic updates from persisting
+                        // forever (e.g. user toggled on desktop but API call failed/app crashed).
+                        let incomingTimestamp = item.updatedAt ?? item.createdAt
+                        let isLocalStagedGuess = overrideStagedDeletions && existingRecord.deletedBy == "staged"
+                        let isRecentLocalChange = Date().timeIntervalSince(existingRecord.updatedAt) < 60
+                        if isRecentLocalChange && existingRecord.updatedAt > incomingTimestamp && !isLocalStagedGuess {
+                            skipped += 1
+                            continue
+                        }
+                        existingRecord.updateFrom(item)
+                        try existingRecord.update(database)
+                    } else if var orphan = try ActionItemRecord
+                        .filter(Column("backendSynced") == false)
+                        .filter(Column("backendId") == nil || Column("backendId") == "")
+                        .filter(Column("description") == item.description)
+                        .fetchOne(database) {
+                        // Adopt orphaned local record: link it to the backend ID.
+                        // This heals records where saveTaskToSQLite succeeded but
+                        // markSynced failed (e.g. app crash between backend sync and local update).
+                        // Match by description only — backend may not preserve the client's
+                        // `source` (manual tasks frequently come back with source=nil),
+                        // and a stricter match here causes the orphan to never be adopted,
+                        // leaving the manual unsynced and producing a duplicate row on every
+                        // pull that returns the same task.
+                        orphan.backendId = item.id
+                        orphan.backendSynced = true
+                        orphan.updateFrom(item)
+                        try orphan.update(database)
+                        adopted += 1
+                    } else {
+                        var newRecord = ActionItemRecord.from(item)
+                        // Auto-assign max+1 score for tasks arriving without a score
+                        if newRecord.relevanceScore == nil {
+                            let maxScore = try Int.fetchOne(database, sql: """
+                                SELECT COALESCE(MAX(relevanceScore), 0) FROM action_items
+                                WHERE completed = 0 AND deleted = 0 AND relevanceScore IS NOT NULL
+                            """) ?? 0
+                            newRecord.relevanceScore = maxScore + 1
+                            newRecord.scoredAt = Date()
+                        }
+                        try newRecord.insert(database)
                     }
-                    existingRecord.updateFrom(item)
-                    try existingRecord.update(database)
-                } else if var orphan = try ActionItemRecord
-                    .filter(Column("backendSynced") == false)
-                    .filter(Column("backendId") == nil || Column("backendId") == "")
-                    .filter(Column("description") == item.description)
-                    .fetchOne(database) {
-                    // Adopt orphaned local record: link it to the backend ID.
-                    // This heals records where saveTaskToSQLite succeeded but
-                    // markSynced failed (e.g. app crash between backend sync and local update).
-                    // Match by description only — backend may not preserve the client's
-                    // `source` (manual tasks frequently come back with source=nil),
-                    // and a stricter match here causes the orphan to never be adopted,
-                    // leaving the manual unsynced and producing a duplicate row on every
-                    // pull that returns the same task.
-                    orphan.backendId = item.id
-                    orphan.backendSynced = true
-                    orphan.updateFrom(item)
-                    try orphan.update(database)
-                    adopted += 1
-                } else {
-                    var newRecord = ActionItemRecord.from(item)
-                    // Auto-assign max+1 score for tasks arriving without a score
-                    if newRecord.relevanceScore == nil {
-                        let maxScore = try Int.fetchOne(database, sql: """
-                            SELECT COALESCE(MAX(relevanceScore), 0) FROM action_items
-                            WHERE completed = 0 AND deleted = 0 AND relevanceScore IS NOT NULL
-                        """) ?? 0
-                        newRecord.relevanceScore = maxScore + 1
-                        newRecord.scoredAt = Date()
-                    }
-                    try newRecord.insert(database)
                 }
+                try authorization.require()
+                return (skipped, adopted)
             }
-            return (skipped, adopted)
         }
 
         if skipped > 0 || adopted > 0 {
@@ -615,48 +560,56 @@ actor ActionItemStorage {
     /// and deletion; due dates are reconciled only when they are not protected by a
     /// recent local edit, because due date edits are PATCHed optimistically.
     @discardableResult
-    func reconcileDashboardVisibilityFields(_ items: [TaskActionItem]) async throws -> Int {
+    func reconcileDashboardVisibilityFields(
+        _ items: [TaskActionItem],
+        authorization: LocalMutationAuthorization
+    ) async throws -> Int {
+        try authorization.require()
         guard !items.isEmpty else { return 0 }
         let db = try await ensureInitialized()
 
-        let reconciled = try await db.write { database -> Int in
-            var count = 0
-            for item in items {
-                guard var record = try ActionItemRecord
-                    .filter(Column("backendId") == item.id)
-                    .fetchOne(database) else { continue }
+        let reconciled = try await authorization.withCommitLease {
+            try await db.write { database -> Int in
+                try authorization.require()
+                var count = 0
+                for item in items {
+                    guard var record = try ActionItemRecord
+                        .filter(Column("backendId") == item.id)
+                        .fetchOne(database) else { continue }
 
-                let incomingDeleted = item.deleted ?? false
-                var changed = false
+                    let incomingDeleted = item.deleted ?? false
+                    var changed = false
 
-                if record.completed != item.completed {
-                    record.completed = item.completed
-                    changed = true
-                }
-                if record.deleted != incomingDeleted {
-                    record.deleted = incomingDeleted
-                    record.deletedBy = item.deletedBy
-                    changed = true
-                } else if incomingDeleted, record.deletedBy != item.deletedBy {
-                    record.deletedBy = item.deletedBy
-                    changed = true
-                }
-                let incomingTimestamp = item.updatedAt ?? item.createdAt
-                let protectsRecentLocalDueDate = Date().timeIntervalSince(record.updatedAt) < 60
-                    && record.updatedAt > incomingTimestamp
-                if record.dueAt != item.dueAt && !protectsRecentLocalDueDate {
-                    record.dueAt = item.dueAt
-                    changed = true
-                }
+                    if record.completed != item.completed {
+                        record.completed = item.completed
+                        changed = true
+                    }
+                    if record.deleted != incomingDeleted {
+                        record.deleted = incomingDeleted
+                        record.deletedBy = item.deletedBy
+                        changed = true
+                    } else if incomingDeleted, record.deletedBy != item.deletedBy {
+                        record.deletedBy = item.deletedBy
+                        changed = true
+                    }
+                    let incomingTimestamp = item.updatedAt ?? item.createdAt
+                    let protectsRecentLocalDueDate = Date().timeIntervalSince(record.updatedAt) < 60
+                        && record.updatedAt > incomingTimestamp
+                    if record.dueAt != item.dueAt && !protectsRecentLocalDueDate {
+                        record.dueAt = item.dueAt
+                        changed = true
+                    }
 
-                guard changed else { continue }
-                if incomingTimestamp > record.updatedAt {
-                    record.updatedAt = incomingTimestamp
+                    guard changed else { continue }
+                    if incomingTimestamp > record.updatedAt {
+                        record.updatedAt = incomingTimestamp
+                    }
+                    try record.update(database)
+                    count += 1
                 }
-                try record.update(database)
-                count += 1
+                try authorization.require()
+                return count
             }
-            return count
         }
 
         if reconciled > 0 {
@@ -669,7 +622,11 @@ actor ActionItemStorage {
     /// Hard-delete incomplete tasks NOT present in the API response.
     /// This cleans up tasks that were moved to staged_tasks or deleted on the backend
     /// but still linger in local SQLite, preventing phantom entries in the task list.
-    func markAbsentTasksAsStaged(apiIds: Set<String>) async throws {
+    func markAbsentTasksAsStaged(
+        apiIds: Set<String>,
+        authorization: LocalMutationAuthorization
+    ) async throws {
+        try authorization.require()
         // Safety guard: never wipe all tasks if the API set is empty (backend error)
         guard !apiIds.isEmpty else {
             log("ActionItemStorage: markAbsentTasksAsStaged skipped — empty API set")
@@ -678,22 +635,26 @@ actor ActionItemStorage {
 
         let db = try await ensureInitialized()
 
-        let deleted = try await db.write { database -> Int in
-            let records = try ActionItemRecord
-                .filter(Column("completed") == false)
-                .filter(Column("deleted") == false)
-                .filter(Column("backendId") != nil)
-                .fetchAll(database)
+        let deleted = try await authorization.withCommitLease {
+            try await db.write { database -> Int in
+                try authorization.require()
+                let records = try ActionItemRecord
+                    .filter(Column("completed") == false)
+                    .filter(Column("deleted") == false)
+                    .filter(Column("backendId") != nil)
+                    .fetchAll(database)
 
-            var count = 0
-            for record in records {
-                guard let backendId = record.backendId, !backendId.isEmpty else { continue }
-                if !apiIds.contains(backendId) {
-                    try record.delete(database)
-                    count += 1
+                var count = 0
+                for record in records {
+                    guard let backendId = record.backendId, !backendId.isEmpty else { continue }
+                    if !apiIds.contains(backendId) {
+                        try record.delete(database)
+                        count += 1
+                    }
                 }
+                try authorization.require()
+                return count
             }
-            return count
         }
 
         if deleted > 0 {
@@ -705,7 +666,11 @@ actor ActionItemStorage {
     /// Only targets synced records (backendSynced=true, backendId present) to avoid
     /// deleting locally-created tasks that haven't been pushed yet.
     /// Returns the number of records deleted.
-    func hardDeleteAbsentTasks(apiIds: Set<String>) async throws -> Int {
+    func hardDeleteAbsentTasks(
+        apiIds: Set<String>,
+        authorization: LocalMutationAuthorization
+    ) async throws -> Int {
+        try authorization.require()
         // Safety guard: never wipe all tasks if the API set is empty (backend error)
         guard !apiIds.isEmpty else {
             log("ActionItemStorage: hardDeleteAbsentTasks skipped — empty API set")
@@ -714,26 +679,30 @@ actor ActionItemStorage {
 
         let db = try await ensureInitialized()
 
-        let deleted = try await db.write { database -> Int in
-            let records = try ActionItemRecord
-                .filter(Column("completed") == false)
-                .filter(Column("deleted") == false)
-                .filter(Column("backendId") != nil)
-                .filter(Column("backendSynced") == true)
-                .fetchAll(database)
+        let deleted = try await authorization.withCommitLease {
+            try await db.write { database -> Int in
+                try authorization.require()
+                let records = try ActionItemRecord
+                    .filter(Column("completed") == false)
+                    .filter(Column("deleted") == false)
+                    .filter(Column("backendId") != nil)
+                    .filter(Column("backendSynced") == true)
+                    .fetchAll(database)
 
-            var count = 0
-            for record in records {
-                guard let backendId = record.backendId, !backendId.isEmpty else { continue }
-                if !apiIds.contains(backendId) {
-                    try database.execute(
-                        sql: "DELETE FROM action_items WHERE id = ?",
-                        arguments: [record.id]
-                    )
-                    count += 1
+                var count = 0
+                for record in records {
+                    guard let backendId = record.backendId, !backendId.isEmpty else { continue }
+                    if !apiIds.contains(backendId) {
+                        try database.execute(
+                            sql: "DELETE FROM action_items WHERE id = ?",
+                            arguments: [record.id]
+                        )
+                        count += 1
+                    }
                 }
+                try authorization.require()
+                return count
             }
-            return count
         }
 
         if deleted > 0 {
@@ -756,14 +725,22 @@ actor ActionItemStorage {
 
     /// Permanently delete an action item from local cache by backend ID.
     /// Used when user explicitly deletes a task.
-    func hardDeleteByBackendId(_ backendId: String) async throws {
+    func hardDeleteByBackendId(
+        _ backendId: String,
+        authorization: LocalMutationAuthorization
+    ) async throws {
+        try authorization.require()
         let db = try await ensureInitialized()
 
-        try await db.write { database in
-            try database.execute(
-                sql: "DELETE FROM action_items WHERE backendId = ?",
-                arguments: [backendId]
-            )
+        try await authorization.withCommitLease {
+            try await db.write { database in
+                try authorization.require()
+                try database.execute(
+                    sql: "DELETE FROM action_items WHERE backendId = ?",
+                    arguments: [backendId]
+                )
+                try authorization.require()
+            }
         }
 
         log("ActionItemStorage: Hard deleted action item with backendId \(backendId)")
@@ -773,42 +750,66 @@ actor ActionItemStorage {
 
     /// Insert a locally extracted action item (before backend sync)
     @discardableResult
-    func insertLocalActionItem(_ record: ActionItemRecord) async throws -> ActionItemRecord {
+    func insertLocalActionItem(
+        _ record: ActionItemRecord,
+        authorization: LocalMutationAuthorization
+    ) async throws -> ActionItemRecord {
+        try authorization.require()
         let db = try await ensureInitialized()
 
         var insertRecord = record
         insertRecord.backendSynced = false
         let recordToInsert = insertRecord
 
-        do {
-            let inserted = try await db.write { database in
-                try recordToInsert.inserted(database)
-            }
-            log("ActionItemStorage: Inserted local action item (id: \(inserted.id ?? -1))")
-            return inserted
-        } catch {
-            guard await RewindDatabase.shared.isActionItemsFTSError(error) else {
-                throw error
-            }
+        let inserted = try await authorization.withCommitLease {
+            try authorization.require()
+            do {
+                return try await db.write { database in
+                    try authorization.require()
+                    let inserted = try recordToInsert.inserted(database)
+                    try authorization.require()
+                    return inserted
+                }
+            } catch {
+                guard await RewindDatabase.shared.isActionItemsFTSError(error) else {
+                    throw error
+                }
 
-            logError("ActionItemStorage: action_items_fts write failed; repairing FTS index and retrying once")
-            try await RewindDatabase.shared.repairActionItemsFTS(in: db, reason: "insertLocalActionItem")
-
-            let inserted = try await db.write { database in
-                try recordToInsert.inserted(database)
+                logError("ActionItemStorage: action_items_fts write failed; repairing FTS index and retrying once")
+                try authorization.require()
+                try await RewindDatabase.shared.repairActionItemsFTS(
+                    in: db,
+                    reason: "insertLocalActionItem"
+                )
+                try authorization.require()
+                return try await db.write { database in
+                    try authorization.require()
+                    let inserted = try recordToInsert.inserted(database)
+                    try authorization.require()
+                    return inserted
+                }
             }
-            log("ActionItemStorage: Inserted local action item after FTS repair (id: \(inserted.id ?? -1))")
-            return inserted
         }
+        log("ActionItemStorage: Inserted local action item (id: \(inserted.id ?? -1))")
+        return inserted
     }
 
     /// Insert a screen observation (context captured during task extraction)
     @discardableResult
-    func insertObservation(_ record: ObservationRecord) async throws -> ObservationRecord {
+    func insertObservation(
+        _ record: ObservationRecord,
+        authorization: LocalMutationAuthorization
+    ) async throws -> ObservationRecord {
+        try authorization.require()
         let db = try await ensureInitialized()
 
-        let inserted = try await db.write { database in
-            try record.inserted(database)
+        let inserted = try await authorization.withCommitLease {
+            try await db.write { database in
+                try authorization.require()
+                let inserted = try record.inserted(database)
+                try authorization.require()
+                return inserted
+            }
         }
 
         log("ActionItemStorage: Inserted observation (id: \(inserted.id ?? -1), app: \(inserted.appName), hasTask: \(inserted.hasTask))")
@@ -816,18 +817,27 @@ actor ActionItemStorage {
     }
 
     /// Mark a local action item as synced with backend ID
-    func markSynced(id: Int64, backendId: String) async throws {
+    func markSynced(
+        id: Int64,
+        backendId: String,
+        authorization: LocalMutationAuthorization
+    ) async throws {
+        try authorization.require()
         let db = try await ensureInitialized()
 
-        try await db.write { database in
-            guard var record = try ActionItemRecord.fetchOne(database, key: id) else {
-                throw ActionItemStorageError.recordNotFound
-            }
+        try await authorization.withCommitLease {
+            try await db.write { database in
+                try authorization.require()
+                guard var record = try ActionItemRecord.fetchOne(database, key: id) else {
+                    throw ActionItemStorageError.recordNotFound
+                }
 
-            record.backendId = backendId
-            record.backendSynced = true
-            record.updatedAt = Date()
-            try record.update(database)
+                record.backendId = backendId
+                record.backendSynced = true
+                record.updatedAt = Date()
+                try record.update(database)
+                try authorization.require()
+            }
         }
 
         log("ActionItemStorage: Marked action item \(id) as synced (backendId: \(backendId))")
@@ -856,50 +866,29 @@ actor ActionItemStorage {
 
     // MARK: - Update Operations
 
-    /// Update action item completion status
-    func updateCompletedStatus(id: Int64, completed: Bool) async throws {
-        let db = try await ensureInitialized()
-
-        try await db.write { database in
-            guard var record = try ActionItemRecord.fetchOne(database, key: id) else {
-                throw ActionItemStorageError.recordNotFound
-            }
-
-            record.completed = completed
-            record.updatedAt = Date()
-            try record.update(database)
-        }
-    }
-
-    /// Hard-delete an action item by local SQLite ID
-    func deleteActionItem(id: Int64) async throws {
-        let db = try await ensureInitialized()
-
-        try await db.write { database in
-            guard let record = try ActionItemRecord.fetchOne(database, key: id) else {
-                throw ActionItemStorageError.recordNotFound
-            }
-
-            try record.delete(database)
-        }
-
-        log("ActionItemStorage: Hard-deleted action item \(id)")
-    }
-
     /// Optimistically update completion status locally (before API call)
     /// Sets updatedAt to Date() so auto-refresh timestamp check skips this record
-    func updateCompletionStatus(backendId: String, completed: Bool) async throws {
+    func updateCompletionStatus(
+        backendId: String,
+        completed: Bool,
+        authorization: LocalMutationAuthorization
+    ) async throws {
+        try authorization.require()
         let db = try await ensureInitialized()
 
-        try await db.write { database in
-            guard var record = try ActionItemRecord
-                .filter(Column("backendId") == backendId)
-                .fetchOne(database) else {
-                throw ActionItemStorageError.recordNotFound
+        try await authorization.withCommitLease {
+            try await db.write { database in
+                try authorization.require()
+                guard var record = try ActionItemRecord
+                    .filter(Column("backendId") == backendId)
+                    .fetchOne(database) else {
+                    throw ActionItemStorageError.recordNotFound
+                }
+                record.completed = completed
+                record.updatedAt = Date()
+                try record.update(database)
+                try authorization.require()
             }
-            record.completed = completed
-            record.updatedAt = Date()
-            try record.update(database)
         }
 
         log("ActionItemStorage: Locally set completed=\(completed) for \(backendId)")
@@ -914,80 +903,91 @@ actor ActionItemStorage {
         clearDueAt: Bool = false,
         priority: String? = nil,
         metadata: [String: Any]? = nil,
-        recurrenceRule: String? = nil
+        recurrenceRule: String? = nil,
+        workstreamId: String? = nil,
+        authorization: LocalMutationAuthorization
     ) async throws {
+        try authorization.require()
         let db = try await ensureInitialized()
 
-        try await db.write { database in
-            guard var record = try ActionItemRecord
-                .filter(Column("backendId") == backendId)
-                .fetchOne(database) else {
-                throw ActionItemStorageError.recordNotFound
+        try await authorization.withCommitLease {
+            try await db.write { database in
+                try authorization.require()
+                guard var record = try ActionItemRecord
+                    .filter(Column("backendId") == backendId)
+                    .fetchOne(database) else {
+                    throw ActionItemStorageError.recordNotFound
+                }
+                if let description = description {
+                    record.description = description
+                }
+                if clearDueAt {
+                    record.dueAt = nil
+                } else if let dueAt = dueAt {
+                    record.dueAt = dueAt
+                }
+                if let priority = priority {
+                    record.priority = priority
+                }
+                if let metadata = metadata {
+                    record.setMetadata(metadata)
+                }
+                if let recurrenceRule = recurrenceRule {
+                    record.recurrenceRule = recurrenceRule.isEmpty ? nil : recurrenceRule
+                }
+                if let workstreamId {
+                    record.workstreamId = workstreamId
+                }
+                record.updatedAt = Date()
+                try record.update(database)
+                try authorization.require()
             }
-            if let description = description {
-                record.description = description
-            }
-            if clearDueAt {
-                record.dueAt = nil
-            } else if let dueAt = dueAt {
-                record.dueAt = dueAt
-            }
-            if let priority = priority {
-                record.priority = priority
-            }
-            if let metadata = metadata {
-                record.setMetadata(metadata)
-            }
-            if let recurrenceRule = recurrenceRule {
-                record.recurrenceRule = recurrenceRule.isEmpty ? nil : recurrenceRule
-            }
-            record.updatedAt = Date()
-            try record.update(database)
         }
 
         log("ActionItemStorage: Locally updated fields for \(backendId)")
     }
 
     /// Batch update sort orders and indent levels in SQLite
-    func updateSortOrders(_ updates: [(backendId: String, sortOrder: Int, indentLevel: Int)]) async throws {
+    func updateSortOrders(
+        _ updates: [(backendId: String, sortOrder: Int, indentLevel: Int)],
+        authorization: LocalMutationAuthorization
+    ) async throws {
+        try authorization.require()
         let db = try await ensureInitialized()
 
-        try await db.write { database in
-            for update in updates {
-                try database.execute(
-                    sql: "UPDATE action_items SET sortOrder = ?, indentLevel = ?, updatedAt = ? WHERE backendId = ?",
-                    arguments: [update.sortOrder, update.indentLevel, Date(), update.backendId]
-                )
+        try await authorization.withCommitLease {
+            try await db.write { database in
+                try authorization.require()
+                for update in updates {
+                    try database.execute(
+                        sql: "UPDATE action_items SET sortOrder = ?, indentLevel = ?, updatedAt = ? WHERE backendId = ?",
+                        arguments: [update.sortOrder, update.indentLevel, Date(), update.backendId]
+                    )
+                }
+                try authorization.require()
             }
         }
 
         log("ActionItemStorage: Updated sort orders for \(updates.count) items")
     }
 
-    /// Un-soft-delete an action item by backend ID (for undo)
-    func undeleteActionItemByBackendId(_ backendId: String) async throws {
-        let db = try await ensureInitialized()
-
-        try await db.write { database in
-            try database.execute(
-                sql: "UPDATE action_items SET deleted = 0, deletedBy = NULL, updatedAt = ? WHERE backendId = ?",
-                arguments: [Date(), backendId]
-            )
-        }
-
-        log("ActionItemStorage: Undeleted action item with backendId \(backendId)")
-    }
-
     /// Purge all soft-deleted items from local SQLite (one-time cleanup during full sync)
-    func purgeAllSoftDeletedItems() async throws -> Int {
+    func purgeAllSoftDeletedItems(
+        authorization: LocalMutationAuthorization
+    ) async throws -> Int {
+        try authorization.require()
         let db = try await ensureInitialized()
 
-        let count = try await db.write { database -> Int in
-            let count = try Int.fetchOne(database, sql: "SELECT COUNT(*) FROM action_items WHERE deleted = 1") ?? 0
-            if count > 0 {
-                try database.execute(sql: "DELETE FROM action_items WHERE deleted = 1")
+        let count = try await authorization.withCommitLease {
+            try await db.write { database -> Int in
+                try authorization.require()
+                let count = try Int.fetchOne(database, sql: "SELECT COUNT(*) FROM action_items WHERE deleted = 1") ?? 0
+                if count > 0 {
+                    try database.execute(sql: "DELETE FROM action_items WHERE deleted = 1")
+                }
+                try authorization.require()
+                return count
             }
-            return count
         }
 
         if count > 0 {
@@ -997,14 +997,23 @@ actor ActionItemStorage {
     }
 
     /// Hard-delete an action item by backend ID
-    func deleteActionItemByBackendId(_ backendId: String, deletedBy: String? = nil) async throws {
+    func deleteActionItemByBackendId(
+        _ backendId: String,
+        deletedBy: String? = nil,
+        authorization: LocalMutationAuthorization
+    ) async throws {
+        try authorization.require()
         let db = try await ensureInitialized()
 
-        try await db.write { database in
-            try database.execute(
-                sql: "DELETE FROM action_items WHERE backendId = ?",
-                arguments: [backendId]
-            )
+        try await authorization.withCommitLease {
+            try await db.write { database in
+                try authorization.require()
+                try database.execute(
+                    sql: "DELETE FROM action_items WHERE backendId = ?",
+                    arguments: [backendId]
+                )
+                try authorization.require()
+            }
         }
 
         log("ActionItemStorage: Hard-deleted action item with backendId \(backendId)")
@@ -1100,31 +1109,37 @@ actor ActionItemStorage {
 
     /// One-time backfill: assign max+1 sequentially to all active unscored tasks.
     /// Returns the number of tasks that were backfilled.
-    func backfillUnscoredTasks() async throws -> Int {
+    func backfillUnscoredTasks(
+        authorization: LocalMutationAuthorization
+    ) async throws -> Int {
+        try authorization.require()
         let db = try await ensureInitialized()
 
-        return try await db.write { database in
-            let maxScore = try Int.fetchOne(database, sql: """
-                SELECT COALESCE(MAX(relevanceScore), 0) FROM action_items
-                WHERE completed = 0 AND deleted = 0 AND relevanceScore IS NOT NULL
-            """) ?? 0
+        return try await authorization.withCommitLease {
+            try await db.write { database in
+                try authorization.require()
+                let maxScore = try Int.fetchOne(database, sql: """
+                    SELECT COALESCE(MAX(relevanceScore), 0) FROM action_items
+                    WHERE completed = 0 AND deleted = 0 AND relevanceScore IS NOT NULL
+                """) ?? 0
 
-            let unscoredIds = try Int64.fetchAll(database, sql: """
-                SELECT id FROM action_items
-                WHERE completed = 0 AND deleted = 0 AND relevanceScore IS NULL
-                ORDER BY createdAt ASC
-            """)
+                let unscoredIds = try Int64.fetchAll(database, sql: """
+                    SELECT id FROM action_items
+                    WHERE completed = 0 AND deleted = 0 AND relevanceScore IS NULL
+                    ORDER BY createdAt ASC
+                """)
 
-            guard !unscoredIds.isEmpty else { return 0 }
+                guard !unscoredIds.isEmpty else { return 0 }
 
-            for (index, id) in unscoredIds.enumerated() {
-                try database.execute(
-                    sql: "UPDATE action_items SET relevanceScore = ? WHERE id = ?",
-                    arguments: [maxScore + 1 + index, id]
-                )
+                for (index, id) in unscoredIds.enumerated() {
+                    try database.execute(
+                        sql: "UPDATE action_items SET relevanceScore = ? WHERE id = ?",
+                        arguments: [maxScore + 1 + index, id]
+                    )
+                }
+                try authorization.require()
+                return unscoredIds.count
             }
-
-            return unscoredIds.count
         }
     }
 
@@ -1146,47 +1161,27 @@ actor ActionItemStorage {
         }
     }
 
-    /// Insert a task with a specific relevanceScore, shifting existing tasks at that score
-    /// and below down by 1 to maintain uniqueness
-    func insertWithScoreShift(_ record: ActionItemRecord) async throws -> ActionItemRecord {
-        let db = try await ensureInitialized()
-
-        var insertRecord = record
-        insertRecord.backendSynced = false
-        let recordToInsert = insertRecord
-
-        let inserted = try await db.write { database in
-            // Shift all active tasks at this score and below down by 1 (push less important tasks further down)
-            // Score 1 = most important (top), so shifting down means incrementing scores >= this one
-            if let score = recordToInsert.relevanceScore {
-                try database.execute(sql: """
-                    UPDATE action_items
-                    SET relevanceScore = relevanceScore + 1
-                    WHERE relevanceScore IS NOT NULL AND relevanceScore >= ?
-                      AND completed = 0 AND deleted = 0
-                """, arguments: [score])
-            }
-
-            return try recordToInsert.inserted(database)
-        }
-
-        log("ActionItemStorage: Inserted with score shift (id: \(inserted.id ?? -1), score: \(inserted.relevanceScore ?? -1))")
-        return inserted
-    }
-
     /// Compact relevance scores after a task is completed or deleted.
     /// Shifts all scores above the removed score down by 1 to fill the gap.
-    func compactScoresAfterRemoval(removedScore: Int) async throws {
+    func compactScoresAfterRemoval(
+        removedScore: Int,
+        authorization: LocalMutationAuthorization
+    ) async throws {
+        try authorization.require()
         let db = try await ensureInitialized()
 
-        try await db.write { database in
-            let now = Date()
-            try database.execute(sql: """
-                UPDATE action_items
-                SET relevanceScore = relevanceScore - 1, updatedAt = ?
-                WHERE relevanceScore IS NOT NULL AND relevanceScore > ?
-                  AND completed = 0 AND deleted = 0
-            """, arguments: [now, removedScore])
+        try await authorization.withCommitLease {
+            try await db.write { database in
+                try authorization.require()
+                let now = Date()
+                try database.execute(sql: """
+                    UPDATE action_items
+                    SET relevanceScore = relevanceScore - 1, updatedAt = ?
+                    WHERE relevanceScore IS NOT NULL AND relevanceScore > ?
+                      AND completed = 0 AND deleted = 0
+                """, arguments: [now, removedScore])
+                try authorization.require()
+            }
         }
         log("ActionItemStorage: Compacted scores after removing score \(removedScore)")
     }
@@ -1269,29 +1264,27 @@ actor ActionItemStorage {
     }
 
     /// Store embedding BLOB for a specific action item
-    func updateEmbedding(id: Int64, embedding: Data) async throws {
+    func updateEmbedding(
+        id: Int64,
+        embedding: Data,
+        authorization: LocalMutationAuthorization
+    ) async throws {
+        try authorization.require()
         let db = try await ensureInitialized()
 
-        try await db.write { database in
-            try database.execute(
-                sql: "UPDATE action_items SET embedding = ? WHERE id = ?",
-                arguments: [embedding, id]
-            )
+        try await authorization.withCommitLease {
+            try await db.write { database in
+                try authorization.require()
+                try database.execute(
+                    sql: "UPDATE action_items SET embedding = ? WHERE id = ?",
+                    arguments: [embedding, id]
+                )
+                try authorization.require()
+            }
         }
     }
 
     // MARK: - Relevance Scores
-
-    /// Clear all relevance scores (for force re-scoring)
-    func clearAllRelevanceScores() async throws {
-        let db = try await ensureInitialized()
-
-        try await db.write { database in
-            try database.execute(
-                sql: "UPDATE action_items SET relevanceScore = NULL, scoredAt = NULL WHERE relevanceScore IS NOT NULL"
-            )
-        }
-    }
 
     /// Get ALL incomplete AI tasks regardless of score status (for full rescore)
     func getAllAITasks(limit: Int = 10000) async throws -> [TaskActionItem] {
@@ -1358,45 +1351,6 @@ actor ActionItemStorage {
         }
     }
 
-    /// Apply selective re-ranking: pull re-ranked tasks out of the ordered list,
-    /// insert them at their new positions, then renumber all tasks 1..N.
-    func applySelectiveReranking(_ reranks: [(backendId: String, newPosition: Int)]) async throws {
-        let db = try await ensureInitialized()
-
-        try await db.write { database in
-            // 1. Get all active tasks ordered by current relevanceScore ASC (1 = top)
-            let rows = try Row.fetchAll(database, sql: """
-                SELECT id, backendId, relevanceScore
-                FROM action_items
-                WHERE completed = 0 AND deleted = 0
-                ORDER BY COALESCE(relevanceScore, 999999) ASC
-            """)
-
-            // 2. Build ordered list of backendIds (current ranking)
-            var orderedIds: [String] = rows.compactMap { $0["backendId"] as? String }
-            let rerankedSet = Set(reranks.map { $0.backendId })
-
-            // 3. Remove re-ranked tasks from the list
-            orderedIds.removeAll { rerankedSet.contains($0) }
-
-            // 4. Insert re-ranked tasks at their new positions (sorted by position to insert correctly)
-            let sorted = reranks.sorted { $0.newPosition < $1.newPosition }
-            for rerank in sorted {
-                let insertIdx = max(0, min(rerank.newPosition - 1, orderedIds.count))
-                orderedIds.insert(rerank.backendId, at: insertIdx)
-            }
-
-            // 5. Reassign sequential scores 1..N
-            let now = Date()
-            for (index, backendId) in orderedIds.enumerated() {
-                try database.execute(
-                    sql: "UPDATE action_items SET relevanceScore = ?, scoredAt = ?, updatedAt = ? WHERE backendId = ?",
-                    arguments: [index + 1, now, now, backendId]
-                )
-            }
-        }
-    }
-
     // MARK: - Agent Session Persistence
 
     /// Update agent state for an action item (keyed by backendId or local_ prefix)
@@ -1408,34 +1362,40 @@ actor ActionItemStorage {
         plan: String?,
         startedAt: Date?,
         completedAt: Date?,
-        editedFilesJson: String?
+        editedFilesJson: String?,
+        authorization: LocalMutationAuthorization
     ) async throws {
+        try authorization.require()
         let db = try await ensureInitialized()
 
-        try await db.write { database in
-            // Find by backendId, or by local ID (local_<rowid>)
-            var record: ActionItemRecord?
-            if taskId.hasPrefix("local_"), let localId = Int64(taskId.dropFirst(6)) {
-                record = try ActionItemRecord.fetchOne(database, key: localId)
-            } else {
-                record = try ActionItemRecord
-                    .filter(Column("backendId") == taskId)
-                    .fetchOne(database)
-            }
+        try await authorization.withCommitLease {
+            try await db.write { database in
+                try authorization.require()
+                // Find by backendId, or by local ID (local_<rowid>)
+                var record: ActionItemRecord?
+                if taskId.hasPrefix("local_"), let localId = Int64(taskId.dropFirst(6)) {
+                    record = try ActionItemRecord.fetchOne(database, key: localId)
+                } else {
+                    record = try ActionItemRecord
+                        .filter(Column("backendId") == taskId)
+                        .fetchOne(database)
+                }
 
-            guard var rec = record else {
-                log("ActionItemStorage: updateAgentState - record not found for taskId \(taskId)")
-                return
-            }
+                guard var rec = record else {
+                    log("ActionItemStorage: updateAgentState - record not found for taskId \(taskId)")
+                    return
+                }
 
-            rec.agentStatus = status
-            rec.agentSessionName = sessionName
-            rec.agentPrompt = prompt
-            rec.agentPlan = plan
-            rec.agentStartedAt = startedAt
-            rec.agentCompletedAt = completedAt
-            rec.agentEditedFilesJson = editedFilesJson
-            try rec.update(database)
+                rec.agentStatus = status
+                rec.agentSessionName = sessionName
+                rec.agentPrompt = prompt
+                rec.agentPlan = plan
+                rec.agentStartedAt = startedAt
+                rec.agentCompletedAt = completedAt
+                rec.agentEditedFilesJson = editedFilesJson
+                try rec.update(database)
+                try authorization.require()
+            }
         }
     }
 
@@ -1452,55 +1412,37 @@ actor ActionItemStorage {
     }
 
     /// Clear all agent fields for a task (when user stops/removes session)
-    func clearAgentState(taskId: String) async throws {
+    func clearAgentState(
+        taskId: String,
+        authorization: LocalMutationAuthorization
+    ) async throws {
+        try authorization.require()
         let db = try await ensureInitialized()
 
-        try await db.write { database in
-            var record: ActionItemRecord?
-            if taskId.hasPrefix("local_"), let localId = Int64(taskId.dropFirst(6)) {
-                record = try ActionItemRecord.fetchOne(database, key: localId)
-            } else {
-                record = try ActionItemRecord
-                    .filter(Column("backendId") == taskId)
-                    .fetchOne(database)
+        try await authorization.withCommitLease {
+            try await db.write { database in
+                try authorization.require()
+                var record: ActionItemRecord?
+                if taskId.hasPrefix("local_"), let localId = Int64(taskId.dropFirst(6)) {
+                    record = try ActionItemRecord.fetchOne(database, key: localId)
+                } else {
+                    record = try ActionItemRecord
+                        .filter(Column("backendId") == taskId)
+                        .fetchOne(database)
+                }
+
+                guard var rec = record else { return }
+
+                rec.agentStatus = nil
+                rec.agentSessionName = nil
+                rec.agentPrompt = nil
+                rec.agentPlan = nil
+                rec.agentStartedAt = nil
+                rec.agentCompletedAt = nil
+                rec.agentEditedFilesJson = nil
+                try rec.update(database)
+                try authorization.require()
             }
-
-            guard var rec = record else { return }
-
-            rec.agentStatus = nil
-            rec.agentSessionName = nil
-            rec.agentPrompt = nil
-            rec.agentPlan = nil
-            rec.agentStartedAt = nil
-            rec.agentCompletedAt = nil
-            rec.agentEditedFilesJson = nil
-            try rec.update(database)
-        }
-    }
-
-    // MARK: - Chat Session
-
-    /// Update chat session ID for a task
-    func updateChatSessionId(taskId: String, sessionId: String?) async throws {
-        let db = try await ensureInitialized()
-
-        try await db.write { database in
-            var record: ActionItemRecord?
-            if taskId.hasPrefix("local_"), let localId = Int64(taskId.dropFirst(6)) {
-                record = try ActionItemRecord.fetchOne(database, key: localId)
-            } else {
-                record = try ActionItemRecord
-                    .filter(Column("backendId") == taskId)
-                    .fetchOne(database)
-            }
-
-            guard var rec = record else {
-                log("ActionItemStorage: updateChatSessionId - record not found for taskId \(taskId)")
-                return
-            }
-
-            rec.chatSessionId = sessionId
-            try rec.update(database)
         }
     }
 

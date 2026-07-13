@@ -20,6 +20,11 @@ on:
         required: false
         default: ''
 
+# Serialize Helm writers to this environment's diarizer release.
+concurrency:
+  group: deploy-gke-diarizer-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
 env:
   SERVICE: diarizer
   REGION: us-central1
@@ -72,7 +77,7 @@ jobs:
 
       - name: Deploy Diarizer to GKE cluster using Helm
         run: |
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-${{ env.SERVICE }} ./backend/charts/${{ env.SERVICE }} -f ./backend/charts/${{ env.SERVICE }}/${{ vars.ENV }}_omi_${{ env.SERVICE }}_values.yaml --set "image.tag=${GITHUB_SHA::7}"
+          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-${{ env.SERVICE }} ./backend/charts/${{ env.SERVICE }} -f ./backend/charts/${{ env.SERVICE }}/${{ vars.ENV }}_omi_${{ env.SERVICE }}_values.yaml --set-string "image.tag=${GITHUB_SHA::7}"
 
       - name: Verify rollout
         run: |

@@ -59,10 +59,14 @@ final class AgentPill: ObservableObject, Identifiable {
     let query: String
     let createdAt: Date
     let model: String
+    let ownerID: String
     let bridgeHarnessOverride: AgentHarnessMode?
     var canonicalSessionId: String?
     var canonicalRunId: String?
     var canonicalAttemptId: String?
+    /// Exact parent journal surface that owns this pill's `agentSpawn` block.
+    /// This stays pinned even if the user switches chats while the run is active.
+    var producingJournalSurface: AgentSurfaceReference?
 
     @Published var title: String
     @Published var status: Status = .queued
@@ -80,10 +84,17 @@ final class AgentPill: ObservableObject, Identifiable {
         (completedAt ?? Date()).timeIntervalSince(createdAt)
     }
 
-    init(id: UUID = UUID(), query: String, model: String, bridgeHarnessOverride: AgentHarnessMode? = nil) {
+    init(
+        id: UUID = UUID(),
+        query: String,
+        model: String,
+        bridgeHarnessOverride: AgentHarnessMode? = nil,
+        ownerID: String? = nil
+    ) {
         self.id = id
         self.query = query
         self.model = model
+        self.ownerID = ownerID ?? RuntimeOwnerIdentity.currentOwnerId() ?? ""
         self.bridgeHarnessOverride = bridgeHarnessOverride
         self.title = AgentPill.deriveTitle(from: query)
         self.createdAt = Date()
@@ -109,8 +120,20 @@ final class AgentPill: ObservableObject, Identifiable {
     }
 }
 
+enum AgentOwnerBoundSpawnResult<Value> {
+    case rejectedBeforeDispatch
+    case staleReceipt(Value)
+    case accepted(Value)
+}
+
 /// Singleton that owns visible `AgentPill` projections. It never owns agent
 /// execution; spawn/continue/stop delegate to the canonical runtime.
+struct AgentPillProducerJournalIntent: Sendable {
+    let surface: AgentSurfaceReference
+    let userText: String
+    let assistantText: String
+}
+
 @MainActor
 final class AgentPillsManager: ObservableObject {
     static let shared = AgentPillsManager()
@@ -123,14 +146,10 @@ final class AgentPillsManager: ObservableObject {
     /// INV-8: ephemeral UI only — tracks in-flight projection poll/send tasks per pill;
     /// canonical run truth lives in the kernel (`canonicalSessionId` / `canonicalRunId`).
     private var runTasksByPill: [UUID: Task<Void, Never>] = [:]
+    private var runAttemptGenerationByPill: [UUID: Int] = [:]
     private var viewedExpirationWorkItemsByPill: [UUID: DispatchWorkItem] = [:]
     private var pendingFollowUpsByPill: [UUID: [PendingAgentFollowUp]] = [:]
-
-    /// Shared agent-noun pattern used by negation guard, intent detection, and
-    /// task extraction. Kept word-boundary-free so callers can embed it inside
-    /// larger patterns and add `\b` anchors themselves. (Cubic P2 — single
-    /// source of truth for agent-noun regex.)
-    private nonisolated static let agentNounPattern = #"(?:sub\s*agents?|subagents?|background\s+agents?|floating\s+agents?|agents?|pills?)"#
+    private var producingJournalSurfaceByPill: [UUID: AgentSurfaceReference] = [:]
 
     /// Which pill (if any) is currently capturing a voice follow-up — drives the
     /// pill popover's mic button state.
@@ -140,6 +159,7 @@ final class AgentPillsManager: ObservableObject {
 
     private var projectionSyncCancellable: AnyCancellable?
     private var projectionRefreshTask: Task<Void, Never>?
+    private var ownerChangeCancellable: AnyCancellable?
 
     private init() {
         projectionSyncCancellable = AgentRuntimeStatusStore.shared.$projectionsBySurface
@@ -150,32 +170,75 @@ final class AgentPillsManager: ObservableObject {
         projectionRefreshTask = Task { @MainActor [weak self] in
             await self?.refreshProjectedPillsFromKernel()
         }
+        ownerChangeCancellable = NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)
+            .sink { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.resetOwnerProjection()
+                }
+            }
     }
 
-    /// Routing decision for an Ask Omi message — does it stay inline in the
-    /// floating bar, or get hoisted into a background agent pill?
-    enum Route: String { case chat, agent }
-
-    /// Explicit UI/control-plane handoff: the parent turn is the user's request
-    /// to create a background agent, while `agentTask` is the work the child
-    /// agent should actually perform. Keeping these separate prevents the child
-    /// prompt from inheriting control words like "spawn a subagent".
-    struct FloatingAgentHandoff: Equatable {
-        let originalRequest: String
-        let agentTask: String
+#if DEBUG
+    /// Hermetic tests that only exercise in-memory projection state must not
+    /// let the singleton's eager refresh start the real shared agent runtime.
+    func quiesceProjectionRefreshForTesting() {
+        projectionRefreshTask?.cancel()
+        projectionRefreshTask = nil
     }
+#endif
 
     private struct PendingAgentFollowUp {
         let text: String
         let attachments: [ChatAttachment]
     }
 
-    /// Combined router result. Title/ack are pre-computed alongside the route
-    /// so we don't need a second Haiku call when the answer is "agent".
-    struct RouterDecision {
-        let route: Route
-        let title: String?
-        let ack: String?
+    func resetOwnerProjection() {
+        projectionRefreshTask?.cancel()
+        projectionRefreshTask = nil
+        for task in runTasksByPill.values { task.cancel() }
+        for item in viewedExpirationWorkItemsByPill.values { item.cancel() }
+        if let recordingPillID {
+            PushToTalkManager.shared.cancelPillFollowUp(for: recordingPillID)
+        }
+        recordingPillID = nil
+        runTasksByPill.removeAll()
+        runAttemptGenerationByPill.removeAll()
+        viewedExpirationWorkItemsByPill.removeAll()
+        pendingFollowUpsByPill.removeAll()
+        producingJournalSurfaceByPill.removeAll()
+        pills.removeAll()
+        projectionRefreshTask = Task { @MainActor [weak self] in
+            await Task.yield()
+            await self?.refreshProjectedPillsFromKernel()
+        }
+    }
+
+    static func performOwnerBoundSpawn<Value>(
+        ownerID: String,
+        currentOwnerID: @escaping @MainActor () -> String? = {
+            RuntimeOwnerIdentity.currentOwnerId()
+        },
+        dispatch: () async throws -> Value
+    ) async rethrows -> AgentOwnerBoundSpawnResult<Value> {
+        guard !ownerID.isEmpty, currentOwnerID() == ownerID else {
+            return .rejectedBeforeDispatch
+        }
+        let value = try await dispatch()
+        guard currentOwnerID() == ownerID else { return .staleReceipt(value) }
+        return .accepted(value)
+    }
+
+    func bindProducingJournalSurface(
+        pillID: UUID,
+        surface: AgentSurfaceReference
+    ) {
+        producingJournalSurfaceByPill[pillID] = surface
+        pills.first(where: { $0.id == pillID })?.producingJournalSurface = surface
+    }
+
+    func producingJournalSurface(for pillID: UUID) -> AgentSurfaceReference? {
+        pills.first(where: { $0.id == pillID })?.producingJournalSurface
+            ?? producingJournalSurfaceByPill[pillID]
     }
 
     enum DirectedProvider: String, Equatable {
@@ -216,6 +279,9 @@ final class AgentPillsManager: ObservableObject {
     }
 
     struct ProviderDirective: Equatable {
+        /// Deterministic explicit-provider syntax only. This is an untrusted
+        /// proposal: `spawn_agent` still calls the kernel's route-and-apply
+        /// contract before it creates any session/run.
         let provider: DirectedProvider
         let rewrittenQuery: String
         let title: String
@@ -230,149 +296,6 @@ final class AgentPillsManager: ObservableObject {
         let query: String
         let createdAt: String
         let completedAt: String?
-    }
-
-    /// Ask Claude Haiku whether the message is a quick info question (→ chat)
-    /// or a background task (→ agent). Falls back to `.chat` on error/timeout
-    /// so we never accidentally hijack a question into a long-running pill.
-    /// ~300-500ms via the desktop-backend's OpenAI-compatible proxy.
-    static func classify(_ query: String) async -> RouterDecision {
-        guard let result = await runRouterCall(for: query) else {
-            return RouterDecision(route: .chat, title: nil, ack: nil)
-        }
-        return result
-    }
-
-    private static func runRouterCall(for query: String) async -> RouterDecision? {
-        let baseURL = await APIClient.shared.rustBackendURL
-        guard !baseURL.isEmpty else {
-            log("AgentPill: router skipped — rustBackendURL empty, defaulting to chat")
-            return nil
-        }
-        let normalized = baseURL.hasSuffix("/") ? baseURL : baseURL + "/"
-        guard let url = URL(string: normalized + "v2/chat/completions") else { return nil }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 4
-        do {
-            let headers = try await APIClient.shared.buildHeaders(requireAuth: true)
-            for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        } catch {
-            log("AgentPill: router skipped — auth header unavailable (\(error.localizedDescription))")
-            return nil
-        }
-
-        let prompt = """
-        The user just sent this message in the Omi floating bar:
-
-        "\(query)"
-
-        Decide whether to (a) answer it inline in the chat bar, or (b) spawn a background agent that will do work on the user's computer/apps/browser.
-
-        Reply with ONLY a single-line JSON object, no prose, no markdown:
-        {"route":"chat"|"agent","title":"<3-5 word imperative title in Title Case, no trailing punctuation>","ack":"<one short spoken acknowledgement, max 7 words, friendly tone>"}
-
-        Use "agent" ONLY when the request requires the assistant to take real actions on the user's computer/browser/apps that will plausibly take more than ~10 seconds — building/coding something, sending/posting a message, editing or creating files, multi-step browser navigation, generating a long document.
-        Use "chat" for everything else: questions, lookups (even if the user uses words like "search"/"find"/"look up"), definitions, single facts, explanations, short summaries, opinions, conversation. When in doubt, choose "chat".
-        """
-
-        let body: [String: Any] = [
-            "model": "claude-haiku-4-5-20251001",
-            "max_tokens": 120,
-            "messages": [["role": "user", "content": prompt]],
-            "stream": false,
-        ]
-        do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: body)
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse else {
-                log("AgentPill: router failed — no HTTP response, defaulting to chat")
-                return nil
-            }
-            guard (200..<300).contains(http.statusCode) else {
-                let bodyText = String(data: data.prefix(200), encoding: .utf8) ?? "<binary>"
-                log("AgentPill: router HTTP \(http.statusCode) — \(bodyText), defaulting to chat")
-                return nil
-            }
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                let choices = json["choices"] as? [[String: Any]],
-                let message = choices.first?["message"] as? [String: Any],
-                let text = message["content"] as? String
-            else {
-                log("AgentPill: router response shape unexpected, defaulting to chat")
-                return nil
-            }
-            // Haiku occasionally ignores the "no markdown" instruction and
-            // wraps the JSON in ```json ... ``` fences, or emits leading
-            // prose. Extract the first balanced {...} object instead of
-            // trusting the whole response to be raw JSON.
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            let jsonBody: String
-            if let firstBrace = trimmed.firstIndex(of: "{"),
-                let lastBrace = trimmed.lastIndex(of: "}"),
-                firstBrace < lastBrace
-            {
-                jsonBody = String(trimmed[firstBrace...lastBrace])
-            } else {
-                jsonBody = trimmed
-            }
-            guard let payloadData = jsonBody.data(using: .utf8),
-                let payload = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any],
-                let routeStr = (payload["route"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            else {
-                log("AgentPill: router JSON parse failed — raw: \(String(trimmed.prefix(200))), defaulting to chat")
-                return nil
-            }
-            let route = Route(rawValue: routeStr) ?? .chat
-            let title = (payload["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let ack = (payload["ack"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-            log("AgentPill: router decided route=\(route.rawValue) title=\"\(title ?? "")\"")
-            return RouterDecision(
-                route: route,
-                title: (title?.isEmpty == false) ? String(title!.prefix(40)) : nil,
-                ack: (ack?.isEmpty == false) ? String(ack!.prefix(120)) : nil
-            )
-        } catch {
-            log("AgentPill: router threw — \(error.localizedDescription), defaulting to chat")
-            return nil
-        }
-    }
-
-    /// Parse phrases like "spawn 3 agents", "5 tasks", "two agents working in
-    /// parallel" out of a user query. Returns 1 if no count is mentioned.
-    /// Handles "3 test agents" — words between the number and the noun are
-    /// allowed (up to 5 tokens) so demo phrasing doesn't fall through.
-    static func parseAgentCount(from text: String) -> Int {
-        let lower = text.lowercased()
-        let nounGroup = "(?:agents?|tasks?|pills?|things?)"
-        // Numeric: "3 agents", "spawn 5 in parallel", "3 test agents",
-        // "spawn 3 of these", but NOT "in 30 seconds".
-        // Allow up to ~5 short words between the number and the noun.
-        let numericPattern = #"\b(\d+)(?:\s+\S+){0,5}\s+\#(nounGroup)\b"#
-        if let regex = try? NSRegularExpression(pattern: numericPattern),
-            let match = regex.firstMatch(in: lower, range: NSRange(lower.startIndex..., in: lower)),
-            match.numberOfRanges > 1,
-            let range = Range(match.range(at: 1), in: lower),
-            let n = Int(lower[range]),
-            n > 0
-        {
-            return min(n, 8)
-        }
-        // Word form: "two agents", "three tasks", "five test agents"
-        let wordToNumber: [String: Int] = [
-            "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
-        ]
-        let wordPattern = #"\b(two|three|four|five|six|seven|eight)(?:\s+\S+){0,5}\s+\#(nounGroup)\b"#
-        if let regex = try? NSRegularExpression(pattern: wordPattern),
-            let match = regex.firstMatch(in: lower, range: NSRange(lower.startIndex..., in: lower)),
-            match.numberOfRanges > 1,
-            let range = Range(match.range(at: 1), in: lower),
-            let n = wordToNumber[String(lower[range])]
-        {
-            return min(n, 8)
-        }
-        return 1
     }
 
     nonisolated static func providerDirective(from text: String) -> ProviderDirective? {
@@ -466,196 +389,29 @@ final class AgentPillsManager: ObservableObject {
             || lower.contains(" instead of ")
     }
 
-    /// User control-plane request from the floating bar UI: create a visible sibling
-    /// background agent. This is intentionally separate from an agent's own tool use;
-    /// existing floating agents still cannot self-spawn nested pills.
-    nonisolated static func floatingAgentHandoff(for text: String) -> FloatingAgentHandoff? {
-        let original = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !original.isEmpty else { return nil }
-        let lower = text.lowercased()
-        // Exclude question-style starters — informational queries like
-        // "how do I start a background agent?" or "can you explain how to run
-        // agents?" should answer inline, not spawn a pill.
-        let questionStarters = [
-            "how do i", "how do you", "how to", "what is", "what are", "what does",
-            "what can", "whats", "can you explain", "could you explain",
-            "explain how", "tell me about", "tell me how", "why", "is it",
-            "are agents", "do agents", "does the agent",
-            // Modal question starters — queries like "can I run agents in the
-            // background?", "will agents run while I work?", or "should I start
-            // an agent?" contain an agent noun + an action verb but are questions,
-            // not imperatives, so they should answer inline, not spawn a pill.
-            "can i", "could i", "should i", "would i", "will agents",
-            "will the agent", "may i", "do i need", "do i have",
-        ]
-        let trimmedLower = lower.trimmingCharacters(in: .whitespacesAndNewlines)
-        if questionStarters.contains(where: { trimmedLower.hasPrefix($0) }) {
-            return nil
-        }
-        // Negation guard (fully scoped): only suppress spawn when a negation
-        // word appears in direct construction with BOTH a spawn action AND an
-        // agent noun — e.g. "don't spawn an agent", "no agent", "without a
-        // pill". Every pattern requires agent-noun proximity so unrelated
-        // negation words (e.g. "don't make me laugh, spawn an agent") do not
-        // false-suppress legitimate spawns. (Cubic P1 — tightens prior scoped
-        // guard.)
-        let agentNoun = Self.agentNounPattern
-        let article = #"(?:a|an|any)\s+"#
-        let negationOptOuts = [
-            // "don't spawn an agent", "do not create a pill", "don't run agents"
-            #"\b(?:don'?t|do not|never)\s+(?:spawn|start|launch|kick\s+off|create|make|run)\s+(?:"# + article + #")?"# + agentNoun + #"\b"#,
-            // "no agent", "not an agent", "no pills", "not a subagent"
-            #"\b(?:no|not)\s+(?:"# + article + #")?"# + agentNoun + #"\b"#,
-            // "without spawning an agent", "without a pill",
-            // "without creating subagents"
-            #"\bwithout\s+(?:(?:spawning|creating|making|starting|launching|running)\s+(?:"# + article + #")?|"# + article + #")?"# + agentNoun + #"\b"#,
-            // "not spawning an agent", "never creating pills"
-            #"\b(?:not|never)\s+(?:spawning|creating|making|starting|launching|running)\s+(?:"# + article + #")?"# + agentNoun + #"\b"#,
-        ]
-        if negationOptOuts.contains(where: { lower.range(of: $0, options: .regularExpression) != nil }) {
-            return nil
-        }
-        let agentPattern = #"\b"# + Self.agentNounPattern + #"\b"#
-        let actionPattern = #"\b(?:spawn|start|launch|kick\s+off|create|make|run)\b"#
-        guard lower.range(of: agentPattern, options: .regularExpression) != nil else { return nil }
-        guard lower.range(of: actionPattern, options: .regularExpression) != nil else { return nil }
-
-        return FloatingAgentHandoff(
-            originalRequest: original,
-            agentTask: extractFloatingAgentTask(from: original) ?? original
-        )
-    }
-
-    nonisolated static func explicitlyRequestsFloatingAgent(_ text: String) -> Bool {
-        floatingAgentHandoff(for: text) != nil
-    }
-
-    private nonisolated static func extractFloatingAgentTask(from text: String) -> String? {
-        let nounPattern = #"\b"# + Self.agentNounPattern + #"\b"#
-        guard let regex = try? NSRegularExpression(pattern: nounPattern, options: [.caseInsensitive]) else {
-            return nil
-        }
-        let range = NSRange(text.startIndex..., in: text)
-        guard let match = regex.firstMatch(in: text, range: range),
-              let matchRange = Range(match.range, in: text)
-        else {
-            return nil
-        }
-
-        var task = String(text[matchRange.upperBound...])
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let connectorPattern = #"^(?:to|for|that\s+can|that\s+will|which\s+can|which\s+will|and)\s+"#
-        if let connectorRegex = try? NSRegularExpression(pattern: connectorPattern, options: [.caseInsensitive]) {
-            task = connectorRegex.stringByReplacingMatches(
-                in: task,
-                range: NSRange(task.startIndex..., in: task),
-                withTemplate: ""
-            )
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        guard task.split(whereSeparator: \.isWhitespace).count >= 2 else { return nil }
-        return task
-    }
-
-    /// Spawn one or more pills for a user query. If the query says "spawn 3
-    /// agents" we create 3 pills (each runs the same task on the shared
-    /// queue). Returns the first pill so callers can inspect it.
-    @discardableResult
-    func spawnFromUserQuery(
-        _ query: String,
-        model: String,
-        fromVoice: Bool = false,
-        preFetchedTitle: String? = nil,
-        preFetchedAck: String? = nil,
-        bridgeHarnessOverride: AgentHarnessMode? = nil
-    ) -> AgentPill {
-        let count = AgentPillsManager.parseAgentCount(from: query)
-        if count <= 1 {
-            return spawn(
-                query: query,
-                model: model,
-                fromVoice: fromVoice,
-                preFetchedTitle: preFetchedTitle,
-                preFetchedAck: preFetchedAck,
-                bridgeHarnessOverride: bridgeHarnessOverride
-            )
-        }
-        var first: AgentPill?
-        for i in 1...count {
-            let labelled = "[\(i)/\(count)] \(query)"
-            // Only the first pill speaks the acknowledgement when N > 1,
-            // otherwise we'd hear N overlapping voices. Only the first pill
-            // gets the pre-fetched title/ack — the others fall back to their
-            // own title generation since their query text differs (the
-            // [i/N] prefix changes the model's output).
-            let pill = spawn(
-                query: labelled,
-                model: model,
-                fromVoice: fromVoice && first == nil,
-                preFetchedTitle: first == nil ? preFetchedTitle : nil,
-                preFetchedAck: first == nil ? preFetchedAck : nil,
-                bridgeHarnessOverride: bridgeHarnessOverride
-            )
-            if first == nil { first = pill }
-        }
-        return first ?? spawn(query: query, model: model, fromVoice: fromVoice, bridgeHarnessOverride: bridgeHarnessOverride)
-    }
-
-    @discardableResult
-    func spawnFromHandoff(
-        _ handoff: FloatingAgentHandoff,
-        model: String,
-        fromVoice: Bool = false,
-        preFetchedTitle: String? = nil,
-        preFetchedAck: String? = nil,
-        bridgeHarnessOverride: AgentHarnessMode? = nil
-    ) -> AgentPill {
-        let count = AgentPillsManager.parseAgentCount(from: handoff.originalRequest)
-        if count <= 1 {
-            return spawn(
-                query: handoff.agentTask,
-                model: model,
-                fromVoice: fromVoice,
-                preFetchedTitle: preFetchedTitle,
-                preFetchedAck: preFetchedAck,
-                bridgeHarnessOverride: bridgeHarnessOverride
-            )
-        }
-        var first: AgentPill?
-        for i in 1...count {
-            let labelled = "[\(i)/\(count)] \(handoff.agentTask)"
-            let pill = spawn(
-                query: labelled,
-                model: model,
-                fromVoice: fromVoice && first == nil,
-                preFetchedTitle: first == nil ? preFetchedTitle : nil,
-                preFetchedAck: first == nil ? preFetchedAck : nil,
-                bridgeHarnessOverride: bridgeHarnessOverride
-            )
-            if first == nil { first = pill }
-        }
-        return first ?? spawn(
-            query: handoff.agentTask,
-            model: model,
-            fromVoice: fromVoice,
-            bridgeHarnessOverride: bridgeHarnessOverride
-        )
-    }
-
     /// Spawn a visible pill projection backed by a canonical background-agent
     /// session/run in the Omi runtime.
     @discardableResult
     func spawn(
         query: String,
         model: String,
+        originSurface: DesktopCoordinatorOriginSurface,
         fromVoice: Bool = false,
         preFetchedTitle: String? = nil,
         preFetchedAck: String? = nil,
         systemPromptSuffix: String? = nil,
-        bridgeHarnessOverride: AgentHarnessMode? = nil
+        bridgeHarnessOverride: AgentHarnessMode? = nil,
+        producerJournalIntent: AgentPillProducerJournalIntent? = nil,
+        onAccepted: (@MainActor (Result<AgentPill, Error>) -> Void)? = nil
     ) -> AgentPill {
         let pillId = UUID()
-        let pill = AgentPill(id: pillId, query: query, model: model, bridgeHarnessOverride: bridgeHarnessOverride)
+        let spawnOwnerID = RuntimeOwnerIdentity.currentOwnerId() ?? ""
+        let pill = AgentPill(
+            id: pillId,
+            query: query,
+            model: model,
+            bridgeHarnessOverride: bridgeHarnessOverride,
+            ownerID: spawnOwnerID)
         if let preFetchedTitle, !preFetchedTitle.isEmpty {
             pill.title = preFetchedTitle
         }
@@ -673,6 +429,9 @@ final class AgentPillsManager: ObservableObject {
 
         let surfaceRef = AgentSurfaceReference.floatingPill(pillId: pill.id)
         pills.append(pill)
+        if let producerJournalIntent {
+            bindProducingJournalSurface(pillID: pill.id, surface: producerJournalIntent.surface)
+        }
 
         pill.status = .starting
         if let preFetchedAck, !preFetchedAck.isEmpty {
@@ -682,13 +441,6 @@ final class AgentPillsManager: ObservableObject {
         }
         AgentRuntimeStatusStore.shared.beginRequest(surface: surfaceRef, statusText: pill.latestActivity)
 
-        // For voice queries, play a cached deterministic kickoff sample before
-        // the runtime accepts the run so the user always hears confirmation
-        // without falling back to a different system voice.
-        if fromVoice {
-            FloatingBarVoicePlaybackService.shared.speakBackgroundAgentKickoff()
-        }
-
         // If the router already returned a title we don't need a second
         // Haiku call for title generation. Otherwise kick one off in the
         // background to upgrade the heuristic title.
@@ -697,6 +449,7 @@ final class AgentPillsManager: ObservableObject {
                 guard let pill else { return }
                 guard let result = await AgentPillsManager.generateTitleAndAck(for: pill.query) else { return }
                 await MainActor.run {
+                    guard RuntimeOwnerIdentity.currentOwnerId() == pill.ownerID else { return }
                     pill.title = result.title
                     if pill.latestActivity == "Warming up…" || pill.latestActivity == "Starting…" {
                         pill.latestActivity = result.ack
@@ -709,30 +462,72 @@ final class AgentPillsManager: ObservableObject {
         let modelForSpawn = bridgeHarnessOverride == nil
             ? (FloatingControlBarManager.shared.sharedFloatingProvider?.modelOverride ?? pill.model)
             : nil
-        let runTask = Task { @MainActor [weak self, weak pill] in
-            guard !Task.isCancelled else { return }
-            guard let self, let pill else { return }
+        let generation = nextRunAttemptGeneration(for: pill.id)
+        let runTask = Task { @MainActor [weak self, weak pill, onAccepted] in
+            guard !Task.isCancelled else {
+                onAccepted?(.failure(CancellationError()))
+                return
+            }
+            guard let self, let pill else {
+                onAccepted?(.failure(CancellationError()))
+                return
+            }
             do {
-                let accepted = try await DesktopCoordinatorService.shared.spawnAgent(
-                    objective: pill.query,
-                    title: pill.title,
-                    pillId: pill.id,
-                    provider: bridgeHarnessOverride?.rawValue,
-                    parentRunId: nil,
-                    visible: true,
-                    model: modelForSpawn,
-                    harnessMode: bridgeHarnessOverride,
-                    cwd: workingDirectory
-                )
-                pill.canonicalSessionId = accepted.sessionId
-                pill.canonicalRunId = accepted.runId
-                pill.canonicalAttemptId = accepted.attemptId
-                if Task.isCancelled || !self.pills.contains(where: { $0.id == pill.id }) || pill.status.isFinished {
+                let producerJournal = producerJournalIntent.map {
+                    DesktopCoordinatorProducerJournalDescriptor(
+                        surface: $0.surface,
+                        continuityKey: "floating_spawn:\(pill.id.uuidString)",
+                        pillId: pill.id,
+                        userText: $0.userText,
+                        assistantText: $0.assistantText,
+                        objective: pill.query,
+                        title: pill.title
+                    )
+                }
+                let ownerBoundReceipt = try await Self.performOwnerBoundSpawn(
+                    ownerID: spawnOwnerID
+                ) {
+                    try await DesktopCoordinatorService.shared.spawnAgent(
+                        objective: pill.query,
+                        title: pill.title,
+                        pillId: pill.id,
+                        originSurface: originSurface,
+                        provider: bridgeHarnessOverride?.rawValue,
+                        parentRunId: nil,
+                        visible: true,
+                        model: modelForSpawn,
+                        harnessMode: bridgeHarnessOverride,
+                        cwd: workingDirectory,
+                        producerJournal: producerJournal
+                    )
+                }
+                let accepted: DesktopCoordinatorSpawnedAgent
+                switch ownerBoundReceipt {
+                case .accepted(let receipt):
+                    accepted = receipt
+                case .staleReceipt(let receipt):
+                    Task {
+                        _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(
+                            runId: receipt.runId)
+                    }
+                    self.removeRenderedProjection(pillID: pill.id)
+                    onAccepted?(.failure(AuthError.userChangedDuringRequest))
+                    return
+                case .rejectedBeforeDispatch:
+                    self.removeRenderedProjection(pillID: pill.id)
+                    onAccepted?(.failure(AuthError.userChangedDuringRequest))
+                    return
+                }
+                if Task.isCancelled || !self.isCurrentRunAttempt(pillID: pill.id, generation: generation) || !self.pills.contains(where: { $0.id == pill.id }) || pill.status.isFinished {
                     Task {
                         _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(runId: accepted.runId)
                     }
+                    onAccepted?(.failure(CancellationError()))
                     return
                 }
+                pill.canonicalSessionId = accepted.sessionId
+                pill.canonicalRunId = accepted.runId
+                pill.canonicalAttemptId = accepted.attemptId
                 pill.title = accepted.title
                 pill.status = .running
                 pill.completedAt = nil
@@ -747,6 +542,15 @@ final class AgentPillsManager: ObservableObject {
                     attemptId: accepted.attemptId,
                     statusText: "Working…"
                 )
+                if fromVoice {
+                    if let acknowledgement = producerJournalIntent?.assistantText,
+                       !acknowledgement.isEmpty {
+                        FloatingBarVoicePlaybackService.shared.speakOneShot(acknowledgement)
+                    } else {
+                        FloatingBarVoicePlaybackService.shared.speakBackgroundAgentKickoff()
+                    }
+                }
+                onAccepted?(.success(pill))
                 let queuedFollowUps = self.pendingFollowUpsByPill.removeValue(forKey: pill.id) ?? []
                 if !queuedFollowUps.isEmpty {
                     self.continueAgent(
@@ -756,9 +560,13 @@ final class AgentPillsManager: ObservableObject {
                     )
                     return
                 }
-                await self.pollCanonicalRun(for: pill)
+                await self.pollCanonicalRun(for: pill, generation: generation)
             } catch {
-                guard !Task.isCancelled else { return }
+                onAccepted?(.failure(error))
+                guard !Task.isCancelled,
+                      RuntimeOwnerIdentity.currentOwnerId() == spawnOwnerID,
+                      self.isCurrentRunAttempt(pillID: pill.id, generation: generation)
+                else { return }
                 AgentRuntimeStatusStore.shared.recordLocalFailure(
                     surface: surfaceRef,
                     error: error.localizedDescription
@@ -790,7 +598,12 @@ final class AgentPillsManager: ObservableObject {
     }
 
     /// Send a follow-up to the same canonical background-agent session.
-    func continueAgent(from pill: AgentPill, text: String, attachments: [ChatAttachment] = []) {
+    func continueAgent(
+        from pill: AgentPill,
+        text: String,
+        attachments: [ChatAttachment] = [],
+        completion: (@MainActor (VoiceNonHubCompletionOutcome) -> Void)? = nil
+    ) {
         // The floating agent runs locally with disk access, so attachments are
         // handed off by local_path in the prompt (see attachmentContextPrompt) —
         // no upload round-trip needed. The visible bubble still renders the files
@@ -805,6 +618,7 @@ final class AgentPillsManager: ObservableObject {
             pendingFollowUpsByPill[pill.id, default: []].append(PendingAgentFollowUp(text: text, attachments: attachments))
             pill.latestActivity = "Queued follow-up until the agent starts…"
             pill.markContentChanged()
+            completion?(.providerFailed)
             return
         }
         pill.status = .running
@@ -819,21 +633,23 @@ final class AgentPillsManager: ObservableObject {
         let workingDirectory = FloatingControlBarManager.shared.sharedFloatingProvider?.workingDirectory
         let activeRunId = pill.canonicalRunId
         runTasksByPill[pill.id]?.cancel()
+        let generation = nextRunAttemptGeneration(for: pill.id)
         let runTask = Task { @MainActor [weak self, weak pill] in
             guard let self, let pill else { return }
             guard !Task.isCancelled else { return }
             do {
                 if let activeRunId, !activeRunId.isEmpty, !pill.status.isFinished {
-                    switch await self.cancelActiveRunBeforeFollowUp(runId: activeRunId, pill: pill) {
+                    switch await self.cancelActiveRunBeforeFollowUp(runId: activeRunId, pill: pill, generation: generation) {
                     case .stopped:
                         break
                     case .cancelled:
+                        completion?(.providerFailed)
                         return
                     case .failed:
                         pendingFollowUpsByPill[pill.id, default: []].append(PendingAgentFollowUp(text: text, attachments: attachments))
                         pill.latestActivity = "Queued follow-up until the current run stops…"
                         pill.markContentChanged()
-                        await self.pollCanonicalRun(for: pill)
+                        await self.pollCanonicalRun(for: pill, generation: generation)
                         guard self.pills.contains(where: { $0.id == pill.id }) else { return }
                         let queuedFollowUps = self.pendingFollowUpsByPill.removeValue(forKey: pill.id) ?? []
                         if !queuedFollowUps.isEmpty {
@@ -843,6 +659,7 @@ final class AgentPillsManager: ObservableObject {
                                 attachments: queuedFollowUps.flatMap(\.attachments)
                             )
                         }
+                        completion?(.providerFailed)
                         return
                     }
                     guard !Task.isCancelled else { return }
@@ -854,18 +671,64 @@ final class AgentPillsManager: ObservableObject {
                 let result = try await DesktopCoordinatorService.shared.continueAgent(
                     sessionId: sessionId,
                     prompt: prompt,
+                    originSurface: .floatingBar,
                     model: pill.bridgeHarnessOverride == nil ? pill.model : nil,
                     cwd: workingDirectory
                 )
-                guard !Task.isCancelled else { return }
-                pill.canonicalRunId = result.runId ?? pill.canonicalRunId
-                self.apply(inspection: result, to: pill)
+                guard !Task.isCancelled, self.isCurrentRunAttempt(pillID: pill.id, generation: generation) else { return }
+                guard pill.canonicalSessionId == sessionId else { return }
+                self.updateCanonicalRun(
+                    for: pill,
+                    runId: result.runId ?? pill.canonicalRunId,
+                    attemptId: result.attemptId,
+                    preservingAttemptForSameRun: true
+                )
+                self.apply(inspection: result, to: pill, expectedRunId: pill.canonicalRunId, expectedAttemptId: pill.canonicalAttemptId)
+                if !pill.status.isFinished {
+                    await self.pollCanonicalRun(for: pill, generation: generation)
+                }
+                let journalAccepted = await self.persistTerminalProjection(for: pill)
+                completion?(journalAccepted ? .journalAccepted : .journalFailed)
             } catch {
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, self.isCurrentRunAttempt(pillID: pill.id, generation: generation) else { return }
                 self.fail(pill: pill, errorText: error.localizedDescription)
+                completion?(.providerFailed)
             }
         }
         runTasksByPill[pill.id] = runTask
+    }
+
+    private func persistTerminalProjection(for pill: AgentPill) async -> Bool {
+        guard pill.status.isFinished else { return false }
+        let message = pill.conversationMessages.last(where: { $0.sender == .ai && !$0.isStreaming })
+        let resources = message?.displayResources ?? []
+        let status: String
+        let output: String
+        switch pill.status {
+        case .done:
+            status = "completed"
+            output = message?.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                ? message!.text : "Done."
+        case .stopped:
+            status = "stopped"
+            output = "Stopped by user"
+        case .failed(let error):
+            status = "failed"
+            output = "Background agent failed: \(error)"
+        case .queued, .starting, .running:
+            return false
+        }
+        return await FloatingControlBarManager.shared.recordPillTerminalCompletion(
+            ownerID: pill.ownerID,
+            pillID: pill.id,
+            producingSurface: pill.producingJournalSurface,
+            runId: pill.canonicalRunId,
+            userText: pill.query,
+            title: pill.title,
+            assistantText: output,
+            status: status,
+            resources: resources
+        )
     }
 
     private enum ActiveRunCancellationResult {
@@ -874,7 +737,34 @@ final class AgentPillsManager: ObservableObject {
         case failed
     }
 
-    private func cancelActiveRunBeforeFollowUp(runId: String, pill: AgentPill) async -> ActiveRunCancellationResult {
+    private func nextRunAttemptGeneration(for pillID: UUID) -> Int {
+        let next = (runAttemptGenerationByPill[pillID] ?? 0) + 1
+        runAttemptGenerationByPill[pillID] = next
+        return next
+    }
+
+    private func isCurrentRunAttempt(pillID: UUID, generation: Int) -> Bool {
+        runAttemptGenerationByPill[pillID] == generation
+    }
+
+    private func updateCanonicalRun(
+        for pill: AgentPill,
+        runId nextRunId: String?,
+        attemptId nextAttemptId: String?,
+        preservingAttemptForSameRun: Bool
+    ) {
+        let previousRunId = pill.canonicalRunId
+        pill.canonicalRunId = nextRunId
+        if nextRunId != previousRunId {
+            pill.canonicalAttemptId = nextAttemptId
+        } else if preservingAttemptForSameRun {
+            pill.canonicalAttemptId = nextAttemptId ?? pill.canonicalAttemptId
+        } else {
+            pill.canonicalAttemptId = nextAttemptId
+        }
+    }
+
+    private func cancelActiveRunBeforeFollowUp(runId: String, pill: AgentPill, generation: Int) async -> ActiveRunCancellationResult {
         do {
             _ = try await DesktopCoordinatorService.shared.cancelAgentRun(runId: runId, reason: "Interrupted by follow-up")
         } catch {
@@ -883,6 +773,8 @@ final class AgentPillsManager: ObservableObject {
         }
         for _ in 0..<20 {
             if Task.isCancelled { return .cancelled }
+            guard isCurrentRunAttempt(pillID: pill.id, generation: generation) else { return .cancelled }
+            guard pill.canonicalRunId == runId else { return .cancelled }
             do {
                 let inspection = try await DesktopCoordinatorService.shared.inspectAgentRun(runId: runId)
                 let status = inspection.status
@@ -935,6 +827,18 @@ final class AgentPillsManager: ObservableObject {
             surface: .floatingPill(pillId: pillID),
             message: "Stopped by user"
         )
+        Task {
+            await FloatingControlBarManager.shared.recordPillTerminalCompletion(
+                ownerID: pill.ownerID,
+                pillID: pill.id,
+                producingSurface: pill.producingJournalSurface,
+                runId: runId,
+                userText: pill.query,
+                title: pill.title,
+                assistantText: "Stopped by user",
+                status: "stopped"
+            )
+        }
         if let runId, !runId.isEmpty {
             Task {
                 _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(runId: runId)
@@ -1072,15 +976,32 @@ final class AgentPillsManager: ObservableObject {
         let runId = pill?.canonicalRunId
         runTasksByPill[pillID]?.cancel()
         runTasksByPill[pillID] = nil
+        runAttemptGenerationByPill[pillID] = nil
         viewedExpirationWorkItemsByPill[pillID]?.cancel()
         viewedExpirationWorkItemsByPill[pillID] = nil
         pendingFollowUpsByPill[pillID] = nil
+        producingJournalSurfaceByPill[pillID] = nil
         pills.removeAll { $0.id == pillID }
         if shouldCancelRun, let runId, !runId.isEmpty {
             Task {
                 _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(runId: runId)
             }
         }
+    }
+
+    private func removeRenderedProjection(pillID: UUID) {
+        if recordingPillID == pillID {
+            recordingPillID = nil
+            PushToTalkManager.shared.cancelPillFollowUp(for: pillID)
+        }
+        runTasksByPill[pillID]?.cancel()
+        runTasksByPill[pillID] = nil
+        runAttemptGenerationByPill[pillID] = nil
+        viewedExpirationWorkItemsByPill[pillID]?.cancel()
+        viewedExpirationWorkItemsByPill[pillID] = nil
+        pendingFollowUpsByPill[pillID] = nil
+        producingJournalSurfaceByPill[pillID] = nil
+        pills.removeAll { $0.id == pillID }
     }
 
     /// Remove all completed (done or failed) pills.
@@ -1096,8 +1017,10 @@ final class AgentPillsManager: ObservableObject {
     }
 
     func snapshots(limit: Int = 20) -> [Snapshot] {
+        let ownerID = RuntimeOwnerIdentity.currentOwnerId()
         let formatter = ISO8601DateFormatter()
         return pills
+            .filter { $0.ownerID == ownerID }
             .sorted { $0.createdAt > $1.createdAt }
             .prefix(limit)
             .map { pill in
@@ -1114,58 +1037,348 @@ final class AgentPillsManager: ObservableObject {
     }
 
     func refreshProjectedPillsFromKernel() async {
+        guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
         do {
             let floating = try await DesktopCoordinatorService.shared.listFloatingAgentPills(limit: 50)
+            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
             mergeProjectedPills(from: floating)
         } catch {
+            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
             logError("AgentPills: failed to refresh projected pills from kernel", error: error)
             applyRuntimeProjections()
         }
     }
 
+    /// Resolve an agent identity for timeline open-by-id.
+    /// Fast path: in-memory pill. Then refresh floating projections once.
+    /// Then hydrate via session/run/externalRef from DesktopCoordinatorService.
+    @discardableResult
+    func resolveAndPresentAgent(
+        pillId: UUID?,
+        sessionId: String?,
+        runId: String?
+    ) async -> Bool {
+        guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return false }
+        let preference = AgentTimelineHydratePreference.make(
+            pillId: pillId,
+            sessionId: sessionId,
+            runId: runId
+        )
+        guard !preference.keys.isEmpty else {
+            log("AgentPills: resolveAndPresentAgent called with empty identity")
+            return false
+        }
+
+        if findPill(matching: preference) != nil {
+            return true
+        }
+
+        await refreshProjectedPillsFromKernel()
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
+        if findPill(matching: preference) != nil {
+            return true
+        }
+
+        let hydrated = await hydratePillFromKernel(preference: preference, ownerID: ownerID)
+        if hydrated {
+            return findPill(matching: preference) != nil
+        }
+
+        log(
+            "AgentPills: resolveAndPresentAgent failed after refresh+hydrate "
+                + "pillId=\(pillId?.uuidString ?? "nil") "
+                + "sessionId=\(sessionId ?? "nil") "
+                + "runId=\(runId ?? "nil")"
+        )
+        return false
+    }
+
+    /// Package-visible for hermetic preference-matching tests.
+    func findPill(matching preference: AgentTimelineHydratePreference) -> AgentPill? {
+        let ownerID = RuntimeOwnerIdentity.currentOwnerId()
+        let ownedPills = pills.filter { $0.ownerID == ownerID }
+        guard let matched = preference.firstMatchingKey(
+            runIdMatches: { runId in ownedPills.contains(where: { $0.canonicalRunId == runId }) },
+            sessionIdMatches: { sessionId in ownedPills.contains(where: { $0.canonicalSessionId == sessionId }) },
+            pillIdMatches: { pillId in ownedPills.contains(where: { $0.id == pillId }) }
+        ) else {
+            return nil
+        }
+        switch matched {
+        case .runId(let runId):
+            return ownedPills.first(where: { $0.canonicalRunId == runId })
+        case .sessionId(let sessionId):
+            return ownedPills.first(where: { $0.canonicalSessionId == sessionId })
+        case .pillId(let pillId):
+            return ownedPills.first(where: { $0.id == pillId })
+        }
+    }
+
+    /// Test hook: replace in-memory pills without kernel I/O.
+    func replacePillsForTesting(_ next: [AgentPill]) {
+        pills = next
+        objectWillChange.send()
+    }
+
+    private func hydratePillFromKernel(
+        preference: AgentTimelineHydratePreference,
+        ownerID: String
+    ) async -> Bool {
+        do {
+            for key in preference.keys {
+                guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
+                switch key {
+                case .runId(let runId):
+                    let inspection = try await DesktopCoordinatorService.shared.inspectAgentRun(runId: runId)
+                    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
+                    if upsertHydratedPill(
+                        pillId: preference.keys.compactMap { key -> UUID? in
+                            if case .pillId(let id) = key { return id }
+                            return nil
+                        }.first,
+                        sessionId: inspection.sessionId,
+                        runId: inspection.runId ?? runId,
+                        attemptId: inspection.attemptId,
+                        title: nil,
+                        query: nil
+                    ) {
+                        return true
+                    }
+                case .sessionId(let sessionId):
+                    let snapshot = await DesktopCoordinatorService.shared.awarenessSnapshot()
+                    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
+                    if let session = snapshot.sessions.first(where: { $0.sessionId == sessionId }) {
+                        let resolvedPillId =
+                            (session.externalRefKind == "pill"
+                                ? session.externalRefId.flatMap(UUID.init(uuidString:))
+                                : nil)
+                            ?? preference.keys.compactMap { key -> UUID? in
+                                if case .pillId(let id) = key { return id }
+                                return nil
+                            }.first
+                        if upsertHydratedPill(
+                            pillId: resolvedPillId,
+                            sessionId: session.sessionId ?? sessionId,
+                            runId: session.runId,
+                            attemptId: session.attemptId,
+                            title: session.title,
+                            query: nil
+                        ) {
+                            return true
+                        }
+                    }
+                    let floating = try await DesktopCoordinatorService.shared.listFloatingAgentPills(limit: 50)
+                    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
+                    if let entry = floating.first(where: {
+                        canonicalString($0["sessionId"]) == sessionId
+                    }) {
+                        mergeProjectedPills(from: [entry])
+                        return findPill(matching: preference) != nil
+                    }
+                case .pillId(let pillId):
+                    let floating = try await DesktopCoordinatorService.shared.listFloatingAgentPills(limit: 50)
+                    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
+                    if let entry = floating.first(where: { canonicalPillId(from: $0) == pillId }) {
+                        mergeProjectedPills(from: [entry])
+                        return findPill(matching: preference) != nil
+                    }
+                    let snapshot = await DesktopCoordinatorService.shared.awarenessSnapshot()
+                    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
+                    if let session = snapshot.sessions.first(where: {
+                        $0.externalRefKind == "pill" && $0.externalRefId == pillId.uuidString
+                    }) {
+                        if upsertHydratedPill(
+                            pillId: pillId,
+                            sessionId: session.sessionId,
+                            runId: session.runId,
+                            attemptId: session.attemptId,
+                            title: session.title,
+                            query: nil
+                        ) {
+                            return true
+                        }
+                    }
+                }
+            }
+        } catch {
+            logError("AgentPills: kernel hydrate failed", error: error)
+        }
+        return false
+    }
+
+    @discardableResult
+    private func upsertHydratedPill(
+        pillId: UUID?,
+        sessionId: String?,
+        runId: String?,
+        attemptId: String?,
+        title: String?,
+        query: String?
+    ) -> Bool {
+        guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return false }
+        let trimmedSession = sessionId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let trimmedRun = runId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmedSession.isEmpty || !trimmedRun.isEmpty || pillId != nil else {
+            return false
+        }
+        let id = pillId ?? UUID()
+        let model = ShortcutSettings.shared.selectedModel.isEmpty
+            ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
+        let pill: AgentPill
+        if let existing = pills.first(where: { $0.id == id && $0.ownerID == ownerID }) {
+            pill = existing
+        } else if let existing = pills.first(where: {
+            $0.ownerID == ownerID
+                && ((!trimmedRun.isEmpty && $0.canonicalRunId == trimmedRun)
+                || (!trimmedSession.isEmpty && $0.canonicalSessionId == trimmedSession)
+                )
+        }) {
+            pill = existing
+        } else {
+            pill = AgentPill(
+                id: id,
+                query: (query?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+                    ? query! : "Background agent",
+                model: model,
+                ownerID: ownerID
+            )
+            pills.append(pill)
+        }
+        pill.producingJournalSurface = producingJournalSurfaceByPill[pill.id]
+        if let title, !title.isEmpty {
+            pill.title = title
+        } else if pill.title.isEmpty {
+            pill.title = "Background agent"
+        }
+        if !trimmedSession.isEmpty {
+            pill.canonicalSessionId = trimmedSession
+        }
+        if !trimmedRun.isEmpty {
+            pill.canonicalRunId = trimmedRun
+        }
+        if let attemptId, !attemptId.isEmpty {
+            pill.canonicalAttemptId = attemptId
+        }
+        Self.ensureStreamingAssistantMessage(for: pill)
+        pill.markContentChanged()
+        objectWillChange.send()
+        return true
+    }
+
+    @MainActor
+    func upsertSpawnedPill(
+        id: UUID,
+        query: String,
+        title: String,
+        sessionId: String,
+        runId: String,
+        attemptId: String?,
+        producingJournalSurface: AgentSurfaceReference? = nil
+    ) {
+        guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
+        let model = ShortcutSettings.shared.selectedModel.isEmpty
+            ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
+        let pill: AgentPill
+        if let existing = pills.first(where: { $0.id == id && $0.ownerID == ownerID }) {
+            pill = existing
+        } else {
+            pill = AgentPill(
+                id: id,
+                query: query.isEmpty ? "Background agent" : query,
+                model: model,
+                ownerID: ownerID)
+            pills.append(pill)
+        }
+        pill.title = title.isEmpty ? "Background agent" : title
+        pill.canonicalSessionId = sessionId
+        pill.canonicalRunId = runId
+        pill.canonicalAttemptId = attemptId
+        if let producingJournalSurface {
+            bindProducingJournalSurface(pillID: pill.id, surface: producingJournalSurface)
+        }
+        pill.status = .running
+        pill.completedAt = nil
+        pill.latestActivity = "Working…"
+        Self.ensureStreamingAssistantMessage(for: pill)
+        pill.markContentChanged()
+        AgentRuntimeStatusStore.shared.recordAcceptedRun(
+            surface: .floatingPill(pillId: pill.id),
+            sessionId: sessionId,
+            runId: runId,
+            attemptId: attemptId,
+            statusText: "Working…"
+        )
+        startCanonicalRunPolling(for: pill)
+        objectWillChange.send()
+    }
+
+    private func startCanonicalRunPolling(for pill: AgentPill) {
+        runTasksByPill[pill.id]?.cancel()
+        let generation = nextRunAttemptGeneration(for: pill.id)
+        runTasksByPill[pill.id] = Task { @MainActor [weak self, weak pill] in
+            guard let self, let pill else { return }
+            await self.pollCanonicalRun(for: pill, generation: generation)
+        }
+    }
+
     private func mergeProjectedPills(from floating: [[String: Any]]) {
+        guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
         var seen = Set<UUID>()
         for entry in floating {
-            let idString = (entry["id"] as? String) ?? (entry["runId"] as? String) ?? ""
-            guard let pillId = UUID(uuidString: idString) ?? stablePillUUID(from: idString) else { continue }
+            guard let pillId = canonicalPillId(from: entry),
+                  let sessionId = canonicalString(entry["sessionId"]),
+                  let runId = canonicalString(entry["runId"])
+            else { continue }
             seen.insert(pillId)
             let query = (entry["query"] as? String) ?? (entry["latestActivity"] as? String) ?? ""
             let model = ShortcutSettings.shared.selectedModel.isEmpty
                 ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
             let pill: AgentPill
-            if let existing = pills.first(where: { $0.id == pillId }) {
+            if let existing = pills.first(where: { $0.id == pillId && $0.ownerID == ownerID }) {
                 pill = existing
             } else {
-                pill = AgentPill(id: pillId, query: query.isEmpty ? "Background agent" : query, model: model)
+                pill = AgentPill(
+                    id: pillId,
+                    query: query.isEmpty ? "Background agent" : query,
+                    model: model,
+                    ownerID: ownerID)
                 pills.append(pill)
             }
+            pill.producingJournalSurface = producingJournalSurfaceByPill[pill.id]
             if let title = entry["title"] as? String, !title.isEmpty {
                 pill.title = title
             }
-            if let sessionId = entry["sessionId"] as? String {
-                pill.canonicalSessionId = sessionId
-            }
-            if let runId = entry["runId"] as? String {
-                pill.canonicalRunId = runId
-            }
-            applyProjectedStatus((entry["status"] as? String) ?? "running", to: pill)
+            pill.canonicalSessionId = sessionId
+            pill.canonicalRunId = runId
+            pill.canonicalAttemptId = canonicalString(entry["attemptId"])
+            let projectedStatus = (entry["status"] as? String) ?? "running"
+            applyProjectedStatus(projectedStatus, to: pill)
             if let activity = entry["latestActivity"] as? String, !activity.isEmpty {
                 pill.latestActivity = activity
             }
+            reconcileProjectedPillRun(entryStatus: projectedStatus, pill: pill)
             pill.markContentChanged()
         }
         let removable = pills.filter { pill in
-            guard let runId = pill.canonicalRunId, !runId.isEmpty else { return false }
-            return !seen.contains(pill.id) && pill.status.isFinished
+            if runTasksByPill[pill.id] != nil {
+                return false
+            }
+            guard let sessionId = pill.canonicalSessionId, !sessionId.isEmpty,
+                  let runId = pill.canonicalRunId, !runId.isEmpty
+            else {
+                return !hasLocalTransientState(pillID: pill.id)
+            }
+            return !seen.contains(pill.id)
         }
         for pill in removable {
-            cleanup(pillID: pill.id)
+            removeRenderedProjection(pillID: pill.id)
         }
         objectWillChange.send()
     }
 
     private func applyRuntimeProjections() {
-        for pill in pills {
+        guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
+        for pill in pills where pill.ownerID == ownerID {
             if let projection = AgentRuntimeStatusStore.shared.floatingPillProjection(pillId: pill.id) {
                 Self.apply(projection: projection, to: pill)
             } else if let runId = pill.canonicalRunId,
@@ -1176,6 +1389,9 @@ final class AgentPillsManager: ObservableObject {
     }
 
     private func applyProjectedStatus(_ status: String, to pill: AgentPill) {
+        if pill.status.isFinished && !isTerminalProjectedStatus(status) {
+            return
+        }
         switch status {
         case "queued":
             pill.status = .queued
@@ -1194,39 +1410,41 @@ final class AgentPillsManager: ObservableObject {
         }
     }
 
-    private func stablePillUUID(from value: String) -> UUID? {
-        guard !value.isEmpty else { return nil }
-        var bytes = [UInt8](repeating: 0, count: 16)
-        let hash = value.utf8.reduce(into: UInt64(0)) { partial, byte in
-            partial = partial &* 31 &+ UInt64(byte)
+    private func reconcileProjectedPillRun(entryStatus: String, pill: AgentPill) {
+        guard shouldPollCanonicalRun(for: pill, projectedStatus: entryStatus) else { return }
+        startCanonicalRunPolling(for: pill)
+    }
+
+    private func shouldPollCanonicalRun(for pill: AgentPill, projectedStatus: String) -> Bool {
+        guard pill.canonicalRunId?.isEmpty == false else { return false }
+        if isTerminalProjectedStatus(projectedStatus) {
+            return !Self.hasTerminalAssistantMessage(for: pill)
         }
-        withUnsafeMutableBytes(of: &bytes) { raw in
-            raw[0] = UInt8(truncatingIfNeeded: hash)
-            raw[1] = UInt8(truncatingIfNeeded: hash >> 8)
-            raw[2] = UInt8(truncatingIfNeeded: hash >> 16)
-            raw[3] = UInt8(truncatingIfNeeded: hash >> 24)
-            raw[4] = UInt8(truncatingIfNeeded: hash >> 32)
-            raw[5] = UInt8(truncatingIfNeeded: hash >> 40)
-            raw[6] = UInt8(truncatingIfNeeded: hash >> 48)
-            raw[7] = UInt8(truncatingIfNeeded: hash >> 56)
-            let swapped = hash.byteSwapped
-            raw[8] = UInt8(truncatingIfNeeded: swapped)
-            raw[9] = UInt8(truncatingIfNeeded: swapped >> 8)
-            raw[10] = UInt8(truncatingIfNeeded: swapped >> 16)
-            raw[11] = UInt8(truncatingIfNeeded: swapped >> 24)
-            raw[12] = UInt8(truncatingIfNeeded: swapped >> 32)
-            raw[13] = UInt8(truncatingIfNeeded: swapped >> 40)
-            raw[14] = UInt8(truncatingIfNeeded: swapped >> 48)
-            raw[15] = UInt8(truncatingIfNeeded: swapped >> 56)
+        return !pill.status.isFinished && runTasksByPill[pill.id] == nil
+    }
+
+    private func isTerminalProjectedStatus(_ status: String) -> Bool {
+        switch status {
+        case "succeeded", "completed", "cancelled", "failed", "timed_out", "orphaned":
+            return true
+        default:
+            return false
         }
-        bytes[6] = (bytes[6] & 0x0F) | 0x40
-        bytes[8] = (bytes[8] & 0x3F) | 0x80
-        return UUID(uuid: (
-            bytes[0], bytes[1], bytes[2], bytes[3],
-            bytes[4], bytes[5], bytes[6], bytes[7],
-            bytes[8], bytes[9], bytes[10], bytes[11],
-            bytes[12], bytes[13], bytes[14], bytes[15]
-        ))
+    }
+
+    private func canonicalPillId(from entry: [String: Any]) -> UUID? {
+        guard let idString = canonicalString(entry["pillId"]) ?? canonicalString(entry["id"]) else { return nil }
+        return UUID(uuidString: idString)
+    }
+
+    private func canonicalString(_ value: Any?) -> String? {
+        guard let text = value as? String else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func hasLocalTransientState(pillID: UUID) -> Bool {
+        recordingPillID == pillID || pendingFollowUpsByPill[pillID]?.isEmpty == false
     }
 
     func snapshotJSON(limit: Int = 20) -> String {
@@ -1262,15 +1480,53 @@ final class AgentPillsManager: ObservableObject {
         }?.id
     }
 
-    private func pollCanonicalRun(for pill: AgentPill) async {
+    private func pollCanonicalRun(for pill: AgentPill, generation: Int) async {
+        defer {
+            if isCurrentRunAttempt(pillID: pill.id, generation: generation) {
+                runTasksByPill[pill.id] = nil
+            }
+        }
         while !Task.isCancelled {
+            guard RuntimeOwnerIdentity.currentOwnerId() == pill.ownerID else { return }
+            guard isCurrentRunAttempt(pillID: pill.id, generation: generation) else { return }
             guard pills.contains(where: { $0.id == pill.id }) else { return }
-            guard let runId = pill.canonicalRunId else { return }
+            guard let runId = pill.canonicalRunId, !runId.isEmpty else { return }
+            let attemptId = pill.canonicalAttemptId
             do {
                 let inspection = try await DesktopCoordinatorService.shared.inspectAgentRun(
                     runId: runId
                 )
-                apply(inspection: inspection, to: pill)
+                guard RuntimeOwnerIdentity.currentOwnerId() == pill.ownerID else { return }
+                guard isCurrentRunAttempt(pillID: pill.id, generation: generation) else { return }
+                guard pill.canonicalRunId == runId else {
+                    ScreenContextToolTelemetry.trackInvariant(
+                        "stale_inspection_ignored",
+                        context: ScreenContextTelemetryContext.from(
+                            surfaceRef: .floatingPill(pillId: pill.id),
+                            runId: runId
+                        ),
+                        properties: [
+                            "expected_run_id": runId,
+                            "current_run_id": pill.canonicalRunId ?? "",
+                        ]
+                    )
+                    return
+                }
+                if let attemptId, pill.canonicalAttemptId != attemptId {
+                    ScreenContextToolTelemetry.trackInvariant(
+                        "stale_inspection_ignored",
+                        context: ScreenContextTelemetryContext.from(
+                            surfaceRef: .floatingPill(pillId: pill.id),
+                            runId: runId
+                        ),
+                        properties: [
+                            "expected_attempt_id": attemptId,
+                            "current_attempt_id": pill.canonicalAttemptId ?? "",
+                        ]
+                    )
+                    return
+                }
+                apply(inspection: inspection, to: pill, expectedRunId: runId, expectedAttemptId: attemptId)
                 if pill.status.isFinished { return }
             } catch {
                 logError("AgentPills: failed to inspect canonical run \(runId)", error: error)
@@ -1279,9 +1535,34 @@ final class AgentPillsManager: ObservableObject {
         }
     }
 
-    private func apply(inspection: DesktopCoordinatorAgentRunInspection, to pill: AgentPill) {
+    private func apply(
+        inspection: DesktopCoordinatorAgentRunInspection,
+        to pill: AgentPill,
+        expectedRunId: String?,
+        expectedAttemptId: String?
+    ) {
+        if let expectedRunId, let inspectedRunId = inspection.runId, inspectedRunId != expectedRunId {
+            return
+        }
+        if let expectedAttemptId, let inspectedAttemptId = inspection.attemptId, inspectedAttemptId != expectedAttemptId {
+            return
+        }
+        if let expectedRunId, pill.canonicalRunId != expectedRunId {
+            return
+        }
+        if let expectedAttemptId, pill.canonicalAttemptId != expectedAttemptId {
+            return
+        }
+        if pill.status.isFinished && !isTerminalProjectedStatus(inspection.status) {
+            return
+        }
         pill.canonicalSessionId = inspection.sessionId ?? pill.canonicalSessionId
-        pill.canonicalRunId = inspection.runId ?? pill.canonicalRunId
+        updateCanonicalRun(
+            for: pill,
+            runId: inspection.runId ?? pill.canonicalRunId,
+            attemptId: inspection.attemptId,
+            preservingAttemptForSameRun: true
+        )
         switch inspection.status {
         case "queued", "starting":
             pill.status = .starting
@@ -1303,6 +1584,18 @@ final class AgentPillsManager: ObservableObject {
             pill.completedAt = Date()
             Self.clearStreamingAssistantMessage(for: pill)
             pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
+            Task {
+                await FloatingControlBarManager.shared.recordPillTerminalCompletion(
+                    ownerID: pill.ownerID,
+                    pillID: pill.id,
+                    producingSurface: pill.producingJournalSurface,
+                    runId: pill.canonicalRunId,
+                    userText: pill.query,
+                    title: pill.title,
+                    assistantText: "Stopped by user",
+                    status: "stopped"
+                )
+            }
         case "failed", "timed_out", "orphaned":
             fail(pill: pill, errorText: inspection.errorMessage ?? "Agent failed")
         default:
@@ -1320,29 +1613,15 @@ final class AgentPillsManager: ObservableObject {
         let trimmed = finalText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !trimmed.isEmpty || !resources.isEmpty {
             let messageText = trimmed.isEmpty ? "Done." : trimmed
-            var finalMessage = pill.aiMessage ?? ChatMessage(text: messageText, sender: .ai)
+            Self.removeEmptyStreamingAssistantMessages(for: pill)
+            var finalMessage = Self.currentAssistantMessage(for: pill) ?? ChatMessage(text: messageText, sender: .ai)
             finalMessage.text = messageText
             finalMessage.resources = resources
             finalMessage.isStreaming = false
-            pill.aiMessage = finalMessage
-            if pill.conversationMessages.isEmpty {
-                pill.conversationMessages = [
-                    ChatMessage(text: pill.query, sender: .user),
-                    finalMessage,
-                ]
-            } else if let index = pill.conversationMessages.firstIndex(where: { $0.id == finalMessage.id }) {
-                pill.conversationMessages[index] = finalMessage
-            } else if !pill.conversationMessages.contains(where: { $0.id == finalMessage.id }) {
-                pill.conversationMessages.append(finalMessage)
-            }
-            pill.latestActivity = String(messageText.prefix(140))
-            FloatingControlBarManager.shared.recordAgentArtifactCompletion(
-                pillID: pill.id,
-                runId: pill.canonicalRunId,
-                userText: pill.query,
-                title: pill.title,
-                finalText: trimmed,
-                resources: resources
+            Self.upsertAssistantMessage(finalMessage, for: pill)
+            pill.latestActivity = ChatContinuityInvariants.agentPreviewText(
+                prompt: pill.query,
+                output: messageText
             )
         } else {
             Self.clearStreamingAssistantMessage(for: pill)
@@ -1352,15 +1631,19 @@ final class AgentPillsManager: ObservableObject {
         pill.completedAt = Date()
         pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
         pill.markContentChanged()
-        if resources.isEmpty, !trimmed.isEmpty {
-            Task {
-                await FloatingControlBarManager.shared.recordPillTerminalCompletion(
-                    pillID: pill.id,
-                    runId: pill.canonicalRunId,
-                    userText: pill.query,
-                    assistantText: trimmed
-                )
-            }
+        let terminalText = trimmed.isEmpty ? "Done." : trimmed
+        Task {
+            await FloatingControlBarManager.shared.recordPillTerminalCompletion(
+                ownerID: pill.ownerID,
+                pillID: pill.id,
+                producingSurface: pill.producingJournalSurface,
+                runId: pill.canonicalRunId,
+                userText: pill.query,
+                title: pill.title,
+                assistantText: terminalText,
+                status: "completed",
+                resources: resources
+            )
         }
     }
 
@@ -1374,10 +1657,14 @@ final class AgentPillsManager: ObservableObject {
         pill.markContentChanged()
         Task {
             await FloatingControlBarManager.shared.recordPillTerminalCompletion(
+                ownerID: pill.ownerID,
                 pillID: pill.id,
+                producingSurface: pill.producingJournalSurface,
                 runId: pill.canonicalRunId,
                 userText: pill.query,
-                assistantText: "Background agent failed: \(errorText)"
+                title: pill.title,
+                assistantText: "Background agent failed: \(errorText)",
+                status: "failed"
             )
         }
     }
@@ -1410,6 +1697,7 @@ final class AgentPillsManager: ObservableObject {
         let hasVisibleContent =
             !aiMessage.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !aiMessage.contentBlocks.isEmpty
+            || !aiMessage.displayResources.isEmpty
 
         if hasVisibleContent {
             var completedMessage = aiMessage
@@ -1424,16 +1712,74 @@ final class AgentPillsManager: ObservableObject {
         }
     }
 
+    private static func removeEmptyStreamingAssistantMessages(for pill: AgentPill) {
+        pill.conversationMessages.removeAll { message in
+            message.sender == .ai
+                && message.isStreaming
+                && !hasVisibleAssistantContent(message)
+        }
+        if let aiMessage = pill.aiMessage,
+           aiMessage.isStreaming,
+           !hasVisibleAssistantContent(aiMessage) {
+            pill.aiMessage = nil
+        }
+    }
+
+    private static func currentAssistantMessage(for pill: AgentPill) -> ChatMessage? {
+        if let aiMessage = pill.aiMessage, hasVisibleAssistantContent(aiMessage) {
+            return aiMessage
+        }
+        return pill.conversationMessages.last { message in
+            message.sender == .ai && hasVisibleAssistantContent(message)
+        }
+    }
+
+    private static func hasTerminalAssistantMessage(for pill: AgentPill) -> Bool {
+        guard let message = currentAssistantMessage(for: pill) else { return false }
+        return !message.isStreaming && hasVisibleAssistantContent(message)
+    }
+
+    private static func hasVisibleAssistantContent(_ message: ChatMessage) -> Bool {
+        !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !message.contentBlocks.isEmpty
+            || !message.displayResources.isEmpty
+    }
+
+    private static func upsertAssistantMessage(_ message: ChatMessage, for pill: AgentPill) {
+        pill.aiMessage = message
+        if pill.conversationMessages.isEmpty {
+            pill.conversationMessages = [
+                ChatMessage(text: pill.query, sender: .user),
+                message,
+            ]
+        } else if let index = pill.conversationMessages.firstIndex(where: { $0.id == message.id }) {
+            pill.conversationMessages[index] = message
+        } else if !pill.conversationMessages.contains(where: { $0.id == message.id }) {
+            pill.conversationMessages.append(message)
+        }
+    }
+
     private func handle(messages: [ChatMessage], since: Int, for pill: AgentPill) {
         guard messages.count > since else { return }
         let recent = Array(messages.suffix(from: since))
-        let displayMessages = recent.filter { message in
+        var displayMessages = recent.filter { message in
             let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
             return message.sender == .user
                 || !trimmed.isEmpty
                 || message.isStreaming
                 || !message.contentBlocks.isEmpty
                 || !message.displayResources.isEmpty
+        }
+        if displayMessages.contains(where: { message in
+            message.sender == .ai
+                && !message.isStreaming
+                && Self.hasVisibleAssistantContent(message)
+        }) {
+            displayMessages.removeAll { message in
+                message.sender == .ai
+                    && message.isStreaming
+                    && !Self.hasVisibleAssistantContent(message)
+            }
         }
         if !displayMessages.isEmpty {
             pill.conversationMessages = displayMessages
@@ -1457,6 +1803,17 @@ final class AgentPillsManager: ObservableObject {
             pill.transcript.append(activity)
             pill.markContentChanged()
         }
+
+        if !aiMessage.isStreaming, Self.hasVisibleAssistantContent(aiMessage) {
+            Self.removeEmptyStreamingAssistantMessages(for: pill)
+            pill.status = .done
+            pill.completedAt = pill.completedAt ?? Date()
+            pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
+            pill.markContentChanged()
+            if pill.viewedAt != nil {
+                scheduleViewedExpiration(for: pill)
+            }
+        }
     }
 
     /// Pill-bar activity string for an AI message. While a message is still
@@ -1478,6 +1835,21 @@ final class AgentPillsManager: ObservableObject {
                 if !trimmed.isEmpty {
                     return String(trimmed.prefix(110))
                 }
+            case .agentSpawn(_, _, _, _, let title, let objective):
+                let label = objective.isEmpty ? title : objective
+                let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    return String(trimmed.prefix(110))
+                }
+            case .agentCompletion(_, _, _, _, let title, let promptSnippet, let output, _):
+                let preview = ChatContinuityInvariants.agentPreviewText(
+                    prompt: promptSnippet.isEmpty ? title : promptSnippet,
+                    output: output
+                )
+                let trimmed = preview.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    return String(trimmed.prefix(110))
+                }
             case .thinking, .discoveryCard:
                 continue
             }
@@ -1493,22 +1865,16 @@ final class AgentPillsManager: ObservableObject {
         let trimmedFinalText = finalText?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let trimmedFinalText, !trimmedFinalText.isEmpty {
             if pill.aiMessage?.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
-                var finalMessage = pill.aiMessage ?? ChatMessage(text: trimmedFinalText, sender: .ai)
+                Self.removeEmptyStreamingAssistantMessages(for: pill)
+                var finalMessage = Self.currentAssistantMessage(for: pill) ?? ChatMessage(text: trimmedFinalText, sender: .ai)
                 finalMessage.text = trimmedFinalText
                 finalMessage.isStreaming = false
-                pill.aiMessage = finalMessage
-                if pill.conversationMessages.isEmpty {
-                    pill.conversationMessages = [
-                        ChatMessage(text: pill.query, sender: .user),
-                        finalMessage,
-                    ]
-                } else if let index = pill.conversationMessages.firstIndex(where: { $0.id == finalMessage.id }) {
-                    pill.conversationMessages[index] = finalMessage
-                } else {
-                    pill.conversationMessages.append(finalMessage)
-                }
+                Self.upsertAssistantMessage(finalMessage, for: pill)
             }
-            pill.latestActivity = String(trimmedFinalText.prefix(140))
+            pill.latestActivity = ChatContinuityInvariants.agentPreviewText(
+                prompt: pill.query,
+                output: trimmedFinalText
+            )
             pill.markContentChanged()
         }
         if let projection = AgentRuntimeStatusStore.shared.floatingPillProjection(pillId: pill.id) {
@@ -1521,7 +1887,7 @@ final class AgentPillsManager: ObservableObject {
                 return
             }
         }
-        if let errorText = provider.errorMessage, !errorText.isEmpty {
+        if let errorText = provider.displayErrorMessage, !errorText.isEmpty {
             pill.status = .failed(errorText)
             pill.latestActivity = errorText
             pill.completedAt = Date()
@@ -1548,7 +1914,7 @@ final class AgentPillsManager: ObservableObject {
     }
 
     private static func ensureFailureMessage(_ errorText: String, for pill: AgentPill) {
-        guard let failureText = AgentFailureTranscriptFormatter.transcriptText(for: errorText) else { return }
+        let failureText = AgentFailureTranscriptFormatter.transcriptText(for: errorText) ?? "Failed: \(errorText)"
         let failureMessage = ChatMessage(text: failureText, sender: .ai)
         if pill.conversationMessages.isEmpty {
             pill.conversationMessages = [
@@ -1568,6 +1934,9 @@ final class AgentPillsManager: ObservableObject {
         if pill.status == .stopped && projection.status != .cancelled {
             return
         }
+        if pill.status.isFinished && !projection.status.isTerminal {
+            return
+        }
 
         switch projection.status {
         case .queued:
@@ -1578,20 +1947,26 @@ final class AgentPillsManager: ObservableObject {
             pill.completedAt = nil
             ensureStreamingAssistantMessage(for: pill)
         case .succeeded:
-            pill.status = .done
-            pill.completedAt = projection.completedAt ?? Date()
-            clearStreamingAssistantMessage(for: pill)
             if let statusText = projection.statusText?.trimmingCharacters(in: .whitespacesAndNewlines),
                !statusText.isEmpty {
+                removeEmptyStreamingAssistantMessages(for: pill)
+                var finalMessage = currentAssistantMessage(for: pill) ?? ChatMessage(text: statusText, sender: .ai)
+                finalMessage.text = statusText
+                finalMessage.isStreaming = false
+                upsertAssistantMessage(finalMessage, for: pill)
                 pill.latestActivity = String(statusText.prefix(140))
-                pill.markContentChanged()
-            } else if let last = pill.aiMessage {
+            } else if let last = currentAssistantMessage(for: pill) {
                 let trimmed = last.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
                     pill.latestActivity = String(trimmed.prefix(140))
-                    pill.markContentChanged()
                 }
+                clearStreamingAssistantMessage(for: pill)
+            } else {
+                clearStreamingAssistantMessage(for: pill)
             }
+            pill.status = .done
+            pill.completedAt = projection.completedAt ?? Date()
+            pill.markContentChanged()
         case .failed, .timedOut, .orphaned:
             let message = projection.failure?.displayMessage ?? projection.errorMessage ?? "Agent failed"
             pill.status = .failed(message)

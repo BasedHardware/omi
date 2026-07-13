@@ -1,5 +1,6 @@
 {
     "@@locale": "sk",
+    "sessionExpiredSignInAgain": "Platnosť relácie vypršala — prihláste sa znova.",
     "appTitle": "Omi",
     "conversationTab": "Konverzácia",
     "transcriptTab": "Prepis",
@@ -3121,5 +3122,31 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "Úložisko prívesku je takmer plné — nechajte aplikáciu otvorenú, aby prebehla synchronizácia."
+    "pendantStorageAlmostFull": "Úložisko prívesku je takmer plné — nechajte aplikáciu otvorenú, aby prebehla synchronizácia.",
+    "connectRayBanMeta": "Pripojiť Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Používajte svoje okuliare Ray-Ban Meta ako zariadenie na zaznamenávanie Omi pre konverzácie a vizuálny kontext. Omi otvorí aplikáciu Meta AI, aby prepojila vaše okuliare.",
+    "raybanMetaOpenMetaAI": "Pripojiť cez Meta AI",
+    "raybanMetaWaitingForMetaAI": "Dokončite pripájanie v aplikácii Meta AI a potom sa vráťte sem.",
+    "raybanMetaCheckAgain": "Skontrolovať znova",
+    "raybanMetaAllowCamera": "Povoliť kameru na okuliaroch",
+    "raybanMetaCameraExplanation": "Omi používa kameru vašich okuliarov na pridávanie fotografií do vašich konverzácií. Tento krok môžete preskočiť a používať iba zvuk.",
+    "raybanMetaSkipForNow": "Zatiaľ preskočiť",
+    "raybanMetaAudioOnlyTitle": "Režim iba zvuk Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "Táto verzia Omi môže používať mikrofón vašich okuliarov cez Bluetooth. Snímanie fotografií vyžaduje verziu Omi pre vývojárov Meta.",
+    "raybanMetaMusicPauseNote": "Hudba vo vašom telefóne sa pozastaví, kým sa používa mikrofón okuliarov.",
+    "raybanMetaContinue": "Pokračovať",
+    "raybanMetaCapturePhoto": "Nasnímať fotografiu",
+    "raybanMetaPhotoRequested": "Fotografia vyžiadaná — zobrazí sa vo vašej konverzácii.",
+    "raybanMetaMicrophoneReady": "Mikrofón pripravený",
+    "raybanMetaImageCaptureReady": "Snímanie obrázkov pripravené",
+    "raybanMetaImageCaptureUnavailable": "Nedostupné v režime iba zvuk",
+    "raybanMetaCamera": "Kamera",
+    "errorConnectingRayBanMeta": "Chyba pri pripájaní k Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

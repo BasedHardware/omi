@@ -2,6 +2,17 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 describe("macOS release CI", () => {
+  it("runs the complete agent runtime suite instead of a hand-picked test list", () => {
+    const toolSurfaceScript = readFileSync(
+      new URL("../../scripts/test-tool-surfaces.sh", import.meta.url),
+      "utf8"
+    );
+
+    expect(toolSurfaceScript).toContain('"$NODE22" node_modules/vitest/vitest.mjs run');
+    expect(toolSurfaceScript).not.toContain("tests/control-tools.test.ts");
+    expect(toolSurfaceScript).not.toContain("tests/runtime-adapter.test.ts");
+  });
+
   it("runs the shared desktop tool-surface guardrail before packaging", () => {
     const codemagic = readFileSync(new URL("../../../../codemagic.yaml", import.meta.url), "utf8");
     const stepStart = codemagic.indexOf("name: Test desktop tool surfaces");
@@ -62,6 +73,19 @@ describe("macOS release CI", () => {
     expect(prepareRuntimeScript).toContain('return `../../../agent/node_modules/${packageName}`');
     expect(prepareRuntimeScript).toContain("npm ci --omit=dev --no-fund --no-audit");
     expect(prepareRuntimeScript).toContain('prune_non_macos_node_packages "$temp_dir"');
+  });
+
+  it("enforces the bundled Node runtime floor required by maintained pi packages", () => {
+    const prepareRuntimeScript = readFileSync(
+      new URL("../../scripts/prepare-agent-runtime.sh", import.meta.url),
+      "utf8"
+    );
+
+    expect(prepareRuntimeScript).toContain('NODE_VERSION="${OMI_AGENT_NODE_VERSION:-v22.19.0}"');
+    expect(prepareRuntimeScript).toContain('NODE_MIN_VERSION="v22.19.0"');
+    expect(prepareRuntimeScript).toContain("node_version_at_least()");
+    expect(prepareRuntimeScript).toContain('node_version_at_least "$staged_version" "$NODE_MIN_VERSION"');
+    expect(prepareRuntimeScript).not.toContain('NODE_VERSION="${OMI_AGENT_NODE_VERSION:-v22.14.0}"');
   });
 
   it("signs bundled pi-mono-extension native dependencies before app signing", () => {

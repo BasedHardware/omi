@@ -52,12 +52,12 @@ struct MemoryPromptEditorView: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                     Text("Memory Extraction Prompt")
-                        .scaledFont(size: 16, weight: .semibold)
+                        .scaledFont(size: OmiType.subheading, weight: .semibold)
 
                     Text("Customize how the AI extracts memories from screenshots")
-                        .scaledFont(size: 12)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(.secondary)
                 }
 
@@ -65,12 +65,12 @@ struct MemoryPromptEditorView: View {
 
                 if hasChanges {
                     Text("Unsaved changes")
-                        .scaledFont(size: 11)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(.orange)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
+                        .padding(.horizontal, OmiSpacing.sm)
+                        .padding(.vertical, OmiSpacing.xxs)
                         .background(Color.orange.opacity(0.1))
-                        .cornerRadius(4)
+                        .cornerRadius(OmiChrome.stripRadius)
                 }
             }
             .padding()
@@ -79,8 +79,8 @@ struct MemoryPromptEditorView: View {
 
             // Editor
             TextEditor(text: $promptText)
-                .scaledFont(size: 13, design: .monospaced)
-                .padding(8)
+                .scaledFont(size: OmiType.body, design: .monospaced)
+                .padding(OmiSpacing.sm)
                 .onChange(of: promptText) { _, newValue in
                     hasChanges = newValue != MemoryAssistantSettings.shared.analysisPrompt
                 }

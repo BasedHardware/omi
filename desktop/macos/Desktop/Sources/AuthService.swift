@@ -1,5 +1,6 @@
 import Foundation
 @preconcurrency import FirebaseAuth
+import FirebaseCore
 import OmiSupport
 import CryptoKit
 import AppKit
@@ -149,25 +150,145 @@ final class OAuthLoopbackCallbackServer: @unchecked Sendable {
                 let bytesRead = recv(clientFD, &buffer, buffer.count - 1, 0)
                 guard bytesRead > 0,
                       let request = String(bytes: buffer.prefix(bytesRead), encoding: .utf8) else {
-                    self.sendResponse(clientFD, status: "400 Bad Request", message: "Invalid authentication callback.")
+                    self.sendResponse(clientFD, page: .invalid)
                     continue
                 }
 
                 switch self.parseCallbackRequest(request) {
                 case .success(let code, let state):
-                    self.sendResponse(clientFD, status: "200 OK", message: "Authentication complete. You can close this tab.")
+                    self.sendResponse(clientFD, page: .success)
                     self.finish(.success((code: code, state: state)))
                     return
                 case .providerError(let error):
-                    self.sendResponse(clientFD, status: "400 Bad Request", message: "Authentication failed. You can close this tab.")
+                    self.sendResponse(clientFD, page: .failure)
                     self.finish(.failure(AuthError.oauthError(error)))
                     return
                 case .ignore:
-                    self.sendResponse(clientFD, status: "400 Bad Request", message: "Invalid authentication callback.")
+                    self.sendResponse(clientFD, page: .invalid)
                     continue
                 }
             }
         }
+    }
+
+    enum CallbackPage {
+        case success
+        case failure
+        case invalid
+
+        var httpStatus: String {
+            switch self {
+            case .success: return "200 OK"
+            case .failure, .invalid: return "400 Bad Request"
+            }
+        }
+
+        var documentTitle: String {
+            switch self {
+            case .success: return "Signed in - Omi"
+            case .failure, .invalid: return "Authentication failed - Omi"
+            }
+        }
+
+        var heading: String {
+            switch self {
+            case .success: return "You're signed in"
+            case .failure: return "Authentication failed"
+            case .invalid: return "Invalid callback"
+            }
+        }
+
+        var message: String {
+            switch self {
+            case .success: return "You can close this tab and return to Omi."
+            case .failure: return "You can close this tab and try again in the app."
+            case .invalid: return "This authentication callback was invalid. You can close this tab."
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .success: return "✓"
+            case .failure, .invalid: return "!"
+            }
+        }
+
+        var iconBackground: String {
+            switch self {
+            case .success: return "#111111"
+            case .failure, .invalid: return "#d32f2f"
+            }
+        }
+    }
+
+    /// Branded HTML body served on the local OAuth loopback callback.
+    /// Kept pure/static so unit tests can assert markup without opening a socket.
+    static func responseHTML(for page: CallbackPage) -> String {
+        """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>\(page.documentTitle)</title>
+            <style>
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    min-height: 100vh;
+                    margin: 0;
+                    background-color: #f7f7f7;
+                    color: #333;
+                }
+                .card {
+                    background-color: white;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+                    padding: 48px 32px;
+                    text-align: center;
+                    max-width: 400px;
+                }
+                .icon {
+                    width: 56px;
+                    height: 56px;
+                    margin: 0 auto 16px;
+                    border-radius: 50%;
+                    background-color: \(page.iconBackground);
+                    color: white;
+                    font-size: 28px;
+                    font-weight: 600;
+                    line-height: 56px;
+                }
+                h1 {
+                    font-size: 24px;
+                    font-weight: 600;
+                    margin: 0 0 12px 0;
+                }
+                p {
+                    font-size: 16px;
+                    color: #555;
+                    margin: 0;
+                    line-height: 1.5;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <div class="icon">\(page.icon)</div>
+                <h1>\(page.heading)</h1>
+                <p>\(page.message)</p>
+            </div>
+            <script>
+                setTimeout(function () {
+                    try { window.close(); } catch (e) {}
+                }, 1200);
+            </script>
+        </body>
+        </html>
+        """
     }
 
     private enum ParsedCallbackRequest {
@@ -207,12 +328,10 @@ final class OAuthLoopbackCallbackServer: @unchecked Sendable {
         return .success(code: code, state: state)
     }
 
-    private func sendResponse(_ clientFD: Int32, status: String, message: String) {
-        let body = """
-        <!doctype html><html><head><meta charset="utf-8"><title>Omi Authentication</title></head><body><p>\(message)</p></body></html>
-        """
+    private func sendResponse(_ clientFD: Int32, page: CallbackPage) {
+        let body = Self.responseHTML(for: page)
         let response = """
-        HTTP/1.1 \(status)\r
+        HTTP/1.1 \(page.httpStatus)\r
         Content-Type: text/html; charset=utf-8\r
         Content-Length: \(body.utf8.count)\r
         Connection: close\r
@@ -297,7 +416,7 @@ class AuthService {
 
     var isSignedIn: Bool {
         get { authState.isSignedIn }
-        set { authState.isSignedIn = newValue }
+        set { authState.transition(to: newValue ? .authenticated : .signedOut) }
     }
     var isLoading: Bool {
         get { authState.isLoading }
@@ -358,10 +477,16 @@ class AuthService {
     // UserDefaults keys for auth persistence (dev builds with ad-hoc signing).
     // Keys are defined once in `DefaultsKey` and read/written through the typed
     // `UserDefaults` accessors so a typo is a compile error, not a silent nil.
-    private let authTokenKeychainService = "com.omi.desktop.firebase-rest-session"
+    //
+    // Keychain service is team+bundle scoped so local Dev / named-bundle builds
+    // cannot poison each other or notarized Beta/Prod (login-keychain password
+    // dialog). See DesktopKeychainStore.scopedService.
     private let authTokenKeychainAccount = "firebase-rest-tokens"
+    private var authTokenKeychainService: String {
+        DesktopKeychainStore.scopedService(DesktopKeychainStore.legacyAuthTokenService)
+    }
 
-    private struct StoredAuthTokens: Codable {
+    private struct StoredAuthTokens: Codable, Equatable {
         let idToken: String
         let refreshToken: String
         let expiryTime: TimeInterval
@@ -384,16 +509,27 @@ class AuthService {
         var deleteKeychainString: (_ service: String, _ account: String) -> Void
         var recordsFallbackTelemetry: Bool
 
+        // Security invariant: new auth tokens live in the Keychain on EVERY build,
+        // including Sparkle beta. Plaintext UserDefaults fallback is disabled for new
+        // sign-ins. The read path remains only for transactional migration of older
+        // installs: keep that already-existing copy until Keychain read-back plus a
+        // forced refresh commit the new store.
         static let live = TokenStorageHooks(
-            usesKeychainTokenStorage: { !AppBuild.isNonProduction },
-            allowsUserDefaultsFallback: { true },
+            usesKeychainTokenStorage: { true },
+            allowsUserDefaultsFallback: { false },
             readKeychainString: { service, account in
+                // Only the team+bundle scoped service. Never query the unscoped
+                // legacy `com.omi.desktop.firebase-rest-session` item — a foreign
+                // ACL on that name is what triggers the login-keychain password
+                // dialog. Pre-scoping installs recover via UserDefaults migration.
                 DesktopKeychainStore.string(service: service, account: account)
             },
             writeKeychainString: { value, service, account in
                 DesktopKeychainStore.setString(value, service: service, account: account)
             },
             deleteKeychainString: { service, account in
+                // Only delete the scoped item. Touching the legacy unscoped name can
+                // itself prompt when the ACL belongs to another signing team.
                 DesktopKeychainStore.delete(service: service, account: account)
             },
             recordsFallbackTelemetry: true
@@ -401,6 +537,14 @@ class AuthService {
     }
 
     var tokenStorageHooks = TokenStorageHooks.live
+
+    struct TokenRefreshHooks {
+        var dataForRequest: ((URLRequest) async throws -> (Data, URLResponse))?
+
+        static let live = TokenRefreshHooks(dataForRequest: nil)
+    }
+
+    var tokenRefreshHooks = TokenRefreshHooks.live
 
     // Firebase Web API key — fetched from backend via APIKeyService, set as env var.
     // No hardcoded fallback — if the key isn't available, auth operations will fail
@@ -459,29 +603,83 @@ class AuthService {
         return ""
     }
 
+    private let sessionCoordinator = AuthSessionCoordinator.shared
+    private let sessionAttemptFence = AuthSessionAttemptFence()
+
     init() {
         // Initialize without super
     }
 
+    /// Start a new authoritative auth operation. Async completions from every
+    /// older restore/sign-in/refresh/invalidation/sign-out attempt become
+    /// incapable of mutating credentials or owner state immediately.
+    @discardableResult
+    func beginSessionAttempt() -> AuthSessionAttempt {
+        sessionAttemptFence.begin()
+    }
+
+    func currentSessionAttempt() -> AuthSessionAttempt {
+        sessionAttemptFence.current()
+    }
+
+    func isSessionAttemptCurrent(_ attempt: AuthSessionAttempt) -> Bool {
+        sessionAttemptFence.isCurrent(attempt)
+    }
+
+    private func discardStaleFirebaseUserIfNeeded(_ userID: String) {
+        guard FirebaseApp.app() != nil,
+              Auth.auth().currentUser?.uid == userID
+        else {
+            return
+        }
+        try? Auth.auth().signOut()
+    }
+
+    // MARK: - Session invalidation (light — not nuclear signOut)
+
+    /// Clears tokens and signed-in UI state without onboarding wipe, capture stop,
+    /// or storage cache teardown. Use for expired/revoked credentials.
+    func invalidateSession(reason: AuthSessionCoordinator.InvalidateReason) async {
+        await sessionCoordinator.invalidateSession(reason: reason, auth: self)
+    }
+
+    /// Internal hook for `AuthSessionCoordinator` — not a user-facing sign-out.
+    func performLightSessionInvalidation() async -> Bool {
+        let attempt = beginSessionAttempt()
+        // Also clear the Firebase SDK session so that restoreAuthState() and the
+        // auth-state listener do not re-create the ghost session on the next
+        // launch. Unlike signOut(), this does NOT tear down storage caches or
+        // stop background services — it only clears the Firebase SDK user.
+        // Guard: tests/local harnesses can exercise invalidation without
+        // FirebaseApp.configure(); Auth.auth() traps fatally if called before
+        // Firebase is configured.
+        if FirebaseApp.app() != nil {
+            try? Auth.auth().signOut()
+        }
+        return await commitSignedOutSession(attempt: attempt, phase: .needsReauth)
+    }
+
     // MARK: - Configuration (call after FirebaseApp.configure())
 
-    func configure() {
+    func configure() async {
         guard !isConfigured else { return }
         isConfigured = true
-        restoreAuthState()
+        let attempt = beginSessionAttempt()
+        await restoreAuthState(attempt: attempt)
         setupAuthStateListener()
 
         // Timeout: if auth isn't restored within 5 seconds, stop showing loading
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
+            guard let self, self.isSessionAttemptCurrent(attempt) else { return }
             if AuthState.shared.isRestoringAuth {
-                NSLog("OMI AUTH: Auth restore timed out after 5s, clearing loading state")
-                AuthState.shared.isRestoringAuth = false
+                NSLog("OMI AUTH: Auth restore timed out after 5s, entering recoverable state")
+                AuthState.shared.transition(to: .recoveryRequired)
             }
         }
     }
 
     func bootstrapLocalHarnessAuthIfNeeded() async {
-        defer { AuthState.shared.isRestoringAuth = false }
+        let attempt = beginSessionAttempt()
         guard let email = DesktopLocalProfile.selectedEmail,
               let password = DesktopLocalProfile.selectedPassword,
               let selectedUser = DesktopLocalProfile.selectedUser else {
@@ -491,33 +689,32 @@ class AuthService {
 
         if let savedEmail = UserDefaults.standard.string(forKey: .authUserEmail),
            !savedEmail.isEmpty, savedEmail != email {
-            clearPersistedAuthState()
-            clearTokens()
+            guard await clearPersistedAuthState(attempt: attempt) else { return }
+            _ = sessionAttemptFence.commitIfCurrent(attempt) {
+                clearTokens()
+            }
             log("OMI AUTH LOCAL: cleared stale persisted auth for email=\(savedEmail)")
         }
 
         do {
             let tokens = try await signInWithPasswordViaAuthEmulator(email: email, password: password)
-            try saveTokens(
-                idToken: tokens.idToken,
-                refreshToken: tokens.refreshToken,
-                expiresIn: tokens.expiresIn,
-                userId: tokens.localId
-            )
-            AuthState.shared.userEmail = email
-            isSignedIn = true
-            saveAuthState(isSignedIn: true, email: email, userId: tokens.localId)
+            guard try await commitSignedInSession(
+                tokens: tokens,
+                email: email,
+                attempt: attempt)
+            else {
+                return
+            }
             if let display = DesktopLocalProfile.selectedDisplayName, !display.isEmpty {
                 let pieces = display.split(separator: " ", maxSplits: 1).map(String.init)
                 givenName = pieces.first ?? ""
                 familyName = pieces.count > 1 ? pieces[1] : ""
             }
-            await RewindDatabase.shared.configure(userId: tokens.localId)
             log("OMI AUTH LOCAL: signed in via emulator REST as \(email) uid=\(tokens.localId) user=\(selectedUser)")
         } catch {
             logError("OMI AUTH LOCAL: sign-in failed for \(email)", error: error)
             self.error = "Local Auth emulator sign-in failed for \(email): \(error.localizedDescription)"
-            isSignedIn = false
+            AuthState.shared.transition(to: .recoveryRequired)
         }
     }
 
@@ -561,25 +758,171 @@ class AuthService {
 
     // MARK: - Auth Persistence (UserDefaults for dev builds)
 
-    private func saveAuthState(isSignedIn: Bool, email: String?, userId: String?) {
-        UserDefaults.standard.set(isSignedIn, forKey: .authIsSignedIn)
-        UserDefaults.standard.set(email, forKey: .authUserEmail)
-        UserDefaults.standard.set(userId, forKey: .authUserId)
-        UserDefaults.standard.synchronize()  // Force flush before process can be killed
+    @discardableResult
+    private func saveAuthState(
+        isSignedIn: Bool,
+        email: String?,
+        userId: String?,
+        attempt: AuthSessionAttempt
+    ) async -> Bool {
+        let attemptFence = sessionAttemptFence
+        let committed = await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+            plannedNextOwner: { _, previousOwner in
+                attemptFence.isCurrent(attempt) ? userId : previousOwner
+            }
+        ) { defaults in
+            attemptFence.commitIfCurrent(attempt) {
+                defaults.set(isSignedIn, forKey: .authIsSignedIn)
+                defaults.set(email, forKey: .authUserEmail)
+                defaults.set(userId, forKey: .authUserId)
+                defaults.synchronize()  // Force flush before process can be killed
+                return true
+            } ?? false
+        }
+        guard committed, sessionAttemptFence.isCurrent(attempt) else { return false }
         NSLog("OMI AUTH: Saved auth state - signedIn: %@, email: %@", isSignedIn ? "true" : "false", email ?? "nil")
+        return true
     }
 
-    private func clearPersistedAuthState() {
-        UserDefaults.standard.removeObject(forKey: .authIsSignedIn)
-        UserDefaults.standard.removeObject(forKey: .authUserEmail)
-        UserDefaults.standard.removeObject(forKey: .authUserId)
-        UserDefaults.standard.removeObject(forKey: .authIdToken)
-        UserDefaults.standard.removeObject(forKey: .authRefreshToken)
-        UserDefaults.standard.removeObject(forKey: .authTokenExpiry)
-        UserDefaults.standard.removeObject(forKey: .authTokenUserId)
+    @discardableResult
+    private func clearPersistedAuthState(attempt: AuthSessionAttempt) async -> Bool {
+        let attemptFence = sessionAttemptFence
+        let committed = await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+            plannedNextOwner: { _, previousOwner in
+                attemptFence.isCurrent(attempt) ? nil : previousOwner
+            }
+        ) { defaults in
+            attemptFence.commitIfCurrent(attempt) {
+                defaults.removeObject(forKey: .authIsSignedIn)
+                defaults.removeObject(forKey: .authUserEmail)
+                defaults.removeObject(forKey: .authUserId)
+                defaults.removeObject(forKey: .authIdToken)
+                defaults.removeObject(forKey: .authRefreshToken)
+                defaults.removeObject(forKey: .authTokenExpiry)
+                defaults.removeObject(forKey: .authTokenUserId)
+                return true
+            } ?? false
+        }
+        return committed && sessionAttemptFence.isCurrent(attempt)
     }
 
-    private func restoreAuthState() {
+    /// The only production path for changing the persisted authenticated uid
+    /// outside the larger save/clear auth-state transactions above.
+    @discardableResult
+    private func persistAuthenticatedOwner(
+        _ userId: String?,
+        attempt: AuthSessionAttempt
+    ) async -> Bool {
+        let attemptFence = sessionAttemptFence
+        let committed = await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+            plannedNextOwner: { _, previousOwner in
+                attemptFence.isCurrent(attempt) ? userId : previousOwner
+            }
+        ) { defaults in
+            attemptFence.commitIfCurrent(attempt) {
+                if let userId {
+                    defaults.set(userId, forKey: .authUserId)
+                } else {
+                    defaults.removeObject(forKey: .authUserId)
+                }
+                return true
+            } ?? false
+        }
+        return committed && sessionAttemptFence.isCurrent(attempt)
+    }
+
+    /// Commit credentials and their owner as one generation-owned auth result.
+    /// Token persistence is synchronous and generation-locked; the awaited owner
+    /// transition re-checks the same attempt before changing defaults. A newer
+    /// operation therefore wins even if this task resumes later.
+    @discardableResult
+    func commitSignedInSession(
+        tokens: FirebaseTokenResult,
+        email: String?,
+        attempt: AuthSessionAttempt
+    ) async throws -> Bool {
+        let attemptFence = sessionAttemptFence
+        // Credentials and their durable owner are one publication boundary.
+        // Writing B's token before revoking A left a window where an admitted A
+        // token read observed `tokenUserId == B` with `authUserId == A` and
+        // correctly treated the new credential as stale by deleting it. Reserve
+        // the owner fence first, quiesce A, then commit both stores synchronously
+        // on MainActor while the attempt-generation lock excludes superseding
+        // auth work. No AuthService token reader can interleave with a mixed
+        // A/B credential generation.
+        let committed = try await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+            plannedNextOwner: { _, previousOwner in
+                attemptFence.isCurrent(attempt) ? tokens.localId : previousOwner
+            }
+        ) { _ in
+            try await MainActor.run {
+                try attemptFence.commitIfCurrent(attempt) {
+                    try self.saveTokens(
+                        idToken: tokens.idToken,
+                        refreshToken: tokens.refreshToken,
+                        expiresIn: tokens.expiresIn,
+                        userId: tokens.localId)
+                    let defaults = UserDefaults.standard
+                    defaults.set(true, forKey: .authIsSignedIn)
+                    defaults.set(email, forKey: .authUserEmail)
+                    defaults.set(tokens.localId, forKey: .authUserId)
+                    defaults.synchronize()
+                    return true
+                } ?? false
+            }
+        }
+        guard committed else { return false }
+        guard sessionAttemptFence.isCurrent(attempt) else { return false }
+        NSLog("OMI AUTH: Atomically saved signed-in session for user %@", tokens.localId)
+        AuthState.shared.userEmail = email
+        sessionCoordinator.resetAfterSuccessfulSignIn()
+        return true
+    }
+
+    /// Publish a restored session only if the restore attempt remains current.
+    @discardableResult
+    func commitRestoredSession(
+        userId: String?,
+        email: String?,
+        attempt: AuthSessionAttempt
+    ) async -> Bool {
+        guard await saveAuthState(
+            isSignedIn: true,
+            email: email,
+            userId: userId,
+            attempt: attempt)
+        else {
+            return false
+        }
+        guard sessionAttemptFence.isCurrent(attempt) else { return false }
+        AuthState.shared.userEmail = email
+        sessionCoordinator.resetAfterSuccessfulSignIn()
+        return true
+    }
+
+    /// Clear credentials before the awaited owner transition. This ordering is
+    /// deliberate: a newer sign-in can begin while SQLite is closing, but a stale
+    /// sign-out has no token-deletion step left to run after that suspension.
+    @discardableResult
+    func commitSignedOutSession(
+        attempt: AuthSessionAttempt,
+        phase: AuthSessionPhase
+    ) async -> Bool {
+        let cleared = sessionAttemptFence.commitIfCurrent(attempt) {
+            clearTokens()
+            AuthState.shared.userEmail = nil
+            AuthState.shared.transition(to: phase)
+            return true
+        } ?? false
+        guard cleared else { return false }
+        return await saveAuthState(
+            isSignedIn: false,
+            email: nil,
+            userId: nil,
+            attempt: attempt)
+    }
+
+    private func restoreAuthState(attempt: AuthSessionAttempt) async {
         // Check if we have a saved auth state
         let savedSignedIn = UserDefaults.standard.bool(forKey: .authIsSignedIn)
         let savedEmail = UserDefaults.standard.string(forKey: .authUserEmail)
@@ -592,80 +935,92 @@ class AuthService {
         // creating a race window where the Firebase auth state listener can fire first
         // with user=nil and flip isSignedIn to false before we restore it.
         if savedSignedIn {
-            // Check if Firebase also has a current user (session might still be valid)
-            if let currentUser = Auth.auth().currentUser {
-                NSLog("OMI AUTH: Restored auth state from Firebase - uid: %@", currentUser.uid)
-                self.isSignedIn = true
-                AuthState.shared.userEmail = currentUser.email ?? savedEmail
-                AuthState.shared.isRestoringAuth = false
-                self.loadNameFromBackendIfNeeded()
-            } else {
-                // Firebase doesn't have user, but we have saved state
-                // This can happen with ad-hoc signing where Keychain doesn't persist
-                NSLog("OMI AUTH: Restored auth state from UserDefaults (Firebase session expired)")
+            AuthState.shared.transition(to: .restoring)
+            AuthState.shared.userEmail = Auth.auth().currentUser?.email ?? savedEmail
 
-                // Migration: Fix empty userId by extracting from stored idToken
-                let savedUserId = UserDefaults.standard.string(forKey: .authUserId) ?? ""
-                if savedUserId.isEmpty, let storedToken = storedIdToken {
-                    if let payload = decodeJWT(storedToken),
-                       let userId = payload["user_id"] as? String ?? payload["sub"] as? String {
-                        NSLog("OMI AUTH: Migrating empty userId - extracted from JWT: %@", userId)
-                        UserDefaults.standard.set(userId, forKey: .authUserId)
-                    }
+            // Migration: Fix empty userId by extracting from stored idToken.
+            let savedUserId = UserDefaults.standard.string(forKey: .authUserId) ?? ""
+            if savedUserId.isEmpty, let storedToken = storedIdToken {
+                if let payload = decodeJWT(storedToken),
+                   let userId = payload["user_id"] as? String ?? payload["sub"] as? String {
+                    NSLog("OMI AUTH: Migrating empty userId - extracted from JWT: %@", userId)
+                    guard await persistAuthenticatedOwner(userId, attempt: attempt) else { return }
                 }
-
-                self.isSignedIn = true
-                AuthState.shared.userEmail = savedEmail
-                AuthState.shared.isRestoringAuth = false
-                validateRestoredUserDefaultsSession()
             }
+
+            // A persisted boolean and Firebase's cached currentUser are restore hints,
+            // never proof of a usable session. Keep every authenticated surface gated
+            // until a forced refresh succeeds.
+            validateRestoredSession(attempt: attempt)
         } else {
             NSLog("OMI AUTH: No saved auth state found")
-            AuthState.shared.isRestoringAuth = false
+            guard await saveAuthState(
+                isSignedIn: false,
+                email: nil,
+                userId: nil,
+                attempt: attempt)
+            else {
+                return
+            }
+            AuthState.shared.transition(to: .signedOut)
         }
     }
 
-    private func validateRestoredUserDefaultsSession() {
+    private func validateRestoredSession(attempt: AuthSessionAttempt) {
         Task { [weak self] in
             guard let self else { return }
-            guard self.storedIdToken != nil else {
-                NSLog("OMI AUTH: Restored UserDefaults session validation deferred - no cached ID token")
+            await self.validateRestoredSessionNow(attempt: attempt)
+        }
+    }
+
+    func retryRestoredSession() async {
+        let attempt = beginSessionAttempt()
+        guard UserDefaults.standard.bool(forKey: .authIsSignedIn) else {
+            AuthState.shared.transition(to: .signedOut)
+            return
+        }
+        AuthState.shared.transition(to: .restoring)
+        await validateRestoredSessionNow(attempt: attempt)
+    }
+
+    private func validateRestoredSessionNow(attempt: AuthSessionAttempt) async {
+        guard sessionAttemptFence.isCurrent(attempt) else { return }
+        let hasFirebaseUser = !DesktopLocalProfile.isEnabled && Auth.auth().currentUser != nil
+
+        guard storedRefreshToken != nil || storedIdToken != nil || hasFirebaseUser else {
+            NSLog("OMI AUTH: Restored session has no credentials — invalidating")
+            await invalidateSession(reason: .restoredSessionInvalid)
+            return
+        }
+
+        do {
+            _ = try await sessionCoordinator.refreshSingleFlight(auth: self)
+            guard sessionAttemptFence.isCurrent(attempt) else { return }
+            NSLog("OMI AUTH: Restored session validated via forced refresh")
+            let userId = storedTokenUserId ?? Auth.auth().currentUser?.uid
+            guard await commitRestoredSession(
+                userId: userId,
+                email: AuthState.shared.userEmail,
+                attempt: attempt)
+            else {
                 return
             }
-            guard !self.isTokenExpired else {
-                NSLog("OMI AUTH: Restored UserDefaults session validation deferred - cached ID token expired")
-                return
+            loadNameFromBackendIfNeeded()
+            APIKeyService.shared.startFetchingKeys()
+            Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
+        } catch AuthError.notSignedIn {
+            guard sessionAttemptFence.isCurrent(attempt) else { return }
+            if sessionCoordinator.phase == .needsReauth || (storedIdToken == nil && storedRefreshToken == nil && !hasFirebaseUser) {
+                NSLog("OMI AUTH: Restored session validation proved credentials absent")
+                await invalidateSession(reason: .restoredSessionInvalid)
+            } else {
+                NSLog("OMI AUTH: Restored session validation deferred - preserving credentials for retry")
+                AuthState.shared.transition(to: .recoveryRequired)
             }
-            do {
-                _ = try await self.getIdToken(forceRefresh: false)
-                NSLog("OMI AUTH: Restored UserDefaults session validated from cached ID token")
-                APIKeyService.shared.startFetchingKeys()
-                Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
-            } catch AuthError.notSignedIn {
-                if self.storedIdToken == nil || self.storedRefreshToken == nil {
-                    // getIdToken() can clear tokens internally before surfacing notSignedIn —
-                    // e.g. a stored token/user mismatch after an account switch (it clears the
-                    // stale token, then the refresh path has no token). The entry guard proved
-                    // a cached ID token existed, so if it's gone now the session is genuinely
-                    // dead; preserving isSignedIn would leave a ghost signed-in UI with no
-                    // credentials. Sign out cleanly so the UI shows sign-in.
-                    NSLog("OMI AUTH: Restored UserDefaults session validation cleared tokens - signing out")
-                    self.isSignedIn = false
-                    AuthState.shared.userEmail = nil
-                    AuthState.shared.isRestoringAuth = false
-                    self.saveAuthState(isSignedIn: false, email: nil, userId: nil)
-                } else if self.isSignedIn {
-                    // Tokens survived — a transient/race failure (e.g. Firebase SDK user not
-                    // yet restored). Keep the restored session; on-demand refresh recovers it.
-                    NSLog("OMI AUTH: Restored UserDefaults session validation deferred - preserving restored session")
-                } else {
-                    NSLog("OMI AUTH: Restored UserDefaults session validation found signed-out state")
-                    AuthState.shared.userEmail = nil
-                    AuthState.shared.isRestoringAuth = false
-                }
-            } catch {
-                NSLog("OMI AUTH: Restored UserDefaults session validation deferred: %@", error.localizedDescription)
-            }
+        } catch {
+            guard sessionAttemptFence.isCurrent(attempt) else { return }
+            NSLog("OMI AUTH: Restored session validation deferred (transient): %@", error.localizedDescription)
+            AuthState.shared.transition(to: .recoveryRequired)
         }
     }
 
@@ -674,38 +1029,78 @@ class AuthService {
     private func setupAuthStateListener() {
         authStateHandle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
             Task { @MainActor in
-                if user != nil {
-                    // Firebase has a user - trust it
-                    log("AUTH_LISTENER: Firebase user present (uid=\(user?.uid ?? "nil")), setting isSignedIn=true")
-                    self?.isSignedIn = true
-                    AuthState.shared.userEmail = user?.email
-                    AuthState.shared.isRestoringAuth = false
-                    self?.saveAuthState(isSignedIn: true, email: user?.email, userId: user?.uid)
-                    // Configure database for the signed-in user immediately so any code
-                    // that touches the DB during onboarding (e.g. save_knowledge_graph)
-                    // writes to the correct per-user path instead of "anonymous".
-                    if let uid = user?.uid {
-                        Task { await RewindDatabase.shared.configure(userId: uid) }
+                guard let self else { return }
+                if let user {
+                    // Firebase currentUser is cached identity, not proof that the
+                    // credential can refresh. Only enrich an already validated session;
+                    // launch restoration remains owned by validateRestoredSessionNow().
+                    log("AUTH_LISTENER: Firebase user present (uid=\(user.uid)), phase=\(String(describing: self.sessionCoordinator.phase))")
+                    let ownerID = UserDefaults.standard.string(forKey: .authUserId)
+                    let tokenOwnerID = self.storedTokenUserId
+                    if self.sessionCoordinator.phase == .authenticated,
+                       ownerID == user.uid,
+                       tokenOwnerID == nil || tokenOwnerID == user.uid {
+                        let attempt = self.currentSessionAttempt()
+                        guard await self.saveAuthState(
+                            isSignedIn: true,
+                            email: user.email,
+                            userId: user.uid,
+                            attempt: attempt)
+                        else {
+                            return
+                        }
+                        AuthState.shared.userEmail = user.email
+                        self.loadNameFromBackendIfNeeded()
+                        Task { await SettingsSyncManager.shared.syncFromServer() }
                     }
-                    // Load name from backend profile (Firestore), then Firebase Auth as fallback
-                    self?.loadNameFromBackendIfNeeded()
-                    // Sync assistant settings from backend (fire-and-forget)
-                    Task { await SettingsSyncManager.shared.syncFromServer() }
                 } else {
                     // Firebase has no user - check if we have a saved session (for dev builds where Keychain doesn't persist)
                     let savedSignedIn = UserDefaults.standard.bool(forKey: .authIsSignedIn)
-                    log("AUTH_LISTENER: Firebase user nil, savedSignedIn=\(savedSignedIn), currentIsSignedIn=\(self?.isSignedIn ?? false)")
+                    log("AUTH_LISTENER: Firebase user nil, savedSignedIn=\(savedSignedIn), currentIsSignedIn=\(self.isSignedIn)")
                     if !savedSignedIn {
                         // No saved session either - user is truly signed out
                         log("AUTH_LISTENER: No saved session - setting isSignedIn=false")
-                        self?.isSignedIn = false
+                        AuthState.shared.transition(to: .signedOut)
                         AuthState.shared.userEmail = nil
-                        AuthState.shared.isRestoringAuth = false
                     } else {
-                        log("AUTH_LISTENER: Keeping saved session (not overriding isSignedIn)")
+                        log("AUTH_LISTENER: Firebase user nil with saved session — validating REST tokens")
+                        await self.validateSavedSessionAfterFirebaseNil()
                     }
                 }
             }
+        }
+    }
+
+    /// When Firebase SDK has no user but UserDefaults says signed-in, probe REST tokens.
+    /// Invalidates only on definitive death; skips while launch restore is in flight.
+    private func validateSavedSessionAfterFirebaseNil() async {
+        let attempt = currentSessionAttempt()
+        let expectedOwnerID = UserDefaults.standard.string(forKey: .authUserId)
+        guard !AuthState.shared.isRestoringAuth else {
+            log("AUTH_LISTENER: skipping REST validation while launch restore is in flight")
+            return
+        }
+        guard storedRefreshToken != nil else {
+            await invalidateSession(reason: .restoredSessionInvalid)
+            return
+        }
+        do {
+            _ = try await sessionCoordinator.refreshSingleFlight(auth: self)
+            guard sessionAttemptFence.isCurrent(attempt),
+                  UserDefaults.standard.string(forKey: .authUserId) == expectedOwnerID
+            else {
+                return
+            }
+            sessionCoordinator.resetAfterSuccessfulSignIn()
+            log("AUTH_LISTENER: saved REST session validated after Firebase nil")
+        } catch AuthError.notSignedIn where storedIdToken == nil || storedRefreshToken == nil {
+            guard sessionAttemptFence.isCurrent(attempt) else { return }
+            log("AUTH_LISTENER: saved REST session definitively dead — invalidating")
+            await invalidateSession(reason: .definitiveRefreshFailure)
+        } catch {
+            guard sessionAttemptFence.isCurrent(attempt) else { return }
+            log("AUTH_LISTENER: saved REST session validation deferred: \(error.localizedDescription)")
+            AuthState.shared.transition(to: .recoveryRequired)
         }
     }
 
@@ -722,6 +1117,7 @@ class AuthService {
 
     @MainActor
     private func signInWithAppleNative() async throws {
+        let sessionAttempt = beginSessionAttempt()
         NSLog("OMI AUTH: Starting native Apple Sign In")
         isLoading = true
         error = nil
@@ -735,6 +1131,9 @@ class AuthService {
 
         // Step 2: Perform native Apple Sign In
         let appleCredential = try await performAppleSignIn(hashedNonce: hashedNonce)
+        guard sessionAttemptFence.isCurrent(sessionAttempt) else {
+            throw AuthError.cancelled
+        }
         appleSignInDelegate = nil  // Clean up
 
         // Step 3: Extract identity token
@@ -765,6 +1164,7 @@ class AuthService {
 
         let credential = OAuthProvider.credential(providerID: .apple, idToken: identityToken, rawNonce: nonce)
         var userId = ""
+        let firebaseTokens: FirebaseTokenResult
 
         do {
             // Firebase SDK sign-in (works with native bundle ID as token audience)
@@ -777,20 +1177,28 @@ class AuthService {
             let idToken = tokenResult.token
             let refreshToken = authResult.user.refreshToken ?? ""
             let expiresIn = Int(tokenResult.expirationDate.timeIntervalSinceNow)
-
-            try saveTokens(idToken: idToken, refreshToken: refreshToken, expiresIn: expiresIn, userId: userId)
+            guard sessionAttemptFence.isCurrent(sessionAttempt) else {
+                discardStaleFirebaseUserIfNeeded(authResult.user.uid)
+                throw AuthError.cancelled
+            }
+            firebaseTokens = FirebaseTokenResult(
+                idToken: idToken,
+                refreshToken: refreshToken,
+                expiresIn: expiresIn,
+                localId: userId)
         } catch {
+            if !sessionAttemptFence.isCurrent(sessionAttempt) {
+                throw AuthError.cancelled
+            }
             // Fall back to REST API (works when Firebase SDK has keychain issues)
             let nsError = error as NSError
             NSLog("OMI AUTH: Firebase SDK Apple sign-in failed (domain=%@ code=%d): %@", nsError.domain, nsError.code, error.localizedDescription)
             logError("AUTH: Firebase SDK Apple sign-in failed (domain=\(nsError.domain) code=\(nsError.code))", error: error)
             NSLog("OMI AUTH: Falling back to REST API for Apple sign-in...")
-            let firebaseTokens = try await signInWithAppleIdentityToken(identityToken: identityToken, nonce: nonce)
-            userId = firebaseTokens.localId
-            try saveTokens(idToken: firebaseTokens.idToken, refreshToken: firebaseTokens.refreshToken, expiresIn: firebaseTokens.expiresIn, userId: userId)
+            let fallbackTokens = try await signInWithAppleIdentityToken(identityToken: identityToken, nonce: nonce)
+            userId = fallbackTokens.localId
+            firebaseTokens = fallbackTokens
         }
-
-        isSignedIn = true
 
         // Extract email from identity token if not provided by Apple
         if AuthState.shared.userEmail == nil {
@@ -800,8 +1208,13 @@ class AuthService {
             }
         }
 
-        saveAuthState(isSignedIn: true, email: AuthState.shared.userEmail, userId: userId)
-        Task { await RewindDatabase.shared.configure(userId: userId) }
+        guard try await commitSignedInSession(
+            tokens: firebaseTokens,
+            email: AuthState.shared.userEmail,
+            attempt: sessionAttempt)
+        else {
+            throw AuthError.cancelled
+        }
 
         if givenName.isEmpty {
             loadNameFromBackendIfNeeded()
@@ -848,6 +1261,7 @@ class AuthService {
             NSLog("OMI AUTH: Sign in already in progress, ignoring duplicate request")
             return
         }
+        let sessionAttempt = beginSessionAttempt()
 
         NSLog("OMI AUTH: Starting Sign in with %@ (Web OAuth)", provider)
         isLoading = true
@@ -950,6 +1364,7 @@ class AuthService {
             NSLog("OMI AUTH: Waiting for OAuth callback...")
             let (code, returnedState) = try await waitForOAuthCallback(callbackServer: callbackServer)
             clearLoopbackCallbackServerIfCurrent(callbackServer, flowId: flowId)
+            bringAppToFrontAfterAuthCallback()
             if callbackServer != nil {
                 trackAuthFlowEvent(
                     "Auth Callback Received",
@@ -1005,6 +1420,10 @@ class AuthService {
             trackAuthFlowEvent("Auth Token Exchange Completed", stage: "token_exchange", provider: provider, authFlowId: flowId)
             NSLog("OMI AUTH: Got Firebase custom token")
 
+            guard sessionAttemptFence.isCurrent(sessionAttempt) else {
+                throw AuthError.cancelled
+            }
+
             // Save user info from OAuth response immediately (before Firebase sign-in)
             // This ensures we have the name even if Firebase session doesn't persist
             if let extractedGivenName = tokenResult.givenName, !extractedGivenName.isEmpty {
@@ -1047,24 +1466,33 @@ class AuthService {
             )
             NSLog("OMI AUTH: Got Firebase ID token via REST API")
 
-            // Store tokens for API calls (include userId to validate token ownership on retrieval)
-            try saveTokens(idToken: firebaseTokens.idToken, refreshToken: firebaseTokens.refreshToken, expiresIn: firebaseTokens.expiresIn, userId: firebaseTokens.localId)
-
             // Also try Firebase SDK sign-in (best effort for other Firebase features)
+            guard sessionAttemptFence.isCurrent(sessionAttempt) else {
+                throw AuthError.cancelled
+            }
             do {
                 let authResult = try await Auth.auth().signIn(withCustomToken: tokenResult.customToken)
+                guard sessionAttemptFence.isCurrent(sessionAttempt) else {
+                    discardStaleFirebaseUserIfNeeded(authResult.user.uid)
+                    throw AuthError.cancelled
+                }
                 NSLog("OMI AUTH: Firebase SDK sign-in SUCCESS - uid: %@", authResult.user.uid)
+            } catch AuthError.cancelled {
+                throw AuthError.cancelled
             } catch let firebaseError as NSError {
                 // Keychain errors are expected on dev builds - we have REST API tokens as fallback
                 NSLog("OMI AUTH: Firebase SDK sign-in failed (using REST API tokens): %@", firebaseError.localizedDescription)
             }
 
-            isSignedIn = true
-
             // Save auth state immediately
             let userId = firebaseTokens.localId
-            saveAuthState(isSignedIn: true, email: tokenResult.email, userId: userId)
-            await RewindDatabase.shared.configure(userId: userId)
+            guard try await commitSignedInSession(
+                tokens: firebaseTokens,
+                email: tokenResult.email,
+                attempt: sessionAttempt)
+            else {
+                throw AuthError.cancelled
+            }
 
             // Try to load name from backend profile (Firestore), then Firebase Auth as fallback
             if givenName.isEmpty {
@@ -1139,7 +1567,11 @@ class AuthService {
                 durationMs: authFlowDurationMs(startedAt: activeFlowStartedAt),
                 extraProperties: ["callback_transport": activeCallbackTransport]
             )
-            AnalyticsManager.shared.signInFailed(provider: provider, error: AuthError.timeout.localizedDescription)
+            AnalyticsManager.shared.signInFailed(
+                provider: provider,
+                error: AuthError.timeout.localizedDescription,
+                errorClass: authFailureClass(for: AuthError.timeout)
+            )
             if let activeFlowId {
                 clearOAuthFlowIfCurrent(flowId: activeFlowId, callbackServer: activeCallbackServer)
             }
@@ -1160,7 +1592,11 @@ class AuthService {
                 durationMs: authFlowDurationMs(startedAt: activeFlowStartedAt),
                 extraProperties: ["callback_transport": activeCallbackTransport]
             )
-            AnalyticsManager.shared.signInFailed(provider: provider, error: error.localizedDescription)
+            AnalyticsManager.shared.signInFailed(
+                provider: provider,
+                error: error.localizedDescription,
+                errorClass: authFailureClass(for: error)
+            )
             if let activeFlowId {
                 clearOAuthFlowIfCurrent(flowId: activeFlowId, callbackServer: activeCallbackServer)
             }
@@ -1232,7 +1668,9 @@ class AuthService {
             properties["failure_class"] = failureClass
         }
         if let error {
-            properties["error"] = String(error.prefix(200))
+            let errorClass = PostHogManager.diagnosticErrorClass(error)
+            properties["error"] = errorClass
+            properties["error_class"] = errorClass
         }
         if let durationMs {
             properties["duration_ms"] = durationMs
@@ -1291,6 +1729,7 @@ class AuthService {
         case .keychainTokenStorageUnavailable: return "keychain_token_storage_unavailable"
         case .cancelled: return "cancelled"
         case .invalidConfiguration: return "invalid_configuration"
+        case .userChangedDuringRequest: return "user_changed_during_request"
         }
     }
 
@@ -1442,7 +1881,20 @@ class AuthService {
             provider: pendingOAuthFlow?.provider ?? "unknown",
             authFlowId: callbackFlowId
         )
+        // Foregrounding happens once in signIn() after waitForOAuthCallback returns,
+        // so custom-scheme and loopback paths share a single activation.
         resumeOAuthContinuation(returning: (code: code, state: state))
+    }
+
+    /// Focus the main Omi window after the browser finishes the OAuth handoff.
+    /// Filters to titled main windows so ordered-out panels (floating bar, overlays)
+    /// are not resurrected by a blanket `orderFrontRegardless()` sweep.
+    @MainActor
+    private func bringAppToFrontAfterAuthCallback() {
+        NSApp.activate()
+        for window in NSApp.windows where window.title.lowercased().hasPrefix("omi") {
+            window.makeKeyAndOrderFront(nil)
+        }
     }
 
     /// Cancel an in-flight web OAuth sign-in so the user can retry from a clean
@@ -1453,6 +1905,7 @@ class AuthService {
     @MainActor
     func cancelSignIn() {
         if let loopbackCallbackServer {
+            _ = beginSessionAttempt()
             NSLog("OMI AUTH: User cancelled in-flight loopback web OAuth sign-in")
             pendingOAuthState = nil
             loopbackCallbackServer.cancel()
@@ -1466,6 +1919,7 @@ class AuthService {
             // cleanup so a stale cancel action cannot race a token exchange.
             return
         }
+        _ = beginSessionAttempt()
         NSLog("OMI AUTH: User cancelled in-flight web OAuth sign-in")
         pendingOAuthState = nil
         resumeOAuthContinuation(throwing: AuthError.cancelled)
@@ -1605,11 +2059,26 @@ class AuthService {
 
     /// Update the user's given name (stores locally, updates Firebase Auth, and syncs to backend profile)
     @MainActor
-    func updateGivenName(_ fullName: String) async {
+    func updateGivenName(
+        _ fullName: String,
+        expectedOwnerID: String? = nil,
+        authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    ) async {
         let trimmedName = fullName.trimmingCharacters(in: .whitespaces)
         let nameParts = trimmedName.split(separator: " ", maxSplits: 1)
         let newGivenName = nameParts.first.map(String.init) ?? trimmedName
         let newFamilyName = nameParts.count > 1 ? String(nameParts[1]) : ""
+
+        if let expectedOwnerID {
+            await updateGivenNameOwnerBound(
+                trimmedName: trimmedName,
+                newGivenName: newGivenName,
+                newFamilyName: newFamilyName,
+                expectedOwnerID: expectedOwnerID,
+                authorizationSnapshot: authorizationSnapshot
+            )
+            return
+        }
 
         // Save locally
         givenName = newGivenName
@@ -1643,6 +2112,63 @@ class AuthService {
         }
     }
 
+    private func updateGivenNameOwnerBound(
+        trimmedName: String,
+        newGivenName: String,
+        newFamilyName: String,
+        expectedOwnerID: String,
+        authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+    ) async {
+        guard isCurrentOwner(expectedOwnerID, authorizationSnapshot: authorizationSnapshot) else { return }
+        let isImpersonating = UserDefaults.standard.bool(forKey: .authIsImpersonating)
+
+        if !isImpersonating, let user = Auth.auth().currentUser {
+            guard user.uid == expectedOwnerID else { return }
+            do {
+                let changeRequest = user.createProfileChangeRequest()
+                changeRequest.displayName = trimmedName
+                try await changeRequest.commitChanges()
+            } catch {
+                NSLog(
+                    "OMI AUTH: Failed to update Firebase displayName (non-fatal): %@",
+                    error.localizedDescription
+                )
+            }
+            guard isCurrentOwner(expectedOwnerID, authorizationSnapshot: authorizationSnapshot) else { return }
+        }
+
+        if !isImpersonating {
+            do {
+                try await APIClient.shared.updateUserProfile(
+                    name: trimmedName,
+                    expectedOwnerId: expectedOwnerID,
+                    authorizationSnapshot: authorizationSnapshot
+                )
+            } catch {
+                NSLog(
+                    "OMI AUTH: Failed to update backend profile name (non-fatal): %@",
+                    error.localizedDescription
+                )
+            }
+            guard isCurrentOwner(expectedOwnerID, authorizationSnapshot: authorizationSnapshot) else { return }
+        }
+
+        givenName = newGivenName
+        familyName = newFamilyName
+        NSLog("OMI AUTH: Updated owner-bound name locally - given: %@, family: %@", newGivenName, newFamilyName)
+    }
+
+    private nonisolated func isCurrentOwner(
+        _ expectedOwnerID: String,
+        authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    ) -> Bool {
+        if let authorizationSnapshot {
+            return authorizationSnapshot.ownerID == expectedOwnerID
+                && RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+        }
+        return AuthorizedToolExecution.isOwnerCurrent(expectedOwnerID)
+    }
+
     /// Try to get name from Firebase user (after OAuth sign-in)
     func getNameFromFirebase() -> String? {
         if let displayName = Auth.auth().currentUser?.displayName, !displayName.isEmpty {
@@ -1651,40 +2177,59 @@ class AuthService {
         return nil
     }
 
-    /// Load name from Firebase if local name is empty
-    func loadNameFromFirebaseIfNeeded() {
-        if givenName.isEmpty, let firebaseName = getNameFromFirebase() {
-            let nameParts = firebaseName.split(separator: " ", maxSplits: 1)
-            givenName = nameParts.first.map(String.init) ?? firebaseName
-            familyName = nameParts.count > 1 ? String(nameParts[1]) : ""
-            NSLog("OMI AUTH: Loaded name from Firebase - given: %@, family: %@", givenName, familyName)
-        }
-    }
-
     /// Load name from backend profile (Firestore) first, then fall back to Firebase Auth.
     /// This handles cases like Apple Sign-In where Firebase Auth displayName may be empty
     /// but the user already has a name stored in Firestore from a previous sign-up.
     func loadNameFromBackendIfNeeded() {
-        guard givenName.isEmpty else { return }
-        Task {
+        guard givenName.isEmpty,
+              let expectedOwnerID = RuntimeOwnerIdentity.currentOwnerId()
+        else {
+            return
+        }
+        let attempt = currentSessionAttempt()
+        Task { [weak self] in
+            guard let self,
+                  self.isSessionAttemptCurrent(attempt),
+                  RuntimeOwnerIdentity.currentOwnerId() == expectedOwnerID
+            else {
+                return
+            }
             do {
                 let profile = try await APIClient.shared.getUserProfile()
+                guard self.isSessionAttemptCurrent(attempt),
+                      RuntimeOwnerIdentity.currentOwnerId() == expectedOwnerID
+                else {
+                    return
+                }
                 if let name = profile.name, !name.trimmingCharacters(in: .whitespaces).isEmpty {
                     let nameParts = name.trimmingCharacters(in: .whitespaces).split(separator: " ", maxSplits: 1)
-                    await MainActor.run {
-                        givenName = nameParts.first.map(String.init) ?? name.trimmingCharacters(in: .whitespaces)
-                        familyName = nameParts.count > 1 ? String(nameParts[1]) : ""
-                        NSLog("OMI AUTH: Loaded name from backend profile - given: %@, family: %@", givenName, familyName)
-                    }
+                    self.givenName = nameParts.first.map(String.init) ?? name.trimmingCharacters(in: .whitespaces)
+                    self.familyName = nameParts.count > 1 ? String(nameParts[1]) : ""
+                    NSLog("OMI AUTH: Loaded name from backend profile - given: %@, family: %@", self.givenName, self.familyName)
                     return
                 }
             } catch {
+                guard self.isSessionAttemptCurrent(attempt),
+                      RuntimeOwnerIdentity.currentOwnerId() == expectedOwnerID
+                else {
+                    return
+                }
                 NSLog("OMI AUTH: Failed to fetch backend profile for name (non-fatal): %@", error.localizedDescription)
             }
             // Fall back to Firebase Auth displayName
-            await MainActor.run {
-                loadNameFromFirebaseIfNeeded()
+            guard self.givenName.isEmpty,
+                  self.isSessionAttemptCurrent(attempt),
+                  RuntimeOwnerIdentity.currentOwnerId() == expectedOwnerID,
+                  FirebaseApp.app() != nil,
+                  Auth.auth().currentUser?.uid == expectedOwnerID,
+                  let firebaseName = self.getNameFromFirebase()
+            else {
+                return
             }
+            let nameParts = firebaseName.split(separator: " ", maxSplits: 1)
+            self.givenName = nameParts.first.map(String.init) ?? firebaseName
+            self.familyName = nameParts.count > 1 ? String(nameParts[1]) : ""
+            NSLog("OMI AUTH: Loaded owner-bound name from Firebase - given: %@, family: %@", self.givenName, self.familyName)
         }
     }
 
@@ -1700,20 +2245,35 @@ class AuthService {
             tokenUserId: userId
         )
         if usesKeychainTokenStorage {
-            if saveKeychainTokens(tokens) {
+            let legacyMigrationSource = loadUserDefaultsTokens()
+            let hasLegacyMigrationSource = legacyMigrationSource.map {
+                $0.tokenUserId.isEmpty || $0.tokenUserId == userId
+            } ?? false
+            if persistKeychainTokensTransactionally(tokens) {
                 clearUserDefaultsTokens()
-            } else if allowsUserDefaultsTokenFallback {
+                cachedStoredTokens = tokens
+                cachedStoredTokensLoaded = true
+            } else if hasLegacyMigrationSource || allowsUserDefaultsTokenFallback {
+                // Migration-only continuity: these secrets were already present in
+                // UserDefaults before the Keychain migration started. Updating that
+                // existing copy is safer than deleting the only refresh credential.
+                // New sign-ins still fail closed when no legacy source exists.
                 saveUserDefaultsTokens(idToken: idToken, refreshToken: refreshToken, expiryTime: expiryTime, userId: userId)
-                log("AuthService: Keychain token storage failed; falling back to UserDefaults for desktop auth continuity")
-                recordTokenStorageFallback(reason: "keychain_write_failed")
+                cachedStoredTokens = tokens
+                cachedStoredTokensLoaded = true
+                log("AuthService: Keychain token persistence deferred; preserving legacy migration source")
+                recordTokenStorageFallback(reason: "keychain_migration_deferred")
             } else {
-                clearUserDefaultsTokens()
+                // Do not clear any prior credential on a failed write. The caller has
+                // not committed the new signed-in state yet, so the old session remains
+                // the only safe rollback point.
                 throw AuthError.keychainTokenStorageUnavailable
             }
         } else {
             saveUserDefaultsTokens(idToken: idToken, refreshToken: refreshToken, expiryTime: expiryTime, userId: userId)
+            cachedStoredTokens = tokens
+            cachedStoredTokensLoaded = true
         }
-        invalidateStoredTokensCache()
         NSLog("OMI AUTH: Saved tokens for user %@, expires at %@", userId, expiryTime.description)
     }
 
@@ -1749,14 +2309,52 @@ class AuthService {
 
     private func recordTokenStorageFallback(reason: String) {
         guard tokenStorageHooks.recordsFallbackTelemetry else { return }
-        AnalyticsManager.shared.desktopHealthEvent(
-            name: "auth_token_storage_fallback",
-            properties: [
-                "storage": "user_defaults",
-                "reason": reason,
+        DesktopDiagnosticsManager.shared.recordFallback(
+            area: "other",
+            from: "keychain",
+            to: "user_defaults",
+            reason: "other",
+            outcome: .degraded,
+            extra: [
+                "detail": reason,
                 "update_channel": AppBuild.currentUpdateChannel,
             ]
         )
+    }
+
+    /// Keychain writes are not committed until the running signed app can read
+    /// back the exact payload it wrote. Callers must retain the previous
+    /// credential source until this returns true.
+    private func persistKeychainTokensTransactionally(_ tokens: StoredAuthTokens) -> Bool {
+        let previousPayload = tokenStorageHooks.readKeychainString(
+            authTokenKeychainService,
+            authTokenKeychainAccount
+        )
+        guard saveKeychainTokens(tokens) else { return false }
+        guard let verified = loadKeychainTokens(), verified == tokens else {
+            log("AuthService: Keychain token read-back verification failed; retaining previous credential source")
+            if let previousPayload {
+                let restored = tokenStorageHooks.writeKeychainString(
+                    previousPayload,
+                    authTokenKeychainService,
+                    authTokenKeychainAccount
+                )
+                let restoredPayload = tokenStorageHooks.readKeychainString(
+                    authTokenKeychainService,
+                    authTokenKeychainAccount
+                )
+                if !restored || restoredPayload != previousPayload {
+                    log("AuthService: failed to restore previous Keychain payload after verification failure")
+                }
+            } else {
+                // The attempted write created the first item but did not verify.
+                // Remove that partial value so a later retry is not mistaken for
+                // a committed credential.
+                tokenStorageHooks.deleteKeychainString(authTokenKeychainService, authTokenKeychainAccount)
+            }
+            return false
+        }
+        return true
     }
 
     private func saveKeychainTokens(_ tokens: StoredAuthTokens) -> Bool {
@@ -1819,25 +2417,30 @@ class AuthService {
 
         let tokens: StoredAuthTokens?
         if usesKeychainTokenStorage {
-            if let keychainTokens = loadKeychainTokens() {
-                tokens = keychainTokens
-            } else if let defaultsTokens = loadUserDefaultsTokens() {
-                if saveKeychainTokens(defaultsTokens) {
-                    clearUserDefaultsTokens()
-                    log("AuthService: migrated production auth tokens from UserDefaults to Keychain")
-                    tokens = defaultsTokens
-                } else if allowsUserDefaultsTokenFallback {
-                    log("AuthService: keeping UserDefaults auth tokens after Keychain migration failed")
-                    recordTokenStorageFallback(reason: "keychain_migration_write_failed")
-                    tokens = defaultsTokens
-                } else {
-                    clearUserDefaultsTokens()
-                    log("AuthService: failed to migrate production auth tokens from UserDefaults to Keychain")
-                    tokens = nil
-                }
-            } else {
-                tokens = nil
+            let keychainTokens = loadKeychainTokens()
+            let defaultsTokens = loadUserDefaultsTokens()
+            let expectedUserId = UserDefaults.standard.string(forKey: .authUserId)
+
+            let candidates = [keychainTokens, defaultsTokens].compactMap { $0 }
+            let exactOwnerMatches = candidates.filter {
+                guard let expectedUserId, !expectedUserId.isEmpty else { return false }
+                return $0.tokenUserId == expectedUserId
             }
+            let eligible = exactOwnerMatches.isEmpty ? candidates : exactOwnerMatches
+            let preferred = eligible.max { $0.expiryTime < $1.expiryTime }
+
+            if let defaultsTokens, preferred == defaultsTokens {
+                // Stage the copy, but do not delete the legacy source here. The
+                // forced refresh performed by restore validation will persist the
+                // refreshed token and only then clear UserDefaults.
+                if persistKeychainTokensTransactionally(defaultsTokens) {
+                    log("AuthService: staged legacy auth tokens in Keychain; awaiting refresh validation before cleanup")
+                } else {
+                    log("AuthService: Keychain migration deferred; retaining legacy auth tokens")
+                    recordTokenStorageFallback(reason: "keychain_migration_deferred")
+                }
+            }
+            tokens = preferred
         } else {
             tokens = loadUserDefaultsTokens()
         }
@@ -1954,7 +2557,8 @@ class AuthService {
     }
 
     /// Refresh the ID token using the refresh token
-    private func refreshIdToken() async throws -> String {
+    private func refreshIdToken(attempt: AuthSessionAttempt) async throws -> String {
+        guard sessionAttemptFence.isCurrent(attempt) else { throw AuthError.notSignedIn }
         guard let refreshToken = storedRefreshToken else {
             throw AuthError.notSignedIn
         }
@@ -1980,7 +2584,14 @@ class AuthService {
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.httpBody = "grant_type=refresh_token&refresh_token=\(refreshToken)".data(using: .utf8)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response): (Data, URLResponse)
+        if let handler = tokenRefreshHooks.dataForRequest {
+            (data, response) = try await handler(request)
+        } else {
+            (data, response) = try await URLSession.shared.data(for: request)
+        }
+
+        guard sessionAttemptFence.isCurrent(attempt) else { throw AuthError.notSignedIn }
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw AuthError.invalidResponse
@@ -1991,11 +2602,10 @@ class AuthService {
             NSLog("OMI AUTH: Token refresh error (HTTP %d): %@", httpResponse.statusCode, errorBody)
             // Only clear tokens for definitive auth failures (invalid/revoked refresh token).
             // Transient errors (network issues, 500s) should not destroy the session.
-            let isDefinitiveAuthFailure = errorBody.contains("TOKEN_EXPIRED")
-                || errorBody.contains("INVALID_REFRESH_TOKEN")
-                || errorBody.contains("USER_NOT_FOUND")
-                || errorBody.contains("USER_DISABLED")
-                || httpResponse.statusCode == 400
+            let isDefinitiveAuthFailure = AuthDefinitiveDeathClassifier.isDefinitiveRefreshFailure(
+                httpStatus: httpResponse.statusCode,
+                errorBody: errorBody
+            )
             if isDefinitiveAuthFailure {
                 if DesktopLocalProfile.isEnabled {
                     NSLog("OMI AUTH LOCAL: refresh failed — re-bootstrapping emulator session")
@@ -2004,12 +2614,12 @@ class AuthService {
                         return token
                     }
                 }
-                NSLog("OMI AUTH: Definitive auth failure - clearing tokens and session")
-                clearTokens()
-                // Also clear auth state so the UI shows sign-in instead of a ghost session
-                // where auth_isSignedIn=true but no valid tokens exist.
-                isSignedIn = false
-                saveAuthState(isSignedIn: false, email: nil, userId: nil)
+                DesktopDiagnosticsManager.shared.recordAuthSessionCleared(
+                    reason: "refresh_token_rejected",
+                    httpStatusCode: httpResponse.statusCode
+                )
+                NSLog("OMI AUTH: Definitive auth failure — invalidating session")
+                await invalidateSession(reason: .definitiveRefreshFailure)
                 throw AuthError.notSignedIn
             }
             throw AuthError.tokenExchangeFailed(httpResponse.statusCode)
@@ -2026,8 +2636,17 @@ class AuthService {
         // Fall back to existing stored token user ID if not in response
         let userId = (json["user_id"] as? String) ?? storedTokenUserId ?? ""
 
-        // Save new tokens with user ID
-        try saveTokens(idToken: newIdToken, refreshToken: newRefreshToken, expiresIn: Int(expiresIn) ?? 3600, userId: userId)
+        // Save new tokens only while the refresh's session attempt still owns
+        // the credential store.
+        let saved = try sessionAttemptFence.commitIfCurrent(attempt) {
+            try saveTokens(
+                idToken: newIdToken,
+                refreshToken: newRefreshToken,
+                expiresIn: Int(expiresIn) ?? 3600,
+                userId: userId)
+            return true
+        } ?? false
+        guard saved else { throw AuthError.notSignedIn }
         NSLog("OMI AUTH: Refreshed ID token successfully for user %@", userId)
 
         return newIdToken
@@ -2036,6 +2655,7 @@ class AuthService {
     // MARK: - Get ID Token (for API calls)
 
     func getIdToken(forceRefresh: Bool = false) async throws -> String {
+        let attempt = currentSessionAttempt()
         // Get the expected user ID (the currently signed-in user)
         let expectedUserId = UserDefaults.standard.string(forKey: .authUserId)
 
@@ -2048,14 +2668,18 @@ class AuthService {
                     // expectedUserId missing (migration gap, crash recovery) - trust the token
                     // and backfill the userId so future calls don't hit this path
                     NSLog("OMI AUTH: expectedUserId is nil but token has userId %@ - backfilling", tokenUserId)
-                    UserDefaults.standard.set(tokenUserId, forKey: .authUserId)
+                    guard await persistAuthenticatedOwner(tokenUserId, attempt: attempt) else {
+                        throw AuthError.notSignedIn
+                    }
                     return token
                 } else if tokenUserId == expectedUserId {
                     return token
                 } else {
                     NSLog("OMI AUTH: Stored token user mismatch (token: %@, expected: %@) - clearing stale token",
                           tokenUserId, expectedUserId ?? "nil")
-                    clearTokens()
+                    _ = sessionAttemptFence.commitIfCurrent(attempt) {
+                        clearTokens()
+                    }
                 }
             } else {
                 // Old token without userId - allow it (backward compatibility)
@@ -2072,10 +2696,15 @@ class AuthService {
             let canRefresh = tokenUserId == nil || expectedUserId == nil || tokenUserId == expectedUserId
             if canRefresh {
                 do {
-                    return try await refreshIdToken()
+                    return try await refreshIdToken(attempt: attempt)
                 } catch {
                     refreshFailure = error
                     NSLog("OMI AUTH: Token refresh failed: %@", error.localizedDescription)
+                    // Definitive refresh failures already cleared local tokens — do not
+                    // fall through to Firebase SDK (which traps when FirebaseApp is absent).
+                    if case AuthError.notSignedIn = error {
+                        throw error
+                    }
                 }
             }
         }
@@ -2083,14 +2712,19 @@ class AuthService {
         // Third try: Use Firebase SDK (only if user matches expected user)
         // This prevents returning a stale user's token during sign-out race conditions
         // Local harness skips FirebaseApp.configure(); Auth.auth() traps if called.
-        if !DesktopLocalProfile.isEnabled, let user = Auth.auth().currentUser {
+        if !DesktopLocalProfile.isEnabled, FirebaseApp.app() != nil, let user = Auth.auth().currentUser {
             if expectedUserId == nil || user.uid == expectedUserId {
                 if expectedUserId == nil {
                     // Backfill the missing userId
                     NSLog("OMI AUTH: expectedUserId is nil, backfilling from Firebase SDK user %@", user.uid)
-                    UserDefaults.standard.set(user.uid, forKey: .authUserId)
+                    guard await persistAuthenticatedOwner(user.uid, attempt: attempt) else {
+                        throw AuthError.notSignedIn
+                    }
                 }
                 let tokenResult = try await user.getIDTokenResult(forcingRefresh: forceRefresh)
+                guard sessionAttemptFence.isCurrent(attempt) else {
+                    throw AuthError.notSignedIn
+                }
                 return tokenResult.token
             } else {
                 NSLog("OMI AUTH: Firebase SDK user mismatch (firebase: %@, expected: %@) - not using",
@@ -2108,6 +2742,55 @@ class AuthService {
     func getAuthHeader(forceRefresh: Bool = false) async throws -> String {
         let token = try await getIdToken(forceRefresh: forceRefresh)
         return "Bearer \(token)"
+    }
+
+    /// Returns an authorization header whose token subject is bound to the
+    /// durable operation owner. This is intentionally stricter than the
+    /// general request path: a sign-out/account switch must make an outbox
+    /// delivery retry rather than send it with the next user's credentials.
+    func getAuthHeader(
+        forceRefresh: Bool = false,
+        expectedUserId: String
+    ) async throws -> String {
+        let expected = expectedUserId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !expected.isEmpty,
+              UserDefaults.standard.string(forKey: .authUserId)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) == expected
+        else {
+            throw AuthError.userChangedDuringRequest
+        }
+
+        let token = try await getIdToken(forceRefresh: forceRefresh)
+        guard UserDefaults.standard.string(forKey: .authUserId)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) == expected,
+              Self.tokenOwnerId(from: token) == expected
+        else {
+            throw AuthError.userChangedDuringRequest
+        }
+        return "Bearer \(token)"
+    }
+
+    nonisolated static func tokenOwnerId(from token: String) -> String? {
+        let parts = token.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 3 else { return nil }
+        var payload = String(parts[1])
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        let remainder = payload.count % 4
+        if remainder != 0 {
+            payload.append(String(repeating: "=", count: 4 - remainder))
+        }
+        guard let data = Data(base64Encoded: payload),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        for claim in ["user_id", "sub"] {
+            if let value = json[claim] as? String,
+               !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            {
+                return value
+            }
+        }
+        return nil
     }
 
     // MARK: - Fetch User Conversations
@@ -2139,7 +2822,8 @@ class AuthService {
 
     // MARK: - Sign Out
 
-    func signOut() throws {
+    func signOut() async throws {
+        let sessionAttempt = beginSessionAttempt()
         // Track sign out and reset analytics
         AnalyticsManager.shared.signedOut()
         AnalyticsManager.shared.reset()
@@ -2149,18 +2833,29 @@ class AuthService {
             SentrySDK.setUser(nil)
         }
 
+        let signingOutUserID = UserDefaults.standard.string(forKey: .authUserId)
         try Auth.auth().signOut()
-        isSignedIn = false
+        // Reset coordinator only after Firebase sign-out succeeds so the state
+        // transition is atomic — if signOut() throws (e.g. keychain error), the
+        // coordinator stays in its previous phase rather than falsely reporting
+        // .signedOut while local tokens remain intact.
+        sessionCoordinator.resetAfterNuclearSignOut()
         CredentialHealthManager.shared.reset()
         APIKeyService.shared.clear()
-        // Clear saved auth state and tokens
-        saveAuthState(isSignedIn: false, email: nil, userId: nil)
-        clearTokens()
-
-        // Stop background services that make API calls before clearing caches
-        Task {
-            await AgentSyncService.shared.stop()
-            await FloatingBarUsageLimiter.shared.reset()
+        ChatDraftStore.shared.clearAll(ownerID: signingOutUserID)
+        // Clear credentials before the awaited owner/SQLite transition. If a
+        // newer sign-in starts while the old pool is closing, this stale
+        // sign-out has no later token deletion that could wipe the new session.
+        guard await commitSignedOutSession(
+            attempt: sessionAttempt,
+            phase: .signedOut)
+        else {
+            log("AuthService: stale sign-out completion ignored")
+            return
+        }
+        guard sessionAttemptFence.isCurrent(sessionAttempt) else {
+            log("AuthService: sign-out superseded by a newer session")
+            return
         }
 
         // Stop trial polling and reset banner state for this user session
@@ -2170,23 +2865,6 @@ class AuthService {
             state.isPaywalled = false
         }
         TrialBannerService.shared.stop()
-
-        // Close database and invalidate all storage caches so the next sign-in
-        // opens a fresh per-user database.
-        // Capture the current configureGeneration so closeIfStale() can detect if
-        // a new sign-in session has already called configure() by the time this runs.
-        let closeGeneration = RewindDatabase.configureGeneration
-        Task {
-            await RewindDatabase.shared.closeIfStale(generation: closeGeneration)
-            await RewindIndexer.shared.reset()
-            await RewindStorage.shared.reset()
-            await TranscriptionStorage.shared.invalidateCache()
-            await MemoryStorage.shared.invalidateCache()
-            await ActionItemStorage.shared.invalidateCache()
-            await ProactiveStorage.shared.invalidateCache()
-            await NoteStorage.shared.invalidateCache()
-            await AIUserProfileService.shared.invalidateCache()
-        }
 
         // Notify observers (DesktopHomeView) to reset @AppStorage-backed properties directly.
         // Using removeObject() on @AppStorage properties doesn't work because the cached value
@@ -2446,6 +3124,7 @@ enum AuthError: LocalizedError {
     case keychainTokenStorageUnavailable
     case cancelled
     case invalidConfiguration
+    case userChangedDuringRequest
 
     var errorDescription: String? {
         switch self {
@@ -2483,6 +3162,8 @@ enum AuthError: LocalizedError {
             return "Sign in cancelled"
         case .invalidConfiguration:
             return "Local harness auth is misconfigured (Firebase auth emulator host missing)"
+        case .userChangedDuringRequest:
+            return "The signed-in account changed while the request was being prepared"
         }
     }
 }

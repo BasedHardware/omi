@@ -123,8 +123,12 @@ final class TasksSortOrderBandingTests: XCTestCase {
         return try String(contentsOf: sourceURL)
     }
 
-    /// Both reorder sites must route through the shared helper, and the fixed
+    /// Both reorder sites must band through the shared helper, and the fixed
     /// `(index + 1) * 1000` / `(index + 1) * 1000` literals must be gone.
+    ///
+    /// The drag path bands via `applyReorder` (which `moveTask` delegates to so it
+    /// rewrites every mirrored array — see `TaskReorderMirroredArraysTests`); the sync
+    /// path bands via `collectSortOrderUpdates`. Both call `Self.sortOrder`.
     func testBothSortSitesUseSharedHelper() throws {
         let source = try tasksPageSource()
 
@@ -132,11 +136,17 @@ final class TasksSortOrderBandingTests: XCTestCase {
             source.contains("static func sortOrder(categoryIndex: Int, itemIndex: Int, itemCount: Int) -> Int"),
             "the shared sortOrder helper must exist so both sort sites agree (BL-016)")
 
-        // moveTask + collectSortOrderUpdates → two call sites.
+        // applyReorder (drag path) + collectSortOrderUpdates (sync path) → two call sites.
         let callSites = source.components(separatedBy: "Self.sortOrder(categoryIndex:").count - 1
         XCTAssertGreaterThanOrEqual(
             callSites, 2,
-            "both moveTask and collectSortOrderUpdates must call the shared helper (BL-016)")
+            "both reorder sites (applyReorder + collectSortOrderUpdates) must call the shared helper (BL-016)")
+
+        // moveTask must route its reorder through applyReorder, so its banding — and the
+        // mirrored-array agreement it guarantees — goes through the shared helper too.
+        XCTAssertTrue(
+            source.contains("Self.applyReorder("),
+            "moveTask must band via applyReorder rather than an inline scheme (BL-016 / TASK-07)")
 
         XCTAssertFalse(
             source.contains("categoryOffset + (index + 1) * 1000"),

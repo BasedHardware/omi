@@ -82,9 +82,9 @@ struct GlowDemoContentView: View {
     @ObservedObject private var state = GlowDemoState.shared
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: OmiSpacing.lg) {
             // Preview content
-            HStack(spacing: 20) {
+            HStack(spacing: OmiSpacing.xl) {
                 // Focused state
                 glowStatePreview(
                     title: "Focused",
@@ -95,7 +95,7 @@ struct GlowDemoContentView: View {
 
                 // Arrow between states
                 Image(systemName: "arrow.right")
-                    .scaledFont(size: 16, weight: .medium)
+                    .scaledFont(size: OmiType.subheading, weight: .medium)
                     .foregroundColor(.secondary.opacity(0.5))
 
                 // Distracted state
@@ -106,31 +106,31 @@ struct GlowDemoContentView: View {
                     isActive: state.phase == .distracted
                 )
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, OmiSpacing.sm)
 
             // Progress indicator
-            HStack(spacing: 8) {
+            HStack(spacing: OmiSpacing.sm) {
                 if state.phase != .none {
                     ProgressView()
                         .scaleEffect(0.6)
                     Text(state.phase == .focused ? "Showing focused glow..." : "Showing distracted glow...")
-                        .scaledFont(size: 12)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(.secondary)
                 } else {
                     Text("Watch the border effect")
-                        .scaledFont(size: 12)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(.secondary.opacity(0.6))
                 }
             }
             .frame(height: 20)
         }
-        .padding(24)
+        .padding(OmiSpacing.xxl)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private func glowStatePreview(title: String, description: String, color: Color, isActive: Bool) -> some View {
-        VStack(spacing: 8) {
+        VStack(spacing: OmiSpacing.sm) {
             // Glow indicator circle
             ZStack {
                 // Outer glow
@@ -151,7 +151,7 @@ struct GlowDemoContentView: View {
                         .frame(width: 40, height: 40)
                         .scaleEffect(isActive ? 1.3 : 1.0)
                         .opacity(isActive ? 0 : 1)
-                        .animation(
+                        .omiAnimation(
                             Animation.easeOut(duration: 1.0).repeatForever(autoreverses: false),
                             value: isActive
                         )
@@ -161,19 +161,19 @@ struct GlowDemoContentView: View {
 
             // Labels
             Text(title)
-                .scaledFont(size: 13, weight: isActive ? .semibold : .regular)
+                .scaledFont(size: OmiType.body, weight: isActive ? .semibold : .regular)
                 .foregroundColor(isActive ? .primary : .secondary)
 
             Text(description)
-                .scaledFont(size: 11)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(.secondary.opacity(0.8))
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
+        .padding(.vertical, OmiSpacing.sm)
         .background(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
                 .fill(isActive ? color.opacity(0.1) : Color.clear)
         )
-        .animation(.easeInOut(duration: 0.3), value: isActive)
+        .omiAnimation(.easeInOut(duration: 0.3), value: isActive)
     }
 }

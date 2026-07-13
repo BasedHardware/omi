@@ -2,13 +2,15 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/core/app_shell.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/auth/clear_user_state.dart';
+import 'package:omi/utils/auth/clear_deleted_account_session.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/wal_file_manager.dart';
@@ -104,9 +106,12 @@ class _DeleteAccountState extends State<DeleteAccount> {
         details: details,
       );
       PlatformManager.instance.analytics.deleteUser();
-      await WalFileManager.clearAll();
-      await SharedPreferencesUtil().clear();
-      await FirebaseAuth.instance.signOut();
+      await clearDeletedAccountSession(
+        authService: AuthService.instance,
+        clearUserState: () => clearAllUserState(context),
+        clearWal: WalFileManager.clearAll,
+        clearPreferences: SharedPreferencesUtil().clear,
+      );
       if (!mounted) return;
       routeToPage(context, const AppShell(), replace: true);
     } catch (_) {

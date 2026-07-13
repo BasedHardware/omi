@@ -4,8 +4,9 @@ import GRDB
 // MARK: - Task Chat Message Record
 
 /// Database record for task sidebar chat messages with embedding support and backend sync fields.
-/// Each message belongs to a task (via taskId = action_items backendId).
-struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
+/// `taskId` is a compatibility column name: canonical rows use the durable
+/// workstream ID as their conversation key until Ticket 14 removes the legacy schema.
+struct TaskChatMessageRecord: Codable, FetchableRecord, TableRecord, Identifiable {
     var id: Int64?
 
     var taskId: String                    // action_items backendId
@@ -53,10 +54,6 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
         self.backendMessageId = backendMessageId
     }
 
-    mutating func didInsert(_ inserted: InsertionSuccess) {
-        id = inserted.rowID
-    }
-
     // MARK: - ChatMessage Conversion
 
     /// Create a record from a ChatMessage for a given task
@@ -66,7 +63,7 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
         // Encode content blocks as JSON for AI messages
         var blocksJson: String?
         if message.sender == .ai && !message.contentBlocks.isEmpty {
-            blocksJson = encodeContentBlocks(message.contentBlocks)
+            blocksJson = ChatContentBlockCodec.encode(message.contentBlocks)
         }
         let resourcesJson = ChatResource.encodeResourcesForPersistence(message.displayResources)
 
@@ -85,7 +82,7 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
     /// Convert back to a ChatMessage for UI display
     func toChatMessage() -> ChatMessage {
         let chatSender: ChatSender = sender == "user" ? .user : .ai
-        let blocks = contentBlocksJson.flatMap { Self.decodeContentBlocks($0) } ?? []
+        let blocks = contentBlocksJson.flatMap { ChatContentBlockCodec.decode($0) } ?? []
         let resources = ChatResource.hydrateFileStates(
             resourcesJson.flatMap { ChatResource.decodeResourcesFromPersistence($0) } ?? []
         )
@@ -102,117 +99,34 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
     }
 
     // Resource JSON encoding lives on ChatResource (protocol layer).
-
-    // MARK: - Content Block Serialization
-
-    /// Encode ChatContentBlock array to JSON string
-    private static func encodeContentBlocks(_ blocks: [ChatContentBlock]) -> String? {
-        var encoded: [[String: Any]] = []
-        for block in blocks {
-            switch block {
-            case .text(let id, let text):
-                encoded.append(["type": "text", "id": id, "text": text])
-            case .toolCall(let id, let name, let status, let toolUseId, let input, let output):
-                // Three-way mapping: in-flight (.running, .slow, .stalled)
-                // persists as "running" so reload resumes the spinner;
-                // .completed → "completed"; .failed → "failed". .stalled
-                // doesn't get its own code because it's a transient
-                // detector-promoted state — on reload, a stalled turn is
-                // already over and re-classifying as "failed" would be a
-                // semantic change; keep it as "running" so existing UI
-                // semantics persist. If the turn ended cleanly while the
-                // tool was .slow/.stalled, completeRemainingToolCalls
-                // would have already collapsed it to .completed before
-                // persistence.
-                let statusCode: String
-                switch status {
-                case .running, .slow, .stalled: statusCode = "running"
-                case .completed: statusCode = "completed"
-                case .failed: statusCode = "failed"
-                }
-                var dict: [String: Any] = [
-                    "type": "toolCall",
-                    "id": id,
-                    "name": name,
-                    "status": statusCode
-                ]
-                if let toolUseId { dict["toolUseId"] = toolUseId }
-                if let input {
-                    dict["inputSummary"] = input.summary
-                    if let details = input.details { dict["inputDetails"] = details }
-                }
-                if let output { dict["output"] = output }
-                encoded.append(dict)
-            case .thinking(let id, let text):
-                encoded.append(["type": "thinking", "id": id, "text": text])
-            case .discoveryCard(let id, let title, let summary, let fullText):
-                encoded.append(["type": "discoveryCard", "id": id, "title": title, "summary": summary, "fullText": fullText])
-            }
-        }
-        guard let data = try? JSONSerialization.data(withJSONObject: encoded),
-              let json = String(data: data, encoding: .utf8) else { return nil }
-        return json
-    }
-
-    /// Decode JSON string back to ChatContentBlock array
-    private static func decodeContentBlocks(_ json: String) -> [ChatContentBlock]? {
-        guard let data = json.data(using: .utf8),
-              let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return nil }
-
-        var blocks: [ChatContentBlock] = []
-        for dict in array {
-            guard let type = dict["type"] as? String,
-                  let id = dict["id"] as? String else { continue }
-
-            switch type {
-            case "text":
-                let text = dict["text"] as? String ?? ""
-                blocks.append(.text(id: id, text: text))
-            case "toolCall":
-                let name = dict["name"] as? String ?? ""
-                let statusStr = dict["status"] as? String ?? "completed"
-                // Reverse of the three-way write mapping. Unknown
-                // strings fall back to .completed for forward-compat
-                // with future status codes.
-                let status: ToolCallStatus
-                switch statusStr {
-                case "running": status = .running
-                case "completed": status = .completed
-                case "failed": status = .failed
-                default: status = .completed
-                }
-                let toolUseId = dict["toolUseId"] as? String
-                let input: ToolCallInput?
-                if let summary = dict["inputSummary"] as? String {
-                    input = ToolCallInput(summary: summary, details: dict["inputDetails"] as? String)
-                } else {
-                    input = nil
-                }
-                let output = dict["output"] as? String
-                blocks.append(.toolCall(id: id, name: name, status: status, toolUseId: toolUseId, input: input, output: output))
-            case "thinking":
-                let text = dict["text"] as? String ?? ""
-                blocks.append(.thinking(id: id, text: text))
-            case "discoveryCard":
-                let title = dict["title"] as? String ?? ""
-                let summary = dict["summary"] as? String ?? ""
-                let fullText = dict["fullText"] as? String ?? ""
-                blocks.append(.discoveryCard(id: id, title: title, summary: summary, fullText: fullText))
-            default:
-                break
-            }
-        }
-        return blocks
-    }
+    // Content-block encode/decode lives on ChatContentBlockCodec.
 }
 
 // MARK: - Task Chat Message Storage
+
+struct TaskChatLegacyCompatibilityMetadata: Equatable {
+    static let owner = "desktop-task-chat"
+    static let removalCondition = "all supported desktop versions have checkpointed task chat into the kernel journal"
+    static let removeBy = "2026-10-01"
+    static let pageSize = 100
+}
+
+struct TaskChatLegacyMessageCursor: Equatable {
+    let createdAt: Date
+    let rowID: Int64
+}
+
+struct TaskChatLegacyMessagePage {
+    let rows: [TaskChatMessageRecord]
+    let nextCursor: TaskChatLegacyMessageCursor?
+}
 
 /// Actor-based storage for task chat messages with local-first persistence
 actor TaskChatMessageStorage {
     static let shared = TaskChatMessageStorage()
 
     private var _dbQueue: DatabasePool?
+    private var _dbGeneration = -1
     private var isInitialized = false
 
     private init() {}
@@ -223,7 +137,7 @@ actor TaskChatMessageStorage {
     }
 
     private func ensureInitialized() async throws -> DatabasePool {
-        if let db = _dbQueue {
+        if let db = _dbQueue, await RewindDatabase.shared.poolGeneration() == _dbGeneration {
             return db
         }
 
@@ -234,140 +148,62 @@ actor TaskChatMessageStorage {
             throw error
         }
 
-        guard let db = await RewindDatabase.shared.getDatabaseQueue() else {
+        let (queue, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+        guard let db = queue else {
             throw TaskChatMessageStorageError.databaseNotInitialized
         }
 
         _dbQueue = db
+        _dbGeneration = generation
         isInitialized = true
         return db
     }
 
-    // MARK: - Insert
-
-    /// Save a single message for a task
-    @discardableResult
-    func insert(_ record: TaskChatMessageRecord) async throws -> TaskChatMessageRecord {
-        let db = try await ensureInitialized()
-        let result = try await db.write { database -> TaskChatMessageRecord in
-            let record = record
-            try record.insert(database)
-            return record
+    /// Read-only compatibility source for the one-time kernel import. Every SQL
+    /// read is capped at 100 immutable rows; callers checkpoint only after they
+    /// have consumed pages through the terminal short page.
+    func legacyMessagePage(
+        fromTaskIds taskIds: [String],
+        workstreamId: String,
+        after cursor: TaskChatLegacyMessageCursor? = nil
+    ) async throws -> TaskChatLegacyMessagePage {
+        let keys = Array(Set(taskIds + [workstreamId]))
+        guard !keys.isEmpty else {
+            return TaskChatLegacyMessagePage(rows: [], nextCursor: nil)
         }
-        return result
-    }
-
-    /// Save a ChatMessage for a task (convenience)
-    @discardableResult
-    func saveMessage(_ message: ChatMessage, taskId: String) async throws -> TaskChatMessageRecord {
-        let record = TaskChatMessageRecord.from(message, taskId: taskId)
-        let db = try await ensureInitialized()
-        let result = try await db.write { database -> TaskChatMessageRecord in
-            let record = record
-            try record.insert(database)
-            return record
-        }
-        return result
-    }
-
-    // MARK: - Query
-
-    /// Get all messages for a task, ordered by creation time
-    func getMessages(forTaskId taskId: String) async throws -> [TaskChatMessageRecord] {
         let db = try await ensureInitialized()
         return try await db.read { database in
-            try TaskChatMessageRecord
-                .filter(Column("taskId") == taskId)
-                .order(Column("createdAt").asc)
-                .fetchAll(database)
-        }
-    }
-
-    // MARK: - Update
-
-    /// Update a message's text and content blocks (for finalizing streamed AI messages)
-    func updateMessage(messageId: String, text: String, contentBlocksJson: String?) async throws {
-        let db = try await ensureInitialized()
-        try await db.write { database in
-            try database.execute(
-                sql: """
-                    UPDATE task_chat_messages
-                    SET messageText = ?, contentBlocksJson = ?, updatedAt = ?
-                    WHERE messageId = ?
-                """,
-                arguments: [text, contentBlocksJson, Date(), messageId]
-            )
-        }
-    }
-
-    /// Update embedding for a message
-    func updateEmbedding(messageId: String, embedding: Data) async throws {
-        let db = try await ensureInitialized()
-        try await db.write { database in
-            try database.execute(
-                sql: "UPDATE task_chat_messages SET embedding = ?, updatedAt = ? WHERE messageId = ?",
-                arguments: [embedding, Date(), messageId]
-            )
-        }
-    }
-
-    /// Mark a message as synced with backend
-    func markSynced(messageId: String, backendMessageId: String) async throws {
-        let db = try await ensureInitialized()
-        try await db.write { database in
-            try database.execute(
-                sql: """
-                    UPDATE task_chat_messages
-                    SET backendSynced = 1, backendMessageId = ?, updatedAt = ?
-                    WHERE messageId = ?
-                """,
-                arguments: [backendMessageId, Date(), messageId]
-            )
-        }
-    }
-
-    // MARK: - Delete
-
-    /// Delete all messages for a task
-    func deleteMessages(forTaskId taskId: String) async throws {
-        let db = try await ensureInitialized()
-        try await db.write { database in
-            try database.execute(
-                sql: "DELETE FROM task_chat_messages WHERE taskId = ?",
-                arguments: [taskId]
-            )
-        }
-    }
-
-    // MARK: - Search
-
-    /// Full-text search across task chat messages
-    func search(query: String, taskId: String? = nil, limit: Int = 20) async throws -> [TaskChatMessageRecord] {
-        let db = try await ensureInitialized()
-        return try await db.read { database in
-            var sql = """
-                SELECT task_chat_messages.*
-                FROM task_chat_messages
-                JOIN task_chat_messages_fts ON task_chat_messages.id = task_chat_messages_fts.rowid
-                WHERE task_chat_messages_fts MATCH ?
-            """
-            var arguments: [DatabaseValueConvertible] = [query]
-
-            if let taskId {
-                sql += " AND task_chat_messages.taskId = ?"
-                arguments.append(taskId)
+            let placeholders = Array(repeating: "?", count: keys.count).joined(separator: ",")
+            var arguments: [DatabaseValueConvertible] = keys
+            let cursorClause: String
+            if let cursor {
+                cursorClause = "AND (createdAt > ? OR (createdAt = ? AND id > ?))"
+                arguments.append(cursor.createdAt)
+                arguments.append(cursor.createdAt)
+                arguments.append(cursor.rowID)
+            } else {
+                cursorClause = ""
             }
-
-            sql += " ORDER BY rank LIMIT ?"
-            arguments.append(limit)
-
-            return try TaskChatMessageRecord.fetchAll(
+            arguments.append(TaskChatLegacyCompatibilityMetadata.pageSize)
+            let rows = try TaskChatMessageRecord.fetchAll(
                 database,
-                sql: sql,
+                sql: """
+                    SELECT * FROM task_chat_messages
+                    WHERE taskId IN (\(placeholders))
+                    \(cursorClause)
+                    ORDER BY createdAt ASC, id ASC
+                    LIMIT ?
+                """,
                 arguments: StatementArguments(arguments)
             )
+            let nextCursor = rows.last.flatMap { row -> TaskChatLegacyMessageCursor? in
+                guard let rowID = row.id else { return nil }
+                return TaskChatLegacyMessageCursor(createdAt: row.createdAt, rowID: rowID)
+            }
+            return TaskChatLegacyMessagePage(rows: rows, nextCursor: nextCursor)
         }
     }
+
 }
 
 // MARK: - TableDocumented

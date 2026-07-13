@@ -11,16 +11,16 @@ struct DailyTaskCreationSheet: View {
     let onCreate: (String, String) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: OmiSpacing.xl) {
             // Header
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
                 HStack {
                     Image(systemName: "repeat.circle.fill")
-                        .scaledFont(size: 20)
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .scaledFont(size: OmiType.heading)
+                        .foregroundColor(OmiColors.accent)
 
                     Text("Create Daily Task")
-                        .scaledFont(size: 18, weight: .semibold)
+                        .scaledFont(size: OmiType.heading, weight: .semibold)
                         .foregroundColor(OmiColors.textPrimary)
 
                     Spacer()
@@ -29,24 +29,24 @@ struct DailyTaskCreationSheet: View {
                         dismiss()
                     }
                     .buttonStyle(.plain)
-                    .scaledFont(size: 13)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textSecondary)
                 }
 
                 Text("This task will repeat every day until completed")
-                    .scaledFont(size: 13)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textSecondary)
             }
 
             // Task description
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
                 Text("Task Description")
-                    .scaledFont(size: 14, weight: .medium)
+                    .scaledFont(size: OmiType.body, weight: .medium)
                     .foregroundColor(OmiColors.textPrimary)
 
                 TextField("What needs to be done daily?", text: $taskDescription)
                     .textFieldStyle(.roundedBorder)
-                    .scaledFont(size: 14)
+                    .scaledFont(size: OmiType.body)
                     .focused($isTextFieldFocused)
                     .onSubmit {
                         createTask()
@@ -54,31 +54,31 @@ struct DailyTaskCreationSheet: View {
             }
 
             // Priority selection
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
                 Text("Priority")
-                    .scaledFont(size: 14, weight: .medium)
+                    .scaledFont(size: OmiType.body, weight: .medium)
                     .foregroundColor(OmiColors.textPrimary)
 
-                HStack(spacing: 12) {
+                HStack(spacing: OmiSpacing.md) {
                     ForEach(["high", "medium", "low"], id: \.self) { level in
                         let isSelected = priority == level
 
                         Button {
                             priority = level
                         } label: {
-                            HStack(spacing: 6) {
+                            HStack(spacing: OmiSpacing.xs) {
                                 Image(systemName: level == "high" ? "flag.fill" : "flag")
-                                    .scaledFont(size: 12)
+                                    .scaledFont(size: OmiType.caption)
                                     .foregroundColor(isSelected ? .white : priorityColor(level))
 
                                 Text(level.capitalized)
-                                    .scaledFont(size: 13)
+                                    .scaledFont(size: OmiType.body)
                                     .foregroundColor(isSelected ? .white : OmiColors.textPrimary)
                             }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
+                            .padding(.horizontal, OmiSpacing.md)
+                            .padding(.vertical, OmiSpacing.sm)
                             .background(
-                                RoundedRectangle(cornerRadius: 8)
+                                RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                                     .fill(isSelected ? priorityColor(level) : OmiColors.backgroundSecondary)
                             )
                         }
@@ -97,7 +97,7 @@ struct DailyTaskCreationSheet: View {
                 Button {
                     createTask()
                 } label: {
-                    HStack(spacing: 8) {
+                    HStack(spacing: OmiSpacing.sm) {
                         if isCreating {
                             ProgressView()
                                 .scaleEffect(0.8)
@@ -106,21 +106,21 @@ struct DailyTaskCreationSheet: View {
                         }
                         Text(isCreating ? "Creating..." : "Create Daily Task")
                     }
-                    .scaledFont(size: 14, weight: .medium)
+                    .scaledFont(size: OmiType.body, weight: .medium)
                     .foregroundColor(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, OmiSpacing.xl)
+                    .padding(.vertical, OmiSpacing.sm)
                     .background(
-                        RoundedRectangle(cornerRadius: 8)
+                        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                             .fill(taskDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?
-                                  OmiColors.textTertiary : OmiColors.purplePrimary)
+                                  OmiColors.textTertiary : OmiColors.accent)
                     )
                 }
                 .buttonStyle(.plain)
                 .disabled(taskDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isCreating)
             }
         }
-        .padding(24)
+        .padding(OmiSpacing.xxl)
         .frame(width: 450, height: 320)
         .background(OmiColors.backgroundPrimary)
         .onAppear {

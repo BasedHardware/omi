@@ -16,7 +16,7 @@ struct OmiThinkingMark: View {
       .rotationEffect(.degrees(angle))
       .onAppear {
         angle = 0
-        withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
+        OmiMotion.withGated(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
           angle = 360
         }
       }
@@ -56,9 +56,9 @@ struct TypingIndicator: View {
   var body: some View {
     OmiThinkingMark()
       .frame(width: 24, height: 24)
-      .padding(.horizontal, 14)
-      .padding(.vertical, 8)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
       .background(OmiColors.backgroundTertiary)
-      .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+      .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous))
   }
 }

@@ -98,6 +98,50 @@ class PostHogManager {
         log("PostHog: Tracked event '\(eventName)'")
     }
 
+    nonisolated static func diagnosticErrorClass(_ value: String) -> String {
+        let normalized = value.lowercased()
+        if normalized.contains("timeout") || normalized.contains("timed out") {
+            return "timeout"
+        }
+        if normalized.contains("cancel") || normalized.contains("stopped") {
+            return "cancelled"
+        }
+        if normalized.contains("429") || normalized.contains("rate limit")
+            || normalized.contains("quota")
+        {
+            return "rate_limit"
+        }
+        if normalized.contains("403") || normalized.contains("forbidden")
+            || normalized.contains("permission") || normalized.contains("denied")
+        {
+            return "permission"
+        }
+        if normalized.contains("401") || normalized.contains("unauthorized")
+            || normalized.contains("auth") || normalized.contains("sign in")
+        {
+            return "authentication"
+        }
+        if normalized.contains("offline") || normalized.contains("network")
+            || normalized.contains("connection") || normalized.contains("socket")
+        {
+            return "network"
+        }
+        if normalized.contains("409") || normalized.contains("conflict")
+            || normalized.contains("aborted")
+        {
+            return "conflict"
+        }
+        if normalized.contains("decode") || normalized.contains("encoding")
+            || normalized.contains("invalid json") || normalized.contains("invalid response")
+        {
+            return "invalid_response"
+        }
+        if normalized.contains("memory") && normalized.contains("available") {
+            return "resource_exhausted"
+        }
+        return "unknown"
+    }
+
     // MARK: - Screen Tracking
 
     /// Track a screen view
@@ -186,10 +230,13 @@ extension PostHogManager {
         ])
     }
 
-    func signInFailed(provider: String, error: String) {
+    func signInFailed(provider: String, error: String, errorClass: String? = nil) {
+        let errorClass = errorClass.map { String($0.prefix(80)) }
+            ?? Self.diagnosticErrorClass(error)
         track("Sign In Failed", properties: [
             "provider": provider,
-            "error": error
+            "error": errorClass,
+            "error_class": errorClass
         ])
     }
 
@@ -212,13 +259,10 @@ extension PostHogManager {
     }
 
     func distractionDetected(app: String, windowTitle: String?) {
-        var properties: [String: Any] = [
-            "app": app
-        ]
-        if let title = windowTitle {
-            properties["window_title"] = title
-        }
-        track("Distraction Detected", properties: properties)
+        track("Distraction Detected", properties: [
+            "app": app,
+            "has_window_title": !(windowTitle?.isEmpty ?? true)
+        ])
     }
 
     func focusRestored(app: String) {
@@ -249,9 +293,11 @@ extension PostHogManager {
         stage: String? = nil,
         retryCount: Int? = nil
     ) {
+        let errorClass = Self.diagnosticErrorClass(error)
         var properties: [String: Any] = [
             "platform": "macos",
-            "error": error
+            "error": errorClass,
+            "error_class": errorClass
         ]
         if let reason {
             properties["recording_error_reason"] = reason
@@ -279,9 +325,11 @@ extension PostHogManager {
         segmentCount: Int?,
         diagnostics: ReconciliationFailureDiagnostics? = nil
     ) {
+        let errorClass = Self.diagnosticErrorClass(error)
         var properties: [String: Any] = [
             "platform": "macos",
-            "error": error,
+            "error": errorClass,
+            "error_class": errorClass,
             "recording_error_reason": reason,
             "retry_count": retryCount,
             "has_backend_id": hasBackendId,
@@ -460,10 +508,10 @@ extension PostHogManager {
 
     // MARK: - Chat Events
 
-    func chatMessageSent(messageLength: Int, hasContext: Bool = false, source: String) {
+    func chatMessageSent(messageLength: Int, hasSelectedAppContext: Bool = false, source: String) {
         track("Chat Message Sent", properties: [
             "message_length": messageLength,
-            "has_context": hasContext,
+            "has_selected_app_context": hasSelectedAppContext,
             "source": source
         ])
     }
@@ -589,7 +637,7 @@ extension PostHogManager {
     func ffmpegResolved(source: String, path: String) {
         track("FFmpeg Resolved", properties: [
             "source": source,
-            "path": path
+            "path_kind": path.contains(".app/Contents/") ? "bundled" : "external"
         ])
     }
 
@@ -617,6 +665,22 @@ extension PostHogManager {
     func taskExtracted(taskCount: Int) {
         track("Task Extracted", properties: [
             "task_count": taskCount
+        ])
+    }
+
+    func taskIntelligenceAttribution(_ event: TaskIntelligenceAttributionEvent) {
+        track("Task Intelligence Attribution", properties: event.analyticsProperties)
+    }
+
+    func proactiveTaskGateEvaluated(_ trace: TaskInterruptionGateTrace) {
+        track("Proactive Task Gate Evaluated", properties: [
+            "schema_version": trace.schemaVersion,
+            "decision_id": trace.decisionID,
+            "recommendation_id": trace.recommendationID,
+            "intervention_id": trace.interventionID,
+            "dedupe_hash": trace.dedupeHash,
+            "cohort": trace.cohort.rawValue,
+            "reason": trace.reason.rawValue,
         ])
     }
 
@@ -683,8 +747,37 @@ extension PostHogManager {
         track("Update Available", properties: updateProperties(version: version, context: context, item: item))
     }
 
-    func updateInstalled(version: String, context: UpdateAnalyticsContext, item: UpdateItemAnalytics) {
-        track("Update Installed", properties: updateProperties(version: version, context: context, item: item))
+    func updateInstallStarted(attempt: UpdateInstallAttempt) {
+        track("Update Install Started", properties: attempt.analyticsProperties)
+    }
+
+    func updateInstalled(
+        attempt: UpdateInstallAttempt,
+        installedVersion: String,
+        installedBuild: String
+    ) {
+        var properties = attempt.analyticsProperties
+        properties["installed_version"] = installedVersion
+        properties["installed_build"] = installedBuild
+        properties["update_duration_seconds"] = max(0, Date().timeIntervalSince(attempt.startedAt))
+        properties["verified_after_relaunch"] = true
+        track("Update Installed", properties: properties)
+    }
+
+    func updateInstallVerificationFailed(
+        attempt: UpdateInstallAttempt,
+        installedVersion: String,
+        installedBuild: String
+    ) {
+        var properties = attempt.analyticsProperties
+        properties["installed_version"] = installedVersion
+        properties["installed_build"] = installedBuild
+        properties["update_duration_seconds"] = max(0, Date().timeIntervalSince(attempt.startedAt))
+        properties["verified_after_relaunch"] = false
+        properties["error"] = "post_relaunch_build_mismatch"
+        properties["error_class"] = "post_relaunch_build_mismatch"
+        properties["phase"] = "post_relaunch_verification"
+        track("Update Install Verification Failed", properties: properties)
     }
 
     func updateCheckFailed(diagnostics: UpdateFailureDiagnostics) {
@@ -707,7 +800,8 @@ extension PostHogManager {
     func notificationSent(notificationId: String, title: String, assistantId: String, surface: String) {
         track("Notification Sent", properties: [
             "notification_id": notificationId,
-            "title": title,
+            "title_length": title.count,
+            "has_title": !title.isEmpty,
             "assistant_id": assistantId,
             "notification_surface": surface
         ])
@@ -716,7 +810,8 @@ extension PostHogManager {
     func notificationClicked(notificationId: String, title: String, assistantId: String, surface: String) {
         track("Notification Clicked", properties: [
             "notification_id": notificationId,
-            "title": title,
+            "title_length": title.count,
+            "has_title": !title.isEmpty,
             "assistant_id": assistantId,
             "notification_surface": surface
         ])
@@ -725,7 +820,8 @@ extension PostHogManager {
     func notificationDismissed(notificationId: String, title: String, assistantId: String, surface: String) {
         track("Notification Dismissed", properties: [
             "notification_id": notificationId,
-            "title": title,
+            "title_length": title.count,
+            "has_title": !title.isEmpty,
             "assistant_id": assistantId,
             "notification_surface": surface
         ])
@@ -734,7 +830,8 @@ extension PostHogManager {
     func notificationWillPresent(notificationId: String, title: String) {
         track("Notification Will Present", properties: [
             "notification_id": notificationId,
-            "title": title
+            "title_length": title.count,
+            "has_title": !title.isEmpty
         ])
     }
 

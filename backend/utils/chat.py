@@ -14,15 +14,16 @@ from models.chat import ChatSession, Message, ResponseMessage, MessageConversati
 from models.notification_message import NotificationMessage
 from models.transcript_segment import TranscriptSegment
 from utils.apps import get_available_app_by_id
-from utils.executors import run_blocking, db_executor
+from utils.executors import db_executor, run_blocking, storage_executor, sync_executor
 from utils.conversation_helpers import extract_memory_ids
 from utils.conversations.factory import deserialize_conversation
 from utils.llm.chat import initial_chat_message
 from utils.llm.persona import initial_persona_chat_message
-from utils.notifications import send_notification
+from utils.notifications import send_notification, send_notification_async
 from utils.other.storage import get_syncing_file_temporal_signed_url, schedule_syncing_temporal_file_deletion
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
 from utils.stt.pre_recorded import (
+    PrerecordedSTTConfigurationError,
     get_deepgram_model_for_language,
     postprocess_words,
     prerecorded,
@@ -116,32 +117,36 @@ def resolve_voice_message_language(uid: str, request_language: Optional[str]) ->
     return 'multi'
 
 
-def transcribe_voice_message_segment(
-    path: str,
-    uid: str,
-    language: str = 'multi',
-) -> Tuple[Optional[str], Optional[str]]:
+def _prepare_voice_message_url(path: str) -> str:
+    """Create the signed input URL and schedule its cleanup on the storage lane."""
     url = get_syncing_file_temporal_signed_url(path)
     schedule_syncing_temporal_file_deletion(path)
+    return url
 
-    if not language:
-        language = resolve_voice_message_language(uid, None)
 
-    # Get the appropriate Deepgram model for this language
+def _transcribe_voice_message_url(
+    url: str,
+    path: str,
+    language: str,
+    detect_language: bool = True,
+) -> Tuple[Optional[str], Optional[str]]:
+    """Run the synchronous prerecorded-STT pipeline for one signed URL."""
     stt_language, stt_model = get_deepgram_model_for_language(language)
-
     is_multi = stt_language == 'multi'
     try:
-        if is_multi:
+        if is_multi and detect_language:
             words, detected_language = prerecorded(
                 url, diarize=False, language=stt_language, return_language=True, model=stt_model
             )
         else:
             words = prerecorded(url, diarize=False, language=stt_language, return_language=False, model=stt_model)
             detected_language = stt_language
+    except PrerecordedSTTConfigurationError:
+        raise
     except RuntimeError as e:
         logger.error(f'Voice message transcription failed for {path}: {e}')
         return None, stt_language if not is_multi else 'en'
+
     if not words:
         logger.info('no words')
         return None, detected_language
@@ -158,6 +163,18 @@ def transcribe_voice_message_segment(
         return None, detected_language
 
     return text, detected_language
+
+
+def transcribe_voice_message_segment(
+    path: str,
+    uid: str,
+    language: str = 'multi',
+) -> Tuple[Optional[str], Optional[str]]:
+    url = _prepare_voice_message_url(path)
+
+    if not language:
+        language = resolve_voice_message_language(uid, None)
+    return _transcribe_voice_message_url(url, path, language)
 
 
 def transcribe_pcm_bytes(
@@ -242,6 +259,8 @@ def process_voice_message_segment(
 
     try:
         words = prerecorded(url, diarize=False, language=stt_language, model=stt_model)
+    except PrerecordedSTTConfigurationError:
+        raise
     except RuntimeError as e:
         logger.error(f'Voice message transcription failed for {path}: {e}')
         return []
@@ -300,30 +319,20 @@ async def process_voice_message_segment_stream(
     uid: str,
     language: str = 'multi',
 ) -> AsyncGenerator[str, None]:
-    url = get_syncing_file_temporal_signed_url(path)
-    schedule_syncing_temporal_file_deletion(path)
+    url = await run_blocking(storage_executor, _prepare_voice_message_url, path)
 
     if not language:
-        language = resolve_voice_message_language(uid, None)
+        language = await run_blocking(db_executor, resolve_voice_message_language, uid, None)
 
-    # Get the appropriate Deepgram model for this language
-    stt_language, stt_model = get_deepgram_model_for_language(language)
-
-    try:
-        words = prerecorded(url, diarize=False, language=stt_language, model=stt_model)
-    except RuntimeError as e:
-        logger.error(f'Voice message transcription failed for {path}: {e}')
-        return
-    transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
-    del words
-    if not transcript_segments:
-        logger.error('failed to get deepgram segments')
-        return
-
-    text = " ".join([segment.text for segment in transcript_segments]).strip()
-    transcript_segments.clear()
-    if len(text) == 0:
-        logger.info('voice message text is empty')
+    text, _detected_language = await run_blocking(
+        sync_executor,
+        _transcribe_voice_message_url,
+        url,
+        path,
+        language,
+        False,
+    )
+    if text is None:
         return
 
     # create message
@@ -417,15 +426,19 @@ async def process_voice_message_segment_stream(
                     yield f"done: {data}\n\n"
 
                     # send notification
-                    send_chat_message_notification(uid, "omi", "omi", ai_message.text, ai_message.id)
+                    await send_chat_message_notification_async(uid, "omi", "omi", ai_message.text, ai_message.id)
     finally:
         reset_usage_context(usage_token)
 
     return
 
 
-def send_chat_message_notification(user_id: str, app_name: str, app_id: str, message: str, message_id: str):
-    ai_message = NotificationMessage(
+def _chat_message_notification(
+    app_id: str,
+    message: str,
+    message_id: str,
+) -> NotificationMessage:
+    return NotificationMessage(
         id=message_id,
         text=message,
         plugin_id=app_id,
@@ -434,4 +447,25 @@ def send_chat_message_notification(user_id: str, app_name: str, app_id: str, mes
         notification_type='plugin',
         navigate_to=f'/chat/{app_id}',
     )
+
+
+def send_chat_message_notification(user_id: str, app_name: str, app_id: str, message: str, message_id: str):
+    ai_message = _chat_message_notification(app_id, message, message_id)
     send_notification(user_id, app_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
+
+
+async def send_chat_message_notification_async(
+    user_id: str,
+    app_name: str,
+    app_id: str,
+    message: str,
+    message_id: str,
+) -> None:
+    """Async notification boundary for streaming chat responses."""
+    ai_message = _chat_message_notification(app_id, message, message_id)
+    await send_notification_async(
+        user_id,
+        app_name + ' says',
+        message,
+        NotificationMessage.get_message_as_dict(ai_message),
+    )

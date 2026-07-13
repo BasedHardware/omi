@@ -9,6 +9,9 @@ class AppLocalizationsUr extends AppLocalizations {
   AppLocalizationsUr([String locale = 'ur']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'سیشن کی میعاد ختم ہو گئی — دوبارہ سائن ان کریں۔';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -9522,4 +9525,66 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get pendantStorageAlmostFull => 'پینڈنٹ کا اسٹوریج تقریباً بھر چکا ہے — سنک کے لیے ایپ کھلی رکھیں۔';
+
+  @override
+  String get connectRayBanMeta => 'Ray-Ban Meta جوڑیں';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'گفتگو اور بصری سیاق و سباق کے لیے اپنی Ray-Ban Meta عینک کو اپنے Omi کیپچر ڈیوائس کے طور پر استعمال کریں۔ Omi آپ کی عینک کو منسلک کرنے کے لیے Meta AI ایپ کھولے گا۔';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Meta AI کے ذریعے جڑیں';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Meta AI ایپ میں کنکشن مکمل کریں، پھر یہاں واپس آئیں۔';
+
+  @override
+  String get raybanMetaCheckAgain => 'دوبارہ چیک کریں';
+
+  @override
+  String get raybanMetaAllowCamera => 'عینک پر کیمرے کی اجازت دیں';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi آپ کی گفتگو میں تصاویر شامل کرنے کے لیے آپ کی عینک کا کیمرہ استعمال کرتا ہے۔ آپ اسے چھوڑ کر صرف آڈیو استعمال کر سکتے ہیں۔';
+
+  @override
+  String get raybanMetaSkipForNow => 'ابھی کے لیے چھوڑ دیں';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta صرف آڈیو موڈ';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Omi کا یہ ورژن Bluetooth کے ذریعے آپ کی عینک کا مائیکروفون استعمال کر سکتا ہے۔ تصویر کیپچر کے لیے Omi کا Meta ڈیولپر بلڈ درکار ہے۔';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'جب عینک کا مائیکروفون استعمال میں ہو تو آپ کے فون پر موسیقی رک جاتی ہے۔';
+
+  @override
+  String get raybanMetaContinue => 'جاری رکھیں';
+
+  @override
+  String get raybanMetaCapturePhoto => 'تصویر لیں';
+
+  @override
+  String get raybanMetaPhotoRequested => 'تصویر کی درخواست کی گئی — یہ آپ کی گفتگو میں ظاہر ہوگی۔';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'مائیکروفون تیار ہے';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'تصویر کیپچر تیار ہے';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'صرف آڈیو موڈ میں دستیاب نہیں';
+
+  @override
+  String get raybanMetaCamera => 'کیمرہ';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Ray-Ban Meta سے جڑنے میں خرابی: $error';
+  }
 }

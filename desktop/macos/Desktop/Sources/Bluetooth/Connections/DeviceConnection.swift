@@ -3,15 +3,6 @@ import CoreBluetooth
 import Foundation
 import os.log
 
-// MARK: - Connection State
-
-/// Device connection state
-/// Ported from: omi/app/lib/services/devices.dart
-enum DeviceConnectionState: String, Sendable {
-    case connected
-    case disconnected
-}
-
 // MARK: - Connection Error
 
 /// Device connection errors
@@ -24,7 +15,7 @@ enum DeviceConnectionError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .alreadyConnected:
-            return "Connection already established. Disconnect before starting a new connection."
+            return "This connection session has already started"
         case .connectionFailed(let reason):
             return "Connection failed: \(reason)"
         case .notConnected:
@@ -76,6 +67,7 @@ struct AccelerometerData {
 // MARK: - Device Connection Delegate
 
 /// Delegate for device connection events
+@MainActor
 protocol DeviceConnectionDelegate: AnyObject {
     /// Called when device disconnects unexpectedly during an operation
     func deviceConnection(_ connection: DeviceConnection, didDisconnectUnexpectedly device: BtDevice)
@@ -88,6 +80,7 @@ protocol DeviceConnectionDelegate: AnyObject {
 
 /// Abstract protocol for device connections
 /// Ported from: omi/app/lib/services/devices/device_connection.dart
+@MainActor
 protocol DeviceConnection: AnyObject {
 
     // MARK: - Properties
@@ -98,11 +91,8 @@ protocol DeviceConnection: AnyObject {
     /// The underlying transport
     var transport: DeviceTransport { get }
 
-    /// Current connection state
-    var connectionState: DeviceConnectionState { get }
-
-    /// Publisher for connection state changes
-    var connectionStatePublisher: AnyPublisher<DeviceConnectionState, Never> { get }
+    /// Generation assigned by the canonical device-session coordinator.
+    var sessionGeneration: UInt64 { get }
 
     /// Last successful ping time
     var lastPongAt: Date? { get }
@@ -112,9 +102,6 @@ protocol DeviceConnection: AnyObject {
 
     /// Delegate for connection events
     var delegate: DeviceConnectionDelegate? { get set }
-
-    /// Alias for connectionState (Flutter compatibility)
-    var status: DeviceConnectionState { get }
 
     // MARK: - Connection Lifecycle
 
@@ -233,19 +220,15 @@ protocol DeviceConnection: AnyObject {
 
 /// Base class providing common device connection functionality
 /// Subclasses implement device-specific behavior
+@MainActor
 class BaseDeviceConnection: DeviceConnection {
 
     // MARK: - Properties
 
     var device: BtDevice
     let transport: DeviceTransport
-
-    private(set) var connectionState: DeviceConnectionState = .disconnected
-    private let connectionStateSubject = PassthroughSubject<DeviceConnectionState, Never>()
-
-    var connectionStatePublisher: AnyPublisher<DeviceConnectionState, Never> {
-        connectionStateSubject.eraseToAnyPublisher()
-    }
+    var sessionGeneration: UInt64 { transport.sessionGeneration }
+    let operationClock: any DeviceOperationClock
 
     private(set) var lastPongAt: Date?
     private(set) var cachedFeatures: OmiFeatures?
@@ -253,22 +236,28 @@ class BaseDeviceConnection: DeviceConnection {
     /// Delegate for connection events
     weak var delegate: DeviceConnectionDelegate?
 
-    /// Alias for connectionState (Flutter compatibility)
-    var status: DeviceConnectionState { connectionState }
-
     private var transportStateSubscription: AnyCancellable?
+    private var isReadyForCallbacks = false
+    private var didStartLifecycle = false
+    private var teardownTask: Task<Void, Never>?
     private let logger = Logger(subsystem: "me.omi.desktop", category: "DeviceConnection")
 
     // MARK: - Initialization
 
-    init(device: BtDevice, transport: DeviceTransport) {
+    init(
+        device: BtDevice,
+        transport: DeviceTransport,
+        operationClock: any DeviceOperationClock = ContinuousDeviceOperationClock()
+    ) {
         self.device = device
         self.transport = transport
+        self.operationClock = operationClock
 
-        // Listen to transport state changes
         transportStateSubscription = transport.connectionStatePublisher
             .sink { [weak self] transportState in
-                self?.handleTransportStateChange(transportState)
+                Task { @MainActor in
+                    self?.handleTransportStateChange(transportState)
+                }
             }
     }
 
@@ -277,61 +266,120 @@ class BaseDeviceConnection: DeviceConnection {
     }
 
     private func handleTransportStateChange(_ transportState: DeviceTransportState) {
-        let newState: DeviceConnectionState = transportState == .connected ? .connected : .disconnected
+        guard transportState == .disconnected,
+              isReadyForCallbacks,
+              teardownTask == nil else { return }
 
-        if connectionState != newState {
-            connectionState = newState
-            connectionStateSubject.send(newState)
-        }
+        beginTeardown(notifyUnexpectedDisconnect: true)
     }
 
     // MARK: - Connection Lifecycle
 
-    func unpair() async {
-        // Clear any cached pairing information
+    final func unpair() async {
         cachedFeatures = nil
         lastPongAt = nil
-
-        // Disconnect if connected
-        if await isConnected() {
-            await disconnect()
-        }
-
+        await beginTeardown(
+            notifyUnexpectedDisconnect: false,
+            performUnpair: true
+        ).value
         logger.info("Device unpaired: \(self.device.displayName)")
     }
 
-    func connect() async throws {
-        guard connectionState != .connected else {
+    final func connect() async throws {
+        guard !didStartLifecycle, teardownTask == nil else {
             throw DeviceConnectionError.alreadyConnected
         }
+        didStartLifecycle = true
 
         do {
             try await transport.connect()
+            try await ensureLifecycleIsActive()
 
             // Verify connection with ping
             let pingSuccess = await ping()
+            try await ensureLifecycleIsActive()
             if !pingSuccess {
                 logger.warning("Ping failed after connection, but continuing")
             }
 
             // Update device info
             await updateDeviceInfo()
-
-            connectionState = .connected
-            connectionStateSubject.send(.connected)
-
+            try await ensureLifecycleIsActive()
+            try await prepareDeviceAfterConnect()
+            try await ensureLifecycleIsActive()
+            isReadyForCallbacks = true
         } catch {
-            throw DeviceConnectionError.connectionFailed(error.localizedDescription)
+            await beginTeardown(notifyUnexpectedDisconnect: false).value
+            throw normalizedConnectionError(error)
         }
     }
 
-    func disconnect() async {
-        connectionState = .disconnected
-        connectionStateSubject.send(.disconnected)
+    final func disconnect() async {
+        await beginTeardown(notifyUnexpectedDisconnect: false).value
+    }
 
-        await transport.disconnect()
-        transportStateSubscription?.cancel()
-        transportStateSubscription = nil
+    /// Starts the session's single teardown operation or joins the one already in flight.
+    /// Keeping the task as the lifecycle boundary prevents an explicit disconnect from
+    /// returning while unexpected-disconnect cleanup is still draining the transport.
+    @discardableResult
+    private func beginTeardown(
+        notifyUnexpectedDisconnect: Bool,
+        performUnpair: Bool = false
+    ) -> Task<Void, Never> {
+        if let teardownTask {
+            return teardownTask
+        }
+
+        isReadyForCallbacks = false
+        let task = Task { @MainActor [self] in
+            if performUnpair {
+                await performDeviceUnpair()
+            }
+            await teardownDevice()
+            await transport.dispose()
+
+            if notifyUnexpectedDisconnect {
+                delegate?.deviceConnection(
+                    self,
+                    didDisconnectUnexpectedly: device
+                )
+            }
+        }
+        teardownTask = task
+        return task
+    }
+
+    /// Device-specific setup after the transport and shared metadata are ready.
+    /// The base lifecycle calls this exactly once per session generation.
+    func prepareDeviceAfterConnect() async throws {}
+
+    /// Device-specific cleanup before the transport is disposed.
+    /// The base lifecycle calls this at most once per session generation.
+    func teardownDevice() async {}
+
+    /// Optional device-side unpair command, invoked before teardown.
+    func performDeviceUnpair() async {}
+
+    private func ensureLifecycleIsActive() async throws {
+        guard teardownTask == nil else {
+            throw DeviceConnectionError.operationFailed("Connection was cancelled")
+        }
+        guard await transport.isConnected() else {
+            throw DeviceConnectionError.connectionFailed(
+                "Device disconnected during connection setup"
+            )
+        }
+    }
+
+    private func normalizedConnectionError(_ error: Error) -> DeviceConnectionError {
+        if let connectionError = error as? DeviceConnectionError {
+            return connectionError
+        }
+        if let transportError = error as? DeviceTransportError,
+           case .connectionFailed(let reason) = transportError {
+            return .connectionFailed(reason)
+        }
+        return .connectionFailed(error.localizedDescription)
     }
 
     func isConnected() async -> Bool {
@@ -410,7 +458,7 @@ class BaseDeviceConnection: DeviceConnection {
         )
 
         return AsyncThrowingStream { continuation in
-            Task {
+            let forwardingTask = Task {
                 do {
                     for try await data in stream {
                         if !data.isEmpty {
@@ -421,6 +469,9 @@ class BaseDeviceConnection: DeviceConnection {
                 } catch {
                     continuation.finish(throwing: error)
                 }
+            }
+            continuation.onTermination = { @Sendable _ in
+                forwardingTask.cancel()
             }
         }
     }
@@ -482,7 +533,7 @@ class BaseDeviceConnection: DeviceConnection {
         )
 
         return AsyncThrowingStream { continuation in
-            Task {
+            let forwardingTask = Task {
                 do {
                     for try await data in stream {
                         continuation.yield(Array(data))
@@ -491,6 +542,9 @@ class BaseDeviceConnection: DeviceConnection {
                 } catch {
                     continuation.finish(throwing: error)
                 }
+            }
+            continuation.onTermination = { @Sendable _ in
+                forwardingTask.cancel()
             }
         }
     }
@@ -581,7 +635,7 @@ class BaseDeviceConnection: DeviceConnection {
         )
 
         return AsyncThrowingStream { [weak self] continuation in
-            Task { [weak self] in
+            let forwardingTask = Task { [weak self] in
                 guard let self = self else {
                     continuation.finish()
                     return
@@ -637,6 +691,9 @@ class BaseDeviceConnection: DeviceConnection {
                 } catch {
                     continuation.finish(throwing: error)
                 }
+            }
+            continuation.onTermination = { @Sendable _ in
+                forwardingTask.cancel()
             }
         }
     }
@@ -723,10 +780,4 @@ class BaseDeviceConnection: DeviceConnection {
         AsyncThrowingStream { $0.finish() }
     }
 
-    // MARK: - Helper Methods
-
-    /// Notify delegate of unexpected disconnection
-    func notifyUnexpectedDisconnection() {
-        delegate?.deviceConnection(self, didDisconnectUnexpectedly: device)
-    }
 }

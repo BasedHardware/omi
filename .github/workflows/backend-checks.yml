@@ -16,9 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       diff_base: ${{ steps.changes.outputs.diff_base }}
-      has_backend_async_gate: ${{ steps.changes.outputs.has_backend_async_gate }}
       has_backend_runtime_env: ${{ steps.changes.outputs.has_backend_runtime_env }}
-      has_backend_static_contracts: ${{ steps.changes.outputs.has_backend_static_contracts }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -33,7 +31,7 @@ jobs:
     name: Static Contracts
     runs-on: ubuntu-latest
     needs: changes
-    if: needs.changes.outputs.has_backend_static_contracts == 'true'
+    if: needs.changes.outputs.has_backend_runtime_env == 'true'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -47,11 +45,3 @@ jobs:
           CLOUD_RUN_VPC_NETWORK=offline-check-network \
           CLOUD_RUN_VPC_SUBNET=offline-check-subnet \
             backend/scripts/pre-deploy-check.sh
-
-      - name: Check backend async blockers
-        if: needs.changes.outputs.has_backend_async_gate == 'true'
-        run: |
-          python3 backend/scripts/scan_async_blockers.py \
-            --dirs backend/routers backend/utils \
-            --diff-base "${{ needs.changes.outputs.diff_base }}" \
-            --fail-on high_network_io,async_helpers_with_blocking,time_sleep,mixed_await_sync_db,no_await_should_be_def

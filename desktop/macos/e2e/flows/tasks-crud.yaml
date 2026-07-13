@@ -1,0 +1,70 @@
+version: 2
+name: tasks-crud
+tier: 2
+description: Hermetic task create, toggle, dump, and delete via bridge actions
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift
+  - desktop/macos/Desktop/Sources/Services/LocalMutationAuthorization.swift
+  - desktop/macos/Desktop/Sources/Stores/APIClient+Tasks.swift
+  - desktop/macos/Desktop/Sources/Stores/TasksStore.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Navigate to Tasks
+    bridge.navigate:
+      target: tasks
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 4
+
+  - id: S2
+    name: Create hermetic task
+    bridge.action:
+      name: create_task
+      params:
+        description: "[[MARKER:tasks-crud]] harness task"
+    expect:
+      result.detail.synced: "true"
+
+  - id: S3
+    name: Dump tasks
+    bridge.action:
+      name: dump_tasks
+    expect:
+      result.detail.count: { min: 1 }
+
+  - id: S4
+    name: Toggle task by marker description
+    bridge.action:
+      name: toggle_task
+      params:
+        description: "[[MARKER:tasks-crud]] harness task"
+    expect:
+      result.detail.completed: "true"
+
+  - id: S5
+    name: Delete task by marker description
+    bridge.action:
+      name: delete_task
+      params:
+        description: "[[MARKER:tasks-crud]] harness task"
+    expect:
+      result.detail.deleted: "true"
+
+  - id: S6
+    name: Verify task removed (dump absence)
+    bridge.action:
+      name: dump_tasks
+      params:
+        marker: "[[MARKER:tasks-crud]]"
+    expect:
+      result.detail.marker_absent: "true"
+
+  - id: S7
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

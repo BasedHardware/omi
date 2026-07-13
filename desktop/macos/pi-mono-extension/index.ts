@@ -26,8 +26,8 @@ import {
   type ToolCallEvent,
   type ToolCallEventResult,
   type ToolResultEvent,
-} from "@mariozechner/pi-coding-agent";
-import { Type } from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-coding-agent";
+import { Type } from "@earendil-works/pi-ai";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createConnection, type Socket } from "node:net";
@@ -484,10 +484,8 @@ async function callSwiftTool(name: string, input: Record<string, unknown>, signa
   if (!connection) return Promise.resolve("Error: not connected to Omi bridge");
   if (signal?.aborted) return Promise.resolve("Error: tool call aborted");
   const callId = `omi-ext-${++omiCallIdCounter}-${Date.now()}`;
-  const correlation = await omiRelayCorrelation();
-  if (correlation.disableSwiftBackedTools === true) {
-    return Promise.resolve("Error: Swift-backed Omi tools are disabled for this control-created run");
-  }
+  const capabilityRef = await omiRelayCapabilityRef();
+  if (!capabilityRef) return Promise.resolve("Error: missing active Omi run capability for tool relay");
   if (signal?.aborted) return Promise.resolve("Error: tool call aborted");
   if (omiPipeConnection !== connection) return Promise.resolve("Error: Omi bridge disconnected");
   return new Promise<string>((resolve) => {
@@ -512,50 +510,25 @@ async function callSwiftTool(name: string, input: Record<string, unknown>, signa
     connection.write(JSON.stringify({
       type: "tool_use",
       callId,
+      invocationId: callId,
       name,
       input,
-      ...correlation,
+      protocolVersion: 2,
+      capabilityRef,
     }) + "\n");
   });
 }
 
-async function omiRelayCorrelation(): Promise<Record<string, string | number | boolean>> {
-  const correlation: Record<string, string | number | boolean> = {};
-  if (process.env.OMI_ADAPTER_ID) correlation.adapterId = process.env.OMI_ADAPTER_ID;
-  if (process.env.OMI_REQUEST_ID) correlation.requestId = process.env.OMI_REQUEST_ID;
-  if (process.env.OMI_CLIENT_ID) correlation.clientId = process.env.OMI_CLIENT_ID;
-  if (process.env.OMI_SESSION_ID) correlation.sessionId = process.env.OMI_SESSION_ID;
-  if (process.env.OMI_RUN_ID) correlation.runId = process.env.OMI_RUN_ID;
-  if (process.env.OMI_ATTEMPT_ID) correlation.attemptId = process.env.OMI_ATTEMPT_ID;
-  if (process.env.OMI_ADAPTER_SESSION_ID) correlation.adapterSessionId = process.env.OMI_ADAPTER_SESSION_ID;
-  correlation.protocolVersion = 2;
-  Object.assign(correlation, await omiContextFileCorrelation());
-  return correlation;
-}
-
-async function omiContextFileCorrelation(): Promise<Record<string, string | number | boolean>> {
+async function omiRelayCapabilityRef(): Promise<string | undefined> {
   const path = process.env.OMI_CONTEXT_FILE;
-  if (!path) return {};
+  if (!path) return undefined;
   try {
     const parsed = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
-    const correlation: Record<string, string | number | boolean> = {};
-    for (const key of [
-      "adapterId",
-      "requestId",
-      "clientId",
-      "sessionId",
-      "runId",
-      "attemptId",
-      "adapterSessionId",
-    ]) {
-      const value = parsed[key];
-      if (typeof value === "string" && value.length > 0) correlation[key] = value;
-    }
-    correlation.protocolVersion = 2;
-    if (parsed.disableSwiftBackedTools === true) correlation.disableSwiftBackedTools = true;
-    return correlation;
+    return typeof parsed.capabilityRef === "string" && parsed.capabilityRef.length > 0
+      ? parsed.capabilityRef
+      : undefined;
   } catch {
-    return {};
+    return undefined;
   }
 }
 
@@ -690,9 +663,16 @@ function loadSkillTool() {
   });
 }
 
-export const OMI_TOOLS = toolsForAdapter("pi-mono").map((tool) => (
-  tool.executor.kind === "nodeTool" ? loadSkillTool() : omiManifestTool(tool)
-));
+const executionRole = process.env.OMI_EXECUTION_ROLE === "leaf" ? "leaf" : "coordinator";
+const projectionContext = { executionRole } as const;
+
+export function omiToolsForExecutionRole(role: "coordinator" | "leaf") {
+  return toolsForAdapter("pi-mono", { executionRole: role }).map((tool) => (
+    tool.executor.kind === "nodeTool" ? loadSkillTool() : omiManifestTool(tool)
+  ));
+}
+
+export const OMI_TOOLS = omiToolsForExecutionRole(executionRole);
 
 async function registerOmiTools(pi: ExtensionAPI): Promise<void> {
   const pipePath = process.env.OMI_BRIDGE_PIPE;
@@ -709,7 +689,7 @@ async function registerOmiTools(pi: ExtensionAPI): Promise<void> {
   for (const tool of OMI_TOOLS) {
     pi.registerTool(tool);
   }
-  const snapshot = buildToolAvailabilitySnapshot("pi-mono");
+  const snapshot = buildToolAvailabilitySnapshot("pi-mono", projectionContext);
   if (process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH) {
     try {
       await writeFile(process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH, `${JSON.stringify(snapshot, null, 2)}\n`);
@@ -849,7 +829,7 @@ export const __connectOmiPipeForTest = connectOmiPipe;
 
 /** Test-only: call a Swift tool through the pipe relay. */
 export const __callSwiftToolForTest = callSwiftTool;
-export const __omiRelayCorrelationForTest = omiRelayCorrelation;
+export const __omiRelayCapabilityRefForTest = omiRelayCapabilityRef;
 
 /** Test-only: access to pending calls map for assertions. */
 export const __omiPendingCallsForTest = omiPendingCalls;

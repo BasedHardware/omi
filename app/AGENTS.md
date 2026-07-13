@@ -43,6 +43,12 @@ Never run `flutterfire configure` — it overwrites prod credentials. Config fil
 - iOS: `ios/Runner/PhoneCallsPlugin.swift`
 - Methods: initialize, makeCall, endCall, toggleMute, toggleSpeaker
 
+### Pigeon (Phone Mic — iOS conversation capture)
+- Contract: `lib/phone_mic_interface.dart` → `lib/gen/phone_mic_pigeon.g.dart` + `ios/Runner/PhoneMic/PhoneMicPigeon.g.swift`
+- Regenerate: `dart run pigeon --input lib/phone_mic_interface.dart`
+- iOS module: `ios/Runner/PhoneMic/` — self-healing AVAudioEngine capture (interruptions/route changes recover natively; Dart only mirrors state)
+- Dart service: `lib/services/mic/native_mic_recorder_service.dart` behind `ServiceManager.phoneMic`; chat memos/speech profile/Android stay on flutter_sound via `ServiceManager.mic`; `MicArbiter` prevents the two stacks contending
+
 ## Permission Matrix
 
 | Permission | Android | iOS | Feature |

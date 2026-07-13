@@ -9,6 +9,9 @@ class AppLocalizationsFa extends AppLocalizations {
   AppLocalizationsFa([String locale = 'fa']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'جلسه منقضی شد — دوباره وارد شوید.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -9510,4 +9513,66 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get pendantStorageAlmostFull => 'حافظه آویز تقریباً پر است — برای همگام‌سازی، برنامه را باز نگه دارید.';
+
+  @override
+  String get connectRayBanMeta => 'اتصال Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'از عینک Ray-Ban Meta خود به‌عنوان دستگاه ضبط Omi برای گفتگوها و زمینه‌ی بصری استفاده کنید. Omi برنامه‌ی Meta AI را باز می‌کند تا عینک شما را متصل کند.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'اتصال از طریق Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'اتصال را در برنامه‌ی Meta AI کامل کنید، سپس به اینجا بازگردید.';
+
+  @override
+  String get raybanMetaCheckAgain => 'بررسی دوباره';
+
+  @override
+  String get raybanMetaAllowCamera => 'اجازه‌ی دوربین روی عینک';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi از دوربین عینک شما برای افزودن عکس به گفتگوهای شما استفاده می‌کند. می‌توانید از این مرحله صرف‌نظر کنید و فقط از صدا استفاده کنید.';
+
+  @override
+  String get raybanMetaSkipForNow => 'فعلاً رد شود';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'حالت فقط صوتی Ray-Ban Meta';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'این نسخه از Omi می‌تواند از میکروفون عینک شما از طریق Bluetooth استفاده کند. ضبط عکس به نسخه‌ی توسعه‌دهنده‌ی Meta از Omi نیاز دارد.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'موسیقی روی تلفن شما هنگام استفاده از میکروفون عینک متوقف می‌شود.';
+
+  @override
+  String get raybanMetaContinue => 'ادامه';
+
+  @override
+  String get raybanMetaCapturePhoto => 'گرفتن عکس';
+
+  @override
+  String get raybanMetaPhotoRequested => 'عکس درخواست شد — در گفتگوی شما نمایش داده خواهد شد.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'میکروفون آماده است';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'ضبط تصویر آماده است';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'در حالت فقط صوتی در دسترس نیست';
+
+  @override
+  String get raybanMetaCamera => 'دوربین';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'خطا در اتصال به Ray-Ban Meta: $error';
+  }
 }

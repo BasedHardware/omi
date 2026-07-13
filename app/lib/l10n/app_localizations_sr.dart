@@ -9,6 +9,9 @@ class AppLocalizationsSr extends AppLocalizations {
   AppLocalizationsSr([String locale = 'sr']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Сесија је истекла — пријавите се поново.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -9522,4 +9525,66 @@ class AppLocalizationsSr extends AppLocalizations {
   @override
   String get pendantStorageAlmostFull =>
       'Memorija priveska je skoro puna — držite aplikaciju otvorenom radi sinhronizacije.';
+
+  @override
+  String get connectRayBanMeta => 'Повежи Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Користите Ray-Ban Meta наочаре као Omi уређај за снимање разговора и визуелног контекста. Omi ће отворити Meta AI апликацију да повеже ваше наочаре.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Повежи преко Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Завршите повезивање у Meta AI апликацији, а затим се вратите овде.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Провери поново';
+
+  @override
+  String get raybanMetaAllowCamera => 'Дозволи камеру на наочарима';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi користи камеру ваших наочара да дода фотографије вашим разговорима. Ово можете прескочити и користити само звук.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Прескочи за сада';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta режим само за звук';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Ова верзија Omi може да користи микрофон ваших наочара преко Bluetooth. Снимање фотографија захтева Meta програмерску верзију Omi.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'Музика на вашем телефону се паузира док се микрофон наочара користи.';
+
+  @override
+  String get raybanMetaContinue => 'Настави';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Направи фотографију';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Фотографија је затражена — појавиће се у вашем разговору.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Микрофон спреман';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Снимање слике спремно';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Није доступно у режиму само за звук';
+
+  @override
+  String get raybanMetaCamera => 'Камера';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Грешка при повезивању са Ray-Ban Meta: $error';
+  }
 }

@@ -19,6 +19,7 @@ from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl
 from pydantic import BaseModel
 
 import firebase_admin.auth
+from google.api_core.exceptions import FailedPrecondition
 from fastapi import APIRouter, HTTPException, Header, Request, Response, Form
 from fastapi.responses import StreamingResponse, JSONResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -73,8 +74,10 @@ from utils.mcp_memories import (
     search_default_mcp_memories_vector,
 )
 from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
+from utils.observability.api_keys import record_api_key_repairs
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
@@ -152,7 +155,9 @@ def authenticate_api_key_auth_context(authorization: Optional[str]) -> Optional[
     if not token.startswith("omi_mcp_"):
         return None
 
-    user_data = mcp_api_key_db.get_user_and_scopes_by_api_key(token)
+    auth_result = mcp_api_key_db.get_api_key_auth_result(token)
+    record_api_key_repairs(key_kind="mcp", operation="auth", repairs=auth_result.repairs, log=logger)
+    user_data = auth_result.context
     if not user_data or not user_data.get("user_id"):
         return None
     return _mcp_memory_context_from_api_key_user_data(user_data)
@@ -168,7 +173,9 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
         token = authorization[7:]
 
     if token.startswith("omi_mcp_"):
-        user_data = mcp_api_key_db.get_user_and_scopes_by_api_key(token)
+        auth_result = mcp_api_key_db.get_api_key_auth_result(token)
+        record_api_key_repairs(key_kind="mcp", operation="auth", repairs=auth_result.repairs, log=logger)
+        user_data = auth_result.context
         if not user_data or not user_data.get("user_id"):
             return None
         return MCPAuthContext(
@@ -742,6 +749,20 @@ def _raise_tool_error_from_http(exc: HTTPException) -> NoReturn:
     raise ToolExecutionError(str(exc.detail)) from exc
 
 
+def _raise_screen_activity_index_error(exc: FailedPrecondition) -> NoReturn:
+    """Turn a missing-Firestore-index failure into a typed, actionable tool error.
+
+    The app-filtered screen activity query needs a composite index (appName +
+    timestamp). Without it Firestore raises FailedPrecondition, which otherwise
+    surfaces to the MCP client as an opaque 500 (see AGENTS.md gotcha #7).
+    """
+    raise ToolExecutionError(
+        "Screen activity isn't queryable right now — its search index is still being built. "
+        "Retry in a few minutes, or narrow the request by removing the app filter.",
+        code=-32009,
+    ) from exc
+
+
 def _parse_mcp_date(value: Optional[str], field: str) -> Optional[datetime]:
     """Parse a yyyy-mm-dd MCP argument into a datetime, or None when absent."""
     if not value:
@@ -967,8 +988,11 @@ def execute_tool(
         end_date = arguments.get("end_date")
         raw_categories = arguments.get("categories", [])
         categories_list: List[Any] = cast(List[Any], raw_categories) if isinstance(raw_categories, list) else []
-        limit = arguments.get("limit", 20)
-        offset = arguments.get("offset", 0)
+        try:
+            limit = parse_mcp_int(arguments.get("limit"), "limit", default=20, minimum=1, maximum=1000)
+            offset = parse_mcp_int(arguments.get("offset"), "offset", default=0, minimum=0, maximum=100000)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
 
         # Parse dates
         start_dt = None
@@ -1098,7 +1122,10 @@ def execute_tool(
         if not query:
             raise ToolExecutionError("query is required")
 
-        limit = arguments.get("limit", 10)
+        try:
+            limit = parse_mcp_int(arguments.get("limit"), "limit", default=10, minimum=1, maximum=100)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
         start_date = arguments.get("start_date")
         end_date = arguments.get("end_date")
 
@@ -1148,7 +1175,10 @@ def execute_tool(
         query = arguments.get("query")
         if not query:
             raise ToolExecutionError("query is required")
-        limit = arguments.get("limit", 10)
+        try:
+            limit = parse_mcp_int(arguments.get("limit"), "limit", default=10, minimum=1, maximum=100)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
 
         matches = vector_db.find_similar_x_posts(user_id, query, limit=limit)
         if not matches:
@@ -1171,7 +1201,10 @@ def execute_tool(
         return {"posts": results}
 
     elif tool_name == "get_x_posts":
-        limit = arguments.get("limit", 50)
+        try:
+            limit = parse_mcp_int(arguments.get("limit"), "limit", default=50, minimum=1, maximum=200)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
         kind = arguments.get("kind")
         posts = x_posts_db.get_x_posts(user_id, limit=limit, kind=kind)
         results = [
@@ -1268,7 +1301,10 @@ def execute_tool(
         return {"success": True}
 
     elif tool_name == "get_goals":
-        include_inactive = parse_mcp_bool(arguments.get("include_inactive"), "include_inactive", default=False)
+        try:
+            include_inactive = parse_mcp_bool(arguments.get("include_inactive"), "include_inactive", default=False)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
         return {"goals": goals_db.get_all_goals(user_id, include_inactive=include_inactive)}
 
     elif tool_name == "get_chat_messages":
@@ -1287,16 +1323,25 @@ def execute_tool(
         start = _parse_mcp_date(arguments.get("start_date"), "start_date")
         end = _parse_mcp_date(arguments.get("end_date"), "end_date")
         app = arguments.get("app")
-        summary = parse_mcp_bool(arguments.get("summary"), "summary", default=False)
+        try:
+            summary = parse_mcp_bool(arguments.get("summary"), "summary", default=False)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
         if summary:
-            return screen_activity_db.get_screen_activity_summary(user_id, start_date=start, end_date=end)
+            try:
+                return screen_activity_db.get_screen_activity_summary(user_id, start_date=start, end_date=end)
+            except FailedPrecondition as e:
+                _raise_screen_activity_index_error(e)
         try:
             limit = parse_mcp_int(arguments.get("limit"), "limit", default=200, minimum=1, maximum=1000)
         except ValueError as e:
             raise ToolExecutionError(str(e), code=-32602)
-        rows = screen_activity_db.get_screen_activity(
-            user_id, start_date=start, end_date=end, app_filter=app, limit=limit
-        )
+        try:
+            rows = screen_activity_db.get_screen_activity(
+                user_id, start_date=start, end_date=end, app_filter=app, limit=limit
+            )
+        except FailedPrecondition as e:
+            _raise_screen_activity_index_error(e)
         return {"screen_activity": [clean_screen_activity_row(r) for r in rows]}
 
     elif tool_name == "get_daily_summaries":

@@ -4,7 +4,8 @@ tier: manual
 description: Apps/Integrations marketplace flow — browse apps, filter by category, search, view app details
 app: com.omi.computer-macos
 covers:
-  - desktop/Desktop/Sources/MainWindow/Pages/IntegrationsPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ManualInstallationDisclosure.swift
 preconditions:
   - auth_ready
 

@@ -108,19 +108,7 @@ struct ConversationRowView: View {
     isStarring = true
     let newStarred = !conversation.starred
 
-    do {
-      try await APIClient.shared.setConversationStarred(id: conversation.id, starred: newStarred)
-
-      // Sync to local SQLite cache so reload doesn't revert the change
-      try await TranscriptionStorage.shared.updateStarredByBackendId(
-        conversation.id, starred: newStarred)
-
-      await MainActor.run {
-        appState.setConversationStarred(conversation.id, starred: newStarred)
-      }
-    } catch {
-      log("Failed to update starred status: \(error)")
-    }
+    await appState.setConversationStarred(conversation.id, starred: newStarred)
 
     isStarring = false
   }
@@ -166,21 +154,8 @@ struct ConversationRowView: View {
     guard !isDeleting else { return }
     isDeleting = true
 
-    // Soft-delete in SQLite immediately so reload doesn't restore it
-    do {
-      try await TranscriptionStorage.shared.deleteByBackendId(conversation.id)
-    } catch {
-      log("Failed to soft-delete conversation locally: \(error)")
-    }
-
-    do {
-      try await APIClient.shared.deleteConversation(id: conversation.id)
-      await MainActor.run {
-        appState.deleteConversationLocally(conversation.id)
-      }
+    if await appState.deleteConversation(conversation.id) {
       log("Deleted conversation \(conversation.id)")
-    } catch {
-      log("Failed to delete conversation: \(error)")
     }
 
     isDeleting = false
@@ -190,20 +165,8 @@ struct ConversationRowView: View {
     guard !isUpdatingTitle, !editedTitle.isEmpty else { return }
     isUpdatingTitle = true
 
-    do {
-      try await APIClient.shared.updateConversationTitle(id: conversation.id, title: editedTitle)
-
-      // Sync to local SQLite cache so reload doesn't revert the change
-      try await TranscriptionStorage.shared.updateTitleByBackendId(
-        conversation.id, title: editedTitle)
-
-      await MainActor.run {
-        appState.updateConversationTitle(conversation.id, title: editedTitle)
-      }
-      log("Updated conversation title to: \(editedTitle)")
-    } catch {
-      log("Failed to update title: \(error)")
-    }
+    await appState.updateConversationTitle(conversation.id, title: editedTitle)
+    log("Updated conversation title to: \(editedTitle)")
 
     isUpdatingTitle = false
   }
@@ -211,14 +174,14 @@ struct ConversationRowView: View {
   // MARK: - Inline Action Buttons
 
   private var inlineActionButtons: some View {
-    HStack(spacing: 4) {
+    HStack(spacing: OmiSpacing.xxs) {
       // Edit title
       Button(action: {
         editedTitle = conversation.title
         showEditDialog = true
       }) {
         Image(systemName: "pencil")
-          .scaledFont(size: 11)
+          .scaledFont(size: OmiType.caption)
           .foregroundColor(OmiColors.textTertiary)
           .frame(width: 22, height: 22)
           .background(Circle().fill(OmiColors.backgroundRaised))
@@ -229,7 +192,7 @@ struct ConversationRowView: View {
       // Copy link
       Button(action: { Task { await copyLink() } }) {
         Image(systemName: isCopyingLink ? "arrow.triangle.2.circlepath" : "link")
-          .scaledFont(size: 11)
+          .scaledFont(size: OmiType.caption)
           .foregroundColor(OmiColors.textTertiary)
           .frame(width: 22, height: 22)
           .background(Circle().fill(OmiColors.backgroundRaised))
@@ -260,7 +223,7 @@ struct ConversationRowView: View {
           }
         } label: {
           Image(systemName: conversation.folderId != nil ? "folder.fill" : "folder")
-            .scaledFont(size: 11)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(conversation.folderId != nil ? .white : OmiColors.textTertiary)
             .frame(width: 22, height: 22)
             .background(Circle().fill(OmiColors.backgroundRaised))
@@ -273,7 +236,7 @@ struct ConversationRowView: View {
       // Delete
       Button(action: { showDeleteConfirmation = true }) {
         Image(systemName: "trash")
-          .scaledFont(size: 11)
+          .scaledFont(size: OmiType.caption)
           .foregroundColor(OmiColors.error.opacity(0.8))
           .frame(width: 22, height: 22)
           .background(Circle().fill(OmiColors.backgroundRaised))
@@ -286,26 +249,26 @@ struct ConversationRowView: View {
   // MARK: - Compact Row (single line)
 
   private var compactRowContent: some View {
-    HStack(spacing: 8) {
+    HStack(spacing: OmiSpacing.sm) {
       // Checkbox for multi-select mode
       if isMultiSelectMode {
         Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-          .scaledFont(size: 18)
-          .foregroundColor(isSelected ? OmiColors.purplePrimary : OmiColors.textTertiary)
+          .scaledFont(size: OmiType.heading)
+          .foregroundColor(isSelected ? OmiColors.accent : OmiColors.textTertiary)
       }
 
       // Emoji
       Text(conversation.structured.emoji.isEmpty ? "💬" : conversation.structured.emoji)
-        .scaledFont(size: 16)
+        .scaledFont(size: OmiType.subheading)
         .frame(width: 36, height: 36)
         .background(
-          RoundedRectangle(cornerRadius: 12, style: .continuous).fill(OmiColors.backgroundRaised))
+          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous).fill(OmiColors.backgroundRaised))
 
       // Title + metadata below
-      VStack(alignment: .leading, spacing: 3) {
-        HStack(spacing: 8) {
+      VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+        HStack(spacing: OmiSpacing.sm) {
           Text(conversation.title)
-            .scaledFont(size: 14, weight: .medium)
+            .scaledFont(size: OmiType.body, weight: .medium)
             .foregroundColor(OmiColors.textPrimary)
             .lineLimit(1)
 
@@ -320,17 +283,17 @@ struct ConversationRowView: View {
           }
         }
 
-        HStack(spacing: 6) {
+        HStack(spacing: OmiSpacing.xs) {
           Text(formattedTimestamp)
-            .scaledFont(size: 12)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textTertiary)
 
           Text("·")
-            .scaledFont(size: 12)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textQuaternary)
 
           Text(conversation.formattedDuration)
-            .scaledFont(size: 12)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textTertiary)
         }
       }
@@ -342,19 +305,19 @@ struct ConversationRowView: View {
         Task { await toggleStar() }
       }) {
         Image(systemName: conversation.starred ? "star.fill" : "star")
-          .scaledFont(size: 12)
+          .scaledFont(size: OmiType.caption)
           .foregroundColor(conversation.starred ? OmiColors.amber : OmiColors.textTertiary)
           .opacity(isStarring ? 0.5 : 1.0)
       }
       .buttonStyle(.plain)
     }
-    .padding(.horizontal, 14)
-    .padding(.vertical, 14)
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.md)
     .background(
-      RoundedRectangle(cornerRadius: 18, style: .continuous)
+      RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
         .fill(
           isSelected
-            ? OmiColors.purplePrimary.opacity(0.22)
+            ? OmiColors.accent.opacity(0.22)
             : (isHovering
               ? OmiColors.backgroundRaised
               : (isNewlyCreated
@@ -362,9 +325,9 @@ struct ConversationRowView: View {
         )
     )
     .overlay(
-      RoundedRectangle(cornerRadius: 18, style: .continuous)
+      RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
         .stroke(
-          isSelected ? OmiColors.purplePrimary.opacity(0.4) : OmiColors.border.opacity(0.14),
+          isSelected ? OmiColors.accent.opacity(0.4) : OmiColors.border.opacity(0.14),
           lineWidth: 1)
     )
     .contentShape(Rectangle())
@@ -373,26 +336,26 @@ struct ConversationRowView: View {
   // MARK: - Expanded Row (title + time/duration)
 
   private var expandedRowContent: some View {
-    HStack(spacing: 12) {
+    HStack(spacing: OmiSpacing.md) {
       // Checkbox for multi-select mode
       if isMultiSelectMode {
         Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-          .scaledFont(size: 20)
-          .foregroundColor(isSelected ? OmiColors.purplePrimary : OmiColors.textTertiary)
+          .scaledFont(size: OmiType.heading)
+          .foregroundColor(isSelected ? OmiColors.accent : OmiColors.textTertiary)
       }
 
       // Emoji
       Text(conversation.structured.emoji.isEmpty ? "💬" : conversation.structured.emoji)
-        .scaledFont(size: 18)
+        .scaledFont(size: OmiType.heading)
         .frame(width: 40, height: 40)
         .background(
-          RoundedRectangle(cornerRadius: 14, style: .continuous).fill(OmiColors.backgroundRaised))
+          RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous).fill(OmiColors.backgroundRaised))
 
       // Title + time/duration below
-      VStack(alignment: .leading, spacing: 3) {
-        HStack(spacing: 8) {
+      VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+        HStack(spacing: OmiSpacing.sm) {
           Text(conversation.title)
-            .scaledFont(size: 15, weight: .medium)
+            .scaledFont(size: OmiType.subheading, weight: .medium)
             .foregroundColor(OmiColors.textPrimary)
             .lineLimit(1)
 
@@ -407,17 +370,17 @@ struct ConversationRowView: View {
           }
         }
 
-        HStack(spacing: 6) {
+        HStack(spacing: OmiSpacing.xs) {
           Text(formattedTimestamp)
-            .scaledFont(size: 12)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textTertiary)
 
           Text("·")
-            .scaledFont(size: 12)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textQuaternary)
 
           Text(conversation.formattedDuration)
-            .scaledFont(size: 12)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textTertiary)
         }
       }
@@ -429,18 +392,18 @@ struct ConversationRowView: View {
         Task { await toggleStar() }
       }) {
         Image(systemName: conversation.starred ? "star.fill" : "star")
-          .scaledFont(size: 14)
+          .scaledFont(size: OmiType.body)
           .foregroundColor(conversation.starred ? OmiColors.amber : OmiColors.textTertiary)
           .opacity(isStarring ? 0.5 : 1.0)
       }
       .buttonStyle(.plain)
     }
-    .padding(16)
+    .padding(OmiSpacing.lg)
     .background(
-      RoundedRectangle(cornerRadius: 20, style: .continuous)
+      RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
         .fill(
           isSelected
-            ? OmiColors.purplePrimary.opacity(0.22)
+            ? OmiColors.accent.opacity(0.22)
             : (isHovering
               ? OmiColors.backgroundRaised
               : (isNewlyCreated
@@ -448,9 +411,9 @@ struct ConversationRowView: View {
         )
     )
     .overlay(
-      RoundedRectangle(cornerRadius: 20, style: .continuous)
+      RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
         .stroke(
-          isSelected ? OmiColors.purplePrimary.opacity(0.4) : OmiColors.border.opacity(0.14),
+          isSelected ? OmiColors.accent.opacity(0.4) : OmiColors.border.opacity(0.14),
           lineWidth: 1)
     )
     .contentShape(Rectangle())
@@ -576,7 +539,7 @@ struct ConversationRowView: View {
 
 #if canImport(PreviewsMacros)
 #Preview {
-  VStack(spacing: 12) {
+  VStack(spacing: OmiSpacing.md) {
     // Preview would require mock ServerConversation
     Text("ConversationRowView Preview")
       .foregroundColor(.white)

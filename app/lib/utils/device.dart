@@ -48,12 +48,14 @@ class DeviceUtils {
   }
 
   /// Whether an Omi-type device is a DevKit board rather than the consumer
-  /// pendant. Match on `DEVKIT`, not a loose `DEV` — the consumer's default
-  /// model fallback is `'Omi Device'`.
+  /// pendant. Match on `DEVKIT`/`DEV KIT` (both spellings ship, e.g.
+  /// "Friend Dev Kit 1"), not a loose `DEV` — the consumer's default model
+  /// fallback is `'Omi Device'`.
   static bool isOmiDevKit({String? modelNumber, String? deviceName}) {
     bool matches(String? value) {
       if (value == null || value.isEmpty) return false;
-      return value.toUpperCase().contains('DEVKIT');
+      final upper = value.toUpperCase();
+      return upper.contains('DEVKIT') || upper.contains('DEV KIT');
     }
 
     return matches(modelNumber) || matches(deviceName);
@@ -110,6 +112,8 @@ class DeviceUtils {
           return Assets.images.fieldy.path;
         case DeviceType.friendPendant:
           return Assets.images.friendPendant.path;
+        case DeviceType.raybanMeta:
+          return Assets.images.raybanMeta.path;
         case DeviceType.omi:
           // For omi type, need to check model/name to distinguish between devkit and regular omi
           if (modelNumber != null && modelNumber.isNotEmpty && modelNumber.toUpperCase() != 'UNKNOWN') {

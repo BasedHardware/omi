@@ -1,5 +1,6 @@
 {
     "@@locale": "pt",
+    "sessionExpiredSignInAgain": "A sessão expirou — inicie sessão novamente.",
     "appTitle": "Omi",
     "conversationTab": "Conversa",
     "transcriptTab": "Transcrição",
@@ -3152,5 +3153,31 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "O armazenamento do pingente está quase cheio — mantenha o app aberto para sincronizar."
+    "pendantStorageAlmostFull": "O armazenamento do pingente está quase cheio — mantenha o app aberto para sincronizar.",
+    "connectRayBanMeta": "Conectar Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Use seus óculos Ray-Ban Meta como seu dispositivo de captura do Omi para conversas e contexto visual. O Omi abrirá o aplicativo Meta AI para vincular seus óculos.",
+    "raybanMetaOpenMetaAI": "Conectar pelo Meta AI",
+    "raybanMetaWaitingForMetaAI": "Conclua a conexão no aplicativo Meta AI e depois volte aqui.",
+    "raybanMetaCheckAgain": "Verificar novamente",
+    "raybanMetaAllowCamera": "Permitir câmera nos óculos",
+    "raybanMetaCameraExplanation": "O Omi usa a câmera dos seus óculos para adicionar fotos às suas conversas. Você pode pular esta etapa e usar apenas áudio.",
+    "raybanMetaSkipForNow": "Pular por enquanto",
+    "raybanMetaAudioOnlyTitle": "Modo somente áudio do Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "Esta versão do Omi pode usar o microfone dos seus óculos via Bluetooth. A captura de fotos requer a versão de desenvolvedor Meta do Omi.",
+    "raybanMetaMusicPauseNote": "A música no seu telefone é pausada enquanto o microfone dos óculos está em uso.",
+    "raybanMetaContinue": "Continuar",
+    "raybanMetaCapturePhoto": "Capturar foto",
+    "raybanMetaPhotoRequested": "Foto solicitada — ela aparecerá na sua conversa.",
+    "raybanMetaMicrophoneReady": "Microfone pronto",
+    "raybanMetaImageCaptureReady": "Captura de imagem pronta",
+    "raybanMetaImageCaptureUnavailable": "Indisponível no modo somente áudio",
+    "raybanMetaCamera": "Câmera",
+    "errorConnectingRayBanMeta": "Erro ao conectar ao Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

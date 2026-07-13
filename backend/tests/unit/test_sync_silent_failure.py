@@ -30,13 +30,13 @@ class TestProcessSegmentErrorHandling:
     """Verify process_segment has proper error handling after the fix."""
 
     @staticmethod
-    def _read_sync_source():
-        sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        return _read_text(sync_path)
+    def _read_pipeline_source():
+        pipeline_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
+        return _read_text(pipeline_path)
 
     def test_process_segment_has_try_except(self):
         """process_segment() must wrap its body in try/except to catch all errors."""
-        source = self._read_sync_source()
+        source = self._read_pipeline_source()
         start = source.index('def process_segment(')
         next_def = source.index('\ndef ', start + 1)
         func_body = source[start:next_def]
@@ -46,7 +46,7 @@ class TestProcessSegmentErrorHandling:
 
     def test_process_segment_treats_empty_words_as_success(self):
         """When Deepgram returns no words, treat it as a successful empty segment."""
-        source = self._read_sync_source()
+        source = self._read_pipeline_source()
         start = source.index('def process_segment(')
         next_def = source.index('\ndef ', start + 1)
         func_body = source[start:next_def]
@@ -58,7 +58,7 @@ class TestProcessSegmentErrorHandling:
 
     def test_process_segment_warns_on_empty_postprocessed(self):
         """When words exist but postprocessing yields nothing, log warning (not error)."""
-        source = self._read_sync_source()
+        source = self._read_pipeline_source()
         start = source.index('def process_segment(')
         next_def = source.index('\ndef ', start + 1)
         func_body = source[start:next_def]
@@ -67,7 +67,7 @@ class TestProcessSegmentErrorHandling:
 
     def test_process_segment_collects_errors_on_exception(self):
         """When an exception occurs, it must be caught and appended to errors."""
-        source = self._read_sync_source()
+        source = self._read_pipeline_source()
         start = source.index('def process_segment(')
         next_def = source.index('\ndef ', start + 1)
         func_body = source[start:next_def]
@@ -76,7 +76,7 @@ class TestProcessSegmentErrorHandling:
 
     def test_process_segment_uses_lock_for_thread_safety(self):
         """Shared state mutations must be protected by a lock."""
-        source = self._read_sync_source()
+        source = self._read_pipeline_source()
         start = source.index('def process_segment(')
         next_def = source.index('\ndef ', start + 1)
         func_body = source[start:next_def]
@@ -88,7 +88,7 @@ class TestProcessSegmentErrorHandling:
 
     def test_process_segment_accepts_lock_and_errors_params(self):
         """process_segment must accept lock and errors as parameters."""
-        source = self._read_sync_source()
+        source = self._read_pipeline_source()
         start = source.index('def process_segment(')
         sig_end = source.index('):', start) + 2
         signature = source[start:sig_end]
@@ -514,13 +514,13 @@ class TestSegmentDeduplication:
     """Verifies that retried segments are deduplicated in the merge path."""
 
     @staticmethod
-    def _read_sync_source():
-        sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        return _read_text(sync_path)
+    def _read_pipeline_source():
+        pipeline_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
+        return _read_text(pipeline_path)
 
     def test_merge_path_has_dedup_logic(self):
         """process_segment merge path must deduplicate before appending."""
-        source = self._read_sync_source()
+        source = self._read_pipeline_source()
         start = source.index('def process_segment(')
         next_def = source.index('\ndef ', start + 1)
         func_body = source[start:next_def]
@@ -533,7 +533,7 @@ class TestSegmentDeduplication:
 
     def test_dedup_uses_timestamp_rounding(self):
         """Dedup must round timestamps to avoid float precision issues."""
-        source = self._read_sync_source()
+        source = self._read_pipeline_source()
         assert 'round(' in source, "Must round timestamps for reliable comparison"
 
     def test_dedup_logic_correctness(self):
@@ -590,7 +590,7 @@ class TestSegmentDeduplication:
 
 import sys
 from types import ModuleType
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 _STUB_MODULES = [
     'models',
@@ -604,6 +604,7 @@ _STUB_MODULES = [
     'database.users',
     'database.user_usage',
     'database.conversations',
+    'database.sync_ledger',
     'firebase_admin',
     'firebase_admin.messaging',
     'opuslib',
@@ -620,6 +621,7 @@ _STUB_MODULES = [
     'utils.fair_use',
     'utils.subscription',
     'utils.cloud_tasks',
+    'utils.sync.content_id',
     'utils.conversations.process_conversation',
     'python_multipart',
     'python_multipart.multipart',
@@ -640,8 +642,9 @@ class TestProcessSegmentReal:
     def setup_class(cls):
         # Save originals
         cls._saved_modules = {name: sys.modules.get(name) for name in _STUB_MODULES}
-        # Also save routers.sync if already imported
-        cls._saved_modules['routers.sync'] = sys.modules.get('routers.sync')
+        # Also save pipeline if already imported
+        cls._saved_modules['utils.sync.pipeline'] = sys.modules.get('utils.sync.pipeline')
+        cls._saved_modules['utils.sync'] = sys.modules.get('utils.sync')
 
         # Install stubs
         for mod_name in _STUB_MODULES:
@@ -680,12 +683,29 @@ class TestProcessSegmentReal:
         sys.modules['utils.other.storage']._PRECACHE_FILE_SEM = MagicMock()
         sys.modules['utils.other.storage'].upload_syncing_temporal_file = MagicMock()
         sys.modules['utils.other.storage'].download_syncing_temporal_file = MagicMock(return_value=True)
+        sys.modules['utils.other.storage'].compute_audio_files_fingerprint = MagicMock(return_value='fp')
+        sys.modules['utils.other.storage'].enqueue_conversation_artifact_build = MagicMock()
+        sys.modules['utils.other.storage'].get_conversation_playback_signed_url = MagicMock(return_value=None)
+        sys.modules['utils.other.storage'].upload_conversation_playback_artifact = MagicMock()
+        sys.modules['utils.other.storage'].mark_conversation_playback_unavailable = MagicMock()
+        sys.modules['utils.other.storage'].get_conversation_playback_unavailable_fingerprint = MagicMock(
+            return_value=None
+        )
         sys.modules['utils.cloud_tasks'].enqueue_sync_job = MagicMock()
         sys.modules['utils.cloud_tasks'].get_sync_tasks_max_attempts = MagicMock(return_value=5)
         sys.modules['utils.cloud_tasks'].is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)
         sys.modules['utils.cloud_tasks'].is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
         sys.modules['utils.cloud_tasks'].enqueue_audio_merge_job = MagicMock()
         sys.modules['utils.cloud_tasks'].verify_cloud_tasks_oidc = MagicMock()
+        sys.modules['database.sync_ledger'].add_processed_sync_segment_id = MagicMock(return_value=True)
+        sys.modules['database.sync_ledger'].checkpoint_sync_content_partial_result = MagicMock()
+        sys.modules['database.sync_ledger'].get_processed_sync_segment_ids = MagicMock(return_value=set())
+        sys.modules['database.sync_ledger'].get_sync_content_partial_result = MagicMock(return_value=None)
+        sys.modules['database.sync_ledger'].mark_sync_content_completed = MagicMock()
+        sys.modules['database.sync_ledger'].release_sync_content_claim = MagicMock()
+        sys.modules['database.sync_ledger'].try_mark_sync_content_metered = MagicMock(return_value=True)
+        sys.modules['database.sync_ledger'].try_mark_sync_content_side_effect = MagicMock(return_value=True)
+        sys.modules['utils.sync.content_id'].compute_sync_segment_id = MagicMock(return_value='segment-id')
         sys.modules['utils.log_sanitizer'].sanitize = lambda value: value
         sys.modules['utils.encryption'].encrypt = MagicMock()
         sys.modules['utils.stt.pre_recorded'].deepgram_prerecorded = MagicMock()
@@ -747,18 +767,19 @@ class TestProcessSegmentReal:
         sys.modules['models.sync_audio'].AudioPrecacheResponse = _AudioPrecacheResponse
         sys.modules['models.sync_audio'].AudioUrlsResponse = _AudioUrlsResponse
 
-        # Import under stubs
-        from routers.sync import process_segment
-        import routers.sync as sync_mod
+        sync_pkg = ModuleType('utils.sync')
+        sync_pkg.__path__ = [os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync')]
+        sys.modules['utils.sync'] = sync_pkg
+        sys.modules.pop('utils.sync.pipeline', None)
 
-        sync_mod.submit_with_context = MagicMock()
+        # Import under stubs
+        from utils.sync.pipeline import process_segment
 
         cls._process_segment = staticmethod(process_segment)
 
     @classmethod
     def teardown_class(cls):
-        # Remove routers.sync so it can be re-imported cleanly
-        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
         # Restore original modules
         for name, orig in cls._saved_modules.items():
             if orig is None:
@@ -778,10 +799,10 @@ class TestProcessSegmentReal:
         errors = []
         lock = threading.Lock()
 
-        with patch('routers.sync.prerecorded', return_value=([], 'en')), patch(
-            'routers.sync.delete_syncing_temporal_file'
-        ), patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'), patch(
-            'routers.sync.time.sleep'
+        with patch('utils.sync.pipeline.prerecorded', return_value=([], 'en')), patch(
+            'utils.sync.pipeline.delete_syncing_temporal_file'
+        ), patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'), patch(
+            'utils.sync.pipeline.time.sleep'
         ):
             from models.conversation_enums import ConversationSource
 
@@ -803,12 +824,12 @@ class TestProcessSegmentReal:
         errors = []
         lock = threading.Lock()
 
-        with patch('routers.sync.prerecorded', return_value=([{'text': 'um'}], 'en')), patch(
-            'routers.sync.postprocess_words', return_value=[]
-        ), patch('routers.sync.delete_syncing_temporal_file'), patch(
-            'routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'
+        with patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'um'}], 'en')), patch(
+            'utils.sync.pipeline.postprocess_words', return_value=[]
+        ), patch('utils.sync.pipeline.delete_syncing_temporal_file'), patch(
+            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
         ), patch(
-            'routers.sync.time.sleep'
+            'utils.sync.pipeline.time.sleep'
         ):
             from models.conversation_enums import ConversationSource
 
@@ -826,10 +847,10 @@ class TestProcessSegmentReal:
         errors = []
         lock = threading.Lock()
 
-        with patch('routers.sync.prerecorded', side_effect=ConnectionError('timeout')), patch(
-            'routers.sync.delete_syncing_temporal_file'
-        ), patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'), patch(
-            'routers.sync.time.sleep'
+        with patch('utils.sync.pipeline.prerecorded', side_effect=ConnectionError('timeout')), patch(
+            'utils.sync.pipeline.delete_syncing_temporal_file'
+        ), patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'), patch(
+            'utils.sync.pipeline.time.sleep'
         ):
             from models.conversation_enums import ConversationSource
 
@@ -857,18 +878,18 @@ class TestProcessSegmentReal:
         mock_conv = MagicMock()
         mock_conv.id = 'conv-abc123'
 
-        with patch('routers.sync.prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
-            'routers.sync.postprocess_words', return_value=[real_segment]
-        ), patch('routers.sync.get_timestamp_from_path', return_value=1700000000.0), patch(
-            'routers.sync.get_closest_conversation_to_timestamps', return_value=None
+        with patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
+            'utils.sync.pipeline.postprocess_words', return_value=[real_segment]
+        ), patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000.0), patch(
+            'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None
         ), patch(
-            'routers.sync.process_conversation', return_value=mock_conv
+            'utils.sync.pipeline.process_conversation', return_value=mock_conv
         ), patch(
-            'routers.sync.delete_syncing_temporal_file'
+            'utils.sync.pipeline.delete_syncing_temporal_file'
         ), patch(
-            'routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'
+            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
         ), patch(
-            'routers.sync.time.sleep'
+            'utils.sync.pipeline.time.sleep'
         ):
             from models.conversation_enums import ConversationSource
 
@@ -900,18 +921,18 @@ class TestProcessSegmentReal:
         mock_conv = MagicMock()
         mock_conv.id = 'conv-success'
 
-        with patch('routers.sync.prerecorded', side_effect=mock_deepgram_mixed), patch(
-            'routers.sync.postprocess_words', return_value=[real_segment]
-        ), patch('routers.sync.get_timestamp_from_path', return_value=1700000000.0), patch(
-            'routers.sync.get_closest_conversation_to_timestamps', return_value=None
+        with patch('utils.sync.pipeline.prerecorded', side_effect=mock_deepgram_mixed), patch(
+            'utils.sync.pipeline.postprocess_words', return_value=[real_segment]
+        ), patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000.0), patch(
+            'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None
         ), patch(
-            'routers.sync.process_conversation', return_value=mock_conv
+            'utils.sync.pipeline.process_conversation', return_value=mock_conv
         ), patch(
-            'routers.sync.delete_syncing_temporal_file'
+            'utils.sync.pipeline.delete_syncing_temporal_file'
         ), patch(
-            'routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'
+            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
         ), patch(
-            'routers.sync.time.sleep'
+            'utils.sync.pipeline.time.sleep'
         ):
             from models.conversation_enums import ConversationSource
 
@@ -959,18 +980,18 @@ class TestProcessSegmentReal:
 
         existing_conv['finished_at'] = datetime.fromtimestamp(1700000005.0, tz=timezone.utc)
 
-        with patch('routers.sync.prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
-            'routers.sync.postprocess_words', return_value=[mock_segment]
-        ), patch('routers.sync.get_timestamp_from_path', return_value=1700000000.0), patch(
-            'routers.sync.get_closest_conversation_to_timestamps', return_value=existing_conv
+        with patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
+            'utils.sync.pipeline.postprocess_words', return_value=[mock_segment]
+        ), patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000.0), patch(
+            'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=existing_conv
         ), patch(
-            'routers.sync.update_conversation_segments'
+            'utils.sync.pipeline.update_conversation_segments'
         ) as mock_update, patch(
-            'routers.sync.delete_syncing_temporal_file'
+            'utils.sync.pipeline.delete_syncing_temporal_file'
         ), patch(
-            'routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'
+            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
         ), patch(
-            'routers.sync.time.sleep'
+            'utils.sync.pipeline.time.sleep'
         ):
             from models.conversation_enums import ConversationSource
 
@@ -994,10 +1015,10 @@ class TestProcessSegmentReal:
         lock = threading.Lock()
 
         # Run 3 segments that all return empty words (silence)
-        with patch('routers.sync.prerecorded', return_value=([], 'en')), patch(
-            'routers.sync.delete_syncing_temporal_file'
-        ), patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'), patch(
-            'routers.sync.time.sleep'
+        with patch('utils.sync.pipeline.prerecorded', return_value=([], 'en')), patch(
+            'utils.sync.pipeline.delete_syncing_temporal_file'
+        ), patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'), patch(
+            'utils.sync.pipeline.time.sleep'
         ):
             from models.conversation_enums import ConversationSource
 
@@ -1031,12 +1052,12 @@ class TestProcessSegmentReal:
         lock = threading.Lock()
 
         with patch(
-            'routers.sync.prerecorded',
+            'utils.sync.pipeline.prerecorded',
             side_effect=RuntimeError('Deepgram transcription failed after 2 attempts: timeout'),
-        ), patch('routers.sync.delete_syncing_temporal_file'), patch(
-            'routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'
+        ), patch('utils.sync.pipeline.delete_syncing_temporal_file'), patch(
+            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
         ), patch(
-            'routers.sync.time.sleep'
+            'utils.sync.pipeline.time.sleep'
         ):
             from models.conversation_enums import ConversationSource
 
@@ -1122,6 +1143,7 @@ class TestVoiceMessageRuntimeErrorHandling:
         sys.modules['utils.other.storage'].is_playback_unavailable = MagicMock(return_value=False)
         sys.modules['utils.other.storage'].mark_playback_unavailable = MagicMock()
         sys.modules['utils.notifications'].send_notification = MagicMock()
+        sys.modules['utils.notifications'].send_notification_async = AsyncMock()
         sys.modules['utils.retrieval.graph'].execute_graph_chat = MagicMock()
         sys.modules['utils.retrieval.graph'].execute_graph_chat_stream = MagicMock()
         sys.modules['utils.log_sanitizer'].sanitize = lambda v: v
@@ -1152,6 +1174,9 @@ class TestVoiceMessageRuntimeErrorHandling:
         sys.modules['models.transcript_segment'].TranscriptSegment = MagicMock()
 
         # STT stubs
+        sys.modules['utils.stt.pre_recorded'].PrerecordedSTTConfigurationError = type(
+            'PrerecordedSTTConfigurationError', (RuntimeError,), {}
+        )
         sys.modules['utils.stt.pre_recorded'].prerecorded = MagicMock()
         sys.modules['utils.stt.pre_recorded'].prerecorded_from_bytes = MagicMock()
         sys.modules['utils.stt.pre_recorded'].postprocess_words = MagicMock()

@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 import { AgentRuntimeKernel } from "../src/runtime/kernel.js";
 import { AdapterRegistry } from "../src/runtime/adapter-registry.js";
-import { importLegacyMainChatSessions, mergeFloatingChatIntoMainChat, resolveSurfaceSession } from "../src/runtime/surface-session.js";
+import { importLegacyMainChatSessions, resolveSurfaceSession } from "../src/runtime/surface-session.js";
+import { listJournalTurns, recordJournalTurn } from "../src/runtime/conversation-journal.js";
 
 function newStore(): SqliteAgentStore {
   const dir = mkdtempSync(join(tmpdir(), "omi-surface-session-"));
@@ -60,6 +61,39 @@ describe("surface_conversations", () => {
     expect(store.allRows("SELECT * FROM surface_conversations")).toHaveLength(1);
   });
 
+  it("pins an explicit creation profile atomically and ignores later selections", () => {
+    const surfaceRef = {
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "directed-provider",
+    };
+    const created = resolveSurfaceSession(store, {
+      ownerId: "owner-a",
+      surfaceRef,
+      defaultAdapterId: "acp",
+      modelProfile: "created-model",
+      defaultCwd: "/tmp/created",
+    }, () => 1);
+    const existing = resolveSurfaceSession(store, {
+      ownerId: "owner-a",
+      surfaceRef,
+      defaultAdapterId: "pi-mono",
+      modelProfile: "must-not-apply",
+      defaultCwd: "/tmp/must-not-apply",
+    }, () => 2);
+
+    expect(existing.agentSessionId).toBe(created.agentSessionId);
+    expect(store.getRow(
+      `SELECT adapter_id, model_profile, working_directory
+       FROM session_execution_profiles WHERE session_id = ? AND generation = 1`,
+      [created.agentSessionId],
+    )).toEqual({
+      adapter_id: "acp",
+      model_profile: "created-model",
+      working_directory: "/tmp/created",
+    });
+  });
+
   it("isolates surfaces per owner", () => {
     const ownerA = resolveSurfaceSession(
       store,
@@ -87,6 +121,79 @@ describe("surface_conversations", () => {
     );
 
     expect(ownerA.agentSessionId).not.toBe(ownerB.agentSessionId);
+  });
+
+  it("shares one canonical session and conversation when realtime voice resolves before main chat", () => {
+    const voice = resolveSurfaceSession(store, {
+      ownerId: "owner-a",
+      surfaceRef: { surfaceKind: "realtime_voice", externalRefKind: "chat", externalRefId: "default" },
+      defaultAdapterId: "acp",
+    }, () => 1);
+    const main = resolveSurfaceSession(store, {
+      ownerId: "owner-a",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "default" },
+      defaultAdapterId: "pi-mono",
+    }, () => 2);
+
+    expect(main).toEqual(voice);
+    expect(store.allRows(
+      `SELECT surface_kind, conversation_id, agent_session_id
+       FROM surface_conversations ORDER BY surface_kind ASC`,
+    )).toEqual([
+      { surface_kind: "main_chat", conversation_id: voice.conversationId, agent_session_id: voice.agentSessionId },
+      { surface_kind: "realtime_voice", conversation_id: voice.conversationId, agent_session_id: voice.agentSessionId },
+    ]);
+  });
+
+  it("shares main, floating, and realtime aliases while preserving task/workstream boundaries", () => {
+    const main = resolveSurfaceSession(store, {
+      ownerId: "owner-a",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "default" },
+    }, () => 1);
+    const floating = resolveSurfaceSession(store, {
+      ownerId: "owner-a",
+      surfaceRef: { surfaceKind: "floating_chat", externalRefKind: "chat", externalRefId: "default" },
+    }, () => 2);
+    const voice = resolveSurfaceSession(store, {
+      ownerId: "owner-a",
+      surfaceRef: { surfaceKind: "realtime_voice", externalRefKind: "chat", externalRefId: "default" },
+    }, () => 3);
+    const task = resolveSurfaceSession(store, {
+      ownerId: "owner-a",
+      surfaceRef: { surfaceKind: "task_chat", externalRefKind: "task", externalRefId: "default" },
+    }, () => 4);
+    const workstream = resolveSurfaceSession(store, {
+      ownerId: "owner-a",
+      surfaceRef: { surfaceKind: "workstream", externalRefKind: "workstream", externalRefId: "default" },
+    }, () => 5);
+
+    expect(floating).toEqual(main);
+    expect(voice).toEqual(main);
+    expect(task.conversationId).not.toBe(main.conversationId);
+    expect(workstream.conversationId).not.toBe(main.conversationId);
+    expect(task.agentSessionId).not.toBe(main.agentSessionId);
+    expect(workstream.agentSessionId).not.toBe(main.agentSessionId);
+
+    recordJournalTurn(store, {
+      ownerId: "owner-a",
+      conversationId: voice.conversationId,
+      turnId: "voice-visible-everywhere",
+      role: "user",
+      surfaceKind: "realtime_voice",
+      origin: "realtime_voice",
+      status: "completed",
+      content: "Shared voice turn",
+      contentBlocks: [{ type: "text", id: "voice:text", text: "Shared voice turn" }],
+      createdAtMs: 10,
+    });
+    expect(listJournalTurns(store, {
+      ownerId: "owner-a",
+      conversationId: main.conversationId,
+    }).turns).toEqual([expect.objectContaining({ turnId: "voice-visible-everywhere" })]);
+    expect(listJournalTurns(store, {
+      ownerId: "owner-a",
+      conversationId: task.conversationId,
+    }).turns).toEqual([]);
   });
 
   it("links orphan sessions by external ref instead of violating uniqueness", () => {
@@ -133,7 +240,10 @@ describe("surface_conversations", () => {
       },
       () => 1,
     );
-    expect(imported).toBe(1);
+    expect(imported).toEqual({
+      acceptedEntries: [{ chatId: "default", agentSessionId: "ses_legacy_other" }],
+      importedCount: 1,
+    });
 
     const row = store.getRow(
       `SELECT conversation_id, agent_session_id FROM surface_conversations
@@ -153,7 +263,22 @@ describe("surface_conversations", () => {
       },
       () => 1,
     );
-    expect(imported).toBe(1);
+    expect(imported).toEqual({
+      acceptedEntries: [{ chatId: "default", agentSessionId: "ses_legacy_1" }],
+      importedCount: 1,
+    });
+
+    expect(importLegacyMainChatSessions(
+      store,
+      {
+        ownerId: "owner-a",
+        entries: [{ chatId: "default", agentSessionId: "ses_legacy_1" }],
+      },
+      () => 2,
+    )).toEqual({
+      acceptedEntries: [{ chatId: "default", agentSessionId: "ses_legacy_1" }],
+      importedCount: 0,
+    });
 
     const resolved = resolveSurfaceSession(
       store,
@@ -168,6 +293,100 @@ describe("surface_conversations", () => {
       () => 2,
     );
     expect(resolved.agentSessionId).toBe("ses_legacy_1");
+  });
+
+  it("rejects an invalid legacy alias batch atomically instead of acknowledging partial import", () => {
+    expect(() => importLegacyMainChatSessions(
+      store,
+      {
+        ownerId: "owner-a",
+        entries: [
+          { chatId: "default", agentSessionId: "ses_valid" },
+          { chatId: "other", agentSessionId: "   " },
+        ],
+      },
+      () => 1,
+    )).toThrow("invalid_legacy_main_chat_session_entry");
+    expect(store.allRows("SELECT * FROM surface_conversations")).toEqual([]);
+    expect(store.allRows("SELECT * FROM sessions")).toEqual([]);
+  });
+
+  it("does not rewrite an imported session profile during surface resolution", () => {
+    importLegacyMainChatSessions(
+      store,
+      {
+        ownerId: "owner-a",
+        entries: [{ chatId: "default", agentSessionId: "ses_legacy_1" }],
+      },
+      () => 1,
+    );
+
+    const resolved = resolveSurfaceSession(
+      store,
+      {
+        ownerId: "owner-a",
+        surfaceRef: {
+          surfaceKind: "main_chat",
+          externalRefKind: "chat",
+          externalRefId: "default",
+        },
+        defaultAdapterId: "pi-mono",
+      },
+      () => 2,
+    );
+
+    expect(resolved.agentSessionId).toBe("ses_legacy_1");
+    const session = store.getRow(
+      "SELECT default_adapter_id, provider_boundary FROM sessions WHERE session_id = ?",
+      [resolved.agentSessionId],
+    );
+    expect(String(session.default_adapter_id)).toBe("acp");
+    expect(String(session.provider_boundary)).toBe("local_user:acp");
+  });
+
+  it("does not rewrite a main-chat provider boundary after execution starts", () => {
+    const resolved = resolveSurfaceSession(
+      store,
+      {
+        ownerId: "owner-a",
+        surfaceRef: {
+          surfaceKind: "main_chat",
+          externalRefKind: "chat",
+          externalRefId: "default",
+        },
+        defaultAdapterId: "acp",
+      },
+      () => 1,
+    );
+    store.insertRun({
+      sessionId: resolved.agentSessionId,
+      clientId: "client-a",
+      requestId: "request-a",
+      status: "queued",
+      mode: "ask",
+      inputJson: "{}",
+    });
+
+    resolveSurfaceSession(
+      store,
+      {
+        ownerId: "owner-a",
+        surfaceRef: {
+          surfaceKind: "main_chat",
+          externalRefKind: "chat",
+          externalRefId: "default",
+        },
+        defaultAdapterId: "pi-mono",
+      },
+      () => 2,
+    );
+
+    const session = store.getRow(
+      "SELECT default_adapter_id, provider_boundary FROM sessions WHERE session_id = ?",
+      [resolved.agentSessionId],
+    );
+    expect(String(session.default_adapter_id)).toBe("acp");
+    expect(String(session.provider_boundary)).toBe("local_user:acp");
   });
 
   it("imports legacy sessions with distinct conversationId from agentSessionId", () => {
@@ -227,66 +446,4 @@ describe("surface_conversations", () => {
     expect(store.allRows("SELECT * FROM surface_conversations")).toHaveLength(1);
   });
 
-  it("mergeFloatingChatIntoMainChat copies turns into main_chat and removes floating mapping", () => {
-    const floating = resolveSurfaceSession(
-      store,
-      {
-        ownerId: "owner-a",
-        surfaceRef: {
-          surfaceKind: "floating_chat",
-          externalRefKind: "chat",
-          externalRefId: "default",
-        },
-      },
-      () => 1,
-    );
-    store.insertConversationTurn({
-      conversationId: floating.conversationId,
-      role: "user",
-      surfaceKind: "floating_chat",
-      content: "typed in floating bar",
-      createdAtMs: 10,
-      metadataJson: "{}",
-    });
-    store.insertConversationTurn({
-      conversationId: floating.conversationId,
-      role: "assistant",
-      surfaceKind: "floating_chat",
-      content: "floating reply",
-      createdAtMs: 11,
-      metadataJson: "{}",
-    });
-
-    const result = mergeFloatingChatIntoMainChat(store, { ownerId: "owner-a", chatId: "default" }, () => 20);
-    expect(result.mergedTurns).toBe(2);
-    expect(result.removedFloatingMapping).toBe(true);
-
-    const main = resolveSurfaceSession(
-      store,
-      {
-        ownerId: "owner-a",
-        surfaceRef: {
-          surfaceKind: "main_chat",
-          externalRefKind: "chat",
-          externalRefId: "default",
-        },
-      },
-      () => 21,
-    );
-    const mainTurns = store.allRows(
-      "SELECT role, content FROM conversation_turns WHERE conversation_id = ? ORDER BY created_at_ms ASC",
-      [main.conversationId],
-    );
-    expect(mainTurns).toEqual([
-      { role: "user", content: "typed in floating bar" },
-      { role: "assistant", content: "floating reply" },
-    ]);
-    expect(
-      store.getOptionalRow(
-        `SELECT conversation_id FROM surface_conversations
-         WHERE owner_id = ? AND surface_kind = ?`,
-        ["owner-a", "floating_chat"],
-      ),
-    ).toBeUndefined();
-  });
 });

@@ -9,6 +9,9 @@ class AppLocalizationsHe extends AppLocalizations {
   AppLocalizationsHe([String locale = 'he']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'ההפעלה פגה — יש להתחבר שוב.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -9436,4 +9439,66 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get pendantStorageAlmostFull => 'אחסון התליון כמעט מלא — השאר את האפליקציה פתוחה כדי לסנכרן.';
+
+  @override
+  String get connectRayBanMeta => 'חבר את Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'השתמש במשקפי Ray-Ban Meta שלך כמכשיר הלכידה של Omi עבור שיחות והקשר חזותי. Omi יפתח את אפליקציית Meta AI כדי לקשר את המשקפיים שלך.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'התחבר דרך Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'סיים את ההתחברות באפליקציית Meta AI, ואז חזור לכאן.';
+
+  @override
+  String get raybanMetaCheckAgain => 'בדוק שוב';
+
+  @override
+  String get raybanMetaAllowCamera => 'אפשר מצלמה במשקפיים';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi משתמש במצלמת המשקפיים שלך כדי להוסיף תמונות לשיחות שלך. אפשר לדלג על כך ולהשתמש בשמע בלבד.';
+
+  @override
+  String get raybanMetaSkipForNow => 'דלג לעת עתה';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'מצב שמע בלבד של Ray-Ban Meta';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'גרסה זו של Omi יכולה להשתמש במיקרופון המשקפיים שלך באמצעות Bluetooth. לכידת תמונות דורשת את גרסת המפתחים של Meta עבור Omi.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'המוזיקה בטלפון שלך מושהית בזמן השימוש במיקרופון המשקפיים.';
+
+  @override
+  String get raybanMetaContinue => 'המשך';
+
+  @override
+  String get raybanMetaCapturePhoto => 'צלם תמונה';
+
+  @override
+  String get raybanMetaPhotoRequested => 'התמונה התבקשה — היא תופיע בשיחה שלך.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'המיקרופון מוכן';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'לכידת תמונה מוכנה';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'לא זמין במצב שמע בלבד';
+
+  @override
+  String get raybanMetaCamera => 'מצלמה';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'שגיאה בהתחברות ל-Ray-Ban Meta: $error';
+  }
 }

@@ -103,76 +103,6 @@ extension AppState {
     }
   }
 
-  /// Trigger screen recording permission prompt
-  func triggerScreenRecordingPermission() {
-    // Request both traditional TCC and ScreenCaptureKit permissions
-    ScreenCaptureService.requestAllScreenCapturePermissions()
-  }
-
-  /// Trigger automation permission by attempting to use Apple Events
-  nonisolated func triggerAutomationPermission() {
-    // Run a simple AppleScript to trigger the permission prompt
-    // This must be done on a background thread since it's nonisolated
-    Task.detached {
-      // First, ensure System Events is running — without it, the TCC prompt won't appear
-      // and checkAutomationPermission returns -600 (procNotFound)
-      let launchScript = NSAppleScript(
-        source: """
-              launch application "System Events"
-          """)
-      var launchError: NSDictionary?
-      launchScript?.executeAndReturnError(&launchError)
-      if let launchError = launchError {
-        log("AUTOMATION_TRIGGER: Failed to launch System Events: \(launchError)")
-      } else {
-        log("AUTOMATION_TRIGGER: System Events launched successfully")
-      }
-
-      // Small delay to let System Events initialize
-      try? await Task.sleep(nanoseconds: 500_000_000)
-
-      // Now trigger the actual TCC prompt
-      let script = NSAppleScript(
-        source: """
-              tell application "System Events"
-                  return name of first process whose frontmost is true
-              end tell
-          """)
-      var error: NSDictionary?
-      script?.executeAndReturnError(&error)
-
-      if let error = error {
-        let errorNum = error[NSAppleScript.errorNumber] as? Int ?? 0
-        let errorMsg = error[NSAppleScript.errorMessage] as? String ?? "unknown"
-        log("AUTOMATION_TRIGGER: AppleScript failed: \(errorNum) - \(errorMsg)")
-      } else {
-        log("AUTOMATION_TRIGGER: AppleScript succeeded, permission may have been granted")
-      }
-
-      // Re-check permission status after the TCC dialog
-      await MainActor.run { [weak self] in
-        self?.checkAutomationPermission()
-      }
-
-      // Small delay to let the check complete
-      try? await Task.sleep(nanoseconds: 300_000_000)
-
-      // Only open Settings if the TCC dialog didn't grant permission
-      let granted = await MainActor.run { [weak self] in
-        self?.hasAutomationPermission ?? false
-      }
-      if !granted {
-        await MainActor.run {
-          if let url = URL(
-            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")
-          {
-            NSWorkspace.shared.open(url)
-          }
-        }
-      }
-    }
-  }
-
   // MARK: - Permission Status Checks
 
   /// Check and update all permission states
@@ -394,9 +324,12 @@ extension AppState {
       // -600 (procNotFound) = System Events not running — try to launch it and retry
       if status == -600 {
         log("AUTOMATION_CHECK: status=-600 (procNotFound), launching System Events and retrying...")
-        let launchScript = NSAppleScript(source: "launch application \"System Events\"")
-        var launchError: NSDictionary?
-        launchScript?.executeAndReturnError(&launchError)
+        // NSAppleScript is main-thread-only — build+execute on the main actor.
+        await MainActor.run {
+          let launchScript = NSAppleScript(source: "launch application \"System Events\"")
+          var launchError: NSDictionary?
+          launchScript?.executeAndReturnError(&launchError)
+        }
 
         // Wait for System Events to initialize
         try? await Task.sleep(nanoseconds: 1_000_000_000)

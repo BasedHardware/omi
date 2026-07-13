@@ -1,0 +1,3 @@
+{
+  "change": "Fixed push-to-talk not recovering the mic after repeated silent turns when the realtime hub was still warming up"
+}

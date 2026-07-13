@@ -7,7 +7,11 @@ actor FileIndexerService {
     static let shared = FileIndexerService()
 
     private var _dbQueue: DatabasePool?
+    /// Shared Rewind pool epoch. `nil` denotes an explicitly injected test pool.
+    private var _dbGeneration: Int?
     private var isScanning = false
+    private var activeScanOperations = 0
+    private var scanCompletionWaiters: [CheckedContinuation<Void, Never>] = []
     private let scanPolicy: FileIndexScanPolicy
 
     /// Batch insert size
@@ -27,18 +31,43 @@ actor FileIndexerService {
     // MARK: - Database Access
 
     private func ensureDB() async throws -> DatabasePool {
-        if let db = _dbQueue { return db }
+        if let db = _dbQueue {
+            guard let generation = _dbGeneration else { return db }
+            if await RewindDatabase.shared.poolGeneration() == generation {
+                return db
+            }
+        }
 
         try await RewindDatabase.shared.initialize()
-        guard let db = await RewindDatabase.shared.getDatabaseQueue() else {
+        let (queue, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+        guard let db = queue else {
             throw FileIndexerError.databaseNotInitialized
         }
         _dbQueue = db
+        _dbGeneration = generation
         return db
     }
 
-    func invalidateCache() {
+    func invalidateCache() async {
+        if activeScanOperations > 0 {
+            await withCheckedContinuation { continuation in
+                scanCompletionWaiters.append(continuation)
+            }
+        }
         _dbQueue = nil
+        _dbGeneration = nil
+    }
+
+    private func finishScanning() {
+        isScanning = false
+    }
+
+    private func finishScanOperation() {
+        activeScanOperations = max(0, activeScanOperations - 1)
+        guard activeScanOperations == 0 else { return }
+        let waiters = scanCompletionWaiters
+        scanCompletionWaiters.removeAll()
+        waiters.forEach { $0.resume() }
     }
 
     /// Returns the total number of indexed files in the database
@@ -69,7 +98,7 @@ actor FileIndexerService {
         }
 
         isScanning = true
-        defer { isScanning = false }
+        defer { finishScanning() }
 
         log("FileIndexer: Starting onboarding pipeline")
 
@@ -118,7 +147,7 @@ actor FileIndexerService {
         }
 
         isScanning = true
-        defer { isScanning = false }
+        defer { finishScanning() }
 
         log("FileIndexer: Starting background rescan")
 
@@ -135,6 +164,8 @@ actor FileIndexerService {
     /// Returns total number of files indexed
     @discardableResult
     func scanFolders(_ folders: [URL], incremental: Bool = false) async -> Int {
+        activeScanOperations += 1
+        defer { finishScanOperation() }
         let db: DatabasePool
         do {
             db = try await ensureDB()
@@ -146,6 +177,11 @@ actor FileIndexerService {
         // For incremental scans, load existing index for O(1) lookup
         let existingIndex: [String: Date?] = incremental ? loadExistingIndex(from: db) : [:]
         var scannedPaths = Set<String>()
+        // ~-relative prefixes of directories whose enumeration FAILED (permission
+        // revoked, transient I/O). Files under these were not scanned, but that is
+        // a read error — not deletion — so they must be excluded from the retention
+        // diff (otherwise a single unreadable folder purges its whole index subtree).
+        var failedDirectories = Set<String>()
 
         if incremental {
             log("FileIndexer: Loaded \(existingIndex.count) existing paths for incremental scan")
@@ -178,7 +214,8 @@ actor FileIndexerService {
                 totalFiles: &totalFiles,
                 db: db,
                 existingIndex: existingIndex,
-                scannedPaths: &scannedPaths
+                scannedPaths: &scannedPaths,
+                failedDirectories: &failedDirectories
             )
         }
 
@@ -189,7 +226,12 @@ actor FileIndexerService {
 
         // For incremental scans, remove files that no longer exist on disk
         if incremental && !existingIndex.isEmpty {
-            deleteRemovedFiles(scannedPaths: scannedPaths, existingPaths: Set(existingIndex.keys), db: db)
+            deleteRemovedFiles(
+                scannedPaths: scannedPaths,
+                existingPaths: Set(existingIndex.keys),
+                protectedPrefixes: failedDirectories,
+                db: db
+            )
         }
 
         return totalFiles
@@ -206,7 +248,8 @@ actor FileIndexerService {
         totalFiles: inout Int,
         db: DatabasePool,
         existingIndex: [String: Date?],
-        scannedPaths: inout Set<String>
+        scannedPaths: inout Set<String>,
+        failedDirectories: inout Set<String>
     ) {
         guard scanPolicy.shouldScanDirectory(atDepth: depth) else { return }
 
@@ -218,6 +261,10 @@ actor FileIndexerService {
                 options: [.skipsHiddenFiles]
             )
         } catch {
+            // Enumeration failure is a read error, not deletion. Record this
+            // directory so its previously-indexed files are NOT purged by the
+            // retention diff (see deleteRemovedFiles / failedDirectories).
+            failedDirectories.insert(scanPolicy.relativePath(for: url, homePath: homePath))
             log("FileIndexer: Cannot read \(url.lastPathComponent): \(error.localizedDescription)")
             return
         }
@@ -269,7 +316,8 @@ actor FileIndexerService {
                         totalFiles: &totalFiles,
                         db: db,
                         existingIndex: existingIndex,
-                        scannedPaths: &scannedPaths
+                        scannedPaths: &scannedPaths,
+                        failedDirectories: &failedDirectories
                     )
                     continue
                 }
@@ -357,8 +405,32 @@ actor FileIndexerService {
     }
 
     /// Delete files from the index that no longer exist on disk
-    private func deleteRemovedFiles(scannedPaths: Set<String>, existingPaths: Set<String>, db: DatabasePool) {
-        let removed = existingPaths.subtracting(scannedPaths)
+    /// Paths that are genuinely gone from disk (present in the index, not seen this
+    /// scan, and NOT under a directory whose enumeration failed). Pure + static so
+    /// the retention diff can be tested without a database or filesystem.
+    static func pathsToDelete(
+        scannedPaths: Set<String>,
+        existingPaths: Set<String>,
+        protectedPrefixes: Set<String>
+    ) -> Set<String> {
+        existingPaths.subtracting(scannedPaths).filter { path in
+            !protectedPrefixes.contains { prefix in
+                path == prefix || path.hasPrefix(prefix + "/")
+            }
+        }
+    }
+
+    private func deleteRemovedFiles(
+        scannedPaths: Set<String>,
+        existingPaths: Set<String>,
+        protectedPrefixes: Set<String>,
+        db: DatabasePool
+    ) {
+        let removed = Self.pathsToDelete(
+            scannedPaths: scannedPaths,
+            existingPaths: existingPaths,
+            protectedPrefixes: protectedPrefixes
+        )
         guard !removed.isEmpty else { return }
 
         log("FileIndexer: Removing \(removed.count) deleted files from index")

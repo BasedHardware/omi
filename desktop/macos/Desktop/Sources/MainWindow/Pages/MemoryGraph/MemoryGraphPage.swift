@@ -1,11 +1,12 @@
 import SceneKit
 import SwiftUI
+import OmiSupport
 import OmiTheme
 
 // MARK: - Memory Graph Page
 
 struct MemoryGraphPage: View {
-  @StateObject private var viewModel = MemoryGraphViewModel()
+  @ObservedObject var viewModel: MemoryGraphViewModel
   @Environment(\.dismiss) private var dismiss
 
   var body: some View {
@@ -25,7 +26,7 @@ struct MemoryGraphPage: View {
             dismiss()
           } label: {
             Image(systemName: "xmark")
-              .scaledFont(size: 13, weight: .semibold)
+              .scaledFont(size: OmiType.body, weight: .semibold)
               .foregroundColor(.white.opacity(0.5))
               .frame(width: 28, height: 28)
           }
@@ -42,7 +43,7 @@ struct MemoryGraphPage: View {
               Task { await viewModel.rebuildGraph() }
             } label: {
               Image(systemName: "arrow.clockwise")
-                .scaledFont(size: 13)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(.white.opacity(0.5))
                 .frame(width: 28, height: 28)
             }
@@ -50,8 +51,8 @@ struct MemoryGraphPage: View {
             .help("Rebuild graph")
           }
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
+        .padding(.horizontal, OmiSpacing.lg)
+        .padding(.top, OmiSpacing.md)
 
         Spacer()
       }
@@ -70,13 +71,13 @@ struct MemoryGraphPage: View {
 }
 
 struct MemoryGraphInlineCard: View {
-  @StateObject private var viewModel = MemoryGraphViewModel()
+  @ObservedObject var viewModel: MemoryGraphViewModel
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      HStack(alignment: .center, spacing: 12) {
+    VStack(alignment: .leading, spacing: OmiSpacing.md) {
+      HStack(alignment: .center, spacing: OmiSpacing.md) {
         Text("Brain Map")
-          .scaledFont(size: 15, weight: .semibold)
+          .scaledFont(size: OmiType.subheading, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
 
         Spacer()
@@ -90,7 +91,7 @@ struct MemoryGraphInlineCard: View {
             Task { await viewModel.rebuildGraph() }
           } label: {
             Image(systemName: "arrow.clockwise")
-              .scaledFont(size: 12, weight: .medium)
+              .scaledFont(size: OmiType.caption, weight: .medium)
               .foregroundColor(OmiColors.textSecondary)
               .frame(width: 32, height: 32)
               .omiControlSurface(fill: OmiColors.backgroundRaised, radius: 12)
@@ -112,22 +113,22 @@ struct MemoryGraphInlineCard: View {
             .scaleEffect(1.1)
             .tint(.white.opacity(0.45))
         } else if viewModel.isEmpty {
-          VStack(spacing: 8) {
+          VStack(spacing: OmiSpacing.sm) {
             Image(systemName: "brain")
-              .scaledFont(size: 18)
+              .scaledFont(size: OmiType.heading)
               .foregroundColor(OmiColors.textTertiary)
             Text("Brain map will appear once enough linked memories are available.")
               .scaledFont(size: 12.5)
               .foregroundColor(OmiColors.textSecondary)
               .multilineTextAlignment(.center)
           }
-          .padding(18)
+          .padding(OmiSpacing.lg)
         }
       }
       .frame(height: 350)
-      .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+      .clipShape(RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous))
     }
-    .padding(16)
+    .padding(OmiSpacing.lg)
     .omiPanel(
       fill: OmiColors.backgroundSecondary, radius: 24, stroke: OmiColors.border.opacity(0.14),
       shadowOpacity: 0.14, shadowRadius: 12, shadowY: 8
@@ -203,6 +204,15 @@ class MemoryGraphViewModel: ObservableObject {
   private var nodeSceneNodes: [String: SCNNode] = [:]
   private var edgeSceneNodes: [String: SCNNode] = [:]
   private var isAnimating = true
+  // Revisit guards: the VM is session-persistent (ViewModelContainer), so a
+  // page visit renders the existing scene instantly. Non-forced loads are
+  // TTL-throttled, single-flight, and skip the expensive re-simulation when
+  // the fetched graph is unchanged.
+  private var lastLoadedAt = Date.distantPast
+  private var isPreparing = false
+  private var hasRunEmptyBootstrap = false
+  private var loadedGraphSignature: Int?
+  private var sessionGeneration = 0
 
   init() {
     setupCamera()
@@ -243,54 +253,217 @@ class MemoryGraphViewModel: ObservableObject {
   // MARK: - Load Graph
 
   func prepareGraph() async {
-    await loadGraph()
-    if isEmpty {
-      await rebuildGraph()
+    guard !isPreparing else { return }
+    let generation = sessionGeneration
+    isPreparing = true
+    defer {
+      if generation == sessionGeneration {
+        isPreparing = false
+      }
+    }
+
+    // A rendered scene within the cooldown is served as-is — visiting the
+    // page must not refetch, re-run the force layout, or reset the camera.
+    if !isEmpty,
+      !PollingConfig.shouldAllowActivationRefresh(lastRefresh: lastLoadedAt)
+    {
+      return
+    }
+
+    await loadGraph(generation: generation)
+    guard generation == sessionGeneration else { return }
+
+    if isEmpty && !hasRunEmptyBootstrap {
+      // First-session bootstrap for sparse accounts: ask the backend to build
+      // the graph, then poll for it. Run once per session — not per visit.
+      guard await rebuildGraph(generation: generation) else { return }
+      hasRunEmptyBootstrap = true
       for _ in 1...10 {
         try? await Task.sleep(nanoseconds: 3_000_000_000)
-        await loadGraph()
+        guard generation == sessionGeneration else { return }
+        await loadGraph(generation: generation)
         if !isEmpty { break }
       }
     }
   }
 
   func loadGraph() async {
-    isLoading = true
-    defer { isLoading = false }
+    await loadGraph(generation: sessionGeneration)
+  }
+
+  private func loadGraph(generation: Int) async {
+    // Only surface the spinner while there's no scene to show — freshness
+    // checks over a rendered graph stay invisible.
+    let showSpinner = isEmpty
+    if showSpinner { isLoading = true }
+    defer {
+      if showSpinner && generation == sessionGeneration {
+        isLoading = false
+      }
+    }
 
     do {
       let response = try await fetchGraph()
+      guard generation == sessionGeneration else { return }
 
       log("Knowledge graph: \(response.nodes.count) nodes, \(response.edges.count) edges")
       isEmpty = response.nodes.isEmpty
+      lastLoadedAt = Date()
 
       guard !isEmpty else { return }
+
+      // Same graph as last time → keep the settled scene. Re-simulating and
+      // recreating scene nodes for identical data is what made every page
+      // visit visibly "reload" the brain map.
+      let signature = Self.graphSignature(of: response)
+      if signature == loadedGraphSignature {
+        return
+      }
+      loadedGraphSignature = signature
 
       // Populate simulation with user node at center
       let userName = AuthService.shared.displayName.isEmpty ? nil : AuthService.shared.givenName
       log("User name for center node: \(userName ?? "nil")")
+      let populateStart = CFAbsoluteTimeGetCurrent()
       simulation.populate(graphResponse: response, userNodeLabel: userName)
       log(
         "Simulation populated: \(simulation.nodes.count) nodes (including user), \(simulation.edges.count) edges"
       )
+      logPerf(
+        "MemoryGraph: populate", duration: CFAbsoluteTimeGetCurrent() - populateStart)
 
-      // Run initial layout off main thread for responsiveness
-      await Task.detached(priority: .userInitiated) { [simulation] in
-        simulation.runSync(ticks: 800)
-      }.value
+      // A settled layout for this exact graph renders instantly — restore it
+      // and skip both the physics run and the visual settle animation.
+      let layoutStart = CFAbsoluteTimeGetCurrent()
+      let restoredLayout =
+        loadCachedLayout(signature: signature).map { simulation.applyLayout($0) } ?? false
+      if !restoredLayout {
+        // Suppress the render-driven simulation.tick() while the off-main physics
+        // run mutates the same node positions/velocities. The SceneKit delegate
+        // enqueues updateSimulation() on the main actor every frame; without this
+        // it would tick() concurrently with runSync() off-main — an unsynchronized
+        // read/write of non-atomic SIMD3 node state (torn positions, corrupt
+        // layout/camera). The post-layout block below re-enables animation once the
+        // detached run has completed.
+        isAnimating = false
+        // Run initial layout off main thread for responsiveness
+        await Task.detached(priority: .userInitiated) { [simulation] in
+          simulation.runSync(ticks: 800)
+        }.value
+        guard generation == sessionGeneration else { return }
+        saveLayoutCache(signature: signature)
+      }
+      logPerf(
+        "MemoryGraph: layout (restored=\(restoredLayout))",
+        duration: CFAbsoluteTimeGetCurrent() - layoutStart)
+
+      guard generation == sessionGeneration else { return }
 
       // Create scene nodes
+      let sceneStart = CFAbsoluteTimeGetCurrent()
       createSceneNodes()
+      logPerf("MemoryGraph: scene build", duration: CFAbsoluteTimeGetCurrent() - sceneStart)
 
-      // Brief animation to settle, then stop
-      isAnimating = true
-      Task {
-        try? await Task.sleep(nanoseconds: 3_000_000_000)  // 3s of live physics
-        await MainActor.run { isAnimating = false }
+      if restoredLayout {
+        isAnimating = false
+      } else {
+        // Brief animation to settle, then stop
+        isAnimating = true
+        Task {
+          try? await Task.sleep(nanoseconds: 3_000_000_000)  // 3s of live physics
+          await MainActor.run { isAnimating = false }
+        }
       }
     } catch {
       log("Failed to load knowledge graph: \(error.localizedDescription)")
     }
+  }
+
+  private struct GraphLayoutCache: Codable {
+    let signature: Int
+    let positions: [String: [Float]]
+  }
+
+  private static func layoutCacheURL() -> URL? {
+    guard let userId = UserDefaults.standard.string(forKey: "auth_userId"), !userId.isEmpty
+    else { return nil }
+
+    let dir = DesktopLocalProfile.applicationSupportURL()
+      .appendingPathComponent("users", isDirectory: true)
+      .appendingPathComponent(userId, isDirectory: true)
+
+    do {
+      try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+      return dir.appendingPathComponent("memory-graph-layout.json")
+    } catch {
+      logError("MemoryGraph: failed to prepare layout cache directory", error: error)
+      return nil
+    }
+  }
+
+  private func loadCachedLayout(signature: Int) -> [String: SIMD3<Float>]? {
+    guard let url = Self.layoutCacheURL(), FileManager.default.fileExists(atPath: url.path)
+    else { return nil }
+
+    let cache: GraphLayoutCache
+    do {
+      let data = try Data(contentsOf: url)
+      cache = try JSONDecoder().decode(GraphLayoutCache.self, from: data)
+    } catch {
+      logError("MemoryGraph: failed to read layout cache", error: error)
+      return nil
+    }
+
+    guard cache.signature == signature else { return nil }
+    var positions: [String: SIMD3<Float>] = [:]
+    positions.reserveCapacity(cache.positions.count)
+    for (id, values) in cache.positions where values.count == 3 {
+      positions[id] = SIMD3<Float>(values[0], values[1], values[2])
+    }
+    return positions
+  }
+
+  private func saveLayoutCache(signature: Int) {
+    guard let url = Self.layoutCacheURL() else { return }
+    var positions: [String: [Float]] = [:]
+    for (id, position) in simulation.layoutPositions() {
+      positions[id] = [position.x, position.y, position.z]
+    }
+    let cache = GraphLayoutCache(signature: signature, positions: positions)
+    do {
+      let data = try JSONEncoder().encode(cache)
+      try data.write(to: url, options: .atomic)
+    } catch {
+      logError("MemoryGraph: failed to write layout cache", error: error)
+    }
+  }
+
+  /// Stable across launches — Swift's `Hasher` is per-process seeded, which
+  /// would silently invalidate the on-disk layout cache on every restart.
+  static func graphSignature(of response: KnowledgeGraphResponse) -> Int {
+    var hash: UInt64 = 0xcbf2_9ce4_8422_2325  // FNV-1a
+    func combine(_ string: String) {
+      for byte in string.utf8 {
+        hash ^= UInt64(byte)
+        hash = hash &* 0x0000_0100_0000_01b3
+      }
+      hash ^= 0xff
+      hash = hash &* 0x0000_0100_0000_01b3
+    }
+    combine(String(response.nodes.count))
+    combine(String(response.edges.count))
+    for node in response.nodes.sorted(by: { $0.id < $1.id }) {
+      combine(node.id)
+      combine(node.label)
+      combine(node.nodeType.rawValue)
+    }
+    for edge in response.edges.sorted(by: { $0.id < $1.id }) {
+      combine(edge.id)
+      combine(edge.sourceId)
+      combine(edge.targetId)
+      combine(edge.label)
+    }
+    return Int(bitPattern: UInt(truncatingIfNeeded: hash))
   }
 
   private func fetchGraph() async throws -> KnowledgeGraphResponse {
@@ -325,20 +498,33 @@ class MemoryGraphViewModel: ObservableObject {
 
   // MARK: - Rebuild Graph
 
-  func rebuildGraph() async {
+  @discardableResult
+  func rebuildGraph() async -> Bool {
+    await rebuildGraph(generation: sessionGeneration)
+  }
+
+  @discardableResult
+  private func rebuildGraph(generation: Int) async -> Bool {
     isRebuilding = true
-    defer { isRebuilding = false }
+    defer {
+      if generation == sessionGeneration {
+        isRebuilding = false
+      }
+    }
 
     do {
       _ = try await APIClient.shared.rebuildKnowledgeGraph()
 
       // Wait a bit for the backend to process
       try await Task.sleep(nanoseconds: 2_000_000_000)
+      guard generation == sessionGeneration else { return false }
 
       // Reload the graph
-      await loadGraph()
+      await loadGraph(generation: generation)
+      return true
     } catch {
       log("Failed to rebuild knowledge graph: \(error.localizedDescription)")
+      return false
     }
   }
 
@@ -346,17 +532,25 @@ class MemoryGraphViewModel: ObservableObject {
 
   /// Add new graph data from storage incrementally (used during onboarding)
   func addGraphFromStorage() async {
+    let generation = sessionGeneration
     let response = await KnowledgeGraphStorage.shared.loadGraph()
+    guard generation == sessionGeneration else { return }
     guard !response.nodes.isEmpty else { return }
     isEmpty = false
 
     let userName = AuthService.shared.displayName.isEmpty ? nil : AuthService.shared.givenName
     simulation.addNodesAndEdges(graphResponse: response, userNodeLabel: userName)
 
+    // Suppress the render-driven tick() while this off-main physics burst mutates
+    // the (already-live) scene's node state — same main-vs-detached data race as
+    // loadGraph. Re-enabled for the settle animation below, after the detached run.
+    isAnimating = false
+
     // Run a burst of physics to integrate new nodes
     await Task.detached(priority: .userInitiated) { [simulation] in
       simulation.runSync(ticks: 200)
     }.value
+    guard generation == sessionGeneration else { return }
 
     // Create scene nodes for new entries, animate them in
     addNewSceneNodes()
@@ -368,6 +562,29 @@ class MemoryGraphViewModel: ObservableObject {
       try? await Task.sleep(nanoseconds: 3_000_000_000)
       await MainActor.run { isAnimating = false }
     }
+  }
+
+  func resetSessionState() {
+    sessionGeneration += 1
+    clearGraphScene()
+    simulation = ForceDirectedSimulation()
+    isLoading = false
+    isRebuilding = false
+    isEmpty = true
+    selectedNodeId = nil
+    isAnimating = false
+    lastLoadedAt = .distantPast
+    isPreparing = false
+    hasRunEmptyBootstrap = false
+    loadedGraphSignature = nil
+    cameraNode.position = SCNVector3(0, 0, 2000)
+  }
+
+  private func clearGraphScene() {
+    for (_, node) in nodeSceneNodes { node.removeFromParentNode() }
+    for (_, node) in edgeSceneNodes { node.removeFromParentNode() }
+    nodeSceneNodes.removeAll()
+    edgeSceneNodes.removeAll()
   }
 
   /// Create scene nodes only for simulation nodes/edges not yet in the scene
@@ -471,14 +688,20 @@ class MemoryGraphViewModel: ObservableObject {
 
   private func createSceneNodes() {
     // Clear existing nodes
-    for (_, node) in nodeSceneNodes { node.removeFromParentNode() }
-    for (_, node) in edgeSceneNodes { node.removeFromParentNode() }
-    nodeSceneNodes.removeAll()
-    edgeSceneNodes.removeAll()
+    clearGraphScene()
 
     // Billboard constraint for labels (always face camera)
     let billboardConstraint = SCNBillboardConstraint()
     billboardConstraint.freeAxes = [.X, .Y]
+
+    // Shared materials/geometry: nodes of the same type (and edges of the
+    // same type pair) are visually identical, so building one material per
+    // node/edge (~1,200 unique GPU objects for a mid-size graph) wasted both
+    // build time and draw-call batching. Cache by visual identity instead.
+    var edgeMaterialCache: [String: SCNMaterial] = [:]
+    var bodyMaterialCache: [String: SCNMaterial] = [:]
+    var glowMaterialCache: [String: SCNMaterial] = [:]
+    var sphereCache: [String: SCNSphere] = [:]
 
     // Create edges first (behind nodes)
     for edge in simulation.edges {
@@ -486,11 +709,20 @@ class MemoryGraphViewModel: ObservableObject {
         let target = simulation.nodeMap[edge.targetId]
       else { continue }
 
-      let edgeColor = blendColors(source.nodeType.nsColor, target.nodeType.nsColor, alpha: 0.25)
-      let edgeMaterial = SCNMaterial()
-      edgeMaterial.diffuse.contents = edgeColor
-      edgeMaterial.emission.contents = edgeColor.withAlphaComponent(0.15)
-      edgeMaterial.lightingModel = .constant
+      let edgeKey = "\(source.nodeType.rawValue)|\(target.nodeType.rawValue)"
+      let edgeMaterial: SCNMaterial
+      if let cached = edgeMaterialCache[edgeKey] {
+        edgeMaterial = cached
+      } else {
+        let edgeColor = blendColors(
+          source.nodeType.nsColor, target.nodeType.nsColor, alpha: 0.25)
+        let material = SCNMaterial()
+        material.diffuse.contents = edgeColor
+        material.emission.contents = edgeColor.withAlphaComponent(0.15)
+        material.lightingModel = .constant
+        edgeMaterialCache[edgeKey] = material
+        edgeMaterial = material
+      }
 
       let edgeNode = createEdgeNode(
         from: source.position, to: target.position, material: edgeMaterial)
@@ -506,34 +738,69 @@ class MemoryGraphViewModel: ObservableObject {
       containerNode.position = SCNVector3(node.position)
       containerNode.name = node.id
 
+      let materialKey = node.isFixed ? "fixed" : node.nodeType.rawValue
+
       // Core sphere
-      let sphere = SCNSphere(radius: radius)
-      sphere.segmentCount = node.isFixed ? 24 : 16
-      let mat = SCNMaterial()
-      if node.isFixed {
-        mat.diffuse.contents = NSColor.white
-        mat.emission.contents = NSColor.white.withAlphaComponent(0.8)
+      let bodyMaterial: SCNMaterial
+      if let cached = bodyMaterialCache[materialKey] {
+        bodyMaterial = cached
       } else {
-        mat.diffuse.contents = node.nodeType.nsColor
-        mat.emission.contents = node.nodeType.nsColor.withAlphaComponent(0.5)
+        let material = SCNMaterial()
+        if node.isFixed {
+          material.diffuse.contents = NSColor.white
+          material.emission.contents = NSColor.white.withAlphaComponent(0.8)
+        } else {
+          material.diffuse.contents = node.nodeType.nsColor
+          material.emission.contents = node.nodeType.nsColor.withAlphaComponent(0.5)
+        }
+        material.lightingModel = .constant
+        bodyMaterialCache[materialKey] = material
+        bodyMaterial = material
       }
-      mat.lightingModel = .constant
-      sphere.materials = [mat]
+      let segments = node.isFixed ? 24 : 16
+      let sphereKey = "\(materialKey)|\(Int(radius * 10))|\(segments)"
+      let sphere: SCNSphere
+      if let cached = sphereCache[sphereKey] {
+        sphere = cached
+      } else {
+        let newSphere = SCNSphere(radius: radius)
+        newSphere.segmentCount = segments
+        newSphere.materials = [bodyMaterial]
+        sphereCache[sphereKey] = newSphere
+        sphere = newSphere
+      }
       let sphereNode = SCNNode(geometry: sphere)
       containerNode.addChildNode(sphereNode)
 
-      // Glow halo (larger semi-transparent sphere around node)
+      // Glow halo (larger semi-transparent sphere around node). The halo is
+      // an additive blur — 24 segments is visually identical to 48 at half
+      // the tessellation.
       let glowRadius = radius * 2.5
-      let glowSphere = SCNSphere(radius: glowRadius)
-      glowSphere.segmentCount = 48
-      let glowMat = SCNMaterial()
-      let glowColor = node.isFixed ? NSColor.white : node.nodeType.nsColor
-      glowMat.diffuse.contents = glowColor.withAlphaComponent(0.03)
-      glowMat.emission.contents = glowColor.withAlphaComponent(0.025)
-      glowMat.lightingModel = .constant
-      glowMat.isDoubleSided = true
-      glowMat.blendMode = .add
-      glowSphere.materials = [glowMat]
+      let glowMaterial: SCNMaterial
+      if let cached = glowMaterialCache[materialKey] {
+        glowMaterial = cached
+      } else {
+        let material = SCNMaterial()
+        let glowColor = node.isFixed ? NSColor.white : node.nodeType.nsColor
+        material.diffuse.contents = glowColor.withAlphaComponent(0.03)
+        material.emission.contents = glowColor.withAlphaComponent(0.025)
+        material.lightingModel = .constant
+        material.isDoubleSided = true
+        material.blendMode = .add
+        glowMaterialCache[materialKey] = material
+        glowMaterial = material
+      }
+      let glowKey = "glow|\(materialKey)|\(Int(glowRadius * 10))"
+      let glowSphere: SCNSphere
+      if let cached = sphereCache[glowKey] {
+        glowSphere = cached
+      } else {
+        let newSphere = SCNSphere(radius: glowRadius)
+        newSphere.segmentCount = 24
+        newSphere.materials = [glowMaterial]
+        sphereCache[glowKey] = newSphere
+        glowSphere = newSphere
+      }
       let glowNode = SCNNode(geometry: glowSphere)
       containerNode.addChildNode(glowNode)
 
@@ -554,9 +821,9 @@ class MemoryGraphViewModel: ObservableObject {
   private func createLabelNode(text: String, nodeRadius: CGFloat, isFixed: Bool) -> SCNNode {
     let truncated = text.count > 18 ? String(text.prefix(16)) + "..." : text
     let fontSize: CGFloat = isFixed ? 22 : 16
-    let scnText = SCNText(string: truncated, extrusionDepth: 0.5)
+    let scnText = SCNText(string: truncated, extrusionDepth: 0)
     scnText.font = NSFont.systemFont(ofSize: fontSize, weight: isFixed ? .bold : .medium)
-    scnText.flatness = 0.3
+    scnText.flatness = 0.6
     scnText.alignmentMode = CATextLayerAlignmentMode.center.rawValue
 
     let textMat = SCNMaterial()
@@ -723,7 +990,7 @@ extension KnowledgeGraphNodeType: CaseIterable {
     case .person: return .cyan
     case .place: return Color(red: 0, green: 1, blue: 0.62)  // Mint
     case .organization: return .orange
-    case .thing: return .purple
+    case .thing: return .yellow
     case .concept: return .blue
     }
   }
@@ -733,7 +1000,7 @@ extension KnowledgeGraphNodeType: CaseIterable {
     case .person: return .cyan
     case .place: return NSColor(red: 0, green: 1, blue: 0.62, alpha: 1)
     case .organization: return .orange
-    case .thing: return .purple
+    case .thing: return .systemYellow
     case .concept: return .systemBlue
     }
   }
@@ -749,7 +1016,7 @@ extension SCNVector3 {
 
 #if canImport(PreviewsMacros)
 #Preview {
-  MemoryGraphPage()
+  MemoryGraphPage(viewModel: MemoryGraphViewModel())
     .frame(width: 800, height: 600)
 }
 #endif

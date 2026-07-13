@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import OmiTheme
 
 /// Settings for the Task Agent feature
 class TaskAgentSettings: ObservableObject {
@@ -71,8 +72,10 @@ class TaskAgentSettings: ObservableObject {
         skipPermissions = true
     }
 
-    /// Build the full prompt for a task, shared by both the tmux agent and the chat sidebar.
-    func buildTaskPrompt(for task: TaskActionItem) -> String {
+    /// Build the bounded canonical prompt for the workstream-backed thread.
+    /// Runtime history and prior output come from the kernel/context packet,
+    /// never from the legacy tmux projection.
+    func buildCanonicalTaskPrompt(for task: TaskActionItem) -> String {
         var prompt = "# Task\n\n\(task.chatContext)"
 
         let customPrefix = customPromptPrefix
@@ -82,6 +85,17 @@ class TaskAgentSettings: ObservableObject {
 
         let instructions = defaultPrompt
         prompt += "\n\n## Instructions\n\n\(instructions)"
+
+        return prompt
+    }
+
+    /// Legacy tmux prompt builder retained until Ticket 14 removes that path.
+    /// `@MainActor` because it reads `TaskAgentManager.shared.getSession`, which is
+    /// now main-actor-isolated; the sole caller (`TaskAgentManager.buildPrompt`) is
+    /// already on the main actor.
+    @MainActor
+    func buildTaskPrompt(for task: TaskActionItem) -> String {
+        var prompt = buildCanonicalTaskPrompt(for: task)
 
         // Live agent output (from running/completed session)
         if let session = TaskAgentManager.shared.getSession(for: task.id),
@@ -230,7 +244,7 @@ struct TaskAgentSettingsView: View {
                                 .foregroundColor(.secondary)
                         }
                     } else if let validation = validation {
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
                             ValidationRow(label: "tmux", isValid: validation.tmuxInstalled)
                             ValidationRow(label: "Claude CLI", isValid: validation.claudeInstalled)
                             ValidationRow(label: "Working directory", isValid: validation.workingDirectoryValid)

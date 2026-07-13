@@ -236,6 +236,18 @@ def test_valid_date_is_accepted_and_calls_search():
         assert mock_search.called
 
 
+def test_null_per_page_does_not_500():
+    # per_page is Optional and unbounded on SearchRequest. Before the fix the total_pages recompute did
+    # `len(conversations) >= search_request.per_page`, so a client sending per_page: null raised TypeError
+    # -> HTTP 500. The handler now derives pagination from search_conversations' clamped return.
+    with patch.object(
+        conv, 'search_conversations', return_value={'items': [], 'total_pages': 1, 'current_page': 1, 'per_page': 10}
+    ):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': 'hi', 'per_page': None})
+    assert resp.status_code == 200
+
+
 def test_named_speaker_is_validated_and_forwarded():
     with (
         patch.object(conv.users_db, 'get_person', return_value={'id': 'person-1'}) as mock_get_person,

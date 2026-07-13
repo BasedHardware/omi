@@ -5,8 +5,19 @@ description: Desktop sidebar navigation — verify core sections load via bridge
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/OmiApp.swift
+  - desktop/macos/Desktop/Sources/MainWindow/CrispManager.swift
   - desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/HomeStatusStore.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiButtonStyle.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiChrome.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiColors.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiMotion.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiSpacing.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiToggleStyle.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiType.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/FocusPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/InsightPage.swift
 preconditions:
   - automation_bridge_ready
 
@@ -60,6 +71,14 @@ steps:
       state.selectedTabIndex: 9
 
   - id: S7
+    name: Return to Dashboard
+    bridge.navigate:
+      target: dashboard
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 0
+
+  - id: S8
     name: Logs clean
     log.expect:
       absent:

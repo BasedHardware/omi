@@ -1,5 +1,6 @@
 {
     "@@locale": "th",
+    "sessionExpiredSignInAgain": "เซสชันหมดอายุ — ลงชื่อเข้าใช้อีกครั้ง",
     "appTitle": "Omi",
     "conversationTab": "บทสนทนา",
     "transcriptTab": "บันทึกเสียง",
@@ -3116,5 +3117,31 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "พื้นที่จัดเก็บของจี้ใกล้เต็มแล้ว — เปิดแอปค้างไว้เพื่อซิงค์"
+    "pendantStorageAlmostFull": "พื้นที่จัดเก็บของจี้ใกล้เต็มแล้ว — เปิดแอปค้างไว้เพื่อซิงค์",
+    "connectRayBanMeta": "เชื่อมต่อ Ray-Ban Meta",
+    "raybanMetaSetupDescription": "ใช้แว่นตา Ray-Ban Meta ของคุณเป็นอุปกรณ์บันทึกของ Omi สำหรับการสนทนาและบริบทเชิงภาพ Omi จะเปิดแอป Meta AI เพื่อเชื่อมโยงแว่นตาของคุณ",
+    "raybanMetaOpenMetaAI": "เชื่อมต่อผ่าน Meta AI",
+    "raybanMetaWaitingForMetaAI": "เชื่อมต่อให้เสร็จในแอป Meta AI แล้วกลับมาที่นี่",
+    "raybanMetaCheckAgain": "ตรวจสอบอีกครั้ง",
+    "raybanMetaAllowCamera": "อนุญาตกล้องบนแว่นตา",
+    "raybanMetaCameraExplanation": "Omi ใช้กล้องของแว่นตาเพื่อเพิ่มรูปภาพลงในการสนทนาของคุณ คุณสามารถข้ามขั้นตอนนี้และใช้เฉพาะเสียงได้",
+    "raybanMetaSkipForNow": "ข้ามไปก่อน",
+    "raybanMetaAudioOnlyTitle": "โหมดเสียงอย่างเดียวของ Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "Omi เวอร์ชันนี้สามารถใช้ไมโครโฟนของแว่นตาผ่าน Bluetooth ได้ การถ่ายภาพต้องใช้ Omi เวอร์ชันนักพัฒนาของ Meta",
+    "raybanMetaMusicPauseNote": "เพลงบนโทรศัพท์ของคุณจะหยุดชั่วคราวขณะที่กำลังใช้ไมโครโฟนของแว่นตา",
+    "raybanMetaContinue": "ดำเนินการต่อ",
+    "raybanMetaCapturePhoto": "ถ่ายรูป",
+    "raybanMetaPhotoRequested": "ขอถ่ายรูปแล้ว — รูปจะปรากฏในการสนทนาของคุณ",
+    "raybanMetaMicrophoneReady": "ไมโครโฟนพร้อมแล้ว",
+    "raybanMetaImageCaptureReady": "การถ่ายภาพพร้อมแล้ว",
+    "raybanMetaImageCaptureUnavailable": "ไม่พร้อมใช้งานในโหมดเสียงอย่างเดียว",
+    "raybanMetaCamera": "กล้อง",
+    "errorConnectingRayBanMeta": "เกิดข้อผิดพลาดในการเชื่อมต่อกับ Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

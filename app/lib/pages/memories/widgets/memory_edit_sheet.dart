@@ -226,9 +226,11 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
     final shouldDelete = await DeleteConfirmation.show(context);
     if (shouldDelete) {
       widget.provider.deleteMemory(widget.memory);
-      Navigator.pop(context); // Close edit sheet
-      if (widget.onDelete != null) {
-        widget.onDelete!(context, widget.memory, widget.provider);
+      if (context.mounted) {
+        Navigator.pop(context); // Close edit sheet
+        if (widget.onDelete != null) {
+          widget.onDelete!(context, widget.memory, widget.provider);
+        }
       }
     }
   }

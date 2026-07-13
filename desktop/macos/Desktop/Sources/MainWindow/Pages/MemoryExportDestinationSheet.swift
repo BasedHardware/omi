@@ -58,9 +58,9 @@ struct ExportsSection: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
+    VStack(alignment: .leading, spacing: OmiSpacing.md) {
       Text("Exports")
-        .scaledFont(size: 18, weight: .semibold)
+        .scaledFont(size: OmiType.heading, weight: .semibold)
         .foregroundColor(OmiColors.textPrimary)
 
       VStack(spacing: 0) {
@@ -80,37 +80,6 @@ struct ExportsSection: View {
         }
       }
     }
-  }
-}
-
-private struct AgentSetupActionButtonStyle: ButtonStyle {
-  enum Kind {
-    case primary
-    case secondary
-  }
-
-  let kind: Kind
-
-  func makeBody(configuration: Configuration) -> some View {
-    configuration.label
-      .font(.system(size: 13, weight: .semibold))
-      .foregroundColor(kind == .primary ? .black : OmiColors.textPrimary)
-      .lineLimit(1)
-      .labelStyle(.titleAndIcon)
-      .padding(.horizontal, kind == .primary ? 14 : 12)
-      .padding(.vertical, 8)
-      .frame(minHeight: 36)
-      .background(
-        RoundedRectangle(cornerRadius: 10, style: .continuous)
-          .fill(kind == .primary ? Color.white : OmiColors.backgroundTertiary)
-      )
-      .overlay(
-        RoundedRectangle(cornerRadius: 10, style: .continuous)
-          .stroke(Color.white.opacity(kind == .primary ? 0 : 0.08), lineWidth: 1)
-      )
-      .opacity(configuration.isPressed ? 0.9 : 1)
-      .scaleEffect(configuration.isPressed ? 0.985 : 1)
-      .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
   }
 }
 
@@ -145,17 +114,17 @@ private struct MemoryExportRow: View {
 
   var body: some View {
     Button(action: action) {
-      HStack(spacing: 12) {
+      HStack(spacing: OmiSpacing.md) {
         ConnectorBrandIcon(brand: destination.brand, size: 34, cornerRadius: 9)
 
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
           Text(titleOverride ?? destination.title)
-            .scaledFont(size: 14, weight: .medium)
+            .scaledFont(size: OmiType.body, weight: .medium)
             .foregroundColor(OmiColors.textPrimary)
             .lineLimit(1)
 
           Text(subtitleOverride ?? destination.description)
-            .scaledFont(size: 12)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textTertiary)
             .lineLimit(1)
             .truncationMode(.tail)
@@ -166,8 +135,8 @@ private struct MemoryExportRow: View {
         ImportConnectorActionButton(
           title: actionTitle, isConnected: showsConnectedState)
       }
-      .padding(.horizontal, 14)
-      .padding(.vertical, 11)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.md)
       .background(isHovering ? OmiColors.backgroundSecondary : Color.clear)
       .contentShape(Rectangle())
     }
@@ -443,23 +412,23 @@ struct MemoryExportDestinationSheet: View {
     .autoconnect()
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 18) {
-      HStack(alignment: .top, spacing: 14) {
-        ConnectorBrandIcon(brand: destination.brand, size: 56, cornerRadius: 16)
+    VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+      HStack(alignment: .top, spacing: OmiSpacing.md) {
+        ConnectorBrandIcon(brand: destination.brand, size: 56, cornerRadius: OmiChrome.controlRadius)
 
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
           Text(destination.title)
-            .scaledFont(size: 20, weight: .semibold)
+            .scaledFont(size: OmiType.heading, weight: .semibold)
             .foregroundColor(OmiColors.textPrimary)
 
           Text(destination.subtitle)
-            .scaledFont(size: 13)
+            .scaledFont(size: OmiType.body)
             .foregroundColor(OmiColors.textTertiary)
 
           Text(destination.description)
-            .scaledFont(size: 13)
+            .scaledFont(size: OmiType.body)
             .foregroundColor(OmiColors.textSecondary)
-            .padding(.top, 4)
+            .padding(.top, OmiSpacing.xxs)
         }
 
         Spacer()
@@ -470,25 +439,25 @@ struct MemoryExportDestinationSheet: View {
       // Scrollable so the full connector flow (Execute + live-connection steps +
       // memory pack) never clips inside the fixed-height sheet.
       ScrollView {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           content
 
           if let statusMessage = model.statusMessage {
             Text(statusMessage)
-              .scaledFont(size: 12, weight: .medium)
+              .scaledFont(size: OmiType.caption, weight: .medium)
               .foregroundColor(OmiColors.success)
           }
 
           if let errorMessage = model.errorMessage {
             Text(errorMessage)
-              .scaledFont(size: 12, weight: .medium)
+              .scaledFont(size: OmiType.caption, weight: .medium)
               .foregroundColor(OmiColors.warning)
           }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
       }
     }
-    .padding(24)
+    .padding(OmiSpacing.xxl)
     .background(OmiColors.backgroundPrimary)
     .task {
       await model.loadConfiguration()
@@ -513,7 +482,7 @@ struct MemoryExportDestinationSheet: View {
 
   @ViewBuilder
   private var content: some View {
-    VStack(alignment: .leading, spacing: 18) {
+    VStack(alignment: .leading, spacing: OmiSpacing.lg) {
       if destination.supportsAgentSetup {
         agentSetupSection
       } else if destination.supportsMCP {
@@ -539,7 +508,7 @@ struct MemoryExportDestinationSheet: View {
   @ViewBuilder
   private var manualSetupDisclosure: some View {
     ManualInstallationDisclosure(isExpanded: $showManualSetup, fontSize: 13) {
-      VStack(alignment: .leading, spacing: 18) {
+      VStack(alignment: .leading, spacing: OmiSpacing.lg) {
         methodHeader(
           icon: "bolt.fill",
           title: "Live connection",
@@ -552,7 +521,7 @@ struct MemoryExportDestinationSheet: View {
         if destination.supportsMemoryPack {
           Divider()
             .background(OmiColors.backgroundTertiary)
-            .padding(.vertical, 2)
+            .padding(.vertical, OmiSpacing.hairline)
           methodHeader(
             icon: "doc.on.clipboard.fill",
             title: "Memory pack",
@@ -564,15 +533,15 @@ struct MemoryExportDestinationSheet: View {
           packActionButton
         }
       }
-      .padding(.top, 10)
+      .padding(.top, OmiSpacing.sm)
     }
   }
 
   private var agentSetupSection: some View {
-    VStack(alignment: .leading, spacing: 16) {
+    VStack(alignment: .leading, spacing: OmiSpacing.lg) {
       agentSetupHeader
 
-      VStack(alignment: .leading, spacing: 8) {
+      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
         agentSetupBullet("Omi creates fresh connection keys for this prompt.")
         agentSetupBullet(
           "Your agent can read synced memories and conversations, then use this Mac for screen history, screenshots, recaps, files, and tasks."
@@ -582,7 +551,7 @@ struct MemoryExportDestinationSheet: View {
         )
       }
 
-      HStack(spacing: 10) {
+      HStack(spacing: OmiSpacing.sm) {
         Button {
           Task {
             if let updatedStatus = await model.copyAgentSetupPrompt() {
@@ -592,7 +561,7 @@ struct MemoryExportDestinationSheet: View {
         } label: {
           Label(model.isLoadingMCPKey ? "Preparing…" : "Copy prompt", systemImage: "sparkles")
         }
-        .buttonStyle(AgentSetupActionButtonStyle(kind: .primary))
+        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
         .disabled(model.isLoadingMCPKey)
 
         Button {
@@ -600,7 +569,7 @@ struct MemoryExportDestinationSheet: View {
         } label: {
           Label(model.isTestingAgentConnection ? "Testing…" : "Test", systemImage: "checkmark.seal")
         }
-        .buttonStyle(AgentSetupActionButtonStyle(kind: .secondary))
+        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
         .disabled(model.isLoadingMCPKey || model.isTestingAgentConnection)
         .help("Test hosted and local Omi access")
 
@@ -612,7 +581,7 @@ struct MemoryExportDestinationSheet: View {
         } label: {
           Label("New key", systemImage: "key")
         }
-        .buttonStyle(AgentSetupActionButtonStyle(kind: .secondary))
+        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
         .disabled(model.isLoadingMCPKey || model.isTestingAgentConnection)
         .help("Create fresh hosted and local connection keys")
       }
@@ -620,35 +589,35 @@ struct MemoryExportDestinationSheet: View {
   }
 
   private var agentSetupHeader: some View {
-    VStack(alignment: .leading, spacing: 6) {
-      HStack(spacing: 9) {
+    VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+      HStack(spacing: OmiSpacing.sm) {
         Text("Let your agent do it")
-          .scaledFont(size: 15, weight: .semibold)
+          .scaledFont(size: OmiType.subheading, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
         Text("MCP + CLI")
-          .scaledFont(size: 9, weight: .bold)
+          .scaledFont(size: OmiType.micro, weight: .bold)
           .foregroundColor(OmiColors.success)
-          .padding(.horizontal, 7)
-          .padding(.vertical, 2)
+          .padding(.horizontal, OmiSpacing.xs)
+          .padding(.vertical, OmiSpacing.hairline)
           .background(Capsule().fill(OmiColors.success.opacity(0.15)))
       }
       Text(
         "Copy one setup prompt for your agent. It connects Omi memories through MCP, turns on local Desktop access through the Omi CLI, and includes a short Omi guide the agent can keep."
       )
-      .scaledFont(size: 12)
+      .scaledFont(size: OmiType.caption)
       .foregroundColor(OmiColors.textTertiary)
       .fixedSize(horizontal: false, vertical: true)
     }
   }
 
   private func agentSetupBullet(_ text: String) -> some View {
-    HStack(alignment: .top, spacing: 8) {
+    HStack(alignment: .top, spacing: OmiSpacing.sm) {
       Image(systemName: "checkmark.circle.fill")
-        .scaledFont(size: 12)
+        .scaledFont(size: OmiType.caption)
         .foregroundColor(OmiColors.success)
         .padding(.top, 1)
       Text(text)
-        .scaledFont(size: 12)
+        .scaledFont(size: OmiType.caption)
         .foregroundColor(OmiColors.textTertiary)
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -695,26 +664,26 @@ struct MemoryExportDestinationSheet: View {
 
   /// "Execute" — hands the whole setup to Omi to run as a task.
   private var executeBlock: some View {
-    VStack(alignment: .leading, spacing: 8) {
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       if let completion = executePresentation.completion {
         setupCompleteBlock(completion)
       } else {
-        HStack(spacing: 8) {
+        HStack(spacing: OmiSpacing.sm) {
           Image(systemName: "sparkles")
-            .scaledFont(size: 13, weight: .semibold)
+            .scaledFont(size: OmiType.body, weight: .semibold)
             .foregroundColor(OmiColors.textSecondary)
           Text("Let Omi do it")
-            .scaledFont(size: 15, weight: .semibold)
+            .scaledFont(size: OmiType.subheading, weight: .semibold)
             .foregroundColor(OmiColors.textPrimary)
           Text("FASTEST")
-            .scaledFont(size: 9, weight: .bold)
+            .scaledFont(size: OmiType.micro, weight: .bold)
             .foregroundColor(OmiColors.success)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 2)
+            .padding(.horizontal, OmiSpacing.xs)
+            .padding(.vertical, OmiSpacing.hairline)
             .background(Capsule().fill(OmiColors.success.opacity(0.15)))
         }
         Text(executeBlockSubtitle)
-          .scaledFont(size: 12)
+          .scaledFont(size: OmiType.caption)
           .foregroundColor(OmiColors.textTertiary)
           .fixedSize(horizontal: false, vertical: true)
 
@@ -741,28 +710,28 @@ struct MemoryExportDestinationSheet: View {
   }
 
   private func setupCompleteBlock(_ completion: MCPSetupCompletionSummary) -> some View {
-    HStack(alignment: .top, spacing: 10) {
+    HStack(alignment: .top, spacing: OmiSpacing.sm) {
       Image(systemName: "checkmark.seal.fill")
-        .scaledFont(size: 16, weight: .semibold)
+        .scaledFont(size: OmiType.subheading, weight: .semibold)
         .foregroundColor(OmiColors.success)
         .padding(.top, 1)
-      VStack(alignment: .leading, spacing: 4) {
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
         Text(completion.title)
-          .scaledFont(size: 15, weight: .semibold)
+          .scaledFont(size: OmiType.subheading, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
         Text(completion.subtitle)
-          .scaledFont(size: 12)
+          .scaledFont(size: OmiType.caption)
           .foregroundColor(OmiColors.textTertiary)
           .fixedSize(horizontal: false, vertical: true)
       }
     }
-    .padding(12)
+    .padding(OmiSpacing.md)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
-      RoundedRectangle(cornerRadius: 12, style: .continuous)
+      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
         .fill(OmiColors.backgroundSecondary)
         .overlay(
-          RoundedRectangle(cornerRadius: 12, style: .continuous)
+          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
             .stroke(OmiColors.success.opacity(0.22), lineWidth: 1))
     )
   }
@@ -776,25 +745,25 @@ struct MemoryExportDestinationSheet: View {
   private func methodHeader(
     icon: String, title: String, tag: String, tagColor: Color, subtitle: String
   ) -> some View {
-    VStack(alignment: .leading, spacing: 4) {
-      HStack(spacing: 8) {
+    VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+      HStack(spacing: OmiSpacing.sm) {
         Image(systemName: icon)
-          .scaledFont(size: 13, weight: .semibold)
+          .scaledFont(size: OmiType.body, weight: .semibold)
           .foregroundColor(tagColor)
         Text(title)
-          .scaledFont(size: 15, weight: .semibold)
+          .scaledFont(size: OmiType.subheading, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
         Text(tag)
-          .scaledFont(size: 9, weight: .bold)
+          .scaledFont(size: OmiType.micro, weight: .bold)
           .foregroundColor(tagColor)
-          .padding(.horizontal, 7)
-          .padding(.vertical, 2)
+          .padding(.horizontal, OmiSpacing.xs)
+          .padding(.vertical, OmiSpacing.hairline)
           .background(
             Capsule().fill(tagColor.opacity(0.15))
           )
       }
       Text(subtitle)
-        .scaledFont(size: 12)
+        .scaledFont(size: OmiType.caption)
         .foregroundColor(OmiColors.textTertiary)
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -805,7 +774,7 @@ struct MemoryExportDestinationSheet: View {
   @ViewBuilder
   private var mcpSection: some View {
     let setup = destination.mcpSetup(key: model.mcpKey ?? "YOUR_OMI_KEY")
-    VStack(alignment: .leading, spacing: 12) {
+    VStack(alignment: .leading, spacing: OmiSpacing.md) {
       if destination == .claude {
         claudeConnectorFields
       } else {
@@ -822,25 +791,25 @@ struct MemoryExportDestinationSheet: View {
       }
 
       if let setup {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: OmiSpacing.xs) {
           ForEach(Array(setup.steps.enumerated()), id: \.offset) { index, step in
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .top, spacing: OmiSpacing.sm) {
               Text("\(index + 1).")
-                .scaledFont(size: 12, weight: .semibold)
+                .scaledFont(size: OmiType.caption, weight: .semibold)
                 .foregroundColor(OmiColors.textTertiary)
               Text(step)
-                .scaledFont(size: 12)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             }
           }
         }
-        .padding(.top, 2)
+        .padding(.top, OmiSpacing.hairline)
 
         if let openURL = setup.openURL, let openTitle = setup.openTitle {
           Button(openTitle) { model.open(openURL) }
             .buttonStyle(.plain)
-            .scaledFont(size: 12, weight: .medium)
+            .scaledFont(size: OmiType.caption, weight: .medium)
             .foregroundColor(OmiColors.textSecondary)
         }
       }
@@ -849,9 +818,9 @@ struct MemoryExportDestinationSheet: View {
 
   @ViewBuilder
   private var claudeConnectorFields: some View {
-    VStack(alignment: .leading, spacing: 12) {
+    VStack(alignment: .leading, spacing: OmiSpacing.md) {
       Text("Copy these fields into Claude's Add custom connector form.")
-        .scaledFont(size: 12)
+        .scaledFont(size: OmiType.caption)
         .foregroundColor(OmiColors.textTertiary)
         .fixedSize(horizontal: false, vertical: true)
 
@@ -864,9 +833,9 @@ struct MemoryExportDestinationSheet: View {
       )
 
       Text("Advanced settings")
-        .scaledFont(size: 12, weight: .medium)
+        .scaledFont(size: OmiType.caption, weight: .medium)
         .foregroundColor(OmiColors.textSecondary)
-        .padding(.top, 2)
+        .padding(.top, OmiSpacing.hairline)
 
       mcpCodeRow(
         label: "OAuth Client ID",
@@ -874,7 +843,7 @@ struct MemoryExportDestinationSheet: View {
         copyLabel: "OAuth Client ID")
 
       Text("Leave OAuth Client Secret blank.")
-        .scaledFont(size: 12)
+        .scaledFont(size: OmiType.caption)
         .foregroundColor(OmiColors.textTertiary)
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -888,7 +857,7 @@ struct MemoryExportDestinationSheet: View {
       Button(model.isLoadingMCPKey ? "Generating…" : "Generate connection key") {
         Task { await model.generateMCPKey() }
       }
-      .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+      .buttonStyle(OmiButtonStyle(.primary))
       .disabled(model.isLoadingMCPKey)
     }
   }
@@ -896,51 +865,51 @@ struct MemoryExportDestinationSheet: View {
   private func mcpCodeRow(label: String, value: String, copyLabel: String, secure: Bool = false)
     -> some View
   {
-    VStack(alignment: .leading, spacing: 6) {
+    VStack(alignment: .leading, spacing: OmiSpacing.xs) {
       Text(label)
-        .scaledFont(size: 12, weight: .medium)
+        .scaledFont(size: OmiType.caption, weight: .medium)
         .foregroundColor(OmiColors.textSecondary)
-      HStack(spacing: 8) {
+      HStack(spacing: OmiSpacing.sm) {
         Text(secure ? String(repeating: "•", count: min(value.count, 28)) : value)
-          .scaledFont(size: 12)
+          .scaledFont(size: OmiType.caption)
           .foregroundColor(OmiColors.textPrimary)
           .lineLimit(1)
           .truncationMode(.middle)
           .frame(maxWidth: .infinity, alignment: .leading)
         Button("Copy") { model.copyToPasteboard(value, label: copyLabel) }
           .buttonStyle(.plain)
-          .scaledFont(size: 11, weight: .medium)
+          .scaledFont(size: OmiType.caption, weight: .medium)
           .foregroundColor(OmiColors.textSecondary)
       }
-      .padding(.horizontal, 12)
-      .padding(.vertical, 10)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
       .background(
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
+        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
           .fill(OmiColors.backgroundSecondary)
           .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
               .stroke(Color.white.opacity(0.08), lineWidth: 1))
       )
     }
   }
 
   private func mcpSnippet(_ text: String, title: String, enabled: Bool) -> some View {
-    VStack(alignment: .leading, spacing: 8) {
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       Text(text)
-        .scaledFont(size: 11)
+        .scaledFont(size: OmiType.caption)
         .foregroundColor(OmiColors.textSecondary)
         .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
+        .padding(OmiSpacing.md)
         .background(
-          RoundedRectangle(cornerRadius: 12, style: .continuous)
+          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
             .fill(OmiColors.backgroundSecondary)
             .overlay(
-              RoundedRectangle(cornerRadius: 12, style: .continuous)
+              RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
                 .stroke(Color.white.opacity(0.08), lineWidth: 1))
         )
       Button(title) { model.copyToPasteboard(text, label: title) }
-        .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+        .buttonStyle(OmiButtonStyle(.primary))
         .disabled(!enabled)
     }
   }
@@ -951,16 +920,16 @@ struct MemoryExportDestinationSheet: View {
   private var packSection: some View {
     switch destination {
     case .notion:
-      VStack(alignment: .leading, spacing: 12) {
+      VStack(alignment: .leading, spacing: OmiSpacing.md) {
         Text(
           "Omi copies a ready-to-paste Markdown page, saves a local backup, and opens Notion so you can drop it where you want."
         )
-        .scaledFont(size: 12)
+        .scaledFont(size: OmiType.caption)
         .foregroundColor(OmiColors.textTertiary)
       }
 
     case .obsidian:
-      VStack(alignment: .leading, spacing: 12) {
+      VStack(alignment: .leading, spacing: OmiSpacing.md) {
         selectedLocationCard(
           title: model.obsidianVaultPath.isEmpty ? "No vault selected yet" : "Selected vault",
           value: model.obsidianVaultPath.isEmpty
@@ -973,31 +942,31 @@ struct MemoryExportDestinationSheet: View {
         }
         .buttonStyle(.plain)
         .foregroundColor(OmiColors.textSecondary)
-        .scaledFont(size: 12, weight: .medium)
+        .scaledFont(size: OmiType.caption, weight: .medium)
 
         Text("Omi writes a refreshed `Omi/Memories.md` file inside the selected vault.")
-          .scaledFont(size: 12)
+          .scaledFont(size: OmiType.caption)
           .foregroundColor(OmiColors.textTertiary)
       }
 
     case .chatgpt, .claude, .gemini:
-      VStack(alignment: .leading, spacing: 12) {
+      VStack(alignment: .leading, spacing: OmiSpacing.md) {
         Text(
           "Omi will generate a Markdown memory pack, copy the prompt and export together, reveal the file in Finder, and open \(destination.title)."
         )
-        .scaledFont(size: 13)
+        .scaledFont(size: OmiType.body)
         .foregroundColor(OmiColors.textSecondary)
 
         Text(destination.manualPrompt)
-          .scaledFont(size: 12)
+          .scaledFont(size: OmiType.caption)
           .foregroundColor(OmiColors.textTertiary)
-          .padding(14)
+          .padding(OmiSpacing.md)
           .frame(maxWidth: .infinity, alignment: .leading)
           .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
               .fill(OmiColors.backgroundSecondary)
               .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
                   .stroke(Color.white.opacity(0.08), lineWidth: 1)
               )
           )
@@ -1016,7 +985,7 @@ struct MemoryExportDestinationSheet: View {
         }
       }
     }
-    .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+    .buttonStyle(OmiButtonStyle(.primary))
     .disabled(model.isRunning)
   }
 
@@ -1036,9 +1005,9 @@ struct MemoryExportDestinationSheet: View {
   private func textField(_ title: String, text: Binding<String>, isSecure: Bool = false)
     -> some View
   {
-    VStack(alignment: .leading, spacing: 6) {
+    VStack(alignment: .leading, spacing: OmiSpacing.xs) {
       Text(title)
-        .scaledFont(size: 12, weight: .medium)
+        .scaledFont(size: OmiType.caption, weight: .medium)
         .foregroundColor(OmiColors.textSecondary)
 
       Group {
@@ -1050,13 +1019,13 @@ struct MemoryExportDestinationSheet: View {
       }
       .textFieldStyle(.plain)
       .foregroundColor(OmiColors.textPrimary)
-      .padding(.horizontal, 14)
-      .padding(.vertical, 12)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.md)
       .background(
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
+        RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
           .fill(OmiColors.backgroundSecondary)
           .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
               .stroke(Color.white.opacity(0.08), lineWidth: 1)
           )
       )
@@ -1064,22 +1033,22 @@ struct MemoryExportDestinationSheet: View {
   }
 
   private func selectedLocationCard(title: String, value: String) -> some View {
-    VStack(alignment: .leading, spacing: 6) {
+    VStack(alignment: .leading, spacing: OmiSpacing.xs) {
       Text(title)
-        .scaledFont(size: 12, weight: .medium)
+        .scaledFont(size: OmiType.caption, weight: .medium)
         .foregroundColor(OmiColors.textSecondary)
 
       Text(value)
-        .scaledFont(size: 12)
+        .scaledFont(size: OmiType.caption)
         .foregroundColor(OmiColors.textPrimary)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.horizontal, OmiSpacing.md)
+        .padding(.vertical, OmiSpacing.md)
         .background(
-          RoundedRectangle(cornerRadius: 14, style: .continuous)
+          RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
             .fill(OmiColors.backgroundSecondary)
             .overlay(
-              RoundedRectangle(cornerRadius: 14, style: .continuous)
+              RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
                 .stroke(Color.white.opacity(0.08), lineWidth: 1)
             )
         )

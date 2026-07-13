@@ -47,11 +47,20 @@ All must be true:
    - exact `MEMORY_V3_GET_ENABLED=true` only when approved;
    - exact `MEMORY_MODE=read` only when approved;
    - one/small approved allowlist entry only;
-   - required server-owned control/grant/head/projection docs only through approved production path.
-8. Run tiny canary.
+   - required server-owned control/grant/head/projection docs only through approved production path;
+   - **required:** flip the same `MEMORY_*` values on `cloud_run.jobs.memory-maintenance-job` (cron + fast-track + allowlist) — ST→LT is **not** hosted by `notifications-job`;
+   - deploy `memory-maintenance-job` via `.github/workflows/gcp_memory_maintenance_job.yml` (`environment=prod`) and confirm live job env;
+   - create/update Cloud Scheduler → Run Job Execute hourly for prod `memory-maintenance-job` (same pattern as the [dev runbook](memory-v3-dev-cloud-proof.md)).
+8. Run tiny canary:
+   - confirm the canary UID has known pending short-term work (or seed one);
+   - capture a pre-execution baseline (pending ST count / watermark fields only — no raw content);
+   - execute `memory-maintenance-job` with `--wait` (or wait for the hourly tick);
+   - compare post-state to the baseline and assert watermark / ST→LT movement for the canary UID.
 9. If any post-selection prerequisite fails, confirm fail-closed and no legacy fallback.
 10. Exercise kill switch / rollback observation as approved.
 11. Record evidence and final decision.
+
+`backend/scripts/validate-backend-runtime-env.py` mechanically rejects `MEMORY_MODE=read` on request-path surfaces while `memory-maintenance-job` remains off/cron-false. Do not bypass that check for Gate 3.
 
 ## Non-claims
 

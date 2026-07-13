@@ -14,11 +14,21 @@ import re
 import sys
 import threading
 import time
+import types
 import unittest
 from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+PIPELINE_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
+
+
+def _read_pipeline_source():
+    with open(PIPELINE_PATH, encoding='utf-8') as f:
+        return f.read()
+
+
 from pydantic import BaseModel
 
 # ---------------------------------------------------------------------------
@@ -109,9 +119,9 @@ class TestSyncV2Structure:
 
     def test_v2_uses_job_specific_directory(self):
         """v2 must use syncing/{uid}/{job_id}/ to avoid concurrency conflicts."""
-        source = self._read_sync_source()
-        assert '_retrieve_file_paths_v2' in source
-        start = source.index('def _retrieve_file_paths_v2')
+        source = _read_pipeline_source()
+        assert '_retrieve_file_paths_v2' in _read_pipeline_source()
+        start = _read_pipeline_source().index('def _retrieve_file_paths_v2')
         next_def = source.index('\ndef ', start + 1)
         func_body = source[start:next_def]
 
@@ -121,9 +131,11 @@ class TestSyncV2Structure:
 
     def test_v2_background_has_cleanup(self):
         """Background worker must clean up files in finally block."""
-        source = self._read_sync_source()
+        source = _read_pipeline_source()
         start = source.index('async def _run_full_pipeline_background_async')
-        next_boundary = source.find('\n@router.', start + 1)
+        next_boundary = source.find('\nasync def ', start + 1)
+        if next_boundary == -1:
+            next_boundary = source.find('\ndef ', start + 1)
         if next_boundary == -1:
             next_boundary = len(source)
         func_body = source[start:next_boundary]
@@ -134,22 +146,26 @@ class TestSyncV2Structure:
 
     def test_v2_background_records_dg_after_processing(self):
         """DG usage must be recorded after processing, not before."""
-        source = self._read_sync_source()
+        source = _read_pipeline_source()
         start = source.index('async def _run_full_pipeline_background_async')
-        next_boundary = source.find('\n@router.', start + 1)
+        next_boundary = source.find('\nasync def ', start + 1)
+        if next_boundary == -1:
+            next_boundary = source.find('\ndef ', start + 1)
         if next_boundary == -1:
             next_boundary = len(source)
         func_body = source[start:next_boundary]
 
         dg_pos = func_body.index('record_dg_usage_ms')
-        processing_pos = func_body.index('asyncio.wait_for(run_blocking(sync_executor, _process_one_segment')
+        processing_pos = func_body.index('run_blocking(sync_executor, _process_one_segment')
         assert dg_pos > processing_pos, "DG usage must be recorded AFTER segment processing"
 
     def test_v2_background_does_decode_and_vad(self):
         """Background worker must run decode and VAD (#7281 — moved from inline)."""
-        source = self._read_sync_source()
+        source = _read_pipeline_source()
         start = source.index('async def _run_full_pipeline_background_async')
-        next_boundary = source.find('\n@router.', start + 1)
+        next_boundary = source.find('\nasync def ', start + 1)
+        if next_boundary == -1:
+            next_boundary = source.find('\ndef ', start + 1)
         if next_boundary == -1:
             next_boundary = len(source)
         func_body = source[start:next_boundary]
@@ -161,9 +177,11 @@ class TestSyncV2Structure:
 
     def test_v2_background_has_stage_heartbeats(self):
         """Background worker must heartbeat with stage info during decode and VAD."""
-        source = self._read_sync_source()
+        source = _read_pipeline_source()
         start = source.index('async def _run_full_pipeline_background_async')
-        next_boundary = source.find('\n@router.', start + 1)
+        next_boundary = source.find('\nasync def ', start + 1)
+        if next_boundary == -1:
+            next_boundary = source.find('\ndef ', start + 1)
         if next_boundary == -1:
             next_boundary = len(source)
         func_body = source[start:next_boundary]
@@ -193,9 +211,11 @@ class TestSyncV2Structure:
 
     def test_v2_bg_worker_fetches_prefs_and_cache(self):
         """Background worker must fetch transcription prefs and build person embeddings cache."""
-        source = self._read_sync_source()
+        source = _read_pipeline_source()
         start = source.index('async def _run_full_pipeline_background_async')
-        next_boundary = source.find('\n@router.', start + 1)
+        next_boundary = source.find('\nasync def ', start + 1)
+        if next_boundary == -1:
+            next_boundary = source.find('\ndef ', start + 1)
         if next_boundary == -1:
             next_boundary = len(source)
         func_body = source[start:next_boundary]
@@ -205,9 +225,11 @@ class TestSyncV2Structure:
 
     def test_v2_bg_worker_forwards_private_cloud_sync_enabled(self):
         """Background worker must forward private cloud sync intent into process_segment."""
-        source = self._read_sync_source()
+        source = _read_pipeline_source()
         start = source.index('async def _run_full_pipeline_background_async')
-        next_boundary = source.find('\n@router.', start + 1)
+        next_boundary = source.find('\nasync def ', start + 1)
+        if next_boundary == -1:
+            next_boundary = source.find('\ndef ', start + 1)
         if next_boundary == -1:
             next_boundary = len(source)
         func_body = source[start:next_boundary]
@@ -244,6 +266,30 @@ class TestSyncV2Structure:
         assert (
             'run_blocking(storage_executor' not in func_body
         ), "fast-path must NOT use storage_executor — background pipeline saturates it (#7372)"
+
+    def test_device_provenance_survives_inline_and_cloud_task_dispatch(self):
+        """Offline sync must stamp the conversation that canonical extraction reads."""
+        source = self._read_sync_source()
+        v1_start = source.index('async def sync_local_files(')
+        v2_start = source.index('async def sync_local_files_v2')
+        v1 = source[v1_start:v2_start]
+        v2_end = source.find('\n@router.', v2_start + 1)
+        v2 = source[v2_start:v2_end]
+        task_handler = source[source.index('async def run_sync_job') :]
+        # process_segment was extracted to utils/sync/pipeline.py (W4 refactor)
+        pipeline_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
+        with open(pipeline_path, encoding='utf-8') as f:
+            pipeline_source = f.read()
+        segment = pipeline_source[
+            pipeline_source.index('def process_segment(') : pipeline_source.index('\ndef _store_sync_audio_chunk')
+        ]
+
+        assert 'resolve_client_device_from_request(request)' in v1
+        assert 'resolve_client_device(' in v2
+        assert "'client_device_id': client_device_context.client_device_id" in v2
+        assert 'client_device_id=client_device_context.client_device_id' in v2
+        assert 'client_device_id=client_device_id' in task_handler
+        assert 'client_device_id=client_device_id' in segment
 
 
 # ---------------------------------------------------------------------------
@@ -441,11 +487,11 @@ class TestFullPipelineBackground:
 
     @staticmethod
     def _get_bg_func_body():
-        sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        with open(sync_path, encoding='utf-8') as f:
-            source = f.read()
+        source = _read_pipeline_source()
         start = source.index('async def _run_full_pipeline_background_async')
-        next_boundary = source.find('\n@router.', start + 1)
+        next_boundary = source.find('\nasync def ', start + 1)
+        if next_boundary == -1:
+            next_boundary = source.find('\ndef ', start + 1)
         if next_boundary == -1:
             next_boundary = len(source)
         return source[start:next_boundary]
@@ -495,11 +541,13 @@ class TestFullPipelineBackground:
         assert 'await run_blocking(' in body, "Async coordinator must offload blocking work to pools"
         assert '_get_sync_pipeline_semaphore' in body, "Async coordinator must use loop-scoped semaphore"
 
-    def test_background_uses_asyncio_wait_for_timeout(self):
-        """Segment and VAD tasks must use asyncio.wait_for with timeout=300."""
+    def test_background_does_not_abandon_mutating_executor_workers(self):
+        """Cancelling an executor Future must not let its thread outlive job finalization."""
         body = self._get_bg_func_body()
-        assert 'asyncio.wait_for(' in body, "Must use asyncio.wait_for for timeout enforcement"
-        assert 'timeout=300' in body, "Must use 300s timeout"
+        assert 'asyncio.wait_for(run_blocking(sync_executor, _run_vad_bg' not in body
+        assert 'asyncio.wait_for(run_blocking(sync_executor, _process_one_segment' not in body
+        assert 'run_blocking(sync_executor, _run_vad_bg' in body
+        assert 'run_blocking(sync_executor, _process_one_segment' in body
 
 
 # ---------------------------------------------------------------------------
@@ -801,11 +849,11 @@ class TestAsyncCoordinatorStructure:
 
     @staticmethod
     def _get_bg_func_body():
-        sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        with open(sync_path, encoding='utf-8') as f:
-            source = f.read()
+        source = _read_pipeline_source()
         start = source.index('async def _run_full_pipeline_background_async')
-        next_boundary = source.find('\n@router.', start + 1)
+        next_boundary = source.find('\nasync def ', start + 1)
+        if next_boundary == -1:
+            next_boundary = source.find('\ndef ', start + 1)
         if next_boundary == -1:
             next_boundary = len(source)
         return source[start:next_boundary]
@@ -929,19 +977,20 @@ class TestAsyncCoordinatorSemaphore:
 
     def test_semaphore_delegates_to_http_client(self):
         """Semaphore must use http_client._get_semaphore (CLAUDE.md rule 4)."""
-        source = self._read_sync_source()
-        assert '_get_sync_pipeline_semaphore()' in source, "Must use loop-scoped semaphore getter"
+        source = _read_pipeline_source()
+        assert '_get_sync_pipeline_semaphore(sync_lane)' in source, "Must use the lane-specific loop-scoped semaphore"
         assert '_get_semaphore' in source, "Must delegate to http_client._get_semaphore"
 
     def test_semaphore_limit_is_16(self):
         """Semaphore cap must be 16 (2x the old 8-slot postprocess_executor)."""
-        source = self._read_sync_source()
+        source = _read_pipeline_source()
         start = source.index('def _get_sync_pipeline_semaphore')
         end = source.find('\ndef ', start + 1)
         if end == -1:
             end = source.find('\nasync def ', start + 1)
         func_body = source[start:end]
-        assert "'sync_pipeline', 16" in func_body
+        assert "'sync_pipeline_fresh', 16" in func_body
+        assert "'sync_pipeline_backfill'" in func_body
 
     def test_semaphore_no_duplicate_cache(self):
         """sync.py must NOT have its own _sync_semaphores cache (use http_client's)."""
@@ -961,11 +1010,11 @@ class TestAsyncCoordinatorScenarios:
 
     @staticmethod
     def _get_bg_func_body():
-        sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        with open(sync_path, encoding='utf-8') as f:
-            source = f.read()
+        source = _read_pipeline_source()
         start = source.index('async def _run_full_pipeline_background_async')
-        next_boundary = source.find('\n@router.', start + 1)
+        next_boundary = source.find('\nasync def ', start + 1)
+        if next_boundary == -1:
+            next_boundary = source.find('\ndef ', start + 1)
         if next_boundary == -1:
             next_boundary = len(source)
         return source[start:next_boundary]
@@ -1027,16 +1076,15 @@ class TestAsyncCoordinatorScenarios:
         return_after_empty = body[empty_check_idx:vad_phase_idx]
         assert 'return' in return_after_empty
 
-    # --- VAD error/timeout ---
+    # --- VAD errors ---
 
-    def test_vad_timeout_captured_as_error(self):
-        """VAD TimeoutError must be captured and appended to vad_errors."""
+    def test_vad_workers_complete_before_cleanup(self):
+        """Mutating VAD workers must finish before segmented paths are cleaned."""
         body = self._get_bg_func_body()
-        assert 'asyncio.TimeoutError' in body
-        timeout_idx = body.index('isinstance(r, asyncio.TimeoutError)')
-        after = body[timeout_idx : timeout_idx + 200]
-        assert 'vad_errors.append' in after
-        assert 'VAD timed out' in after
+        gather_idx = body.index('vad_results = await asyncio.gather')
+        cleanup_idx = body.index("stage_timings['vad_ms']")
+        assert gather_idx < cleanup_idx
+        assert 'asyncio.wait_for(run_blocking(sync_executor, _run_vad_bg' not in body
 
     def test_vad_executor_error_captured(self):
         """Generic executor error during VAD must be captured."""
@@ -1119,20 +1167,20 @@ class TestAsyncCoordinatorScenarios:
 
     # --- Partial / all segment failure ---
 
-    def test_segment_timeout_captured(self):
-        """Segment TimeoutError must be captured in segment_errors."""
+    def test_segment_workers_complete_before_reprocessing(self):
+        """Mutating segment workers must finish before merged conversations are reprocessed."""
         body = self._get_bg_func_body()
-        seg_section = body[body.index('seg_results = await asyncio.gather') :]
-        seg_early = seg_section[:500]
-        assert 'isinstance(r, asyncio.TimeoutError)' in seg_early
-        assert 'Segment timed out' in seg_early
+        gather_idx = body.index('seg_results = await asyncio.gather')
+        reprocess_idx = body.index('_reprocess_merged_conversations')
+        assert gather_idx < reprocess_idx
+        assert 'asyncio.wait_for(run_blocking(sync_executor, _process_one_segment' not in body
 
     def test_generic_segment_task_exception_captured(self):
         """Generic segment task exceptions must be counted in segment_errors."""
         body = self._get_bg_func_body()
         seg_section = body[body.index('seg_results = await asyncio.gather') :]
         seg_early = seg_section[:800]
-        assert 'elif isinstance(r, Exception):' in seg_early
+        assert 'if isinstance(r, Exception):' in seg_early
         assert 'segment_errors.append' in seg_early
         assert 'Segment failed:' in seg_early
 
@@ -1251,6 +1299,23 @@ class TestAsyncCoordinatorScenarios:
 # ---------------------------------------------------------------------------
 
 
+def _install_sync_observability_stubs():
+    """Stub utils.observability.fallback + utils.metrics for routers.sync imports.
+
+    MagicMock('utils.observability') is not a package, so submodule imports fail
+    unless we install a real ModuleType package with __path__.
+    """
+    obs_pkg = types.ModuleType('utils.observability')
+    obs_pkg.__path__ = []  # type: ignore[attr-defined]
+    fallback_mod = types.ModuleType('utils.observability.fallback')
+    fallback_mod.record_fallback = MagicMock()
+    sys.modules['utils.observability'] = obs_pkg
+    sys.modules['utils.observability.fallback'] = fallback_mod
+    obs_pkg.fallback = fallback_mod
+    sys.modules['utils.metrics'] = MagicMock(OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL=MagicMock())
+    return fallback_mod
+
+
 class TestAsyncCoordinatorBehavioral:
     """Behavioral tests that invoke _run_full_pipeline_background_async with
     mocked dependencies. Verifies actual call sequences and outcomes."""
@@ -1269,6 +1334,7 @@ class TestAsyncCoordinatorBehavioral:
             'database.conversations',
             'database.users',
             'database.user_usage',
+            'database.sync_ledger',
             'firebase_admin',
             'google',
             'google.cloud',
@@ -1283,6 +1349,7 @@ class TestAsyncCoordinatorBehavioral:
             'utils',
             'utils.analytics',
             'utils.byok',
+            'utils.client_device',
             'utils.cloud_tasks',
             'utils.conversations',
             'utils.conversations.process_conversation',
@@ -1297,12 +1364,15 @@ class TestAsyncCoordinatorBehavioral:
             'utils.fair_use',
             'utils.subscription',
             'utils.observability',
+            'utils.observability.fallback',
+            'utils.metrics',
             'utils.log_sanitizer',
             'utils.http_client',
             'utils.request_validation',
-            'utils.sync',
             'utils.sync.files',
             'utils.sync.playback',
+            'utils.sync.backfill',
+            'utils.sync.content_id',
             'utils.speaker_assignment',
             'utils.speaker_identification',
             'utils.stt.speaker_embedding',
@@ -1316,6 +1386,25 @@ class TestAsyncCoordinatorBehavioral:
 
         sys.modules['python_multipart'].__version__ = '0.0.99'
         sys.modules['python_multipart.multipart'].parse_options_header = MagicMock(return_value={})
+        sys.modules['utils.log_sanitizer'].sanitize = lambda value: value
+        sys.modules['utils.client_device'].resolve_client_device = MagicMock(
+            return_value=MagicMock(client_device_id=None, platform=None)
+        )
+        sys.modules['utils.client_device'].resolve_client_device_from_request = MagicMock(
+            return_value=MagicMock(client_device_id=None, platform=None)
+        )
+        sys.modules['database.sync_ledger'].claim_sync_content = MagicMock(return_value={'outcome': 'owned'})
+        sys.modules['database.sync_ledger'].release_sync_content_claim = MagicMock()
+        sys.modules['database.sync_ledger'].mark_sync_content_completed = MagicMock()
+        sys.modules['database.sync_ledger'].try_mark_sync_content_side_effect = MagicMock(return_value=True)
+        sys.modules['utils.sync.backfill'].try_acquire_backfill_slot = MagicMock(return_value=True)
+        sys.modules['utils.sync.backfill'].release_backfill_slot = MagicMock()
+        sys.modules['utils.sync.backfill'].reserve_backfill_speech = MagicMock(
+            return_value=MagicMock(allowed=True, reason=None, retry_after=None)
+        )
+        sys.modules['utils.sync.content_id'].compute_sync_content_id = MagicMock(return_value='content-1')
+
+        _install_sync_observability_stubs()
 
         mock_executors = MagicMock()
         mock_executors.critical_executor = MagicMock()
@@ -1358,7 +1447,12 @@ class TestAsyncCoordinatorBehavioral:
         sys.modules['utils.byok'].set_byok_uid = MagicMock()
         sys.modules['utils.byok'].get_byok_keys = MagicMock(return_value={})
         sys.modules['utils.analytics'].record_usage = MagicMock()
-        sys.modules['utils.request_validation'].parse_sync_filename_timestamp = MagicMock(return_value=1700000000)
+        sys.modules['utils.request_validation'].parse_sync_filename_timestamp = MagicMock(return_value=time.time())
+        import types
+
+        sync_pkg = types.ModuleType('utils.sync')
+        sync_pkg.__path__ = [os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync')]
+        sys.modules['utils.sync'] = sync_pkg
         sys.modules['utils.sync'].files = sys.modules['utils.sync.files']
         sys.modules['utils.sync'].playback = sys.modules['utils.sync.playback']
         sys.modules['utils.sync.playback'].build_playback_artifact = MagicMock(return_value=b'')
@@ -1377,6 +1471,7 @@ class TestAsyncCoordinatorBehavioral:
         sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
 
         sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
         import importlib.util
 
         spec = importlib.util.spec_from_file_location(
@@ -1386,10 +1481,13 @@ class TestAsyncCoordinatorBehavioral:
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
 
+        pipeline_mod = sys.modules['utils.sync.pipeline']
+
         stubs['sync_jobs'] = mock_sync_jobs
         stubs['fair_use'] = sys.modules['utils.fair_use']
         stubs['byok'] = sys.modules['utils.byok']
         stubs['analytics'] = sys.modules['utils.analytics']
+        stubs['pipeline'] = pipeline_mod
         stubs['saved_modules'] = saved_modules
 
         return module, stubs
@@ -1397,6 +1495,7 @@ class TestAsyncCoordinatorBehavioral:
     @staticmethod
     def _cleanup(saved_modules):
         sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
         sys.modules.pop('sync_behavioral', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
@@ -1411,8 +1510,10 @@ class TestAsyncCoordinatorBehavioral:
 
         module, stubs = self._load_sync_module()
         try:
-            module.decode_files_to_wav = MagicMock(side_effect=_HTTPException(status_code=400, detail='bad format'))
-            module._cleanup_files = MagicMock()
+            stubs['pipeline'].decode_files_to_wav = MagicMock(
+                side_effect=_HTTPException(status_code=400, detail='bad format')
+            )
+            stubs['pipeline']._cleanup_files = MagicMock()
 
             await module._run_full_pipeline_background_async('j1', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job1')
 
@@ -1428,8 +1529,8 @@ class TestAsyncCoordinatorBehavioral:
         """Decode raising generic Exception must mark job failed."""
         module, stubs = self._load_sync_module()
         try:
-            module.decode_files_to_wav = MagicMock(side_effect=RuntimeError('corrupt file'))
-            module._cleanup_files = MagicMock()
+            stubs['pipeline'].decode_files_to_wav = MagicMock(side_effect=RuntimeError('corrupt file'))
+            stubs['pipeline']._cleanup_files = MagicMock()
 
             await module._run_full_pipeline_background_async('j2', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job2')
 
@@ -1444,15 +1545,18 @@ class TestAsyncCoordinatorBehavioral:
         """Empty wav_paths after decode must complete job with 0 segments."""
         module, stubs = self._load_sync_module()
         try:
-            module.decode_files_to_wav = MagicMock(return_value=[])
-            module._cleanup_files = MagicMock()
+            stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=[])
+            stubs['pipeline']._cleanup_files = MagicMock()
 
-            await module._run_full_pipeline_background_async('j3', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job3')
+            await module._run_full_pipeline_background_async(
+                'j3', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job3', content_id='content-3'
+            )
 
             stubs['sync_jobs'].mark_job_completed.assert_called_once()
             result = stubs['sync_jobs'].mark_job_completed.call_args[0][1]
             assert result['total_segments'] == 0
             assert result['failed_segments'] == 0
+            stubs['pipeline'].mark_sync_content_completed.assert_called_once()
         finally:
             self._cleanup(stubs['saved_modules'])
 
@@ -1461,20 +1565,20 @@ class TestAsyncCoordinatorBehavioral:
         """VAD errors must mark job failed and clean up."""
         module, stubs = self._load_sync_module()
         try:
-            module.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
-            module._cleanup_files = MagicMock()
+            stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
+            stubs['pipeline']._cleanup_files = MagicMock()
 
             def _bad_vad(path, segmented_paths, errors):
                 errors.append(f'{path}: silero exploded')
 
-            module.retrieve_vad_segments = _bad_vad
+            stubs['pipeline'].retrieve_vad_segments = _bad_vad
 
             await module._run_full_pipeline_background_async('j4', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job4')
 
             stubs['sync_jobs'].mark_job_failed.assert_called()
             args = stubs['sync_jobs'].mark_job_failed.call_args[0]
             assert 'VAD failed' in args[1]
-            assert module._cleanup_files.call_count >= 2
+            assert stubs['pipeline']._cleanup_files.call_count >= 2
         finally:
             self._cleanup(stubs['saved_modules'])
 
@@ -1483,16 +1587,19 @@ class TestAsyncCoordinatorBehavioral:
         """Zero segmented_paths after VAD must complete with 0 segments."""
         module, stubs = self._load_sync_module()
         try:
-            module.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
-            module._cleanup_files = MagicMock()
-            module.retrieve_vad_segments = MagicMock()
-            module.get_wav_duration = MagicMock(return_value=0.0)
+            stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
+            stubs['pipeline']._cleanup_files = MagicMock()
+            stubs['pipeline'].retrieve_vad_segments = MagicMock()
+            stubs['pipeline'].get_wav_duration = MagicMock(return_value=0.0)
 
-            await module._run_full_pipeline_background_async('j5', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job5')
+            await module._run_full_pipeline_background_async(
+                'j5', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job5', content_id='content-5'
+            )
 
             stubs['sync_jobs'].mark_job_completed.assert_called_once()
             result = stubs['sync_jobs'].mark_job_completed.call_args[0][1]
             assert result['total_segments'] == 0
+            stubs['pipeline'].mark_sync_content_completed.assert_called_once()
         finally:
             self._cleanup(stubs['saved_modules'])
 
@@ -1501,18 +1608,18 @@ class TestAsyncCoordinatorBehavioral:
         """DG budget exhausted must mark job failed."""
         module, stubs = self._load_sync_module()
         try:
-            module.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
-            module._cleanup_files = MagicMock()
+            stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
+            stubs['pipeline']._cleanup_files = MagicMock()
 
             def _vad_with_segments(path, segmented_paths, errors):
                 segmented_paths.add('/tmp/seg_1700000001.wav')
 
-            module.retrieve_vad_segments = _vad_with_segments
-            module.get_wav_duration = MagicMock(return_value=5.0)
-            module.FAIR_USE_ENABLED = True
-            module.FAIR_USE_RESTRICT_DAILY_DG_MS = 1000
-            module.get_enforcement_stage = MagicMock(return_value='restrict')
-            module.is_dg_budget_exhausted = MagicMock(return_value=True)
+            stubs['pipeline'].retrieve_vad_segments = _vad_with_segments
+            stubs['pipeline'].get_wav_duration = MagicMock(return_value=5.0)
+            stubs['pipeline'].FAIR_USE_ENABLED = True
+            stubs['pipeline'].FAIR_USE_RESTRICT_DAILY_DG_MS = 1000
+            stubs['pipeline'].get_enforcement_stage = MagicMock(return_value='restrict')
+            stubs['pipeline'].is_dg_budget_exhausted = MagicMock(return_value=True)
             module.record_speech_ms = MagicMock()
             module.get_rolling_speech_ms = MagicMock(return_value={})
             module.check_soft_caps = MagicMock(return_value=[])
@@ -1530,32 +1637,32 @@ class TestAsyncCoordinatorBehavioral:
         """DG budget NOT exhausted must continue to segment processing."""
         module, stubs = self._load_sync_module()
         try:
-            module.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
-            module._cleanup_files = MagicMock()
+            stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
+            stubs['pipeline']._cleanup_files = MagicMock()
 
             def _vad_with_segments(path, segmented_paths, errors):
                 segmented_paths.add('/tmp/seg_1700000001.wav')
 
-            module.retrieve_vad_segments = _vad_with_segments
-            module.get_wav_duration = MagicMock(return_value=5.0)
-            module.FAIR_USE_ENABLED = True
-            module.FAIR_USE_RESTRICT_DAILY_DG_MS = 1000
-            module.get_enforcement_stage = MagicMock(return_value='restrict')
-            module.is_dg_budget_exhausted = MagicMock(return_value=False)
-            module.record_speech_ms = MagicMock()
-            module.get_rolling_speech_ms = MagicMock(return_value={})
-            module.check_soft_caps = MagicMock(return_value=[])
-            module.users_db = MagicMock()
-            module.users_db.get_user_transcription_preferences = MagicMock(return_value={})
-            module.build_person_embeddings_cache = MagicMock(return_value={})
-            module.process_segment = MagicMock()
-            module.record_dg_usage_ms = MagicMock()
-            module.record_usage = MagicMock()
+            stubs['pipeline'].retrieve_vad_segments = _vad_with_segments
+            stubs['pipeline'].get_wav_duration = MagicMock(return_value=5.0)
+            stubs['pipeline'].FAIR_USE_ENABLED = True
+            stubs['pipeline'].FAIR_USE_RESTRICT_DAILY_DG_MS = 1000
+            stubs['pipeline'].get_enforcement_stage = MagicMock(return_value='restrict')
+            stubs['pipeline'].is_dg_budget_exhausted = MagicMock(return_value=False)
+            stubs['pipeline'].record_speech_ms = MagicMock()
+            stubs['pipeline'].get_rolling_speech_ms = MagicMock(return_value={})
+            stubs['pipeline'].check_soft_caps = MagicMock(return_value=[])
+            stubs['pipeline'].users_db = MagicMock()
+            stubs['pipeline'].users_db.get_user_transcription_preferences = MagicMock(return_value={})
+            stubs['pipeline'].build_person_embeddings_cache = MagicMock(return_value={})
+            stubs['pipeline'].process_segment = MagicMock()
+            stubs['pipeline'].record_dg_usage_ms = MagicMock()
+            stubs['pipeline'].record_usage = MagicMock()
 
             await module._run_full_pipeline_background_async('j7', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job7')
 
             stubs['sync_jobs'].mark_job_completed.assert_called_once()
-            module.process_segment.assert_called_once()
+            stubs['pipeline'].process_segment.assert_called_once()
         finally:
             self._cleanup(stubs['saved_modules'])
 
@@ -1564,23 +1671,25 @@ class TestAsyncCoordinatorBehavioral:
         """Partial segment failure must complete (not fail) with error count."""
         module, stubs = self._load_sync_module()
         try:
-            module.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
-            module._cleanup_files = MagicMock()
+            stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
+            stubs['pipeline']._cleanup_files = MagicMock()
 
             def _vad_two_segments(path, segmented_paths, errors):
                 segmented_paths.add('/tmp/seg_1700000001.wav')
                 segmented_paths.add('/tmp/seg_1700000002.wav')
 
-            module.retrieve_vad_segments = _vad_two_segments
-            module.get_wav_duration = MagicMock(return_value=5.0)
-            module.users_db = MagicMock()
-            module.users_db.get_user_transcription_preferences = MagicMock(return_value={})
-            module.users_db.get_user_private_cloud_sync_enabled = MagicMock(return_value=False)
-            module.users_db.get_data_protection_level = MagicMock(return_value=None)
-            module.build_person_embeddings_cache = MagicMock(return_value={})
-            module._reprocess_merged_conversations = MagicMock()
-            module.record_usage = MagicMock()
-            module.get_timestamp_from_path = MagicMock(side_effect=lambda p: int(p.split('_')[-1].split('.')[0]))
+            stubs['pipeline'].retrieve_vad_segments = _vad_two_segments
+            stubs['pipeline'].get_wav_duration = MagicMock(return_value=5.0)
+            stubs['pipeline'].users_db = MagicMock()
+            stubs['pipeline'].users_db.get_user_transcription_preferences = MagicMock(return_value={})
+            stubs['pipeline'].users_db.get_user_private_cloud_sync_enabled = MagicMock(return_value=False)
+            stubs['pipeline'].users_db.get_data_protection_level = MagicMock(return_value=None)
+            stubs['pipeline'].build_person_embeddings_cache = MagicMock(return_value={})
+            stubs['pipeline']._reprocess_merged_conversations = MagicMock()
+            stubs['pipeline'].record_usage = MagicMock()
+            stubs['pipeline'].get_timestamp_from_path = MagicMock(
+                side_effect=lambda p: int(p.split('_')[-1].split('.')[0])
+            )
             call_count = [0]
 
             def _process_seg_fails_once(path, uid, response, lock, errors, *args, **kwargs):
@@ -1590,7 +1699,7 @@ class TestAsyncCoordinatorBehavioral:
                 else:
                     response['new_memories'].add('mem1')
 
-            module.process_segment = _process_seg_fails_once
+            stubs['pipeline'].process_segment = _process_seg_fails_once
 
             await module._run_full_pipeline_background_async('j8', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job8')
 
@@ -1606,24 +1715,24 @@ class TestAsyncCoordinatorBehavioral:
         """A task-level segment exception must not complete with failed_segments=0."""
         module, stubs = self._load_sync_module()
         try:
-            module.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
-            module._cleanup_files = MagicMock()
+            stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
+            stubs['pipeline']._cleanup_files = MagicMock()
 
             def _vad_one_segment(path, segmented_paths, errors):
                 segmented_paths.add('/tmp/seg_1700000001.wav')
 
-            module.retrieve_vad_segments = _vad_one_segment
-            module.get_wav_duration = MagicMock(return_value=5.0)
-            module.users_db = MagicMock()
-            module.users_db.get_user_transcription_preferences = MagicMock(return_value={})
-            module.users_db.get_user_private_cloud_sync_enabled = MagicMock(return_value=False)
-            module.users_db.get_data_protection_level = MagicMock(return_value=None)
-            module.build_person_embeddings_cache = MagicMock(return_value={})
+            stubs['pipeline'].retrieve_vad_segments = _vad_one_segment
+            stubs['pipeline'].get_wav_duration = MagicMock(return_value=5.0)
+            stubs['pipeline'].users_db = MagicMock()
+            stubs['pipeline'].users_db.get_user_transcription_preferences = MagicMock(return_value={})
+            stubs['pipeline'].users_db.get_user_private_cloud_sync_enabled = MagicMock(return_value=False)
+            stubs['pipeline'].users_db.get_data_protection_level = MagicMock(return_value=None)
+            stubs['pipeline'].build_person_embeddings_cache = MagicMock(return_value={})
             module._reprocess_merged_conversations = MagicMock()
-            module.record_usage = MagicMock()
+            stubs['pipeline'].record_usage = MagicMock()
             module.get_timestamp_from_path = MagicMock(return_value=1700000001)
             module.sanitize = lambda value: value
-            module.process_segment = MagicMock(side_effect=RuntimeError('executor exploded'))
+            stubs['pipeline'].process_segment = MagicMock(side_effect=RuntimeError('executor exploded'))
 
             await module._run_full_pipeline_background_async(
                 'j-generic-segment-error', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-generic'
@@ -1642,25 +1751,25 @@ class TestAsyncCoordinatorBehavioral:
         """Person embeddings failure must fall back to empty dict, not crash."""
         module, stubs = self._load_sync_module()
         try:
-            module.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
-            module._cleanup_files = MagicMock()
+            stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
+            stubs['pipeline']._cleanup_files = MagicMock()
 
             def _vad_one_seg(path, segmented_paths, errors):
                 segmented_paths.add('/tmp/seg_1700000001.wav')
 
-            module.retrieve_vad_segments = _vad_one_seg
-            module.get_wav_duration = MagicMock(return_value=5.0)
-            module.users_db = MagicMock()
-            module.users_db.get_user_transcription_preferences = MagicMock(return_value={})
-            module.build_person_embeddings_cache = MagicMock(side_effect=RuntimeError('cache boom'))
+            stubs['pipeline'].retrieve_vad_segments = _vad_one_seg
+            stubs['pipeline'].get_wav_duration = MagicMock(return_value=5.0)
+            stubs['pipeline'].users_db = MagicMock()
+            stubs['pipeline'].users_db.get_user_transcription_preferences = MagicMock(return_value={})
+            stubs['pipeline'].build_person_embeddings_cache = MagicMock(side_effect=RuntimeError('cache boom'))
             captured_cache = {}
 
             def _capture_process(path, uid, response, lock, errors, source, is_locked, prefs, cache, *args, **kwargs):
                 captured_cache['value'] = cache
                 response['new_memories'].add('m1')
 
-            module.process_segment = _capture_process
-            module.record_usage = MagicMock()
+            stubs['pipeline'].process_segment = _capture_process
+            stubs['pipeline'].record_usage = MagicMock()
 
             await module._run_full_pipeline_background_async('j9', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job9')
 
@@ -1674,18 +1783,18 @@ class TestAsyncCoordinatorBehavioral:
         """target_conversation_id must be forwarded to process_segment."""
         module, stubs = self._load_sync_module()
         try:
-            module.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
-            module._cleanup_files = MagicMock()
+            stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
+            stubs['pipeline']._cleanup_files = MagicMock()
 
             def _vad_one_seg(path, segmented_paths, errors):
                 segmented_paths.add('/tmp/seg_1700000001.wav')
 
-            module.retrieve_vad_segments = _vad_one_seg
-            module.get_wav_duration = MagicMock(return_value=5.0)
-            module.users_db = MagicMock()
-            module.users_db.get_user_transcription_preferences = MagicMock(return_value={})
-            module.build_person_embeddings_cache = MagicMock(return_value={})
-            module.record_usage = MagicMock()
+            stubs['pipeline'].retrieve_vad_segments = _vad_one_seg
+            stubs['pipeline'].get_wav_duration = MagicMock(return_value=5.0)
+            stubs['pipeline'].users_db = MagicMock()
+            stubs['pipeline'].users_db.get_user_transcription_preferences = MagicMock(return_value={})
+            stubs['pipeline'].build_person_embeddings_cache = MagicMock(return_value={})
+            stubs['pipeline'].record_usage = MagicMock()
             captured_target = {}
 
             def _capture_target(
@@ -1694,7 +1803,7 @@ class TestAsyncCoordinatorBehavioral:
                 captured_target['value'] = target_cid
                 response['new_memories'].add('m1')
 
-            module.process_segment = _capture_target
+            stubs['pipeline'].process_segment = _capture_target
 
             await module._run_full_pipeline_background_async(
                 'j10', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job10', target_conversation_id='conv-123'
@@ -1709,26 +1818,26 @@ class TestAsyncCoordinatorBehavioral:
         """private_cloud_sync_enabled must be forwarded to process_segment."""
         module, stubs = self._load_sync_module()
         try:
-            module.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
-            module._cleanup_files = MagicMock()
+            stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
+            stubs['pipeline']._cleanup_files = MagicMock()
 
             def _vad_one_seg(path, segmented_paths, errors):
                 segmented_paths.add('/tmp/seg_1700000001.wav')
 
-            module.retrieve_vad_segments = _vad_one_seg
-            module.get_wav_duration = MagicMock(return_value=5.0)
-            module.users_db = MagicMock()
-            module.users_db.get_user_transcription_preferences = MagicMock(return_value={})
-            module.users_db.get_user_private_cloud_sync_enabled = MagicMock(return_value=True)
-            module.build_person_embeddings_cache = MagicMock(return_value={})
-            module.record_usage = MagicMock()
+            stubs['pipeline'].retrieve_vad_segments = _vad_one_seg
+            stubs['pipeline'].get_wav_duration = MagicMock(return_value=5.0)
+            stubs['pipeline'].users_db = MagicMock()
+            stubs['pipeline'].users_db.get_user_transcription_preferences = MagicMock(return_value={})
+            stubs['pipeline'].users_db.get_user_private_cloud_sync_enabled = MagicMock(return_value=True)
+            stubs['pipeline'].build_person_embeddings_cache = MagicMock(return_value={})
+            stubs['pipeline'].record_usage = MagicMock()
             captured = {}
 
             def _capture_private_sync(path, uid, response, lock, errors, *args, **kwargs):
                 captured['value'] = kwargs['private_cloud_sync_enabled']
                 response['new_memories'].add('m1')
 
-            module.process_segment = _capture_private_sync
+            stubs['pipeline'].process_segment = _capture_private_sync
 
             await module._run_full_pipeline_background_async(
                 'j-private', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-private'
@@ -1743,20 +1852,20 @@ class TestAsyncCoordinatorBehavioral:
         """Cleanup must be called even on successful completion."""
         module, stubs = self._load_sync_module()
         try:
-            module.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
+            stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
             cleanup_calls = []
-            module._cleanup_files = lambda paths: cleanup_calls.append(list(paths))
+            stubs['pipeline']._cleanup_files = lambda paths: cleanup_calls.append(list(paths))
 
             def _vad_one_seg(path, segmented_paths, errors):
                 segmented_paths.add('/tmp/seg_1700000001.wav')
 
-            module.retrieve_vad_segments = _vad_one_seg
-            module.get_wav_duration = MagicMock(return_value=5.0)
-            module.users_db = MagicMock()
-            module.users_db.get_user_transcription_preferences = MagicMock(return_value={})
-            module.build_person_embeddings_cache = MagicMock(return_value={})
-            module.process_segment = MagicMock()
-            module.record_usage = MagicMock()
+            stubs['pipeline'].retrieve_vad_segments = _vad_one_seg
+            stubs['pipeline'].get_wav_duration = MagicMock(return_value=5.0)
+            stubs['pipeline'].users_db = MagicMock()
+            stubs['pipeline'].users_db.get_user_transcription_preferences = MagicMock(return_value={})
+            stubs['pipeline'].build_person_embeddings_cache = MagicMock(return_value={})
+            stubs['pipeline'].process_segment = MagicMock()
+            stubs['pipeline'].record_usage = MagicMock()
 
             await module._run_full_pipeline_background_async('j11', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job11')
 
@@ -1770,15 +1879,15 @@ class TestAsyncCoordinatorBehavioral:
         """Cleanup and BYOK clear must happen even when pipeline crashes."""
         module, stubs = self._load_sync_module()
         try:
-            module.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
+            stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
             cleanup_calls = []
-            module._cleanup_files = lambda paths: cleanup_calls.append(list(paths))
+            stubs['pipeline']._cleanup_files = lambda paths: cleanup_calls.append(list(paths))
 
             def _vad_one_seg(path, segmented_paths, errors):
                 segmented_paths.add('/tmp/seg_1700000001.wav')
 
-            module.retrieve_vad_segments = _vad_one_seg
-            module.get_wav_duration = MagicMock(side_effect=RuntimeError('unexpected crash'))
+            stubs['pipeline'].retrieve_vad_segments = _vad_one_seg
+            stubs['pipeline'].get_wav_duration = MagicMock(side_effect=RuntimeError('unexpected crash'))
 
             await module._run_full_pipeline_background_async('j12', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job12')
 
@@ -1812,6 +1921,7 @@ class TestV2EndpointExecution:
             'database.conversations',
             'database.users',
             'database.user_usage',
+            'database.sync_ledger',
             'firebase_admin',
             'google',
             'google.cloud',
@@ -1826,6 +1936,7 @@ class TestV2EndpointExecution:
             'utils',
             'utils.analytics',
             'utils.byok',
+            'utils.client_device',
             'utils.cloud_tasks',
             'utils.conversations',
             'utils.conversations.process_conversation',
@@ -1840,12 +1951,15 @@ class TestV2EndpointExecution:
             'utils.fair_use',
             'utils.subscription',
             'utils.observability',
+            'utils.observability.fallback',
+            'utils.metrics',
             'utils.log_sanitizer',
             'utils.http_client',
             'utils.request_validation',
-            'utils.sync',
             'utils.sync.files',
             'utils.sync.playback',
+            'utils.sync.backfill',
+            'utils.sync.content_id',
             'utils.speaker_assignment',
             'utils.speaker_identification',
             'utils.stt.speaker_embedding',
@@ -1859,6 +1973,25 @@ class TestV2EndpointExecution:
 
         sys.modules['python_multipart'].__version__ = '0.0.99'
         sys.modules['python_multipart.multipart'].parse_options_header = MagicMock(return_value={})
+        sys.modules['utils.log_sanitizer'].sanitize = lambda value: value
+        sys.modules['utils.client_device'].resolve_client_device = MagicMock(
+            return_value=MagicMock(client_device_id=None, platform=None)
+        )
+        sys.modules['utils.client_device'].resolve_client_device_from_request = MagicMock(
+            return_value=MagicMock(client_device_id=None, platform=None)
+        )
+        sys.modules['database.sync_ledger'].claim_sync_content = MagicMock(return_value={'outcome': 'owned'})
+        sys.modules['database.sync_ledger'].release_sync_content_claim = MagicMock()
+        sys.modules['database.sync_ledger'].mark_sync_content_completed = MagicMock()
+        sys.modules['database.sync_ledger'].try_mark_sync_content_side_effect = MagicMock(return_value=True)
+        sys.modules['utils.sync.backfill'].try_acquire_backfill_slot = MagicMock(return_value=True)
+        sys.modules['utils.sync.backfill'].release_backfill_slot = MagicMock()
+        sys.modules['utils.sync.backfill'].reserve_backfill_speech = MagicMock(
+            return_value=MagicMock(allowed=True, reason=None, retry_after=None)
+        )
+        sys.modules['utils.sync.content_id'].compute_sync_content_id = MagicMock(return_value='content-1')
+
+        _install_sync_observability_stubs()
 
         # Stub utils.executors with real-ish executor mocks
         import contextvars
@@ -1888,7 +2021,12 @@ class TestV2EndpointExecution:
         sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False
         sys.modules['utils.fair_use'].FAIR_USE_RESTRICT_DAILY_DG_MS = 0
         sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
-        sys.modules['utils.request_validation'].parse_sync_filename_timestamp = MagicMock(return_value=1700000000)
+        sys.modules['utils.request_validation'].parse_sync_filename_timestamp = MagicMock(return_value=time.time())
+        import types
+
+        sync_pkg = types.ModuleType('utils.sync')
+        sync_pkg.__path__ = [os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync')]
+        sys.modules['utils.sync'] = sync_pkg
         sys.modules['utils.sync'].files = sys.modules['utils.sync.files']
         sys.modules['utils.sync'].playback = sys.modules['utils.sync.playback']
         sys.modules['utils.sync.playback'].build_playback_artifact = MagicMock(return_value=b'')
@@ -1911,6 +2049,7 @@ class TestV2EndpointExecution:
     @staticmethod
     def _cleanup_modules(saved_modules):
         sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -1924,6 +2063,7 @@ class TestV2EndpointExecution:
 
         try:
             sys.modules.pop('routers.sync', None)
+            sys.modules.pop('utils.sync.pipeline', None)
             import importlib.util
 
             spec = importlib.util.spec_from_file_location(
@@ -1966,6 +2106,7 @@ class TestV2EndpointExecution:
 
         try:
             sys.modules.pop('routers.sync', None)
+            sys.modules.pop('utils.sync.pipeline', None)
             import importlib.util
 
             spec = importlib.util.spec_from_file_location(
@@ -2007,6 +2148,7 @@ class TestV2EndpointExecution:
 
         try:
             sys.modules.pop('routers.sync', None)
+            sys.modules.pop('utils.sync.pipeline', None)
             import importlib.util
 
             spec = importlib.util.spec_from_file_location(
@@ -2053,6 +2195,7 @@ class TestV2EndpointExecution:
 
         try:
             sys.modules.pop('routers.sync', None)
+            sys.modules.pop('utils.sync.pipeline', None)
             import importlib.util
 
             spec = importlib.util.spec_from_file_location(
@@ -2098,6 +2241,7 @@ class TestV2EndpointExecution:
 
         try:
             sys.modules.pop('routers.sync', None)
+            sys.modules.pop('utils.sync.pipeline', None)
             import importlib.util
 
             spec = importlib.util.spec_from_file_location(
@@ -2140,6 +2284,7 @@ class TestV2EndpointExecution:
 
         try:
             sys.modules.pop('routers.sync', None)
+            sys.modules.pop('utils.sync.pipeline', None)
             import importlib.util
 
             spec = importlib.util.spec_from_file_location(
@@ -2160,6 +2305,15 @@ class TestV2EndpointExecution:
                 return fn(*args, **kwargs)
 
             module.run_blocking = _passthrough_run_blocking
+            module.classify_sync_lane = MagicMock(
+                return_value=types.SimpleNamespace(
+                    lane=module.SyncLane.FRESH,
+                    trust=types.SimpleNamespace(value='legacy'),
+                    reason='recent_capture',
+                    maximum_age_seconds=60,
+                    automatic_recovery_allowed=True,
+                )
+            )
 
             import asyncio
             from starlette.datastructures import UploadFile
@@ -2342,7 +2496,7 @@ class TestBYOKContextPropagation:
 
     def test_async_coordinator_clears_byok_in_finally(self):
         """Async coordinator must clear BYOK context in its finally block."""
-        source = self._read_sync_source()
+        source = _read_pipeline_source()
         start = source.index('async def _run_full_pipeline_background_async')
         next_boundary = source.find('\n@router.', start + 1)
         if next_boundary == -1:
@@ -2354,7 +2508,7 @@ class TestBYOKContextPropagation:
 
     def test_async_coordinator_sets_byok_uid_before_work(self):
         """Async coordinator must attach the uid to inherited BYOK key context."""
-        source = self._read_sync_source()
+        source = _read_pipeline_source()
         start = source.index('async def _run_full_pipeline_background_async')
         next_boundary = source.find('\n@router.', start + 1)
         if next_boundary == -1:
@@ -2485,15 +2639,15 @@ class TestTimeoutConfiguration:
         func_body = source[start:end]
         assert 'attempts < 1' in func_body, "DG bytes transcription must use attempts < 1 (max 2 attempts)"
 
-    def test_segment_timeout_budget(self):
-        """Segment tasks in v2 async coordinator must use asyncio.wait_for with timeout=300."""
-        sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        with open(sync_path, encoding='utf-8') as f:
-            source = f.read()
+    def test_segment_workers_are_not_detached_by_async_timeout(self):
+        """Executor threads must not outlive the coordinator after an asyncio timeout."""
+        source = _read_pipeline_source()
         start = source.index('async def _run_full_pipeline_background_async')
-        end = source.find('\n@router.', start + 1)
+        end = source.find('\nasync def ', start + 1)
+        if end == -1:
+            end = source.find('\ndef ', start + 1)
         if end == -1:
             end = len(source)
         func_body = source[start:end]
-        assert 'asyncio.wait_for(' in func_body, "Must use asyncio.wait_for for timeout enforcement"
-        assert 'timeout=300' in func_body, "Segment tasks must have 300s timeout"
+        assert 'asyncio.wait_for(run_blocking(sync_executor, _process_one_segment' not in func_body
+        assert 'run_blocking(sync_executor, _process_one_segment' in func_body

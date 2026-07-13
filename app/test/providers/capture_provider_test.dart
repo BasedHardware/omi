@@ -558,7 +558,7 @@ void main() {
       await tester.pump();
 
       final context = tester.element(find.byType(Scaffold));
-      final expectedText = AppLocalizations.of(context)!.transcriptionPausedReconnecting;
+      final expectedText = AppLocalizations.of(context).transcriptionPausedReconnecting;
 
       expect(find.byType(SnackBar), findsOneWidget);
       expect(find.text(expectedText), findsOneWidget);
@@ -576,7 +576,7 @@ void main() {
       await tester.pump();
 
       final context = tester.element(find.byType(Scaffold));
-      final expectedText = AppLocalizations.of(context)!.transcriptionPausedReconnecting;
+      final expectedText = AppLocalizations.of(context).transcriptionPausedReconnecting;
 
       expect(find.byType(SnackBar), findsNothing);
       expect(find.text(expectedText), findsNothing);

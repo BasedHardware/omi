@@ -100,11 +100,18 @@ actor VideoChunkEncoder {
 
     /// Initialize the encoder with the videos directory
     func initialize(videosDirectory: URL) async throws {
-        guard !isInitialized else { return }
+        if isInitialized {
+            guard self.videosDirectory != videosDirectory else { return }
+            await resetForUserSwitch()
+        }
 
         self.videosDirectory = videosDirectory
         isInitialized = true
         log("VideoChunkEncoder: Initialized at \(videosDirectory.path)")
+    }
+
+    func videosDirectoryForTesting() -> URL? {
+        videosDirectory
     }
 
     func hasFinalizedChunkForDedupe() -> Bool {
@@ -203,18 +210,12 @@ actor VideoChunkEncoder {
             }
         }
 
-        // Record timestamp only (CGImage is not retained - memory optimization)
-        frameTimestamps.append(timestamp)
-
-        let frameInfo = EncodedFrame(
-            videoChunkPath: currentChunkPath!,
-            frameOffset: frameOffsetInChunk,
-            timestamp: timestamp
-        )
-
-        frameOffsetInChunk += 1
-
-        // Write frame to the encoder immediately (CGImage not stored after this)
+        // Write frame to the encoder FIRST (CGImage not stored after this). Only a
+        // successful write may consume a frame index: if the write throws, the
+        // caller skips the DB insert for this frame, so advancing frameOffsetInChunk
+        // / appending a timestamp here would desync every later frame in the chunk
+        // by one (DB frameOffset N pointing at real sample N-1, and the last record
+        // pointing past the end of the video). Record the frame only after success.
         do {
             try await writeFrame(image: image)
             consecutiveWriteFailures = 0 // Reset on successful write
@@ -229,6 +230,18 @@ actor VideoChunkEncoder {
             }
             throw error
         }
+
+        // Write succeeded — now record the timestamp (CGImage is not retained) and
+        // claim this frame's offset, so offsets match real encoded sample indices.
+        frameTimestamps.append(timestamp)
+
+        let frameInfo = EncodedFrame(
+            videoChunkPath: currentChunkPath!,
+            frameOffset: frameOffsetInChunk,
+            timestamp: timestamp
+        )
+
+        frameOffsetInChunk += 1
 
         // Check if chunk duration exceeded.
         // First chunk uses the shorter `firstChunkDuration` so Rewind starts showing
@@ -324,7 +337,10 @@ actor VideoChunkEncoder {
         )
 
         guard writer.startWriting() else {
-            throw RewindError.storageError("Failed to start HEVC writer: \(writer.error?.localizedDescription ?? "unknown error")")
+            if let writerError = writer.error {
+                throw RewindError.storageWriteFailed("Failed to start HEVC writer", underlying: writerError)
+            }
+            throw RewindError.storageError("Failed to start HEVC writer: unknown error")
         }
         writer.startSession(atSourceTime: .zero)
 
@@ -352,6 +368,14 @@ actor VideoChunkEncoder {
         SentrySDK.addBreadcrumb(breadcrumb)
     }
 
+    /// Presentation timestamp (in seconds) for the frame at `frameOffset` within a chunk.
+    /// Callers pass the offset of the frame being written now; the writer requires strictly
+    /// increasing timestamps, so this must be a strictly increasing function of frameOffset
+    /// for 0, 1, 2, … `nonisolated static` so it is synchronously unit-testable.
+    nonisolated static func framePresentationSeconds(frameOffset: Int, frameRate: Double) -> Double {
+        Double(max(0, frameOffset)) / frameRate
+    }
+
     private func writeFrame(image: CGImage) async throws {
         guard let input = writerInput,
               let adaptor = pixelBufferAdaptor,
@@ -375,9 +399,23 @@ actor VideoChunkEncoder {
             try createPixelBuffer(from: image, size: outputSize, adaptor: adaptor)
         }
 
-        let presentationTime = CMTime(seconds: Double(max(0, frameOffsetInChunk - 1)) / frameRate, preferredTimescale: 600)
+        // frameOffsetInChunk is the index of the frame being written RIGHT NOW; it is
+        // incremented in addFrame only AFTER this write succeeds (so a failed write does
+        // not consume an offset). The presentation timestamp must therefore be derived
+        // from the current offset directly. A stale `- 1` here (left over from when the
+        // offset was pre-incremented before writeFrame) makes frame 0 and frame 1 both
+        // resolve to PTS 0, and AVAssetWriterInputPixelBufferAdaptor.append requires
+        // strictly increasing timestamps — so every chunk's second frame is rejected,
+        // failures cascade to an emergency reset, and no video chunk is ever persisted.
+        let presentationTime = CMTime(
+            seconds: Self.framePresentationSeconds(frameOffset: frameOffsetInChunk, frameRate: frameRate),
+            preferredTimescale: 600
+        )
         guard adaptor.append(pixelBuffer, withPresentationTime: presentationTime) else {
-            throw RewindError.storageError("Failed to append frame to HEVC writer: \(assetWriter?.error?.localizedDescription ?? "unknown error")")
+            if let writerError = assetWriter?.error {
+                throw RewindError.storageWriteFailed("Failed to append frame to HEVC writer", underlying: writerError)
+            }
+            throw RewindError.storageError("Failed to append frame to HEVC writer: unknown error")
         }
         writerNotReadyCount = 0
     }
@@ -575,7 +613,11 @@ actor VideoChunkEncoder {
                 case .completed:
                     continuation.resume()
                 case .failed, .cancelled:
-                    continuation.resume(throwing: RewindError.storageError("HEVC writer failed: \(writerBox.writer.error?.localizedDescription ?? Self.writerStatusDescription(writerBox.writer.status))"))
+                    if let writerError = writerBox.writer.error {
+                        continuation.resume(throwing: RewindError.storageWriteFailed("HEVC writer failed", underlying: writerError))
+                    } else {
+                        continuation.resume(throwing: RewindError.storageError("HEVC writer failed: \(Self.writerStatusDescription(writerBox.writer.status))"))
+                    }
                 default:
                     continuation.resume(throwing: RewindError.storageError("HEVC writer ended in unexpected state: \(Self.writerStatusDescription(writerBox.writer.status))"))
                 }
@@ -625,6 +667,13 @@ actor VideoChunkEncoder {
         currentChunkInputSize = nil
         consecutiveWriteFailures = 0
         writerNotReadyCount = 0
+    }
+
+    func resetForUserSwitch() async {
+        await cancel()
+        videosDirectory = nil
+        isInitialized = false
+        hasFinalizedAnyChunk = false
     }
 
     /// Emergency reset when encoding fails repeatedly or buffer overflows

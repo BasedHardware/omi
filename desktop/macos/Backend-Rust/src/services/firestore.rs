@@ -1,28 +1,17 @@
+#![deny(dead_code, unreachable_pub)]
+
 // Firestore service - Port from Python backend (database.py)
 // Uses Firestore REST API for simplicity and compatibility
 
 mod action_items_repository;
-mod advice_repository;
 mod agent_vm_repository;
-mod apps_repository;
-mod chat_repository;
 mod conversations_repository;
 mod desktop_releases_repository;
-mod focus_repository;
-mod folders_repository;
-mod folders_values;
-mod goals_repository;
-mod knowledge_graph_repository;
 mod llm_usage_repository;
-mod memories_repository;
-mod messages_repository;
-mod people_repository;
-mod persona_repository;
 mod screen_activity_repository;
 mod users_repository;
 mod values;
 
-use base64::Engine;
 use chrono::{DateTime, Utc};
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use reqwest::Client;
@@ -32,16 +21,7 @@ use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::encryption;
-
-use crate::models::{
-    AIUserProfile, ActionItemDB, AdviceCategory, AdviceDB, AdviceSettingsData, App, AppReview,
-    AppSummary, AssistantSettingsData, Category, Conversation, DailySummarySettings,
-    DistractionEntry, FloatingBarSettingsData, FocusSessionDB, FocusSettingsData, FocusStats,
-    FocusStatus, Folder, GoalDB, GoalHistoryEntry, GoalType, Memory, MemoryCategory, MemoryDB,
-    MemorySettingsData, MessageDB, NotificationSettings, PersonaDB, SharedAssistantSettingsData,
-    Structured, TaskSettingsData, TranscriptSegment, TranscriptionPreferences, UserProfile,
-};
+use crate::models::ActionItemDB;
 
 /// Service account credentials from JSON file
 #[derive(Debug, Clone, Deserialize)]
@@ -69,29 +49,16 @@ struct CachedToken {
 
 /// Firestore collection paths
 /// Copied from Python database.py
-pub const USERS_COLLECTION: &str = "users";
-pub const CONVERSATIONS_SUBCOLLECTION: &str = "conversations";
-pub const ACTION_ITEMS_SUBCOLLECTION: &str = "action_items";
-pub const MEMORIES_SUBCOLLECTION: &str = "memories";
-pub const APPS_COLLECTION: &str = "plugins_data";
-pub const ENABLED_APPS_SUBCOLLECTION: &str = "enabled_plugins";
-pub const FOCUS_SESSIONS_SUBCOLLECTION: &str = "focus_sessions";
-pub const ADVICE_SUBCOLLECTION: &str = "advice";
-pub const MESSAGES_SUBCOLLECTION: &str = "messages";
-pub const FOLDERS_SUBCOLLECTION: &str = "folders";
-pub const CHAT_SESSIONS_SUBCOLLECTION: &str = "chat_sessions";
-pub const GOALS_SUBCOLLECTION: &str = "goals";
-pub const KG_NODES_SUBCOLLECTION: &str = "knowledge_nodes";
-pub const KG_EDGES_SUBCOLLECTION: &str = "knowledge_edges";
-pub const STAGED_TASKS_SUBCOLLECTION: &str = "staged_tasks";
-pub const PEOPLE_SUBCOLLECTION: &str = "people";
-pub const LLM_USAGE_SUBCOLLECTION: &str = "llm_usage";
-pub const SCREEN_ACTIVITY_SUBCOLLECTION: &str = "screen_activity";
-pub const REALTIME_SESSIONS_SUBCOLLECTION: &str = "realtime_sessions";
+const USERS_COLLECTION: &str = "users";
+const CONVERSATIONS_SUBCOLLECTION: &str = "conversations";
+const ACTION_ITEMS_SUBCOLLECTION: &str = "action_items";
+const LLM_USAGE_SUBCOLLECTION: &str = "llm_usage";
+const SCREEN_ACTIVITY_SUBCOLLECTION: &str = "screen_activity";
+const REALTIME_SESSIONS_SUBCOLLECTION: &str = "realtime_sessions";
 
 /// Generate a document ID from a seed string using SHA256 hash
 /// Copied from Python document_id_from_seed
-pub fn document_id_from_seed(seed: &str) -> String {
+fn document_id_from_seed(seed: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(seed.as_bytes());
     let result = hasher.finalize();
@@ -99,31 +66,17 @@ pub fn document_id_from_seed(seed: &str) -> String {
 }
 
 /// Firestore REST API client
-pub struct FirestoreService {
+pub(crate) struct FirestoreService {
     client: Client,
     project_id: String,
     credentials: Option<ServiceAccountCredentials>,
     cached_token: Arc<RwLock<Option<CachedToken>>>,
-    /// Encryption secret for decrypting user data with enhanced protection level
-    encryption_secret: Option<Vec<u8>>,
 }
 
 impl FirestoreService {
-    #[cfg(test)]
-    pub(super) fn new_for_contract(encryption_secret: Option<Vec<u8>>) -> Self {
-        Self {
-            client: Client::new(),
-            project_id: "contract-tests".to_string(),
-            credentials: None,
-            cached_token: Arc::new(RwLock::new(None)),
-            encryption_secret,
-        }
-    }
-
     /// Create a new Firestore service
-    pub async fn new(
+    pub(crate) async fn new(
         project_id: String,
-        encryption_secret: Option<Vec<u8>>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let client = Client::new();
 
@@ -135,7 +88,6 @@ impl FirestoreService {
             project_id,
             credentials,
             cached_token: Arc::new(RwLock::new(None)),
-            encryption_secret,
         };
 
         // Pre-fetch an access token
@@ -312,17 +264,6 @@ impl FirestoreService {
         Ok(token_response.access_token)
     }
 
-    /// Refresh access token (for manual refresh if needed)
-    pub async fn refresh_token(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Clear cache to force refresh
-        {
-            let mut cache = self.cached_token.write().await;
-            *cache = None;
-        }
-        self.get_access_token().await?;
-        Ok(())
-    }
-
     /// Build Firestore REST API base URL
     fn base_url(&self) -> String {
         format!(
@@ -344,25 +285,12 @@ impl FirestoreService {
     }
 
     /// Build authenticated request for GCE Compute Engine API (public for agent routes)
-    pub async fn build_compute_request(
+    pub(crate) async fn build_compute_request(
         &self,
         method: reqwest::Method,
         url: &str,
     ) -> Result<reqwest::RequestBuilder, Box<dyn std::error::Error + Send + Sync>> {
         self.build_request(method, url).await
-    }
-}
-
-impl Default for Structured {
-    fn default() -> Self {
-        Self {
-            title: String::new(),
-            overview: String::new(),
-            emoji: "🧠".to_string(),
-            category: Category::Other,
-            action_items: vec![],
-            events: vec![],
-        }
     }
 }
 
@@ -372,7 +300,7 @@ impl Default for Structured {
 
 /// Parse BYOK state from a Firestore user document JSON.
 /// Returns `ByokState::default()` (inactive) if the byok field is missing or malformed.
-pub(super) fn parse_byok_state_from_doc(doc: &Value) -> crate::byok::ByokState {
+fn parse_byok_state_from_doc(doc: &Value) -> crate::byok::ByokState {
     let fields = match doc.get("fields") {
         Some(f) => f,
         None => return crate::byok::ByokState::default(),
@@ -423,7 +351,7 @@ pub(super) fn parse_byok_state_from_doc(doc: &Value) -> crate::byok::ByokState {
 
 /// Parse effective subscription plan from a Firestore user document JSON.
 /// Returns "basic" if the subscription field is missing, malformed, or expired.
-pub(super) fn parse_effective_plan_from_doc(doc: &Value) -> String {
+fn parse_effective_plan_from_doc(doc: &Value) -> String {
     let fields = match doc.get("fields") {
         Some(f) => f,
         None => return "basic".to_string(),

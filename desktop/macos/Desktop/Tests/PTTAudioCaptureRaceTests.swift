@@ -18,6 +18,21 @@ import XCTest
 /// runtime on a named bundle in the default (hub) config — see
 /// `.omi-hardening/slices/003-ptt-empty-batch/`.
 final class PTTAudioCaptureRaceTests: XCTestCase {
+  func testDeferredCoreAudioReconfigurationCannotRestartAfterOwnerTeardown() {
+    XCTAssertTrue(
+      AudioCaptureService.shouldRunDeferredReconfiguration(
+        isCapturing: true,
+        isReconfiguring: true))
+    XCTAssertFalse(
+      AudioCaptureService.shouldRunDeferredReconfiguration(
+        isCapturing: false,
+        isReconfiguring: true))
+    XCTAssertFalse(
+      AudioCaptureService.shouldRunDeferredReconfiguration(
+        isCapturing: true,
+        isReconfiguring: false))
+  }
+
   func testAllModeGatesRouteTooShortTurnsToHint() throws {
     let source = try managerSource()
 
@@ -30,14 +45,15 @@ final class PTTAudioCaptureRaceTests: XCTestCase {
   }
 
   func testHintUsesPTTHintTextAndKeepsBarVoiceSized() throws {
-    let source = try managerSource()
+    let reducer = VoiceTurnReducer()
+    let turnID = VoiceTurnID()
+    let started = reducer.reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
 
-    XCTAssertTrue(source.contains("private func finishTooShortPTTTurnWithHint(reason: String)"))
-    XCTAssertTrue(source.contains("barState?.pttHintText = \"Hold longer to record\""))
-    // updateBarState keeps the bar in voice-UI (sized) while the hint is up.
-    XCTAssertTrue(source.contains("|| !barState.pttHintText.isEmpty"))
-    // The hint is cleared on reset.
-    XCTAssertTrue(source.contains("barState?.pttHintText = \"\""))
+    let finished = reducer.reduce(started, .finish(turnID: turnID, reason: .tooShort))
+
+    XCTAssertEqual(finished.model.turn?.phase, .terminal(.tooShort))
+    XCTAssertEqual(finished.model.turn?.projection.hint, "Hold longer to record")
+    XCTAssertTrue(finished.model.turn?.deadlines.contains(.hintVisibility) == true)
   }
 
   /// Review fixes for the hint path (cubic P1/P2): the omni/batch discard path
@@ -46,13 +62,18 @@ final class PTTAudioCaptureRaceTests: XCTestCase {
   /// `.finalizing`), and the reset timer must be tagged so a rapid follow-up tap's
   /// hint isn't cleared early.
   func testHintPathResetsStateAndTagsHint() throws {
-    let source = try managerSource()
-    guard let start = source.range(of: "func finishTooShortPTTTurnWithHint(reason: String)") else {
-      return XCTFail("finishTooShortPTTTurnWithHint not found")
-    }
-    let body = String(source[start.lowerBound...].prefix(900))
-    XCTAssertTrue(body.contains("state = .idle"), "hint path must return the manager to .idle")
-    XCTAssertTrue(body.contains("pttHintGeneration"), "hint reset must be guarded by a per-hint token")
+    let reducer = VoiceTurnReducer()
+    let turnID = VoiceTurnID()
+    var model = reducer.reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reducer.reduce(model, .finish(turnID: turnID, reason: .tooShort)).model
+
+    XCTAssertTrue(model.turn?.phase.isTerminal == true)
+
+    let cleared = reducer.reduce(
+      model,
+      .deadlineFired(turnID: turnID, deadline: .hintVisibility))
+    XCTAssertEqual(cleared.model.turn?.projection.hint, "")
+    XCTAssertEqual(cleared.model.turn?.phase, .terminal(.tooShort))
   }
 
   func testFloatingBarRendersPTTHintText() throws {
@@ -83,7 +104,8 @@ final class PTTAudioCaptureRaceTests: XCTestCase {
     XCTAssertTrue(window.contains("pttHintRowHeight"))
     // ...and a dedicated observer resizes when the hint appears/clears (no
     // isVoiceListening transition fires on its own to trigger a resize).
-    XCTAssertTrue(window.contains("state.$pttHintText"))
+    XCTAssertTrue(window.contains("state.$voiceProjection"))
+    XCTAssertTrue(window.contains("$0.hint.isEmpty"))
   }
 
   private func managerSource() throws -> String {

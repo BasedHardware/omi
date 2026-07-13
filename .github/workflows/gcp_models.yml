@@ -22,6 +22,11 @@ on:
         required: false
         default: ''
 
+# This workflow's Helm target is VAD; serialize writers to that release.
+concurrency:
+  group: deploy-gke-vad-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
 env:
   SERVICE: models
   REGION: us-central1
@@ -75,7 +80,7 @@ jobs:
 
       - name: Deploy VAD to GKE cluster using Helm
         run: |
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-vad ./backend/charts/vad -f ./backend/charts/vad/${{ vars.ENV }}_omi_vad_values.yaml --set "image.tag=${GITHUB_SHA::7}"
+          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-vad ./backend/charts/vad -f ./backend/charts/vad/${{ vars.ENV }}_omi_vad_values.yaml --set-string "image.tag=${GITHUB_SHA::7}"
 
       - name: Verify rollout
         run: |

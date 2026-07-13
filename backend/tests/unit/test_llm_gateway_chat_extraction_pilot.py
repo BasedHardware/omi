@@ -137,6 +137,7 @@ def test_gateway_validation_rejects_conversation_structure_defaults_masking_miss
         (
             {
                 'feature': 'conversation_structure.extract.shadow',
+                'mode': 'fallback',
                 'outcome': 'fallback',
                 'reason': 'schema_validation',
             },
@@ -205,7 +206,17 @@ def test_strict_schema_normalizes_action_item_extraction_for_openai():
 
     action_item_schema = schema['$defs']['ExtractedActionItem']
     assert action_item_schema['additionalProperties'] is False
-    assert action_item_schema['required'] == ['description', 'due_at']
+    assert action_item_schema['required'] == [
+        'description',
+        'due_at',
+        'capture_kind',
+        'capture_confidence',
+        'ownership_confidence',
+        'capture_owner',
+        'concrete_deliverable',
+        'candidate_action',
+        'target_task_id',
+    ]
     assert 'default' not in action_item_schema['properties']['due_at']
     assert {'type': 'null'} in action_item_schema['properties']['due_at']['anyOf']
 
@@ -308,6 +319,7 @@ def test_chat_structured_gateway_records_success_metric(monkeypatch, caplog):
         (
             {
                 'feature': 'chat_extraction.requires_context',
+                'mode': 'serving',
                 'outcome': 'success',
                 'reason': 'ok',
             },
@@ -337,6 +349,7 @@ def test_chat_structured_gateway_records_fallback_reason_metric(monkeypatch):
         (
             {
                 'feature': 'chat_extraction.requires_context',
+                'mode': 'fallback',
                 'outcome': 'fallback',
                 'reason': 'schema_validation',
             },
@@ -563,6 +576,7 @@ def test_action_items_gateway_shadow_disabled_skips_submit(monkeypatch):
     assert (
         {
             'feature': 'conversation_action_items.extract.shadow',
+            'mode': 'shadow',
             'outcome': 'skipped',
             'reason': 'disabled',
         },
@@ -707,6 +721,7 @@ def test_conversation_structure_shadow_disabled_skips_gateway(monkeypatch):
     assert (
         {
             'feature': 'conversation_structure.extract.shadow',
+            'mode': 'shadow',
             'outcome': 'skipped',
             'reason': 'disabled',
         },

@@ -5,35 +5,67 @@ import XCTest
 @MainActor
 final class CaptureScreenToolTests: XCTestCase {
 
+  private let screenshotKey = DefaultsKey.chatScreenshotSharingEnabled.rawValue
+  private var ownerFixture: RuntimeOwnerAuthorityTestFixture!
+
+  override func setUp() async throws {
+    try await super.setUp()
+    ownerFixture = RuntimeOwnerAuthorityTestFixture()
+    await ownerFixture.establish(authOwnerID: "capture-screen-test-owner")
+  }
+
+  override func tearDown() async throws {
+    UserDefaults.standard.removeObject(forKey: screenshotKey)
+    await ownerFixture.restore()
+    ownerFixture = nil
+    try await super.tearDown()
+  }
+
   // MARK: - Tool dispatch
 
   /// Verify "capture_screen" is handled by ChatToolExecutor and does NOT fall
-  /// through to "Unknown tool: capture_screen".
-  func testCaptureScreenToolIsDeniedByDefaultPolicy() async {
+  /// through to "Unknown tool: capture_screen". With Screen Sharing in Chat off,
+  /// it must fail its physical execution precondition.
+  func testCaptureScreenToolIsDeniedWhenSharingDisabled() async {
+    UserDefaults.standard.set(false, forKey: screenshotKey)
     let toolCall = ToolCall(name: "capture_screen", arguments: [:], thoughtSignature: nil)
     let result = await ChatToolExecutor.execute(toolCall)
 
     XCTAssertFalse(
       result.hasPrefix("Unknown tool"),
       "capture_screen should be dispatched, got: \(result)")
-    XCTAssertTrue(result.hasPrefix("POLICY_DENIED:"), "capture_screen should fail closed, got: \(result)")
-    XCTAssertTrue(result.contains("\"capability\":\"desktop.context.screenshot_image\""))
-    XCTAssertTrue(result.contains("Screenshot image access requires explicit approval"))
+    XCTAssertTrue(
+      result.hasPrefix("EXECUTION_PRECONDITION_FAILED:"),
+      "capture_screen should fail closed, got: \(result)")
+    XCTAssertTrue(result.contains("\"code\":\"execution_precondition_failed\""))
+    XCTAssertTrue(result.contains("\"reason\":\"screenshot_sharing_disabled\""))
+    XCTAssertFalse(result.contains("capability"))
+    XCTAssertTrue(result.contains("Screen Sharing in Chat"))
   }
 
-  func testScreenshotImagePolicyDeniesLocalImageBytesByDefault() {
+  func testScreenshotImagePreconditionDoesNotLeakArgumentsWhenSharingDisabled() {
+    UserDefaults.standard.set(false, forKey: screenshotKey)
     for toolName in ["capture_screen", "get_screenshot"] {
-      let decision = ChatToolExecutor.localPolicyDecision(
-        toolName: toolName,
-        arguments: ["screenshot_id": "123"])
+      let decision = ChatToolExecutor.physicalExecutionPrecondition(toolName: toolName)
 
-      guard case .deny(let message) = decision else {
-        return XCTFail("\(toolName) should require approval")
+      guard case .failed(let message) = decision else {
+        return XCTFail("\(toolName) should fail its physical precondition")
       }
-      XCTAssertTrue(message.hasPrefix("POLICY_DENIED:"))
-      XCTAssertTrue(message.contains("\"capability\":\"desktop.context.screenshot_image\""))
-      XCTAssertTrue(message.contains("Screenshot image access requires explicit approval"))
+      XCTAssertTrue(message.hasPrefix("EXECUTION_PRECONDITION_FAILED:"))
+      XCTAssertTrue(message.contains("\"reason\":\"screenshot_sharing_disabled\""))
       XCTAssertFalse(message.contains("123"))
+    }
+  }
+
+  /// Regression: chat screen vision was hard-denied with no approval path from
+  /// 2026-06-29 (a4160e40cf) until the Screen Sharing in Chat setting. Default
+  /// (setting unset) must allow the tools to dispatch.
+  func testScreenshotImagePreconditionAllowsByDefault() {
+    UserDefaults.standard.removeObject(forKey: screenshotKey)
+    for toolName in ["capture_screen", "get_screenshot"] {
+      XCTAssertEqual(
+        ChatToolExecutor.physicalExecutionPrecondition(toolName: toolName), .satisfied,
+        "\(toolName) must dispatch when Screen Sharing in Chat is on (default)")
     }
   }
 

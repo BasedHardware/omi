@@ -5,7 +5,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional, cast
 import database._client as db_client_module
 from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationError
 
@@ -21,15 +21,14 @@ from database.vector_db import (
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.memory_imports import MemoryImportBatchRequest, MemoryImportBatchResponse
 from utils.apps import update_personas_async
-from utils.memory.v3_composed_get_service import V3ComposedRequestParams, V3ComposedResponse
-from utils.memory.v3_production_runtime import build_v3_production_runtime
+from utils.memory.v3.composed_get_service import V3ComposedRequestParams, V3ComposedResponse
+from utils.memory.v3.production_runtime import build_v3_production_runtime
 from utils.memory.canonical_activation import canonical_read_enabled, canonical_write_decision, canonical_write_enabled
 from utils.memory.canonical_memory_adapter import (
     memory_item_to_memorydb,
     read_canonical_memory_item,
 )
 from utils.memory.memory_service import MemoryPayload, MemoryService, fetch_memory_dict
-from utils.memory.required_promotion import required_promotion_payload
 from utils.memory.import_write_guard import (
     import_write_block_mode,
     import_write_violation_for_guard,
@@ -40,8 +39,8 @@ from utils.memory.memory_api_contract import (
     memory_write_payload,
 )
 from utils.memory.memory_api_response import memory_batch_response, memory_item_response, memory_list_response
-from utils.memory.memory_system import MemorySystem
-from utils.client_device import DeviceScopeRequest, DeviceScopeValidationError
+from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from utils.client_device import DeviceScopeRequest, DeviceScopeValidationError, resolve_client_device_from_request
 from utils.memory.device_scope_filter import device_scope_validation_error
 from utils.log_sanitizer import sanitize_pii
 from utils.other import endpoints as auth
@@ -54,6 +53,14 @@ _auth_module = cast(Any, auth)
 
 class MemoryMutationResponse(BaseModel):
     status: str
+
+
+class MemoryValueRequest(BaseModel):
+    """Canonical body for single-value memory mutations."""
+
+    model_config = {"extra": "forbid"}
+
+    value: str
 
 
 class ReviewResolutionResponse(BaseModel):
@@ -144,6 +151,11 @@ class ReviewResolutionRequest(BaseModel):
 
 async def _guard_import_memory_write(request: Request, *, endpoint: str, uid: str) -> None:
     mode = import_write_block_mode()
+    db_client = getattr(db_client_module, 'db', None)
+    # Canonical users must never fall back from evidence ingress into a direct
+    # product-memory write, regardless of the legacy rollout env default.
+    if resolve_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
+        mode = "enforce"
     if mode == "off":
         return
     try:
@@ -343,7 +355,17 @@ async def create_memory(
     # everything into "Manual". manually_added tracks human entry, so derive it
     # from the category rather than forcing it True for every API caller.
     manually_added = memory.category == MemoryCategory.manual
-    memory_db = MemoryDB.from_memory(memory, uid, None, manually_added)
+    device_context = resolve_client_device_from_request(request)
+    memory_db = MemoryDB.from_memory(
+        memory,
+        uid,
+        None,
+        manually_added,
+        source_type="manual" if manually_added else "api",
+        source_signal="manual" if manually_added else "api",
+        extractor_id="manual_memory_submission" if manually_added else "external_memory_submission",
+        client_device_id=device_context.client_device_id,
+    )
 
     # Old desktop builds fan out one create per indexed local file during
     # onboarding (up to 2800 path facts). Acknowledge without persisting:
@@ -353,30 +375,21 @@ async def create_memory(
         logger.info("memory_import.per_file_item_dropped endpoint=/v3/memories uid=%s", uid)
         return _legacy_memory_response(memory_db)
 
-    # Build payload outside try so serialization bugs aren't misreported as
-    # transient 503s — only the Firestore write should be retryable.
-    payload = memory_db.dict()
-
     db_client = getattr(db_client_module, 'db', None)
     if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
         try:
             memory_service = MemoryService(db_client=db_client)
-            if manually_added:
-                payload = required_promotion_payload(payload, source_surface="v3_manual")
-            committed_id = await run_blocking(db_executor, memory_service.write, uid, payload)
-            item = await run_blocking(
+            return await run_blocking(
                 db_executor,
-                read_canonical_memory_item,
+                memory_service.create_external_memory,
                 uid,
-                committed_id or memory_db.id,
-                db_client=db_client,
+                memory_db,
+                memory_system=MemorySystem.CANONICAL,
+                consumer="v3_manual" if manually_added else "v3_api",
+                operation="create_memory",
+                upsert_vector=False,
+                require_canonical_promotion=True,
             )
-            if item is not None:
-                return memory_item_to_memorydb(item)
-            logger.error(
-                "Canonical create_memory readback missing uid=%s memory_id=%s", uid, committed_id or memory_db.id
-            )
-            raise HTTPException(status_code=503, detail="Service temporarily unavailable")
         except Exception:
             logger.exception("Canonical create_memory failed uid=%s", uid)
             raise HTTPException(status_code=503, detail="Service temporarily unavailable")
@@ -457,9 +470,19 @@ async def create_memories_batch(
     # `manual`. Derive manually_added from the category instead of forcing it.
     memory_dbs: List[MemoryDB] = []
     has_public = False
+    device_context = resolve_client_device_from_request(request_context)
     for memory in accepted_memories:
         manually_added = memory.category == MemoryCategory.manual
-        memory_db = MemoryDB.from_memory(memory, uid, None, manually_added)
+        memory_db = MemoryDB.from_memory(
+            memory,
+            uid,
+            None,
+            manually_added,
+            source_type="manual" if manually_added else "api",
+            source_signal="manual" if manually_added else "api",
+            extractor_id="manual_memory_submission" if manually_added else "external_memory_submission",
+            client_device_id=device_context.client_device_id,
+        )
         memory_dbs.append(memory_db)
         if memory.visibility == 'public':
             has_public = True
@@ -480,11 +503,18 @@ async def create_memories_batch(
                 )
         committed_ids: List[str] = []
         for memory_db in memory_dbs:
-            payload = memory_db.model_dump()
-            if memory_db.manually_added:
-                payload = required_promotion_payload(payload, source_surface="v3_manual")
-            committed_id = await run_blocking(db_executor, memory_service.write, uid, payload)
-            committed_ids.append(committed_id or memory_db.id)
+            created = await run_blocking(
+                db_executor,
+                memory_service.create_external_memory,
+                uid,
+                memory_db,
+                memory_system=MemorySystem.CANONICAL,
+                consumer="v3_manual" if memory_db.manually_added else "v3_api",
+                operation="batch_create_memory",
+                upsert_vector=False,
+                require_canonical_promotion=True,
+            )
+            committed_ids.append(created.id)
         if has_public:
             submit_with_context(postprocess_executor, update_personas_async, uid)
         server_memories: List[MemoryDB] = []
@@ -636,6 +666,7 @@ def get_memories(
             limit=clamped_limit,
             offset=clamped_offset,
             device_scope_request=scope_request,
+            include_pending_processing=True,
         )
 
     if memory_runtime.source_decision != 'memory_read':
@@ -814,25 +845,38 @@ def review_memory(
 @router.patch('/v3/memories/{memory_id}', tags=['memories'], response_model=MemoryMutationResponse)
 def edit_memory(
     memory_id: str,
-    value: str,
+    request: Optional[MemoryValueRequest] = Body(default=None),
+    value: Optional[str] = Query(
+        default=None,
+        deprecated=True,
+        description="Deprecated; send JSON body {'value': ...} instead",
+    ),
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:modify"))
     ),
 ):
+    mutation_value = request.value if request is not None else value
+    if mutation_value is None:
+        raise HTTPException(status_code=422, detail="Missing memory mutation value")
+
     db_client = getattr(db_client_module, 'db', None)
     if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
         _validate_mutable_memory(uid, memory_id, db_client=db_client)
-        MemoryService(db_client=db_client).update_content(uid, memory_id, value)
+        MemoryService(db_client=db_client).update_content(uid, memory_id, mutation_value)
         return {'status': 'ok'}
 
     memory = _validate_mutable_memory(uid, memory_id, db_client=db_client)
-    memories_db.edit_memory(uid, memory_id, value)
+    memories_db.edit_memory(uid, memory_id, mutation_value)
     # Re-embed so semantic search reflects the new content. Without this the Pinecone
     # vector keeps matching the OLD text — a silent staleness bug that breaks the
     # "constantly updated brain" (search would still surface the pre-edit fact).
     try:
         upsert_memory_vector(
-            uid, memory_id, value, memory.get('category', 'system'), subject_entity_id=memory.get('subject_entity_id')
+            uid,
+            memory_id,
+            mutation_value,
+            memory.get('category', 'system'),
+            subject_entity_id=memory.get('subject_entity_id'),
         )
     except Exception:
         logger.exception("Vector upsert failed uid=%s memory_id=%s (memory edited, vector stale)", uid, memory_id)
@@ -842,21 +886,29 @@ def edit_memory(
 @router.patch('/v3/memories/{memory_id}/visibility', tags=['memories'], response_model=MemoryMutationResponse)
 def update_memory_visibility(
     memory_id: str,
-    value: str,
+    request: Optional[MemoryValueRequest] = Body(default=None),
+    value: Optional[str] = Query(
+        default=None,
+        deprecated=True,
+        description="Deprecated; send JSON body {'value': ...} instead",
+    ),
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:modify"))
     ),
 ):
-    if value not in ['public', 'private']:
+    mutation_value = request.value if request is not None else value
+    if mutation_value is None:
+        raise HTTPException(status_code=422, detail="Missing memory mutation value")
+    if mutation_value not in ['public', 'private']:
         raise HTTPException(status_code=400, detail='Invalid visibility value')
     db_client = getattr(db_client_module, 'db', None)
     if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
         _validate_mutable_memory(uid, memory_id, db_client=db_client)
-        MemoryService(db_client=db_client).update_visibility(uid, memory_id, value)
+        MemoryService(db_client=db_client).update_visibility(uid, memory_id, mutation_value)
         submit_with_context(postprocess_executor, update_personas_async, uid)
         return {'status': 'ok'}
     _validate_mutable_memory(uid, memory_id, db_client=db_client)
-    memories_db.change_memory_visibility(uid, memory_id, value)
+    memories_db.change_memory_visibility(uid, memory_id, mutation_value)
     return {'status': 'ok'}
 
 

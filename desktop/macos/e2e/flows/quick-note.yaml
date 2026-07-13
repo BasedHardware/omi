@@ -1,0 +1,24 @@
+version: 2
+name: quick-note
+tier: 2
+description: Quick Note opens Rewind notes transcript via bridge action
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/LiveNotesView.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Open Quick Note
+    bridge.action:
+      name: open_quick_note
+    wait:
+      state.selectedTabIndex: 7
+
+  - id: S2
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

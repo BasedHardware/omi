@@ -1,4 +1,3 @@
-import Combine
 import CoreBluetooth
 import Foundation
 import os.log
@@ -17,26 +16,25 @@ final class FieldyDeviceConnection: BaseDeviceConnection {
     // MARK: - Private Properties
 
     private let logger = Logger(subsystem: "me.omi.desktop", category: "FieldyDeviceConnection")
-    private var audioStreamSubject = PassthroughSubject<Data, Error>()
-    private var audioSubscription: Task<Void, Never>?
 
     // MARK: - Initialization
 
-    override init(device: BtDevice, transport: DeviceTransport) {
-        super.init(device: device, transport: transport)
+    override init(
+        device: BtDevice,
+        transport: DeviceTransport,
+        operationClock: any DeviceOperationClock = ContinuousDeviceOperationClock()
+    ) {
+        super.init(
+            device: device,
+            transport: transport,
+            operationClock: operationClock
+        )
     }
 
     // MARK: - Connection
 
-    override func connect() async throws {
-        try await super.connect()
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
-    }
-
-    override func disconnect() async {
-        audioSubscription?.cancel()
-        audioSubscription = nil
-        await super.disconnect()
+    override func prepareDeviceAfterConnect() async throws {
+        try await operationClock.sleep(for: .seconds(1))
     }
 
     // MARK: - Battery
@@ -74,7 +72,7 @@ final class FieldyDeviceConnection: BaseDeviceConnection {
                 return
             }
 
-            self.audioSubscription = Task { [weak self] in
+            let forwardingTask = Task { [weak self] in
                 guard let self = self else {
                     continuation.finish()
                     return
@@ -116,8 +114,8 @@ final class FieldyDeviceConnection: BaseDeviceConnection {
                 }
             }
 
-            continuation.onTermination = { @Sendable [weak self] _ in
-                self?.audioSubscription?.cancel()
+            continuation.onTermination = { @Sendable _ in
+                forwardingTask.cancel()
             }
         }
     }

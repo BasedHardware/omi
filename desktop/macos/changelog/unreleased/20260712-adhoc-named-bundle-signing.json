@@ -1,0 +1,3 @@
+{
+  "change": "Fixed ad-hoc named development bundles failing to launch with embedded frameworks"
+}

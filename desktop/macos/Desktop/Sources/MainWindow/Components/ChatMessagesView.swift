@@ -10,6 +10,130 @@ struct LocalSendToken: Equatable {
     let generation: Int
 }
 
+/// A pure display projection for one background-agent lifecycle in the shared
+/// transcript. Launch and completion are distinct canonical turns, but showing
+/// both as independent cards makes one run look like two agents. This combines
+/// a terminal-only completion into its originating spawn row without mutating
+/// the kernel-backed `ChatProvider.messages` collection.
+enum AgentLifecycleDisplayProjection {
+    private struct Location: Hashable {
+        let messageIndex: Int
+        let blockIndex: Int
+    }
+
+    private struct Completion {
+        let location: Location
+        let block: ChatContentBlock
+    }
+
+    static func project(_ canonicalMessages: [ChatMessage]) -> [ChatMessage] {
+        var spawnByRunID: [String: Location] = [:]
+        var spawnByPillID: [UUID: Location] = [:]
+
+        for (messageIndex, message) in canonicalMessages.enumerated() {
+            for (blockIndex, block) in message.contentBlocks.enumerated() {
+                guard case .agentSpawn(_, let pillID, _, let runID, _, _) = block else { continue }
+                if let runID = nonEmpty(runID) {
+                    spawnByRunID[runID] = spawnByRunID[runID] ?? Location(messageIndex: messageIndex, blockIndex: blockIndex)
+                }
+                if let pillID {
+                    spawnByPillID[pillID] = spawnByPillID[pillID] ?? Location(messageIndex: messageIndex, blockIndex: blockIndex)
+                }
+            }
+        }
+
+        var completionsBySpawn: [Location: [Completion]] = [:]
+        var matchedCompletionLocations = Set<Location>()
+
+        for (messageIndex, message) in canonicalMessages.enumerated() {
+            for (blockIndex, block) in message.contentBlocks.enumerated() {
+                guard case .agentCompletion(_, let pillID, _, let runID, _, _, _, _) = block else { continue }
+
+                // A completion with a run ID may only complete that exact run.
+                // Pill IDs are a legacy fallback when the completion lacks a
+                // durable run identity.
+                let spawn: Location?
+                if let runID = nonEmpty(runID) {
+                    spawn = spawnByRunID[runID]
+                } else if let pillID {
+                    spawn = spawnByPillID[pillID]
+                } else {
+                    spawn = nil
+                }
+                guard let spawn else { continue }
+
+                let completion = Completion(
+                    location: Location(messageIndex: messageIndex, blockIndex: blockIndex),
+                    block: block
+                )
+                completionsBySpawn[spawn, default: []].append(completion)
+                matchedCompletionLocations.insert(completion.location)
+            }
+        }
+
+        guard !completionsBySpawn.isEmpty else { return canonicalMessages }
+
+        var projectedMessages = canonicalMessages
+        for (spawn, completions) in completionsBySpawn {
+            guard let latestCompletion = completions.last else { continue }
+            projectedMessages[spawn.messageIndex].contentBlocks[spawn.blockIndex] = latestCompletion.block
+            let completionResources = completions.flatMap { completion in
+                canonicalMessages[completion.location.messageIndex].resources
+            }
+            projectedMessages[spawn.messageIndex].resources = mergeResources(
+                existing: projectedMessages[spawn.messageIndex].resources,
+                adding: completionResources
+            )
+        }
+
+        // A completion source can also carry ordinary text/tool blocks. Keep
+        // those blocks in their original row, but remove the already-projected
+        // completion card so one run never renders twice. Terminal-only source
+        // rows become empty and are hidden below.
+        for messageIndex in canonicalMessages.indices {
+            let message = canonicalMessages[messageIndex]
+            guard !message.contentBlocks.isEmpty else { continue }
+            let hasMatchedCompletion = message.contentBlocks.indices.contains { blockIndex in
+                matchedCompletionLocations.contains(Location(messageIndex: messageIndex, blockIndex: blockIndex))
+            }
+            guard hasMatchedCompletion else { continue }
+            // Start from the display copy: a same-row lifecycle has already
+            // replaced its spawn block with the terminal completion above.
+            // Filtering the canonical blocks here would accidentally restore
+            // that old spawn card while removing the terminal block.
+            let retainedBlocks = projectedMessages[messageIndex].contentBlocks.enumerated().compactMap { blockIndex, block in
+                matchedCompletionLocations.contains(Location(messageIndex: messageIndex, blockIndex: blockIndex))
+                    ? nil
+                    : block
+            }
+            projectedMessages[messageIndex].contentBlocks = retainedBlocks
+        }
+
+        let hiddenCompletionMessages = Set(canonicalMessages.indices.filter { messageIndex in
+            let message = canonicalMessages[messageIndex]
+            guard message.sender == .ai, !message.contentBlocks.isEmpty else { return false }
+            let hadMatchedCompletion = message.contentBlocks.indices.contains { blockIndex in
+                matchedCompletionLocations.contains(Location(messageIndex: messageIndex, blockIndex: blockIndex))
+            }
+            return hadMatchedCompletion && projectedMessages[messageIndex].contentBlocks.isEmpty
+        })
+
+        return projectedMessages.enumerated().compactMap { messageIndex, message in
+            hiddenCompletionMessages.contains(messageIndex) ? nil : message
+        }
+    }
+
+    private static func nonEmpty(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func mergeResources(existing: [ChatResource], adding: [ChatResource]) -> [ChatResource] {
+        var seen = Set(existing.map(\.id))
+        return existing + adding.filter { seen.insert($0.id).inserted }
+    }
+}
+
 /// Reusable chat messages scroll view extracted from ChatPage.
 /// Used by both ChatPage (main chat) and TaskChatPanel (task sidebar chat).
 struct ChatMessagesView<WelcomeContent: View>: View {
@@ -34,6 +158,13 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     /// Threaded down to `ToolCallsGroup`. Optional so existing callers
     /// don't need updating; ChatPage passes `chatProvider.stopAgent`.
     var onCancelTurn: (() -> Void)? = nil
+    /// Opens a spawned background-agent pill from a `spawn_agent` tool row.
+    /// Optional so task/sidebar chat callers that do not expose floating pills
+    /// keep the existing non-clickable tool-card behavior.
+    /// Completion reports whether the agent was resolved and presented.
+    var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil
+    /// Opens via structured agent identity (session/run/pill) when available.
+    var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
     @ViewBuilder var welcomeContent: () -> WelcomeContent
 
     /// IDs of messages that are near-duplicates of an earlier message in the same session.
@@ -121,13 +252,15 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     @ViewBuilder
     private func scrollContent(proxy: ScrollViewProxy) -> some View {
         ScrollView {
-            LazyVStack(spacing: 18) {
+            LazyVStack(spacing: OmiSpacing.lg) {
                 loadMoreButton
                 messageContent
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 22)
-            .textSelection(.enabled)
+            .padding(.horizontal, OmiSpacing.xxl)
+            .padding(.vertical, OmiSpacing.xl)
+            // Do not enable text selection on the whole stack. SelectionOverlay on every
+            // chrome Text (agent card headers, tool summaries, timestamps) can peg the
+            // main thread in GraphHost layout. Message bodies opt in via SelectableMarkdown.
             .background(scrollDetectors)
 
             // Invisible anchor lives OUTSIDE the LazyVStack so it is always
@@ -291,8 +424,14 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         guard let anchorId = prependAnchorId else { return }
         prependAnchorId = nil
 
-        // If the user scrolled during the load, don't override their position
-        guard scrollMode != .freeScrolling else { return }
+        // Only bail if the user is *physically* scrolling right now — not on
+        // scrollMode. Prepend ("Load earlier") only happens while reading history,
+        // i.e. scrollMode == .freeScrolling, so guarding on that mode made this
+        // restore (and the scrollTo below) dead code — the viewport jumped on every
+        // page-up. userIsScrolling is the real "don't fight the user's drag" signal
+        // (set by UserScrollDetector on any scroll interaction — wheel, drag, or
+        // keyboard scroll — and auto-cleared 0.3s after the last one).
+        guard !userIsScrolling else { return }
 
         // Verify the anchor message is still in the list
         let stillExists = messages.contains { $0.id == anchorId }
@@ -300,7 +439,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
 
         // Scroll anchor to top without animation
         let work = DispatchWorkItem { [self] in
-            guard self.scrollMode != .freeScrolling else { return }
+            guard !self.userIsScrolling else { return }
             proxy.scrollTo(anchorId, anchor: .top)
         }
         initialScrollWorkItems.append(work)
@@ -383,18 +522,18 @@ struct ChatMessagesView<WelcomeContent: View>: View {
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
+            .padding(.vertical, OmiSpacing.sm)
         }
     }
 
     @ViewBuilder
     private var messageContent: some View {
         if isLoadingInitial && messages.isEmpty && sessionsLoadError == nil {
-            VStack(spacing: 12) {
+            VStack(spacing: OmiSpacing.md) {
                 ProgressView()
                     .scaleEffect(0.8)
                 Text("Loading...")
-                    .scaledFont(size: 13)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textTertiary)
             }
             .frame(maxWidth: .infinity)
@@ -405,7 +544,8 @@ struct ChatMessagesView<WelcomeContent: View>: View {
             welcomeContent()
         } else {
             let dupeIds = duplicateMessageIds
-            ForEach(messages) { message in
+            let displayMessages = AgentLifecycleDisplayProjection.project(messages)
+            ForEach(displayMessages) { message in
                 ChatBubble(
                     message: message,
                     app: app,
@@ -416,7 +556,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                         onCitationTap?(citation)
                     },
                     isDuplicate: dupeIds.contains(message.id),
-                    onCancelTurn: onCancelTurn
+                    onCancelTurn: onCancelTurn,
+                    onOpenAgent: onOpenAgent,
+                    onOpenAgentRef: onOpenAgentRef
                 )
                 .id(message.id)
             }
@@ -425,34 +567,34 @@ struct ChatMessagesView<WelcomeContent: View>: View {
 
     @ViewBuilder
     private func errorContent(error: String) -> some View {
-        VStack(spacing: 16) {
+        VStack(spacing: OmiSpacing.lg) {
             Image(systemName: "exclamationmark.triangle")
-                .scaledFont(size: 40)
+                .scaledFont(size: OmiType.hero)
                 .foregroundColor(OmiColors.warning)
 
             Text("Failed to load chats")
-                .scaledFont(size: 16, weight: .medium)
+                .scaledFont(size: OmiType.subheading, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
 
             Text(error)
-                .scaledFont(size: 14)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(OmiColors.textTertiary)
                 .multilineTextAlignment(.center)
 
             if let onRetry {
                 Button(action: onRetry) {
                     Text("Try Again")
-                        .scaledFont(size: 14, weight: .medium)
+                        .scaledFont(size: OmiType.body, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 10)
+                            .padding(.horizontal, OmiSpacing.xl)
+                            .padding(.vertical, OmiSpacing.sm)
                             .omiControlSurface(fill: OmiColors.userBubble, radius: OmiChrome.chipRadius)
                 }
                 .buttonStyle(.plain)
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(32)
+        .padding(OmiSpacing.section)
         .padding(.vertical, 48)
     }
 
@@ -513,7 +655,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                         .frame(width: 36, height: 36)
                         .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
                     Image(systemName: "arrow.down.circle.fill")
-                        .scaledFont(size: 28)
+                        .scaledFont(size: OmiType.title)
                         .foregroundColor(OmiColors.textSecondary)
                 }
                 // Activity pulse: subtle white glow when new content arrived below
@@ -526,10 +668,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Jump to latest message")
-            .padding(.bottom, 16)
+            .padding(.bottom, OmiSpacing.lg)
             .transition(.scale.combined(with: .opacity))
-            .animation(.easeInOut(duration: 0.2), value: scrollMode)
-            .animation(.easeInOut(duration: 0.3), value: hasActivityBelow)
+            .omiAnimation(.easeInOut(duration: 0.2), value: scrollMode)
+            .omiAnimation(.easeInOut(duration: 0.3), value: hasActivityBelow)
         }
     }
 

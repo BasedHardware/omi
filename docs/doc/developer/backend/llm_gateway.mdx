@@ -138,10 +138,12 @@ For v1, build the gateway as a separate FastAPI app in the backend tree, using t
 Promotion model:
 
 1. Start with no live product traffic while service startup, readiness, config validation, and service auth are verified.
-2. Route one structured feature through the gateway in shadow mode.
-3. Promote dev to gateway-serving only after shadow metrics and feature-specific gates pass.
-4. Run prod shadow before prod serving when the feature touches user content or user-visible behavior.
+2. Route non-embedding features through the gateway in shadow mode (`OMI_LLM_GATEWAY_DEV_SHADOW_ALL_*` and feature shadow flags).
+3. Promote **dev** to gateway-serving with `OMI_LLM_GATEWAY_FEATURE_MODE=gateway`. When serving is on, turn shadow flags **off** so callers do not double-hit the gateway. Keep hard direct surfaces (BYOK, Anthropic agentic chat, Assistants/file chat, omni realtime) on providers via `OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=true`. Backend wraps gateway clients with legacy fallback on hard transport failures (timeout / 5xx / connection).
+4. Run prod shadow before prod serving when the feature touches user content or user-visible behavior. Prod serving also requires `OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true` and an explicit gateway URL.
 5. Promote prod serving only after rollback has been tested and the route artifact has suitable eval evidence.
+
+**Dev serving rollback (config-only):** unset `OMI_LLM_GATEWAY_FEATURE_MODE` (or set it to anything other than `gateway`/`true`/`1`/`yes`) on Cloud Run `backend` / `backend-sync` / `backend-integration` and GKE `backend-listen`. Optionally restore shadow flags. Do not set feature mode on prod without the prod allow env.
 
 Do not start by embedding the gateway router into `backend/main.py`. That would make the gateway look separate in code while still sharing the main backend process, lifecycle, scaling, and blast radius.
 
@@ -181,8 +183,13 @@ Backend-listen env:
 |---|---|
 | `OMI_LLM_GATEWAY_URL` | Internal service URL above |
 | `OMI_LLM_GATEWAY_SERVICE_TOKEN` | `*-omi-backend-secrets` key `OMI_LLM_GATEWAY_SERVICE_TOKEN` |
+| `OMI_LLM_GATEWAY_FEATURE_MODE` | Dev serving flip: `gateway` routes non-BYOK `get_llm` traffic through per-feature `omi:auto:*` lanes |
+| `OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION` | When `true`, acknowledged direct surfaces (BYOK, agentic, file chat, omni realtime) stay on providers |
+| `OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED` | Broad dev shadow kill switch; keep `false` while feature mode is serving |
 | `OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED` | Feature-level shadow kill switch for conversation structure extraction |
 | `OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE` | Deterministic sample rate from `0.0` to `1.0` for conversation structure shadow traffic |
+| `OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED` | Feature-level shadow kill switch for conversation action-item extraction |
+| `OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE` | Deterministic sample rate from `0.0` to `1.0` for conversation action-item shadow traffic |
 
 Gateway env:
 
@@ -192,6 +199,8 @@ Gateway env:
 | `OMI_LLM_GATEWAY_SERVICE_TOKEN` | same `*-omi-backend-secrets` key `OMI_LLM_GATEWAY_SERVICE_TOKEN` |
 | `LLM_GATEWAY_ALLOWED_CALLERS` | `backend` |
 | `OPENAI_API_KEY` | existing `*-omi-backend-secrets` key `OPENAI_API_KEY` |
+| `GEMINI_API_KEY` | existing `*-omi-backend-secrets` key `GEMINI_API_KEY` (required for gemini-backed feature lanes) |
+| `OPENROUTER_API_KEY` | existing `*-omi-backend-secrets` key `OPENROUTER_API_KEY` (required for openrouter-backed feature lanes) |
 | `METRICS_SECRET` | existing `*-omi-backend-secrets` key `METRICS_SECRET` |
 
 ExternalSecrets expect a GCP Secret Manager secret named `OMI_LLM_GATEWAY_SERVICE_TOKEN` in both projects:
@@ -608,6 +617,13 @@ containing `llm_gateway_backend_event` with the same low-cardinality dimensions
 plus `kind`, `field`, `route`, and `service`. This gives rollout owners a stable
 query surface even when backend caller metrics are hard to inspect per runtime
 surface.
+
+Gateway terminal errors and request rejections emit warning-level, privacy-safe
+Cloud Logging lines. `llm_gateway_terminal` includes only the opaque request ID,
+route metadata, credential source, and bounded `error_class` / `failure_class`;
+it never includes provider bodies, prompts, or credentials. Successful terminal
+events remain metrics and info-level logs to avoid turning normal traffic into
+an operational alert stream.
 
 Shadow-only features can also emit privacy-safe comparison buckets through
 `llm_gateway_chat_extraction_comparisons_total{feature,field,outcome}`. These

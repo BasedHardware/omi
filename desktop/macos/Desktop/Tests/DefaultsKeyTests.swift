@@ -41,6 +41,8 @@ final class DefaultsKeyTests: XCTestCase {
     XCTAssertEqual(DefaultsKey.authTokenExpiry.rawValue, "auth_tokenExpiry")
     XCTAssertEqual(DefaultsKey.authTokenUserId.rawValue, "auth_tokenUserId")
     XCTAssertEqual(DefaultsKey.authIsImpersonating.rawValue, "auth_isImpersonating")
+    XCTAssertEqual(DefaultsKey.automationOwnerOverride.rawValue, "automation_owner_override")
+    XCTAssertEqual(DefaultsKey.automationOwnerABackup.rawValue, "automation_swap_owner_a_backup")
   }
 
   // MARK: Typed accessors round-trip through the same underlying key

@@ -4,11 +4,17 @@ tier: manual
 description: Screen Recording permission flow — verify Rewind permission state, grant flow, toggle monitoring, and Settings integration
 app: com.omi.computer-macos
 covers:
-  - desktop/Desktop/Sources/Rewind/UI/RewindPage.swift
-  - desktop/Desktop/Sources/ScreenCaptureService.swift
-  - desktop/Desktop/Sources/MainWindow/Pages/PermissionsPage.swift
-  - desktop/Desktop/Sources/AppState/AppState+SystemActions.swift
-  - desktop/Desktop/Sources/AppState/AppState+TrialPaywall.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift
+  - desktop/macos/Desktop/Sources/ScreenCaptureService.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/PermissionsPage.swift
+  - desktop/macos/Desktop/Sources/AppState/AppState+SystemActions.swift
+  - desktop/macos/Desktop/Sources/AppState/AppState+Permissions.swift
+  - desktop/macos/Desktop/Sources/AppState/AppState+TrialPaywall.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+BillingHelpers.swift
+  - desktop/macos/Desktop/Sources/MainWindow/RewindOnlyView.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Focus/FocusAssistant.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/MemoryExtraction/MemoryAssistant.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift
 preconditions:
   - auth_ready
 

@@ -34,11 +34,13 @@ from routers import (
     integration,
     conversations,
     memories,
+    api_key_management,
     mcp,
     mcp_sse,
     oauth,
     auth,
     action_items,
+    candidates,
     task_integrations,
     integrations,
     x_connector,
@@ -53,6 +55,7 @@ from routers import (
     wrapped,
     folders,
     goals,
+    workstreams,
     announcements,
     phone_calls,
     agent_tools,
@@ -67,6 +70,7 @@ from routers import (
     tts,
     memory_admin,
     memory_product,
+    task_recommendations,
 )
 
 from utils.other.timeout import TimeoutMiddleware
@@ -117,6 +121,7 @@ app.include_router(omni_relay.router)
 app.include_router(auto_model.router)
 app.include_router(conversations.router)
 app.include_router(action_items.router)
+app.include_router(candidates.router)
 app.include_router(task_integrations.router)
 app.include_router(integrations.router)
 app.include_router(x_connector.router)
@@ -145,14 +150,17 @@ app.include_router(auth.router)  # Added auth router (for the main Omi App, this
 
 
 app.include_router(payment.router)
+app.include_router(api_key_management.mcp_router)
 app.include_router(mcp.router)
 app.include_router(mcp_sse.router)
+app.include_router(api_key_management.developer_router)
 app.include_router(developer.router)
 app.include_router(imports.router)
 app.include_router(wrapped.router)
 app.include_router(folders.router)
 app.include_router(knowledge_graph.router)
 app.include_router(goals.router)
+app.include_router(workstreams.router)
 app.include_router(announcements.router)
 app.include_router(phone_calls.router)
 app.include_router(agent_tools.router)
@@ -167,6 +175,7 @@ app.include_router(scores.router)
 app.include_router(tts.router)
 app.include_router(memory_admin.router)
 app.include_router(memory_product.router)
+app.include_router(task_recommendations.router)
 
 
 methods_timeout = {

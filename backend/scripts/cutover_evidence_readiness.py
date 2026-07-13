@@ -1,11 +1,26 @@
 #!/usr/bin/env python3
+# LIFECYCLE: one-time
+# DELETE-AFTER: INV-MEM-3
+
 from __future__ import annotations
 
 import argparse
 import json
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, Sequence
+
+SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+from readiness_gate_common import (
+    add_require_go_arg,
+    collect_gates_from_artifact,
+    evaluate_gates,
+    exit_code_for_status,
+)
 
 CUTOVER_GATE_STATUS_BLOCKED = "BLOCKED"
 CUTOVER_GATE_STATUS_NOT_RUN = "NOT_RUN"
@@ -151,6 +166,7 @@ NON_CLAIMS = [
 @dataclass(frozen=True)
 class CutoverEvidenceReadinessConfig:
     execute: bool
+    require_go: bool = False
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
@@ -160,11 +176,15 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument(
         "--execute", action="store_true", help="Emit the same read-only checklist; does not call providers."
     )
+    add_require_go_arg(parser)
     return parser.parse_args(argv)
 
 
 def config_from_args(args: argparse.Namespace) -> CutoverEvidenceReadinessConfig:
-    return CutoverEvidenceReadinessConfig(execute=bool(args.execute))
+    return CutoverEvidenceReadinessConfig(
+        execute=bool(args.execute),
+        require_go=bool(args.require_go),
+    )
 
 
 def build_readiness_artifact(config: CutoverEvidenceReadinessConfig) -> Dict[str, Any]:
@@ -188,7 +208,11 @@ def build_readiness_artifact(config: CutoverEvidenceReadinessConfig) -> Dict[str
 
 def main(argv: Sequence[str] | None = None) -> int:
     config = config_from_args(parse_args(argv or sys.argv[1:]))
-    print(json.dumps(build_readiness_artifact(config), indent=2, sort_keys=True))
+    artifact = build_readiness_artifact(config)
+    print(json.dumps(artifact, indent=2, sort_keys=True))
+    if config.require_go:
+        overall_status, _ = evaluate_gates(collect_gates_from_artifact(artifact))
+        return exit_code_for_status(overall_status, require_go=True)
     return 0
 
 

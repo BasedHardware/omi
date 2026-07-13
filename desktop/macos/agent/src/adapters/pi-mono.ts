@@ -32,8 +32,8 @@ import type {
   ToolDef,
   ToolExecutor,
   EventCallback,
+  WarmupSessionConfig,
 } from "./interface.js";
-import type { WarmupSessionConfig } from "../protocol.js";
 
 type PiMonoConfig = HarnessConfig & {
   onRestart?: (reason: string) => void;
@@ -52,14 +52,7 @@ interface PiRpcEvent {
 }
 
 interface PiMonoRelayContext {
-  protocolVersion: 2;
-  requestId: string;
-  clientId: string;
-  sessionId: string;
-  runId: string;
-  attemptId: string;
-  adapterSessionId?: string;
-  disableSwiftBackedTools?: boolean;
+  capabilityRef: string;
 }
 
 interface PiAssistantMessageEvent {
@@ -112,6 +105,39 @@ interface PiUsage {
   };
 }
 
+const REQUIRED_AGENT_CONTROL_TOOLS = new Set([
+  "send_agent_message",
+  "spawn_background_agent",
+  "spawn_agent",
+  "run_agent_and_wait",
+]);
+
+function requiredAgentControlFailure(toolName: string, output: string): string | undefined {
+  if (!REQUIRED_AGENT_CONTROL_TOOLS.has(toolName)) return undefined;
+  if (output.startsWith("Error:")) return output;
+  try {
+    const parsed = JSON.parse(output) as { ok?: unknown; error?: { message?: unknown } };
+    if (parsed.ok === false) {
+      const detail = typeof parsed.error?.message === "string" ? parsed.error.message : output;
+      return `Required ${toolName} operation failed: ${detail}`;
+    }
+  } catch {
+    // A successful control tool always returns the canonical JSON envelope.
+    // Preserve a prior failure until an explicit successful retry clears it.
+  }
+  return undefined;
+}
+
+function requiredControlOperationKey(toolName: string, input: Record<string, unknown> | undefined): string {
+  const ignored = new Set(["adapterId", "provider", "defaultAdapterId", "requestId", "clientId"]);
+  const normalized = Object.fromEntries(
+    Object.entries(input ?? {})
+      .filter(([key]) => !ignored.has(key))
+      .sort(([left], [right]) => left.localeCompare(right)),
+  );
+  return `${toolName}:${JSON.stringify(normalized)}`;
+}
+
 /**
  * PiMonoAdapter spawns pi-mono in RPC mode and translates its events
  * into the normalized bridge protocol.
@@ -155,7 +181,7 @@ function resolveBundledPi(): string {
   // Note: URL.pathname percent-encodes spaces (%20) which breaks existsSync
   // for app bundles with spaces in their name (e.g. "Omi Beta.app").
   const direct = decodeURIComponent(new URL(
-    "../../node_modules/@mariozechner/pi-coding-agent/dist/cli.js",
+    "../../node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
     import.meta.url
   ).pathname);
   if (existsSync(direct)) return direct;
@@ -209,6 +235,9 @@ export class PiMonoAdapter implements HarnessAdapter {
   private nextRequestId = 1;
   private eventHandler: EventCallback | null = null;
   private toolExecutor: ToolExecutor | null = null;
+  /** Unresolved required control obligations for the active turn. */
+  private requiredAgentControlFailures = new Map<string, string>();
+  private requiredControlInputs = new Map<string, Record<string, unknown>>();
   private currentAbortController: AbortController | null = null;
   private piPath: string;
   private extensionPath: string;
@@ -219,6 +248,7 @@ export class PiMonoAdapter implements HarnessAdapter {
   /** Current system prompt baked into the spawned pi process via --system-prompt.
    *  Pi has no set_system_prompt RPC, so changing this requires a subprocess restart. */
   private currentSystemPrompt: string | undefined;
+  private currentExecutionRole: "coordinator" | "leaf" = "coordinator";
   private readonly sessionPrefix: string;
   /** True when a token refresh was deferred because a prompt was active */
   private pendingTokenRefresh = false;
@@ -299,6 +329,7 @@ export class PiMonoAdapter implements HarnessAdapter {
       env.OMI_API_BASE_URL = this.config.omiApiBaseUrl;
     }
     env.OMI_ADAPTER_ID = "pi-mono";
+    env.OMI_EXECUTION_ROLE = this.currentExecutionRole;
     env.OMI_CONTEXT_FILE = this.contextFilePath;
     // Forward OMI_BRIDGE_PIPE so the extension can register omi-tools
     // (execute_sql, semantic_search, etc.) that forward to Swift.
@@ -371,6 +402,7 @@ export class PiMonoAdapter implements HarnessAdapter {
 
   async createSession(opts: SessionOpts): Promise<string> {
     const mapped = opts.model ? mapModel(opts.model) : undefined;
+    await this.setExecutionRole(opts.executionRole ?? "coordinator");
 
     // Pi bakes the system prompt at spawn time via --system-prompt. If the
     // caller requested a different prompt than the currently-running process,
@@ -402,6 +434,14 @@ export class PiMonoAdapter implements HarnessAdapter {
     return sessionId;
   }
 
+  async setExecutionRole(role: "coordinator" | "leaf"): Promise<void> {
+    if (role === this.currentExecutionRole) return;
+    this.currentExecutionRole = role;
+    if (this.process) {
+      await this.stop();
+    }
+  }
+
   async sendPrompt(
     sessionId: string,
     prompt: PromptBlock[],
@@ -424,6 +464,8 @@ export class PiMonoAdapter implements HarnessAdapter {
 
     this.eventHandler = onEvent;
     this.toolExecutor = onToolCall;
+    this.requiredAgentControlFailures.clear();
+    this.requiredControlInputs.clear();
     this.currentAbortController = new AbortController();
     this.writeRelayContext(relayContext);
 
@@ -497,8 +539,8 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.activePromptGeneration = 0;
   }
 
-  clearRelayContextForAttempt(attemptId: string): void {
-    this.clearRelayContext(attemptId);
+  clearRelayContextForCapability(capabilityRef: string): void {
+    this.clearRelayContext(capabilityRef);
   }
 
   async setModel(sessionId: string, model: string): Promise<void> {
@@ -652,14 +694,11 @@ export class PiMonoAdapter implements HarnessAdapter {
       return;
     }
     mkdirSync(dirname(this.contextFilePath), { recursive: true });
-    writeFileSync(this.contextFilePath, JSON.stringify({
-      adapterId: "pi-mono",
-      ...context,
-    }));
+    writeFileSync(this.contextFilePath, JSON.stringify({ capabilityRef: context.capabilityRef }));
   }
 
-  private clearRelayContext(expectedAttemptId?: string): void {
-    if (!expectedAttemptId) {
+  private clearRelayContext(expectedCapabilityRef?: string): void {
+    if (!expectedCapabilityRef) {
       rmSync(this.contextFilePath, { force: true });
       return;
     }
@@ -667,7 +706,7 @@ export class PiMonoAdapter implements HarnessAdapter {
 
     try {
       const parsed = JSON.parse(readFileSync(this.contextFilePath, "utf8")) as Record<string, unknown>;
-      if (parsed.attemptId !== expectedAttemptId) return;
+      if (parsed.capabilityRef !== expectedCapabilityRef) return;
     } catch {
       // Invalid context is unusable by the extension; remove it as stale.
     }
@@ -801,6 +840,9 @@ export class PiMonoAdapter implements HarnessAdapter {
   private handleToolStart(event: PiRpcEvent): void {
     const name = event.toolName as string;
     const toolCallId = event.toolCallId as string;
+    if (REQUIRED_AGENT_CONTROL_TOOLS.has(name)) {
+      this.requiredControlInputs.set(toolCallId, (event.args as Record<string, unknown> | undefined) ?? {});
+    }
     this.eventHandler?.({
       type: "tool_activity",
       name,
@@ -820,6 +862,25 @@ export class PiMonoAdapter implements HarnessAdapter {
       ?.filter((c) => c.type === "text")
       .map((c) => c.text || "")
       .join("") || "";
+
+    if (REQUIRED_AGENT_CONTROL_TOOLS.has(name)) {
+      const operationKey = requiredControlOperationKey(name, this.requiredControlInputs.get(toolCallId));
+      this.requiredControlInputs.delete(toolCallId);
+      const failure = requiredAgentControlFailure(name, output);
+      if (failure) {
+        this.requiredAgentControlFailures.set(operationKey, failure);
+      } else {
+        // Only a successful retry of the same logical operation resolves its
+        // obligation; unrelated control success cannot erase a prior failure.
+        try {
+          if ((JSON.parse(output) as { ok?: unknown }).ok === true) {
+            this.requiredAgentControlFailures.delete(operationKey);
+          }
+        } catch {
+          // Non-canonical output cannot clear a prior control-operation failure.
+        }
+      }
+    }
 
     this.eventHandler?.({
       type: "tool_activity",
@@ -888,6 +949,21 @@ export class PiMonoAdapter implements HarnessAdapter {
       return;
     }
 
+    const controlFailure = this.requiredAgentControlFailures.values().next().value as string | undefined;
+    if (controlFailure) {
+      this.eventHandler?.({
+        type: "error",
+        message: controlFailure,
+        adapterSessionId: pending.sessionId,
+      });
+      this.pendingRequests.delete(generation);
+      this.activePromptGeneration = 0;
+      pending.reject(new Error(controlFailure));
+      this.eventHandler = null;
+      this.toolExecutor = null;
+      return;
+    }
+
     // Extract text from content blocks
     let text = "";
     if (message?.content) {
@@ -946,11 +1022,13 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
       model: input.model,
       systemPrompt: input.systemPrompt,
       mcpServers: input.mcpServers,
+      executionRole: input.metadata?.executionRole === "leaf" ? "leaf" : "coordinator",
     });
     return this.binding(input, adapterNativeSessionId);
   }
 
   async resumeBinding(input: ResumeBindingInput): Promise<OpenedBinding> {
+    await this.harness.setExecutionRole(input.metadata?.executionRole === "leaf" ? "leaf" : "coordinator");
     await this.start();
     // pi-mono has no native resume after daemon/process loss, but while this
     // RuntimeAdapter instance is alive the opaque session id is still usable as
@@ -976,14 +1054,7 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
         async () => "",
         signal,
         {
-          protocolVersion: 2,
-          requestId: context.requestId,
-          clientId: context.clientId,
-          sessionId: context.sessionId,
-          runId: context.runId,
-          attemptId: context.attemptId,
-          adapterSessionId: context.binding.adapterNativeSessionId,
-          disableSwiftBackedTools: context.metadata?.disableSwiftBackedTools === true,
+          capabilityRef: context.toolCapabilityRef,
         }
       );
 
@@ -998,7 +1069,7 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
         terminalStatus: signal.aborted || this.cancelledAttempts.has(context.attemptId) ? "cancelled" : "succeeded",
       };
     } finally {
-      this.harness.clearRelayContextForAttempt(context.attemptId);
+      this.harness.clearRelayContextForCapability(context.toolCapabilityRef);
       this.cancelledAttempts.delete(context.attemptId);
       if (this.harness.hasPendingRestart) {
         await this.harness.executePendingRestart();

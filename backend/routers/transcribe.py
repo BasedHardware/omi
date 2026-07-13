@@ -82,6 +82,11 @@ from utils.conversations.process_conversation import retrieve_in_progress_conver
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists, get_user_has_speech_profile
+from utils.client_device import (
+    ClientDeviceContext,
+    resolve_client_device_from_headers,
+    resolve_client_device_from_websocket_auth_message,
+)
 from utils.pusher import PusherCircuitBreakerOpen
 from utils.request_validation import ImageChunkEnvelope
 from utils.speaker_identification import detect_speaker_from_text
@@ -119,6 +124,7 @@ from utils.translation_cache import (
     ConversationLanguageState,
     should_persist_translation,
 )
+from utils.listen_session_bootstrap import finalize_listen_connect_context, load_listen_connect_base
 from utils.translation_coordinator import TranslationCoordinator
 from utils.transcribe_decisions import (  # async-blockers: no-import-scope; async-blockers: no-changed-range-scope
     ConversationLifecycleAction,
@@ -134,6 +140,7 @@ from utils.transcribe_decisions import (  # async-blockers: no-import-scope; asy
     normalize_codec_frame,
     normalize_language,
     person_id_for_client,
+    resolve_photo_conversation_source,
     select_translation_language,
     should_enable_speaker_identification,
     should_flush_final_multi_channel_mix,
@@ -327,6 +334,7 @@ async def _stream_handler(
     vad_gate_override: Optional[str] = None,
     call_id: Optional[str] = None,
     client_conversation_id: Optional[str] = None,
+    client_device_context: Optional[ClientDeviceContext] = None,
 ):
     """
     Core WebSocket streaming handler. Assumes websocket is already accepted and uid is validated.
@@ -334,6 +342,7 @@ async def _stream_handler(
     """
     session_id = str(uuid.uuid4())
     client_conversation_id = _normalize_client_conversation_id(client_conversation_id)
+    client_device_context = client_device_context or resolve_client_device_from_headers(websocket.headers)
 
     if not uid or len(uid) <= 0:
         await websocket.close(code=1008, reason="Bad uid")
@@ -341,7 +350,7 @@ async def _stream_handler(
 
     set_byok_keys(extract_byok_from_websocket(websocket))
 
-    if is_trial_paywalled(uid, source):
+    if await run_blocking(db_executor, is_trial_paywalled, uid, source):
         logger.info("trial paywall: closing desktop WS uid=%s session=%s reason=trial_expired", uid, session_id)
         try:
             await websocket.send_json(
@@ -392,13 +401,6 @@ async def _stream_handler(
     # Onboarding mode overrides: no speech profile (creating new one), single language
     include_speech_profile = should_include_speech_profile(include_speech_profile, is_multi_channel, onboarding_mode)
 
-    user_has_credits = True if use_custom_stt else has_transcription_credits(uid, source=source)
-    if not user_has_credits:
-        try:
-            await send_credit_limit_notification(uid)
-        except Exception as e:
-            logger.error(f"Error sending credit limit notification: {e} {uid} {session_id}")
-
     # Frame size, codec
     frame_size: int = 160
     lc3_chunk_size: Optional[int] = None
@@ -410,30 +412,22 @@ async def _stream_handler(
     lc3_chunk_size = codec_decision.lc3_chunk_size
     lc3_frame_duration_us = codec_decision.lc3_frame_duration_us
 
-    # Fetch user transcription preferences once and reuse its embedded language
-    # projection below for translation targeting. Avoid a second user preference
-    # read on the hot WebSocket startup path.
-    transcription_prefs = get_user_transcription_preferences(uid)
-    single_language_mode = transcription_prefs.get('single_language_mode', False)
-    vocabulary = transcription_prefs.get('vocabulary', [])
-    user_language_preference = transcription_prefs.get('language', '')
+    connect_base = await load_listen_connect_base(uid, source=source, use_custom_stt=use_custom_stt)
+    if not connect_base.user_exists:
+        await websocket.close(code=1008, reason="Bad user")
+        return
 
-    # Stamp mobile custom-STT usage onto the user doc so these users are queryable
-    # and meterable (#7690) — the app otherwise only signals it per-session via the
-    # custom_stt WS param. Write only on change to keep this off the hot path.
-    # Best-effort telemetry only: never let a tracking write failure (e.g. a
-    # transient Firestore error) tear down the session — catch, log, and proceed.
-    if use_custom_stt != transcription_prefs.get('uses_custom_stt', False):
+    user_has_credits = connect_base.user_has_credits
+    if not user_has_credits:
         try:
-            await run_blocking(db_executor, user_db.set_user_custom_stt_usage, uid, use_custom_stt)
+            await send_credit_limit_notification(uid)
         except Exception as e:
-            logger.warning(f"Failed to persist custom_stt usage {uid} {session_id}: {e}")
+            logger.error(f"Error sending credit limit notification: {e} {uid} {session_id}")
 
-    # Onboarding mode: force single language for better accuracy
-    single_language_mode = should_force_single_language(onboarding_mode, single_language_mode)
-
-    # Always include "Omi" as predefined vocabulary
-    vocabulary = list({"Omi"} | set(vocabulary))
+    transcription_prefs = connect_base.transcription_prefs
+    single_language_mode = should_force_single_language(
+        onboarding_mode, transcription_prefs.get('single_language_mode', False)
+    )
 
     # Convert 'auto' to 'multi' for consistency
     language = normalize_language(language)
@@ -451,17 +445,32 @@ async def _stream_handler(
         return
 
     # Opt-in: honor an explicit Parakeet request only when the self-hosted service is configured.
-    # Default stays unchanged (Deepgram / language-selected) — this never auto-switches anyone.
     if requested_stt_service == 'parakeet' and os.getenv('HOSTED_PARAKEET_API_URL'):
         stt_service = STTService.parakeet
 
-    # Translation language (disabled in single language mode)
-    translation_language = select_translation_language(
-        single_language_mode=single_language_mode,
-        stt_language=stt_language,
+    connect_ctx = finalize_listen_connect_context(
+        connect_base,
         language=language,
-        user_language_preference=user_language_preference,
+        onboarding_mode=onboarding_mode,
+        stt_language=stt_language,
     )
+    single_language_mode = connect_ctx.single_language_mode
+    vocabulary = connect_ctx.vocabulary
+    language = connect_ctx.language
+    user_language_preference = connect_ctx.user_language_preference
+    translation_language = connect_ctx.translation_language
+    transcription_prefs = connect_ctx.transcription_prefs
+
+    # Stamp mobile custom-STT usage onto the user doc so these users are queryable
+    # and meterable (#7690) — the app otherwise only signals it per-session via the
+    # custom_stt WS param. Write only on change to keep this off the hot path.
+    # Best-effort telemetry only: never let a tracking write failure (e.g. a
+    # transient Firestore error) tear down the session — catch, log, and proceed.
+    if use_custom_stt != transcription_prefs.get('uses_custom_stt', False):
+        try:
+            await run_blocking(db_executor, user_db.set_user_custom_stt_usage, uid, use_custom_stt)
+        except Exception as e:
+            logger.warning(f"Failed to persist custom_stt usage {uid} {session_id}: {e}")
 
     session = ListenSessionState()
     task_supervisor = WebSocketTaskSupervisor(
@@ -499,12 +508,6 @@ async def _stream_handler(
 
     def spawn(coro: Awaitable[Any], *, name: str) -> asyncio.Task[Any]:
         return task_supervisor.create_task(cast(Coroutine[Any, Any, Any], coro), name=name)
-
-    # Validate user before spawning any session-scoped tasks.
-    if not user_db.is_exists_user(uid):
-        session.active = False
-        await websocket.close(code=1008, reason="Bad user")
-        return
 
     # Onboarding handler
     onboarding_handler: Optional[OnboardingHandler] = None
@@ -558,11 +561,11 @@ async def _stream_handler(
     # Session-start: check DG budget for restrict-stage users (#6083)
     if FAIR_USE_ENABLED:
         try:
-            _init_stage = get_enforcement_stage(uid)
+            _init_stage = connect_ctx.fair_use_init_stage
             logger.info(f'fair_use: session start uid={uid} session={session_id} stage={_init_stage}')
-            if _init_stage == 'restrict' and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
+            if connect_ctx.fair_use_track_dg_usage:
                 session.fair_use_track_dg_usage = True
-                session.fair_use_dg_budget_exhausted = is_dg_budget_exhausted(uid)
+                session.fair_use_dg_budget_exhausted = connect_ctx.fair_use_dg_budget_exhausted
                 if session.fair_use_dg_budget_exhausted:
                     logger.info(f'fair_use: DG budget already exhausted at session start for {uid}')
         except Exception as e:
@@ -825,16 +828,45 @@ async def _stream_handler(
     # Stream transcript
     # Callback for when pusher finishes processing a conversation
     def on_conversation_processed(conversation_id: str):
+        if conversation_id != session.current_conversation_id:
+            logger.warning(
+                "Suppressing lifecycle event for non-current conversation %s on listen session %s %s",
+                conversation_id,
+                session_id,
+                uid,
+            )
+            return
         conversation_data = conversations_db.get_conversation(uid, conversation_id)
         if conversation_data:
             conversation = deserialize_conversation(conversation_data)
-            _send_message_event(ConversationEvent(event_type="memory_created", memory=conversation, messages=[]))
+            _send_message_event(
+                ConversationEvent(
+                    event_type="memory_created",
+                    memory=conversation,
+                    messages=[],
+                    recording_session_id=client_conversation_id,
+                )
+            )
 
     def on_conversation_processing_started(conversation_id: str):
+        if conversation_id != session.current_conversation_id:
+            logger.warning(
+                "Suppressing lifecycle event for non-current conversation %s on listen session %s %s",
+                conversation_id,
+                session_id,
+                uid,
+            )
+            return
         conversation_data = conversations_db.get_conversation(uid, conversation_id)
         if conversation_data:
             conversation = deserialize_conversation(conversation_data)
-            _send_message_event(ConversationEvent(event_type="memory_processing_started", memory=conversation))
+            _send_message_event(
+                ConversationEvent(
+                    event_type="memory_processing_started",
+                    memory=conversation,
+                    recording_session_id=client_conversation_id,
+                )
+            )
 
     async def cleanup_processing_conversations():
         processing = conversations_db.get_processing_conversations(uid)
@@ -884,7 +916,12 @@ async def _stream_handler(
                 if existing_conversation.get('status') == ConversationStatus.in_progress:
                     session.current_conversation_id = client_conversation_id
                     redis_db.set_in_progress_conversation_id(uid, session.current_conversation_id)
-                    _send_message_event(ConversationSessionEvent(conversation_id=session.current_conversation_id))
+                    _send_message_event(
+                        ConversationSessionEvent(
+                            conversation_id=session.current_conversation_id,
+                            recording_session_id=client_conversation_id,
+                        )
+                    )
                     logger.info(
                         f"Resuming client-scoped conversation {session.current_conversation_id} {uid} {session_id}"
                     )
@@ -906,6 +943,8 @@ async def _stream_handler(
             source=conversation_source,
             private_cloud_sync_enabled=private_cloud_sync_enabled,
             call_id=call_id if is_multi_channel else None,
+            client_device_id=client_device_context.client_device_id,
+            client_platform=client_device_context.platform,
         )
         if client_conversation_id and new_conversation_id == client_conversation_id:
             conversations_db.create_conversation_if_absent(uid, stub_conversation.model_dump())
@@ -951,7 +990,12 @@ async def _stream_handler(
             redis_db.set_conversation_meeting_id(new_conversation_id, detected_meeting_id)
 
         session.current_conversation_id = new_conversation_id
-        _send_message_event(ConversationSessionEvent(conversation_id=new_conversation_id))
+        _send_message_event(
+            ConversationSessionEvent(
+                conversation_id=new_conversation_id,
+                recording_session_id=client_conversation_id,
+            )
+        )
 
         logger.info(f"Created new stub conversation: {new_conversation_id} {uid} {session_id}")
 
@@ -979,6 +1023,12 @@ async def _stream_handler(
 
     # Process existing conversations
     async def _prepare_in_progess_conversations() -> Optional[str]:
+        # A client-provided UUID is the durable identity of this recording.  It
+        # must win over the legacy, user-global in-progress pointer; otherwise a
+        # stale Redis/Firestore row can rebind a fresh desktop recording.
+        if client_conversation_id:
+            await _create_new_in_progress_conversation()
+            return None
 
         if existing_conversation := retrieve_in_progress_conversation(uid):
             finished_at = datetime.fromisoformat(existing_conversation['finished_at'].isoformat())
@@ -1053,10 +1103,15 @@ async def _stream_handler(
 
         if photos:
             conversations_db.store_conversation_photos(uid, conversation.id, photos)
-            # Update source if we now have photos
-            if conversation.source != ConversationSource.openglass:
-                conversations_db.update_conversation(uid, conversation.id, {'source': ConversationSource.openglass})
-                conversation.source = ConversationSource.openglass
+            # Photo-bearing conversations default to the openglass label unless the
+            # source already identifies a photo-capable device (e.g. rayban_meta).
+            new_source_value = resolve_photo_conversation_source(
+                conversation.source.value if conversation.source else None
+            )
+            if new_source_value is not None and conversation.source != ConversationSource(new_source_value):
+                new_source = ConversationSource(new_source_value)
+                conversations_db.update_conversation(uid, conversation.id, {'source': new_source})
+                conversation.source = new_source
 
         conversations_db.update_conversation_finished_at(uid, conversation.id, finished_at)
         return conversation, updated_segments, removed_ids
@@ -2536,6 +2591,22 @@ async def _stream_handler(
             except Exception as e:
                 logger.error(f"Error processing multi-channel conversation: {e} {uid} {session_id}")
 
+        # Flush any remaining mixed audio to pusher before closing the socket
+        if should_flush_final_multi_channel_mix(
+            is_multi_channel=is_multi_channel,
+            audio_bytes_enabled=audio_bytes_send is not None,
+            buffers=channel_mix_buffers,
+        ):
+            try:
+                mixed = mix_n_channel_buffers(channel_mix_buffers)
+                if mixed:
+                    if audio_bytes_send is not None:
+                        audio_bytes_send(mixed, time.time())
+            except Exception as e:
+                logger.error(f"Error flushing final multi-channel mix to pusher: {e} {uid} {session_id}")
+            for buf in channel_mix_buffers:
+                buf.clear()
+
         # Pusher sockets
         if pusher_close is not None:
             try:
@@ -2548,22 +2619,6 @@ async def _stream_handler(
             onboarding_handler.cleanup()
 
         await task_supervisor.drain_all(timeout=5.0, cancel=True)
-
-        # Flush any remaining mixed audio to pusher
-        if should_flush_final_multi_channel_mix(
-            is_multi_channel=is_multi_channel,
-            audio_bytes_enabled=audio_bytes_send is not None,
-            buffers=channel_mix_buffers,
-        ):
-            try:
-                mixed = mix_n_channel_buffers(channel_mix_buffers)
-                if mixed:
-                    if audio_bytes_send is not None:
-                        audio_bytes_send(mixed, time.time())
-            except Exception:
-                pass
-            for buf in channel_mix_buffers:
-                buf.clear()
 
         # Clean up collections and heavy objects to aid garbage collection
         try:
@@ -2587,7 +2642,7 @@ async def _stream_handler(
             if vad_gate is not None:
                 del vad_gate
             language_cache.cache.clear()
-            translation_service.translation_cache.clear()
+            translation_service.clear_session_cache()
         except NameError:
             pass
 
@@ -2743,6 +2798,8 @@ async def web_listen_handler(
         await websocket.close(code=1008, reason="Auth error")
         return
 
+    client_device_context = resolve_client_device_from_websocket_auth_message(first_message)
+
     # Send success response
     await websocket.send_json({"type": "auth_response", "success": True})
     logger.info(f"web_listen_handler authenticated {uid}")
@@ -2766,5 +2823,6 @@ async def web_listen_handler(
         onboarding_mode=onboarding_mode,
         call_id=call_id,
         client_conversation_id=client_conversation_id,
+        client_device_context=client_device_context,
     )
     logger.info(f"web_listen_handler ended {uid}")

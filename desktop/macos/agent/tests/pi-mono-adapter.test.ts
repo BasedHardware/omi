@@ -63,6 +63,7 @@ function makeAttemptContext(overrides: AttemptContextOverrides = {}): AdapterAtt
     clientId: overrides.clientId ?? "client-runtime",
     runId: overrides.runId ?? "run_runtime",
     attemptId,
+    toolCapabilityRef: overrides.toolCapabilityRef ?? `cap_${attemptId}`,
     binding: {
       bindingId: "bind-runtime",
       sessionId,
@@ -125,6 +126,7 @@ describe("PiMonoAdapter prompt correlation", () => {
       clientId: "client-runtime",
       runId: "run_runtime",
       attemptId: "att_runtime",
+      toolCapabilityRef: "cap_runtime",
       binding: {
         bindingId: "bind-runtime",
         sessionId: "ses_runtime",
@@ -143,17 +145,7 @@ describe("PiMonoAdapter prompt correlation", () => {
 
     const execution = runtime.executeAttempt(attemptContext, () => {}, new AbortController().signal);
     const relayContext = JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8"));
-    expect(relayContext).toMatchObject({
-      adapterId: "pi-mono",
-      protocolVersion: 2,
-      requestId: "request-runtime",
-      clientId: "client-runtime",
-      sessionId: "ses_runtime",
-      runId: "run_runtime",
-      attemptId: "att_runtime",
-      adapterSessionId: "session-1",
-      disableSwiftBackedTools: true,
-    });
+    expect(relayContext).toEqual({ capabilityRef: "cap_runtime" });
 
     (adapter as any).handleTurnEnd(makeTurnEndEvent("done"));
     await expect(execution).resolves.toMatchObject({ terminalStatus: "succeeded" });
@@ -183,7 +175,7 @@ describe("PiMonoAdapter prompt correlation", () => {
     const attemptContext = makeAttemptContext({ attemptId: "att_abort" });
 
     const execution = runtime.executeAttempt(attemptContext, () => {}, controller.signal);
-    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).attemptId).toBe("att_abort");
+    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).capabilityRef).toBe("cap_att_abort");
     controller.abort();
 
     await expect(execution).resolves.toMatchObject({ terminalStatus: "cancelled" });
@@ -200,7 +192,7 @@ describe("PiMonoAdapter prompt correlation", () => {
       () => {},
       new AbortController().signal
     );
-    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).attemptId).toBe("att_first");
+    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).capabilityRef).toBe("cap_att_first");
 
     const second = runtime.executeAttempt(
       makeAttemptContext({ attemptId: "att_second", binding: { adapterNativeSessionId: "session-2" } }),
@@ -209,7 +201,7 @@ describe("PiMonoAdapter prompt correlation", () => {
     );
 
     await expect(second).rejects.toThrow("pi-mono prompt already in flight");
-    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).attemptId).toBe("att_first");
+    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).capabilityRef).toBe("cap_att_first");
 
     (adapter as any).handleTurnEnd(makeTurnEndEvent("first done"));
     await expect(first).resolves.toMatchObject({ terminalStatus: "succeeded" });
@@ -226,7 +218,7 @@ describe("PiMonoAdapter prompt correlation", () => {
       () => {},
       new AbortController().signal
     );
-    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).attemptId).toBe("att_exit");
+    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).capabilityRef).toBe("cap_att_exit");
 
     (adapter as any).process.emit("exit", 7);
 
@@ -238,7 +230,7 @@ describe("PiMonoAdapter prompt correlation", () => {
     const { adapter } = createAdapter();
     writeFileSync((adapter as any).contextFilePath, "{invalid json");
 
-    (adapter as any).clearRelayContextForAttempt("att_invalid");
+    (adapter as any).clearRelayContextForCapability("cap_invalid");
 
     expect(existsSync((adapter as any).contextFilePath)).toBe(false);
   });
@@ -254,6 +246,7 @@ describe("PiMonoAdapter prompt correlation", () => {
       clientId: "client-runtime",
       runId: "run_runtime",
       attemptId: "att_runtime",
+      toolCapabilityRef: "cap_runtime",
       binding: {
         bindingId: "bind-runtime",
         sessionId: "ses_runtime",
@@ -344,6 +337,108 @@ describe("PiMonoAdapter prompt correlation", () => {
         adapterSessionId: "session-1",
       })
     );
+  });
+
+  it("does not report success after a required agent-control operation fails", async () => {
+    const { adapter, events } = createAdapter();
+    seedSessions(adapter, "session-1");
+
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "create a child" }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => ""
+    );
+
+    (adapter as any).handleToolEnd({
+      toolName: "spawn_agent",
+      toolCallId: "tool-spawn",
+      result: {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            ok: false,
+            error: { code: "missing_request_context", message: "missing active Omi request context" },
+          }),
+        }],
+      },
+    });
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("I could not create the child, but I am done."));
+
+    await expect(prompt).rejects.toThrow("Required spawn_agent operation failed");
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "error",
+        message: expect.stringContaining("missing active Omi request context"),
+      })
+    );
+  });
+
+  it("allows a successful required-control retry to complete the parent turn", async () => {
+    const { adapter } = createAdapter();
+    seedSessions(adapter, "session-1");
+
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "create a child" }],
+      [],
+      "act",
+      () => {},
+      async () => ""
+    );
+
+    (adapter as any).handleToolEnd({
+      toolName: "spawn_agent",
+      toolCallId: "tool-spawn-1",
+      result: { content: [{ type: "text", text: JSON.stringify({ ok: false, error: { message: "temporary failure" } }) }] },
+    });
+    (adapter as any).handleToolEnd({
+      toolName: "spawn_agent",
+      toolCallId: "tool-spawn-2",
+      result: { content: [{ type: "text", text: JSON.stringify({ ok: true }) }] },
+    });
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("child created"));
+
+    await expect(prompt).resolves.toMatchObject({ text: "child created" });
+  });
+
+  it("does not let an unrelated control success erase a failed obligation", async () => {
+    const { adapter } = createAdapter();
+    seedSessions(adapter, "session-1");
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "create both children" }],
+      [],
+      "act",
+      () => {},
+      async () => "",
+    );
+
+    (adapter as any).handleToolStart({
+      toolName: "spawn_agent",
+      toolCallId: "tool-child-a",
+      args: { objective: "child A" },
+    });
+    (adapter as any).handleToolEnd({
+      toolName: "spawn_agent",
+      toolCallId: "tool-child-a",
+      result: { content: [{ type: "text", text: JSON.stringify({ ok: false, error: { message: "failed A" } }) }] },
+    });
+    (adapter as any).handleToolStart({
+      toolName: "spawn_agent",
+      toolCallId: "tool-child-b",
+      args: { objective: "child B" },
+    });
+    (adapter as any).handleToolEnd({
+      toolName: "spawn_agent",
+      toolCallId: "tool-child-b",
+      result: { content: [{ type: "text", text: JSON.stringify({ ok: true }) }] },
+    });
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("child B created"));
+
+    await expect(prompt).rejects.toThrow("failed A");
   });
 
   it("resolves abort before turn_end and drops the late completion", async () => {

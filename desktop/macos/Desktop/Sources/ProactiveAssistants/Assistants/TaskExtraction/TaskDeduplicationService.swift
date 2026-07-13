@@ -1,10 +1,25 @@
 import Foundation
+import OmiSupport
 
 /// Service that periodically scans staged tasks and uses Gemini AI to detect
 /// and remove semantic duplicates BEFORE they are promoted to action items.
 /// Only operates on staged_tasks — never touches action_items.
 actor TaskDeduplicationService {
     static let shared = TaskDeduplicationService()
+
+    /// Delete IDs that are safe to hard-delete for a duplicate group. A delete ID
+    /// is safe only if it exists in this batch AND is not a keep_id of any group.
+    /// The model (a "pick one, delete the rest" prompt) sometimes lists the task it
+    /// told us to keep among the delete_ids — same group (`keep_id: t1,
+    /// delete_ids: [t1, t2]`) or cross-group — and the old filter (existence only)
+    /// would then hard-delete the canonical task, destroying the whole cluster.
+    static func safeDeleteIDs(
+        deleteIDs: [String],
+        validTaskIDs: Set<String>,
+        protectedKeepIDs: Set<String>
+    ) -> [String] {
+        deleteIDs.filter { validTaskIDs.contains($0) && !protectedKeepIDs.contains($0) }
+    }
 
     private var geminiClient: GeminiClient?
     private var timer: Task<Void, Never>?
@@ -80,6 +95,10 @@ actor TaskDeduplicationService {
     // MARK: - Deduplication Logic
 
     private func runDeduplication() async {
+        guard await TaskLegacyEffectGate.live.isAllowed(.destructiveDeduplication) else {
+            log("TaskDedup: Canonical or unresolved mode; destructive staged dedupe skipped")
+            return
+        }
         guard let client = getGeminiClient() else {
             log("TaskDedup: Skipping - Gemini client not initialized")
             return
@@ -211,7 +230,10 @@ actor TaskDeduplicationService {
 
         // Validate and delete
         let validTaskIDs = Set(tasks.map { $0.id })
-        let taskLookup = Dictionary(tasks.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
+        let taskLookup = Dictionary(lastWriteWins: tasks.map { ($0.id, $0) })
+        // Every task the model told us to keep — across ALL groups — must never be
+        // hard-deleted, even if it also appears in some group's delete_ids.
+        let protectedKeepIDs = Set(result.duplicateGroups.map { $0.keepId })
         var deletedCount = 0
 
         for group in result.duplicateGroups {
@@ -221,9 +243,13 @@ actor TaskDeduplicationService {
                 continue
             }
 
-            let validDeleteIds = group.deleteIds.filter { validTaskIDs.contains($0) }
+            let validDeleteIds = Self.safeDeleteIDs(
+                deleteIDs: group.deleteIds,
+                validTaskIDs: validTaskIDs,
+                protectedKeepIDs: protectedKeepIDs
+            )
             if validDeleteIds.count != group.deleteIds.count {
-                log("TaskDedup: Some delete IDs not in input set, filtering")
+                log("TaskDedup: Some delete IDs not in input set or protected as a keep_id, filtering")
             }
 
             guard !validDeleteIds.isEmpty else { continue }
@@ -251,7 +277,16 @@ actor TaskDeduplicationService {
 
                 // Hard-delete staged task from backend
                 do {
-                    try await APIClient.shared.deleteStagedTask(id: deleteId)
+                    let deleted: Bool = try await TaskLegacyEffectGate.live.perform(
+                        .destructiveDeduplication
+                    ) {
+                        try await APIClient.shared.deleteStagedTask(id: deleteId)
+                        return true
+                    } ?? false
+                    guard deleted else {
+                        log("TaskDedup: Mode changed; stopping before destructive write")
+                        return deletedCount
+                    }
                     deletedCount += 1
                     log("TaskDedup: Hard-deleted staged task '\(deletedTask?.description ?? deleteId)' (kept: '\(keptTask?.description ?? group.keepId)') - \(group.reason)")
                 } catch {

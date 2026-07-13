@@ -114,8 +114,10 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["focus", "distraction", "notify focus"], section: .notifications, icon: "bell",
       settingId: "notifications.focus"),
     SettingsSearchItem(
-      name: "Task Notifications", subtitle: "Show notification when a task is extracted",
-      keywords: ["task", "action item", "notify task"], section: .notifications, icon: "bell",
+      name: "Task Notifications",
+      subtitle: "Allow interruptions when a task needs attention",
+      keywords: ["task", "action item", "notify task", "interruption", "proactive"],
+      section: .notifications, icon: "bell",
       settingId: "notifications.task"),
     SettingsSearchItem(
       name: "Insight Notifications", subtitle: "Show notification when an insight is generated",
@@ -267,6 +269,11 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["typed", "text", "speech", "tts", "audio answers"], section: .floatingBar,
       icon: "sparkles", settingId: "floatingbar.typedvoiceanswers"),
     SettingsSearchItem(
+      name: "Screen Sharing in Chat",
+      subtitle: "Let Ask Omi capture your screen when you ask about it",
+      keywords: ["screenshot", "screen", "capture", "share screen", "vision", "see my screen"],
+      section: .floatingBar, icon: "camera.viewfinder", settingId: "floatingbar.screenshare"),
+    SettingsSearchItem(
       name: "Voice Speed", subtitle: "Adjust the playback speed for voice replies",
       keywords: ["voice speed", "speech speed", "playback speed", "tts speed"],
       section: .floatingBar, icon: "sparkles", settingId: "floatingbar.voicespeed"),
@@ -324,15 +331,17 @@ struct SettingsSidebar: View {
 
   private let expandedWidth: CGFloat = 260
   private let iconWidth: CGFloat = 20
+  // Merged nav: `.account` hosts Account & Plan (renders `.planUsage` content
+  // too) and `.notifications` hosts Notifications & Privacy (renders `.privacy`
+  // content too). The absorbed cases stay routable for deep links/automation
+  // and highlight their merged item via `sidebarItem`.
   private let visibleSections: [SettingsContentView.SettingsSection] = [
     .general,
-    .rewind,
-    .transcription,
-    .notifications,
-    .privacy,
     .account,
-    .planUsage,
+    .transcription,
     .floatingBar,
+    .notifications,
+    .rewind,
     .shortcuts,
     .advanced,
     .about,
@@ -357,34 +366,34 @@ struct SettingsSidebar: View {
     VStack(alignment: .leading, spacing: 0) {
       // Back button header
       backButton
-        .padding(.top, 12)
-        .padding(.horizontal, 16)
+        .padding(.top, OmiSpacing.md)
+        .padding(.horizontal, OmiSpacing.lg)
 
-      Spacer().frame(height: 24)
+      Spacer().frame(height: OmiSpacing.xxl)
 
       // Settings title
       Text("Settings")
-        .scaledFont(size: 22, weight: .bold)
+        .scaledFont(size: OmiType.heading, weight: .bold)
         .foregroundColor(OmiColors.textPrimary)
-        .padding(.horizontal, 16)
-        .padding(.bottom, 12)
+        .padding(.horizontal, OmiSpacing.lg)
+        .padding(.bottom, OmiSpacing.md)
 
       // Search field
       searchField
-        .padding(.horizontal, 12)
-        .padding(.bottom, 12)
+        .padding(.horizontal, OmiSpacing.md)
+        .padding(.bottom, OmiSpacing.md)
 
       if searchQuery.isEmpty {
         // Normal settings sections
         ScrollView(showsIndicators: false) {
-          VStack(alignment: .leading, spacing: 2) {
+          VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             ForEach(visibleSections, id: \.self) { section in
               SettingsSidebarItem(
                 section: section,
-                isSelected: selectedSection == section,
+                isSelected: selectedSection.sidebarItem == section,
                 iconWidth: iconWidth,
                 onTap: {
-                  withAnimation(.easeInOut(duration: 0.15)) {
+                  OmiMotion.withGated(.easeInOut(duration: 0.15)) {
                     selectedSection = section
                   }
                 }
@@ -393,11 +402,11 @@ struct SettingsSidebar: View {
             }
           }
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, OmiSpacing.sm)
       } else {
         // Search results
         searchResultsList
-          .padding(.horizontal, 8)
+          .padding(.horizontal, OmiSpacing.sm)
       }
 
       Spacer()
@@ -407,15 +416,15 @@ struct SettingsSidebar: View {
   }
 
   private var searchField: some View {
-    HStack(spacing: 8) {
+    HStack(spacing: OmiSpacing.sm) {
       Image(systemName: "magnifyingglass")
-        .scaledFont(size: 13)
-        .foregroundColor(isSearchFocused ? OmiColors.purplePrimary : OmiColors.textTertiary)
-        .animation(.easeInOut(duration: 0.15), value: isSearchFocused)
+        .scaledFont(size: OmiType.body)
+        .foregroundColor(isSearchFocused ? OmiColors.accent : OmiColors.textTertiary)
+        .omiAnimation(.easeInOut(duration: 0.15), value: isSearchFocused)
 
       TextField("Search settings...", text: $searchQuery)
         .textFieldStyle(.plain)
-        .scaledFont(size: 13)
+        .scaledFont(size: OmiType.body)
         .foregroundColor(OmiColors.textPrimary)
         .focused($isSearchFocused)
 
@@ -424,38 +433,38 @@ struct SettingsSidebar: View {
           searchQuery = ""
         } label: {
           Image(systemName: "xmark.circle.fill")
-            .scaledFont(size: 12)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textTertiary)
         }
         .buttonStyle(.plain)
       }
     }
-    .padding(.horizontal, 10)
-    .padding(.vertical, 8)
+    .padding(.horizontal, OmiSpacing.sm)
+    .padding(.vertical, OmiSpacing.sm)
     .background(
-      RoundedRectangle(cornerRadius: 8)
+      RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
         .fill(OmiColors.backgroundTertiary)
         .overlay(
-          RoundedRectangle(cornerRadius: 8)
+          RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
             .stroke(
-              isSearchFocused ? OmiColors.purplePrimary.opacity(0.5) : Color.clear, lineWidth: 1)
+              isSearchFocused ? OmiColors.accent.opacity(0.5) : Color.clear, lineWidth: 1)
         )
     )
   }
 
   private var searchResultsList: some View {
     ScrollView(showsIndicators: false) {
-      VStack(alignment: .leading, spacing: 2) {
+      VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         if filteredSearchItems.isEmpty {
           Text("No results")
-            .scaledFont(size: 13)
+            .scaledFont(size: OmiType.body)
             .foregroundColor(OmiColors.textTertiary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 20)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.xl)
         } else {
           ForEach(filteredSearchItems) { item in
             SettingsSearchResultRow(item: item) {
-              withAnimation(.easeInOut(duration: 0.15)) {
+              OmiMotion.withGated(.easeInOut(duration: 0.15)) {
                 selectedSection = item.section
               }
               searchQuery = ""
@@ -472,22 +481,22 @@ struct SettingsSidebar: View {
 
   private var backButton: some View {
     Button(action: onBack) {
-      HStack(spacing: 8) {
+      HStack(spacing: OmiSpacing.sm) {
         Image(systemName: "chevron.left")
-          .scaledFont(size: 14, weight: .semibold)
+          .scaledFont(size: OmiType.body, weight: .semibold)
           .foregroundColor(OmiColors.textSecondary)
 
         Text("Back")
-          .scaledFont(size: 14, weight: .medium)
+          .scaledFont(size: OmiType.body, weight: .medium)
           .foregroundColor(OmiColors.textSecondary)
 
         Spacer()
       }
-      .padding(.horizontal, 12)
-      .padding(.vertical, 10)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
       .contentShape(Rectangle())
       .background(
-        RoundedRectangle(cornerRadius: 8)
+        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
           .fill(isBackHovered ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
       )
     }
@@ -530,23 +539,23 @@ struct SettingsSidebarItem: View {
         EmptyView()
       } else {
         Button(action: onTap) {
-          HStack(spacing: 12) {
+          HStack(spacing: OmiSpacing.md) {
             Image(systemName: icon)
-              .scaledFont(size: 17)
+              .scaledFont(size: OmiType.subheading)
               .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
               .frame(width: iconWidth)
 
-            Text(section.rawValue)
-              .scaledFont(size: 14, weight: isSelected ? .medium : .regular)
+            Text(section.displayTitle)
+              .scaledFont(size: OmiType.body, weight: isSelected ? .medium : .regular)
               .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
 
             Spacer()
           }
-          .padding(.horizontal, 12)
-          .padding(.vertical, 11)
+          .padding(.horizontal, OmiSpacing.md)
+          .padding(.vertical, OmiSpacing.md)
           .contentShape(Rectangle())
           .background(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
               .fill(
                 isSelected
                   ? OmiColors.backgroundTertiary.opacity(0.8)
@@ -573,27 +582,27 @@ struct SettingsSubsectionItem: View {
 
   var body: some View {
     Button(action: onTap) {
-      HStack(spacing: 10) {
+      HStack(spacing: OmiSpacing.sm) {
         // Indentation spacer
         Spacer()
           .frame(width: iconWidth + 12)
 
         Image(systemName: subsection.icon)
-          .scaledFont(size: 14)
+          .scaledFont(size: OmiType.body)
           .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
           .frame(width: 16)
 
         Text(subsection.rawValue)
-          .scaledFont(size: 13, weight: isSelected ? .medium : .regular)
+          .scaledFont(size: OmiType.body, weight: isSelected ? .medium : .regular)
           .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
 
         Spacer()
       }
-      .padding(.horizontal, 12)
-      .padding(.vertical, 9)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
       .contentShape(Rectangle())
       .background(
-        RoundedRectangle(cornerRadius: 8)
+        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
           .fill(
             isSelected
               ? OmiColors.backgroundTertiary.opacity(0.6)
@@ -616,29 +625,29 @@ struct SettingsSearchResultRow: View {
 
   var body: some View {
     Button(action: onTap) {
-      HStack(spacing: 10) {
+      HStack(spacing: OmiSpacing.sm) {
         Image(systemName: item.icon)
-          .scaledFont(size: 14)
+          .scaledFont(size: OmiType.body)
           .foregroundColor(OmiColors.textTertiary)
           .frame(width: 20)
 
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
           Text(item.name)
-            .scaledFont(size: 13, weight: .medium)
+            .scaledFont(size: OmiType.body, weight: .medium)
             .foregroundColor(OmiColors.textPrimary)
 
           Text(item.breadcrumb)
-            .scaledFont(size: 11)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textTertiary)
         }
 
         Spacer()
       }
-      .padding(.horizontal, 12)
-      .padding(.vertical, 8)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
       .contentShape(Rectangle())
       .background(
-        RoundedRectangle(cornerRadius: 8)
+        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
           .fill(isHovered ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
       )
     }
@@ -660,16 +669,16 @@ struct SettingHighlightModifier: ViewModifier {
     content
       .id(settingId)
       .overlay(
-        RoundedRectangle(cornerRadius: 8)
-          .fill(isHighlighted ? OmiColors.purplePrimary.opacity(0.12) : Color.clear)
-          .animation(.easeInOut(duration: 0.3), value: isHighlighted)
+        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+          .fill(isHighlighted ? OmiColors.accent.opacity(0.12) : Color.clear)
+          .omiAnimation(.easeInOut(duration: 0.3), value: isHighlighted)
           .allowsHitTesting(false)
       )
       .onChange(of: highlightedSettingId) { _, newId in
         if newId == settingId {
-          withAnimation { isHighlighted = true }
+          OmiMotion.withGated { isHighlighted = true }
           DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            withAnimation(.easeInOut(duration: 0.5)) { isHighlighted = false }
+            OmiMotion.withGated(.easeInOut(duration: 0.5)) { isHighlighted = false }
             if highlightedSettingId == settingId { highlightedSettingId = nil }
           }
         }

@@ -81,7 +81,14 @@ def get_account_deletion_tasks_max_attempts() -> int:
     return int(os.getenv('ACCOUNT_DELETION_TASKS_MAX_ATTEMPTS', get_sync_tasks_max_attempts()))
 
 
-def _enqueue_named_task(queue: str, url: str, task_id: str, payload: Dict[str, Any]) -> None:
+def _enqueue_named_task(
+    queue: str,
+    url: str,
+    task_id: str,
+    payload: Dict[str, Any],
+    *,
+    audience: Optional[str] = None,
+) -> None:
     """Enqueue one named HTTP task. Duplicate names are treated as success —
     Cloud Tasks deduplicates named tasks. Any other failure raises."""
     project = os.getenv('SYNC_TASKS_PROJECT', '')
@@ -99,7 +106,7 @@ def _enqueue_named_task(queue: str, url: str, task_id: str, payload: Dict[str, A
             url=url,
             headers={'Content-Type': 'application/json'},
             body=json.dumps(payload).encode(),
-            oidc_token=tasks_v2.OidcToken(service_account_email=invoker_sa, audience=_oidc_audience()),
+            oidc_token=tasks_v2.OidcToken(service_account_email=invoker_sa, audience=audience or _oidc_audience()),
         ),
         dispatch_deadline=duration_pb2.Duration(seconds=DISPATCH_DEADLINE_SECONDS),
     )
@@ -114,6 +121,16 @@ def enqueue_sync_job(payload: Dict[str, Any]) -> None:
 
     The caller falls back to the inline pipeline on failure.
     """
+    if payload.get('lane') == 'backfill':
+        handler_url = os.getenv('SYNC_BACKFILL_TASKS_HANDLER_URL', '')
+        _enqueue_named_task(
+            os.getenv('SYNC_BACKFILL_TASKS_QUEUE', ''),
+            handler_url,
+            str(payload['job_id']),
+            payload,
+            audience=os.getenv('SYNC_BACKFILL_TASKS_OIDC_AUDIENCE') or handler_url,
+        )
+        return
     _enqueue_named_task(os.getenv('SYNC_TASKS_QUEUE', ''), _handler_url(), str(payload['job_id']), payload)
 
 
@@ -124,8 +141,16 @@ def enqueue_audio_merge_job(payload: Dict[str, Any]) -> None:
     from /urls polling; the handler's artifact-exists check covers the rest.
     Tokens are minted with the same audience as sync tasks so a single
     verify_cloud_tasks_oidc dependency covers both handlers.
+
+    schema_version 2 = conversation-level artifact build: the name embeds the
+    audio_files fingerprint so a rebuild after late chunks gets a fresh name
+    and isn't swallowed by the named-task tombstone. 'amc-' cannot collide with
+    per-part names (audio_file ids are UUIDv4).
     """
-    task_id = f"am-{payload['conversation_id']}-{payload['audio_file_id']}"
+    if payload.get('schema_version') == 2:
+        task_id = f"amc-{payload['conversation_id']}-{payload['fingerprint']}"
+    else:
+        task_id = f"am-{payload['conversation_id']}-{payload['audio_file_id']}"
     _enqueue_named_task(
         os.getenv('AUDIO_MERGE_TASKS_QUEUE', ''),
         os.getenv('AUDIO_MERGE_HANDLER_URL', ''),

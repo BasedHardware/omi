@@ -98,18 +98,18 @@ struct SearchableDropdown: View {
   }
 
   private var dropdownLabel: some View {
-    HStack(spacing: 6) {
+    HStack(spacing: OmiSpacing.xs) {
       Text(selectedTitle)
-        .scaledFont(size: 12, weight: .medium)
+        .scaledFont(size: OmiType.caption, weight: .medium)
         .foregroundColor(OmiColors.textSecondary)
         .lineLimit(1)
 
       Image(systemName: "chevron.down")
-        .scaledFont(size: 10, weight: .semibold)
+        .scaledFont(size: OmiType.micro, weight: .semibold)
         .foregroundColor(OmiColors.textTertiary)
     }
-    .padding(.horizontal, 10)
-    .padding(.vertical, 6)
+    .padding(.horizontal, OmiSpacing.sm)
+    .padding(.vertical, OmiSpacing.xs)
     .frame(minWidth: minWidth)
     .background(
       Capsule()
@@ -157,19 +157,19 @@ private struct SearchableDropdownPopover: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 10) {
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       Text(title)
-        .scaledFont(size: 12, weight: .semibold)
+        .scaledFont(size: OmiType.caption, weight: .semibold)
         .foregroundColor(OmiColors.textTertiary)
 
-      HStack(spacing: 7) {
+      HStack(spacing: OmiSpacing.xs) {
         Image(systemName: "magnifyingglass")
-          .scaledFont(size: 11, weight: .medium)
+          .scaledFont(size: OmiType.caption, weight: .medium)
           .foregroundColor(OmiColors.textTertiary)
 
         TextField("Search", text: $query)
           .textFieldStyle(.plain)
-          .scaledFont(size: 12)
+          .scaledFont(size: OmiType.caption)
           .foregroundColor(OmiColors.textPrimary)
           .focused($searchIsFocused)
           .onSubmit {
@@ -184,32 +184,32 @@ private struct SearchableDropdownPopover: View {
             query = ""
           } label: {
             Image(systemName: "xmark.circle.fill")
-              .scaledFont(size: 11, weight: .medium)
+              .scaledFont(size: OmiType.caption, weight: .medium)
               .foregroundColor(OmiColors.textTertiary)
           }
           .buttonStyle(.plain)
           .help("Clear search")
         }
       }
-      .padding(.horizontal, 9)
-      .padding(.vertical, 7)
+      .padding(.horizontal, OmiSpacing.sm)
+      .padding(.vertical, OmiSpacing.xs)
       .background(
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
+        RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
           .fill(OmiColors.backgroundTertiary)
           .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
               .stroke(OmiColors.border.opacity(0.7), lineWidth: 1)
           )
       )
 
       if filteredOptions.isEmpty {
         Text("No matches")
-          .scaledFont(size: 12)
+          .scaledFont(size: OmiType.caption)
           .foregroundColor(OmiColors.textTertiary)
           .frame(maxWidth: .infinity, minHeight: listHeight)
       } else {
         ScrollView {
-          LazyVStack(alignment: .leading, spacing: 2) {
+          LazyVStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             ForEach(filteredOptions) { option in
               SearchableDropdownRow(
                 option: option,
@@ -218,12 +218,12 @@ private struct SearchableDropdownPopover: View {
               )
             }
           }
-          .padding(.vertical, 2)
+          .padding(.vertical, OmiSpacing.hairline)
         }
         .frame(height: listHeight)
       }
     }
-    .padding(12)
+    .padding(OmiSpacing.md)
     .background(OmiColors.backgroundSecondary)
     .onAppear {
       DispatchQueue.main.async {
@@ -244,16 +244,16 @@ private struct SearchableDropdownRow: View {
     Button {
       onSelect(option)
     } label: {
-      HStack(spacing: 8) {
-        VStack(alignment: .leading, spacing: 1) {
+      HStack(spacing: OmiSpacing.sm) {
+        VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
           Text(option.title)
-            .scaledFont(size: 12, weight: isSelected ? .semibold : .regular)
+            .scaledFont(size: OmiType.caption, weight: isSelected ? .semibold : .regular)
             .foregroundColor(OmiColors.textPrimary)
             .lineLimit(1)
 
           if let subtitle = option.subtitle {
             Text(subtitle)
-              .scaledFont(size: 10)
+              .scaledFont(size: OmiType.micro)
               .foregroundColor(OmiColors.textTertiary)
               .lineLimit(1)
           }
@@ -263,11 +263,11 @@ private struct SearchableDropdownRow: View {
 
         if isSelected {
           Image(systemName: "checkmark")
-            .scaledFont(size: 11, weight: .semibold)
+            .scaledFont(size: OmiType.caption, weight: .semibold)
             .foregroundColor(OmiColors.textSecondary)
         }
       }
-      .padding(.horizontal, 8)
+      .padding(.horizontal, OmiSpacing.sm)
       .padding(.vertical, option.subtitle == nil ? 7 : 6)
       .background(
         RoundedRectangle(cornerRadius: 7, style: .continuous)

@@ -5,12 +5,58 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 class NotificationsSettingsPage extends StatefulWidget {
   const NotificationsSettingsPage({super.key});
 
   @override
   State<NotificationsSettingsPage> createState() => _NotificationsSettingsPageState();
+}
+
+class NotificationsSettingsLoadingShimmer extends StatelessWidget {
+  const NotificationsSettingsLoadingShimmer({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final placeholderColor = Colors.grey.shade800;
+
+    Widget placeholder({required double height, double? width, double radius = 8}) {
+      return Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(color: placeholderColor, borderRadius: BorderRadius.circular(radius)),
+      );
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: ShimmerWithTimeout(
+        baseColor: placeholderColor,
+        highlightColor: Colors.grey.shade600,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            placeholder(width: 190, height: 24),
+            const SizedBox(height: 12),
+            placeholder(height: 14),
+            const SizedBox(height: 8),
+            placeholder(width: 250, height: 14),
+            const SizedBox(height: 16),
+            placeholder(height: 172, radius: 20),
+            const SizedBox(height: 32),
+            placeholder(width: 150, height: 24),
+            const SizedBox(height: 12),
+            placeholder(height: 14),
+            const SizedBox(height: 8),
+            placeholder(width: 220, height: 14),
+            const SizedBox(height: 16),
+            placeholder(height: 145, radius: 20),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
@@ -204,7 +250,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
         elevation: 0,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Colors.white))
+          ? const NotificationsSettingsLoadingShimmer()
           : SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: Column(

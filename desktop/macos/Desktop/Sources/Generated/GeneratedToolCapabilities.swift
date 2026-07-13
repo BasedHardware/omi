@@ -261,7 +261,6 @@ enum GeneratedToolCapabilities {
       bullets: [
       "Creates a canonical kernel session/run; visible runs project into floating-bar pills.",
       "Calling spawn_agent is the only way to start a visible floating-bar background agent; saying you will start one does not start it.",
-      "Prefer spawning when a request needs more than ~30 seconds of tool work or research — start the agent and tell the user in one line instead of making them wait.",
       "Use visible=false for parent-linked background work that should not appear as a pill.",
       "If the user asks to use OpenClaw or Hermes, pass provider='openclaw' or provider='hermes'.",
       "Inspect progress with list_agent_sessions or get_agent_run."
@@ -425,11 +424,12 @@ enum GeneratedToolCapabilities {
       title: "Capture Screen",
       latency: .fastLocal,
       surfaces: Set([.desktopChat]),
-      summary: "Capture a screenshot of the user's current screen.",
+      summary: "Capture raw screenshot pixels after screen summary context is not enough.",
       bullets: [
-      "Call capture_screen when the user asks about what's on their screen.",
+      "For screen-awareness questions, call get_work_context first.",
+      "Use capture_screen only when raw pixels are necessary; it requires explicit approval before image bytes are shared.",
       "After capture_screen returns a file path, use Read to view the image.",
-      "Call capture_screen when the user asks about what's on their screen or what they're looking at.",
+      "Call get_work_context first when the user asks about what's on their screen or what they're looking at.",
       "Do NOT use bash screencapture - always use this tool instead."
     ]
     ),
@@ -437,20 +437,27 @@ enum GeneratedToolCapabilities {
       toolName: "check_permission_status",
       title: "Check Permission Status",
       latency: .fastLocal,
-      surfaces: Set([.onboarding]),
+      surfaces: Set([.desktopChat, .realtimeHub, .onboarding]),
       summary: "Check whether a required macOS permission has been granted.",
       bullets: [
-      "Onboarding-only."
+      "Use before requesting a permission or after request_permission returns pending.",
+      "Omit type to check all supported permissions."
     ]
     ),
     Capability(
       toolName: "request_permission",
       title: "Request Permission",
       latency: .fastLocal,
-      surfaces: Set([.onboarding]),
+      surfaces: Set([.desktopChat, .realtimeHub, .onboarding]),
       summary: "Open or guide the user through granting a required macOS permission.",
       bullets: [
-      "Onboarding-only."
+      "Call only when the current user message names one permission or clearly affirms your immediately preceding permission request.",
+      "Ask the user to choose when their request is generic or names multiple permissions.",
+      "The user must still complete the native macOS prompt or Settings toggle.",
+      "Call only when the current user message explicitly requests one named permission, or clearly affirms your immediately preceding missing-permission request.",
+      "For generic or multi-permission requests, ask the user which permission they want to grant.",
+      "Use strict permission types only. Do not invent permission names.",
+      "After requesting, explain any returned requires_restart or pending status."
     ]
     ),
     Capability(
@@ -523,7 +530,7 @@ enum GeneratedToolCapabilities {
       bullets: [
       "Use when the user asks to add, create, schedule, or put a specific event on their calendar.",
       "Pass title, start_time, and end_time as ISO-8601 strings with timezone; include location, description, and attendees when provided.",
-      "Use spawn_agent for multi-step calendar work such as finding availability or coordinating with people."
+      "This capability creates one specified event; it does not find availability, reschedule, delete, or coordinate with people."
     ]
     ),
     Capability(
@@ -583,7 +590,12 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat]),
       summary: "Get the user's current screen plus a compressed timeline of recent on-screen activity.",
       bullets: [
-      "Local API only."
+      "Call this first for \"what is on my screen\", \"do you see my screen\", and current-work questions.",
+      "Returns availability, a screenshot_id for follow-up, OCR preview, and recent timeline without raw image bytes.",
+      "If raw pixels are needed after this, request get_screenshot/capture_screen approval.",
+      "Call get_work_context first for \"what is on my screen\", \"do you see my screen\", and current-work questions.",
+      "Use its screen_now and timeline fields to answer directly when possible.",
+      "Only request get_screenshot or capture_screen approval if raw image pixels are necessary after get_work_context."
     ]
     )
   ]
@@ -597,6 +609,6 @@ enum GeneratedToolCapabilities {
   }
 
   static var realtimeToolNames: [String] {
-    ["ask_higher_model","cancel_agent_run","create_action_item","create_calendar_event","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","run_agent_and_wait","screenshot","search_conversations","search_memories","search_screen_history","set_desktop_attention_override","spawn_agent","update_action_item","update_agent_artifact_lifecycle"]
+    ["ask_higher_model","cancel_agent_run","check_permission_status","create_action_item","create_calendar_event","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","request_permission","screenshot","search_conversations","search_memories","search_screen_history","set_desktop_attention_override","spawn_agent","update_action_item","update_agent_artifact_lifecycle"]
   }
 }

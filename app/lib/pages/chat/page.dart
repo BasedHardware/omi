@@ -125,8 +125,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       } else if (_isInitialLoad) {
         // Auto-focus the text field only on initial load, not on app switches
         Future.delayed(const Duration(milliseconds: 300), () {
+          if (!mounted) return;
           final voiceRecorderProvider = context.read<VoiceRecorderProvider>();
-          if (mounted && !voiceRecorderProvider.isActive && _isInitialLoad) {
+          if (!voiceRecorderProvider.isActive && _isInitialLoad) {
             textFieldFocusNode.requestFocus();
           }
         });
@@ -435,6 +436,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                 child: Container(
                                                   width: 16,
                                                   height: 16,
+                                                  alignment: Alignment.center,
                                                   decoration: BoxDecoration(
                                                     color: Colors.white,
                                                     borderRadius: BorderRadius.circular(10),

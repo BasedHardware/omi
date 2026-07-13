@@ -1,5 +1,6 @@
 import AVFoundation
 import Combine
+import OmiSupport
 @preconcurrency import ObjectiveC
 import SwiftUI
 import UserNotifications
@@ -94,10 +95,14 @@ enum DesktopConversationMatchPolicy {
 
   static func shouldBindConversationSession(
     incomingBackendId: String,
+    expectedBackendId: String? = nil,
     activeBackendId: String?,
     ignoredRotatedBackendIds: Set<String>
   ) -> Bool {
     guard !incomingBackendId.isEmpty else { return false }
+    if let expectedBackendId, !expectedBackendId.isEmpty, incomingBackendId != expectedBackendId {
+      return false
+    }
     if let activeBackendId, !activeBackendId.isEmpty {
       return incomingBackendId == activeBackendId
     }
@@ -105,6 +110,19 @@ enum DesktopConversationMatchPolicy {
       return false
     }
     return true
+  }
+
+  /// Identified listen sessions may only consume lifecycle events produced by
+  /// their own recording. Older backend versions omit `recording_session_id`,
+  /// so the matching conversation id remains the compatibility proof.
+  static func lifecycleEventBelongsToRecording(
+    memoryId: String,
+    recordingSessionId: String?,
+    expectedBackendId: String?
+  ) -> Bool {
+    guard let expectedBackendId, !expectedBackendId.isEmpty else { return true }
+    guard memoryId == expectedBackendId else { return false }
+    return recordingSessionId == nil || recordingSessionId == expectedBackendId
   }
 
   static func canCompleteBoundBackendConversation(
@@ -207,7 +225,7 @@ class AppState: ObservableObject {
   @Published var conversationsError: String? = nil
   @Published var totalConversationsCount: Int? = nil  // Unfiltered total count for dashboard metrics.
   @Published var filteredConversationsCount: Int? = nil  // Count matching the active conversations filters.
-  var pendingConversationMutations: [String: ConversationPendingMutation] = [:]
+  let conversationRepository = ConversationRepository()
 
   // Conversation filters
   @Published var showStarredOnly: Bool = false
@@ -221,9 +239,8 @@ class AppState: ObservableObject {
   // People (speaker voice profiles)
   @Published var people: [Person] = []
   var peopleById: [String: Person] {
-    // Last-write-wins: the API can return duplicate person ids; uniqueKeysWithValues
-    // would trap on a collision and crash the render path (same class as the fixed #6506).
-    Dictionary(people.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
+    // Last-write-wins: the API can return duplicate person ids.
+    Dictionary(lastWriteWins: people.map { ($0.id, $0) })
   }
 
   /// Maps live speaker IDs to person IDs during recording (cleared on finalize)
@@ -320,11 +337,7 @@ class AppState: ObservableObject {
     get { servicesCoordinator.localSystemService }
     set { servicesCoordinator.localSystemService = newValue }
   }
-  var useLocalSTT = false
-  var sttFallbackInProgress = false
-  var forceCloudSTTForSession = false
-  var forceLocalSTTForSession = false
-  var sttCloudFallbackTried = false
+  var sttSession = STTSessionState()
 
   static let isAppleSilicon: Bool = {
     var value: Int32 = 0
@@ -356,9 +369,13 @@ class AppState: ObservableObject {
   /// True while a bridge-owned hermetic capture session is active (T2 E2E only).
   var automationCaptureTestSessionActive = false
   var currentBackendConversationId: String?
+  /// The UUID created by desktop before opening an identified `/v4/listen` stream.
+  /// In the current compatible protocol it is also the backend conversation id.
+  var currentClientConversationId: String?
   var pendingBackendConversationId: String?
   var ignoredRotatedBackendConversationIds: Set<String> = []
   var finishedSessionId: Int64?
+  var finishedClientConversationId: String?
   var finishedRecordingStartTime: Date?
 
   var willTerminateObserver: NSObjectProtocol? {
@@ -413,6 +430,18 @@ class AppState: ObservableObject {
   init() {
     // Register as the current instance so background services can check recording state
     AppState.current = self
+    conversationRepository.onSnapshot = { [weak self] snapshot in
+      guard let self else { return }
+      self.conversations = snapshot.conversations
+      self.isLoadingConversations = snapshot.isLoading
+      self.conversationsError = snapshot.error
+      if self.hasActiveConversationFilters {
+        self.filteredConversationsCount = snapshot.count
+      } else {
+        self.totalConversationsCount = snapshot.count
+        self.filteredConversationsCount = nil
+      }
+    }
 
     // Restore paywall flag from prior session so toggles + auto-restart respect
     // it before any backend call has a chance to refresh state — but never for
@@ -758,14 +787,6 @@ extension Notification.Name {
   /// Posted by the local desktop automation bridge to expand the transcript drawer.
   static let desktopAutomationShowConversationTranscriptRequested = Notification.Name(
     "desktopAutomationShowConversationTranscriptRequested")
-  /// Posted by the local desktop automation bridge to open an export connector sheet
-  /// (userInfo: ["destination": rawValue]) — for headless e2e inspection.
-  static let desktopAutomationOpenExportRequested = Notification.Name(
-    "desktopAutomationOpenExportRequested")
-  /// Posted to open an import connector sheet from Home or automation
-  /// (userInfo: ["connector": ImportConnector.id]).
-  static let desktopAutomationOpenImportRequested = Notification.Name(
-    "desktopAutomationOpenImportRequested")
   /// Posted when file indexing completes (userInfo: ["totalFiles": Int])
   static let fileIndexingComplete = Notification.Name("fileIndexingComplete")
   /// Posted from Settings to trigger the file indexing sheet

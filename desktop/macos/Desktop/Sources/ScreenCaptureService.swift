@@ -50,7 +50,7 @@ final class ScreenCaptureService: Sendable {
   @available(macOS 14.0, *)
   private static func sharedContent(forceRefresh: Bool = false) async throws -> SCShareableContent {
     if !forceRefresh,
-      !UserDefaults.standard.bool(forKey: "rewindDisableContentCache")
+      !UserDefaults.standard.bool(forKey: .rewindDisableContentCache)
     {
       let cached: SCShareableContent? = sharedContentLock.withLock {
         guard let ts = sharedContentCachedAt,
@@ -203,13 +203,20 @@ final class ScreenCaptureService: Sendable {
   }
 
   /// Request all screen capture permissions (both traditional TCC and ScreenCaptureKit)
+  @MainActor
   static func requestAllScreenCapturePermissions() {
     // 0. Ensure this app is the authoritative version in Launch Services
     // This fixes issues where stale registrations from old builds, DMGs, or Trash
     // cause macOS to grant permissions to the wrong app
     ensureLaunchServicesRegistration()
 
-    // 1. Request traditional Screen Recording TCC permission
+    // 1. Request traditional Screen Recording TCC permission.
+    // Activate first so the request fires while Omi is frontmost. A
+    // screen-capture access request from a backgrounded app does not reliably
+    // register the kTCCServiceScreenCapture row, so the app never appears in the
+    // Screen Recording list (PERM-02). This mirrors requestMicrophonePermission,
+    // which activates before requesting and reliably creates its TCC row.
+    NSApp.activate()
     CGRequestScreenCaptureAccess()
 
     // 2. Request ScreenCaptureKit permission (macOS 14+)
@@ -221,6 +228,32 @@ final class ScreenCaptureService: Sendable {
 
     // Note: callers are responsible for opening System Settings
     // (removed duplicate open that conflicted with caller's own open call)
+  }
+
+  /// Structured variant for owner-bound tool execution. It keeps the
+  /// ScreenCaptureKit request attached to the permission request lifetime so
+  /// the caller can fence every state or Settings publication after the await.
+  @MainActor
+  static func requestAllScreenCapturePermissionsAwaitingScreenCaptureKit() async -> Bool {
+    ensureLaunchServicesRegistration()
+    NSApp.activate()
+    let tccGranted = CGRequestScreenCaptureAccess()
+    if #available(macOS 14.0, *) {
+      _ = await requestScreenCaptureKitPermission()
+    }
+    return tccGranted || checkPermission()
+  }
+
+  /// Guided grant flow (PERM-02 / BL-050): register the screen-recording TCC row
+  /// **while Omi is frontmost**, then open System Settings so the user lands on a
+  /// list that already contains Omi. Opening Settings first backgrounded the app
+  /// before the registering call, so a screen-capture request from the
+  /// backgrounded app never created the `kTCCServiceScreenCapture` row and Omi
+  /// never appeared in the list. Mirrors MemoryExportExecutor.requestScreenRecordingApprovalForCloudSetup, the existing register-while-frontmost path.
+  @MainActor
+  static func requestScreenRecordingAccessAndOpenSettings() {
+    requestAllScreenCapturePermissions()
+    openScreenRecordingPreferences()
   }
 
   /// Test if ScreenCaptureKit specifically works (macOS 14+)
@@ -328,7 +361,7 @@ final class ScreenCaptureService: Sendable {
 
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/sh")
-        task.arguments = ["-c", "sleep 0.5 && open \"\(bundleURL.path)\""]
+        task.arguments = ["-c", screenCaptureRelaunchCommand(appPath: bundleURL.path)]
 
         do {
           try task.run()
@@ -371,10 +404,9 @@ final class ScreenCaptureService: Sendable {
         if success {
           log("Screen capture permission reset, restarting app...")
 
-          // Use a shell script to wait briefly, then relaunch the app
           let task = Process()
           task.executableURL = URL(fileURLWithPath: "/bin/sh")
-          task.arguments = ["-c", "sleep 0.5 && open \"\(bundleURL.path)\""]
+          task.arguments = ["-c", screenCaptureRelaunchCommand(appPath: bundleURL.path)]
 
           do {
             try task.run()
@@ -390,6 +422,14 @@ final class ScreenCaptureService: Sendable {
         }
       }
     }
+  }
+
+  nonisolated static func screenCaptureRelaunchCommand(appPath: String) -> String {
+    AppState.relaunchCommand(
+      appPath: appPath,
+      isNonProduction: AppBuild.isNonProduction,
+      automationPort: DesktopAutomationLaunchOptions.port
+    )
   }
 
   /// Get the window ID of the frontmost application's main window

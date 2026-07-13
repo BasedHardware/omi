@@ -7,7 +7,6 @@ import OmiTheme
 struct AskAIInputView: View {
     @EnvironmentObject var state: FloatingControlBarState
     @Binding var userInput: String
-    @State private var localInput: String = ""
     @State private var textHeight: CGFloat = 40
     @State private var hasMarkedText = false
     @State private var attachments: [ChatAttachment] = []
@@ -21,7 +20,7 @@ struct AskAIInputView: View {
 
     private let minHeight: CGFloat = 40
     private let maxHeight: CGFloat = 200
-    private var trimmedInput: String { localInput.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var trimmedInput: String { userInput.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var canSend: Bool {
         !hasMarkedText && (!trimmedInput.isEmpty || !attachments.isEmpty)
     }
@@ -32,20 +31,20 @@ struct AskAIInputView: View {
                 HStack {
                     Spacer()
 
-                    HStack(spacing: 4) {
+                    HStack(spacing: OmiSpacing.xxs) {
                         Text("esc")
-                            .scaledFont(size: 11)
+                            .scaledFont(size: OmiType.caption)
                             .foregroundColor(.secondary)
                             .frame(width: 30, height: 16)
                             .background(Color.white.opacity(0.1))
-                            .cornerRadius(4)
+                            .cornerRadius(OmiChrome.stripRadius)
                         Text("to clear")
-                            .scaledFont(size: 11)
+                            .scaledFont(size: OmiType.caption)
                             .foregroundColor(.secondary)
                     }
                 }
-                .padding(.top, 8)
-                .padding(.trailing, 16)
+                .padding(.top, OmiSpacing.sm)
+                .padding(.trailing, OmiSpacing.lg)
             }
 
             if !attachments.isEmpty {
@@ -54,22 +53,22 @@ struct AskAIInputView: View {
                     onRemove: removeAttachment
                 )
                 .environment(\.colorScheme, .dark)
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
+                .padding(.horizontal, OmiSpacing.lg)
+                .padding(.top, OmiSpacing.sm)
             }
 
-            HStack(spacing: 6) {
+            HStack(spacing: OmiSpacing.xs) {
                 ZStack(alignment: .topLeading) {
-                    if localInput.isEmpty && !hasMarkedText {
+                    if userInput.isEmpty && !hasMarkedText {
                         Text("Ask a question...")
-                            .scaledFont(size: 13)
+                            .scaledFont(size: OmiType.body)
                             .foregroundColor(.secondary)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 8)
+                            .padding(.horizontal, OmiSpacing.sm)
+                            .padding(.vertical, OmiSpacing.sm)
                     }
 
                     OmiTextEditor(
-                        text: $localInput,
+                        text: $userInput,
                         lineFragmentPadding: 8,
                         onSubmit: {
                             guard canSend else { return }
@@ -86,14 +85,8 @@ struct AskAIInputView: View {
                             }
                         }
                     )
-                    .onChange(of: localInput) { _, newValue in
-                        userInput = newValue
-                    }
-                    .onAppear {
-                        localInput = userInput
-                    }
                 }
-                .padding(.horizontal, 4)
+                .padding(.horizontal, OmiSpacing.xxs)
                 .frame(height: textHeight)
 
                 Button(action: {
@@ -109,8 +102,8 @@ struct AskAIInputView: View {
                 .disabled(!canSend)
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.horizontal, OmiSpacing.lg)
+            .padding(.vertical, OmiSpacing.md)
             .frame(maxWidth: .infinity)
         }
         .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted, perform: handleAttachmentDrop)
@@ -123,8 +116,7 @@ struct AskAIInputView: View {
         let text = trimmedInput
         let staged = attachments
         guard !text.isEmpty || !staged.isEmpty else { return }
-        localInput = ""
-        userInput = ""
+        userInput = text
         attachments = []
         if !staged.isEmpty {
             FloatingControlBarManager.shared.sharedFloatingProvider?.addAttachments(staged)

@@ -28,6 +28,12 @@ final class PushToTalkSpeechGateTests: XCTestCase {
     XCTAssertFalse(PushToTalkManager.hubTurnHasSpeech(pcm16k: audio))
   }
 
+  func testHubSpeechGateAcceptsClearShortReply() {
+    let audio = sinePCM16k(seconds: 0.42, frequency: 220, amplitude: 3500)
+
+    XCTAssertTrue(PushToTalkManager.hubTurnHasSpeech(pcm16k: audio))
+  }
+
   func testHubSpeechGateAcceptsSustainedVoicedAudio() {
     let audio = sinePCM16k(seconds: 0.7, frequency: 220, amplitude: 3500)
 

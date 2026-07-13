@@ -46,7 +46,7 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
   func run(timeoutSeconds: Double) async -> [String: String] {
     let s = RealtimeHubSession(
       provider: provider, auth: auth,
-      instructions: RealtimeHubTools.systemInstruction(aboutUser: ""),
+      instructions: RealtimeHubTools.systemInstruction(),
       delegate: self)
     session = s
     let rate = s.requiredInputSampleRate
@@ -106,15 +106,24 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
 
   func hubDidConnect(source: RealtimeHubSession) { connected = true }
 
-  func hubDidReceiveInputTranscript(_ text: String, isFinal: Bool, source: RealtimeHubSession) {
+  func hubDidReceiveInputTranscript(
+    _ text: String, isFinal: Bool, identity: RealtimeHubEventIdentity?, source: RealtimeHubSession
+  ) {
     if isFinal { if !text.isEmpty { transcriptIn = text } } else { transcriptIn += text }
   }
 
-  func hubDidReceiveAudio(_ pcm24k: Data, source: RealtimeHubSession) { audioBytes += pcm24k.count }
+  func hubDidReceiveAudio(
+    _ pcm24k: Data, identity: RealtimeHubEventIdentity?, source: RealtimeHubSession
+  ) { audioBytes += pcm24k.count }
 
-  func hubDidEmitText(_ text: String, isFinal: Bool, source: RealtimeHubSession) { textOut += text }
+  func hubDidEmitText(
+    _ text: String, isFinal: Bool, identity: RealtimeHubEventIdentity?, source: RealtimeHubSession
+  ) { textOut += text }
 
-  func hubDidRequestTool(name: String, callId: String, argumentsJSON: String, source: RealtimeHubSession) {
+  func hubDidRequestTool(
+    name: String, callId: String, argumentsJSON: String,
+    identity: RealtimeHubEventIdentity?, source: RealtimeHubSession
+  ) {
     toolCalls.append("\(name)(\(argumentsJSON))")
     // Return a stub result so the turn completes and we observe the full loop —
     // without spawning real agents / network calls inside the test.
@@ -127,6 +136,8 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     case .searchConversations: stub = "On Monday you discussed the launch timeline."
     case .getConversations: stub = "Most recent: today, 'Standup notes'. Before that: yesterday, 'Design review'."
     case .getActionItems: stub = "Open: Buy milk (due tomorrow). Completed: Ship the PR."
+    case .checkPermissionStatus: stub = "Screen Recording: not granted."
+    case .requestPermission: stub = "Screen Recording permission request opened."
     case .listAgentSessions:
       stub = "Canonical Omi agent sessions. Use agentRef values internally for follow-up tool calls; do not say them aloud.\n- agent_1: Example agent, running"
     case .getAgentRun: stub = "The selected canonical run is running, mode ask. Attempts: 1. Events returned: 3."
@@ -140,7 +151,6 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     case .updateActionItem: stub = "Updated the task."
     case .createCalendarEvent: stub = "Created calendar event: Example event."
     case .spawnAgent: stub = "Started a background agent."
-    case .runAgentAndWait: stub = "Child agent finished with a structured result."
     case .setDesktopAttentionOverride: stub = "Attention override applied."
     case .screenshot: stub = "Screen captured."
     case .pointClick: stub = "Clicked."
@@ -149,7 +159,9 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     session?.sendToolResult(callId: callId, name: name, output: stub)
   }
 
-  func hubDidFinishTurn(source: RealtimeHubSession) { finish(timedOut: false) }
+  func hubDidFinishTurn(identity: RealtimeHubEventIdentity?, source: RealtimeHubSession) {
+    finish(timedOut: false)
+  }
 
   func hubDidError(_ message: String, source: RealtimeHubSession) {
     if errorMsg == nil { errorMsg = message }
@@ -182,9 +194,14 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
         auth = .byokKey(key)
       } else {
         let p = provider == .openai ? "openai" : "gemini"
+        guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else {
+          return ["error": "ephemeral mint requires a stable authenticated owner"]
+        }
         let token: String
         do {
-          token = try await APIClient.shared.mintRealtimeToken(provider: p)
+          token = try await APIClient.shared.mintRealtimeToken(
+            provider: p,
+            expectedOwnerID: ownerID)
         } catch {
           return [
             "error": "ephemeral mint failed for \(p)",

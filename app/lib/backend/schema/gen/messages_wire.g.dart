@@ -190,15 +190,19 @@ class GeneratedMessage {
   final String? appId;
   final Map<String, dynamic>? chartData;
   final String? chatSessionId;
+  final String? clientMessageId;
   final DateTime createdAt;
   final String? dataProtectionLevel;
   final List<GeneratedFileChat> files;
   final List<String> filesId;
   final bool fromExternalIntegration;
   final String id;
+  final int? journalRevision;
   final String? langsmithRunId;
   final List<GeneratedMessageConversation> memories;
   final List<String> memoriesId;
+  final String? messageSource;
+  final String? metadata;
   final String? pluginId;
   final String? promptCommit;
   final String? promptName;
@@ -206,6 +210,7 @@ class GeneratedMessage {
   final String? reportReason;
   final bool reported;
   final String sender;
+  final String? sessionId;
   final String text;
   final String type;
 
@@ -213,15 +218,19 @@ class GeneratedMessage {
     this.appId,
     this.chartData,
     this.chatSessionId,
+    this.clientMessageId,
     required this.createdAt,
     this.dataProtectionLevel,
     this.files = const [],
     this.filesId = const [],
     this.fromExternalIntegration = false,
     required this.id,
+    this.journalRevision,
     this.langsmithRunId,
     this.memories = const [],
     this.memoriesId = const [],
+    this.messageSource,
+    this.metadata,
     this.pluginId,
     this.promptCommit,
     this.promptName,
@@ -229,6 +238,7 @@ class GeneratedMessage {
     this.reportReason,
     this.reported = false,
     required this.sender,
+    this.sessionId,
     required this.text,
     required this.type,
   });
@@ -238,15 +248,19 @@ class GeneratedMessage {
       appId: _readFieldValue<String>(_readField(json, const ["app_id"]), "app_id", _readString, requiredField: false, nullable: true),
       chartData: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["chart_data"]), "chart_data", _readMap, requiredField: false, nullable: true),
       chatSessionId: _readFieldValue<String>(_readField(json, const ["chat_session_id"]), "chat_session_id", _readString, requiredField: false, nullable: true),
+      clientMessageId: _readFieldValue<String>(_readField(json, const ["client_message_id"]), "client_message_id", _readString, requiredField: false, nullable: true),
       createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
       dataProtectionLevel: _readFieldValue<String>(_readField(json, const ["data_protection_level"]), "data_protection_level", _readString, requiredField: false, nullable: true),
       files: _required(_readFieldValue<List<GeneratedFileChat>>(_readField(json, const ["files"]), "files", (value) => _readObjectList(value, GeneratedFileChat.fromJson), requiredField: false, nullable: false, defaultValue: const []), "files"),
       filesId: _required(_readFieldValue<List<String>>(_readField(json, const ["files_id"]), "files_id", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "files_id"),
       fromExternalIntegration: _required(_readFieldValue<bool>(_readField(json, const ["from_external_integration"]), "from_external_integration", _readBool, requiredField: false, nullable: false, defaultValue: false), "from_external_integration"),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      journalRevision: _readFieldValue<int>(_readField(json, const ["journal_revision"]), "journal_revision", _readInt, requiredField: false, nullable: true),
       langsmithRunId: _readFieldValue<String>(_readField(json, const ["langsmith_run_id"]), "langsmith_run_id", _readString, requiredField: false, nullable: true),
       memories: _required(_readFieldValue<List<GeneratedMessageConversation>>(_readField(json, const ["memories"]), "memories", (value) => _readObjectList(value, GeneratedMessageConversation.fromJson), requiredField: false, nullable: false, defaultValue: const []), "memories"),
       memoriesId: _required(_readFieldValue<List<String>>(_readField(json, const ["memories_id"]), "memories_id", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "memories_id"),
+      messageSource: _readFieldValue<String>(_readField(json, const ["message_source"]), "message_source", _readString, requiredField: false, nullable: true),
+      metadata: _readFieldValue<String>(_readField(json, const ["metadata"]), "metadata", _readString, requiredField: false, nullable: true),
       pluginId: _readFieldValue<String>(_readField(json, const ["plugin_id"]), "plugin_id", _readString, requiredField: false, nullable: true),
       promptCommit: _readFieldValue<String>(_readField(json, const ["prompt_commit"]), "prompt_commit", _readString, requiredField: false, nullable: true),
       promptName: _readFieldValue<String>(_readField(json, const ["prompt_name"]), "prompt_name", _readString, requiredField: false, nullable: true),
@@ -254,6 +268,7 @@ class GeneratedMessage {
       reportReason: _readFieldValue<String>(_readField(json, const ["report_reason"]), "report_reason", _readString, requiredField: false, nullable: true),
       reported: _required(_readFieldValue<bool>(_readField(json, const ["reported"]), "reported", _readBool, requiredField: false, nullable: false, defaultValue: false), "reported"),
       sender: _required(_readFieldValue<String>(_readField(json, const ["sender"]), "sender", _readString, requiredField: true, nullable: false), "sender"),
+      sessionId: _readFieldValue<String>(_readField(json, const ["session_id"]), "session_id", _readString, requiredField: false, nullable: true),
       text: _required(_readFieldValue<String>(_readField(json, const ["text"]), "text", _readString, requiredField: true, nullable: false), "text"),
       type: _required(_readFieldValue<String>(_readField(json, const ["type"]), "type", _readString, requiredField: true, nullable: false), "type"),
     );
@@ -264,15 +279,19 @@ class GeneratedMessage {
       'app_id': appId,
       'chart_data': chartData,
       'chat_session_id': chatSessionId,
+      'client_message_id': clientMessageId,
       'created_at': createdAt.toUtc().toIso8601String(),
       'data_protection_level': dataProtectionLevel,
       'files': files.map((value) => value.toJson()).toList(),
       'files_id': filesId,
       'from_external_integration': fromExternalIntegration,
       'id': id,
+      'journal_revision': journalRevision,
       'langsmith_run_id': langsmithRunId,
       'memories': memories.map((value) => value.toJson()).toList(),
       'memories_id': memoriesId,
+      'message_source': messageSource,
+      'metadata': metadata,
       'plugin_id': pluginId,
       'prompt_commit': promptCommit,
       'prompt_name': promptName,
@@ -280,6 +299,7 @@ class GeneratedMessage {
       'report_reason': reportReason,
       'reported': reported,
       'sender': sender,
+      'session_id': sessionId,
       'text': text,
       'type': type,
     };
@@ -291,15 +311,19 @@ class GeneratedResponseMessage {
   final bool? askForNps;
   final Map<String, dynamic>? chartData;
   final String? chatSessionId;
+  final String? clientMessageId;
   final DateTime createdAt;
   final String? dataProtectionLevel;
   final List<GeneratedFileChat> files;
   final List<String> filesId;
   final bool fromExternalIntegration;
   final String id;
+  final int? journalRevision;
   final String? langsmithRunId;
   final List<GeneratedMessageConversation> memories;
   final List<String> memoriesId;
+  final String? messageSource;
+  final String? metadata;
   final String? pluginId;
   final String? promptCommit;
   final String? promptName;
@@ -307,6 +331,7 @@ class GeneratedResponseMessage {
   final String? reportReason;
   final bool reported;
   final String sender;
+  final String? sessionId;
   final String text;
   final String type;
 
@@ -315,15 +340,19 @@ class GeneratedResponseMessage {
     this.askForNps = false,
     this.chartData,
     this.chatSessionId,
+    this.clientMessageId,
     required this.createdAt,
     this.dataProtectionLevel,
     this.files = const [],
     this.filesId = const [],
     this.fromExternalIntegration = false,
     required this.id,
+    this.journalRevision,
     this.langsmithRunId,
     this.memories = const [],
     this.memoriesId = const [],
+    this.messageSource,
+    this.metadata,
     this.pluginId,
     this.promptCommit,
     this.promptName,
@@ -331,6 +360,7 @@ class GeneratedResponseMessage {
     this.reportReason,
     this.reported = false,
     required this.sender,
+    this.sessionId,
     required this.text,
     required this.type,
   });
@@ -341,15 +371,19 @@ class GeneratedResponseMessage {
       askForNps: _readFieldValue<bool>(_readField(json, const ["ask_for_nps"]), "ask_for_nps", _readBool, requiredField: false, nullable: true, defaultValue: false),
       chartData: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["chart_data"]), "chart_data", _readMap, requiredField: false, nullable: true),
       chatSessionId: _readFieldValue<String>(_readField(json, const ["chat_session_id"]), "chat_session_id", _readString, requiredField: false, nullable: true),
+      clientMessageId: _readFieldValue<String>(_readField(json, const ["client_message_id"]), "client_message_id", _readString, requiredField: false, nullable: true),
       createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
       dataProtectionLevel: _readFieldValue<String>(_readField(json, const ["data_protection_level"]), "data_protection_level", _readString, requiredField: false, nullable: true),
       files: _required(_readFieldValue<List<GeneratedFileChat>>(_readField(json, const ["files"]), "files", (value) => _readObjectList(value, GeneratedFileChat.fromJson), requiredField: false, nullable: false, defaultValue: const []), "files"),
       filesId: _required(_readFieldValue<List<String>>(_readField(json, const ["files_id"]), "files_id", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "files_id"),
       fromExternalIntegration: _required(_readFieldValue<bool>(_readField(json, const ["from_external_integration"]), "from_external_integration", _readBool, requiredField: false, nullable: false, defaultValue: false), "from_external_integration"),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      journalRevision: _readFieldValue<int>(_readField(json, const ["journal_revision"]), "journal_revision", _readInt, requiredField: false, nullable: true),
       langsmithRunId: _readFieldValue<String>(_readField(json, const ["langsmith_run_id"]), "langsmith_run_id", _readString, requiredField: false, nullable: true),
       memories: _required(_readFieldValue<List<GeneratedMessageConversation>>(_readField(json, const ["memories"]), "memories", (value) => _readObjectList(value, GeneratedMessageConversation.fromJson), requiredField: false, nullable: false, defaultValue: const []), "memories"),
       memoriesId: _required(_readFieldValue<List<String>>(_readField(json, const ["memories_id"]), "memories_id", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "memories_id"),
+      messageSource: _readFieldValue<String>(_readField(json, const ["message_source"]), "message_source", _readString, requiredField: false, nullable: true),
+      metadata: _readFieldValue<String>(_readField(json, const ["metadata"]), "metadata", _readString, requiredField: false, nullable: true),
       pluginId: _readFieldValue<String>(_readField(json, const ["plugin_id"]), "plugin_id", _readString, requiredField: false, nullable: true),
       promptCommit: _readFieldValue<String>(_readField(json, const ["prompt_commit"]), "prompt_commit", _readString, requiredField: false, nullable: true),
       promptName: _readFieldValue<String>(_readField(json, const ["prompt_name"]), "prompt_name", _readString, requiredField: false, nullable: true),
@@ -357,6 +391,7 @@ class GeneratedResponseMessage {
       reportReason: _readFieldValue<String>(_readField(json, const ["report_reason"]), "report_reason", _readString, requiredField: false, nullable: true),
       reported: _required(_readFieldValue<bool>(_readField(json, const ["reported"]), "reported", _readBool, requiredField: false, nullable: false, defaultValue: false), "reported"),
       sender: _required(_readFieldValue<String>(_readField(json, const ["sender"]), "sender", _readString, requiredField: true, nullable: false), "sender"),
+      sessionId: _readFieldValue<String>(_readField(json, const ["session_id"]), "session_id", _readString, requiredField: false, nullable: true),
       text: _required(_readFieldValue<String>(_readField(json, const ["text"]), "text", _readString, requiredField: true, nullable: false), "text"),
       type: _required(_readFieldValue<String>(_readField(json, const ["type"]), "type", _readString, requiredField: true, nullable: false), "type"),
     );
@@ -368,15 +403,19 @@ class GeneratedResponseMessage {
       'ask_for_nps': askForNps,
       'chart_data': chartData,
       'chat_session_id': chatSessionId,
+      'client_message_id': clientMessageId,
       'created_at': createdAt.toUtc().toIso8601String(),
       'data_protection_level': dataProtectionLevel,
       'files': files.map((value) => value.toJson()).toList(),
       'files_id': filesId,
       'from_external_integration': fromExternalIntegration,
       'id': id,
+      'journal_revision': journalRevision,
       'langsmith_run_id': langsmithRunId,
       'memories': memories.map((value) => value.toJson()).toList(),
       'memories_id': memoriesId,
+      'message_source': messageSource,
+      'metadata': metadata,
       'plugin_id': pluginId,
       'prompt_commit': promptCommit,
       'prompt_name': promptName,
@@ -384,6 +423,7 @@ class GeneratedResponseMessage {
       'report_reason': reportReason,
       'reported': reported,
       'sender': sender,
+      'session_id': sessionId,
       'text': text,
       'type': type,
     };
@@ -412,16 +452,22 @@ class GeneratedMessageReportResponse {
 
 class GeneratedVoiceMessageTranscriptionResponse {
   final String? language;
+  final String? sttModel;
+  final String? sttProvider;
   final String transcript;
 
   const GeneratedVoiceMessageTranscriptionResponse({
     this.language,
+    this.sttModel,
+    this.sttProvider,
     required this.transcript,
   });
 
   factory GeneratedVoiceMessageTranscriptionResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedVoiceMessageTranscriptionResponse(
       language: _readFieldValue<String>(_readField(json, const ["language"]), "language", _readString, requiredField: false, nullable: true),
+      sttModel: _readFieldValue<String>(_readField(json, const ["stt_model"]), "stt_model", _readString, requiredField: false, nullable: true),
+      sttProvider: _readFieldValue<String>(_readField(json, const ["stt_provider"]), "stt_provider", _readString, requiredField: false, nullable: true),
       transcript: _required(_readFieldValue<String>(_readField(json, const ["transcript"]), "transcript", _readString, requiredField: true, nullable: false), "transcript"),
     );
   }
@@ -429,6 +475,8 @@ class GeneratedVoiceMessageTranscriptionResponse {
   Map<String, dynamic> toJson() {
     return {
       'language': language,
+      'stt_model': sttModel,
+      'stt_provider': sttProvider,
       'transcript': transcript,
     };
   }

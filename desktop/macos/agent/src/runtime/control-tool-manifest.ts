@@ -25,14 +25,6 @@ export interface AgentControlManifestProperty {
 
 export type AgentControlSurface = "desktopChat" | "realtimeHub";
 
-export interface AgentControlMcpInputSchemaOptions {
-  anyOf?: unknown[];
-  allOf?: unknown[];
-  oneOf?: unknown[];
-  if?: unknown;
-  then?: unknown;
-}
-
 export interface AgentControlManifestTool {
   name:
     | "list_agent_sessions"
@@ -73,7 +65,6 @@ export interface AgentControlManifestTool {
   timeoutClass: AgentControlTimeoutClass;
   properties: Record<string, AgentControlManifestProperty>;
   required: string[];
-  mcpInputSchemaOptions?: AgentControlMcpInputSchemaOptions;
 }
 
 const agentControlReadPolicy = {
@@ -418,7 +409,16 @@ Use a runId returned by list_agent_sessions or a correlated Omi response. Return
       priority: { type: "number", description: "Priority integer." },
       title: { type: "string", description: "Short title." },
       decisionPrompt: { type: "string", description: "Exact decision prompt." },
+      recommendedDefault: { type: "string", description: "Optional recommended default decision label." },
+      sourceSessionId: { type: "string", description: "Optional source Omi session_id scope guard." },
+      sourceRunId: { type: "string", description: "Optional source Omi run_id scope guard." },
+      sourceAttemptId: { type: "string", description: "Optional source Omi attempt_id scope guard." },
+      sourceArtifactId: { type: "string", description: "Optional source Omi artifact_id scope guard." },
+      capability: { type: "string", description: "Capability being requested, e.g. desktop.context.screenshot_image." },
+      operation: { type: "string", description: "Operation being requested, e.g. get_screenshot." },
+      resourceRef: { type: "string", description: "Resource reference for scoped approval." },
       payload: { type: "object", description: "Small structured payload.", additionalProperties: true },
+      expiresAtMs: { type: "number", description: "Optional epoch-ms expiration for the decision item." },
     },
     required: ["kind", "priority", "title", "decisionPrompt"],
   },
@@ -521,14 +521,6 @@ Returns metadata and references only. It does not read arbitrary artifact conten
       limit: { type: "number", description: "Maximum artifacts to return. Default 50, max 200." },
     },
     required: [],
-    mcpInputSchemaOptions: {
-      anyOf: [
-        { required: ["artifactId"] },
-        { required: ["sessionId"] },
-        { required: ["runId"] },
-        { required: ["attemptId"] },
-      ],
-    },
   },
   {
     name: "update_agent_artifact_lifecycle",
@@ -606,6 +598,7 @@ Creates a new run in that session through the runtime kernel.`,
     timeoutClass: "long",
     properties: {
       sessionId: { type: "string", description: "Canonical Omi session_id to continue." },
+      originSurfaceKind: { type: "string", enum: ["main_chat", "floating_bar", "realtime", "task_chat", "agent_control"], description: "Surface that originated the continuation request. Persisted caller session authority overrides this routing fact." },
       ownerId: { type: "string", description: "Owner id. Defaults to the active signed-in owner." },
       prompt: { type: "string", description: "The follow-up message." },
       mode: { type: "string", enum: ["ask", "act"], description: "Run mode. Default ask." },
@@ -616,7 +609,7 @@ Creates a new run in that session through the runtime kernel.`,
       clientId: { type: "string", description: "Logical caller id. Defaults to omi-control-tools." },
       metadata: { type: "object", description: "Small structured metadata for this run.", additionalProperties: true },
     },
-    required: ["sessionId", "prompt"],
+    required: ["sessionId", "originSurfaceKind", "prompt"],
   },
   {
     name: "spawn_background_agent",
@@ -642,6 +635,7 @@ Not exposed to agent-facing surfaces.`,
     timeoutClass: "long",
     properties: {
       prompt: { type: "string", description: "Self-contained background-agent task prompt." },
+      originSurfaceKind: { type: "string", enum: ["main_chat", "floating_bar", "realtime", "task_chat", "agent_control"], description: "Surface that originated the spawn request. Persisted caller session authority overrides this routing fact." },
       title: { type: "string", description: "Optional visible session title." },
       surfaceKind: { type: "string", description: "Optional session surface kind. Default floating_bar." },
       externalRefKind: { type: "string", description: "Optional external reference kind for UI projection." },
@@ -656,7 +650,7 @@ Not exposed to agent-facing surfaces.`,
       clientId: { type: "string", description: "Logical caller id. Defaults to omi-control-tools." },
       metadata: { type: "object", description: "Small structured metadata for this run.", additionalProperties: true },
     },
-    required: ["prompt"],
+    required: ["prompt", "originSurfaceKind"],
   },
   {
     name: "spawn_agent",
@@ -667,7 +661,6 @@ Pass parentRunId to link the new run to a parent.`,
     promptSnippet: "spawn_agent - Start canonical Omi background work",
     promptGuidelines: [
       "Calling spawn_agent is the only way to start a visible floating-bar background agent; saying you will start one does not start it.",
-      "Prefer spawning when a request needs more than ~30 seconds of tool work or research — start the agent and tell the user in one line instead of making them wait.",
       "Use visible=false for parent-linked background work that should not appear as a pill.",
       "If the user asks to use OpenClaw or Hermes, pass provider='openclaw' or provider='hermes'.",
       "Inspect progress with list_agent_sessions or get_agent_run.",
@@ -688,6 +681,7 @@ Pass parentRunId to link the new run to a parent.`,
     timeoutClass: "long",
     properties: {
       objective: { type: "string", description: "Self-contained background-agent objective." },
+      requestedAgentCount: { type: "number", description: "Number of sibling agents requested in this single canonical route decision (default 1, maximum 8)." },
       provider: { type: "string", enum: ["openclaw", "hermes"], description: "Optional local provider override." },
       parentRunId: { type: "string", description: "Optional parent run to link via delegation." },
       visible: { type: "boolean", description: "Whether to project into floating-bar pill UI. Default true." },
@@ -727,6 +721,7 @@ Pass parentRunId to link the new run to a parent.`,
     properties: {
       objective: { type: "string", description: "Delegated objective for the child agent." },
       parentRunId: { type: "string", description: "Canonical parent Omi run_id." },
+      originSurfaceKind: { type: "string", enum: ["main_chat", "floating_bar", "realtime", "task_chat", "agent_control"], description: "Surface that originated the synchronous delegation request. Persisted caller session authority overrides this routing fact." },
       context: { type: "string", description: "Optional concise context, not a full transcript." },
       ownerId: { type: "string", description: "Optional owner guard for the parent run." },
       adapterId: { type: "string", description: "Optional adapter override." },
@@ -739,7 +734,7 @@ Pass parentRunId to link the new run to a parent.`,
       maxBudgetUsd: { type: "number", description: "Per-delegation budget guard. Default 5, hard max 10." },
       metadata: { type: "object", description: "Small structured metadata for the child run.", additionalProperties: true },
     },
-    required: ["objective", "parentRunId"],
+    required: ["objective", "parentRunId", "originSurfaceKind"],
   },
   {
     name: "set_desktop_attention_override",

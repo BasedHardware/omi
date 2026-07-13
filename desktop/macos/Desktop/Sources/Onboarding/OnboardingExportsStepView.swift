@@ -26,7 +26,7 @@ struct OnboardingExportsStepView: View {
       onSkip: onSkip,
       onForceComplete: onForceComplete
     ) {
-      VStack(alignment: .leading, spacing: 18) {
+      VStack(alignment: .leading, spacing: OmiSpacing.lg) {
         destinationsList
 
         if let activeDestination {
@@ -36,7 +36,7 @@ struct OnboardingExportsStepView: View {
         Button("Continue") {
           onContinue()
         }
-        .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+        .buttonStyle(OmiButtonStyle(.primary))
         .keyboardShortcut(.defaultAction)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
@@ -80,10 +80,10 @@ struct OnboardingExportsStepView: View {
         exportedCount: 0, lastExportedAt: nil, detailText: nil, isConfigured: false, hasConnection: false)
     let metrics = exportMetrics(for: destination, status: status)
 
-    return HStack(alignment: .center, spacing: 12) {
-      ConnectorBrandIcon(brand: destination.brand, size: 38, cornerRadius: 11)
+    return HStack(alignment: .center, spacing: OmiSpacing.md) {
+      ConnectorBrandIcon(brand: destination.brand, size: 38, cornerRadius: OmiChrome.smallControlRadius)
 
-      VStack(alignment: .leading, spacing: 3) {
+      VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         Text(destination.title)
           .font(.system(size: 15, weight: .semibold))
           .foregroundColor(OmiColors.textPrimary)
@@ -100,8 +100,8 @@ struct OnboardingExportsStepView: View {
       .buttonStyle(.plain)
       .font(.system(size: 13, weight: .semibold))
       .foregroundColor(OmiColors.textSecondary)
-      .padding(.horizontal, 12)
-      .padding(.vertical, 8)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
       .background(
         Capsule(style: .continuous)
           .fill(OmiColors.backgroundPrimary)
@@ -111,8 +111,8 @@ struct OnboardingExportsStepView: View {
           .stroke(Color.white.opacity(0.08), lineWidth: 1)
       )
     }
-    .padding(.horizontal, 16)
-    .padding(.vertical, 14)
+    .padding(.horizontal, OmiSpacing.lg)
+    .padding(.vertical, OmiSpacing.md)
   }
 
   private func exportPanel(for destination: MemoryExportDestination) -> some View {
@@ -151,7 +151,7 @@ private struct OnboardingInlineExportPanel: View {
   @StateObject private var model = MemoryExportDestinationSheetModel()
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 14) {
+    VStack(alignment: .leading, spacing: OmiSpacing.md) {
       Text(destination.description)
         .font(.system(size: 13))
         .foregroundColor(OmiColors.textSecondary)
@@ -191,7 +191,7 @@ private struct OnboardingInlineExportPanel: View {
           "Connect \(destination.title) over MCP from Apps after onboarding.")
       }
 
-      HStack(spacing: 12) {
+      HStack(spacing: OmiSpacing.md) {
         Button(model.isRunning ? runningLabel : idleLabel) {
           Task {
             if destination.supportsAgentSetup,
@@ -203,7 +203,7 @@ private struct OnboardingInlineExportPanel: View {
             }
           }
         }
-        .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+        .buttonStyle(OmiButtonStyle(.primary))
         .disabled(model.isRunning || model.isLoadingMCPKey)
 
         Button("Cancel") {
@@ -221,17 +221,17 @@ private struct OnboardingInlineExportPanel: View {
       }
 
       if let errorMessage = model.errorMessage {
-        Text(errorMessage)
+        Text(UserFacingErrorPresentation.message(from: errorMessage, while: .memoryExport))
           .font(.system(size: 12, weight: .medium))
           .foregroundColor(OmiColors.warning)
       }
     }
-    .padding(18)
+    .padding(OmiSpacing.lg)
     .background(
-      RoundedRectangle(cornerRadius: 20, style: .continuous)
+      RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
         .fill(OmiColors.backgroundSecondary)
         .overlay(
-          RoundedRectangle(cornerRadius: 20, style: .continuous)
+          RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
             .stroke(Color.white.opacity(0.08), lineWidth: 1)
         )
     )
@@ -276,13 +276,13 @@ private struct OnboardingInlineExportPanel: View {
     .textFieldStyle(.plain)
     .font(.system(size: 13))
     .foregroundColor(OmiColors.textPrimary)
-    .padding(.horizontal, 14)
-    .padding(.vertical, 12)
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.md)
     .background(
-      RoundedRectangle(cornerRadius: 16, style: .continuous)
+      RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
         .fill(OmiColors.backgroundSecondary)
         .overlay(
-          RoundedRectangle(cornerRadius: 16, style: .continuous)
+          RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
             .stroke(Color.white.opacity(0.08), lineWidth: 1)
         )
     )
@@ -292,13 +292,13 @@ private struct OnboardingInlineExportPanel: View {
     Text(text)
       .font(.system(size: 12))
       .foregroundColor(OmiColors.textTertiary)
-      .padding(14)
+      .padding(OmiSpacing.md)
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
+        RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
           .fill(OmiColors.backgroundSecondary)
           .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
               .stroke(Color.white.opacity(0.08), lineWidth: 1)
           )
       )

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, List, Mapping, Optional, cast
 
@@ -173,10 +173,15 @@ class Announcement(BaseModel):
         except ValueError:
             announcement_type = AnnouncementType.ANNOUNCEMENT
 
+        # Tolerate a legacy doc missing id or created_at the same way a missing type is tolerated above,
+        # so a single malformed announcement cannot 500 the whole list. A missing created_at sorts as
+        # the epoch.
+        announcement_id = cast(str, data.get("id")) or ""
+        created_at = cast(datetime, data.get("created_at")) or datetime.fromtimestamp(0, tz=timezone.utc)
         return Announcement(
-            id=cast(str, data.get("id")),
+            id=announcement_id,
             type=announcement_type,
-            created_at=cast(datetime, data.get("created_at")),
+            created_at=created_at,
             active=data.get("active", True),
             app_version=data.get("app_version"),
             firmware_version=data.get("firmware_version"),

@@ -6,7 +6,7 @@
 
 These rules apply to every AI agent working in this repository. This file is the single source of truth; `CLAUDE.md` just points here.
 
-**Two audiences read this file.** Engineering standards (Definition of Done, coding guidelines, testing, formatting) apply to everyone — maintainers and open-source contributors alike. Rules about this repo's `main` branch, production app bundles, deploys, and local machine workflows assume a maintainer environment; if you are working in a fork, follow your user's process for landing changes and skip those. Contributor flow: `docs/doc/developer/Contribution.mdx`.
+**Two audiences read this file.** Engineering standards (Definition of Done, coding guidelines, testing, formatting) apply to everyone — maintainers and open-source contributors alike. Rules about this repo's `main` branch, production app bundles, deploys, and local machine workflows assume a maintainer environment; if you are working in a fork, follow your user's process for landing changes and skip those. Contributor flow: `docs/doc/developer/Contribution.mdx`. Product direction and locked invariants: `PRODUCT.md` and `docs/product/invariants/`.
 
 ## Definition of Done
 
@@ -17,7 +17,33 @@ Every change must satisfy this checklist before it is committed or put in a PR. 
 3. **You exercised the change yourself** — ran the real user-facing path, not just compiled or lint-passed. If you truly could not, say so explicitly instead of implying it works.
 4. **Verification evidence is written down** — the commands you ran and what they showed, in the commit message or PR description.
 5. **No orphaned deferrals** — new `TODO`/`FIXME`/`HACK` comments reference a tracking issue or are resolved before merge.
-6. **Docs moved with the code** — if you changed setup, test commands, service boundaries, env vars, or agent-relevant behavior, the matching doc (this file, a component `AGENTS.md`, or `docs/doc/developer/`) is updated in the same PR.
+6. **Docs moved with the code** — if you changed setup, test commands, service boundaries, env vars, or agent-relevant behavior, the matching doc (this file, a component `AGENTS.md`, or `docs/doc/developer/`) is updated in the same PR. Product-direction or invariant changes update `PRODUCT.md` / `docs/product/invariants/` in the same PR.
+7. **Bug classes are closed, not patched around** — write down the root cause and the durable guard in the PR. When recent history contains the same failure class, fix the shared boundary, state model, harness, or static contract that allowed all of them.
+8. **PR contracts pass before opening the PR** — run `make preflight`; it executes the same deterministic check manifest CI runs (`.github/checks-manifest.yaml`). Draft the PR body and run `scripts/pr-preflight --pr-body-file /tmp/pr-body.md` when product-invariant citations apply (or use `scripts/pr-preflight --suggest` to get the paste-ready IDs).
+
+A deterministic diff-scoped check failing for the first time in CI is a manifest bug: fix the manifest instead of adding a one-off workflow step. Register new checks in `.github/checks-manifest.yaml` with both `local` and `ci` lanes.
+
+## Bug Fixes: Close the Failure Class
+
+Before implementing a bug fix, inspect recent fixes in the same subsystem. The
+unit of work is the violated contract, not only the line where the symptom
+appeared.
+
+- Identify the authoritative owner, identity, state transition, or boundary
+  contract that failed. Avoid adding another observer, fallback boolean, status
+  string heuristic, or call-site exception when ownership is the real problem.
+- If two or more recent fixes share the cause, add a reusable guard surface in
+  the same PR: a typed state/policy model, behavioral contract test, fault
+  harness, compatibility check, or narrow static checker.
+- A regression test must execute production behavior through a controllable
+  seam. Reading production source and asserting that strings occur in a certain
+  order is a static tripwire, not behavioral coverage; label and test static
+  checkers as such.
+- Record the root cause, recurrence evidence, durable guard, real-path exercise,
+  and any deliberately deferred high-blast-radius follow-up in the PR body.
+- Do not broaden a safe bug-fix PR into an unreviewable migration. Land the
+  enforceable guard now and track schema, data-migration, or deploy-rollout work
+  explicitly when it requires its own rollback plan.
 
 ## Leave It Better Than You Found It
 
@@ -35,7 +61,7 @@ Improve the code you touch — within your blast radius:
 
 ## Setup
 
-- **Worktree setup (required before first commit/push):** `make setup` — installs the repo Git hooks using linked-worktree-safe paths.
+- **Worktree setup (required before first commit/push):** `make setup` — fetches `origin/main`, fast-forwards a stale current branch when safe, and installs repo Git hooks using linked-worktree-safe paths.
 - **Pre-commit hook (required before first commit):** `ln -s -f ../../scripts/pre-commit "$(git rev-parse --git-path hooks)/pre-commit"` — auto-formats staged files on commit.
 - Mobile app setup: `cd app && bash setup.sh ios` (or `android`).
 
@@ -52,23 +78,57 @@ Improve the code you touch — within your blast radius:
 
 ## Coding Guidelines
 
+### Product invariants
+
+- Read [`PRODUCT.md`](PRODUCT.md) before changing product behavior. Locked rules live in [`docs/product/invariants/`](docs/product/invariants/) (shared chat continuity, memory tiers, agent control plane, integrations harness, brand UI).
+- If you touch a locked invariant’s path globs, name **every** matched invariant ID in the PR body (path-based, not intent-based — e.g. touching `ChatProvider.swift` requires `INV-AUTH-1` even when the diff is not about auth). Discover IDs with `scripts/pr-preflight --suggest`; do not invent a partial list.
+- Update the invariant’s guard test when behavior changes.
+- Do not paste product essays into this file — keep the registry as the SSOT and link here.
+
 ### UI / Design (all platforms)
 
-- **Never use purple.** Purple is off-brand — do not use it anywhere in the UI (icons, accents, glows, hover states, gradients). Use white/neutral for accent icons and primary actions.
+- **Never use purple.** Purple is off-brand — do not use it anywhere in the UI (icons, accents, glows, hover states, gradients). Use white/neutral for accent icons and primary actions. Enforced as a no-increase ratchet (`INV-UI-1`); see `docs/product/invariants/brand-ui.md`.
 
 ### Deferred Work Markers
 
 - New `TODO`, `FIXME`, and `HACK` comments must reference a tracking issue or be resolved before merge.
 - Existing markers are legacy debt; only delete or annotate them when the owner and next action are clear.
+- Packages over 12 source files need a package-root `ARCHITECTURE.md` or `README.md`; `.github/scripts/check_arch_guardrails.py` enforces the baseline ratchet.
+- Designated rollout scaffolding (`backend/scripts/*readiness*`, `*gauntlet*`, `*proof*`, and `backend/utils/**/*rollout*`, `*compat*`) needs a near-top `LIFECYCLE: permanent|one-time` header; one-time files also need `DELETE-AFTER: <GitHub issue URL or invariant ID>`. `.github/scripts/check_lifecycle_headers.py` enforces this with `.github/lifecycle-header-baseline.txt` as the frozen legacy census.
+
+### Fallback / resilience telemetry
+
+Silent UX healing is allowed; **silent ops is not**. When a branch changes provider, mode, correctness, or takes a fail-open path, call the shared helper — do **not** invent a new `*_fallback_total` counter or one-off PostHog event.
+
+```
+IF branch changes provider OR mode OR correctness OR fail-open taken:
+  MUST call record_fallback / recordFallback with outcome
+ELSE IF hard failure (no continue):
+  error metric / Sentry / HTTP — NOT the fallback helper
+ELSE (pure cache miss, expected soft path with no mode change):
+  existing domain metric OR nothing — NOT fallback helper
+```
+
+| Field | Values |
+|-------|--------|
+| `component` / `area` | closed enum (`sync_dispatch`, `pusher`, `realtime_hub`, `ptt_cascade`, …) → else `other` |
+| `from` / `to` | closed enums or `none` |
+| `reason` | shared bounded set (`enqueue_failed`, `circuit_open`, `byok`, …) → else `other` |
+| `outcome` | `recovered` (full UX restored) \| `degraded` (continues with hit) \| `exhausted` (no path left) |
+
+Emitters: Python `utils.observability.fallback.record_fallback` → `omi_fallback_total`; Swift `DesktopDiagnosticsManager.recordFallback` → `desktop_health_event`/`fallback_triggered`; Rust `fallback::record_fallback` → fixed-field `tracing` (`event=fallback`). Legacy metrics (`llm_gateway_*`, `pusher_sessions_degraded`) stay — do not copy their fat label sets onto new sites. Alert on rates with denominators or dwell gauges; never page on raw absolute counts or successful `recovered` heals.
+
+Optional ratchet (not CI): `python backend/scripts/check_fallback_instrumentation.py <touched files>` warns when a diff hunk adds fallback/fail-open/degraded branches without `record_fallback`/`recordFallback`.
 
 ### Backend (Python)
 
+- **Composition errors** — step helpers raise a typed error caught once at the composition boundary. Do not add assigned-call `isinstance(...): return` flow control; `.github/scripts/check_isinstance_return_ratchet.py` ratchets existing occurrences.
 - **No in-function imports** — all imports at module top level.
-- **Import purity** — a module's top level must be referentially transparent: importing it must not construct clients/connections (`OpenAI(...)`, `Redis(...)`, `Pinecone(...)`, `DeepgramClient(...)`, `firebase_admin.initialize_app(...)`, `tiktoken.encoding_for_model(...)`, etc.), perform network/IO (`requests.*`, `httpx.*`, `open(...)`), read `os.environ["X"]` (subscript — use `os.getenv`/`.get`), or mutate global state. Defer construction into lazy getters (`_x=None; def get_x(): ...`); tests inject fakes via `monkeypatch.setattr` on the singleton. Scope: correctness side effects, not import duration (`import langchain` is slow-but-pure and fine). Run `python scripts/scan_import_time_side_effects.py` from `backend/`. Full prescription: `backend/docs/test_isolation.md`.
-- **Test isolation** — never mutate `sys.modules` at module scope in test files. Use `monkeypatch.setattr` on a lazy-held singleton, FastAPI `app.dependency_overrides` for router deps, or (reserve only) `backend/testing/import_isolation.py`. Run `python scripts/check_module_stub_pollution.py`. Do not extend `tests/unit/memory_import_isolation.py` (deprecated). See `backend/docs/test_isolation.md`.
+- **Import purity** — a module's top level must be referentially transparent: importing it must not construct clients/connections (`OpenAI(...)`, `Redis(...)`, `Pinecone(...)`, `DeepgramClient(...)`, `firebase_admin.initialize_app(...)`, `tiktoken.encoding_for_model(...)`, etc.), perform network/IO (`requests.*`, `httpx.*`, `open(...)`), read `os.environ["X"]` (subscript — use `os.getenv`/`.get`), or mutate global state. Defer construction into lazy getters (`_x=None; def get_x(): ...`); tests inject fakes via `monkeypatch.setattr` on the singleton. Scope: correctness side effects, not import duration (`import langchain` is slow-but-pure and fine). The shared preflight manifest runs the import-purity guard. Full prescription: `backend/docs/test_isolation.md`.
+- **Test isolation** — never mutate `sys.modules` at module scope in test files. Use `monkeypatch.setattr` on a lazy-held singleton, FastAPI `app.dependency_overrides` for router deps, or (reserve only) `backend/testing/import_isolation.py`. The shared preflight manifest runs the module-pollution guard. Do not extend `tests/unit/memory_import_isolation.py` (deprecated). See `backend/docs/test_isolation.md`.
 - **Import hierarchy** (low → high): `database/` → `utils/` → `routers/` → `main.py`. Never import upward.
 - **Memory management** — `del` byte arrays after processing, `.clear()` dicts/lists holding data.
-- **Async I/O** — never `requests.*` in async (use `httpx.AsyncClient` pools from `utils/http_client.py`), never `Thread().start().join()` (use `critical_executor`/`storage_executor`), never `time.sleep()` in async (use `asyncio.sleep()`). Run `python scripts/scan_async_blockers.py` from `backend/` before committing.
+- **Async I/O** — never `requests.*` in async (use `httpx.AsyncClient` pools from `utils/http_client.py`), never `Thread().start().join()` (use `critical_executor`/`storage_executor`), never `time.sleep()` in async (use `asyncio.sleep()`). The shared preflight manifest runs the async-blocker guard.
 - **`async def` vs `def` endpoints** — use `def` for endpoints that only call sync code (Firestore, Redis, file I/O); FastAPI runs `def` in a threadpool automatically. Only use `async def` when the endpoint genuinely `await`s something (httpx, file.read(), WebSocket, asyncio.sleep) or uses asyncio APIs directly. Never call sync DB/storage/file functions directly inside `async def` — wrap with `await run_blocking(executor, func, args)`.
 - **Blocking calls in async** — these block the event loop: `database.*` functions (Firestore sync SDK), `open()`/`shutil.*` (file I/O), `upload_*`/`delete_*` from storage (GCS SDK), `creds.refresh()` (Google auth HTTP). In `async def`, always offload via `await run_blocking(executor, func, args)` from `utils.executors`. Pool assignment: `critical_executor` for auth/rate-limits, `db_executor` for Firestore/Redis CRUD, `llm_executor` for LLM calls, `storage_executor` for GCS/file I/O, `postprocess_executor` for coordinators, `sync_executor` for STT/VAD. See `backend/CLAUDE.md` for full rules. Never use bare `asyncio.to_thread()`.
 
@@ -99,6 +159,7 @@ backend (main.py)
   ├── ──────► vad (modal/)
   ├── ──────► deepgram (self-hosted or cloud)
   ├── ──────► parakeet (parakeet/)
+  ├── ──────► nllb-translation (nllb_translation/)
   └── ──────► llm-gateway (llm_gateway/main.py)
 
 pusher
@@ -109,17 +170,19 @@ agent-proxy (agent-proxy/main.py)
   └── ws ──► user agent VM (private IP, port 8080)
 
 backend-sync (main.py, Cloud Run)
-  ├── ──────► Cloud Tasks queue `sync-jobs` ──► POST /v2/sync-jobs/run (OIDC, same service)
+  ├── ──────► Cloud Tasks queue `sync-jobs` ──► POST /v2/sync-jobs/run (OIDC, same service; fresh lane)
+  ├── ──────► Cloud Tasks queue `sync-backfill` ──► backend-sync-backfill POST /v2/sync-jobs/run (OIDC; historical lane)
   ├── ──────► Cloud Tasks queue `audio-merge` ──► POST /v2/audio-merge-jobs/run (OIDC, same service)
   └── ──────► Cloud Tasks queue `account-deletion` ──► POST /v1/users/account-deletion-wipes/run (OIDC, same service)
 
 notifications-job (modal/job.py)  [cron]
+memory-maintenance-job (modal/memory_maintenance_job.py)  [cron]
 agent-vm-reaper (backend/charts/agent-vm-reaper)  [cron]
 ```
 
-Helm charts: `backend/charts/{agent-proxy,agent-vm-reaper,backend-listen,backend-secrets,deepgram-self-hosted,diarizer,llm-gateway,monitoring,parakeet,pusher,vad}/`
+Helm charts: `backend/charts/{agent-proxy,agent-vm-reaper,backend-listen,backend-secrets,deepgram-self-hosted,diarizer,llm-gateway,monitoring,nllb-translation,parakeet,pusher,vad}/`
 
-- **backend** (`main.py`) — REST API. Streams audio to pusher via WebSocket (`utils/pusher.py`). Calls diarizer for speaker embeddings (`utils/stt/speaker_embedding.py`). Calls vad for voice activity detection and speaker identification (`utils/stt/vad.py`, `utils/stt/speech_profile.py`). Calls deepgram or parakeet for STT (`HOSTED_PARAKEET_API_URL`, `utils/stt/streaming.py`).
+- **backend** (`main.py`) — REST API. Streams audio to pusher via WebSocket (`utils/pusher.py`). Calls diarizer for speaker embeddings (`utils/stt/speaker_embedding.py`). Calls vad for voice activity detection and speaker identification (`utils/stt/vad.py`, `utils/stt/speech_profile.py`). Calls deepgram or parakeet for STT (`HOSTED_PARAKEET_API_URL`, `utils/stt/streaming.py`). Calls NLLB translation when `HOSTED_TRANSLATION_API_URL` is set and NLLB is selected (`utils/translation.py`).
 - **hosted MCP OAuth** (`routers/mcp_sse.py`) — Provider-neutral OAuth for `/v1/mcp/sse`. Configure public or confidential clients with `MCP_OAUTH_CLIENTS_JSON`; allowlist the exact connector callback URI from the provider. The temporary `MCP_OAUTH_CHATGPT_*` envs still define the legacy confidential ChatGPT test client, and `MCP_OAUTH_PUBLIC_*` can expose a no-secret PKCE public client. Also set `MCP_AUTHORIZATION_SERVER_URL`, optional `MCP_RESOURCE_URL`, and token TTL env vars.
 - **llm-gateway** (`llm_gateway/main.py`) — Internal FastAPI service for Omi-managed LLM auto lanes. Called by backend with service auth for `omi:auto:*` chat-completions routes; not exposed to clients.
 - **pusher** (`pusher/main.py`) — Receives audio via binary WebSocket protocol. Calls diarizer and deepgram for speaker sample extraction (`utils/speaker_identification.py` → `utils/speaker_sample.py`).
@@ -128,8 +191,10 @@ Helm charts: `backend/charts/{agent-proxy,agent-vm-reaper,backend-listen,backend
 - **vad** (`modal/main.py`) — GPU. `/v1/vad` and `/v1/speaker-identification`. Called by backend only.
 - **deepgram** — STT. Streaming uses self-hosted (`DEEPGRAM_SELF_HOSTED_URL`) or cloud based on `DEEPGRAM_SELF_HOSTED_ENABLED`. Pre-recorded always uses Deepgram cloud. Called by backend and pusher.
 - **parakeet** (`parakeet/`) — GPU STT service for streaming and pre-recorded transcription. Called by backend when `HOSTED_PARAKEET_API_URL` is set and parakeet is selected.
-- **backend-sync** (`main.py`, same image as backend) — Cloud Run service for `/v2/sync-local-files`. When `SYNC_DISPATCH_MODE=cloud_tasks`: stages raw audio in GCS, enqueues to Cloud Tasks queue `sync-jobs`, which POSTs `/v2/sync-jobs/run` (OIDC-verified, `utils/cloud_tasks.py`) to run decode→VAD→STT inside a request. Inline fallback when the flag is off, env is incomplete, BYOK headers are present, or enqueue fails. Audio playback merges (`/v1/sync/audio/*`) follow the same pattern via queue `audio-merge` building 30-day MP3 artifacts under `playback/` (`AUDIO_MERGE_DISPATCH_MODE`). Account deletion uses `ACCOUNT_DELETION_DISPATCH_MODE=cloud_tasks` to enqueue durable wipes to queue `account-deletion`, which posts `/v1/users/account-deletion-wipes/run`; API success is returned only after the deletion marker is persisted and the wipe task is durably enqueued.
-- **notifications-job** (`modal/job.py`) — Cron job, reads Firestore/Redis, sends push notifications.
+- **nllb-translation** (`nllb_translation/`) — GPU translation service. Called by backend when `HOSTED_TRANSLATION_API_URL` is set and NLLB is selected.
+- **backend-sync** (`main.py`, same image as backend) — Cloud Run admission service for `/v2/sync-local-files`. The server classifies whole batches: recordings no more than six hours old enter `sync-jobs` (fresh), while older or untrusted batches enter `sync-backfill` and the scale-to-zero **backend-sync-backfill** worker. Fresh keeps its bounded inline fallback; backfill never falls into fresh/inline capacity. Backfill defaults to one in-flight job per UID, four processed speech hours per UID/day, 555 processed speech hours globally/day, a 30-day lookback, and four queue workers. Live fair-use reads only `realtime + sync_fresh`; `sync_backfill` is separately metered. A 45-day Firestore content ledger protects transcription and usage side effects across job expiry and re-upload. Audio playback merges (`/v1/sync/audio/*`) follow the same pattern via queue `audio-merge` building 30-day MP3 artifacts under `playback/` (`AUDIO_MERGE_DISPATCH_MODE`) — per-part files plus one dense per-conversation `conversation.mp3` whose spans manifest + audio_files fingerprint are stamped on the conversation doc (`conversation_audio`); a fingerprint mismatch after late chunks re-enqueues the build. Account deletion uses `ACCOUNT_DELETION_DISPATCH_MODE=cloud_tasks` to enqueue durable wipes to queue `account-deletion`, which posts `/v1/users/account-deletion-wipes/run`; API success is returned only after the deletion marker is persisted and the wipe task is durably enqueued.
+- **notifications-job** (`modal/job.py`) — Cron job, reads Firestore/Redis, sends push notifications and runs X connector sync. It has no canonical maintenance flags or Typesense secrets; its deploy workflow removes only those retired bindings and preserves unrelated notification/X-sync env.
+- **memory-maintenance-job** (`modal/memory_maintenance_job.py`) — Cloud Run Job and sole host for canonical ST→LT maintenance (TTL → consolidation → promotion). Manual deploy via `.github/workflows/gcp_memory_maintenance_job.yml`; auto-dev on push to `main` via `gcp_memory_maintenance_job_auto_dev.yml`. Enablement is a multi-var contract (`MEMORY_MODE`, `MEMORY_ENABLED_USERS`, cron/fast-track/consolidation flags) enforced by `backend/scripts/validate-backend-runtime-env.py`; prod stays `MEMORY_MODE=off` until Gate 3.
 - **monitoring** (`backend/charts/monitoring/`) — Prometheus, Grafana, Loki, Alloy, alerts, and HPA metric adapters for backend services.
 - **agent-vm-reaper** (`backend/charts/agent-vm-reaper/`) — CronJob that deletes stale `omi-agent-*` GCE VMs left by desktop agent sandboxes.
 - **backend-secrets** (`backend/charts/backend-secrets/`) — ExternalSecret and SecretStore resources that sync backend runtime secrets into GKE namespaces.
@@ -143,6 +208,8 @@ Keep this map up to date. When adding, removing, or changing inter-service calls
 - All user-facing strings must use l10n (`context.l10n.keyName`) — never hardcoded strings. Add keys to ARB files using `jq` (never read full ARB files). See skill `add-a-new-localization-key-l10n-arb`.
 - When adding new l10n keys, translate all non-English locales — never leave English text in a non-English ARB file. Don't hardcode the count; the authoritative list is whatever `ls app/lib/l10n/app_*.arb` returns minus `app_en.arb`. Use the `omi-add-missing-language-keys-l10n` skill, then verify with `cd app && flutter gen-l10n` — zero "untranslated message(s)" warnings means done.
 - **Firebase Prod Config** — never run `flutterfire configure`; it overwrites prod credentials. Prod config files live in `app/ios/Config/Prod/`, `app/lib/firebase_options_prod.dart`, `app/android/app/src/prod/`.
+- PR CI runs `flutter test` and an analyzer ratchet (`app/scripts/analyze_ratchet.sh`) — analyzer errors always fail; new info/warning lint occurrences above `app/analysis_baseline.json` fail. Run the script locally before committing app Dart changes.
+- Deliberate lint acceptances/improvements update the baseline via `--update-baseline` in the same PR.
 
 #### Verifying UI Changes (agent-flutter)
 
@@ -170,15 +237,17 @@ The desktop app is a **Swift Package Manager** project (no Xcode project, no `.x
 #### Building & Running
 
 - `cd desktop/macos && ./run.sh` — full local dev (build Swift app + Rust backend + Cloudflare tunnel + launch).
-- `cd desktop/macos && ./run.sh --yolo` — quick start against the prod backend, no local services.
+- `cd desktop/macos && ./run.sh --yolo` — quick start against the dev backend, no local services.
 - `OMI_SKIP_BACKEND=1` — app only, use remote backend via `OMI_DESKTOP_API_URL`. `OMI_SKIP_TUNNEL=1` — no Cloudflare tunnel.
 - **Parallel worktrees auto-isolate.** `scripts/dev-instance.sh` derives a unique instance from each linked git worktree, so `run.sh` (and `backend/scripts/dev-serve.sh`) pick per-worktree ports (Rust 10201+, Python 8080+, automation 47777+) and bundle name (`omi-<worktree>`). Kills are pidfile-scoped (never the global `omi-desktop-backend` name), and a taken port fails loud instead of clobbering. The primary checkout is unchanged (`Omi Dev`, 10201/8080/47777). Override any of `OMI_INSTANCE` / `PORT` / `PYTHON_PORT` / `OMI_AUTOMATION_PORT` / `OMI_APP_NAME` to opt out.
+- **`run.sh` build lock is per-worktree, launch-phase only.** It serializes same-checkout builds that share `Desktop/.build/` + `build/$APP_NAME.app`, holds through install/seed/`open`, then releases before the long-running backend wait — never a per-user global mutex. Cross-worktree `./run.sh` must not block each other. Do not point two worktrees at the same explicit `OMI_APP_NAME` (shared `/Applications` path is not cross-locked).
 - `Omi Dev` is the canonical shared development profile: `/Applications/Omi Dev.app`, bundle id `com.omi.desktop-dev`, reusable permissions, and auth seed source. Do not pass `OMI_APP_NAME="Omi Dev"` from a linked worktree; that creates a named bundle displayed as Omi Dev with a different bundle id and breaks permission reuse.
 - Local Python backend (per-worktree port): `cd backend && ./scripts/dev-serve.sh`.
 - Compile-only check: `cd desktop/macos && xcrun swift build -c debug --package-path Desktop` (the `xcrun` prefix is required to match the SDK).
 - **DO NOT** use bare `swift build`, `xcodebuild`, or launch from `build/` directly. Always launch via `cd desktop/macos && ./run.sh` (installs to `/Applications/` and registers with LaunchServices, required for permission "Quit & Reopen").
-- Release builds are handled entirely by Codemagic CI (no local release script).
-- For PRs that change function signatures or cross-file types, run a clean release build before merge: `cd desktop/macos && rm -rf .build && xcrun swift build -c release --triple arm64-apple-macosx` — incremental debug builds miss stale-cache type errors that Codemagic's clean release build catches later.
+- **PR CI** (`desktop-swift-ci.yml`): debug build + parallel suite tests (`OMI_SWIFT_TEST_SUITE_WORKERS=4`). No release compile on ordinary PRs.
+- **Clean release compile** runs in CI on `main` pushes that touch desktop Swift, and on PRs that change `desktop/macos/Desktop/Package.swift`. Locally, for signature / cross-file type changes: `cd desktop/macos && rm -rf Desktop/.build && xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx` — incremental debug builds can miss stale-cache type errors.
+- **Ship builds** (universal, signed, notarized) are handled entirely by Codemagic CI (no local release script).
 
 #### Named Test Bundles
 
@@ -205,7 +274,8 @@ Agents can and should self-test the running app — don't stop at a successful c
 2. **Boot signed-in (no browser):** sign into "Omi Dev" once; `./run.sh` auto-clones auth/onboarding plus common shortcuts/settings into named bundles **before launch** (UserDefaults is read at startup). To do it manually:
    ```bash
    cd desktop/macos && ./scripts/omi-auth-dump.sh                  # capture the Omi Dev session
-   ./scripts/omi-auth-seed.sh com.omi.omi-<feature>          # replay into the test bundle
+   ./scripts/omi-auth-seed.sh com.omi.omi-<feature> \
+     tmp/desktop-auth.json "/Applications/omi-<feature>.app"  # clears stale Keychain; UD→KC migrate
    ./scripts/omi-settings-seed.sh com.omi.omi-<feature>       # replay shortcuts/settings
    ```
    On next launch `restoreAuthState()` picks it up and boots already-signed-in.
@@ -310,7 +380,7 @@ Full RELEASE flow + `gh workflow run gcp_backend.yml -f environment=prod -f bran
 
 ## CI/CD & Logs
 
-- Desktop release pipeline: merging `desktop/macos/**` to `main` auto-increments the version, tags `v*-macos`, and triggers Codemagic to build/sign/notarize/publish a beta GitHub release. Stable/prod requires the agent runbook `desktop/macos/docs/agent-prod-promotion-runbook.md`, then manual `.github/workflows/desktop_promote_prod.yml` dispatch with `release_tag` and `confirm=promote-stable`; that workflow is roll-forward only, deploys the Rust backend from the exact tag, verifies `/health`, promotes the Firestore bridge release, then marks the GitHub release stable. Desktop Rust backend deploys require environment-scoped `DESKTOP_BACKEND_BASE_API_URL` so OAuth callbacks set runtime `BASE_API_URL`.
+- Desktop release pipeline: `.github/workflows/desktop_auto_release.yml` batches `main` into at most one daily `v*-macos` build candidate. Codemagic builds/signs/notarizes it non-live, verifies published digests against signed-smoke evidence, then runs static checks, hermetic T2, and the fault suite before automatically dispatching beta promotion for the newest tag. `DESKTOP_AUTO_BETA_ENABLED=false` pauses automatic beta. Before stable, `.github/workflows/desktop_nominate_stable_candidate.yml` records soak, telemetry, release-note, and qualification evidence without changing either channel pointer. Stable/prod remains manual-only through `.github/workflows/desktop_promote_prod.yml` with `release_tag` and `confirm=promote-stable`; it accepts a nominated stable candidate by default, is roll-forward only, and advances stable only after backend verification. Desktop Rust backend deploys require environment-scoped `DESKTOP_BACKEND_BASE_API_URL` so OAuth callbacks set runtime `BASE_API_URL`.
 - Backend deploy: `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`.
 - Firmware release (Omi CV1): manual `.github/workflows/firmware_release.yml`. Bump `CONFIG_BT_DIS_FW_REV_STR` in `omi/firmware/omi/omi.conf` first, then `gh workflow run firmware_release.yml -f publish=publish -f changelog="..." -f minimum_app_version_code=...` (omit `publish` for a build-only QA run). It builds via Docker (NCS 2.9.0 sysbuild + MCUboot), names the OTA asset `Omi_CV1_OTA_v<ver>.zip` (the "ota" substring is required), and publishes a `Omi_CV1_v<ver>` GitHub Release with the `KEY_VALUE` body that `backend/routers/firmware.py` serves. Build logic lives in `omi/firmware/scripts/ci/`.
 
@@ -322,6 +392,7 @@ Full RELEASE flow + `gh workflow run gcp_backend.yml -f environment=prod -f bran
 - **When a defect ships because guidance was misread or missing, tighten the guidance in the fix PR** — make the rule mechanical enough that the same misreading can't recur, or add a check that catches it.
 - If a PR changes setup, test commands, safety rules, service boundaries, or env vars — update this file in the same PR.
 - For architecture / core flow / API changes — update Mintlify docs (`docs/doc/developer/`) in the same PR.
+- For product direction or locked invariants — update `PRODUCT.md` and `docs/product/invariants/` (and guard tests) in the same PR.
 - If a PR changes audio streaming, transcription, conversation lifecycle, or listen/pusher WebSocket — update `docs/doc/developer/backend/listen_pusher_pipeline.mdx`.
 
 ## Cursor Cloud specific instructions
