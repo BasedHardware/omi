@@ -394,11 +394,6 @@ _default_anthropic_client = anthropic.AsyncAnthropic(timeout=120.0, max_retries=
 anthropic_client = _AnthropicClientProxy(_default_anthropic_client)
 
 
-def get_anthropic_client() -> anthropic.AsyncAnthropic:
-    """Kept as a factory for callers that prefer explicit routing over the module proxy."""
-    return anthropic_client._resolve()
-
-
 def get_openai_chat(model: str, **kwargs) -> ChatOpenAI:
     """Explicit factory; equivalent to using the module-level proxies."""
     kwargs = _with_llm_callbacks(kwargs, 'openai', model=model)

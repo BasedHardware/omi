@@ -165,37 +165,6 @@ class TranslationService:
         self.cache.clear_memory()
 
 
-_default_service: TranslationService | None = None
-
-
-def _get_default_service() -> TranslationService:
-    global _default_service
-    if _default_service is None:
-        _default_service = TranslationService()
-    return _default_service
-
-
-def get_cached_translation(text_hash: str, dest_lang: str) -> dict[str, str] | None:
-    return _get_default_service().get_cached_translation(text_hash, dest_lang)
-
-
-def cache_translation(
-    text_hash: str,
-    dest_lang: str,
-    translated_text: str,
-    detected_lang: str,
-) -> None:
-    _get_default_service().cache_translation(text_hash, dest_lang, translated_text, detected_lang)
-
-
-def get_negative_cache(text_hash: str, dest_lang: str) -> bool:
-    return _get_default_service().get_negative_cache(text_hash, dest_lang)
-
-
-def set_negative_cache(text_hash: str, dest_lang: str) -> None:
-    _get_default_service().set_negative_cache(text_hash, dest_lang)
-
-
 __all__ = [
     'CONFIDENCE_FOREIGN_TRANSLATE',
     'CONFIDENCE_TARGET_SKIP',
@@ -209,13 +178,9 @@ __all__ = [
     'TranslationProvider',
     'TranslationService',
     'TranslationStatus',
-    'cache_translation',
     'classify_translation_need',
     'detect_language',
     'detect_language_with_confidence',
-    'get_cached_translation',
-    'get_negative_cache',
     'resolve_translation_profile',
-    'set_negative_cache',
     'split_into_sentences',
 ]
