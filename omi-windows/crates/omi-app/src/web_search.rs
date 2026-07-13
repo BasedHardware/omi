@@ -28,18 +28,38 @@ pub struct TavilyResult {
     pub score: f64,
 }
 
-pub fn should_search(query: &str) -> bool {
-    let q = query.to_lowercase();
-    let indicators = [
-        "search", "look up", "find", "what is", "what are", "who is", "who are",
-        "when did", "when was", "when is", "where is", "where are", "how to",
-        "how do", "how does", "how much", "how many", "latest", "recent",
-        "current", "today", "news", "weather", "price", "stock", "score",
-        "update", "status", "release", "version", "compare", "vs",
-        "best", "top", "review", "recommend", "definition", "meaning",
-        "explain", "tell me about", "search the web", "google",
+pub async fn needs_web_search(query: &str, cfg: &AppConfig) -> bool {
+    let (api_key, url, model) = crate::llm::resolve_llm_endpoint(cfg);
+    if api_key.is_empty() {
+        return false;
+    }
+
+    let messages = vec![
+        crate::llm::LlmMessage {
+            role: "system".into(),
+            content: "You are a routing classifier. Given a user message, decide whether answering it \
+                      requires a live web search (real-time info, current events, prices, weather, \
+                      recent news, sports scores, product lookups, anything your training data may \
+                      not cover). Respond with EXACTLY one word: YES or NO. Nothing else.".into(),
+        },
+        crate::llm::LlmMessage {
+            role: "user".into(),
+            content: query.to_string(),
+        },
     ];
-    indicators.iter().any(|kw| q.contains(kw))
+
+    match crate::llm::complete(&api_key, &url, &model, messages, Some(3)).await {
+        Ok(answer) => {
+            let decision = answer.trim().to_uppercase();
+            let needs = decision.starts_with("YES");
+            tracing::info!("[WEBSEARCH] LLM classifier: {query:.60} → {decision} (search={needs})");
+            needs
+        }
+        Err(e) => {
+            tracing::warn!("[WEBSEARCH] Classifier LLM call failed: {e:#}, skipping search");
+            false
+        }
+    }
 }
 
 pub async fn search(query: &str, cfg: &AppConfig) -> Result<TavilyResponse> {
