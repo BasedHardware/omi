@@ -1270,10 +1270,16 @@ async def sync_local_files_v2(
                             run_lock_token=inline_run_lock_token,
                         )
                     except SyncJobRunLeaseLost:
-                        # A higher epoch is now the durable owner. Keep the
-                        # local material and token TTL rather than racing it.
+                        # A higher epoch is now the durable owner. Drop our
+                        # unused Redis lease so the winner is not blocked for
+                        # the full lock TTL, and keep local material for retry.
                         can_start = False
                         logger.warning('event=sync_inline outcome=ledger_lease_lost')
+                        try:
+                            await run_blocking(db_executor, release_job_run_lock, job_id, inline_run_lock_token)
+                        except Exception:
+                            pass
+                        inline_run_lock_token = None
                 if can_start:
                     if converged is not None:
                         await run_blocking(sync_executor, _cleanup_files, owned_paths)

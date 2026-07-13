@@ -1995,6 +1995,56 @@ async def test_sync_dispatch_staging_failure_can_terminalize_and_release_for_wal
 
 
 @pytest.mark.asyncio
+async def test_sync_inline_releases_run_lock_when_ledger_bind_loses_lease():
+    """Fence-active inline admission must not keep a Redis lock after bind loss."""
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    module.has_byok_keys = MagicMock(return_value=True)
+    module.start_background_task = MagicMock()
+    module.get_sync_ledger_fence_mode = MagicMock(return_value=module.SyncLedgerFenceMode.ACTIVE)
+    module.try_acquire_sync_job_run_lock = MagicMock(return_value='1:lock-token')
+    module.release_job_run_lock = MagicMock()
+    module.bind_or_converge_sync_ledger_completion = MagicMock(
+        side_effect=module.SyncJobRunLeaseLost('newer ledger epoch owns retry material')
+    )
+    module.classify_sync_lane = MagicMock(
+        return_value=types.SimpleNamespace(
+            lane=module.SyncLane.FRESH,
+            trust=types.SimpleNamespace(value='legacy'),
+            reason='recent_capture',
+            maximum_age_seconds=60,
+            automatic_recovery_allowed=True,
+        )
+    )
+    module.create_sync_job = MagicMock(
+        return_value={
+            'job_id': 'job-lease-lost',
+            'status': 'queued',
+            'ledger_fence_mode': module.SyncLedgerFenceMode.ACTIVE.value,
+        }
+    )
+
+    try:
+        upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+        response = await module.sync_local_files_v2(files=[upload], uid='test-uid')
+
+        assert response.status_code == 202
+        body = json.loads(response.body)
+        assert body['status'] == 'queued'
+        module.start_background_task.assert_not_called()
+        module.release_job_run_lock.assert_called_once_with(body['job_id'], '1:lock-token')
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
 async def test_sync_dispatch_byok_records_recovered_inline(monkeypatch):
     from starlette.datastructures import UploadFile
 
