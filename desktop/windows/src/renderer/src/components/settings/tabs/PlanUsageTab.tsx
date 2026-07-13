@@ -127,7 +127,12 @@ export function PlanUsageTab(): React.JSX.Element {
       )
       switch (result.kind) {
         case 'cancelled':
-          return // user abandoned — no toast
+          // User abandoned — no toast. Still refresh quietly: if the window was
+          // force-closed in the gap AFTER Stripe charged but BEFORE the success
+          // redirect fired, the webhook has (or will have) granted the plan
+          // server-side, and this pickup keeps the tab from showing stale state.
+          void load()
+          return
         case 'refresh_lagging':
           toast('Payment received', { tone: 'warn', body: REFRESH_LAGGING_MSG })
           break
