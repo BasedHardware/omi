@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Brain, Plus, Loader2, CheckSquare, Trash2, X } from 'lucide-react'
 import { useMemories, type Memory } from '../hooks/useMemories'
 import { PageHeader } from '../components/layout/PageHeader'
@@ -19,6 +19,18 @@ export function Memories(): React.JSX.Element {
   // that reference a memory you actually have (no account-wide bloat / phantoms),
   // drops the layer when empty, and refetches on add/delete.
   const { graph: brainGraph, centerNodeId } = useMemoryGraph(memories)
+  // The brain map lazy-loads a ~1MB three.js chunk and then spins up WebGL, so
+  // the container can otherwise sit blank for seconds with no hint anything is
+  // coming. Track readiness via BrainGraph's onCreated signal, with a bounded
+  // fallback so a stalled/failed load (chunk error, WebGL crash) doesn't leave
+  // the placeholder showing forever.
+  const [graphReady, setGraphReady] = useState(false)
+  const hasGraph = brainGraph.nodes.length > 0
+  useEffect(() => {
+    if (graphReady || !hasGraph) return
+    const t = setTimeout(() => setGraphReady(true), 4000)
+    return () => clearTimeout(t)
+  }, [graphReady, hasGraph])
   const [composing, setComposing] = useState(false)
   const [draft, setDraft] = useState('')
   const [saving, setSaving] = useState(false)
@@ -203,20 +215,51 @@ export function Memories(): React.JSX.Element {
           <div className="glass-subtle mb-5 px-4 py-3 text-sm text-white/60">Failed to load memories: {error}</div>
         )}
 
-        {!manage && brainGraph.nodes.length > 0 && (
+        {!manage && hasGraph && (
           <div className="mx-auto mb-6 max-w-4xl">
             {/* Flat background (no .glass backdrop-filter): layering a WebGL
                 canvas over a blurred surface forces the compositor to re-blend
                 the graph on every unrelated UI repaint, pinning GPU at 50-60%.
                 Keeps the card look via a solid tint + hairline border. */}
             <div className="relative h-80 overflow-hidden rounded-2xl border border-white/[0.08] bg-black/40 p-0">
-              <BrainGraph
-                graph={brainGraph}
-                centerNodeId={centerNodeId}
-                interactive={false}
-                pauseWhenHidden
-                frameLoop="demand"
-              />
+              <div
+                className={`absolute inset-0 flex flex-col items-center justify-center gap-3 transition-opacity duration-500 ${
+                  graphReady ? 'pointer-events-none opacity-0' : 'opacity-100'
+                }`}
+                aria-hidden={graphReady}
+              >
+                <div className="flex items-center gap-2">
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <span
+                      key={i}
+                      className="h-2.5 w-2.5 animate-pulse rounded-full bg-white/15"
+                      style={{ animationDelay: `${i * 150}ms` }}
+                    />
+                  ))}
+                </div>
+                <p className="text-xs text-white/30">Building your memory map…</p>
+              </div>
+              <div
+                className={`h-full w-full transition-opacity duration-500 ${graphReady ? 'opacity-100' : 'opacity-0'}`}
+              >
+                <BrainGraph
+                  graph={brainGraph}
+                  centerNodeId={centerNodeId}
+                  interactive={false}
+                  pauseWhenHidden
+                  frameLoop="demand"
+                  onReady={() => setGraphReady(true)}
+                  // pauseWhenHidden tears down and recreates the canvas when this
+                  // tab goes hidden then shown again (e.g. it was pre-warmed in
+                  // the background before you navigated here) — fall back to the
+                  // loading state for that brief recreation gap instead of a
+                  // blank pane; onReady above flips it back once the new canvas
+                  // is ready (typically instant, since the layout is cached).
+                  onVisibleChange={(v) => {
+                    if (!v) setGraphReady(false)
+                  }}
+                />
+              </div>
             </div>
           </div>
         )}

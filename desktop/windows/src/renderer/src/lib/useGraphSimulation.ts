@@ -61,7 +61,43 @@ export type SimNode = SimNodeDatum & {
   // distance-from-center target (re-rolled on reshuffle). Center node: 1 and 0.
   sizeScale: number
   targetRadius: number
+  // Where this node first appeared (set once, never mutated again). getPositions()
+  // reports this — not the live x/y/z — for a node's first frame, so the renderer's
+  // per-mesh lerp has somewhere to glide FROM; the live simulation position is the
+  // fixed target it glides TO. Without this split, a node's initial render position
+  // and its settle target would be the same value and there'd be nothing to animate.
+  seedX: number
+  seedY: number
+  seedZ: number
 }
+
+// Snapshot of a fully-settled layout, keyed by node id. Cached at module scope
+// (survives a component remount, e.g. revisiting the Memories tab, or the
+// second <BrainGraph> instance Settings.tsx mounts for its own Memories tab)
+// so an unchanged graph never re-pays the settle cost.
+type CachedLayout = Map<
+  string,
+  { x: number; y: number; z: number; sizeScale: number; targetRadius: number }
+>
+const layoutCache = new Map<string, CachedLayout>()
+// Small cap — a session only ever produces a handful of distinct node-set
+// snapshots (floor-only, floor+kg, +1 memory, ...), but bound it anyway so a
+// pathological amount of add/delete churn can't grow this unboundedly.
+const LAYOUT_CACHE_MAX = 20
+
+// Test-only escape hatch: the cache is intentionally module-scoped (it must
+// survive a component remount within one renderer process), which means it
+// otherwise leaks across test cases in the same file. Not used by app code.
+export function __clearLayoutCacheForTests(): void {
+  layoutCache.clear()
+}
+
+// Ticks for the one-shot synchronous settle below. Same physics as before, but
+// run as a single batch instead of spread across ~170 animation frames — that
+// spread is what made the entry read as heavy (a full force pass every frame
+// for seconds) and glitchy (the renderer's lerp chases a target that is itself
+// still jittering under live collision/radial forces, instead of a fixed spot).
+const SETTLE_TICKS = 220
 type SimLink = { source: string; target: string }
 export type NodePosition = {
   id: string
@@ -147,10 +183,14 @@ export class GraphSimulation {
         targetRadius: isCenter ? 0 : RING_RADIUS * (RADIUS_MIN + Math.random() * RADIUS_SPAN),
         x: seed.x,
         y: seed.y,
-        z: seed.z
+        z: seed.z,
+        seedX: seed.x,
+        seedY: seed.y,
+        seedZ: seed.z
       }
       if (isCenter) {
         node.x = node.y = node.z = 0
+        node.seedX = node.seedY = node.seedZ = 0
         node.fx = 0
         node.fy = 0
       } else {
@@ -200,15 +240,85 @@ export class GraphSimulation {
       // cools, rather than leaving residual overlaps.
       .force(
         'collide',
-        (forceCollide((d) => this.collideRadius(d as SimNode)) as {
-          iterations(n: number): unknown
-        }).iterations(10)
+        (
+          forceCollide((d) => this.collideRadius(d as SimNode)) as {
+            iterations(n: number): unknown
+          }
+        ).iterations(10)
       )
-      // Gentle reheat (not 0.9): existing settled nodes barely shift when a new
-      // node is revealed, so the reveal reads as an addition, not an upheaval.
-      .alpha(0.6)
-      .restart()
-      .stop()
+    const key = this.cacheKey(graph)
+    const cached = layoutCache.get(key)
+    const t0 = typeof performance !== 'undefined' ? performance.now() : 0
+    if (cached) {
+      // Exact node-set match to a layout we've already settled (a remount with
+      // unchanged data) — adopt it directly, zero physics. getPositions() still
+      // reports each of these as "not fresh" (they were added in an earlier
+      // call), so the renderer draws them straight at rest, no fly-in replay.
+      for (const n of this.nodes) {
+        const c = cached.get(n.id)
+        if (!c) continue
+        n.x = c.x
+        n.y = c.y
+        n.z = c.z
+        n.sizeScale = c.sizeScale
+        n.targetRadius = c.targetRadius
+      }
+      this.sim.alpha(0).stop()
+    } else {
+      // Freeze everything already settled so the burst below only has to place
+      // the newly-added nodes among fixed neighbors — this IS "existing settled
+      // nodes barely shift when a new node is revealed" (now they don't shift at
+      // all), and it means an incremental update is cheap regardless of how
+      // large the existing graph has grown.
+      const fresh = new Set(this.newlyAdded)
+      for (const n of this.nodes) {
+        if (fresh.has(n.id) || n.id === this.centerNodeId) continue
+        n.fx = n.x
+        n.fy = n.y
+      }
+      // One synchronous batch instead of ~170 live animation frames: same total
+      // force math, but as a single fast pass, so nothing is left to visibly
+      // (and jitterily) converge on screen.
+      this.sim.alpha(0.6).restart().tick(SETTLE_TICKS)
+      this.clampPositions()
+      this.sim.stop()
+      for (const n of this.nodes) {
+        if (fresh.has(n.id) || n.id === this.centerNodeId) continue
+        n.fx = undefined
+        n.fy = undefined
+      }
+      const snapshot: CachedLayout = new Map()
+      for (const n of this.nodes) {
+        snapshot.set(n.id, {
+          x: n.x ?? 0,
+          y: n.y ?? 0,
+          z: n.z ?? 0,
+          sizeScale: n.sizeScale,
+          targetRadius: n.targetRadius
+        })
+      }
+      if (layoutCache.size >= LAYOUT_CACHE_MAX) {
+        const oldest = layoutCache.keys().next().value
+        if (oldest !== undefined) layoutCache.delete(oldest)
+      }
+      layoutCache.set(key, snapshot)
+    }
+    if (typeof performance !== 'undefined' && import.meta.env.DEV) {
+      console.debug(
+        `[BrainGraph] settle ${(performance.now() - t0).toFixed(1)}ms (${cached ? 'cache hit' : 'fresh'}, ${this.nodes.length} nodes, +${this.newlyAdded.length} new)`
+      )
+    }
+  }
+
+  // Node-id-set + center id: two graphs with the same nodes settle to the same
+  // shape, so this is enough to detect "we've already laid this out" without
+  // hashing content that doesn't affect layout (labels, edge direction, etc).
+  private cacheKey(graph: KnowledgeGraph): string {
+    const ids = graph.nodes
+      .map((n) => n.id)
+      .sort()
+      .join(',')
+    return `${this.centerNodeId ?? ''}|${ids}`
   }
 
   private seedPositionNear(id: string, graph: KnowledgeGraph): { x: number; y: number; z: number } {
@@ -348,17 +458,27 @@ export class GraphSimulation {
     this.sim.alpha(0.4).restart().stop()
   }
 
+  // For a node added in the most recent setGraph() call, report its SEED spot
+  // (not its already-settled final one) so the renderer's initial render — and
+  // thus the per-mesh lerp's starting point — is the fly-in origin, while
+  // liveNode() (read every frame) already returns the final, fixed target.
+  // Nodes from an earlier call report their current (already on-screen, at
+  // rest) position, so they never re-play the fly-in on a later update.
   getPositions(): NodePosition[] {
-    return this.nodes.map((n) => ({
-      id: n.id,
-      label: n.label,
-      nodeType: n.nodeType,
-      degree: n.degree,
-      sizeScale: n.sizeScale,
-      x: n.x ?? 0,
-      y: n.y ?? 0,
-      z: n.z ?? 0
-    }))
+    const fresh = new Set(this.newlyAdded)
+    return this.nodes.map((n) => {
+      const useSeed = fresh.has(n.id)
+      return {
+        id: n.id,
+        label: n.label,
+        nodeType: n.nodeType,
+        degree: n.degree,
+        sizeScale: n.sizeScale,
+        x: useSeed ? n.seedX : (n.x ?? 0),
+        y: useSeed ? n.seedY : (n.y ?? 0),
+        z: useSeed ? n.seedZ : (n.z ?? 0)
+      }
+    })
   }
 
   // Returns and clears the list of node ids added since the last call, so the

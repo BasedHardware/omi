@@ -27,6 +27,17 @@ export type BrainGraphProps = {
   // Use demand for idle-heavy surfaces such as Memories so the WebGL canvas
   // stops rendering once layout/easing has settled.
   frameLoop?: 'always' | 'demand'
+  // Fired once the WebGL context/scene is created (r3f's Canvas onCreated) —
+  // the cheapest available "first frame is imminent" signal. Callers use this
+  // to swap a loading placeholder for the canvas without guessing at timing.
+  onReady?: () => void
+  // Fired whenever the canvas mounts/unmounts under pauseWhenHidden (e.g. the
+  // host tab going hidden then shown again tears down and recreates the WebGL
+  // context). A caller tracking readiness from onReady alone would otherwise
+  // treat that recreation as a no-op and show nothing during the gap — this
+  // lets it fall back to its loading state for that window instead of a blank
+  // pane. Not called when pauseWhenHidden is false (the canvas never toggles).
+  onVisibleChange?: (visible: boolean) => void
 }
 
 // Must match GraphSimulation.nodeRadius so the spheres and the collision force
@@ -356,10 +367,18 @@ export function BrainGraph({
   interactive = true,
   shuffleKey,
   pauseWhenHidden = false,
-  frameLoop = 'always'
+  frameLoop = 'always',
+  onReady,
+  onVisibleChange
 }: BrainGraphProps): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
   const [visible, setVisible] = useState(true)
+  // Latest-ref so the effect below can depend on just `showCanvas` (only fire
+  // on real transitions) without also re-firing whenever a caller passes a
+  // new inline callback identity on every render.
+  const onVisibleChangeRef = useRef(onVisibleChange)
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref (keeps the effect below from re-firing on every render just because the caller passed a new inline callback)
+  onVisibleChangeRef.current = onVisibleChange
 
   // Off-screen GPU saving for the Memories tab only (pauseWhenHidden): UNMOUNT
   // the canvas while the host is collapsed to 0×0 (its MainViews tab is
@@ -372,14 +391,55 @@ export function BrainGraph({
     if (!pauseWhenHidden) return
     const el = hostRef.current
     if (!el) return
-    const update = (): void => setVisible(el.clientWidth > 0 && el.clientHeight > 0)
+    // Debounce HIDE decisions only, not show ones: measured on the real page,
+    // a ResizeObserver tick can report a genuine 0×0 for this container —
+    // observed immediately after the canvas's WebGL context is created, which
+    // itself briefly perturbs the compositor — immediately followed by another
+    // real tick reporting its normal size again 60-120ms later, with no actual
+    // tab switch in between. Acting on that first 0×0 unmounted+remounted the
+    // whole canvas — and doing that repeatedly, in quick succession, was
+    // observed to lose the WebGL context outright (software rendering under
+    // dev's forced-software-WebGL has a low tolerance for rapid context churn):
+    // a real crash, not just a wasted rebuild. A real "tab went inactive" stays
+    // at 0×0 well past this window, so (a) requiring the reading to hold for
+    // 250ms before hiding, and (b) refusing to even arm that timer within 500ms
+    // of the last time we showed (exactly when a just-created context's own
+    // compositor blip lands) still catches a genuine hide — just slightly
+    // later — while filtering out the blip that used to compound into a crash.
+    // Showing is always acted on immediately — there's nothing to protect there.
+    let hideTimer: ReturnType<typeof setTimeout> | undefined
+    let lastShownAt = 0
+    const update = (): void => {
+      const hasSize = el.clientWidth > 0 && el.clientHeight > 0
+      if (hasSize) {
+        if (hideTimer) {
+          clearTimeout(hideTimer)
+          hideTimer = undefined
+        }
+        lastShownAt = Date.now()
+        setVisible(true)
+        return
+      }
+      if (hideTimer || Date.now() - lastShownAt < 500) return
+      hideTimer = setTimeout(() => {
+        hideTimer = undefined
+        setVisible(el.clientWidth > 0 && el.clientHeight > 0)
+      }, 250)
+    }
     update()
     const ro = new ResizeObserver(update)
     ro.observe(el)
-    return () => ro.disconnect()
+    return () => {
+      if (hideTimer) clearTimeout(hideTimer)
+      ro.disconnect()
+    }
   }, [pauseWhenHidden])
 
   const showCanvas = !pauseWhenHidden || visible
+
+  useEffect(() => {
+    onVisibleChangeRef.current?.(showCanvas)
+  }, [showCanvas])
 
   return (
     <div ref={hostRef} className="absolute inset-0">
@@ -392,6 +452,7 @@ export function BrainGraph({
         dpr={[1, 2]}
         frameloop={frameLoop}
         gl={{ antialias: true, alpha: true }}
+        onCreated={onReady}
       >
         <GraphScene
           graph={graph}

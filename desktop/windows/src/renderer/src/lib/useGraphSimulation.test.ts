@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { GraphSimulation } from './useGraphSimulation'
+import { describe, it, expect, beforeEach } from 'vitest'
+import { GraphSimulation, __clearLayoutCacheForTests } from './useGraphSimulation'
 import type { KnowledgeGraph } from '../../../shared/types'
 
 const g1: KnowledgeGraph = {
@@ -15,6 +15,13 @@ const g2: KnowledgeGraph = {
 }
 
 describe('GraphSimulation', () => {
+  // The layout cache is module-scoped (by design — it must survive a real
+  // component remount), so it otherwise leaks a settled g1/g2 layout from one
+  // test into the next. Reset it so each test settles from a clean slate.
+  beforeEach(() => {
+    __clearLayoutCacheForTests()
+  })
+
   it('pins the center node at the origin', () => {
     const sim = new GraphSimulation('user')
     sim.setGraph(g1)
@@ -48,14 +55,41 @@ describe('GraphSimulation', () => {
     expect(sim.consumeNewlyAdded()).toEqual([]) // consumed
   })
 
-  it('reports whether frame-by-frame settling still needs rendering', () => {
+  it('settles synchronously inside setGraph, leaving nothing for the render loop', () => {
+    // setGraph() now runs its settle as one synchronous batch (so the entry
+    // animation is a cheap, deterministic tween toward an already-fixed target,
+    // not a live physics convergence spread across frames) — settleFrame()
+    // should report there's nothing left to do immediately after.
     const sim = new GraphSimulation('user')
     sim.setGraph(g2)
 
-    expect(sim.settleFrame()).toBe(true)
-
-    sim.settle(300)
-
     expect(sim.settleFrame()).toBe(false)
+  })
+
+  it('reuses a cached layout for an identical node set instead of re-settling', () => {
+    const sim1 = new GraphSimulation('user')
+    sim1.setGraph(g2)
+    const sizeScale1 = sim1.getPositions().find((p) => p.id === 'language_en')!.sizeScale
+
+    // A second, independent instance (e.g. a remount) with the exact same node
+    // set should adopt the first instance's settled sizeScale verbatim — if it
+    // were re-settling from scratch, sizeScale is re-rolled via Math.random()
+    // and would essentially never match.
+    const sim2 = new GraphSimulation('user')
+    sim2.setGraph(g2)
+    const sizeScale2 = sim2.getPositions().find((p) => p.id === 'language_en')!.sizeScale
+
+    expect(sizeScale2).toBe(sizeScale1)
+  })
+
+  it('reports a freshly-added node at its seed spot, distinct from its settled target', () => {
+    const sim = new GraphSimulation('user')
+    sim.setGraph(g2)
+
+    const rendered = sim.getPositions().find((p) => p.id === 'language_en')!
+    const settled = sim.liveNode('language_en')!
+    // The renderer's initial position (seed) and its per-frame lerp target
+    // (already-settled) must differ — otherwise there is nothing to animate.
+    expect(rendered.x === settled.x && rendered.y === settled.y).toBe(false)
   })
 })
