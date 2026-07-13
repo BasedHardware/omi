@@ -205,6 +205,15 @@ function emit(ownerId: number, msg: ListenMessage): void {
   }
 }
 
+/** Stop and clear a session's keepalive/watchdog timer, if any. Shared by every
+ *  path that tears a session down so the timer can't drift between call sites. */
+function stopKeepalive(s: Session): void {
+  if (s.keepaliveTimer) {
+    clearInterval(s.keepaliveTimer)
+    s.keepaliveTimer = null
+  }
+}
+
 /** The one way a session dies early: mark closed, drop buffers, remove from the
  *  map, close the socket. Shared by replace/supersede/stop so Session cleanup
  *  can't drift between call sites. */
@@ -213,10 +222,7 @@ function killSession(id: string, s: Session, why: string): void {
   s.closed = true
   s.pending = []
   s.pendingBytes = 0
-  if (s.keepaliveTimer) {
-    clearInterval(s.keepaliveTimer)
-    s.keepaliveTimer = null
-  }
+  stopKeepalive(s)
   sessions.delete(id)
   try {
     s.ws.close()
@@ -366,10 +372,7 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
   ws.on('close', (code, reasonBuf) => {
     if (session.closed) return
     session.closed = true
-    if (session.keepaliveTimer) {
-      clearInterval(session.keepaliveTimer)
-      session.keepaliveTimer = null
-    }
+    stopKeepalive(session)
     sessions.delete(args.sessionId)
     const reason = reasonBuf.toString()
     console.log(

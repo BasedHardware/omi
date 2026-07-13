@@ -14,19 +14,26 @@ const calls: Call[] = []
 const stop = vi.fn()
 const finalizeHandle = vi.fn()
 
-vi.mock('../lib/transcriptionClient', () => ({
-  startTranscription: vi.fn(
-    async (
-      source: string,
-      cb: TranscriptionCallbacks,
-      mode?: string,
-      clientConversationId?: string
-    ) => {
-      calls.push({ source, cb, mode, clientConversationId })
-      return { stop, finalize: finalizeHandle }
-    }
-  )
-}))
+// Preserve the module's real exports (liveRescue's isRetryableDropError now
+// calls the real isQuotaExhaustedMessage from this module) and mock only
+// startTranscription.
+vi.mock('../lib/transcriptionClient', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/transcriptionClient')>()
+  return {
+    ...actual,
+    startTranscription: vi.fn(
+      async (
+        source: string,
+        cb: TranscriptionCallbacks,
+        mode?: string,
+        clientConversationId?: string
+      ) => {
+        calls.push({ source, cb, mode, clientConversationId })
+        return { stop, finalize: finalizeHandle }
+      }
+    )
+  }
+})
 
 vi.mock('../lib/liveConversation', () => ({
   isConversationBoundary: () => false,

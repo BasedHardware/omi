@@ -22,6 +22,41 @@ export async function fetchAllMemories(): Promise<Memory[]> {
   return [...byId.values()]
 }
 
+// Cap aligned with the backend's MEMORIES_BATCH_MAX (backend/routers/memories.py)
+// so a chunk can never be rejected for exceeding the server's per-request limit.
+export const MEMORIES_IMPORT_BATCH_SIZE = 100
+
+export type BatchImportTally = { ok: number; failed: number; firstError?: string }
+
+// Send memory contents through POST /v3/memories/batch in chunks of at most
+// MEMORIES_IMPORT_BATCH_SIZE, one request per chunk, sequentially. Replaces the
+// old one-POST-per-memory fan-out (up to hundreds of requests for a large
+// import), which could blow through the per-Authorization rate limit and
+// collaterally 429 unrelated chat/sync/goals calls for the same user.
+export async function postMemoriesBatched(contents: string[]): Promise<BatchImportTally> {
+  let ok = 0
+  let failed = 0
+  let firstError: string | undefined
+  for (let i = 0; i < contents.length; i += MEMORIES_IMPORT_BATCH_SIZE) {
+    const chunk = contents.slice(i, i + MEMORIES_IMPORT_BATCH_SIZE)
+    try {
+      const r = await omiApi.post('/v3/memories/batch', {
+        memories: chunk.map((content) => ({ content }))
+      })
+      ok += r.data?.created_count ?? chunk.length
+    } catch (e) {
+      const msg =
+        (e as { response?: { status?: number; data?: { detail?: string } }; message: string })
+          .response?.data?.detail ??
+        (e as { response?: { status?: number } }).response?.status?.toString() ??
+        (e as Error).message
+      if (!firstError) firstError = msg
+      failed += chunk.length
+    }
+  }
+  return { ok, failed, firstError }
+}
+
 export type BulkDeleteTally = { deleted: number; failed: number; firstError?: string }
 
 // Delete memories by id, paced under the server's 60-per-hour delete cap: one at

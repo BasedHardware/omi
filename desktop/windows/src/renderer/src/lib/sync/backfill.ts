@@ -12,7 +12,10 @@
  */
 import { queueForSync } from './outbox'
 import { syncLocalConversation } from './conversationSync'
+import { POST_HISTORY_KEY } from './backfillStorageKey'
 import type { LocalConversation, SyncSegment } from '../../../../shared/types'
+
+export { POST_HISTORY_KEY }
 
 export const BACKFILL_HOURLY_CAP = 25 // headroom under the 30/hour from-segments limit
 const HOUR_MS = 3_600_000
@@ -114,8 +117,6 @@ export function transcriptToSegments(transcript: string, durationSec: number): S
 }
 
 // Runner ---------------------------------------------------------------------
-
-const POST_HISTORY_KEY = 'omi.syncBackfillPosts'
 
 function readPostHistory(): number[] {
   try {

@@ -8,6 +8,7 @@ import { callAgentLLM } from '../lib/agentLLM'
 import { detectAgentTask, resolveTaskCwd } from '../lib/agentTask'
 import type { AutomationPlan, CodingAgentEvent, ChatCitation } from '../../../shared/types'
 import { getPreferences } from '../lib/preferences'
+import { CHAT_INFINITE_ID_KEY } from '../lib/chatStorageKeys'
 import { resolveChatId, mergeChatMessages } from '../lib/chatConversation'
 import { parseDoneMessage, type DoneMessage } from '../lib/messagesSse'
 import { speakText } from '../lib/voice/voiceController'
@@ -106,10 +107,10 @@ export function useChat(): UseChat {
     chatIdRef.current = resolveChatId(
       mode,
       {
-        get: () => localStorage.getItem('omi-chat-infinite-id'),
+        get: () => localStorage.getItem(CHAT_INFINITE_ID_KEY),
         set: (id) => {
           try {
-            localStorage.setItem('omi-chat-infinite-id', id)
+            localStorage.setItem(CHAT_INFINITE_ID_KEY, id)
           } catch {
             /* private mode / quota */
           }

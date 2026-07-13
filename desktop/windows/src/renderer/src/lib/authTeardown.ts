@@ -10,12 +10,14 @@
 import { clearMemoryCache } from './localAgentMemoryCache'
 import { clearPendingConversations, invalidateConversationsCache } from './pageCache'
 import { clearUserScopedPreferences } from './preferences'
+import { CHAT_INFINITE_ID_KEY } from './chatStorageKeys'
+import { POST_HISTORY_KEY } from './sync/backfillStorageKey'
 
 // Standalone user-scoped localStorage keys (the device-prefs blob and sidebar
 // collapse state are machine-scoped and NOT listed here).
 const USER_SCOPED_LOCALSTORAGE_KEYS = [
-  'omi-chat-infinite-id', // shared chat conversation id (useChat)
-  'omi.syncBackfillPosts' // from-segments post history (backfill dedupe)
+  CHAT_INFINITE_ID_KEY, // shared chat conversation id (useChat)
+  POST_HISTORY_KEY // from-segments post history (backfill dedupe)
 ]
 
 export async function teardownUserData(): Promise<void> {

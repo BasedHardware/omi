@@ -54,6 +54,29 @@ async function fetchMemories(): Promise<Memory[]> {
   )
 }
 
+// Shared by editMemory and setMemoryVisibility: both PATCH a single field and
+// send it as a QUERY param, not a JSON body — that's the backend's actual
+// contract for PATCH /v3/memories/{id}[/visibility] (see edit_memory /
+// update_memory_visibility in backend/routers/memories.py, plain `value: str`
+// function args, which FastAPI binds as query params for non-model types).
+// Optimistic; reverts the cache on failure so the UI doesn't show a save that
+// didn't happen.
+async function patchMemoryOptimistic(
+  id: string,
+  urlPath: string,
+  value: string,
+  apply: (m: Memory) => Memory
+): Promise<void> {
+  const prev = cache.list ?? []
+  publish(prev.map((m) => (m.id === id ? apply(m) : m)))
+  try {
+    await omiApi.patch(urlPath, null, { params: { value } })
+  } catch (e) {
+    publish(prev)
+    throw e
+  }
+}
+
 export function useMemories(): {
   memories: Memory[]
   loading: boolean
@@ -115,34 +138,22 @@ export function useMemories(): {
     publish(await fetchMemories())
   }
 
-  // Edit a memory's content. `value` is sent as a QUERY param, not a JSON body —
-  // that's the backend's actual contract for PATCH /v3/memories/{id} (see
-  // edit_memory in backend/routers/memories.py, a plain `value: str` function
-  // arg, which FastAPI binds as a query param for non-model types). Optimistic;
-  // reverts the cache on failure so the UI doesn't show a save that didn't happen.
+  // Edit a memory's content.
   const editMemory = async (id: string, content: string): Promise<void> => {
     const text = content.trim()
     if (!text) return
-    const prev = cache.list ?? []
-    publish(prev.map((m) => (m.id === id ? { ...m, content: text } : m)))
-    try {
-      await omiApi.patch(`/v3/memories/${id}`, null, { params: { value: text } })
-    } catch (e) {
-      publish(prev)
-      throw e
-    }
+    await patchMemoryOptimistic(id, `/v3/memories/${id}`, text, (m) => ({ ...m, content: text }))
   }
 
   // Same query-param contract as editMemory, for PATCH /v3/memories/{id}/visibility.
-  const setMemoryVisibility = async (id: string, visibility: 'public' | 'private'): Promise<void> => {
-    const prev = cache.list ?? []
-    publish(prev.map((m) => (m.id === id ? { ...m, visibility } : m)))
-    try {
-      await omiApi.patch(`/v3/memories/${id}/visibility`, null, { params: { value: visibility } })
-    } catch (e) {
-      publish(prev)
-      throw e
-    }
+  const setMemoryVisibility = async (
+    id: string,
+    visibility: 'public' | 'private'
+  ): Promise<void> => {
+    await patchMemoryOptimistic(id, `/v3/memories/${id}/visibility`, visibility, (m) => ({
+      ...m,
+      visibility
+    }))
   }
 
   // Re-pull the server list and broadcast to all mounts. Used after a bulk

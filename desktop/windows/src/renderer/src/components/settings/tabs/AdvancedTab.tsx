@@ -5,7 +5,7 @@ import { toast } from '../../../lib/toast'
 import { extractMemories, type MemorySource } from '../../../lib/memoryExtract'
 import { buildLocalGraph } from '../../../lib/kgSynthesis'
 import { summarizeMemories, appIndexMemoryIds, type MemoryBreakdown } from '../../../lib/memoryCleanup'
-import { fetchAllMemories } from '../../../lib/memoriesBulk'
+import { fetchAllMemories, postMemoriesBatched } from '../../../lib/memoriesBulk'
 import { useMemories, type Memory } from '../../../hooks/useMemories'
 import { resetOnboarding } from '../../../lib/preferences'
 import { SettingRow } from '../SettingRow'
@@ -16,6 +16,12 @@ import type {
   LocalKGStatus,
   MemoryExportResult
 } from '../../../../../shared/types'
+
+// Sanity cap for the no-AI line-split fallback in extractDump: an enormous paste
+// (a multi-thousand-line export dump) would otherwise turn one "Extract" click
+// into a single absurdly large import batch. The reviewed-list UI still shows
+// exactly what will be sent, so cap the count, not the per-request size.
+const MAX_HEURISTIC_IMPORT_ITEMS = 500
 
 export function AdvancedTab(): React.JSX.Element {
   const { memories, refresh } = useMemories()
@@ -67,12 +73,6 @@ export function AdvancedTab(): React.JSX.Element {
   const [extracting, setExtracting] = useState(false)
   const [importing, setImporting] = useState(false)
 
-  // Sanity cap for the no-AI line-split fallback below: an enormous paste (a
-  // multi-thousand-line export dump) would otherwise turn one "Extract" click
-  // into a single absurdly large import batch. The reviewed-list UI still shows
-  // exactly what will be sent, so cap the count, not the per-request size.
-  const MAX_HEURISTIC_IMPORT_ITEMS = 500
-
   const extractDump = async (): Promise<void> => {
     if (extracting) return
     setExtracting(true)
@@ -107,38 +107,10 @@ export function AdvancedTab(): React.JSX.Element {
     }
   }
 
-  // Cap aligned with the backend's MEMORIES_BATCH_MAX (backend/routers/memories.py)
-  // so a chunk can never be rejected for exceeding the server's per-request limit.
-  const IMPORT_BATCH_SIZE = 100
-
-  // Send parsed memories through POST /v3/memories/batch in chunks of at most
-  // IMPORT_BATCH_SIZE, one request per chunk, sequentially. Replaces the old
-  // one-POST-per-memory fan-out (up to hundreds of requests for a large import),
-  // which could blow through the per-Authorization rate limit and collaterally
-  // 429 unrelated chat/sync/goals calls for the same user.
   const importMemories = async (): Promise<void> => {
     if (!parsed || parsed.length === 0 || importing) return
     setImporting(true)
-    let ok = 0
-    let failed = 0
-    let firstError = ''
-    for (let i = 0; i < parsed.length; i += IMPORT_BATCH_SIZE) {
-      const chunk = parsed.slice(i, i + IMPORT_BATCH_SIZE)
-      try {
-        const r = await omiApi.post('/v3/memories/batch', {
-          memories: chunk.map((content) => ({ content }))
-        })
-        ok += r.data?.created_count ?? chunk.length
-      } catch (e) {
-        const msg =
-          (e as { response?: { status?: number; data?: { detail?: string } }; message: string })
-            .response?.data?.detail ??
-          (e as { response?: { status?: number } }).response?.status?.toString() ??
-          (e as Error).message
-        if (!firstError) firstError = msg
-        failed += chunk.length
-      }
-    }
+    const { ok, failed, firstError } = await postMemoriesBatched(parsed)
     setImporting(false)
     toast(`Imported ${ok} memor${ok === 1 ? 'y' : 'ies'}${failed ? `, ${failed} failed` : ''}`, {
       tone: failed ? (ok ? 'warn' : 'error') : 'success',

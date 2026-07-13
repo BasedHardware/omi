@@ -1,6 +1,7 @@
 // Pure helpers for the always-on mic session's reconnect + from-segments rescue
 // (see liveMicSession). Kept side-effect-free so the backoff schedule and the
 // segment mapping are exhaustively unit-testable in node.
+import { isQuotaExhaustedMessage } from '../lib/transcriptionClient'
 import type { BackendSegment, SyncSegment } from '../../../shared/types'
 
 // Reconnect budget. A dropped /v4/listen resumes the SAME conversation (via
@@ -23,7 +24,7 @@ export function reconnectDelayMs(attempt: number): number {
  *  burning the whole backoff budget (~55s) first. Everything else (network drops,
  *  timeouts, transient server closes) is retryable. */
 export function isRetryableDropError(message: string): boolean {
-  return !/quota|1008|trial_expired|not signed in|requires sign-in/i.test(message)
+  return !isQuotaExhaustedMessage(message) && !/not signed in|requires sign-in/i.test(message)
 }
 
 /**
