@@ -21,18 +21,11 @@ enum PermissionDragGuidance {
       ?? (Bundle.main.infoDictionary?["CFBundleDisplayName"] as? String)
       ?? "Omi"
     let icon = NSApp.applicationIconImage ?? NSWorkspace.shared.icon(forFile: appURL.path)
-    let initialAnchor = CloudConnectorFormAutomation.systemSettingsWindowAppKitFrame()
 
+    // The overlay owns the System Settings lifecycle from here: it re-anchors over
+    // the window once it appears and dismisses the card when the user closes it.
     CloudConnectorGuidanceOverlay.shared.presentDragToGrantCard(
-      appIcon: icon, appName: appName, appURL: appURL, near: initialAnchor)
-
-    guard initialAnchor == nil else { return }
-    for _ in 0..<15 {
-      try? await Task.sleep(nanoseconds: 150_000_000)
-      if let frame = CloudConnectorFormAutomation.systemSettingsWindowAppKitFrame() {
-        CloudConnectorGuidanceOverlay.shared.repositionDragCard(near: frame)
-        return
-      }
-    }
+      appIcon: icon, appName: appName, appURL: appURL,
+      near: CloudConnectorFormAutomation.systemSettingsWindowAppKitFrame())
   }
 }

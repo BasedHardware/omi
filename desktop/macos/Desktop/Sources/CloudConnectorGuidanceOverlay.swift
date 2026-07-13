@@ -79,6 +79,7 @@ final class CloudConnectorGuidanceOverlay {
 
   private var window: NSWindow?
   private var dismissTask: Task<Void, Never>?
+  private var settingsWatchTask: Task<Void, Never>?
   private var lastAutomationState: [String: String]?
   private var dragCardSize: CGSize?
   private var dragTargetState: ScreenRecordingDragTargetState?
@@ -219,6 +220,7 @@ final class CloudConnectorGuidanceOverlay {
   /// Screen Recording helper whose app icon can be dropped into System Settings.
   func presentDragToGrantCard(appIcon: NSImage, appName: String, appURL: URL, near anchor: CGRect?) {
     dismissTask?.cancel()
+    settingsWatchTask?.cancel()
     window?.close()
 
     let cardSize = CGSize(width: 180, height: 164)
@@ -278,6 +280,26 @@ final class CloudConnectorGuidanceOverlay {
       await MainActor.run {
         guard !Task.isCancelled else { return }
         self?.dismiss()
+      }
+    }
+
+    // Follow the System Settings window: re-anchor over it once it appears, and
+    // dismiss the card as soon as the user closes it — the drag target is gone.
+    settingsWatchTask = Task { [weak self] in
+      var sawSettings = false
+      while !Task.isCancelled {
+        let settingsFrame = await MainActor.run {
+          CloudConnectorFormAutomation.systemSettingsWindowAppKitFrame()
+        }
+        if let settingsFrame {
+          sawSettings = true
+          await MainActor.run { self?.repositionDragCard(near: settingsFrame) }
+        } else if sawSettings {
+          // Window appeared and is now gone → the user closed Settings.
+          await MainActor.run { self?.dismiss() }
+          return
+        }
+        try? await Task.sleep(nanoseconds: 300_000_000)
       }
     }
   }
@@ -454,6 +476,8 @@ final class CloudConnectorGuidanceOverlay {
   func dismiss() {
     dismissTask?.cancel()
     dismissTask = nil
+    settingsWatchTask?.cancel()
+    settingsWatchTask = nil
     window?.close()
     window = nil
     dragCardSize = nil
