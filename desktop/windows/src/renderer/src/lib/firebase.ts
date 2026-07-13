@@ -9,6 +9,7 @@ import {
   browserLocalPersistence,
   type User
 } from 'firebase/auth'
+import { teardownUserData } from './authTeardown'
 
 const app = initializeApp({
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string,
@@ -59,6 +60,11 @@ export async function signInWithGoogle(): Promise<User> {
 }
 
 export async function signOutUser(): Promise<void> {
+  // User-initiated sign-out is the NUCLEAR path (vs the LIGHT session
+  // invalidation on a 401 — see authSession.forceReauth): tear down all
+  // user-scoped local data FIRST so a second account on this machine can't see
+  // it, THEN drop the Firebase session.
+  await teardownUserData()
   await signOut(auth)
 }
 

@@ -108,6 +108,13 @@ export function addPendingConversation(transcript: string): string {
   return id
 }
 
+// Drop all optimistic pending rows (sign-out teardown — they belong to the
+// outgoing user). Notifies mounted lists so they re-render without the rows.
+export function clearPendingConversations(): void {
+  pending = []
+  subscribers.forEach((cb) => cb())
+}
+
 export function setPendingTopic(id: string, title: string, emoji: string): void {
   pending = pending.map((p) => (p.id === id ? { ...p, title, emoji: emoji || p.emoji } : p))
   subscribers.forEach((cb) => cb())
