@@ -43,6 +43,18 @@ def test_llm_gateway_anthropic_secret_and_authenticated_readiness_probe_contract
         assert 'X-Omi-Service-Caller: backend' in probe_command
 
 
+def test_gateway_service_token_is_provided_by_external_secrets_contract():
+    for environment in ('dev', 'prod'):
+        gateway = _load_yaml(f'charts/llm-gateway/{environment}_omi_llm_gateway_values.yaml')
+        secrets = _load_yaml(f'charts/backend-secrets/{environment}_omi_backend_secrets_values.yaml')
+
+        assert _env_map(gateway)['OMI_LLM_GATEWAY_SERVICE_TOKEN']['valueFrom']['secretKeyRef'] == {
+            'name': f'{environment}-omi-backend-secrets',
+            'key': 'OMI_LLM_GATEWAY_SERVICE_TOKEN',
+        }
+        assert 'OMI_LLM_GATEWAY_SERVICE_TOKEN' in _secret_keys(secrets)
+
+
 def test_monitoring_scrapes_llm_gateway_with_shared_metrics_secret_contract():
     for environment in ('dev', 'prod'):
         monitoring = _load_yaml(f'charts/monitoring/kube-prometheus-stack/{environment}_omi_monitoring_values.yaml')
