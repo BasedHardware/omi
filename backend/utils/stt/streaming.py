@@ -2,7 +2,6 @@ import asyncio
 import io
 import json
 import os
-import random
 import threading
 import urllib.parse
 import wave as _wave
@@ -26,6 +25,7 @@ from utils.stt.speaker_embedding import (
     compare_embeddings,
 )
 from utils.observability.fallback import record_fallback
+from utils.other.backoff import calculate_backoff_with_jitter
 import logging
 
 logger = logging.getLogger(__name__)
@@ -407,13 +407,6 @@ async def process_audio_dg(
     dg_connection.on(LiveTranscriptionEvents.Error, on_dg_error)
 
     return safe_conn
-
-
-# Calculate backoff with jitter
-def calculate_backoff_with_jitter(attempt: int, base_delay: int = 1000, max_delay: int = 32000) -> float:
-    jitter = random.random() * base_delay
-    backoff = min(((2**attempt) * base_delay) + jitter, max_delay)
-    return backoff
 
 
 async def connect_to_deepgram_with_backoff(
