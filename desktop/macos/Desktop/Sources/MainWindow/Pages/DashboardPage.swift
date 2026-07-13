@@ -813,7 +813,7 @@ struct DashboardPage: View {
 
     private var homeHubWordmark: some View {
         Text("omi.")
-            .font(.system(size: 58, weight: .bold, design: .rounded))
+            .scaledFont(size: 58, weight: .bold)
             .foregroundStyle(HomePalette.ink)
             .lineLimit(1)
             .shadow(color: HomePalette.jewelGlow.opacity(0.22), radius: 24)
@@ -1071,7 +1071,7 @@ struct DashboardPage: View {
         }
 
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 15),
+            .font: OmiType.appKitFont(size: 15),
         ]
         let measuredTextWidth = (text as NSString).size(withAttributes: attributes).width
         let chromeWidth: CGFloat = 210
@@ -1371,7 +1371,7 @@ struct DashboardPage: View {
     private var sourceColumnHeader: some View {
         VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Connect data")
-                .font(.system(size: 20, weight: .medium, design: .serif))
+                .scaledFont(size: OmiType.heading, weight: .medium)
                 .foregroundStyle(HomePalette.ink)
 
             Text("Sources Omi learns from.")
@@ -1408,7 +1408,7 @@ struct DashboardPage: View {
         VStack(alignment: .leading, spacing: OmiSpacing.md) {
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                 Text("Use omi memory anywhere")
-                    .font(.system(size: 20, weight: .medium, design: .serif))
+                    .scaledFont(size: OmiType.heading, weight: .medium)
                     .foregroundStyle(HomePalette.ink)
 
                 Text("Bring your memories to the apps you use")
@@ -2175,7 +2175,7 @@ private struct HomeAskBar: View {
                     prompt: Text("Ask omi anything").foregroundColor(HomePalette.muted)
                 )
                 .textFieldStyle(.plain)
-                .font(.system(size: 15))
+                .scaledFont(size: OmiType.subheading)
                 .foregroundStyle(HomePalette.ink)
                 .focused(focus)
                 .onSubmit(handleSubmit)
@@ -3362,7 +3362,7 @@ private struct HomeStatRibbonCell: View {
                         .foregroundStyle(isHovering ? HomePalette.ink : HomePalette.secondary)
 
                     Text(item.value)
-                        .font(.system(size: 22, weight: .medium, design: .serif))
+                        .scaledFont(size: 22, weight: .medium)
                         .foregroundStyle(HomePalette.ink)
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)

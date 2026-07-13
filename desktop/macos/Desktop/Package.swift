@@ -37,7 +37,11 @@ let package = Package(
     ),
     .target(
       name: "OmiTheme",
-      path: "Sources/Theme"
+      path: "Sources/Theme",
+      resources: [
+        .copy("Resources/Fonts"),
+        .copy("Resources/Licenses"),
+      ]
     ),
     .target(
       name: "OmiWAL",

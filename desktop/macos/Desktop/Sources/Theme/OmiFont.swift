@@ -45,7 +45,7 @@ package struct ScaledFontModifier: ViewModifier {
     var design: Font.Design = .default
 
     package func body(content: Content) -> some View {
-        content.font(.system(size: round(size * fontScale), weight: weight, design: design))
+        content.font(OmiType.font(size: round(size * fontScale), weight: weight, design: design))
     }
 }
 
