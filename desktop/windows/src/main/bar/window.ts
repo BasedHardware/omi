@@ -805,9 +805,27 @@ export function setSummonGestureAccelerator(accelerator: string): void {
   const sampler = makeKeySampler(accelerator)
   samplerAvailable = !!sampler
   gesture = new SummonGesture(
-    { onStart: onGestureStart, onEnd: onGestureEnd },
+    {
+      onStart: onGestureStart,
+      onEnd: onGestureEnd,
+      // The poll kept reading the key DOWN past the ~5-min cap — the physical
+      // key-up was almost certainly missed (GetAsyncKeyState stale-down). onEnd
+      // (below) still sends 'up'; this line just makes the recovery visible in
+      // field logs so we can confirm the failure class.
+      onCapExceeded: () => pttTrace('gesture CAP (~5min, key still reads down) → forcing release')
+    },
     { sampleKeyDown: sampler }
   )
+}
+
+/** End an in-flight summon PTT hold NOW because the OS is about to make the
+ *  physical key-up unobservable (session lock / suspend — GetAsyncKeyState
+ *  freezes across those, so the poll would read the key stuck-down). Wired to
+ *  powerMonitor 'lock-screen'/'suspend' in index.ts. No-op when nothing is held. */
+export function endActiveSummonHold(reason: string): void {
+  if (!gesture?.isActive) return
+  pttTrace(`system ${reason} → ending active hold`)
+  gesture.endIfActive()
 }
 
 /** E2E diagnostic: is real hit-testing currently enabled? Must be FALSE right

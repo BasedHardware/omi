@@ -1,4 +1,13 @@
-import { app, shell, BrowserWindow, ipcMain, session, nativeImage, desktopCapturer } from 'electron'
+import {
+  app,
+  shell,
+  BrowserWindow,
+  ipcMain,
+  session,
+  nativeImage,
+  desktopCapturer,
+  powerMonitor
+} from 'electron'
 import { join } from 'path'
 import { appendFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -35,7 +44,8 @@ import {
   isBarInteractive,
   isBarVisible,
   showBar,
-  hideBar
+  hideBar,
+  endActiveSummonHold
 } from './bar/window'
 import {
   registerOverlayShortcut,
@@ -733,6 +743,12 @@ app.whenReady().then(async () => {
       '[bar] summon shortcut unavailable; the bar can still be revealed from the top edge'
     )
   }
+  // A PTT hold in flight when the session locks or the machine suspends would
+  // never see its physical key-up (GetAsyncKeyState freezes across those
+  // transitions), so the recording visualizer would stick. Finalize the hold on
+  // those events instead — the direct trigger for the stuck-visualizer class.
+  powerMonitor.on('lock-screen', () => endActiveSummonHold('lock-screen'))
+  powerMonitor.on('suspend', () => endActiveSummonHold('suspend'))
 
   // Mic record chord (default Ctrl+Space, rebindable + persisted). Fires
   // 'recorder:hotkey' at the renderer (receiver already exists) and surfaces the
