@@ -44,3 +44,48 @@ def test_safe_file_chats_skips_malformed_record():
 
 def test_safe_file_chats_empty():
     assert cf._safe_file_chats([]) == []
+
+
+def test_openai_file_ids_includes_malformed_docs():
+    # A doc that fails FileChat validation can still carry openai_file_id; cleanup must see it.
+    records = [
+        _valid_file_dict(),
+        {'id': 'broken', 'openai_file_id': 'oai-orphan'},
+        {'id': 'no-provider'},
+        {**_valid_file_dict(), 'id': 'f3', 'openai_file_id': 'oai-3'},
+    ]
+    assert cf._openai_file_ids(records) == ['oai-1', 'oai-orphan', 'oai-3']
+
+
+def test_cleanup_deletes_openai_file_even_when_doc_is_malformed(monkeypatch):
+    deleted: list[str] = []
+    firestore_deleted: list = []
+
+    monkeypatch.setattr(
+        cf.chat_db,
+        'get_chat_files',
+        lambda _uid: [
+            _valid_file_dict(),
+            {'id': 'broken', 'openai_file_id': 'oai-orphan'},
+        ],
+    )
+    monkeypatch.setattr(
+        cf.chat_db,
+        'delete_multi_files',
+        lambda _uid, files: firestore_deleted.extend(files),
+    )
+    monkeypatch.setattr(
+        cf.openai.files,
+        'delete',
+        lambda file_id, timeout=30.0: deleted.append(file_id),
+    )
+
+    # Bypass __init__ (Firestore session load); cleanup only needs uid + optional ids.
+    tool = cf.FileChatTool.__new__(cf.FileChatTool)
+    tool.uid = 'u1'
+    tool.thread_id = None
+    tool.assistant_id = None
+    tool.cleanup()
+
+    assert deleted == ['oai-1', 'oai-orphan']
+    assert [f.get('id') for f in firestore_deleted] == ['f1', 'broken']
