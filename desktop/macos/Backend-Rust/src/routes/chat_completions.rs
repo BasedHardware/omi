@@ -663,6 +663,19 @@ fn drain_sse_events(buffer: &mut Vec<u8>) -> Vec<String> {
     events
 }
 
+/// Byte-safe preview of an upstream error body for logging.
+///
+/// `&body[..N]` slices by byte index and panics when byte `N` lands inside a
+/// multi-byte UTF-8 sequence (the same byte-vs-char hazard `drain_sse_events`
+/// avoids). Truncate to the nearest char boundary at or below 500 instead.
+fn error_body_preview(body: &str) -> &str {
+    let mut end = body.len().min(500);
+    while !body.is_char_boundary(end) {
+        end -= 1;
+    }
+    &body[..end]
+}
+
 fn make_chunk(
     id: &str,
     created: i64,
@@ -910,7 +923,7 @@ async fn handle_non_streaming(
             "chat_completions: Anthropic returned {} for user {}: {}",
             status,
             user.uid,
-            &body[..body.len().min(500)]
+            error_body_preview(&body)
         );
         return Ok(response_or_500(
             Response::builder()
@@ -958,7 +971,7 @@ async fn handle_streaming(
             "chat_completions: Anthropic stream returned {} for user {}: {}",
             status,
             user.uid,
-            &body[..body.len().min(500)]
+            error_body_preview(&body)
         );
         return Ok(response_or_500(
             Response::builder()
@@ -2388,6 +2401,23 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert!(events[0].contains("a—b"), "got {}", events[0]);
         assert!(!events[0].contains('\u{fffd}'));
+    }
+
+    #[test]
+    fn test_error_body_preview_never_splits_multibyte_char() {
+        // A >500-byte upstream error body whose 500th byte lands inside a
+        // multi-byte char must not panic the byte slice. "€" (U+20AC) is 3 bytes.
+        let body = format!("{}€tail", "x".repeat(498)); // byte 500 is mid-euro
+        let preview = error_body_preview(&body);
+        assert!(preview.len() <= 500);
+        assert!(body.starts_with(preview));
+        assert!(!preview.contains('\u{fffd}'));
+    }
+
+    #[test]
+    fn test_error_body_preview_passes_short_body_through() {
+        let body = "short error";
+        assert_eq!(error_body_preview(body), "short error");
     }
 
     #[test]
