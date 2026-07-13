@@ -175,6 +175,14 @@ def test_every_external_workflow_contract_source_triggers_backend_unit_workflow(
     assert missing == set()
 
 
+def test_static_backend_unit_workflow_uses_ci_duration_sanity_ceiling():
+    """Static tripwire: local pre-push is strict; PR CI only blocks pathological CPU cost."""
+    workflow_text = (BACKEND_DIR.parent / ".github/workflows/backend-unit-tests.yml").read_text(encoding="utf-8")
+
+    assert 'BACKEND_FAST_UNIT_WARN_SECONDS: "0.1"' in workflow_text
+    assert 'BACKEND_FAST_UNIT_FAIL_SECONDS: "1.0"' in workflow_text
+
+
 def test_backend_test_runner_defaults_python_to_utf8():
     runner = (BACKEND_DIR / "test.sh").read_text(encoding="utf-8")
     utf8_export = 'export PYTHONUTF8="${PYTHONUTF8:-1}"'

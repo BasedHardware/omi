@@ -115,7 +115,7 @@ jobs:
         env:
           BACKEND_UNIT_TEST_FILE_LIST: /tmp/backend-unit-tests.txt
           BACKEND_FAST_UNIT_WARN_SECONDS: "0.1"
-          BACKEND_FAST_UNIT_FAIL_SECONDS: "0.25"
+          BACKEND_FAST_UNIT_FAIL_SECONDS: "1.0"
           BACKEND_PYTEST_FILE_ISOLATION: "1"
           BACKEND_PYTEST_MARK_EXPR: "not integration and not slow"
           BACKEND_PYTEST_XDIST: auto
