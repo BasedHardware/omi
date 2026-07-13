@@ -4,6 +4,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"
 
+# Repository sources are UTF-8. Native Windows Python otherwise inherits the
+# system code page, which makes source-reading tests locale-dependent.
+export PYTHONUTF8="${PYTHONUTF8:-1}"
+
 # Git exports repository-local variables while invoking hooks. They must not
 # leak into pytest: tests that create temporary repositories would otherwise
 # keep operating on the outer worktree. The runner is already anchored at the
