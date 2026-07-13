@@ -163,7 +163,7 @@ jobs:
             fi
             python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service llm-gateway
           else
-            helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml --set "image.tag=${GITHUB_SHA::7}"
+            helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml --set-string "image.tag=${GITHUB_SHA::7}"
             if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-pusher --timeout=300s; then
               python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service pusher || true
               exit 1

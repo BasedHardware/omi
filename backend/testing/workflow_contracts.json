@@ -416,6 +416,28 @@
       ]
     },
     {
+      "id": "rendered_gke_deployment_identity",
+      "risk": "high",
+      "sources": [
+        "backend/charts/backend-listen/**",
+        "backend/charts/pusher/**",
+        "backend/charts/agent-proxy/**",
+        "backend/charts/llm-gateway/**",
+        "backend/charts/diarizer/**",
+        "backend/charts/parakeet/**",
+        "backend/charts/nllb-translation/**",
+        "backend/charts/vad/**",
+        "backend/scripts/validate_rendered_deployment_contract.py"
+      ],
+      "tests": ["tests/unit/test_rendered_deployment_contract.py"],
+      "checks": [],
+      "invariants": [
+        "every first-party GKE workload renders an explicit immutable image identity",
+        "rendered Deployments keep their environment-specific service account, secret references, port, and health probes",
+        "chart defaults cannot fall back to an application-version or latest image tag"
+      ]
+    },
+    {
       "id": "ci_changed_path_selection",
       "risk": "high",
       "sources": [

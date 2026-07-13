@@ -48,6 +48,8 @@ def test_workflow_contract_sources_select_adjacent_tests():
         "backend/routers/transcribe.py": "tests/unit/test_listen_pipeline.py",
         "backend/config/prerecorded_stt.py": "tests/unit/test_parakeet_prerecorded.py",
         "backend/scripts/validate-backend-runtime-env.py": "tests/unit/test_backend_runtime_env_validator.py",
+        "backend/charts/pusher/templates/deployment.yaml": "tests/unit/test_rendered_deployment_contract.py",
+        "backend/scripts/validate_rendered_deployment_contract.py": "tests/unit/test_rendered_deployment_contract.py",
         ".github/workflows/dev_backend_deployment_acceptance.yml": "tests/unit/test_verify_dev_backend_deployment.py",
         "backend/jobs/short_term_lifecycle_worker.py": "tests/unit/test_ws_b_short_term_lifecycle.py",
         "backend/utils/memory_ingestion/export_runner.py": "tests/unit/test_memory_ingestion_pipeline.py",
@@ -63,6 +65,19 @@ def test_workflow_contract_sources_select_adjacent_tests():
         assert expected_test in selected, source_path
         assert reason == f"{source_path} requires the full backend unit suite"
         assert selected == all_tests
+
+
+def test_workflow_contract_directory_glob_selects_nested_chart_test():
+    selector = _load_script("select_backend_unit_tests")
+    all_tests = selector.discover_all_tests()
+
+    selected, reason = selector.tests_for_changed_paths(
+        ["backend/charts/pusher/templates/deployment.yaml"],
+        all_tests,
+    )
+
+    assert "tests/unit/test_rendered_deployment_contract.py" in selected
+    assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
 
 def test_selector_docs_and_flat_utils_do_not_force_full_suite_via_globs():
