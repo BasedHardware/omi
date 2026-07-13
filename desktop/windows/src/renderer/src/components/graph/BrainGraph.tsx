@@ -452,7 +452,19 @@ export function BrainGraph({
         dpr={[1, 2]}
         frameloop={frameLoop}
         gl={{ antialias: true, alpha: true }}
-        onCreated={onReady}
+        onCreated={(state) => {
+          // A lost WebGL context (GPU crash/reset — more likely under dev's
+          // forced software rendering, but not exclusive to it) otherwise
+          // leaves the canvas showing whatever the browser draws for a dead
+          // context instead of our content, with nothing here to notice or
+          // recover. This can't un-lose the context, but it lets a caller
+          // (e.g. Memories.tsx's onVisibleChange wiring) fall back to its own
+          // loading/placeholder state instead of leaving that up.
+          state.gl.domElement.addEventListener('webglcontextlost', () => {
+            onVisibleChangeRef.current?.(false)
+          })
+          onReady?.()
+        }}
       >
         <GraphScene
           graph={graph}
