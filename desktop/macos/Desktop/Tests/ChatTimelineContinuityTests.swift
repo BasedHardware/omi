@@ -75,13 +75,182 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertEqual(calls.spawnedAgentIDs, [subagentID])
   }
 
-  func testMainChatKeepsOnlyInFlightNonAgentToolsWhileStreaming() {
+  func testLifecycleProjectionHidesDuplicateSpawnProseAndRetainsCanonicalRunIdentity() {
+    let pillID = UUID()
+    let runID = "run_5f35b43bf8a646f29b548a1306cf663f"
+    let spawnProse = """
+    Subagent spawned! It's running as a floating pill titled \"Sleep 5 seconds\" (\(runID)).
+    It'll execute sleep 5 and report back once complete.
+    """
+    let canonical = ChatMessage(
+      id: "spawn-message",
+      text: spawnProse,
+      sender: .ai,
+      contentBlocks: [
+        .text(id: "assistant-spawn-prose", text: spawnProse),
+        .agentSpawn(
+          id: "spawn-block",
+          pillId: pillID,
+          sessionId: "session_123",
+          runId: runID,
+          title: "Sleep 5 seconds",
+          objective: "Sleep for 5 seconds, then report completion."
+        ),
+      ]
+    )
+
+    let projected = AgentLifecycleDisplayProjection.project([canonical])
+
+    // Projection must not mutate durable lifecycle facts used by recovery and
+    // notch-pill linking.
+    XCTAssertEqual(canonical.text, spawnProse)
+    guard case .text(_, let canonicalProse) = canonical.contentBlocks[0],
+          case .agentSpawn(_, let canonicalPillID, let canonicalSessionID, let canonicalRunID, _, _) =
+            canonical.contentBlocks[1]
+    else {
+      return XCTFail("expected canonical spawn prose and structured receipt")
+    }
+    XCTAssertEqual(canonicalProse, spawnProse)
+    XCTAssertEqual(canonicalPillID, pillID)
+    XCTAssertEqual(canonicalSessionID, "session_123")
+    XCTAssertEqual(canonicalRunID, runID)
+
+    XCTAssertEqual(projected.count, 1)
+    XCTAssertTrue(projected[0].text.isEmpty)
+    XCTAssertFalse(projected[0].copyableText.contains(runID))
+    let visibleGroups = ContentBlockGroup.visibleChatGroups(
+      projected[0].contentBlocks,
+      isStreaming: false
+    )
+    XCTAssertEqual(visibleGroups.count, 1)
+    guard case .agentSpawn(_, let renderedPillID, let renderedSessionID, let renderedRunID, _, _) = visibleGroups[0]
+    else {
+      return XCTFail("only the structured spawn card should remain visible")
+    }
+    XCTAssertEqual(renderedPillID, pillID)
+    XCTAssertEqual(renderedSessionID, "session_123")
+    XCTAssertEqual(renderedRunID, runID)
+  }
+
+  func testLifecycleProjectionRedactsOnlyKnownIdentifiersFromNonLaunchAssistantText() {
+    let runID = "run_internal_123"
+    let userSuppliedCode = "run_public_example"
+    let canonical = ChatMessage(
+      text: "The lifecycle handle is \(runID); keep \(userSuppliedCode) unchanged.",
+      sender: .ai,
+      contentBlocks: [
+        .agentCompletion(
+          id: "completion-block",
+          pillId: nil,
+          sessionId: nil,
+          runId: runID,
+          title: "Background agent",
+          promptSnippet: "",
+          output: "Done.",
+          status: "completed"
+        ),
+      ]
+    )
+
+    let projected = AgentLifecycleDisplayProjection.project([canonical])
+
+    XCTAssertFalse(projected[0].text.contains(runID))
+    XCTAssertTrue(projected[0].text.contains(userSuppliedCode))
+    XCTAssertEqual(canonical.text, "The lifecycle handle is \(runID); keep \(userSuppliedCode) unchanged.")
+  }
+
+  func testLifecycleProjectionHidesDuplicateSpawnProseWithoutLegacyIdentifiers() {
+    let spawnProse = "Subagent spawned! It is running as a floating pill titled Sleep 5 seconds."
+    let canonical = ChatMessage(
+      text: spawnProse,
+      sender: .ai,
+      contentBlocks: [
+        .text(id: "assistant-spawn-prose", text: spawnProse),
+        .agentSpawn(
+          id: "legacy-spawn-block",
+          pillId: nil,
+          sessionId: "",
+          runId: "",
+          title: "Sleep 5 seconds",
+          objective: "Sleep for 5 seconds, then report completion."
+        ),
+      ]
+    )
+
+    let projected = AgentLifecycleDisplayProjection.project([canonical])
+
+    XCTAssertEqual(projected.count, 1)
+    XCTAssertTrue(projected[0].text.isEmpty)
+    let visibleGroups = ContentBlockGroup.visibleChatGroups(
+      projected[0].contentBlocks,
+      isStreaming: false
+    )
+    XCTAssertEqual(visibleGroups.count, 1)
+    guard case .agentSpawn = visibleGroups[0] else {
+      return XCTFail("expected only the structured legacy spawn card")
+    }
+  }
+
+  func testLifecycleProjectionPreservesAResultSharingSpawnAnnouncementParagraph() {
+    let runID = "run_abc123"
+    let combinedProse =
+      "Subagent spawned as a floating pill (\(runID)). Result: the requested task completed."
+    let canonical = ChatMessage(
+      text: combinedProse,
+      sender: .ai,
+      contentBlocks: [
+        .text(id: "assistant-combined-prose", text: combinedProse),
+        .agentSpawn(
+          id: "spawn-block",
+          pillId: nil,
+          sessionId: "",
+          runId: runID,
+          title: "Background task",
+          objective: "Complete the requested task."
+        ),
+      ]
+    )
+
+    let projected = AgentLifecycleDisplayProjection.project([canonical])
+
+    XCTAssertTrue(projected[0].text.contains("Result: the requested task completed."))
+    XCTAssertFalse(projected[0].text.localizedCaseInsensitiveContains(runID))
+  }
+
+  func testLifecycleProjectionRedactsKnownUUIDIdentifierCaseInsensitively() {
+    let pillID = UUID()
+    let lowercasedPillID = pillID.uuidString.lowercased()
+    let canonical = ChatMessage(
+      text: "The internal pill handle is \(lowercasedPillID).",
+      sender: .ai,
+      contentBlocks: [
+        .agentCompletion(
+          id: "completion-block",
+          pillId: pillID,
+          sessionId: nil,
+          runId: nil,
+          title: "Background task",
+          promptSnippet: "",
+          output: "Done.",
+          status: "completed"
+        ),
+      ]
+    )
+
+    let projected = AgentLifecycleDisplayProjection.project([canonical])
+
+    XCTAssertFalse(projected[0].text.localizedCaseInsensitiveContains(lowercasedPillID))
+  }
+
+  func testMainChatKeepsOnlyInFlightNonAgentToolsAfterAssistantTextSettles() {
     let groups = ContentBlockGroup.visibleChatGroups(
       [
         .toolCall(id: "tool_1", name: "search_conversations", status: .completed, output: "done"),
         .toolCall(id: "tool_2", name: "execute_sql", status: .running, output: nil),
       ],
-      isStreaming: true
+      // A tool can still be executing after an assistant's explanatory text
+      // has settled. Both chat surfaces must keep the truthful active row.
+      isStreaming: false
     )
 
     XCTAssertEqual(groups.count, 1)
@@ -93,6 +262,40 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertEqual(calls.count, 1)
     XCTAssertEqual(name, "execute_sql")
     XCTAssertEqual(status, .running)
+  }
+
+  func testMainChatKeepsActiveToolProgressAlongsideUnmaterializedSpawnLink() {
+    let subagentID = UUID()
+    let groups = ContentBlockGroup.visibleChatGroups(
+      [
+        .toolCall(
+          id: "spawn_1",
+          name: "spawn_agent",
+          status: .completed,
+          output: "Started agent\nID: \(subagentID.uuidString)"
+        ),
+        .toolCall(id: "web_1", name: "WebSearch", status: .running, output: nil),
+      ],
+      isStreaming: false
+    )
+
+    XCTAssertEqual(groups.count, 1)
+    guard case .toolCalls(_, let calls) = groups[0] else {
+      return XCTFail("expected one mixed lifecycle tool group")
+    }
+    XCTAssertEqual(calls.map(\.id), ["spawn_1", "web_1"])
+  }
+
+  func testMainChatHidesToolProgressWhenItsLifecycleBecomesTerminal() {
+    let groups = ContentBlockGroup.visibleChatGroups(
+      [
+        .toolCall(id: "tool_1", name: "WebSearch", status: .completed, output: "done"),
+        .toolCall(id: "tool_2", name: "WebFetch", status: .failed, output: nil),
+      ],
+      isStreaming: false
+    )
+
+    XCTAssertTrue(groups.isEmpty)
   }
 
   func testBackgroundAgentSummaryParsesLinkedAndLegacyCompletionText() {
@@ -279,6 +482,60 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertEqual(renderedPill, pillID)
     XCTAssertEqual(renderedRun, "run-1")
     XCTAssertEqual(output, "Final release-note summary")
+  }
+
+  func testAgentLifecycleDisplayProjectionHidesRawSpawnToolAfterTerminalTransition() {
+    let pillID = UUID()
+    let lifecycle = ChatMessage(
+      id: "same-row-lifecycle",
+      text: "",
+      sender: .ai,
+      contentBlocks: [
+        .toolCall(
+          id: "spawn-tool",
+          name: "spawn_agent",
+          status: .completed,
+          output: """
+          id: \(pillID.uuidString)
+          runId: run-1
+          """
+        ),
+        .agentSpawn(
+          id: "spawn-block",
+          pillId: pillID,
+          sessionId: "session-1",
+          runId: "run-1",
+          title: "Research Agent",
+          objective: "Research the release notes"
+        ),
+        .agentCompletion(
+          id: "completion-block",
+          pillId: pillID,
+          sessionId: "session-1",
+          runId: "run-1",
+          title: "Research Agent",
+          promptSnippet: "Research the release notes",
+          output: "Final release-note summary",
+          status: "completed"
+        ),
+      ]
+    )
+
+    let projected = AgentLifecycleDisplayProjection.project([lifecycle])
+    XCTAssertEqual(projected.count, 1)
+    XCTAssertEqual(projected[0].id, lifecycle.id)
+
+    // The main chat and floating chat both use this shared group projection.
+    let visible = ContentBlockGroup.visibleChatGroups(
+      projected[0].contentBlocks,
+      isStreaming: false
+    )
+    XCTAssertEqual(visible.count, 1)
+    guard case .agentCompletion(_, let visiblePillID, _, let visibleRunID, _, _, _, _) = visible[0] else {
+      return XCTFail("a terminal run must replace both its starting tool and spawn card")
+    }
+    XCTAssertEqual(visiblePillID, pillID)
+    XCTAssertEqual(visibleRunID, "run-1")
   }
 
   func testAgentLifecycleDisplayProjectionUsesRunBeforePillAndFallsBackForLegacyCompletion() {
@@ -650,10 +907,20 @@ final class ChatTimelineContinuityTests: XCTestCase {
       )
     ]
 
-    ChatProvider.materializeAgentSpawnBlockIfNeeded(
-      in: &blocks,
-      toolUseId: "tu-1",
-      toolName: "spawn_agent"
+    let projection = ChatProvider.materializeAgentSpawnBlockIfNeeded(
+        in: &blocks,
+        toolUseId: "tu-1",
+        toolName: "spawn_agent"
+    )
+    XCTAssertEqual(
+      projection,
+      ChatProvider.SpawnedAgentPillProjection(
+        pillID: pillId,
+        sessionID: "sess-abc",
+        runID: "run-xyz",
+        title: "Sleep Agent",
+        objective: "sleep five seconds"
+      )
     )
     XCTAssertEqual(blocks.count, 2)
     guard case .agentSpawn(_, let spawnPill, let sessionId, let runId, let title, let objective) =

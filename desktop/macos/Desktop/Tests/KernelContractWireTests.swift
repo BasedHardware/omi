@@ -3,6 +3,26 @@ import XCTest
 @testable import Omi_Computer
 
 final class KernelContractWireTests: XCTestCase {
+  func testContextReadinessContractsHaveAnExplicitStartupTolerantDeadline() {
+    XCTAssertEqual(
+      AgentRuntimeKernelContractTimeoutPolicy.deadlineNanoseconds(for: "resolve_surface_session"),
+      15_000_000_000
+    )
+    XCTAssertEqual(
+      AgentRuntimeKernelContractTimeoutPolicy.deadlineNanoseconds(for: "context_source_update"),
+      15_000_000_000
+    )
+    XCTAssertEqual(
+      AgentRuntimeKernelContractTimeoutPolicy.deadlineNanoseconds(for: "get_context_snapshot"),
+      15_000_000_000
+    )
+    XCTAssertEqual(
+      AgentRuntimeKernelContractTimeoutPolicy.deadlineNanoseconds(for: "journal_record_exchange"),
+      5_000_000_000,
+      "The model query and journal paths must not inherit the context-readiness budget."
+    )
+  }
+
   func testJournalExchangeWireCarriesBothTurnsInOneOwnerBoundRequest() throws {
     let turns = [
       KernelJournalTurnWrite(

@@ -40,11 +40,25 @@ private actor SuspendedJournalListGate {
 
 @MainActor
 final class KernelTurnRecordedProjectionTests: XCTestCase {
-  func testRealtimeVoiceUsesDedicatedKernelSessionSurface() {
-    let surface = AgentSurfaceReference.realtimeVoice()
+  func testRealtimeVoiceCompanionPreservesTheMainChatIdentity() {
+    let main = AgentSurfaceReference.mainChat(chatId: "conversation-42")
+    let surface = main.realtimeVoiceCompanion()
     XCTAssertEqual(surface.surfaceKind, "realtime_voice")
     XCTAssertEqual(surface.externalRefKind, "chat")
-    XCTAssertEqual(surface.externalRefId, "default")
+    XCTAssertEqual(surface.externalRefId, main.externalRefId)
+  }
+
+  func testVoiceContextSnapshotRejectsOnlyTheUnresolvedTransportSentinel() {
+    XCTAssertFalse(KernelVoiceContextSnapshot.empty.isResolved)
+
+    let blankNewConversation = KernelVoiceContextSnapshot(
+      sessionId: "session-new",
+      conversationId: "conversation-new",
+      context: "",
+      freshnessIdentity: "1:renderer:capabilities",
+      turnIDs: []
+    )
+    XCTAssertTrue(blankNewConversation.isResolved)
   }
 
   func testSpawnProjectionPinsItsProducingSurfaceAcrossLaterCompletion() throws {

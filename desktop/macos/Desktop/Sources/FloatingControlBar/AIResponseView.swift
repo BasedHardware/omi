@@ -265,19 +265,13 @@ struct AIResponseView: View {
     }
 
     private func groupedContentBlocks(for message: ChatMessage) -> [ContentBlockGroup] {
-        let grouped = ContentBlockGroup.group(message.contentBlocks)
+        let grouped = ContentBlockGroup.visibleChatGroups(
+            message.contentBlocks,
+            isStreaming: message.isStreaming
+        )
         guard !message.isStreaming else { return grouped }
 
-        return grouped.filter { group in
-            switch group {
-            case .text, .discoveryCard, .agentSpawn, .agentCompletion:
-                return true
-            case .toolCalls(_, let calls):
-                return calls.contains { $0.spawnedAgentID != nil }
-            case .thinking:
-                return false
-            }
-        }
+        return grouped
     }
 
     // MARK: - Per-Message Hover Action Overlay

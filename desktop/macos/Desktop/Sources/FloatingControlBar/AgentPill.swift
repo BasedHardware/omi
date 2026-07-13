@@ -1258,6 +1258,9 @@ final class AgentPillsManager: ObservableObject {
         if let producingJournalSurface {
             bindProducingJournalSurface(pillID: pill.id, surface: producingJournalSurface)
         }
+        // A delayed duplicate spawn receipt must not turn a terminal pill back
+        // into a running row after the completion was already projected.
+        guard !pill.status.isFinished else { return }
         pill.status = .running
         pill.completedAt = nil
         pill.latestActivity = "Working…"
@@ -1322,20 +1325,31 @@ final class AgentPillsManager: ObservableObject {
             pill.markContentChanged()
         }
         let removable = pills.filter { pill in
-            if runTasksByPill[pill.id] != nil {
-                return false
-            }
-            guard let sessionId = pill.canonicalSessionId, !sessionId.isEmpty,
-                  let runId = pill.canonicalRunId, !runId.isEmpty
-            else {
-                return !hasLocalTransientState(pillID: pill.id)
-            }
-            return !seen.contains(pill.id)
+            Self.shouldRemoveRenderedProjection(
+                status: pill.status,
+                isPolling: runTasksByPill[pill.id] != nil,
+                isSeenInRuntimeSnapshot: seen.contains(pill.id),
+                hasLocalTransientState: hasLocalTransientState(pillID: pill.id)
+            )
         }
         for pill in removable {
             removeRenderedProjection(pillID: pill.id)
         }
         objectWillChange.send()
+    }
+
+    /// Runtime session lists are intentionally an active-work snapshot and can
+    /// omit a run immediately after it completes. A finished pill remains a
+    /// user-visible attention item until the normal viewed/dismissed retention
+    /// policy removes it; a refresh must not orphan it from the hover list.
+    nonisolated static func shouldRemoveRenderedProjection(
+        status: AgentPill.Status,
+        isPolling: Bool,
+        isSeenInRuntimeSnapshot: Bool,
+        hasLocalTransientState: Bool
+    ) -> Bool {
+        guard !isPolling, !status.isFinished else { return false }
+        return !isSeenInRuntimeSnapshot && !hasLocalTransientState
     }
 
     private func applyRuntimeProjections() {

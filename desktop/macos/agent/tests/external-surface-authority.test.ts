@@ -23,7 +23,7 @@ import {
   establishRuntimeOwner,
   runRuntimeOwnerRevocationBarrier,
 } from "../src/runtime/runtime-owner-authority.js";
-import { createKernelHarness, waitUntil } from "./kernel-fakes.js";
+import { createKernelHarness, FakeRuntimeAdapter, waitUntil } from "./kernel-fakes.js";
 
 const roots: string[] = [];
 
@@ -341,9 +341,73 @@ describe("external realtime surface authority", () => {
       precedingAssistantText: "Would you like me to request Omi's microphone permission?",
     })).toMatchObject({ action: "execute", toolName: "request_permission" });
     expect(routeExternalSurfaceTool({
+      toolName: "request_permission",
+      toolInput: { type: "screen_recording" },
+      originatingPrompt: "Request it",
+      precedingAssistantText: "I cannot see your screen because Omi needs Screen Recording permission. I can request that permission now.",
+    })).toMatchObject({ action: "execute", toolName: "request_permission", toolInput: { type: "screen_recording" } });
+    expect(routeExternalSurfaceTool({
+      toolName: "request_permission",
+      toolInput: { type: "screen_recording" },
+      originatingPrompt: "Request permissions",
+      precedingAssistantText: "Omi needs microphone and Screen Recording permissions before continuing.",
+    })).toMatchObject({ action: "reject", code: "permission_request_not_authorized" });
+    expect(routeExternalSurfaceTool({
+      toolName: "request_permission",
+      toolInput: { type: "microphone" },
+      originatingPrompt: "Request it",
+      precedingAssistantText: "Omi needs Screen Recording permission before I can see your screen.",
+    })).toMatchObject({ action: "reject", code: "permission_request_not_authorized" });
+    expect(routeExternalSurfaceTool({
+      toolName: "request_permission",
+      toolInput: { type: "screen_recording" },
+      originatingPrompt: "Request it",
+      precedingAssistantText: "Slack needs Screen Recording permission before it can share your screen.",
+    })).toMatchObject({ action: "reject", code: "permission_target_rejected" });
+    expect(routeExternalSurfaceTool({
       toolName: "check_permission_status",
       toolInput: { type: "microphone" },
       originatingPrompt: "Check Slack's microphone permission",
+    })).toMatchObject({ action: "reject", code: "permission_target_rejected" });
+  });
+
+  it("canonicalizes screen-share vocabulary to Omi's Screen Recording permission", () => {
+    for (const [phrase, inputType] of [
+      ["screen share", "screen_share"],
+      ["screen sharing", "screen_sharing"],
+      ["screen-share", "screen-share"],
+    ] as const) {
+      expect(routeExternalSurfaceTool({
+        toolName: "request_permission",
+        toolInput: { type: inputType },
+        originatingPrompt: `Please request Omi's ${phrase} permission`,
+      })).toEqual({
+        action: "execute",
+        toolName: "request_permission",
+        toolInput: { type: "screen_recording" },
+        recoveredFromDelegation: false,
+      });
+    }
+
+    expect(routeExternalSurfaceTool({
+      toolName: "spawn_agent",
+      toolInput: { objective: "Request Omi's screen-sharing permission" },
+      originatingPrompt: "Can you request screen share permissions?",
+    })).toEqual({
+      action: "execute",
+      toolName: "request_permission",
+      toolInput: { type: "screen_recording" },
+      recoveredFromDelegation: true,
+    });
+    expect(routeExternalSurfaceTool({
+      toolName: "request_permission",
+      toolInput: { type: "screen_share" },
+      originatingPrompt: "Please request Slack's screen share permission",
+    })).toMatchObject({ action: "reject", code: "permission_target_rejected" });
+    expect(routeExternalSurfaceTool({
+      toolName: "check_permission_status",
+      toolInput: { type: "screen_share" },
+      originatingPrompt: "Can you check Slack's screen share permission?",
     })).toMatchObject({ action: "reject", code: "permission_target_rejected" });
   });
 
@@ -400,7 +464,7 @@ describe("external realtime surface authority", () => {
     pillFixture.store.close();
   });
 
-  it("routes identical permission proposals through one policy for typed and realtime surfaces", async () => {
+  it("routes explicit screen-share permission proposals through one policy for typed and realtime surfaces", async () => {
     const typed = createKernelHarness(join(newRoot(), "typed.sqlite"), "acp");
     typed.adapter.deferResult();
     const typedRunPromise = typed.kernel.executeRun({
@@ -412,7 +476,7 @@ describe("external realtime surface authority", () => {
       adapterId: "acp",
       clientId: "typed-chat",
       requestId: "typed-permission-run",
-      prompt: "Can you check Omi's screen recording permission?",
+      prompt: "Can you request screen share permissions?",
       cwd: "/tmp/work",
     });
     await waitUntil(() => typed.adapter.executed.length === 1);
@@ -421,11 +485,11 @@ describe("external realtime surface authority", () => {
     const realtime = createFixture();
     const realtimeRun = realtime.kernel.beginExternalSurfaceRun({
       ...beginInput(realtime.sessionId),
-      prompt: "Can you check Omi's screen recording permission?",
+      prompt: "Can you request screen share permissions?",
     });
     const proposal = {
       toolName: "spawn_agent",
-      toolInput: { objective: "Check whether Omi has screen recording permission" },
+      toolInput: { objective: "Request Omi's screen-sharing permission" },
     };
     const typedRoute = typed.kernel.routeRelayedRunToolProposal({
       capabilityRef: typedAttempt.toolCapabilityRef,
@@ -443,7 +507,7 @@ describe("external realtime surface authority", () => {
     expect(typedRoute).toEqual(realtimeRoute);
     expect(typedRoute).toEqual({
       action: "execute",
-      toolName: "check_permission_status",
+      toolName: "request_permission",
       toolInput: { type: "screen_recording" },
       recoveredFromDelegation: true,
     });
@@ -465,8 +529,8 @@ describe("external realtime surface authority", () => {
       toolInput: realtimeRoute.toolInput,
       activeOwnerId: "owner",
     });
-    expect(readToolInvocation(typed.store, typedInvocation.invocationId).toolName).toBe("check_permission_status");
-    expect(readToolInvocation(realtime.store, realtimeInvocation.invocationId).toolName).toBe("check_permission_status");
+    expect(readToolInvocation(typed.store, typedInvocation.invocationId).toolName).toBe("request_permission");
+    expect(readToolInvocation(realtime.store, realtimeInvocation.invocationId).toolName).toBe("request_permission");
 
     for (const [kernel, invocation] of [
       [typed.kernel, typedInvocation],
@@ -883,11 +947,11 @@ describe("external realtime surface authority", () => {
 
   it("stamps trusted realtime origin on exact generated spawn payload before the production control parser", async () => {
     const root = newRoot();
-    const { store, adapter, kernel } = createKernelHarness(join(root, "agent.sqlite"), "acp");
+    const { store, adapter, kernel } = createKernelHarness(join(root, "agent.sqlite"), "pi-mono");
     const session = resolveSurfaceSession(store, {
       ownerId: "owner",
       surfaceRef: { surfaceKind: "realtime_voice", externalRefKind: "chat", externalRefId: "default" },
-      defaultAdapterId: "acp",
+      defaultAdapterId: "pi-mono",
     }, () => 1);
     const run = kernel.beginExternalSurfaceRun({
       ...beginInput(session.agentSessionId),
@@ -902,10 +966,16 @@ describe("external realtime surface authority", () => {
       invocationId: "generated-spawn-1",
       toolName: "spawn_agent",
       // Exact generated realtime schema: originSurfaceKind is intentionally absent.
-      toolInput: { objective: "Research the launch plan" },
+      toolInput: {
+        objective: "Research the launch plan",
+        // This optional alias is advertised by GeneratedRealtimeTools.swift.
+        // The external path must accept it through the strict control parser.
+        brief: "Checking the launch plan",
+      },
     });
     expect(routed.toolInput).toMatchObject({
       objective: "Research the launch plan",
+      brief: "Checking the launch plan",
       originSurfaceKind: "realtime",
       parentRunId: run.runId,
       title: "Delegated: Research the launch plan",
@@ -934,8 +1004,8 @@ describe("external realtime surface authority", () => {
       kernel,
       callerSessionId: session.agentSessionId,
       executionRole: "coordinator",
-      providerBoundary: "local_user:acp",
-      defaultAdapterId: "acp",
+      providerBoundary: "managed_cloud",
+      defaultAdapterId: "pi-mono",
       authorizedProducerJournal: parseAgentSpawnProducerJournalDescriptor(
         ((routed.toolInput.metadata as any) ?? {}).producerJournal,
       ),
@@ -1034,6 +1104,151 @@ describe("external realtime surface authority", () => {
     const childInput = JSON.parse(String(store.getRow("SELECT input_json FROM runs WHERE run_id = ?", [child.runId]).input_json));
     expect(childInput.contextSnapshotVersion).toBe(parentInput.contextSnapshotVersion);
     expect(childInput.contextSnapshotGeneration).toBe(parentInput.contextSnapshotGeneration);
+    expect(childInput.metadata).toMatchObject({ brief: "Checking the launch plan" });
+    store.close();
+  });
+
+  it("starts an explicitly requested OpenClaw realtime child independently while preserving its producer journal", async () => {
+    const root = newRoot();
+    const store = new SqliteAgentStore({ databasePath: join(root, "agent.sqlite"), reconcileOnOpen: false });
+    const registry = new AdapterRegistry();
+    const piMono = new FakeRuntimeAdapter("pi-mono");
+    const openClaw = new FakeRuntimeAdapter("openclaw");
+    registry.register("pi-mono", () => piMono);
+    registry.register("openclaw", () => openClaw);
+    const kernel = new AgentRuntimeKernel({ store, registry });
+    const session = resolveSurfaceSession(store, {
+      ownerId: "owner",
+      surfaceRef: { surfaceKind: "realtime_voice", externalRefKind: "chat", externalRefId: "default" },
+      defaultAdapterId: "pi-mono",
+    }, () => 1);
+    const run = kernel.beginExternalSurfaceRun({
+      ...beginInput(session.agentSessionId),
+      prompt: "Ask OpenClaw to check the release notes in the background",
+    });
+    const routed = kernel.routeExternalSurfaceToolInvocation({
+      ownerId: "owner",
+      sessionId: session.agentSessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      invocationId: "realtime-openclaw-spawn",
+      toolName: "spawn_agent",
+      toolInput: {
+        objective: "Check the release notes",
+        provider: "openclaw",
+        // Gemini sends this optional field because it is present in the
+        // realtime schema. It must not reject the OpenClaw admission path.
+        brief: "Checking release notes",
+      },
+    });
+    const producerJournal = parseAgentSpawnProducerJournalDescriptor(
+      ((routed.toolInput.metadata as Record<string, unknown>).producerJournal),
+    );
+
+    const started = JSON.parse(await handleAgentControlToolCall({
+      kernel,
+      callerSessionId: session.agentSessionId,
+      executionRole: "coordinator",
+      providerBoundary: "managed_cloud",
+      defaultAdapterId: "pi-mono",
+      authorizedProducerJournal: producerJournal,
+      authorizedCallerRunId: run.runId,
+      getOwnerId: () => "owner",
+    }, "spawn_agent", routed.toolInput)) as Record<string, any>;
+
+    expect(started).toMatchObject({
+      ok: true,
+      run: { parentRunId: null },
+      session: {
+        defaultAdapterId: "openclaw",
+        providerBoundary: "local_user:openclaw",
+      },
+    });
+    await waitUntil(() => openClaw.executed.length === 1);
+    expect(piMono.executed).toHaveLength(0);
+    const child = started.run as { runId: string };
+    const childSession = started.session as { sessionId: string };
+    expect(JSON.parse(String(store.getRow("SELECT input_json FROM runs WHERE run_id = ?", [child.runId]).input_json)).metadata)
+      .toMatchObject({ brief: "Checking release notes" });
+    const ensured = kernel.ensureAgentSpawnJournal({
+      ownerId: "owner",
+      sessionId: childSession.sessionId,
+      runId: child.runId,
+    });
+    expect(ensured.assistantTurn.contentBlocks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "agentSpawn", runId: child.runId, pillId: producerJournal.pillId }),
+    ]));
+
+    // Without the kernel-issued producer-journal authority, the same parent
+    // remains a conventional managed delegation and cannot cross providers.
+    const ordinaryParentLinked = JSON.parse(await handleAgentControlToolCall({
+      kernel,
+      callerSessionId: session.agentSessionId,
+      executionRole: "coordinator",
+      providerBoundary: "managed_cloud",
+      defaultAdapterId: "pi-mono",
+      getOwnerId: () => "owner",
+    }, "spawn_agent", {
+      objective: "Must remain inside the parent boundary",
+      provider: "openclaw",
+      parentRunId: run.runId,
+      originSurfaceKind: "realtime",
+    })) as Record<string, any>;
+    expect(ordinaryParentLinked).toMatchObject({
+      ok: false,
+      error: {
+        code: "control_tool_failed",
+        message: "Managed Omi agents can only use Omi cloud routing.",
+      },
+    });
+    store.close();
+  });
+
+  it("returns a sanitized structured result when external OpenClaw admission is unavailable", async () => {
+    const root = newRoot();
+    const store = new SqliteAgentStore({ databasePath: join(root, "agent.sqlite"), reconcileOnOpen: false });
+    const registry = new AdapterRegistry();
+    registry.register("pi-mono", () => new FakeRuntimeAdapter("pi-mono"));
+    const kernel = new AgentRuntimeKernel({ store, registry });
+    const session = resolveSurfaceSession(store, {
+      ownerId: "owner",
+      surfaceRef: { surfaceKind: "realtime_voice", externalRefKind: "chat", externalRefId: "default" },
+      defaultAdapterId: "pi-mono",
+    }, () => 1);
+    const run = kernel.beginExternalSurfaceRun(beginInput(session.agentSessionId));
+    const routed = kernel.routeExternalSurfaceToolInvocation({
+      ownerId: "owner",
+      sessionId: session.agentSessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      invocationId: "realtime-openclaw-unavailable",
+      toolName: "spawn_agent",
+      toolInput: { objective: "Check the release notes", provider: "openclaw" },
+    });
+    const producerJournal = parseAgentSpawnProducerJournalDescriptor(
+      ((routed.toolInput.metadata as Record<string, unknown>).producerJournal),
+    );
+
+    const rejected = JSON.parse(await handleAgentControlToolCall({
+      kernel,
+      callerSessionId: session.agentSessionId,
+      executionRole: "coordinator",
+      providerBoundary: "managed_cloud",
+      defaultAdapterId: "pi-mono",
+      authorizedProducerJournal: producerJournal,
+      authorizedCallerRunId: run.runId,
+      getOwnerId: () => "owner",
+    }, "spawn_agent", routed.toolInput));
+
+    expect(rejected).toEqual({
+      ok: false,
+      error: {
+        code: "external_spawn_admission_failed",
+        message: "The requested agent could not be started. Try again.",
+        retryable: true,
+      },
+    });
+    expect(store.getRow("SELECT COUNT(*) AS count FROM runs").count).toBe(1);
     store.close();
   });
 });

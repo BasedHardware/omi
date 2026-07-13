@@ -939,6 +939,10 @@ enum ChatSystemPromptStyle {
 @MainActor
 class ChatProvider: ObservableObject {
 
+    nonisolated static func shouldInterruptTimedOutAgentQuery(queryStarted: Bool) -> Bool {
+        queryStarted
+    }
+
     /// Weak reference to the app-root main-window instance (set by
     /// ViewModelContainer.init()), so the local automation bridge can drive
     /// the real main chat surface in-process — no synthetic mouse/keyboard
@@ -1784,7 +1788,7 @@ private var activeBridgeSendGeneration: Int?
         guard await ensureBridgeStartedForKernel() else { return .empty }
         do {
             let context = try await prepareKernelQueryContext(
-                surface: .realtimeVoice(),
+                surface: realtimeVoiceSurfaceReference(),
                 systemPromptStyle: .floating,
                 systemPromptPrefix: nil,
                 systemPromptSuffix: nil,
@@ -3145,6 +3149,13 @@ private var activeBridgeSendGeneration: Int?
         .mainChat(chatId: mainChatRuntimeChatId(sessionId: isInDefaultChat ? nil : currentSessionId))
     }
 
+    /// PTT is a realtime projection of the selected main chat, never a second
+    /// chat. Retain the exact external reference so the runtime resolves the
+    /// canonical main-chat conversation for non-default chats and app scopes.
+    func realtimeVoiceSurfaceReference() -> AgentSurfaceReference {
+        mainChatSurfaceReference().realtimeVoiceCompanion()
+    }
+
     /// Upsert by canonical turn ID only. Text equality is deliberately ignored:
     /// two identical messages with distinct turn IDs are distinct journal rows.
     func projectJournalTurn(_ turn: KernelJournalTurn) {
@@ -3879,6 +3890,7 @@ private var activeBridgeSendGeneration: Int?
         var completedResponseText: String?
         var screenContextEligibleForTurn = false
         var correlatedTerminalResult: AgentClient.QueryResult?
+        var agentQueryStarted = false
 
         // Stall detection.
         // The detector observes every bridge event (text deltas, tool
@@ -4185,6 +4197,7 @@ private var activeBridgeSendGeneration: Int?
             }
 
             activeBridgeSendGeneration = sendGen
+            agentQueryStarted = true
             let queryResult: AgentClient.QueryResult
             do {
                 queryResult = try await resolvedAgentClient().query(
@@ -4555,10 +4568,16 @@ private var activeBridgeSendGeneration: Int?
                 return nil
             }
 
-            // On timeout, cancel the stuck ACP session so it's not left dangling
+            // Kernel context readiness happens before the model query. Never
+            // interrupt a session that has not been queried yet: doing so turns
+            // a recoverable setup timeout into a misleading ACP-query failure.
             if let bridgeError = error as? BridgeError, case .timeout = bridgeError {
-                log("ChatProvider: ACP query timed out, sending interrupt to cancel stuck session")
-                await resolvedAgentClient().interrupt()
+                if Self.shouldInterruptTimedOutAgentQuery(queryStarted: agentQueryStarted) {
+                    log("ChatProvider: agent query timed out, sending interrupt to cancel stuck session")
+                    await resolvedAgentClient().interrupt()
+                } else {
+                    log("ChatProvider: kernel context preparation timed out before an agent query started")
+                }
             }
 
             // Flush any remaining buffered streaming text before handling the error
@@ -4955,28 +4974,52 @@ private var activeBridgeSendGeneration: Int?
             toolUseId: toolUseId,
             extraTexts: [output]
         )
-        Self.materializeAgentSpawnBlockIfNeeded(
+        if let spawnedAgent = Self.materializeAgentSpawnBlockIfNeeded(
             in: &messages[index].contentBlocks,
             toolUseId: toolUseId,
             toolName: name
-        )
+        ), !spawnedAgent.sessionID.isEmpty, !spawnedAgent.runID.isEmpty {
+            // The transcript and notch must project the same accepted kernel
+            // run. Without this handoff, main-chat spawn receipts render a
+            // structured card while the compact notch still sees an empty
+            // AgentPillsManager (white mark and no hover row).
+            AgentPillsManager.shared.upsertSpawnedPill(
+                id: spawnedAgent.pillID,
+                query: spawnedAgent.objective,
+                title: spawnedAgent.title,
+                sessionId: spawnedAgent.sessionID,
+                runId: spawnedAgent.runID,
+                attemptId: nil,
+                producingJournalSurface: mainChatSurfaceReference()
+            )
+        }
         scheduleJournalUpdate(messageId: messageId, status: .streaming)
     }
 
+    struct SpawnedAgentPillProjection: Equatable, Sendable {
+        let pillID: UUID
+        let sessionID: String
+        let runID: String
+        let title: String
+        let objective: String
+    }
+
     /// When `spawn_agent` completes, append a structured `.agentSpawn` block so
-    /// cross-surface identity does not depend on tool-output text alone (INV-6 #4).
+    /// cross-surface identity does not depend on tool-output text alone (INV-6 #4),
+    /// then return the same receipt for the floating pill projection.
+    @discardableResult
     nonisolated static func materializeAgentSpawnBlockIfNeeded(
         in blocks: inout [ChatContentBlock],
         toolUseId: String?,
         toolName: String
-    ) {
+    ) -> SpawnedAgentPillProjection? {
         let cleanName: String
         if toolName.hasPrefix("mcp__") {
             cleanName = String(toolName.split(separator: "__").last ?? Substring(toolName))
         } else {
             cleanName = toolName
         }
-        guard cleanName == "spawn_agent" else { return }
+        guard cleanName == "spawn_agent" else { return nil }
 
         guard let toolIndex = blocks.lastIndex(where: { block in
             guard case .toolCall(_, let name, let status, let existingToolUseId, _, let output) = block,
@@ -4994,11 +5037,11 @@ private var activeBridgeSendGeneration: Int?
                 return existingToolUseId == toolUseId || existingToolUseId == nil
             }
             return true
-        }) else { return }
+        }) else { return nil }
 
-        guard case .toolCall(_, _, _, _, let input, _) = blocks[toolIndex] else { return }
+        guard case .toolCall(_, _, _, _, let input, _) = blocks[toolIndex] else { return nil }
         let spawnSource = blocks[toolIndex]
-        guard let pillId = spawnSource.spawnedAgentID else { return }
+        guard let pillId = spawnSource.spawnedAgentID else { return nil }
         let sessionId = spawnSource.spawnedAgentSessionID ?? ""
         let runId = spawnSource.spawnedAgentRunID ?? ""
 
@@ -5010,8 +5053,6 @@ private var activeBridgeSendGeneration: Int?
             }
             return false
         }
-        guard !alreadyPresent else { return }
-
         let titleFromOutput = spawnSource.spawnedAgentTitle
         let title = (titleFromOutput?.isEmpty == false)
             ? (titleFromOutput ?? "Background agent")
@@ -5019,6 +5060,18 @@ private var activeBridgeSendGeneration: Int?
         let objective = (input?.details?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
             ? (input?.details ?? "")
             : (input?.summary ?? "")
+        let projection = SpawnedAgentPillProjection(
+            pillID: pillId,
+            sessionID: sessionId,
+            runID: runId,
+            title: title,
+            objective: objective
+        )
+
+        // A repeat display event must still restore the matching notch pill if
+        // its in-memory projection was evicted, but must not add a duplicate
+        // transcript block.
+        guard !alreadyPresent else { return projection }
 
         let stableSpawnIdentity = !runId.isEmpty ? runId : pillId.uuidString.lowercased()
         let spawnBlock = ChatContentBlock.agentSpawn(
@@ -5033,6 +5086,7 @@ private var activeBridgeSendGeneration: Int?
         // immediately after it so reload/metadata durability has a first-class card.
         let insertAt = min(toolIndex + 1, blocks.count)
         blocks.insert(spawnBlock, at: insertAt)
+        return projection
     }
 
     private func attachGeneratedFileResources(

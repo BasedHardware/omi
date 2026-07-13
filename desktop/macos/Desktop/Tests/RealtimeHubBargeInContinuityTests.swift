@@ -81,49 +81,92 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
       .finalizeLogicalTurn)
   }
 
-  func testExternalRunWaitsForFinalProviderTranscriptAndPreservesPrompt() {
-    XCTAssertNil(
-      RealtimeExternalRunPromptPolicy.finalizedPrompt(
+  func testSecondBargeInTurnExecutesAuthorizedToolWithoutFinalTranscriptAndFencesOldTurn() throws {
+    let fallback = try XCTUnwrap(
+      RealtimeExternalRunPromptPolicy.promptForAuthorizedTool(
         transcript: "",
         isFinal: false))
-    XCTAssertNil(
-      RealtimeExternalRunPromptPolicy.finalizedPrompt(
-        transcript: "partial words",
-        isFinal: false))
-    XCTAssertNil(
-      RealtimeExternalRunPromptPolicy.finalizedPrompt(
-        transcript: "   ",
+    XCTAssertEqual(fallback.source, .authorizedToolFallback)
+    XCTAssertTrue(fallback.prompt.contains("already authorized one tool invocation"))
+    XCTAssertTrue(fallback.prompt.contains("Do not infer, expand"))
+
+    let finalTranscript = try XCTUnwrap(
+      RealtimeExternalRunPromptPolicy.promptForAuthorizedTool(
+        transcript: "  ask a subagent to check the latest models  ",
         isFinal: true))
+    XCTAssertEqual(finalTranscript.source, .finalizedTranscript)
+    XCTAssertEqual(finalTranscript.prompt, "ask a subagent to check the latest models")
+
+    let partialPermissionTranscript = RealtimeExternalRunPromptPolicy.promptForAuthorizedTool(
+      transcript: "Can you check Slack's screen share permission?",
+      isFinal: false,
+      toolName: "check_permission_status",
+      arguments: ["type": "screen_share"])
+    XCTAssertEqual(partialPermissionTranscript?.source, .partialTranscript)
     XCTAssertEqual(
-      RealtimeExternalRunPromptPolicy.finalizedPrompt(
-        transcript: "  please open settings  ",
-        isFinal: true),
-      "please open settings")
-  }
+      partialPermissionTranscript?.prompt,
+      "Can you check Slack's screen share permission?",
+      "A pre-final permission tool must retain the spoken target for the shared policy to reject external apps.")
 
-  func testPreTranscriptToolQueueDefersThenDrainsInArrivalOrder() {
-    var queue = RealtimeDeferredToolQueue<String>()
+    XCTAssertNil(
+      RealtimeExternalRunPromptPolicy.promptForAuthorizedTool(
+        transcript: "",
+        isFinal: false,
+        toolName: "request_permission",
+        arguments: ["type": "screen_recording"]),
+      "Permission tools must fail closed rather than deriving authority from type-only provider arguments.")
 
-    queue.enqueue("memory-call")
-    queue.enqueue("task-call")
-
-    XCTAssertEqual(queue.count, 2)
-    XCTAssertEqual(queue.takeAll(), ["memory-call", "task-call"])
-    XCTAssertEqual(queue.count, 0)
-  }
-
-  func testBargeInRevokesDeferredToolsAndOldFenceCannotResume() {
-    var queue = RealtimeDeferredToolQueue<String>()
-    queue.enqueue("old-turn-call")
-    queue.revokeAll()
-    XCTAssertTrue(queue.takeAll().isEmpty)
+    let requestStartedAt = Date(timeIntervalSinceReferenceDate: 100)
+    XCTAssertEqual(
+      RealtimePermissionTranscriptSettlementPolicy.decision(
+        toolName: "request_permission",
+        transcriptIsFinal: false,
+        hasTranscript: false,
+        lastTranscriptUpdate: nil,
+        requestStartedAt: requestStartedAt,
+        now: requestStartedAt),
+      .wait(RealtimePermissionTranscriptSettlementPolicy.maximumWait))
+    XCTAssertEqual(
+      RealtimePermissionTranscriptSettlementPolicy.decision(
+        toolName: "request_permission",
+        transcriptIsFinal: false,
+        hasTranscript: true,
+        lastTranscriptUpdate: requestStartedAt,
+        requestStartedAt: requestStartedAt,
+        now: requestStartedAt.addingTimeInterval(
+          RealtimePermissionTranscriptSettlementPolicy.maximumWait)),
+      .execute,
+      "Gemini's settled live transcript remains usable after the bounded collection window.")
+    XCTAssertEqual(
+      RealtimePermissionTranscriptSettlementPolicy.decision(
+        toolName: "request_permission",
+        transcriptIsFinal: false,
+        hasTranscript: false,
+        lastTranscriptUpdate: nil,
+        requestStartedAt: requestStartedAt,
+        now: requestStartedAt.addingTimeInterval(
+          RealtimePermissionTranscriptSettlementPolicy.maximumWait)),
+      .reject,
+      "A missing transcript must never be turned into a type-only permission request.")
+    XCTAssertEqual(
+      RealtimePermissionTranscriptSettlementPolicy.decision(
+        toolName: "request_permission",
+        transcriptIsFinal: false,
+        hasTranscript: true,
+        lastTranscriptUpdate: requestStartedAt.addingTimeInterval(
+          RealtimePermissionTranscriptSettlementPolicy.maximumWait - 0.1),
+        requestStartedAt: requestStartedAt,
+        now: requestStartedAt.addingTimeInterval(
+          RealtimePermissionTranscriptSettlementPolicy.maximumWait)),
+      .reject,
+      "A transcript that is still changing at the deadline must not lose a late external-app target.")
 
     let oldTurnID = VoiceTurnID()
     let newTurnID = VoiceTurnID()
     let identity = VoiceEffectIdentity(turnID: oldTurnID, effectID: 7)
     let source = NSObject()
     XCTAssertTrue(
-      RealtimeDeferredToolOwnership.accepts(
+      RealtimeToolTurnOwnership.accepts(
         turnID: oldTurnID,
         identity: identity,
         sourceObjectID: ObjectIdentifier(source),
@@ -133,7 +176,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
         activeSourceObjectID: ObjectIdentifier(source),
         currentTurnEpoch: 3))
     XCTAssertFalse(
-      RealtimeDeferredToolOwnership.accepts(
+      RealtimeToolTurnOwnership.accepts(
         turnID: oldTurnID,
         identity: identity,
         sourceObjectID: ObjectIdentifier(source),
@@ -195,6 +238,40 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertFalse(
       RealtimeHubEventOwnership.accepts(
         nil, activeTurnID: turnA, activeResponseID: responseA))
+  }
+
+  func testContextFreshReconnectKeepsBufferedResponseIdentityForFreshSocket() {
+    let turnID = VoiceTurnID()
+    let responseID = VoiceResponseID("context-reconnect-response")
+    let pendingReconnect = RealtimeReconnectAudioBuffer(
+      turnID: turnID,
+      responseID: responseID,
+      identity: VoiceEffectIdentity(turnID: turnID, effectID: 1),
+      interrupting: false)
+
+    let retainedResponseID = RealtimeHubReconnectIdentityPolicy.responseIDAfterSessionDetach(
+      preservingReconnectAudio: true,
+      pendingReconnect: pendingReconnect)
+    XCTAssertEqual(retainedResponseID, responseID)
+    XCTAssertTrue(
+      RealtimeHubEventOwnership.accepts(
+        RealtimeHubEventIdentity(turnID: turnID, responseID: responseID),
+        activeTurnID: turnID,
+        activeResponseID: retainedResponseID))
+    XCTAssertFalse(
+      RealtimeHubEventOwnership.accepts(
+        RealtimeHubEventIdentity(turnID: turnID, responseID: VoiceResponseID("stale-response")),
+        activeTurnID: turnID,
+        activeResponseID: retainedResponseID))
+
+    XCTAssertNil(
+      RealtimeHubReconnectIdentityPolicy.responseIDAfterSessionDetach(
+        preservingReconnectAudio: false,
+        pendingReconnect: pendingReconnect))
+    XCTAssertNil(
+      RealtimeHubReconnectIdentityPolicy.responseIDAfterSessionDetach(
+        preservingReconnectAudio: true,
+        pendingReconnect: nil))
   }
 
   func testGeminiInputTranscriptCannotCrossCompletedTurnBoundary() {
@@ -342,16 +419,17 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
 
   func testStaticCommitAndKernelJournalBoundariesStayOrdered() throws {
     let source = try realtimeHubControllerSource()
-    let commit = try XCTUnwrap(source.range(of: "func commitTurn() -> RealtimeHubCommitResult"))
-    let tail = source[commit.lowerBound...]
+    let physicalCommit = try XCTUnwrap(source.range(of: "func commitClaimedHubInput(turnID: VoiceTurnID)"))
+    let tail = source[physicalCommit.lowerBound...]
     let cancel = try XCTUnwrap(tail.range(of: "turnPreparationTask?.cancel()"))
     let close = try XCTUnwrap(tail.range(of: "s.commitInputTurn()"))
 
     XCTAssertLessThan(cancel.lowerBound, close.lowerBound)
-    XCTAssertTrue(source.contains("self.reducerCapturingInput,"))
+    XCTAssertTrue(source.contains("contextFreshInputPreparationIsCurrent("))
     XCTAssertTrue(source.contains("pendingSessionRefreshReason = \"voice_context_changed\""))
-    XCTAssertTrue(
-      source.contains("deferring voice-context session refresh until the active turn terminates"))
+    XCTAssertTrue(source.contains("beginContextFreshInputPreparation("))
+    XCTAssertTrue(source.contains("finishContextFreshInputOnCurrentSession()"))
+    XCTAssertTrue(source.contains("preservingReconnectAudio: true"))
     XCTAssertTrue(source.contains("await persistence.value"))
     XCTAssertTrue(source.contains("await self.refreshVoiceContextSnapshot()"))
     XCTAssertTrue(source.contains("applying deferred voice context refresh after turn persistence"))
@@ -412,6 +490,10 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
         "let resolvedSnapshot = await FloatingControlBarManager.shared.kernelVoiceContextSnapshot()"))
     XCTAssertTrue(source.contains("prefetchedVoiceContext = resolvedSnapshot.context"))
     XCTAssertTrue(source.contains("prefetchedVoiceContextFreshnessIdentity = resolvedSnapshot.freshnessIdentity"))
+    XCTAssertTrue(source.contains("guard resolvedSnapshot.isResolved else"))
+    XCTAssertTrue(source.contains("retaining the last voice context after an unresolved kernel snapshot"))
+    XCTAssertTrue(source.contains("failContextFreshInputPreparation("))
+    XCTAssertTrue(source.contains("Voice context is temporarily unavailable"))
     XCTAssertFalse(source.contains("prefetchedFloatingAgentStatus"))
     XCTAssertFalse(source.contains("floatingAgentStatusContext"))
   }
@@ -496,8 +578,8 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
 
   func testFastCommitQueuesBeginBeforeProviderCommit() throws {
     let source = try realtimeHubControllerSource()
-    let commit = try XCTUnwrap(source.range(of: "func commitTurn() -> RealtimeHubCommitResult"))
-    let tail = source[commit.lowerBound...]
+    let physicalCommit = try XCTUnwrap(source.range(of: "func commitClaimedHubInput(turnID: VoiceTurnID)"))
+    let tail = source[physicalCommit.lowerBound...]
     let begin = try XCTUnwrap(tail.range(of: "s.beginInputTurn("))
     let providerCommit = try XCTUnwrap(tail.range(of: "s.commitInputTurn()"))
 
@@ -803,7 +885,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertTrue(
       source.contains("await self.refreshVoiceContextSnapshot()")
         || source.contains("await refreshVoiceContextSnapshot()"))
-    XCTAssertTrue(source.contains("reconnectWarmSessionIfContextStale()"))
+    XCTAssertTrue(source.contains("beginContextFreshInputPreparation("))
     XCTAssertTrue(source.contains("sessionVoiceContextFreshnessIdentity"))
     XCTAssertTrue(source.contains("persistTurnDirectlyToKernel("))
     XCTAssertTrue(source.contains("RealtimeHubBargeInContinuity.prepareReplacementSession("))
@@ -831,7 +913,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
   func testBeginTurnWaitsForActiveSessionBeforeActivityStart() throws {
     let source = try realtimeHubControllerSource()
 
-    XCTAssertTrue(source.contains("self.reducerCapturingInput,"))
+    XCTAssertTrue(source.contains("self.contextFreshInputPreparationIsCurrent("))
     XCTAssertTrue(source.contains("await self.waitUntilActive(timeout: 15)"))
     XCTAssertTrue(source.contains("inputTurnActivityStartPending = true"))
   }

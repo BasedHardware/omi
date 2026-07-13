@@ -300,6 +300,10 @@ const spawnBackgroundAgentSchema = strictObject({
 
 const spawnAgentPublicShape = {
   objective: z.string().min(1),
+  // Gemini's realtime tool contract advertises this optional pill summary.
+  // Keep it in the canonical strict parser so a valid provider tool call does
+  // not fail before the child-admission boundary.
+  brief: z.string().min(1).optional(),
   requestedAgentCount: z.coerce.number().int().min(1).max(8).default(1),
   provider: z.enum(["openclaw", "hermes"]).optional(),
   parentRunId: z.string().min(1).optional(),
@@ -1071,16 +1075,48 @@ export async function handleAgentControlToolCall(
           (parentRunId
             ? context.kernel.defaultAdapterIdForRun(parentRunId)
             : spawnProfile.adapterId);
-        const cwd = parsed.cwd ?? (parentRunId ? undefined : spawnProfile.workingDirectory);
-        const model = parsed.model ?? (parentRunId ? undefined : spawnProfile.modelProfile ?? undefined);
-        if (parentRunId) {
+        /**
+         * Realtime control always stamps its own run as `parentRunId` so the
+         * producer journal is bound to the exact authorized turn.  That
+         * provenance must not turn an explicit user-selected local provider
+         * into a child of the managed pi-mono session: delegateAgent correctly
+         * pins children to their parent's credential boundary.
+         *
+         * The exception is deliberately narrow.  It requires both the
+         * kernel-issued realtime caller/run and its producer-journal
+         * descriptor, an explicit provider selector, and no producerTurnId
+         * whose validation requires an actual child parent_run_id.  Normal
+         * parent-linked delegation stays on the existing boundary-safe path.
+         */
+        const isAuthorizedIndependentLocalProviderSpawn = Boolean(
+          parentRunId
+          && context.authorizedCallerRunId === parentRunId
+          && context.authorizedProducerJournal
+          && parsed.provider
+          && parsed.provider === adapterId
+          && !producerJournal?.producerTurnId,
+        );
+        const inheritsParentExecutionProfile = Boolean(parentRunId) && !isAuthorizedIndependentLocalProviderSpawn;
+        const cwd = parsed.cwd ?? (inheritsParentExecutionProfile ? undefined : spawnProfile.workingDirectory);
+        // An explicitly selected local provider is a new credential/model
+        // boundary.  Its adapter owns model selection, so it must not inherit
+        // the managed Omi model profile from the realtime coordinator (for
+        // example `omi-sonnet`, which Hermes/OpenClaw cannot use with a Codex
+        // ChatGPT account).  An explicitly supplied model remains intentional
+        // user/provider input; ordinary parent-linked children still inherit.
+        const model = parsed.model ?? (
+          inheritsParentExecutionProfile || parsed.provider
+            ? undefined
+            : spawnProfile.modelProfile ?? undefined
+        );
+        if (inheritsParentExecutionProfile) {
           assertAdapterAllowedForControlRun(context, adapterId);
         } else {
           assertAdapterAllowedForTopLevelLocalProviderSpawn(context, adapterId, parsed.provider);
         }
         const childSurfaceKind = parsed.visible ? "floating_bar" : "delegated_agent";
         const childExternalRefKind = parsed.visible ? "pill" : undefined;
-        const producerContextSnapshot = !parentRunId && producerJournal
+        const producerContextSnapshot = (!parentRunId || isAuthorizedIndependentLocalProviderSpawn) && producerJournal
           ? context.kernel.contextSnapshotForExactSurface(ownerId, producerJournal.surface)
           : undefined;
         const routed = await context.kernel.applyDesktopIntentEffect(
@@ -1129,6 +1165,7 @@ export async function handleAgentControlToolCall(
                   ...callerMetadata,
                   visible: parsed.visible,
                   siblingOrdinal: ordinal,
+                  ...(parsed.brief ? { brief: parsed.brief } : {}),
                   ...(parsed.requestedAgentCount > 1 && parsed.externalRefId
                     ? { siblingGroupExternalRefId: parsed.externalRefId }
                     : {}),
@@ -1148,7 +1185,10 @@ export async function handleAgentControlToolCall(
                   screenContext: true,
                   executionRole: "leaf",
                 });
-                if (parentRunId) {
+                if (inheritsParentExecutionProfile) {
+                  if (!parentRunId) {
+                    throw new Error("Parent-linked agent spawn is missing its parent run");
+                  }
                   const result = await executeAuthorizedControlEffect(context, () => context.kernel.delegateAgent({
                     ...controlRunRecovery(context, adapterId ?? defaultControlAdapterId(context)),
                     mode: "spawn",
@@ -1178,7 +1218,9 @@ export async function handleAgentControlToolCall(
                 } else {
                   const result = await executeAuthorizedControlEffect(context, () => context.kernel.spawnBackgroundAgent({
                     ...controlRunRecovery(context, adapterId ?? defaultControlAdapterId(context)),
-                    ...backgroundSpawnAuthority(context),
+                    ...(isAuthorizedIndependentLocalProviderSpawn
+                      ? { trustedUserSpawn: true }
+                      : backgroundSpawnAuthority(context)),
                     ownerId,
                     clientId: parsed.clientId,
                     requestId: siblingRequestId,
@@ -1649,13 +1691,25 @@ export async function handleAgentControlToolCall(
       ? String((error as { code: unknown }).code)
       : "";
     const details = error instanceof PartialAgentSpawnError ? error.details : undefined;
+    const isAuthorizedExternalSpawnAdmission = name === "spawn_agent"
+      && context.authorizedCallerRunId !== undefined
+      && context.authorizedProducerJournal !== undefined;
+    const errorCode = error instanceof z.ZodError
+      ? "invalid_tool_input"
+      : /^[a-z0-9_]{1,64}$/.test(rawCode) ? rawCode : "control_tool_failed";
     return JSON.stringify({
       ok: false,
       error: {
-        code: error instanceof z.ZodError
-          ? "invalid_tool_input"
-          : /^[a-z0-9_]{1,64}$/.test(rawCode) ? rawCode : "control_tool_failed",
-        message: error instanceof Error ? error.message : String(error),
+        // Realtime callers consume this response through a model tool result,
+        // so an admission failure needs a stable recovery signal rather than
+        // an adapter/policy exception that may contain implementation detail.
+        code: isAuthorizedExternalSpawnAdmission && errorCode === "control_tool_failed"
+          ? "external_spawn_admission_failed"
+          : errorCode,
+        message: isAuthorizedExternalSpawnAdmission && errorCode === "control_tool_failed"
+          ? "The requested agent could not be started. Try again."
+          : error instanceof Error ? error.message : String(error),
+        ...(isAuthorizedExternalSpawnAdmission ? { retryable: true } : {}),
         ...(details ? { details } : {}),
       },
     });

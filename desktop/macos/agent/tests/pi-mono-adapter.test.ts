@@ -4,7 +4,11 @@ import { PassThrough } from "node:stream";
 import { EventEmitter } from "node:events";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { spawn } from "child_process";
-import { PiMonoAdapter, PiMonoRuntimeAdapter } from "../src/adapters/pi-mono.js";
+import {
+  PiMonoAdapter,
+  PiMonoRuntimeAdapter,
+  routePromptForPublicWeb,
+} from "../src/adapters/pi-mono.js";
 import { HarnessFeature, type AdapterAttemptContext, type HarnessConfig } from "../src/adapters/interface.js";
 import type { OutboundMessage } from "../src/protocol.js";
 
@@ -116,6 +120,211 @@ function makeErrorTurnEndEvent(errorMessage: string) {
 }
 
 describe("PiMonoAdapter prompt correlation", () => {
+  it("routes current public web requests for both coordinator and leaf sessions", async () => {
+    const { adapter } = createAdapter();
+    seedSessions(adapter, "main", "leaf");
+
+    for (const [sessionId, query] of [
+      ["main", "what's the weather in NYC right now?"],
+      ["leaf", "what AI models were released this week?"],
+      ["main", "who's playing in the World Cup right now?"],
+    ] as const) {
+      const prompt = adapter.sendPrompt(
+        sessionId,
+        [{ type: "text", text: query }],
+        [],
+        "act",
+        () => {},
+        async () => ""
+      );
+      const command = (adapter as any).sendCommand.mock.calls.at(-1)[0];
+      expect(command.message).toContain("<omi_retrieval_policy>");
+      expect(command.message).toContain("Web search is required and available for this fresh public request.");
+      expect(command.message).toContain("Use a live public-web or search tool before answering.");
+      expect(command.message).toContain("Never say, imply, or hedge that you lack internet, web-search, real-time-data, or tool access");
+      expect(command.message).toContain(query);
+      (adapter as any).handleTurnEnd(makeTurnEndEvent("done"));
+      await expect(prompt).resolves.toMatchObject({ text: "done" });
+    }
+  });
+
+  it("does not route explicit private-context requests onto the public web", () => {
+    for (const message of [
+      "search my calendar for weather in NYC",
+      "what did I say today about the current weather?",
+    ]) {
+      expect(routePromptForPublicWeb(message)).toBe(message);
+    }
+  });
+
+  it("does not route a child task from inherited public-web context", async () => {
+    const { adapter, events } = createAdapter();
+    seedSessions(adapter, "child");
+    const renderedChildPrompt = [
+      "# Omi Context Snapshot",
+      "Earlier user request: ask OpenClaw what's trending on X right now.",
+      "# User Message",
+      "Sleep for 5 seconds.",
+    ].join("\n");
+
+    const prompt = adapter.sendPrompt(
+      "child",
+      [{ type: "text", text: renderedChildPrompt }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => ""
+    );
+
+    const command = (adapter as any).sendCommand.mock.calls.at(-1)[0];
+    expect(command.message).toBe(renderedChildPrompt);
+    expect(command.message).not.toContain("<omi_retrieval_policy>");
+    expect(events.filter((event) => event.type === "tool_activity")).toEqual([]);
+
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("Slept for 5 seconds."));
+    await expect(prompt).resolves.toMatchObject({ text: "Slept for 5 seconds." });
+  });
+
+  it("projects gateway web-search progress and removes a false no-access disclaimer without local tool events", async () => {
+    const { adapter, events } = createAdapter();
+    seedSessions(adapter, "main");
+    const response = "I don't have direct internet/web access, but I can get you real weather data via the terminal!\n\nCurrent weather: Sunny, 73 F.";
+    const prompt = adapter.sendPrompt(
+      "main",
+      [{ type: "text", text: "what's the weather in NYC right now?" }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => ""
+    );
+
+    (adapter as any).handleMessageUpdate({
+      assistantMessageEvent: { type: "text_delta", delta: response },
+    });
+    (adapter as any).handleTurnEnd(makeTurnEndEvent(response));
+
+    const expected = "I can get you real weather data via the terminal!\n\nCurrent weather: Sunny, 73 F.";
+    await expect(prompt).resolves.toMatchObject({ text: expected });
+    expect(events.filter((event) => event.type === "text_delta")).toEqual([
+      { type: "text_delta", text: expected },
+    ]);
+    expect(events.filter((event) => event.type === "tool_activity")).toEqual([
+      {
+        type: "tool_activity",
+        name: "web_search",
+        status: "started",
+        toolUseId: "gateway-public-web-1",
+        input: { executor: "gateway" },
+      },
+      {
+        type: "tool_activity",
+        name: "web_search",
+        status: "completed",
+        toolUseId: "gateway-public-web-1",
+      },
+    ]);
+  });
+
+  it("closes gateway web-search progress as failed when the public lookup fails", async () => {
+    const { adapter, events } = createAdapter();
+    seedSessions(adapter, "main");
+    const prompt = adapter.sendPrompt(
+      "main",
+      [{ type: "text", text: "what's the weather in NYC right now?" }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => ""
+    );
+
+    (adapter as any).handleTurnEnd(makeErrorTurnEndEvent("public web lookup failed"));
+
+    await expect(prompt).rejects.toThrow("public web lookup failed");
+    expect(events.filter((event) => event.type === "tool_activity")).toEqual([
+      {
+        type: "tool_activity",
+        name: "web_search",
+        status: "started",
+        toolUseId: "gateway-public-web-1",
+        input: { executor: "gateway" },
+      },
+      {
+        type: "tool_activity",
+        name: "web_search",
+        status: "failed",
+        toolUseId: "gateway-public-web-1",
+      },
+    ]);
+  });
+
+  it("closes gateway web-search progress when prompt dispatch fails synchronously", async () => {
+    const { adapter, events } = createAdapter();
+    seedSessions(adapter, "main");
+    (adapter as any).sendCommand = vi.fn(() => {
+      throw new Error("Pi stdin is not writable");
+    });
+
+    await expect(adapter.sendPrompt(
+      "main",
+      [{ type: "text", text: "what's the weather in NYC right now?" }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => ""
+    )).rejects.toThrow("Pi stdin is not writable");
+
+    expect(events.filter((event) => event.type === "tool_activity")).toEqual([
+      {
+        type: "tool_activity",
+        name: "web_search",
+        status: "started",
+        toolUseId: "gateway-public-web-1",
+        input: { executor: "gateway" },
+      },
+      {
+        type: "tool_activity",
+        name: "web_search",
+        status: "failed",
+        toolUseId: "gateway-public-web-1",
+      },
+    ]);
+  });
+
+  it("closes gateway web-search progress when abort dispatch fails synchronously", async () => {
+    const { adapter, events } = createAdapter();
+    seedSessions(adapter, "main");
+    const prompt = adapter.sendPrompt(
+      "main",
+      [{ type: "text", text: "what's the weather in NYC right now?" }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => ""
+    );
+    (adapter as any).sendCommand = vi.fn(() => {
+      throw new Error("Pi stdin is not writable");
+    });
+
+    adapter.abort("main");
+
+    await expect(prompt).resolves.toMatchObject({ text: "", sessionId: "main" });
+    expect(events.filter((event) => event.type === "tool_activity")).toEqual([
+      {
+        type: "tool_activity",
+        name: "web_search",
+        status: "started",
+        toolUseId: "gateway-public-web-1",
+        input: { executor: "gateway" },
+      },
+      {
+        type: "tool_activity",
+        name: "web_search",
+        status: "failed",
+        toolUseId: "gateway-public-web-1",
+      },
+    ]);
+  });
+
   it("writes the active runtime attempt context before prompt execution", async () => {
     const { adapter } = createAdapter();
     seedSessions(adapter, "session-1");

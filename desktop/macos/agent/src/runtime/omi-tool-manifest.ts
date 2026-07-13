@@ -506,14 +506,15 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
   },
   request_permission: {
     surfaces: ["desktop_chat", "realtime_voice", "onboarding"],
-    capabilityDoc: doc("Request Permission", "Open or guide the user through granting a required macOS permission.", [
-      "Call only when the current user message names one permission or clearly affirms your immediately preceding permission request.",
+    capabilityDoc: doc("Request Permission", "Open or guide the user through granting a required macOS permission. Screen sharing is the macOS Screen Recording permission.", [
+      "Call only when the current user message names one permission, clearly affirms your immediately preceding one-permission request, or directly says to request it/that permission.",
+      "Treat screen share, screen sharing, and screen-share as the screen_recording permission type.",
       "Ask the user to choose when their request is generic or names multiple permissions.",
       "The user must still complete the native macOS prompt or Settings toggle.",
     ]),
     voice: {
       realtimeDescription:
-        "Request Omi's macOS permission through the kernel-authorized native executor by opening the native prompt or relevant System Settings pane. Supports Screen Recording, microphone, notifications, Accessibility, Automation, and Full Disk Access.",
+        "Request Omi's macOS permission through the kernel-authorized native executor by opening the native prompt or relevant System Settings pane. Screen share, screen sharing, and screen-share mean Screen Recording. Supports Screen Recording, microphone, notifications, Accessibility, Automation, and Full Disk Access.",
     },
   },
   scan_files: {
@@ -1059,10 +1060,11 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     name: "request_permission",
     label: "Request Permission",
     description:
-      "Open the native macOS permission prompt or Settings pane for one required permission after the user explicitly asks for it.",
+      "Open the native macOS permission prompt or Settings pane for one required permission after the user explicitly asks for it. Screen share, screen sharing, and screen-share mean screen_recording.",
     promptSnippet: "request_permission - Request a macOS permission",
     promptGuidelines: [
-      "Call only when the current user message explicitly requests one named permission, or clearly affirms your immediately preceding missing-permission request.",
+      "Call only when the current user message explicitly requests one named permission, clearly affirms your immediately preceding one-permission request, or directly says to request it/that permission.",
+      "Treat screen share, screen sharing, and screen-share as the screen_recording permission type.",
       "For generic or multi-permission requests, ask the user which permission they want to grant.",
       "Use strict permission types only. Do not invent permission names.",
       "After requesting, explain any returned requires_restart or pending status.",
