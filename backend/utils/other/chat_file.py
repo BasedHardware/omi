@@ -12,6 +12,7 @@ from openai.types.chat import (
     ChatCompletionMessageParam,
 )
 from PIL import Image
+from pydantic import ValidationError
 
 import database.chat as chat_db
 from models.chat import ChatSession, FileChat
@@ -20,6 +21,27 @@ from utils.llm.gateway_client import raise_if_gateway_feature_mode_blocks_direct
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_file_chats(files_data: List[Dict[str, Any]]) -> List[FileChat]:
+    """Build FileChat objects from raw file docs, skipping (not raising on) a malformed one.
+
+    A legacy or partial file document (missing openai_file_id, mime_type, created_at, ...) must not
+    500 the whole chat-file flow. Skip such a record, logging the file id and offending field names,
+    mirroring utils.apps._safe_build_app.
+    """
+    files: List[FileChat] = []
+    for f in files_data:
+        try:
+            files.append(FileChat(**f))
+        except ValidationError as e:
+            logger.warning(
+                "Skipping malformed chat file %s: %s",
+                f.get('id') if isinstance(f, dict) else None,
+                [err['loc'][0] for err in e.errors()],
+            )
+    return files
+
 
 _async_openai: AsyncOpenAI | None = None
 
@@ -151,7 +173,7 @@ class FileChatTool:
             files_data = await run_blocking(
                 db_executor, chat_db.get_chat_files_desc, self.uid, files_id=file_ids, limit=9
             )
-            files = [FileChat(**f) for f in files_data]
+            files = _safe_file_chats(files_data)
             all_images = all(f.is_image() for f in files) if files else False
         except Exception:
             callback.end_nowait()
@@ -280,7 +302,7 @@ class FileChatTool:
         # OpenAI has a limit of 10 items in content array (1 text + max 9 images)
         files = chat_db.get_chat_files_desc(uid, files_id=file_ids, limit=9)
 
-        files_typed = [FileChat(**file) for file in files]
+        files_typed = _safe_file_chats(files)
 
         contents: List[Dict[str, Any]] = []
         attachments: List[Dict[str, Any]] = []
@@ -383,7 +405,7 @@ class FileChatTool:
         if files:
             chat_db.delete_multi_files(self.uid, files)
 
-            file_objs = [FileChat(**file) for file in files]
+            file_objs = _safe_file_chats(files)
             # clear file in openai
             for file in file_objs:
                 try:
