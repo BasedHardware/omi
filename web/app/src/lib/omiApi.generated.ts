@@ -2237,15 +2237,19 @@ export interface Message {
   app_id?: string | null;
   chart_data?: ChartData | Record<string, unknown> | null;
   chat_session_id?: string | null;
+  client_message_id?: string | null;
   created_at: string;
   data_protection_level?: string | null;
   files?: Array<FileChat>;
   files_id?: Array<string>;
   from_external_integration?: boolean;
   id: string;
+  journal_revision?: number | null;
   langsmith_run_id?: string | null;
   memories?: Array<MessageConversation>;
   memories_id?: Array<string>;
+  message_source?: string | null;
+  metadata?: string | null;
   plugin_id?: string | null;
   prompt_commit?: string | null;
   prompt_name?: string | null;
@@ -2253,6 +2257,7 @@ export interface Message {
   report_reason?: string | null;
   reported?: boolean;
   sender: MessageSender;
+  session_id?: string | null;
   text: string;
   type: MessageType;
 }
@@ -2617,15 +2622,19 @@ export interface ResponseMessage {
   ask_for_nps?: boolean | null;
   chart_data?: ChartData | Record<string, unknown> | null;
   chat_session_id?: string | null;
+  client_message_id?: string | null;
   created_at: string;
   data_protection_level?: string | null;
   files?: Array<FileChat>;
   files_id?: Array<string>;
   from_external_integration?: boolean;
   id: string;
+  journal_revision?: number | null;
   langsmith_run_id?: string | null;
   memories?: Array<MessageConversation>;
   memories_id?: Array<string>;
+  message_source?: string | null;
+  metadata?: string | null;
   plugin_id?: string | null;
   prompt_commit?: string | null;
   prompt_name?: string | null;
@@ -2633,6 +2642,7 @@ export interface ResponseMessage {
   report_reason?: string | null;
   reported?: boolean;
   sender: MessageSender;
+  session_id?: string | null;
   text: string;
   type: MessageType;
 }
@@ -3245,6 +3255,20 @@ export interface TranscriptSegment {
   translations?: Array<Translation> | null;
 }
 
+export interface TranscriptionErrorDetail {
+  error: string;
+  message: string;
+  outcome: TranscriptionOutcome;
+  provider: string;
+  retryable: boolean;
+}
+
+export interface TranscriptionErrorResponse {
+  detail: TranscriptionErrorDetail;
+}
+
+export type TranscriptionOutcome = "success" | "expected_silence" | "empty_unexpected" | "timeout" | "upstream_error" | "config_error" | "invalid_input";
+
 export interface TranscriptionPreferencesResponse {
   custom_stt_since?: string | null;
   language?: string;
@@ -3520,6 +3544,7 @@ export interface VerifyPhoneNumberResponse {
 
 export interface VoiceMessageTranscriptionResponse {
   language?: string | null;
+  outcome?: TranscriptionOutcome | null;
   stt_model?: string | null;
   stt_provider?: string | null;
   transcript: string;
@@ -4099,6 +4124,9 @@ export interface OmiApiSchemas {
   "TokenResponse": TokenResponse;
   "TrainingDataOptInResponse": TrainingDataOptInResponse;
   "TranscriptSegment": TranscriptSegment;
+  "TranscriptionErrorDetail": TranscriptionErrorDetail;
+  "TranscriptionErrorResponse": TranscriptionErrorResponse;
+  "TranscriptionOutcome": TranscriptionOutcome;
   "TranscriptionPreferencesResponse": TranscriptionPreferencesResponse;
   "TranscriptionPreferencesUpdate": TranscriptionPreferencesUpdate;
   "Translation": Translation;
@@ -7795,8 +7823,12 @@ export interface OmiApiPaths {
       operationId: "transcribe_voice_message_v2_voice_message_transcribe_post";
       responses: {
         "200": VoiceMessageTranscriptionResponse;
+        "400": TranscriptionErrorResponse;
         "401": void;
         "422": HTTPValidationError;
+        "502": TranscriptionErrorResponse;
+        "503": TranscriptionErrorResponse;
+        "504": TranscriptionErrorResponse;
       };
     };
   };
@@ -9543,7 +9575,7 @@ export async function get_calendar_onboarding_status_v1_calendar_onboarding_stat
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function list_candidates_v1_candidates_get(query: { status?: CandidateStatus | null, limit?: number, offset?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<CandidateListResponse> {
+export async function list_candidates_v1_candidates_get(query: { status?: CandidateStatus | null, limit?: number, offset?: number, surface?: "suggested" | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<CandidateListResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/candidates`;
   const _params = query ? Object.entries(query)

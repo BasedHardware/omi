@@ -1,0 +1,50 @@
+version: 2
+name: google-connector-read
+tier: manual
+description: Gmail and Calendar connector reads run through the real BrowserGoogleSession keychain + cookie path and return a classified status instead of crashing or hanging.
+app: non-prod
+# Manual tier: exercising a real "connected" read requires a browser signed into
+# Google, so this flow is not hermetic and is not part of the automated CI tier.
+# Run it on a machine with a signed-in Chromium/Safari profile to confirm the
+# native keychain access path resolves cookies and returns status: connected.
+covers:
+  - desktop/macos/Desktop/Sources/BrowserGoogleSession.swift
+  - desktop/macos/Desktop/Sources/GmailReaderService.swift
+  - desktop/macos/Desktop/Sources/CalendarReaderService.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Gmail read probe returns a classified status
+    # Drives GmailReaderService -> BrowserGoogleSession (native keychain lookup +
+    # cookie decrypt). The probe catches every reader error and returns a
+    # classified detail dict, so ok:true here proves the path ran to completion
+    # (status: connected with a signed-in browser; status: error + classification
+    # such as not_signed_in / no_browser otherwise) rather than throwing.
+    bridge.action:
+      name: gmail_read_probe
+      params:
+        maxResults: 1
+        query: "newer_than:1d"
+    expect:
+      result.action: "gmail_read_probe"
+
+  - id: S2
+    name: Calendar read probe returns a classified status
+    # Drives CalendarReaderService -> BrowserGoogleSession over the same
+    # keychain + cookie seam.
+    bridge.action:
+      name: calendar_read_probe
+      params:
+        daysBack: 1
+        daysForward: 1
+        maxResults: 1
+    expect:
+      result.action: "calendar_read_probe"
+
+  - id: S3
+    name: Bridge logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

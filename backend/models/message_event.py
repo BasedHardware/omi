@@ -86,9 +86,15 @@ class MessageServiceStatusEvent(MessageEvent):
     event_type: str = "service_status"
     status: str
     status_text: Optional[str] = None
+    outcome: Optional[str] = None
+    provider: Optional[str] = None
+    retryable: Optional[bool] = None
+    reason: Optional[str] = None
 
     def to_json(self):
-        j = self.model_dump(mode="json")
+        # The outcome fields are an additive terminal-failure contract, not
+        # nullable noise on legacy ready and initiating status events.
+        j = self.model_dump(mode="json", exclude_none=True)
         j["type"] = self.event_type
         del j["event_type"]
         return j

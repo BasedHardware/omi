@@ -8,6 +8,120 @@ final class MemoryTaskInterruptionLedger: TaskInterruptionLedgerPersisting {
   func save(_ ledger: TaskInterruptionLedger) { self.ledger = ledger }
 }
 
+private actor SuspendedPromotionInsert {
+  private var started = false
+  private var released = false
+  private(set) var committed = 0
+
+  func insert(authorization: LocalMutationAuthorization) async throws {
+    started = true
+    while !released { await Task.yield() }
+    try authorization.require()
+    committed += 1
+  }
+
+  func waitUntilStarted() async {
+    while !started { await Task.yield() }
+  }
+
+  func release() { released = true }
+}
+
+private actor PromotionCallRecorder {
+  private var promoteCalls = 0
+
+  func record() { promoteCalls += 1 }
+
+  func callCount() -> Int { promoteCalls }
+}
+
+private actor SuspendedContextClient: TaskContextualResurfacingClient {
+  enum PausePoint: Equatable { case control, snapshot }
+
+  private let pausePoint: PausePoint
+  private var started = false
+  private var released = false
+  private var snapshotCount = 0
+  private var evaluationCount = 0
+
+  init(pausePoint: PausePoint) { self.pausePoint = pausePoint }
+
+  func getCandidateWorkflowControl(
+    expectedOwnerId: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async throws -> OmiAPI.TaskWorkflowControl {
+    if pausePoint == .control { await pause() }
+    return OmiAPI.TaskWorkflowControl(accountGeneration: 1, workflowMode: .read)
+  }
+
+  func replaceTaskContextSnapshot(
+    _ snapshot: OmiAPI.NormalizedContextSnapshot,
+    accountGeneration: Int,
+    expectedOwnerId: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async throws -> OmiAPI.SnapshotReceipt {
+    snapshotCount += 1
+    if pausePoint == .snapshot { await pause() }
+    return OmiAPI.SnapshotReceipt(
+      expiresAt: snapshot.expiresAt,
+      replaced: true,
+      snapshotId: snapshot.snapshotId
+    )
+  }
+
+  func evaluateWhatMattersNow(
+    _ request: OmiAPI.EvaluationRequest,
+    expectedOwnerId: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async throws -> OmiAPI.WhatMattersNowProjection {
+    evaluationCount += 1
+    return OmiAPI.WhatMattersNowProjection(
+      evaluationId: "evaluation",
+      expiresAt: "2030-01-01T00:00:00Z",
+      generatedAt: "2029-12-31T23:00:00Z",
+      materialVersion: "material",
+      outputVersion: "output",
+      recommendations: [],
+      schemaVersion: 1
+    )
+  }
+
+  private func pause() async {
+    started = true
+    while !released { await Task.yield() }
+  }
+
+  func waitUntilStarted() async {
+    while !started { await Task.yield() }
+  }
+
+  func release() { released = true }
+
+  func counts() -> (snapshots: Int, evaluations: Int) {
+    (snapshotCount, evaluationCount)
+  }
+}
+
+private func transitionContextTestOwner(to ownerID: String?) async {
+  _ = await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+    plannedNextOwner: { _, _ in ownerID },
+    quiesceVoice: { _, _ in },
+    retargetLocalStorage: { _, _ in },
+    ownerDidChange: {
+      await MainActor.run {
+        NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+      }
+    }
+  ) { defaults in
+    defaults.removeObject(forKey: .automationOwnerOverride)
+    if let ownerID {
+      defaults.set(ownerID, forKey: .authUserId)
+    } else {
+      defaults.removeObject(forKey: .authUserId)
+    }
+  }
+}
+
 final class TaskInterruptionLedgerOwnerIsolationTests: XCTestCase {
   func testDefaultOwnerTracksAuthenticationChanges() {
     let suite = "TaskInterruptionLedgerOwnerIsolationTests.\(UUID().uuidString)"
@@ -25,19 +139,35 @@ final class TaskInterruptionLedgerOwnerIsolationTests: XCTestCase {
 
 final class FakeTaskContextualResurfacingClient: TaskContextualResurfacingClient {
   var workflowMode: OmiAPI.TaskWorkflowMode = .read
+  var controlRequests = 0
+  var onControl: (() -> Void)?
+  var onSnapshot: (() -> Void)?
   var snapshots: [OmiAPI.NormalizedContextSnapshot] = []
   var evaluations: [OmiAPI.EvaluationRequest] = []
+  var recommendations: [OmiAPI.Recommendation] = []
 
-  func getCandidateWorkflowControl() async throws -> OmiAPI.TaskWorkflowControl {
-    OmiAPI.TaskWorkflowControl(accountGeneration: 1, workflowMode: workflowMode)
+  func getCandidateWorkflowControl(
+    expectedOwnerId: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async throws -> OmiAPI.TaskWorkflowControl {
+    XCTAssertFalse(expectedOwnerId.isEmpty)
+    XCTAssertNotNil(authorizationSnapshot)
+    controlRequests += 1
+    onControl?()
+    return OmiAPI.TaskWorkflowControl(accountGeneration: 1, workflowMode: workflowMode)
   }
 
   func replaceTaskContextSnapshot(
     _ snapshot: OmiAPI.NormalizedContextSnapshot,
-    accountGeneration: Int
+    accountGeneration: Int,
+    expectedOwnerId: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
   ) async throws -> OmiAPI.SnapshotReceipt {
     XCTAssertEqual(accountGeneration, 1)
+    XCTAssertFalse(expectedOwnerId?.isEmpty ?? true)
+    XCTAssertNotNil(authorizationSnapshot)
     snapshots.append(snapshot)
+    onSnapshot?()
     return OmiAPI.SnapshotReceipt(
       expiresAt: snapshot.expiresAt,
       replaced: true,
@@ -46,8 +176,12 @@ final class FakeTaskContextualResurfacingClient: TaskContextualResurfacingClient
   }
 
   func evaluateWhatMattersNow(
-    _ request: OmiAPI.EvaluationRequest
+    _ request: OmiAPI.EvaluationRequest,
+    expectedOwnerId: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
   ) async throws -> OmiAPI.WhatMattersNowProjection {
+    XCTAssertFalse(expectedOwnerId?.isEmpty ?? true)
+    XCTAssertNotNil(authorizationSnapshot)
     evaluations.append(request)
     return OmiAPI.WhatMattersNowProjection(
       evaluationId: "evaluation-1",
@@ -55,7 +189,7 @@ final class FakeTaskContextualResurfacingClient: TaskContextualResurfacingClient
       generatedAt: "2029-12-31T23:00:00Z",
       materialVersion: "material-1",
       outputVersion: "output-1",
-      recommendations: [],
+      recommendations: recommendations,
       schemaVersion: 1
     )
   }
@@ -63,6 +197,18 @@ final class FakeTaskContextualResurfacingClient: TaskContextualResurfacingClient
 
 final class TaskContextualResurfacingTests: XCTestCase {
   private let baseDate = Date(timeIntervalSince1970: 1_800_000_000)
+  private var previousOwnerID: String?
+
+  override func setUp() async throws {
+    try await super.setUp()
+    previousOwnerID = RuntimeOwnerIdentity.currentOwnerId()
+    await transitionContextTestOwner(to: "context-test-owner")
+  }
+
+  override func tearDown() async throws {
+    await transitionContextTestOwner(to: previousOwnerID)
+    try await super.tearDown()
+  }
 
   func testNormalizationHashesRawContextAndCoalescesRapidSwitchesByWorkstream() throws {
     let subject = TaskContextSubject(kind: .task, id: "task-1", workstreamID: "workstream-1")
@@ -97,7 +243,12 @@ final class TaskContextualResurfacingTests: XCTestCase {
 
   func testRapidContextEventsProduceOneEvaluationAndOneBoundedSnapshot() async throws {
     let client = FakeTaskContextualResurfacingClient()
-    let service = TaskContextualResurfacingService(client: client, debounceInterval: 60)
+    let service = TaskContextualResurfacingService(
+      client: client,
+      debounceInterval: 60,
+      deviceIDProvider: { "macos_deadbeef" },
+      ownerIDProvider: { "owner-1" }
+    )
     let subject = TaskContextSubject(kind: .workstream, id: "workstream-1", workstreamID: "workstream-1")
     for (kind, reference) in [
       (TaskContextEventKind.appWindow, "Slack tab A"),
@@ -119,6 +270,8 @@ final class TaskContextualResurfacingTests: XCTestCase {
 
     XCTAssertEqual(client.evaluations.count, 1)
     XCTAssertEqual(client.snapshots.count, 1)
+    XCTAssertEqual(client.snapshots[0].deviceId, "macos_deadbeef")
+    XCTAssertEqual(client.evaluations[0].deviceId, "macos_deadbeef")
     XCTAssertEqual(client.snapshots[0].matches?.count, 1)
     XCTAssertEqual(
       client.snapshots[0].matches?.first?.signals.map(\.rawValue).sorted(),
@@ -142,21 +295,461 @@ final class TaskContextualResurfacingTests: XCTestCase {
     XCTAssertEqual(client.evaluations.count, 1)
   }
 
-  func testUnmatchedContextClearsPriorSnapshotBeforeReevaluation() async throws {
+  func testDifferentUnmatchedRawContextsShareOneSemanticEvaluationWithinFiveMinutes() async throws {
     let client = FakeTaskContextualResurfacingClient()
-    let service = TaskContextualResurfacingService(client: client, debounceInterval: 60)
-    let event = try XCTUnwrap(TaskLocalContextEvent.normalized(
+    let service = TaskContextualResurfacingService(
+      client: client,
+      debounceInterval: 60,
+      ownerIDProvider: { "owner-1" }
+    )
+    let first = try XCTUnwrap(TaskLocalContextEvent.normalized(
       kind: .appWindow,
-      rawReference: "Unmatched browser tab",
+      rawReference: "Unmatched window one",
       occurredAt: baseDate
+    ))
+    let second = try XCTUnwrap(TaskLocalContextEvent.normalized(
+      kind: .document,
+      rawReference: "Different unmatched document",
+      occurredAt: baseDate.addingTimeInterval(1)
+    ))
+
+    await service.observe(first)
+    await service.flush()
+    await service.observe(second)
+    await service.flush()
+
+    XCTAssertEqual(client.snapshots.count, 1)
+    XCTAssertEqual(client.snapshots[0].matches?.count, 0)
+    XCTAssertEqual(client.evaluations.count, 1)
+  }
+
+  func testMatchedContextTransitionToEmptyReevaluatesOnce() async throws {
+    let client = FakeTaskContextualResurfacingClient()
+    let service = TaskContextualResurfacingService(
+      client: client,
+      debounceInterval: 60,
+      ownerIDProvider: { "owner-1" }
+    )
+    let subject = TaskContextSubject(kind: .task, id: "task-1", workstreamID: nil)
+    let matched = try XCTUnwrap(TaskLocalContextEvent.normalized(
+      kind: .appWindow,
+      rawReference: "Matched window",
+      subject: subject,
+      occurredAt: baseDate
+    ))
+    let unmatched = try XCTUnwrap(TaskLocalContextEvent.normalized(
+      kind: .document,
+      rawReference: "Unmatched document",
+      occurredAt: baseDate.addingTimeInterval(1)
+    ))
+
+    await service.observe(matched)
+    await service.flush()
+    await service.observe(unmatched)
+    await service.flush()
+
+    XCTAssertEqual(client.snapshots.count, 2)
+    XCTAssertEqual(client.snapshots[0].matches?.count, 1)
+    XCTAssertEqual(client.snapshots[1].matches?.count, 0)
+    XCTAssertEqual(client.evaluations.count, 2)
+  }
+
+  func testChangedTypedMatchReevaluates() async throws {
+    let client = FakeTaskContextualResurfacingClient()
+    let service = TaskContextualResurfacingService(
+      client: client,
+      debounceInterval: 60,
+      ownerIDProvider: { "owner-1" }
+    )
+    let subject = TaskContextSubject(kind: .task, id: "task-1", workstreamID: nil)
+    let app = try XCTUnwrap(TaskLocalContextEvent.normalized(
+      kind: .appWindow,
+      rawReference: "Matched app",
+      subject: subject,
+      occurredAt: baseDate
+    ))
+    let document = try XCTUnwrap(TaskLocalContextEvent.normalized(
+      kind: .document,
+      rawReference: "Matched document",
+      subject: subject,
+      occurredAt: baseDate.addingTimeInterval(1)
+    ))
+
+    await service.observe(app)
+    await service.flush()
+    await service.observe(document)
+    await service.flush()
+
+    XCTAssertEqual(client.evaluations.count, 2)
+    XCTAssertEqual(client.snapshots[0].matches?.first?.signals, [.app])
+    XCTAssertEqual(client.snapshots[1].matches?.first?.signals, [.document])
+  }
+
+  @MainActor
+  func testUrgencyTransitionRechecksServerGateButKeepsSemanticSnapshotStable() async throws {
+    let client = FakeTaskContextualResurfacingClient()
+    let subject = TaskContextSubject(kind: .task, id: "task-urgent", workstreamID: nil)
+    client.recommendations = [recommendation(id: subject.id)]
+    var interruptions: [TaskInterruptionCandidate] = []
+    let service = TaskContextualResurfacingService(
+      client: client,
+      debounceInterval: 60,
+      ownerIDProvider: { "owner-1" },
+      sendInterruption: { interruptions.append($0) }
+    )
+    let first = try XCTUnwrap(TaskLocalContextEvent.normalized(
+      kind: .document,
+      rawReference: "Matched urgent document",
+      subject: subject,
+      urgency: .canWait
+    ))
+    let urgent = try XCTUnwrap(TaskLocalContextEvent.normalized(
+      kind: .document,
+      rawReference: "Matched urgent document",
+      subject: subject,
+      urgency: .timeSensitive
+    ))
+
+    await service.observe(first)
+    await service.flush()
+    await service.observe(urgent)
+    await service.flush()
+
+    XCTAssertEqual(client.controlRequests, 2)
+    XCTAssertEqual(client.evaluations.count, 2)
+    XCTAssertEqual(client.snapshots.count, 2)
+    XCTAssertEqual(
+      client.snapshots[0].matches?.map { "\($0.subjectKind.rawValue):\($0.subjectId)" },
+      client.snapshots[1].matches?.map { "\($0.subjectKind.rawValue):\($0.subjectId)" }
+    )
+    XCTAssertEqual(client.snapshots[0].matches?.first?.signals, client.snapshots[1].matches?.first?.signals)
+    XCTAssertEqual(interruptions.map(\.recommendationID), ["output-1:dedupe-task-urgent"])
+  }
+
+  @MainActor
+  func testUrgencyTransitionCannotReuseProjectionAfterWorkflowIsDisabled() async throws {
+    let client = FakeTaskContextualResurfacingClient()
+    let subject = TaskContextSubject(kind: .task, id: "task-disabled", workstreamID: nil)
+    client.recommendations = [recommendation(id: subject.id)]
+    var interruptions: [TaskInterruptionCandidate] = []
+    let service = TaskContextualResurfacingService(
+      client: client,
+      debounceInterval: 60,
+      ownerIDProvider: { "owner-1" },
+      sendInterruption: { interruptions.append($0) }
+    )
+    let first = try XCTUnwrap(TaskLocalContextEvent.normalized(
+      kind: .document,
+      rawReference: "Matched gated document",
+      subject: subject,
+      urgency: .canWait
+    ))
+    let urgent = try XCTUnwrap(TaskLocalContextEvent.normalized(
+      kind: .document,
+      rawReference: "Matched gated document",
+      subject: subject,
+      urgency: .timeSensitive
+    ))
+
+    await service.observe(first)
+    await service.flush()
+    client.workflowMode = .off
+    await service.observe(urgent)
+    await service.flush()
+
+    XCTAssertEqual(client.controlRequests, 2)
+    XCTAssertEqual(client.evaluations.count, 1)
+    XCTAssertTrue(interruptions.isEmpty)
+  }
+
+  @MainActor
+  func testOwnerSwitchInvalidatesLocalEvaluationCache() async throws {
+    let client = FakeTaskContextualResurfacingClient()
+    let subject = TaskContextSubject(kind: .task, id: "task-owner-switch", workstreamID: nil)
+    var ownerID = "owner-a"
+    let service = TaskContextualResurfacingService(
+      client: client,
+      debounceInterval: 60,
+      ownerIDProvider: { ownerID }
+    )
+    let event = try XCTUnwrap(TaskLocalContextEvent.normalized(
+      kind: .document,
+      rawReference: "Matched owner-scoped document",
+      subject: subject
+    ))
+
+    await service.observe(event)
+    await service.flush()
+    ownerID = "owner-b"
+    await service.observe(event)
+    await service.flush()
+
+    XCTAssertEqual(client.controlRequests, 2)
+    XCTAssertEqual(client.evaluations.count, 2)
+  }
+
+  @MainActor
+  func testQueuedContextIsClearedWhenOwnerChangesBeforeFlush() async throws {
+    let client = FakeTaskContextualResurfacingClient()
+    var ownerID = "owner-a"
+    let service = TaskContextualResurfacingService(
+      client: client,
+      debounceInterval: 60,
+      ownerIDProvider: { ownerID }
+    )
+    let ownerAEvent = try XCTUnwrap(TaskLocalContextEvent.normalized(
+      kind: .document,
+      rawReference: "Owner A document",
+      subject: TaskContextSubject(kind: .task, id: "task-owner-a", workstreamID: nil)
+    ))
+    let ownerBEvent = try XCTUnwrap(TaskLocalContextEvent.normalized(
+      kind: .document,
+      rawReference: "Owner B document",
+      subject: TaskContextSubject(kind: .task, id: "task-owner-b", workstreamID: nil)
+    ))
+
+    await service.observe(ownerAEvent)
+    ownerID = "owner-b"
+    await service.observe(ownerBEvent)
+    await service.flush()
+
+    XCTAssertEqual(client.snapshots.count, 1)
+    XCTAssertEqual(client.snapshots[0].matches?.map(\.subjectId), ["task-owner-b"])
+  }
+
+  @MainActor
+  func testOwnerSwitchDuringControlAbortsSnapshotEvaluationAndInterruption() async throws {
+    let client = FakeTaskContextualResurfacingClient()
+    var ownerID = "owner-a"
+    client.onControl = { ownerID = "owner-b" }
+    client.recommendations = [recommendation(id: "task-owner-a")]
+    var interruptions: [TaskInterruptionCandidate] = []
+    let service = TaskContextualResurfacingService(
+      client: client,
+      debounceInterval: 60,
+      ownerIDProvider: { ownerID },
+      sendInterruption: { interruptions.append($0) }
+    )
+    let event = try XCTUnwrap(TaskLocalContextEvent.normalized(
+      kind: .document,
+      rawReference: "Owner A urgent document",
+      subject: TaskContextSubject(kind: .task, id: "task-owner-a", workstreamID: nil),
+      urgency: .timeSensitive
+    ))
+
+    await service.observe(event)
+    await service.flush()
+
+    XCTAssertEqual(client.controlRequests, 1)
+    XCTAssertTrue(client.snapshots.isEmpty)
+    XCTAssertTrue(client.evaluations.isEmpty)
+    XCTAssertTrue(interruptions.isEmpty)
+  }
+
+  @MainActor
+  func testOwnerSwitchDuringSnapshotAbortsEvaluationAndInterruption() async throws {
+    let client = FakeTaskContextualResurfacingClient()
+    var ownerID = "owner-a"
+    client.onSnapshot = { ownerID = "owner-b" }
+    client.recommendations = [recommendation(id: "task-owner-a")]
+    var interruptions: [TaskInterruptionCandidate] = []
+    let service = TaskContextualResurfacingService(
+      client: client,
+      debounceInterval: 60,
+      ownerIDProvider: { ownerID },
+      sendInterruption: { interruptions.append($0) }
+    )
+    let event = try XCTUnwrap(TaskLocalContextEvent.normalized(
+      kind: .document,
+      rawReference: "Owner A urgent document",
+      subject: TaskContextSubject(kind: .task, id: "task-owner-a", workstreamID: nil),
+      urgency: .timeSensitive
     ))
 
     await service.observe(event)
     await service.flush()
 
     XCTAssertEqual(client.snapshots.count, 1)
-    XCTAssertEqual(client.snapshots[0].matches?.count, 0)
-    XCTAssertEqual(client.evaluations.count, 1)
+    XCTAssertTrue(client.evaluations.isEmpty)
+    XCTAssertTrue(interruptions.isEmpty)
+  }
+
+  func testSuspendedPromotionInsertCannotCommitOrPublishAcrossOwnerTransition() async {
+    let previousOwner = RuntimeOwnerIdentity.currentOwnerId()
+    await transitionContextTestOwner(to: "promotion-owner-a")
+    let insert = SuspendedPromotionInsert()
+    let promotedTask = TaskActionItem(
+      id: "promoted-owner-a",
+      description: "Owner A private promotion",
+      completed: false,
+      createdAt: baseDate
+    )
+    let service = TaskPromotionService(operations: .init(
+      legacyPromotionEnabled: { _ in true },
+      promote: { _ in
+        PromoteResponse(promoted: true, reason: nil, promotedTask: promotedTask)
+      },
+      insertLocal: { _, authorization in
+        try await insert.insert(authorization: authorization)
+      }
+    ))
+
+    let promotion = Task {
+      await service.promoteIfNeeded(bypassDebounce: true)
+    }
+    await insert.waitUntilStarted()
+    await transitionContextTestOwner(to: "promotion-owner-b")
+    await insert.release()
+    let result = await promotion.value
+
+    let committed = await insert.committed
+    XCTAssertTrue(result.isEmpty)
+    XCTAssertEqual(committed, 0)
+    await service.stop()
+    await transitionContextTestOwner(to: previousOwner)
+  }
+
+  func testDelayedOwnerNotificationCannotEraseAlreadyAdmittedOwnerBPromotionThrottle() async {
+    await transitionContextTestOwner(to: "promotion-observer-owner-a")
+    let promotedTask = TaskActionItem(
+      id: "promoted-observer-owner-b",
+      description: "Owner B promotion",
+      completed: false,
+      createdAt: baseDate
+    )
+    let recorder = PromotionCallRecorder()
+    let service = TaskPromotionService(operations: .init(
+      legacyPromotionEnabled: { _ in true },
+      promote: { _ in
+        await recorder.record()
+        return PromoteResponse(promoted: true, reason: nil, promotedTask: promotedTask)
+      },
+      insertLocal: { _, authorization in try authorization.require() }
+    ))
+
+    await transitionContextTestOwner(to: "promotion-observer-owner-b")
+    let first = await service.promoteIfNeeded(bypassDebounce: true)
+    XCTAssertEqual(first.map(\.id), [promotedTask.id])
+
+    // Models an A→B notification queued before B admission whose actor
+    // callback is delivered after B has already established its throttle.
+    await service.processOwnerChangeNotificationForTesting()
+    let second = await service.promoteIfNeeded()
+    let promoteCalls = await recorder.callCount()
+
+    XCTAssertTrue(second.isEmpty)
+    XCTAssertEqual(promoteCalls, 1)
+    await service.stop()
+  }
+
+  func testOwnerAContextBatchIsDiscardedWhenControlResumesUnderOwnerB() async throws {
+    try await assertContextTransitionFence(pausePoint: .control)
+  }
+
+  func testOwnerAContextBatchCannotEvaluateAfterSnapshotResumesUnderOwnerB() async throws {
+    try await assertContextTransitionFence(pausePoint: .snapshot)
+  }
+
+  func testDelayedOwnerNotificationCannotEraseAlreadyAdmittedOwnerBContext() async throws {
+    await transitionContextTestOwner(to: "delayed-observer-owner-a")
+    let service = TaskContextualResurfacingService(
+      client: FakeTaskContextualResurfacingClient(),
+      debounceInterval: 60
+    )
+    await transitionContextTestOwner(to: "delayed-observer-owner-b")
+    let event = try XCTUnwrap(TaskLocalContextEvent.normalized(
+      kind: .document,
+      rawReference: "Owner B current document",
+      occurredAt: baseDate
+    ))
+    await service.observe(event)
+
+    // Models an A→B notification that was queued before B admission but whose
+    // async observer callback runs afterward.
+    await service.processOwnerChangeNotificationForTesting()
+
+    let pending = await service.pendingWorkstreamCount()
+    XCTAssertEqual(pending, 1)
+  }
+
+  @MainActor
+  func testStaleContextualInterruptionCannotConsumeLedgerMetadataOrOwnerBThrottle() async throws {
+    await transitionContextTestOwner(to: "notification-owner-a")
+    let ownerASnapshot = try XCTUnwrap(RuntimeOwnerIdentity.captureAuthorizationSnapshot())
+    let service = NotificationService(registerWithSystemNotificationCenter: false)
+    let persistence = MemoryTaskInterruptionLedger()
+    let sentinelDate = baseDate.addingTimeInterval(-60)
+    persistence.ledger = TaskInterruptionLedger(sentAt: [sentinelDate])
+    service.recordNotificationMetadataForTesting(
+      id: "owner-a-notification",
+      authorizationSnapshot: ownerASnapshot
+    )
+
+    let priorFrequency = UserDefaults.standard.object(
+      forKey: NotificationService.frequencyDefaultsKey)
+    UserDefaults.standard.set(3, forKey: NotificationService.frequencyDefaultsKey)
+    XCTAssertTrue(service.allowProactiveNotificationForTesting(
+      assistantId: "task",
+      authorizationSnapshot: ownerASnapshot,
+      now: baseDate
+    ))
+
+    await transitionContextTestOwner(to: "notification-owner-b")
+    let ownerBSnapshot = try XCTUnwrap(RuntimeOwnerIdentity.captureAuthorizationSnapshot())
+    let staleTrace = service.sendContextualTaskInterruption(
+      candidate(),
+      authorizationSnapshot: ownerASnapshot,
+      now: baseDate,
+      ledgerPersistence: persistence
+    )
+
+    XCTAssertEqual(staleTrace.reason, .staleOwner)
+    XCTAssertEqual(persistence.ledger.sentAt, [sentinelDate])
+    XCTAssertFalse(service.hasCurrentNotificationMetadataForTesting(id: "owner-a-notification"))
+    XCTAssertTrue(service.allowProactiveNotificationForTesting(
+      assistantId: "task",
+      authorizationSnapshot: ownerBSnapshot,
+      now: baseDate.addingTimeInterval(1)
+    ))
+
+    if let priorFrequency {
+      UserDefaults.standard.set(priorFrequency, forKey: NotificationService.frequencyDefaultsKey)
+    } else {
+      UserDefaults.standard.removeObject(forKey: NotificationService.frequencyDefaultsKey)
+    }
+  }
+
+  private func assertContextTransitionFence(
+    pausePoint: SuspendedContextClient.PausePoint
+  ) async throws {
+    let previousOwner = RuntimeOwnerIdentity.currentOwnerId()
+    await transitionContextTestOwner(to: "context-owner-a")
+    let client = SuspendedContextClient(pausePoint: pausePoint)
+    let service = TaskContextualResurfacingService(client: client, debounceInterval: 60)
+    let event = try XCTUnwrap(TaskLocalContextEvent.normalized(
+      kind: .document,
+      rawReference: "Owner A confidential document",
+      subject: TaskContextSubject(kind: .task, id: "owner-a-task", workstreamID: "owner-a-workstream"),
+      occurredAt: baseDate
+    ))
+    await service.observe(event)
+    let flush = Task { await service.flush() }
+    await client.waitUntilStarted()
+    await transitionContextTestOwner(to: "context-owner-b")
+    await client.release()
+    await flush.value
+
+    let counts = await client.counts()
+    switch pausePoint {
+    case .control:
+      XCTAssertEqual(counts.snapshots, 0)
+    case .snapshot:
+      XCTAssertEqual(counts.snapshots, 1)
+    }
+    XCTAssertEqual(counts.evaluations, 0)
+    let pendingCount = await service.pendingWorkstreamCount()
+    XCTAssertEqual(pendingCount, 0)
+    await transitionContextTestOwner(to: previousOwner)
   }
 
   @MainActor
@@ -364,7 +957,7 @@ final class TaskContextualResurfacingTests: XCTestCase {
     defer { try? FileManager.default.removeItem(at: root) }
     var persistedVersions = 0
     let bridge = KernelPreparedArtifactBridge(root: root) {
-      workstreamID, logicalKey, kind, fileURL, contentHash, evidenceRefs, grantID in
+      workstreamID, logicalKey, kind, fileURL, contentHash, evidenceRefs, grantID, _ in
       persistedVersions += 1
       let artifactID = "kernel-artifact-\(persistedVersions)"
       XCTAssertEqual(grantID, "grant-1")
@@ -470,7 +1063,10 @@ final class TaskContextualResurfacingTests: XCTestCase {
       fileURL: fileURL,
       contentHash: "sha256:\(String(repeating: "c", count: 64))",
       evidenceRefs: [evidence],
-      grantId: "grant-1"
+      grantId: "grant-1",
+      authorizationSnapshot: try XCTUnwrap(
+        RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+      )
     ) { name, input in
       capturedName = name
       capturedInput = input
@@ -574,6 +1170,28 @@ final class TaskContextualResurfacingTests: XCTestCase {
       recommendedAction: "Review update",
       expiresAt: expiresAt ?? baseDate.addingTimeInterval(24 * 60 * 60),
       canWait: canWait
+    )
+  }
+
+  private func recommendation(id: String) -> OmiAPI.Recommendation {
+    OmiAPI.Recommendation(
+      alternativeAction: nil,
+      dedupeKey: "dedupe-\(id)",
+      destinationTaskId: id,
+      destinationWorkstreamId: nil,
+      evidencePreview: "Linked evidence",
+      evidenceRefs: [],
+      expiresAt: "2030-01-01T00:00:00Z",
+      feedbackSubjectId: id,
+      feedbackSubjectKind: .task,
+      goalOrWorkstreamLabel: nil,
+      headline: "Handle the urgent task",
+      interventionId: "intervention-\(id)",
+      outputVersion: "output-1",
+      recommendedAction: "Open",
+      subjectId: id,
+      subjectKind: .task,
+      whyNow: "The matched context is active."
     )
   }
 

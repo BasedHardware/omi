@@ -6,22 +6,22 @@ import OmiTheme
 
 extension SettingsContentView {
   var accountSection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       settingsCard(settingId: "account.account") {
-        VStack(alignment: .leading, spacing: 14) {
-          HStack(spacing: 16) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+          HStack(spacing: OmiSpacing.lg) {
             Image(systemName: "person.circle.fill")
-              .scaledFont(size: 40)
+              .scaledFont(size: OmiType.hero)
               .foregroundColor(OmiColors.textTertiary)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text(AuthService.shared.displayName.isEmpty ? "User" : AuthService.shared.displayName)
-                .scaledFont(size: 16, weight: .semibold)
+                .scaledFont(size: OmiType.subheading, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
               if let email = AuthState.shared.userEmail {
                 Text(email)
-                  .scaledFont(size: 13)
+                  .scaledFont(size: OmiType.body)
                   .foregroundColor(OmiColors.textTertiary)
               }
             }
@@ -31,25 +31,27 @@ extension SettingsContentView {
             Button("Sign Out") {
               appState.stopTranscription()
               ProactiveAssistantsPlugin.shared.stopMonitoring()
-              try? AuthService.shared.signOut()
+              Task {
+                try? await AuthService.shared.signOut()
+              }
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(OmiButtonStyle(.primary, size: .compact))
             .disabled(isDeletingAccount)
           }
 
           Divider()
             .overlay(OmiColors.backgroundQuaternary)
 
-          HStack(alignment: .center, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
+          HStack(alignment: .center, spacing: OmiSpacing.lg) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Delete Account & Data")
-                .scaledFont(size: 15, weight: .semibold)
+                .scaledFont(size: OmiType.subheading, weight: .semibold)
                 .foregroundColor(OmiColors.error)
 
               Text(
                 "Permanently deletes server data, clears local data for this account, resets onboarding, and signs you out."
               )
-              .scaledFont(size: 13)
+              .scaledFont(size: OmiType.body)
               .foregroundColor(OmiColors.textTertiary)
             }
 
@@ -64,7 +66,7 @@ extension SettingsContentView {
                   .controlSize(.small)
               } else {
                 Text("Delete")
-                  .scaledFont(size: 13, weight: .semibold)
+                  .scaledFont(size: OmiType.body, weight: .semibold)
               }
             }
             .buttonStyle(.borderedProminent)
@@ -74,7 +76,7 @@ extension SettingsContentView {
 
           if let deleteAccountError {
             Text(deleteAccountError)
-              .scaledFont(size: 12)
+              .scaledFont(size: OmiType.caption)
               .foregroundColor(OmiColors.warning)
           }
         }
@@ -93,18 +95,18 @@ extension SettingsContentView {
       }
 
       //            settingsCard {
-      //                HStack(spacing: 16) {
+      //                HStack(spacing: OmiSpacing.lg) {
       //                    Image(systemName: "bolt.fill")
-      //                        .scaledFont(size: 16)
+      //                        .scaledFont(size: OmiType.subheading)
       //                        .foregroundColor(.yellow)
       //
-      //                    VStack(alignment: .leading, spacing: 4) {
+      //                    VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
       //                        Text("Upgrade to Pro")
-      //                            .scaledFont(size: 15, weight: .medium)
+      //                            .scaledFont(size: OmiType.subheading, weight: .medium)
       //                            .foregroundColor(OmiColors.textPrimary)
       //
       //                        Text("Unlock all features and unlimited usage")
-      //                            .scaledFont(size: 13)
+      //                            .scaledFont(size: OmiType.body)
       //                            .foregroundColor(OmiColors.textTertiary)
       //                    }
       //
@@ -116,7 +118,7 @@ extension SettingsContentView {
       //                        }
       //                    }
       //                    .buttonStyle(.borderedProminent)
-      //                    .tint(OmiColors.purplePrimary)
+      //                    .tint(OmiColors.accent)
       //                }
       //            }
     }
@@ -128,19 +130,19 @@ extension SettingsContentView {
   var trialCountdownCard: some View {
     if let trial = appState.trialMetadata, trial.trialStartedAt != nil, !trial.trialExpired {
       settingsCard(settingId: "planusage.trial") {
-        VStack(alignment: .leading, spacing: 14) {
-          HStack(spacing: 16) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+          HStack(spacing: OmiSpacing.lg) {
             Image(systemName: "clock.fill")
-              .scaledFont(size: 28)
+              .scaledFont(size: OmiType.title)
               .foregroundColor(trialTimeColor(remaining: trial.trialRemainingSeconds))
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Premium Trial Active")
-                .scaledFont(size: 16, weight: .semibold)
+                .scaledFont(size: OmiType.subheading, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
               Text(trialCountdownText(remaining: trial.trialRemainingSeconds))
-                .scaledFont(size: 13)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(trialTimeColor(remaining: trial.trialRemainingSeconds))
             }
 
@@ -160,9 +162,9 @@ extension SettingsContentView {
 
           Divider().overlay(OmiColors.backgroundQuaternary)
 
-          VStack(alignment: .leading, spacing: 8) {
+          VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             Text("Included in your trial")
-              .scaledFont(size: 12, weight: .semibold)
+              .scaledFont(size: OmiType.caption, weight: .semibold)
               .foregroundColor(OmiColors.textTertiary)
 
             trialFeatureRow(text: "Unlimited listening & transcription")
@@ -175,19 +177,19 @@ extension SettingsContentView {
       trial.trialExpired
     {
       settingsCard(settingId: "planusage.trial-expired") {
-        VStack(alignment: .leading, spacing: 14) {
-          HStack(spacing: 16) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+          HStack(spacing: OmiSpacing.lg) {
             Image(systemName: "exclamationmark.circle.fill")
-              .scaledFont(size: 28)
+              .scaledFont(size: OmiType.title)
               .foregroundColor(OmiColors.warning)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Trial Ended")
-                .scaledFont(size: 16, weight: .semibold)
+                .scaledFont(size: OmiType.subheading, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
               Text("Upgrade to keep unlimited access")
-                .scaledFont(size: 13)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(OmiColors.textSecondary)
             }
 
@@ -200,29 +202,26 @@ extension SettingsContentView {
             selectedPlanIdForCheckout = "operator"
           }) {
             Text("View Plans")
-              .scaledFont(size: 13, weight: .semibold)
-              .padding(.horizontal, 16)
-              .padding(.vertical, 8)
+              .scaledFont(size: OmiType.body, weight: .semibold)
           }
-          .buttonStyle(.borderedProminent)
-          .tint(OmiColors.purplePrimary)
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
         }
       }
     }
   }
 
   func trialFeatureRow(text: String) -> some View {
-    HStack(spacing: 8) {
+    HStack(spacing: OmiSpacing.sm) {
       ZStack {
         Circle()
-          .fill(OmiColors.purplePrimary.opacity(0.16))
+          .fill(OmiColors.backgroundTertiary)
           .frame(width: 18, height: 18)
         Image(systemName: "checkmark")
-          .scaledFont(size: 9, weight: .bold)
-          .foregroundColor(OmiColors.purplePrimary)
+          .scaledFont(size: OmiType.micro, weight: .bold)
+          .foregroundColor(OmiColors.textSecondary)
       }
       Text(text)
-        .scaledFont(size: 13, weight: .medium)
+        .scaledFont(size: OmiType.body, weight: .medium)
         .foregroundColor(OmiColors.textSecondary)
     }
   }
@@ -256,23 +255,23 @@ extension SettingsContentView {
   // MARK: - Plan and Usage Section
 
   var planUsageSection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       trialCountdownCard
 
       settingsCard(settingId: "planusage.current") {
-        VStack(alignment: .leading, spacing: 14) {
-          HStack(spacing: 16) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+          HStack(spacing: OmiSpacing.lg) {
             Image(systemName: "creditcard.fill")
-              .scaledFont(size: 28)
-              .foregroundColor(OmiColors.purplePrimary)
+              .scaledFont(size: OmiType.title)
+              .foregroundColor(OmiColors.textSecondary)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text(currentPlanTitle)
-                .scaledFont(size: 16, weight: .semibold)
+                .scaledFont(size: OmiType.subheading, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
               Text(currentPlanSubtitle)
-                .scaledFont(size: 13)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(OmiColors.textTertiary)
             }
 
@@ -288,16 +287,16 @@ extension SettingsContentView {
                     .controlSize(.small)
                 } else {
                   Text("Manage")
-                    .scaledFont(size: 13, weight: .semibold)
+                    .scaledFont(size: OmiType.body, weight: .semibold)
                 }
               }
-              .buttonStyle(.bordered)
+              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
               .disabled(isOpeningCustomerPortal)
             } else {
               Button("Refresh") {
                 loadSubscriptionInfo()
               }
-              .buttonStyle(.bordered)
+              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
               .disabled(isLoadingSubscription)
             }
           }
@@ -307,13 +306,13 @@ extension SettingsContentView {
               .overlay(OmiColors.backgroundQuaternary)
 
             Text(periodText)
-              .scaledFont(size: 12)
+              .scaledFont(size: OmiType.caption)
               .foregroundColor(OmiColors.textSecondary)
           }
 
           if let error = subscriptionError {
             Text(error)
-              .scaledFont(size: 12)
+              .scaledFont(size: OmiType.caption)
               .foregroundColor(OmiColors.warning)
           }
         }
@@ -323,13 +322,13 @@ extension SettingsContentView {
         subscription.deprecated == true
       {
         settingsCard(settingId: "planusage.deprecation") {
-          VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
+          VStack(alignment: .leading, spacing: OmiSpacing.md) {
+            HStack(spacing: OmiSpacing.sm) {
               Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundColor(OmiColors.warning)
-                .scaledFont(size: 16)
+                .scaledFont(size: OmiType.subheading)
               Text("Plan Retiring")
-                .scaledFont(size: 14, weight: .semibold)
+                .scaledFont(size: OmiType.subheading, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
             }
 
@@ -337,7 +336,7 @@ extension SettingsContentView {
               subscription.deprecationMessage
                 ?? "Your Unlimited plan is being retired. Try the new Operator plan — same great features at $49/mo."
             )
-            .scaledFont(size: 13)
+            .scaledFont(size: OmiType.body)
             .foregroundColor(OmiColors.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
 
@@ -345,9 +344,9 @@ extension SettingsContentView {
               selectedPlanIdForCheckout = "operator"
             }) {
               Text("Try Operator")
-                .scaledFont(size: 13, weight: .semibold)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .scaledFont(size: OmiType.body, weight: .semibold)
+                .padding(.horizontal, OmiSpacing.lg)
+                .padding(.vertical, OmiSpacing.sm)
             }
             .buttonStyle(.borderedProminent)
             .tint(OmiColors.success)
@@ -357,23 +356,22 @@ extension SettingsContentView {
 
       if shouldShowPlanPurchaseOptions {
         settingsCard(settingId: "planusage.purchase") {
-          VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 4) {
+          VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Choose a plan")
-                .scaledFont(size: 15, weight: .semibold)
+                .scaledFont(size: OmiType.subheading, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
               Text("Pick one plan first. Billing options appear only after the card is selected.")
-                .scaledFont(size: 12)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textTertiary)
             }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-              HStack(alignment: .top, spacing: 14) {
-                ForEach(subscriptionPlansForDisplay) { plan in
-                  subscriptionPlanCard(plan)
-                    .frame(minWidth: 220)
-                }
+            // All plan cards share the row width — no horizontal scrolling.
+            HStack(alignment: .top, spacing: OmiSpacing.lg) {
+              ForEach(subscriptionPlansForDisplay) { plan in
+                subscriptionPlanCard(plan)
+                  .frame(maxWidth: .infinity, alignment: .topLeading)
               }
             }
           }
@@ -395,24 +393,24 @@ extension SettingsContentView {
   var overageCard: some View {
     if let info = overageInfo, info.isOveragePlan {
       settingsCard(settingId: "planusage.overage") {
-        VStack(alignment: .leading, spacing: 10) {
-          HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+          HStack(spacing: OmiSpacing.sm) {
             Image(systemName: info.excessQuestions > 0
               ? "dollarsign.circle.fill"
               : "checkmark.circle.fill")
-              .scaledFont(size: 18)
+              .scaledFont(size: OmiType.heading)
               .foregroundColor(info.excessQuestions > 0
                 ? OmiColors.warning
                 : OmiColors.success)
             Text(info.excessQuestions > 0
               ? "Usage-based overage"
               : "No overage yet this cycle")
-              .scaledFont(size: 14, weight: .semibold)
+              .scaledFont(size: OmiType.body, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
             Spacer()
             if info.excessQuestions > 0 {
               Text(String(format: "$%.2f", info.overageUsd))
-                .scaledFont(size: 15, weight: .semibold)
+                .scaledFont(size: OmiType.subheading, weight: .semibold)
                 .foregroundColor(OmiColors.warning)
                 .monospacedDigit()
             }
@@ -422,28 +420,25 @@ extension SettingsContentView {
             Text(
               "You've gone \(info.excessQuestions) question\(info.excessQuestions == 1 ? "" : "s") past your plan's \(info.includedQuestions ?? 0) included. We'll bill the overage at end of your cycle."
             )
-            .scaledFont(size: 12)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
           } else {
             Text(
               "Go over your \(info.includedQuestions ?? 0) included questions and we'll charge real provider cost + \(Int(info.markupPercent))%. No hard cutoff."
             )
-            .scaledFont(size: 12)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textTertiary)
             .fixedSize(horizontal: false, vertical: true)
           }
 
           Button(action: { showOverageExplainer = true }) {
-            HStack(spacing: 4) {
+            HStack(spacing: OmiSpacing.xxs) {
               Text(info.explainerTitle)
-                .scaledFont(size: 12, weight: .medium)
               Image(systemName: "info.circle")
-                .scaledFont(size: 11)
             }
-            .foregroundColor(OmiColors.purplePrimary)
           }
-          .buttonStyle(.plain)
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
         }
       }
     } else if isLoadingOverage && overageInfo == nil {
@@ -454,30 +449,30 @@ extension SettingsContentView {
 
   var overageExplainerSheet: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: 16) {
+      VStack(alignment: .leading, spacing: OmiSpacing.lg) {
         HStack {
           Text(overageInfo?.explainerTitle ?? "How overage billing works")
-            .scaledFont(size: 18, weight: .semibold)
+            .scaledFont(size: OmiType.heading, weight: .semibold)
             .foregroundColor(OmiColors.textPrimary)
           Spacer()
           Button(action: { showOverageExplainer = false }) {
             Image(systemName: "xmark.circle.fill")
-              .scaledFont(size: 20)
+              .scaledFont(size: OmiType.heading)
               .foregroundColor(OmiColors.textTertiary)
           }
           .buttonStyle(.plain)
         }
 
         Text(overageInfo?.explainerBody ?? "")
-          .scaledFont(size: 13)
+          .scaledFont(size: OmiType.body)
           .foregroundColor(OmiColors.textSecondary)
           .fixedSize(horizontal: false, vertical: true)
 
         if let info = overageInfo, info.isOveragePlan {
           Divider().overlay(OmiColors.backgroundQuaternary)
-          VStack(alignment: .leading, spacing: 8) {
+          VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             Text("Your current cycle")
-              .scaledFont(size: 13, weight: .semibold)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
             overageExplainerRow("Questions used", value: "\(info.usedQuestions)")
             overageExplainerRow("Included in plan", value: "\(info.includedQuestions ?? 0)")
@@ -498,7 +493,7 @@ extension SettingsContentView {
           }
         }
       }
-      .padding(24)
+      .padding(OmiSpacing.xxl)
     }
     .frame(minWidth: 440, minHeight: 360)
   }
@@ -506,11 +501,11 @@ extension SettingsContentView {
   func overageExplainerRow(_ label: String, value: String, emphasized: Bool = false) -> some View {
     HStack {
       Text(label)
-        .scaledFont(size: 12)
+        .scaledFont(size: OmiType.caption)
         .foregroundColor(OmiColors.textTertiary)
       Spacer()
       Text(value)
-        .scaledFont(size: 12, weight: emphasized ? .semibold : .regular)
+        .scaledFont(size: OmiType.caption, weight: emphasized ? .semibold : .regular)
         .foregroundColor(emphasized ? OmiColors.warning : OmiColors.textSecondary)
         .monospacedDigit()
     }
@@ -519,21 +514,21 @@ extension SettingsContentView {
   @ViewBuilder
   var byokPromoCard: some View {
     settingsCard(settingId: "planusage.byok") {
-      VStack(alignment: .leading, spacing: 12) {
-        HStack(spacing: 12) {
+      VStack(alignment: .leading, spacing: OmiSpacing.md) {
+        HStack(spacing: OmiSpacing.md) {
           Image(systemName: "key.fill")
-            .scaledFont(size: 20)
-            .foregroundColor(OmiColors.purplePrimary)
-          VStack(alignment: .leading, spacing: 2) {
+            .scaledFont(size: OmiType.heading)
+            .foregroundColor(OmiColors.textSecondary)
+          VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             Text(APIKeyService.isByokActive ? "Free plan active" : "Use Omi free forever")
-              .scaledFont(size: 15, weight: .semibold)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
             Text(
               APIKeyService.isByokActive
                 ? "You're using your own OpenAI, Anthropic, Gemini, and Deepgram keys. No subscription."
                 : "Provide your own OpenAI, Anthropic, Gemini, and Deepgram keys to skip the subscription entirely."
             )
-            .scaledFont(size: 12)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textTertiary)
           }
           Spacer()
@@ -541,9 +536,9 @@ extension SettingsContentView {
 
         Button(action: openBYOKSettings) {
           Text(APIKeyService.isByokActive ? "Manage your keys" : "Switch to your own keys")
-            .scaledFont(size: 13, weight: .semibold)
+            .scaledFont(size: OmiType.body, weight: .semibold)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
       }
     }
   }
@@ -561,14 +556,14 @@ extension SettingsContentView {
   var chatUsageQuotaCard: some View {
     if let quota = chatUsageQuota {
       settingsCard(settingId: "planusage.current") {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
           HStack {
             Text("Usage this month")
-              .scaledFont(size: 14, weight: .semibold)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
             Spacer()
             Text(chatUsageQuotaValueText(quota))
-              .scaledFont(size: 13, weight: .medium)
+              .scaledFont(size: OmiType.body, weight: .medium)
               .foregroundColor(chatUsageBarColor(quota))
               .monospacedDigit()
           }
@@ -579,12 +574,12 @@ extension SettingsContentView {
 
           HStack {
             Text(chatUsageQuotaDescription(quota))
-              .scaledFont(size: 12)
+              .scaledFont(size: OmiType.caption)
               .foregroundColor(OmiColors.textTertiary)
             Spacer()
             if let resetText = chatUsageQuotaResetText(quota) {
               Text(resetText)
-                .scaledFont(size: 12)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textTertiary)
             }
           }
@@ -596,16 +591,16 @@ extension SettingsContentView {
             // plans.
             if let info = overageInfo, info.isOveragePlan {
               Text("You're past your included limit — extra usage is billed as overage at end of cycle.")
-                .scaledFont(size: 12)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.warning)
             } else {
               Text("You've reached this month's limit. Upgrade your plan or wait until the next reset.")
-                .scaledFont(size: 12)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.warning)
             }
           } else if quota.percent >= 80.0 {
             Text("You're close to your monthly limit.")
-              .scaledFont(size: 12)
+              .scaledFont(size: OmiType.caption)
               .foregroundColor(OmiColors.warning)
           }
         }
@@ -615,7 +610,7 @@ extension SettingsContentView {
         HStack {
           ProgressView().controlSize(.small)
           Text("Loading usage…")
-            .scaledFont(size: 13)
+            .scaledFont(size: OmiType.body)
             .foregroundColor(OmiColors.textTertiary)
         }
       }
@@ -656,7 +651,7 @@ extension SettingsContentView {
   func chatUsageBarColor(_ q: APIClient.ChatUsageQuota) -> Color {
     if !q.allowed || q.percent >= 100.0 { return OmiColors.warning }
     if q.percent >= 80.0 { return OmiColors.warning }
-    return OmiColors.purplePrimary
+    return OmiColors.accent
   }
 
   // MARK: - AI Chat Section

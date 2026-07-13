@@ -45,6 +45,9 @@ concurrency:
 env:
   SERVICE: backend
   REGION: us-central1
+  # A per-run Cloud Run tag exposes only the no-traffic production candidate
+  # to the known-audio gate. It is removed before normal traffic promotion.
+  TRANSCRIPTION_CANDIDATE_TAG: stt-gate-${{ github.run_id }}-${{ github.run_attempt }}
 
 jobs:
   repair-traffic:
@@ -134,6 +137,15 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Verify serving sync ledger fence mode before deploy
+        env:
+          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
+        run: |
+          python3 backend/scripts/verify_sync_ledger_fence_transition.py \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --desired-mode="$SYNC_LEDGER_FENCE_MODE"
+
       - name: Login to GCR
         run: gcloud auth configure-docker
 
@@ -156,6 +168,7 @@ jobs:
           CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
           CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
           OMI_LLM_GATEWAY_URL: ${{ vars.OMI_LLM_GATEWAY_URL }}
+          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
         run: |
           python3 backend/scripts/render_backend_runtime_env.py --env ${{ vars.ENV }} >> "$GITHUB_OUTPUT"
 
@@ -174,6 +187,8 @@ jobs:
           python3 backend/scripts/preflight-cloud-run-deploy.py "${PREFLIGHT_ARGS[@]}"
 
       - name: Validate backend runtime env before deploy
+        env:
+          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
         run: |
           python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-workflows --check-rendered-cloud-run
 
@@ -200,6 +215,7 @@ jobs:
           no_traffic: true
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
+            ${{ github.event.inputs.environment == 'prod' && format('--tag={0}', env.TRANSCRIPTION_CANDIDATE_TAG) || '' }}
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: ${{ steps.runtime-env.outputs.backend_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.backend_secrets }}
@@ -286,7 +302,7 @@ jobs:
             --set image.repository=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} \
             --set gcpProjectId=${{ vars.GCP_PROJECT_ID }} \
             --set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
-            --set image.tag=${{ steps.image-tag.outputs.short_sha }}
+            --set-string image.tag=${{ steps.image-tag.outputs.short_sha }}
           if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=300s; then
             python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen || true
             exit 1
@@ -325,8 +341,58 @@ jobs:
             --wait-revision-ready backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }}
 
       - name: Validate backend runtime env after deploy
+        env:
+          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
         run: |
           python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-workflows --check-live-cloud-run
+
+      - name: Resolve production transcription candidate URL
+        if: ${{ github.event.inputs.environment == 'prod' }}
+        id: transcription-candidate
+        run: |
+          candidate_url="$(python3 backend/scripts/resolve_cloud_run_tagged_url.py \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --service=${{ env.SERVICE }} \
+            --revision=${{ steps.capture-backend-revision.outputs.revision }} \
+            --tag="$TRANSCRIPTION_CANDIDATE_TAG")"
+          printf 'url=%s\n' "$candidate_url" >> "$GITHUB_OUTPUT"
+
+      - name: Gate production backend candidate on known audio
+        if: ${{ github.event.inputs.environment == 'prod' }}
+        env:
+          CANDIDATE_API_URL: ${{ steps.transcription-candidate.outputs.url }}
+          OMI_TRANSCRIPTION_SYNTHETIC_AUDIO_URL: ${{ secrets.OMI_TRANSCRIPTION_SYNTHETIC_AUDIO_URL }}
+          OMI_TRANSCRIPTION_SYNTHETIC_BEARER_TOKEN: ${{ secrets.OMI_TRANSCRIPTION_SYNTHETIC_BEARER_TOKEN }}
+          OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_PHRASE: ${{ secrets.OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_PHRASE }}
+          OMI_TRANSCRIPTION_SYNTHETIC_LANGUAGE: ${{ vars.OMI_TRANSCRIPTION_SYNTHETIC_LANGUAGE }}
+          OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_PROVIDER: ${{ vars.OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_PROVIDER }}
+          OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_MODEL: ${{ vars.OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_MODEL }}
+        run: |
+          python3 backend/scripts/transcription_capability_probe.py \
+            --candidate-api-url "$CANDIDATE_API_URL" \
+            --require-route-identity \
+            --json-only
+
+      - name: Remove passed production transcription candidate tag
+        if: ${{ github.event.inputs.environment == 'prod' }}
+        run: |
+          gcloud run services update-traffic ${{ env.SERVICE }} \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --remove-tags="$TRANSCRIPTION_CANDIDATE_TAG" \
+            --quiet
+
+      - name: Remove failed production transcription candidate tag
+        # Tag is created at deploy-backend; clean it up on any later prod failure,
+        # not only after the candidate URL resolution step succeeds.
+        if: ${{ failure() && github.event.inputs.environment == 'prod' && steps.deploy-backend.outcome == 'success' }}
+        run: |
+          gcloud run services update-traffic ${{ env.SERVICE }} \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --remove-tags="$TRANSCRIPTION_CANDIDATE_TAG" \
+            --quiet
 
       - name: Verify validated revisions are still current
         run: |

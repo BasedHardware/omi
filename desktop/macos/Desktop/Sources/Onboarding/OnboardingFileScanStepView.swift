@@ -23,7 +23,7 @@ struct OnboardingFileScanStepView: View {
       onSkip: onSkip,
       onForceComplete: onForceComplete
     ) {
-      VStack(alignment: .leading, spacing: 24) {
+      VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
         ZStack {
           RoundedRectangle(cornerRadius: 28, style: .continuous)
             .fill(OmiColors.backgroundSecondary)
@@ -32,7 +32,7 @@ struct OnboardingFileScanStepView: View {
                 .stroke(Color.white.opacity(0.08), lineWidth: 1)
             )
 
-          VStack(spacing: 20) {
+          VStack(spacing: OmiSpacing.xl) {
             OnboardingLoadingAnimation(progress: scanProgress)
               .frame(height: 160)
 
@@ -51,7 +51,7 @@ struct OnboardingFileScanStepView: View {
                 .foregroundColor(OmiColors.textTertiary)
             }
           }
-          .padding(28)
+          .padding(OmiSpacing.xxl)
         }
         .frame(maxWidth: 560, maxHeight: 280)
 
@@ -59,7 +59,7 @@ struct OnboardingFileScanStepView: View {
           Button("Continue") {
             onContinue()
           }
-          .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+          .buttonStyle(OmiButtonStyle(.primary))
           .keyboardShortcut(.defaultAction)
         } else {
           Text("Scanning your workspace…")

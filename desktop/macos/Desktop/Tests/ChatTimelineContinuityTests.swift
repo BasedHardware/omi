@@ -685,6 +685,45 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertEqual(visibleRun, "run-xyz")
   }
 
+  func testMaterializeAgentSpawnBlockFromCanonicalProductionJSONResult() throws {
+    let pillId = UUID(uuidString: "C7CBA329-65C4-4A5C-96A6-1A0A5FEECC48")!
+    // Exact compact response shape returned by control-tools.ts stringifyToolResult.
+    let output = #"{"ok":true,"routeDecision":{"effect":"spawn_background_agent"},"requestedAgentCount":1,"agents":[{"kind":"background","delegation":null,"session":{"sessionId":"sess-prod","ownerId":"owner-1","title":"Memory Insight","surfaceKind":"floating_agent","externalRefKind":"pill","externalRefId":"C7CBA329-65C4-4A5C-96A6-1A0A5FEECC48","metadata":{}},"run":{"runId":"run-prod","sessionId":"sess-prod"},"attempt":null}],"delegation":null,"session":{"sessionId":"sess-prod","ownerId":"owner-1","title":"Memory Insight","surfaceKind":"floating_agent","externalRefKind":"pill","externalRefId":"C7CBA329-65C4-4A5C-96A6-1A0A5FEECC48","metadata":{}},"run":{"runId":"run-prod","sessionId":"sess-prod"},"attempt":null}"#
+    var blocks: [ChatContentBlock] = [
+      .toolCall(
+        id: "tool-prod",
+        name: "spawn_agent",
+        status: .completed,
+        toolUseId: "tu-prod",
+        input: ToolCallInput(summary: "Memory Insight", details: "look through today's memories"),
+        output: output
+      )
+    ]
+
+    ChatProvider.materializeAgentSpawnBlockIfNeeded(
+      in: &blocks,
+      toolUseId: "tu-prod",
+      toolName: "spawn_agent"
+    )
+
+    XCTAssertEqual(blocks.count, 2)
+    guard case .agentSpawn(let blockId, let actualPill, let sessionId, let runId, let title, let objective) = blocks[1]
+    else { return XCTFail("canonical production result must materialize agentSpawn") }
+    XCTAssertEqual(blockId, "agent_spawn_run-prod")
+    XCTAssertEqual(actualPill, pillId)
+    XCTAssertEqual(sessionId, "sess-prod")
+    XCTAssertEqual(runId, "run-prod")
+    XCTAssertEqual(title, "Memory Insight")
+    XCTAssertEqual(objective, "look through today's memories")
+
+    ChatProvider.materializeAgentSpawnBlockIfNeeded(
+      in: &blocks,
+      toolUseId: "tu-prod",
+      toolName: "spawn_agent"
+    )
+    XCTAssertEqual(blocks.count, 2)
+  }
+
   func testSpawnToolOutputParsesSessionAndRunIds() {
     let pillId = UUID()
     let block = ChatContentBlock.toolCall(
@@ -759,19 +798,41 @@ final class ChatTimelineContinuityTests: XCTestCase {
 
   @MainActor
   func testFindPillMatchesByHydratePreferenceOrder() {
-    let runPill = AgentPill(id: UUID(), query: "by-run", model: "test")
+    let defaults = UserDefaults.standard
+    let previousAuthOwner = defaults.object(forKey: .authUserId)
+    let previousAutomationOwner = defaults.object(forKey: .automationOwnerOverride)
+    let ownerID = "timeline-hydrate-owner"
+    defaults.removeObject(forKey: .automationOwnerOverride)
+    defaults.set(ownerID, forKey: .authUserId)
+
+    let runPill = AgentPill(
+      id: UUID(), query: "by-run", model: "test", ownerID: ownerID)
     runPill.canonicalRunId = "run-match"
     runPill.canonicalSessionId = "sess-other"
 
-    let sessionPill = AgentPill(id: UUID(), query: "by-session", model: "test")
+    let sessionPill = AgentPill(
+      id: UUID(), query: "by-session", model: "test", ownerID: ownerID)
     sessionPill.canonicalSessionId = "sess-match"
 
     let pillId = UUID()
-    let idPill = AgentPill(id: pillId, query: "by-id", model: "test")
+    let idPill = AgentPill(
+      id: pillId, query: "by-id", model: "test", ownerID: ownerID)
 
     let manager = AgentPillsManager.shared
     let previous = manager.pills
-    defer { manager.replacePillsForTesting(previous) }
+    defer {
+      if let previousAuthOwner {
+        defaults.set(previousAuthOwner, forKey: .authUserId)
+      } else {
+        defaults.removeObject(forKey: .authUserId)
+      }
+      if let previousAutomationOwner {
+        defaults.set(previousAutomationOwner, forKey: .automationOwnerOverride)
+      } else {
+        defaults.removeObject(forKey: .automationOwnerOverride)
+      }
+      manager.replacePillsForTesting(previous)
+    }
     manager.replacePillsForTesting([runPill, sessionPill, idPill])
 
     XCTAssertEqual(
@@ -1125,7 +1186,10 @@ final class ChatTimelineContinuityTests: XCTestCase {
       encoding: .utf8
     )
 
-    XCTAssertTrue(hub.contains("ChatProvider.mainInstance"))
+    XCTAssertFalse(
+      hub.contains("ChatProvider.mainInstance"),
+      "realtime transport must project through the journal-facing manager, not reach into ChatProvider"
+    )
     XCTAssertFalse(hub.contains("warmProvider = ChatProvider()"))
     XCTAssertFalse(hub.contains("private var warmProvider"))
     XCTAssertFalse(
@@ -1133,10 +1197,10 @@ final class ChatTimelineContinuityTests: XCTestCase {
       "speculative warm must not construct a second ChatProvider"
     )
 
-    XCTAssertFalse(runtime.contains("addTurnRecordedHandler"))
-    XCTAssertFalse(bridge.contains("addTurnRecordedHandler"))
-    XCTAssertTrue(runtime.contains("func setTurnRecordedHandler"))
-    XCTAssertTrue(bridge.contains("Single-slot replace"))
+    XCTAssertFalse(runtime.contains("turn_recorded"))
+    XCTAssertFalse(bridge.contains("setTurnRecordedHandler"))
+    XCTAssertTrue(runtime.contains("func setJournalTurnChangedHandler"))
+    XCTAssertTrue(bridge.contains("func setJournalTurnChangedHandler"))
 
     for source in [hub, runtime, bridge, floatingState, provider, window] {
       XCTAssertFalse(

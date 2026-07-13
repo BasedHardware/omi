@@ -11,11 +11,11 @@ struct SignInView: View {
                 .ignoresSafeArea()
 
             // Centered sign in card
-            VStack(spacing: 32) {
+            VStack(spacing: OmiSpacing.section) {
                 Spacer()
 
                 // Logo/Title
-                VStack(spacing: 16) {
+                VStack(spacing: OmiSpacing.lg) {
                     // Omi logo
                     if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
                        let logoImage = NSImage(contentsOf: logoURL) {
@@ -37,7 +37,7 @@ struct SignInView: View {
                 Spacer()
 
                 // Sign in buttons
-                VStack(spacing: 12) {
+                VStack(spacing: OmiSpacing.md) {
                     // Sign in with Apple
                     Button(action: {
                         Task {
@@ -54,17 +54,17 @@ struct SignInView: View {
                             }
                         }
                     }) {
-                        HStack(spacing: 8) {
+                        HStack(spacing: OmiSpacing.sm) {
                             Image(systemName: "applelogo")
-                                .scaledFont(size: 18)
+                                .scaledFont(size: OmiType.heading)
                             Text("Sign in with Apple")
-                                .scaledFont(size: 17, weight: .medium)
+                                .scaledFont(size: OmiType.subheading, weight: .medium)
                         }
                         .foregroundColor(.black)
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
                         .background(Color.white)
-                        .cornerRadius(10)
+                        .cornerRadius(OmiChrome.smallControlRadius)
                     }
                     .buttonStyle(.plain)
                     .disabled(authState.isLoading)
@@ -85,19 +85,19 @@ struct SignInView: View {
                             }
                         }
                     }) {
-                        HStack(spacing: 8) {
+                        HStack(spacing: OmiSpacing.sm) {
                             GoogleLogo()
                                 .frame(width: 18, height: 18)
                             Text("Sign in with Google")
-                                .scaledFont(size: 17, weight: .medium)
+                                .scaledFont(size: OmiType.subheading, weight: .medium)
                         }
                         .foregroundColor(.black)
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
                         .background(Color.white)
-                        .cornerRadius(10)
+                        .cornerRadius(OmiChrome.smallControlRadius)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 10)
+                            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
                                 .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                         )
                     }
@@ -108,7 +108,7 @@ struct SignInView: View {
                     if authState.isLoading {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: OmiColors.textPrimary))
-                            .padding(.top, 8)
+                            .padding(.top, OmiSpacing.sm)
 
                         // Minimal escape hatch so a failed web sign-in (closed tab,
                         // denied on Apple/Google, etc.) doesn't trap the user with
@@ -122,7 +122,7 @@ struct SignInView: View {
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                         .buttonStyle(.plain)
-                        .padding(.top, 4)
+                        .padding(.top, OmiSpacing.xxs)
                     }
 
                     if let error = authState.error {
@@ -130,7 +130,7 @@ struct SignInView: View {
                             .font(.caption)
                             .foregroundColor(OmiColors.error)
                             .multilineTextAlignment(.center)
-                            .padding(.top, 4)
+                            .padding(.top, OmiSpacing.xxs)
                     }
                 }
                 .frame(width: 320)

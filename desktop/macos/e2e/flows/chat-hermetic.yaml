@@ -4,6 +4,14 @@ tier: 2
 description: Hermetic main chat navigation and typed turn using Rust OMI_LLM_STUB=1 (no live LLM)
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/APIClient+AuthPolicy.swift
+  - desktop/macos/Desktop/Sources/Auth/AuthSessionAttemptFence.swift
+  - desktop/macos/Desktop/Sources/Chat/APIClient+KernelJournal.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentArtifactProjection.swift
+  - desktop/macos/Desktop/Sources/Chat/AuthorizedToolExecution.swift
+  - desktop/macos/Desktop/Sources/Chat/KernelJournalBackendSyncDriver.swift
+  - desktop/macos/Desktop/Sources/Chat/KernelJournalEventHub.swift
+  - desktop/macos/Desktop/Sources/Chat/KernelTurnJournal.swift
   - desktop/macos/Desktop/Sources/Chat/WritingToolsFix.swift
   - desktop/macos/Desktop/Sources/BrowserExtensionSetup.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ChatPage.swift
@@ -43,6 +51,9 @@ covers:
   - desktop/macos/Desktop/Sources/Services/QueryTracer.swift
   - desktop/macos/Desktop/Sources/Diagnostics/DesktopStressDiagnostics.swift
   - desktop/macos/Backend-Rust/src/routes/chat_completions.rs
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatScrollBehavior.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatSessionsSidebar.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/AgentConnectPickerSheet.swift
 preconditions:
   - automation_bridge_ready
 

@@ -34,6 +34,7 @@ from routers import (
     integration,
     conversations,
     memories,
+    api_key_management,
     mcp,
     mcp_sse,
     oauth,
@@ -149,8 +150,10 @@ app.include_router(auth.router)  # Added auth router (for the main Omi App, this
 
 
 app.include_router(payment.router)
+app.include_router(api_key_management.mcp_router)
 app.include_router(mcp.router)
 app.include_router(mcp_sse.router)
+app.include_router(api_key_management.developer_router)
 app.include_router(developer.router)
 app.include_router(imports.router)
 app.include_router(wrapped.router)

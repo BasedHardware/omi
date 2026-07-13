@@ -101,6 +101,14 @@ from utils.stt.streaming import (
     sort_transcript_segments_in_place,
 )
 from utils.stt.vad_gate import GatedSTTSocket, VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
+from utils.stt.live_failure import (
+    flush_live_stt_buffer,
+    live_stt_initialization_failure,
+    live_stt_socket_is_dead,
+    live_stt_upstream_failure,
+    send_live_stt_audio,
+    terminate_live_stt_session,
+)
 from utils.fair_use import (
     FAIR_USE_ENABLED,
     FAIR_USE_CHECK_INTERVAL_SECONDS,
@@ -182,6 +190,7 @@ logger = logging.getLogger(__name__)
 class ListenSessionState:
     active: bool = True
     close_code: int = 1001  # Going Away, don't close with good from backend
+    stt_terminal_failure: bool = False
     shutdown_event: asyncio.Event = field(default_factory=asyncio.Event)
     audio_ring_buffer: Optional[AudioRingBuffer] = None
     speaker_id_enabled: bool = False
@@ -1153,12 +1162,13 @@ async def _stream_handler(
             return await process_audio_modulate(callback, sr, lang)
         return await process_audio_dg(callback, lang, sr, 1, model=model, keywords=keywords, is_active=active_check)
 
-    async def _process_stt():
+    async def _process_stt() -> bool:
         nonlocal stt_socket
+        provider = getattr(stt_service, 'value', stt_service)
         try:
             if use_custom_stt:
                 logger.info(f"Custom STT mode enabled - using suggested transcripts from app {uid} {session_id}")
-                return None
+                return True
 
             if is_multi_channel:
                 for i, ch_config in enumerate(channel_configs):
@@ -1175,17 +1185,27 @@ async def _stream_handler(
                     callback = make_multi_channel_callback(ch_config)
                     # Pass the user's vocabulary (always includes "Omi") so phone-call /
                     # multi-channel transcripts get the same keyterm hinting as single-channel.
-                    stt_sockets_multi[i] = await _create_stt_socket(
+                    channel_socket = await _create_stt_socket(
                         callback,
                         stt_language,
                         TARGET_SAMPLE_RATE,
                         stt_model,
                         kw=vocabulary[:100] if vocabulary else None,
                     )
+                    if channel_socket is None:
+                        await terminate_live_stt_session(
+                            websocket,
+                            session,
+                            failure=live_stt_upstream_failure(provider),
+                            reason='initialization_failed',
+                            platform=client_device_context.platform,
+                        )
+                        return False
+                    stt_sockets_multi[i] = channel_socket
                 logger.info(
                     f"Multi-channel STT connections established ({len(channel_configs)} channels) {uid} {session_id}"
                 )
-                return None
+                return True
 
             nonlocal vad_gate
             if should_initialize_vad_gate(override=vad_gate_override, global_gate_enabled=is_gate_enabled()):
@@ -1219,17 +1239,37 @@ async def _stream_handler(
                 kw=vocabulary[:100] if vocabulary else None,
                 active_check=lambda: session.active,
             )
+            if raw_socket is None:
+                await terminate_live_stt_session(
+                    websocket,
+                    session,
+                    failure=live_stt_upstream_failure(provider),
+                    reason='initialization_failed',
+                    platform=client_device_context.platform,
+                )
+                return False
             if vad_gate is not None and raw_socket is not None:
                 stt_socket = GatedSTTSocket(raw_socket, gate=vad_gate, passthrough_audio=passthrough)
             else:
                 stt_socket = raw_socket
-            return None
+            return True
 
         except Exception as e:
-            logger.error(f"Initial processing error: {e} {uid} {session_id}")
-            session.close_code = 1011
-            await websocket.close(code=session.close_code)
-            return None
+            failure = live_stt_initialization_failure(e, provider)
+            logger.error(
+                'Live STT initialization failed provider=%s outcome=%s reason=initialization_failed error_type=%s',
+                failure.provider,
+                failure.outcome.value,
+                type(e).__name__,
+            )
+            await terminate_live_stt_session(
+                websocket,
+                session,
+                failure=failure,
+                reason='initialization_failed',
+                platform=client_device_context.platform,
+            )
+            return False
 
     # Pusher
     #
@@ -2081,7 +2121,10 @@ async def _stream_handler(
         async def flush_stt_buffer(force: bool = False):
             nonlocal stt_audio_buffer, stt_socket
 
-            socket_dead = stt_socket is not None and stt_socket.is_connection_dead
+            if not session.active:
+                return
+
+            socket_dead = stt_socket is not None and live_stt_socket_is_dead(stt_socket)
             decision = decide_stt_buffer_flush(
                 buffer_len=len(stt_audio_buffer),
                 flush_size=stt_buffer_flush_size,
@@ -2095,21 +2138,19 @@ async def _stream_handler(
             if not decision.should_flush:
                 return
 
-            chunk = bytes(stt_audio_buffer)
-            stt_audio_buffer.clear()
+            if session.fair_use_dg_budget_exhausted:
+                stt_audio_buffer.clear()
+                return
 
-            if decision.socket_dead:
-                close_reason = stt_socket.death_reason or 'unknown'
-                logger.error(
-                    'STT connection died mid-session uid=%s session=%s reason=%s',
-                    uid,
-                    session_id,
-                    close_reason,
-                )
-                stt_socket = None
-
-            if decision.send_to_stt:
-                stt_socket.send(chunk)
+            sent = await flush_live_stt_buffer(
+                websocket,
+                session,
+                stt_socket=stt_socket,
+                buffer=stt_audio_buffer,
+                provider=getattr(stt_service, 'value', stt_service),
+                platform=client_device_context.platform,
+            )
+            if sent:
                 session.dg_usage_ms_pending += decision.dg_usage_ms
 
         try:
@@ -2174,13 +2215,18 @@ async def _stream_handler(
                             pcm_len=len(pcm_16k),
                             fair_use_track_dg_usage=session.fair_use_track_dg_usage,
                         )
-                        if should_send_mc_stt:
-                            try:
-                                stt_sockets_multi[ch_idx].send(pcm_16k)
+                        if not session.fair_use_dg_budget_exhausted:
+                            sent = await send_live_stt_audio(
+                                websocket,
+                                session,
+                                stt_socket=stt_sockets_multi[ch_idx],
+                                audio=pcm_16k,
+                                provider=getattr(stt_service, 'value', stt_service),
+                                platform=client_device_context.platform,
+                            )
+                            if sent and should_send_mc_stt:
                                 # Accumulate DG usage locally, flushed every 60s (#5854)
                                 session.dg_usage_ms_pending += mc_dg_usage_ms
-                            except Exception as e:
-                                logger.error(f"[MC-STT] ch={ch_idx} send error: {e} {uid} {session_id}")
 
                         # Accumulate per-channel audio for mixing before sending to pusher
                         channel_mix_buffers[ch_idx].extend(pcm_16k)
@@ -2365,8 +2411,11 @@ async def _stream_handler(
     try:
         task_supervisor.start_session()
         # Init STT
-        _send_message_event(MessageServiceStatusEvent(status="stt_initiating", status_text="STT Service Starting"))
-        await _process_stt()
+        await _asend_message_event(
+            MessageServiceStatusEvent(status="stt_initiating", status_text="STT Service Starting")
+        )
+        if not await _process_stt():
+            return
 
         # Init pusher
         pusher_tasks: List[asyncio.Task[Any]] = []
@@ -2546,7 +2595,7 @@ async def _stream_handler(
             logger.error(f"Error closing STT sockets: {e} {uid} {session_id}")
 
         # Client sockets
-        if websocket.client_state == WebSocketState.CONNECTED:
+        if websocket.client_state == WebSocketState.CONNECTED and not session.stt_terminal_failure:
             try:
                 await websocket.close(code=session.close_code)
             except Exception as e:
@@ -2642,7 +2691,7 @@ async def _stream_handler(
             if vad_gate is not None:
                 del vad_gate
             language_cache.cache.clear()
-            translation_service.translation_cache.clear()
+            translation_service.clear_session_cache()
         except NameError:
             pass
 

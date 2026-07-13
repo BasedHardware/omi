@@ -366,6 +366,9 @@ enum MemoryExportExecutor {
       ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
     let query = ProactiveTaskExecute.buildQuery(title: task.title, message: task.body)
     _ = AgentPillsManager.shared.spawn(
-      query: query, model: model, systemPromptSuffix: ProactiveTaskExecute.systemPromptSuffix)
+      query: query,
+      model: model,
+      originSurface: .mainChat,
+      systemPromptSuffix: ProactiveTaskExecute.systemPromptSuffix)
   }
 }

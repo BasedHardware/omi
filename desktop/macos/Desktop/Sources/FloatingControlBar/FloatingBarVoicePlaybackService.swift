@@ -373,12 +373,11 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return }
     if let lease {
-      guard VoiceOutputCoordinator.shared.snapshot().activeLease == lease else {
+      guard VoiceTurnCoordinator.shared.outputSnapshot.activeLease == lease else {
         log("FloatingBarVoicePlaybackService: dropping one-shot with stale PTT lease")
         return
       }
       activePTTLease = lease
-      VoiceTurnCoordinator.shared.send(.playbackStarted(turnID: lease.turnID, lease: lease))
     } else if VoiceTurnCoordinator.shared.activeTurnID != nil,
       acquirePTTLeaseIfNeeded(.deterministicAgentAck) == nil
     {
@@ -563,10 +562,10 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
       if let lease = activePTTLease {
         activePTTLease = nil
-        _ = VoiceOutputCoordinator.shared.release(lease)
         VoiceTurnCoordinator.shared.send(
-          .playbackFailed(
+          .playbackFailedScoped(
             turnID: lease.turnID,
+            identity: lease.identity,
             leaseID: lease.id,
             message: "no fallback speech available"))
       }
@@ -648,12 +647,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     speechSynthesizer.stopSpeaking(at: .immediate)
     localSpeechActive = false
     activePTTLease = nil
-    if let lease = leaseToRelease,
-      VoiceOutputCoordinator.shared.release(lease),
-      notifyPTTDrain
-    {
-      VoiceTurnCoordinator.shared.send(
-        .playbackDrained(turnID: lease.turnID, leaseID: lease.id))
+    if let lease = leaseToRelease, notifyPTTDrain {
+      _ = VoiceTurnCoordinator.shared.releaseOutput(lease)
     }
     setFloatingPillResponseGlow(false)
   }
@@ -682,12 +677,20 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       return activePTTLease.lane == lane ? activePTTLease : nil
     }
     guard let turnID = VoiceTurnCoordinator.shared.activeTurnID else { return nil }
-    switch VoiceOutputCoordinator.shared.acquire(lane, turnID: turnID) {
+    switch VoiceTurnCoordinator.shared.acquireOutput(lane, turnID: turnID) {
     case .acquired(let lease):
       activePTTLease = lease
+      guard let providerIdentity = VoiceTurnCoordinator.shared.activeTurn?.providerEffectIdentity else {
+        log("FloatingBarVoicePlaybackService: dropping PTT output without provider effect identity")
+        activePTTLease = nil
+        return nil
+      }
       VoiceTurnCoordinator.shared.send(
-        .providerResponseStarted(turnID: turnID, sessionID: nil, responseID: nil))
-      VoiceTurnCoordinator.shared.send(.playbackStarted(turnID: turnID, lease: lease))
+        .providerResponseStartedScoped(
+          turnID: turnID,
+          identity: providerIdentity,
+          sessionID: nil,
+          responseID: nil))
       return lease
     case .denied(let active):
       log(
@@ -720,21 +723,13 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     speechSynthesizer.stopSpeaking(at: .immediate)
     localSpeechActive = false
     activePTTLease = nil
-    guard VoiceOutputCoordinator.shared.release(lease) else { return false }
-    VoiceTurnCoordinator.shared.send(
-      .playbackDrained(turnID: lease.turnID, leaseID: lease.id))
-    return true
+    return VoiceTurnCoordinator.shared.releaseOutput(lease)
   }
 
   private func finishActivePTTLeaseIfIdle() {
     guard !isSpeaking, let lease = activePTTLease else { return }
     activePTTLease = nil
-    guard VoiceOutputCoordinator.shared.release(lease) else { return }
-    VoiceTurnCoordinator.shared.send(
-      .playbackDrained(turnID: lease.turnID, leaseID: lease.id))
-    if VoiceTurnCoordinator.shared.model.turn?.phase.isTerminal == true {
-      _ = VoiceOutputCoordinator.shared.endTurn(lease.turnID)
-    }
+    _ = VoiceTurnCoordinator.shared.releaseOutput(lease)
   }
 
   private func preferredSystemVoice() -> AVSpeechSynthesisVoice? {

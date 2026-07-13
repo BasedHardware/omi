@@ -638,8 +638,8 @@ class TestGatedDeepgramSocket:
 
         mock_conn.finalize.assert_called()
 
-    def test_send_finalize_exception_swallowed(self):
-        """If finalize() throws during speech->silence in send(), it should be swallowed."""
+    def test_send_finalize_exception_rejects_the_chunk(self):
+        """A failed speech-boundary flush must surface to the live session."""
         mock_conn = MagicMock()
         mock_conn.finalize.side_effect = RuntimeError("connection closed")
         gate = self._make_gate()
@@ -651,12 +651,17 @@ class TestGatedDeepgramSocket:
         for i in range(5):
             socket.send(_make_pcm(30), wall_time=t + i * 0.03)
 
-        # Silence past hangover — should not raise despite finalize error
+        # Silence past hangover — do not raise in the VAD layer, but reject the
+        # chunk so send_live_stt_audio terminates the client session.
         _set_vad_speech(False)
+        saw_rejected_chunk = False
         for i in range(30):
-            socket.send(_make_pcm(30), wall_time=t + 0.15 + i * 0.03)
+            saw_rejected_chunk = (
+                socket.send(_make_pcm(30), wall_time=t + 0.15 + i * 0.03) is False or saw_rejected_chunk
+            )
 
         mock_conn.finalize.assert_called()
+        assert saw_rejected_chunk is True
 
     def test_finish_shadow_mode_no_finalize(self):
         """finish() in shadow mode should NOT call finalize before finish."""
@@ -828,6 +833,19 @@ class TestDgDeadDetection:
         safe = self._wrap(mock_conn)
         safe.send(b'\x00' * 960)
         assert safe.is_connection_dead is True
+        safe.finish()
+
+    def test_safe_socket_finalize_exception_sets_dead(self):
+        """A failed transcript flush is also a terminal provider failure."""
+        mock_conn = MagicMock()
+        mock_conn.finalize.side_effect = RuntimeError('connection reset')
+        safe = self._wrap(mock_conn)
+
+        with pytest.raises(RuntimeError, match='connection reset'):
+            safe.finalize()
+
+        assert safe.is_connection_dead is True
+        assert safe.death_reason == 'finalize RuntimeError: connection reset'
         safe.finish()
 
     def test_safe_socket_dead_stops_sending(self):

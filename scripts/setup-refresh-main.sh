@@ -17,22 +17,48 @@ if ! git rev-parse --verify "$REMOTE_REF" >/dev/null 2>&1; then
 fi
 
 current_branch="$(git symbolic-ref --short -q HEAD || true)"
+remote_oid="$(git rev-parse "$REMOTE_REF")"
+
+sync_current_worktree_branch() {
+  if [ -z "$current_branch" ] || [ "$current_branch" = "$BRANCH" ]; then
+    return 0
+  fi
+
+  local head_oid
+  head_oid="$(git rev-parse HEAD)"
+
+  if [ "$head_oid" = "$remote_oid" ]; then
+    echo "Current branch ${current_branch} already matches ${REMOTE_BRANCH}."
+    return 0
+  fi
+
+  if git merge-base --is-ancestor "$head_oid" "$remote_oid"; then
+    echo "Fast-forwarding current branch ${current_branch} to ${REMOTE_BRANCH}..."
+    git merge --ff-only "$REMOTE_REF"
+    return 0
+  fi
+
+  echo "Current branch ${current_branch} is not a fast-forward behind ${REMOTE_BRANCH}; left unchanged." >&2
+}
+
 if ! git show-ref --verify --quiet "$LOCAL_REF"; then
   git branch "$BRANCH" "$REMOTE_REF"
   echo "Created local ${BRANCH} from ${REMOTE_BRANCH}."
+  sync_current_worktree_branch
   exit 0
 fi
 
 local_oid="$(git rev-parse "$LOCAL_REF")"
-remote_oid="$(git rev-parse "$REMOTE_REF")"
 
 if [ "$local_oid" = "$remote_oid" ]; then
   echo "Local ${BRANCH} already matches ${REMOTE_BRANCH}."
+  sync_current_worktree_branch
   exit 0
 fi
 
 if ! git merge-base --is-ancestor "$local_oid" "$remote_oid"; then
   echo "Fetched ${REMOTE_BRANCH}; local ${BRANCH} is not a fast-forward, so it was left unchanged." >&2
+  sync_current_worktree_branch
   exit 0
 fi
 
@@ -56,3 +82,5 @@ else
     exit 1
   fi
 fi
+
+sync_current_worktree_branch

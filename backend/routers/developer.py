@@ -10,7 +10,6 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError
 import database.folders as folders_db
 import database.memories as memories_db
 import database.conversations as conversations_db
-import database.dev_api_key as dev_api_key_db
 import database.action_items as action_items_db
 import database.goals as goals_db
 import database.users as users_db
@@ -36,12 +35,10 @@ from models.conversation_enums import (
 from models.geolocation import Geolocation
 from models.structured import Structured
 from utils.conversations.render import populate_speaker_names, populate_folder_names
-from utils.dev_cache import invalidate_developer_cache
 from models.transcript_segment import TranscriptSegment
 from dependencies import (
     ApiKeyAuth,
     check_conversation_transcript_read_limit,
-    get_current_user_id,
     get_auth_with_conversation_detail_read,
     get_auth_with_conversations_read,
     get_uid_with_conversations_read,
@@ -57,8 +54,6 @@ from dependencies import (
 from utils.apps import update_personas_async
 from utils.log_sanitizer import sanitize
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
-from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
-from utils.scopes import AVAILABLE_SCOPES, validate_scopes
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.location import get_google_maps_location
@@ -136,55 +131,6 @@ def _audit_developer_read(
         returned_count,
         sanitize(resource_id) if resource_id else None,
     )
-
-
-# ******************************************************
-# ****************** API KEY MANAGEMENT ****************
-# ******************************************************
-
-
-@router.get("/v1/dev/keys", response_model=List[DevApiKey], tags=["API Keys"], operation_id="listApiKeys")
-def get_keys(uid: str = Depends(get_current_user_id)):
-    return dev_api_key_db.get_dev_keys_for_user(uid)
-
-
-@router.post("/v1/dev/keys", response_model=DevApiKeyCreated, tags=["API Keys"], operation_id="createApiKey")
-def create_key(key_data: DevApiKeyCreate, uid: str = Depends(get_current_user_id)):
-    """
-    Create a new Developer API key with optional scopes.
-
-    - **name**: Descriptive name for the key
-    - **scopes**: Optional list of scopes. If not provided, defaults to read-only access.
-      Available scopes:
-      - conversations:read
-      - conversations:write
-      - memories:read
-      - memories:write
-      - action_items:read
-      - action_items:write
-      - goals:read
-      - goals:write
-    """
-    if not key_data.name or len(key_data.name.strip()) == 0:
-        raise HTTPException(status_code=422, detail="Key name cannot be empty")
-
-    # Validate scopes if provided
-    if key_data.scopes is not None:
-        if not validate_scopes(key_data.scopes):
-            raise HTTPException(status_code=400, detail=f"Invalid scopes. Available: {AVAILABLE_SCOPES}")
-
-    raw_key, api_key_data = dev_api_key_db.create_dev_key(uid, key_data.name.strip(), scopes=key_data.scopes)
-    # The proactive-notification cap exempts developers, so refresh that cache now
-    # that this user has a key, rather than waiting out its TTL.
-    invalidate_developer_cache(uid)
-    return DevApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
-
-
-@router.delete("/v1/dev/keys/{key_id}", status_code=204, tags=["API Keys"], operation_id="revokeApiKey")
-def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
-    dev_api_key_db.delete_dev_key(uid, key_id)
-    invalidate_developer_cache(uid)
-    return
 
 
 # ******************************************************

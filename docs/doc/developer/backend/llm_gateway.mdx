@@ -618,6 +618,13 @@ plus `kind`, `field`, `route`, and `service`. This gives rollout owners a stable
 query surface even when backend caller metrics are hard to inspect per runtime
 surface.
 
+Gateway terminal errors and request rejections emit warning-level, privacy-safe
+Cloud Logging lines. `llm_gateway_terminal` includes only the opaque request ID,
+route metadata, credential source, and bounded `error_class` / `failure_class`;
+it never includes provider bodies, prompts, or credentials. Successful terminal
+events remain metrics and info-level logs to avoid turning normal traffic into
+an operational alert stream.
+
 Shadow-only features can also emit privacy-safe comparison buckets through
 `llm_gateway_chat_extraction_comparisons_total{feature,field,outcome}`. These
 metrics compare derived properties such as category match, empty/non-empty

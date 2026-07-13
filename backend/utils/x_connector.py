@@ -40,6 +40,7 @@ from utils.memory.memory_api_contract import MemoryApiExposure, memory_write_pay
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.executors import db_executor, run_blocking
+from utils.log_sanitizer import sanitize
 from utils import social
 from utils.integration_telemetry import (
     IntegrationTelemetryContext,
@@ -165,7 +166,7 @@ async def exchange_code(code: str, verifier: str) -> Dict:
     async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=3.0)) as client:
         resp = await client.post(TOKEN_URL, data=data, headers=_basic_auth_header())
         if resp.status_code >= 400:
-            logger.error(f'exchange_code: X returned {resp.status_code}: {resp.text[:500]}')
+            logger.error(f'exchange_code: X returned {resp.status_code}: {sanitize(resp.text[:500])}')
         resp.raise_for_status()
         return resp.json()
 

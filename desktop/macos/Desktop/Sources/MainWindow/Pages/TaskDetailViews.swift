@@ -20,7 +20,7 @@ struct TaskDetailButton: View {
             showDetail = true
         } label: {
             Image(systemName: "info.circle")
-                .scaledFont(size: 10)
+                .scaledFont(size: OmiType.micro)
                 .foregroundColor(showTooltip ? OmiColors.textSecondary : OmiColors.textTertiary)
         }
         .buttonStyle(.plain)
@@ -68,7 +68,7 @@ private struct TaskDetailTooltip: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xs) {
                 // Core fields
                 tooltipRow("Status", task.completed ? "Completed" : "Active")
                 if let category = task.category {
@@ -129,7 +129,7 @@ private struct TaskDetailTooltip: View {
                     }
                 }
             }
-            .padding(10)
+            .padding(OmiSpacing.sm)
         }
         .frame(maxWidth: 350, maxHeight: 400)
     }
@@ -171,27 +171,27 @@ private struct TaskDetailTooltip: View {
     }
 
     private func tooltipRow(_ label: String, _ value: String) -> some View {
-        HStack(alignment: .top, spacing: 6) {
+        HStack(alignment: .top, spacing: OmiSpacing.xs) {
             Text(label)
-                .scaledFont(size: 11, weight: .medium)
+                .scaledFont(size: OmiType.caption, weight: .medium)
                 .foregroundColor(OmiColors.textTertiary)
                 .frame(width: 70, alignment: .trailing)
 
             Text(value)
-                .scaledFont(size: 11)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textPrimary)
         }
     }
 
     private func tooltipBlock(_ label: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             Text(label)
-                .scaledFont(size: 11, weight: .medium)
+                .scaledFont(size: OmiType.caption, weight: .medium)
                 .foregroundColor(OmiColors.textTertiary)
                 .padding(.leading, 76)
 
             Text(value)
-                .scaledFont(size: 11)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textPrimary)
                 .padding(.leading, 76)
         }
@@ -228,7 +228,7 @@ struct TaskDetailView: View {
 
             // Content
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: OmiSpacing.xl) {
                     // Task description
                     taskInfoSection
 
@@ -276,7 +276,7 @@ struct TaskDetailView: View {
                         remainingMetadataSection
                     }
                 }
-                .padding(20)
+                .padding(OmiSpacing.xl)
             }
         }
         .frame(width: 550, height: 600)
@@ -287,19 +287,19 @@ struct TaskDetailView: View {
 
     private var header: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                 Text("Task Details")
-                    .scaledFont(size: 16, weight: .semibold)
+                    .scaledFont(size: OmiType.subheading, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 if let source = task.source {
                     Text(source)
-                        .scaledFont(size: 11, weight: .medium)
+                        .scaledFont(size: OmiType.caption, weight: .medium)
                         .foregroundColor(OmiColors.textTertiary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
+                        .padding(.horizontal, OmiSpacing.xs)
+                        .padding(.vertical, OmiSpacing.hairline)
                         .background(
-                            RoundedRectangle(cornerRadius: 4)
+                            RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
                                 .fill(OmiColors.backgroundSecondary)
                         )
                 }
@@ -309,23 +309,23 @@ struct TaskDetailView: View {
 
             DismissButton(action: dismissSheet)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
+        .padding(.horizontal, OmiSpacing.xl)
+        .padding(.vertical, OmiSpacing.lg)
     }
 
     // MARK: - Task Info
 
     private var taskInfoSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             sectionHeader("Task")
 
             Text(task.description)
-                .scaledFont(size: 14)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(OmiColors.textPrimary)
-                .padding(12)
+                .padding(OmiSpacing.md)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
-                    RoundedRectangle(cornerRadius: 8)
+                    RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                         .fill(OmiColors.backgroundSecondary)
                 )
         }
@@ -334,10 +334,10 @@ struct TaskDetailView: View {
     // MARK: - Core Fields
 
     private var coreFieldsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             sectionHeader("Details")
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xs) {
                 if let category = task.category {
                     detailRow("Category", category.capitalized)
                 }
@@ -386,10 +386,10 @@ struct TaskDetailView: View {
                     detailRow("Conversation", convId)
                 }
             }
-            .padding(12)
+            .padding(OmiSpacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                     .fill(OmiColors.backgroundSecondary)
             )
         }
@@ -398,10 +398,10 @@ struct TaskDetailView: View {
     // MARK: - Agent
 
     private var agentSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             sectionHeader("Agent")
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xs) {
                 if let status = task.agentStatus {
                     detailRow("Status", status.capitalized)
                 }
@@ -412,10 +412,10 @@ struct TaskDetailView: View {
                     detailBlock("Plan", String(plan.prefix(2000)))
                 }
             }
-            .padding(12)
+            .padding(OmiSpacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                     .fill(OmiColors.backgroundSecondary)
             )
         }
@@ -424,10 +424,10 @@ struct TaskDetailView: View {
     // MARK: - Sentry
 
     private var sentrySection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             sectionHeader("Sentry")
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xs) {
                 if let issueId = metadata["sentry_issue_id"] as? String {
                     detailRow("Issue ID", issueId)
                 }
@@ -436,18 +436,18 @@ struct TaskDetailView: View {
                    let url = URL(string: urlString) {
                     HStack {
                         Text("Link")
-                            .scaledFont(size: 12, weight: .medium)
+                            .scaledFont(size: OmiType.caption, weight: .medium)
                             .foregroundColor(OmiColors.textSecondary)
                             .frame(width: 100, alignment: .leading)
 
                         Button {
                             NSWorkspace.shared.open(url)
                         } label: {
-                            HStack(spacing: 4) {
+                            HStack(spacing: OmiSpacing.xxs) {
                                 Text("Open in Sentry")
-                                    .scaledFont(size: 12)
+                                    .scaledFont(size: OmiType.caption)
                                 Image(systemName: "arrow.up.right.square")
-                                    .scaledFont(size: 10)
+                                    .scaledFont(size: OmiType.micro)
                             }
                             .foregroundColor(.blue)
                         }
@@ -455,10 +455,10 @@ struct TaskDetailView: View {
                     }
                 }
             }
-            .padding(12)
+            .padding(OmiSpacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                     .fill(OmiColors.backgroundSecondary)
             )
         }
@@ -467,10 +467,10 @@ struct TaskDetailView: View {
     // MARK: - Reporter
 
     private var reporterSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             sectionHeader("Reporter")
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xs) {
                 if let name = metadata["reporter_name"] as? String {
                     detailRow("Name", name)
                 }
@@ -481,10 +481,10 @@ struct TaskDetailView: View {
                     detailRow("Type", type.capitalized)
                 }
             }
-            .padding(12)
+            .padding(OmiSpacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                     .fill(OmiColors.backgroundSecondary)
             )
         }
@@ -493,10 +493,10 @@ struct TaskDetailView: View {
     // MARK: - Analysis (omi-analytics)
 
     private var analysisSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             sectionHeader("Analysis")
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
                 if let reason = metadata["creation_reason"] as? String {
                     detailBlock("Reason", reason)
                 }
@@ -517,10 +517,10 @@ struct TaskDetailView: View {
                     detailBlock("Relevant Files", files)
                 }
             }
-            .padding(12)
+            .padding(OmiSpacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                     .fill(OmiColors.backgroundSecondary)
             )
         }
@@ -529,10 +529,10 @@ struct TaskDetailView: View {
     // MARK: - Context (screenshot)
 
     private var contextSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             sectionHeader("Context")
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
                 // Prefer direct task fields, fall back to metadata
                 if let summary = task.contextSummary ?? metadata["context_summary"] as? String {
                     detailBlock("Summary", summary)
@@ -544,10 +544,10 @@ struct TaskDetailView: View {
                     detailBlock("Reasoning", reasoning)
                 }
             }
-            .padding(12)
+            .padding(OmiSpacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                     .fill(OmiColors.backgroundSecondary)
             )
         }
@@ -556,10 +556,10 @@ struct TaskDetailView: View {
     // MARK: - App Info (sentry)
 
     private var appInfoSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             sectionHeader("App Info")
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xs) {
                 if let version = metadata["app_version"] as? String {
                     detailRow("Version", version)
                 }
@@ -573,10 +573,10 @@ struct TaskDetailView: View {
                     detailRow("Device", device)
                 }
             }
-            .padding(12)
+            .padding(OmiSpacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                     .fill(OmiColors.backgroundSecondary)
             )
         }
@@ -585,10 +585,10 @@ struct TaskDetailView: View {
     // MARK: - Source (screenshot)
 
     private var sourceSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             sectionHeader("Source")
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xs) {
                 if let app = metadata["source_app"] as? String {
                     detailRow("App", app)
                 }
@@ -602,10 +602,10 @@ struct TaskDetailView: View {
                     detailRow("Window", window)
                 }
             }
-            .padding(12)
+            .padding(OmiSpacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                     .fill(OmiColors.backgroundSecondary)
             )
         }
@@ -655,10 +655,10 @@ struct TaskDetailView: View {
     }
 
     private var remainingMetadataSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             sectionHeader("Other Info")
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
                 ForEach(remainingMetadata, id: \.key) { entry in
                     let label = entry.key
                         .replacingOccurrences(of: "_", with: " ")
@@ -670,10 +670,10 @@ struct TaskDetailView: View {
                     }
                 }
             }
-            .padding(12)
+            .padding(OmiSpacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                     .fill(OmiColors.backgroundSecondary)
             )
         }
@@ -683,19 +683,19 @@ struct TaskDetailView: View {
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
-            .scaledFont(size: 13, weight: .semibold)
+            .scaledFont(size: OmiType.body, weight: .semibold)
             .foregroundColor(OmiColors.textSecondary)
     }
 
     private func detailRow(_ label: String, _ value: String) -> some View {
         HStack(alignment: .top) {
             Text(label)
-                .scaledFont(size: 12, weight: .medium)
+                .scaledFont(size: OmiType.caption, weight: .medium)
                 .foregroundColor(OmiColors.textSecondary)
                 .frame(width: 100, alignment: .leading)
 
             Text(value)
-                .scaledFont(size: 12)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textPrimary)
                 .textSelection(.enabled)
                 .if_available_writingToolsNone()
@@ -703,13 +703,13 @@ struct TaskDetailView: View {
     }
 
     private func detailBlock(_ label: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text(label)
-                .scaledFont(size: 12, weight: .medium)
+                .scaledFont(size: OmiType.caption, weight: .medium)
                 .foregroundColor(OmiColors.textSecondary)
 
             Text(value)
-                .scaledFont(size: 12)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textPrimary)
                 .textSelection(.enabled)
                 .if_available_writingToolsNone()

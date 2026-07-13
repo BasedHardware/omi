@@ -67,6 +67,9 @@ class _Transaction:
     def set(self, ref, data, **kwargs):
         ref.set(data, **kwargs)
 
+    def update(self, ref, data):
+        ref.update(data)
+
 
 def test_document_update_time_is_exposed_as_server_revision():
     revision = datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc)
@@ -296,3 +299,67 @@ def test_mutation_response_contract_carries_canonical_revision_and_state():
     assert result.conversation.structured.title == 'Renamed'
     assert result.conversation.structured.overview == 'Processing finished'
     assert result.conversation.starred is True
+
+
+def _segment_snapshot(segments, *, is_locked=False, exists=True):
+    return _Snapshot(
+        {
+            'data_protection_level': 'standard',
+            'is_locked': is_locked,
+            'transcript_segments': segments,
+        },
+        exists=exists,
+    )
+
+
+def test_segment_text_edit_reads_and_writes_inside_a_transaction(monkeypatch):
+    # Regression for #9392: the read-modify-write must be atomic so concurrent
+    # edits to different segments can't lose-update each other.
+    ref = _ConversationRef(_segment_snapshot([{'id': 's1', 'text': 'old'}, {'id': 's2', 'text': 'keep'}]))
+    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
+
+    result = conversations_db.update_conversation_segment_text('user-1', 'conv-1', 's1', 'new text')
+
+    assert result == 'ok'
+    # The write went through the transaction (recorded on the ref), and the edit
+    # landed while the untouched segment is preserved.
+    assert len(ref.update_calls) == 1
+    import json as _json
+    import zlib as _zlib
+
+    written = _json.loads(_zlib.decompress(ref.update_calls[0]['transcript_segments']).decode('utf-8'))
+    assert {s['id']: s['text'] for s in written} == {'s1': 'new text', 's2': 'keep'}
+
+
+def test_segment_text_edit_missing_segment_does_not_write(monkeypatch):
+    ref = _ConversationRef(_segment_snapshot([{'id': 's1', 'text': 'old'}]))
+    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
+
+    result = conversations_db.update_conversation_segment_text('user-1', 'conv-1', 'missing', 'x')
+
+    assert result == 'segment_not_found'
+    assert ref.update_calls == []
+
+
+def test_segment_text_edit_rejects_locked_conversation(monkeypatch):
+    ref = _ConversationRef(_segment_snapshot([{'id': 's1', 'text': 'old'}], is_locked=True))
+    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
+
+    result = conversations_db.update_conversation_segment_text('user-1', 'conv-1', 's1', 'x')
+
+    assert result == 'locked'
+    assert ref.update_calls == []
+
+
+def test_segment_text_edit_missing_conversation_returns_not_found(monkeypatch):
+    ref = _ConversationRef(_segment_snapshot([], exists=False))
+    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
+
+    result = conversations_db.update_conversation_segment_text('user-1', 'conv-1', 's1', 'x')
+
+    assert result == 'not_found'
+    assert ref.update_calls == []

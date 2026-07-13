@@ -114,6 +114,8 @@ class CaptureController extends ChangeNotifier
 
   List<MessageEvent> _transcriptionServiceStatuses = [];
   List<MessageEvent> get transcriptionServiceStatuses => _transcriptionServiceStatuses;
+  MessageServiceStatusEvent? _terminalTranscriptionFailure;
+  MessageServiceStatusEvent? get terminalTranscriptionFailure => _terminalTranscriptionFailure;
 
   // Phone mic WAL: buffer for splitting variable-sized PCM chunks into fixed-size frames
   bool _phoneMicWalActive = false;
@@ -1252,6 +1254,7 @@ class CaptureController extends ChangeNotifier
     photos = [];
     hasTranscripts = false;
     _transcriptionServiceStatuses = [];
+    _terminalTranscriptionFailure = null;
     suggestionsBySegmentId = {};
     taggingSegmentIds = [];
     notifyListeners();
@@ -1744,6 +1747,15 @@ class CaptureController extends ChangeNotifier
         final thresholdEvent = FreemiumThresholdReachedEvent.fromJson({'status_text': event.statusText});
         _handleFreemiumThresholdReached(thresholdEvent);
         return;
+      }
+
+      // The backend sends stt_failed immediately before it closes the socket.
+      // Keep this terminal state separate from the connection-scoped status
+      // list so the user can see the outage while the reconnect loop runs.
+      if (event.status == 'stt_failed') {
+        _terminalTranscriptionFailure = event;
+      } else if (event.status == 'ready') {
+        _terminalTranscriptionFailure = null;
       }
 
       _transcriptionServiceStatuses.add(event);

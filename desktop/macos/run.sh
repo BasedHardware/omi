@@ -857,6 +857,15 @@ done
 # Register the /Applications/ copy as the canonical bundle for this bundle ID
 $LSREGISTER -f "$APP_PATH" 2>/dev/null || true
 
+if [ "${OMI_DESKTOP_LOCAL_PROFILE:-0}" = "1" ]; then
+    step "Resetting local-profile Keychain state..."
+    # Local profiles sign into the synthetic Auth emulator on every launch.
+    # Clear only this installed named bundle's scoped disposable items so an
+    # earlier ad-hoc build cannot block startup on a stale TrustedApplication
+    # ACL. The reset helper rejects Prod, Beta, Omi Dev, and identity mismatch.
+    ./scripts/omi-local-profile-keychain-reset.sh "$BUNDLE_ID" "$APP_PATH"
+fi
+
 if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_AUTH_SEED:-0}" != "1" ]; then
     step "Seeding auth from Omi Dev..."
     if AUTH_CACHE="$(mktemp "${TMPDIR:-/tmp}/omi-desktop-auth.XXXXXX")"; then

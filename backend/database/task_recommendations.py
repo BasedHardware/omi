@@ -2,11 +2,13 @@
 
 import hashlib
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any, Optional, cast
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
+from pydantic import ValidationError
 
 from database._client import get_firestore_client
 from models.task_recommendation import (
@@ -23,6 +25,8 @@ from models.task_recommendation import (
     WhatMattersNowProjection,
 )
 from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
+
+logger = logging.getLogger(__name__)
 
 FEEDBACK_COLLECTION = 'task_feedback'
 OUTCOMES_COLLECTION = 'task_outcomes'
@@ -309,6 +313,23 @@ def get_projection(
     return projection if include_expired or projection.expires_at > now else None
 
 
+def _decision_records(raw_records: list[Any], evaluation_id: str) -> list[DecisionRecord]:
+    """Build DecisionRecord objects from stored decision dicts, skipping a malformed one.
+
+    DecisionRecord is extra='forbid', so a legacy or schema-drifted audit record would raise
+    ValidationError and 500 the whole recommendation read. Skip such a record rather than fail the
+    batch; unexpected errors still propagate. Sorted by subject_id to match the caller.
+    """
+    records: list[DecisionRecord] = []
+    for record in raw_records:
+        try:
+            records.append(DecisionRecord.model_validate(record))
+        except ValidationError as e:
+            logger.warning('Skipping malformed decision record in evaluation %s: %s', evaluation_id, e)
+    records.sort(key=lambda record: record.subject_id)
+    return records
+
+
 def get_decisions(
     uid: str,
     evaluation_id: str,
@@ -341,9 +362,7 @@ def get_decisions(
     raw_records = payload.get('decisions')
     if not isinstance(raw_records, list):
         return []
-    records = [DecisionRecord.model_validate(record) for record in raw_records]
-    records.sort(key=lambda record: record.subject_id)
-    return records
+    return _decision_records(raw_records, evaluation_id)
 
 
 def get_evaluation_projection(

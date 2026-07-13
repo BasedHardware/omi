@@ -8,7 +8,11 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { omiToolManifest } from "../dist/runtime/omi-tool-manifest.js";
+import {
+  OMI_TOOL_MANIFEST_DIGEST,
+  OMI_TOOL_MANIFEST_VERSION,
+  omiToolManifest,
+} from "../dist/runtime/omi-tool-manifest.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const AGENT_DIR = join(__dirname, "..");
@@ -520,6 +524,9 @@ enum GeneratedSwiftToolExecutor: String {
 }
 
 enum GeneratedToolExecutors {
+  static let manifestVersion = ${OMI_TOOL_MANIFEST_VERSION}
+  static let manifestDigest = ${JSON.stringify(OMI_TOOL_MANIFEST_DIGEST)}
+
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
 ${aliasMapEntries.join(",\n")}
   ]

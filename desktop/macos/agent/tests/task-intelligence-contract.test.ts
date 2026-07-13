@@ -22,7 +22,7 @@ describe("task intelligence v1 contract", () => {
 
   it("keeps recorded capture adapter outputs identical across modalities", () => {
     const fixture = readJson(
-      "backend/tests/unit/fixtures/task_intelligence/capture_v1.json",
+      "backend/tests/unit/fixtures/task_intelligence/capture_v2.json",
     );
     const cases = fixture.cases as Array<Record<string, unknown>>;
 

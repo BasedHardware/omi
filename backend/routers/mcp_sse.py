@@ -74,8 +74,10 @@ from utils.mcp_memories import (
     search_default_mcp_memories_vector,
 )
 from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
+from utils.observability.api_keys import record_api_key_repairs
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
@@ -153,7 +155,9 @@ def authenticate_api_key_auth_context(authorization: Optional[str]) -> Optional[
     if not token.startswith("omi_mcp_"):
         return None
 
-    user_data = mcp_api_key_db.get_user_and_scopes_by_api_key(token)
+    auth_result = mcp_api_key_db.get_api_key_auth_result(token)
+    record_api_key_repairs(key_kind="mcp", operation="auth", repairs=auth_result.repairs, log=logger)
+    user_data = auth_result.context
     if not user_data or not user_data.get("user_id"):
         return None
     return _mcp_memory_context_from_api_key_user_data(user_data)
@@ -169,7 +173,9 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
         token = authorization[7:]
 
     if token.startswith("omi_mcp_"):
-        user_data = mcp_api_key_db.get_user_and_scopes_by_api_key(token)
+        auth_result = mcp_api_key_db.get_api_key_auth_result(token)
+        record_api_key_repairs(key_kind="mcp", operation="auth", repairs=auth_result.repairs, log=logger)
+        user_data = auth_result.context
         if not user_data or not user_data.get("user_id"):
             return None
         return MCPAuthContext(

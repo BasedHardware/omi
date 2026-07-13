@@ -132,11 +132,11 @@ The backend uses NLLB via the `TranslationProvider` enum in `utils/translation.p
 # 2. NLLB primary with Google fallback
 TRANSLATION_SERVICE_MODELS=nllb,google
 
-# 3. NLLB primary (Google fallback still fires on NLLB errors)
+# 3. NLLB only (errors stay retryable; no implicit Google fallback)
 TRANSLATION_SERVICE_MODELS=nllb
 ```
 
-`HOSTED_TRANSLATION_API_URL` must also be set for `nllb` to activate.
+The comma-separated list is the exact provider order: fallbacks are used only when they are named. `HOSTED_TRANSLATION_API_URL` must also be set for `nllb` to activate. If the list is empty or contains no usable provider, the backend defaults to Google.
 
 ## Deploy
 

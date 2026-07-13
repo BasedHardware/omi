@@ -805,7 +805,7 @@
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Backend-sync",
-    "title": "Backend-sync - sync enqueue_failed share high",
+    "title": "Backend-sync - sync enqueue uncertainty share high",
     "condition": "C",
     "data": [
       {
@@ -821,7 +821,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(omi_fallback_total{component=\"sync_dispatch\",reason=\"enqueue_failed\"}[10m])) / clamp_min(sum(rate(omi_sync_dispatch_attempts_total[10m])), 1e-9)",
+          "expr": "sum(rate(omi_sync_dispatch_attempts_total{mode=\"enqueue_uncertain\"}[10m])) / clamp_min(sum(rate(omi_sync_dispatch_attempts_total[10m])), 1e-9)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -901,7 +901,7 @@
     "annotations": {
       "runbook": "backend/docs/runbooks/sync-dispatch-fallback.md",
       "summary": "Paused: backend-sync metrics not scraped by GKE Prometheus \u2014 use Cloud Logging",
-      "threshold": "0.2 (20% enqueue_failed)",
+      "threshold": "0.2 (20% enqueue uncertainty)",
       "__dashboardUid__": "omi-resilience-fallbacks",
       "__panelId__": "3"
     },

@@ -130,13 +130,6 @@ class RewindViewModel: ObservableObject {
         errorMessage = nil
 
         do {
-            // Configure database for the current user BEFORE anything touches the DB.
-            // Without this, RewindIndexer.initialize() opens the DB for "anonymous",
-            // then ViewModelContainer.loadAllData() detects the user mismatch, closes
-            // the DB, and re-opens — leaving us with a nil dbQueue mid-use.
-            let userId = UserDefaults.standard.string(forKey: "auth_userId")
-            await RewindDatabase.shared.configure(userId: userId)
-
             // Initialize the indexer if needed
             try await RewindIndexer.shared.initialize()
 

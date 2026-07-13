@@ -21,6 +21,8 @@ make desktop-run-local USER=alice
 make reset-memory-scenario SCENARIO=happy_path
 ```
 
+Before `make desktop-run-local` signs into the Auth emulator, it resets only the selected synthetic `omi-*` bundle's team-and-bundle-scoped auth, local-agent, and device Keychain items. This keeps repeated ad-hoc builds hermetic; the reset helper rejects Prod, Beta, Omi Dev, and any app-path identity mismatch.
+
 `make dev-summary` writes an optional `LOCAL_EMULATOR_DEV` session summary with `activation_eligible=false`, provider mode, local endpoints, no prod/dev-cloud activation implication, and placeholder fields for write-attempt instrumentation plus protected-collection before/after digests when live emulator instrumentation is not available.
 
 If local Firestore/Auth emulators are not reachable, seed/reset commands still validate fixtures and emit a dry-run manifest under the sentinel-owned local harness state root. They do not fake live emulator writes.

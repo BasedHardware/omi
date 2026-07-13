@@ -303,7 +303,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       return;
     }
     final deviceService = ServiceManager.instance().device;
-    if (deviceService is DeviceService && deviceService.status == DeviceServiceStatus.ready) {
+    if (deviceService.status == DeviceServiceStatus.ready) {
       try {
         await deviceService.discover();
       } catch (e) {

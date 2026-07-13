@@ -11,8 +11,13 @@ from typing import Any
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_ROOT))
 
-from models.task_recommendation import DeterministicFacts, RecommendationSubjectKind  # noqa: E402
+from models.task_recommendation import (  # noqa: E402
+    DeterministicFacts,
+    FeedbackSubjectKind,
+    RecommendationSubjectKind,
+)
 from utils.task_intelligence import recommendations  # noqa: E402
+from utils.task_intelligence.fixture_runner import validate_ranking_selection  # noqa: E402
 from utils.task_intelligence.live_recommendation_judgment import LiveRecommendationJudgment  # noqa: E402
 
 if '--live' in sys.argv:
@@ -20,11 +25,11 @@ if '--live' in sys.argv:
 else:
     _get_live_llm = None
 
-DEFAULT_FIXTURE = BACKEND_ROOT / 'tests' / 'unit' / 'fixtures' / 'task_intelligence' / 'ranking_v1.json'
+DEFAULT_FIXTURE = BACKEND_ROOT / 'tests' / 'unit' / 'fixtures' / 'task_intelligence' / 'ranking_v2.json'
 
 
 class RecordedJudgment:
-    model_version = 'recorded:ranking.v1'
+    model_version = 'recorded:ranking.v2'
 
     def __init__(self, selected_ids: list[str]):
         self.selected_ids = selected_ids
@@ -58,19 +63,48 @@ def _subject(payload: dict[str, Any], *, device_id: str) -> recommendations.Eval
     recent_material_activity = bool(
         payload.get('recent_material_activity', raw_facts.get('recent_material_activity', False))
     )
+    kind = RecommendationSubjectKind(payload.get('subject_kind', RecommendationSubjectKind.task.value))
+    feedback_kind = FeedbackSubjectKind.workstream if kind == RecommendationSubjectKind.agent_open_loop else None
     return recommendations.build_evaluation_subject(
-        kind=RecommendationSubjectKind.task,
+        kind=kind,
         subject_id=payload['subject_id'],
-        destination_task_id=payload['subject_id'],
-        headline=f"Synthetic fixture {payload['subject_id']}",
-        label=None,
+        feedback_subject_kind=feedback_kind,
+        feedback_subject_id=payload.get('workstream_id') if feedback_kind else None,
+        destination_task_id=payload['subject_id'] if kind == RecommendationSubjectKind.task else None,
+        destination_workstream_id=payload.get('workstream_id'),
+        headline=str(payload.get('headline') or f"Synthetic fixture {payload['subject_id']}"),
+        label=payload.get('label'),
         evidence=evidence,
         facts=facts,
         is_open=bool(raw_facts.get('open', True)),
         unexpired=bool(raw_facts.get('unexpired', True)),
         recent_material_activity=recent_material_activity,
         material_token='fixture-v1',
+        evidence_preview=payload.get('evidence_preview'),
+        explicit_user_intent=bool(payload.get('explicit_user_intent', False)),
     )
+
+
+def validate_live_selection(
+    case: dict[str, Any],
+    selections: list[recommendations.JudgmentSelection],
+    shortlist: list[recommendations.EvaluationSubject],
+) -> list[str]:
+    """Validate both the taste fixture and the production shortlist boundary."""
+
+    shortlist_keys = {(subject.kind, subject.subject_id) for subject in shortlist}
+    valid_selections = [
+        selection for selection in selections if (selection.subject_kind, selection.subject_id) in shortlist_keys
+    ]
+    violations = validate_ranking_selection(case, [selection.subject_id for selection in valid_selections])
+    out_of_shortlist = sorted(
+        f'{selection.subject_kind.value}:{selection.subject_id}'
+        for selection in selections
+        if (selection.subject_kind, selection.subject_id) not in shortlist_keys
+    )
+    if out_of_shortlist:
+        violations.append('out_of_shortlist:' + ','.join(out_of_shortlist))
+    return violations
 
 
 def run(fixture_path: Path, *, live: bool) -> dict[str, Any]:
@@ -86,14 +120,18 @@ def run(fixture_path: Path, *, live: bool) -> dict[str, Any]:
             judgment = RecordedJudgment(case['recorded_judgment'])
         selections = judgment.judge(shortlist)
         selected_ids = [selection.subject_id for selection in selections]
-        forbidden = sorted(set(selected_ids).intersection(case['must_not_select']))
+        shortlist_ids = [subject.subject_id for subject in shortlist]
+        violations = validate_live_selection(case, selections, shortlist)
         case_reports.append(
             {
                 'case_id': case['id'],
-                'shortlist_ids': [subject.subject_id for subject in shortlist],
+                'model_version': judgment.model_version,
+                'shortlist_ids': shortlist_ids,
+                'shortlist_keys': [f'{subject.kind.value}:{subject.subject_id}' for subject in shortlist],
                 'selected_ids': selected_ids,
-                'must_not_select_violations': forbidden,
-                'passed': not forbidden,
+                'selected_keys': [f'{selection.subject_kind.value}:{selection.subject_id}' for selection in selections],
+                'violations': violations,
+                'passed': not violations,
             }
         )
     return {

@@ -11,6 +11,7 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/GeminiClient.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeStatusStore.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/ProactiveTaskExecute.swift
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/SuggestedTasksSection.swift
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/SuggestedTasksStore.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskAgentSettings.swift
@@ -35,6 +36,8 @@ covers:
   - desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/StagedTaskStorage.swift
   - desktop/macos/Desktop/Sources/TaskActionItem.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/TaskDetailViews.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/DailyTaskCreationSheet.swift
 preconditions:
   - automation_bridge_ready
 

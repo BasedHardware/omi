@@ -14,10 +14,14 @@ enum DeviceTransportState: String, Sendable {
 /// Abstract transport layer protocol for device communication
 /// Provides a unified interface for different communication protocols (BLE, etc.)
 /// Ported from: omi/app/lib/services/devices/transports/device_transport.dart
+@MainActor
 protocol DeviceTransport: AnyObject {
 
     /// Unique identifier for the connected device
     var deviceId: String { get }
+
+    /// Session generation that owns this physical transport.
+    var sessionGeneration: UInt64 { get }
 
     /// Current connection state
     var state: DeviceTransportState { get }

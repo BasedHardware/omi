@@ -15,6 +15,53 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(source.contains("runtime.directControlTool"))
   }
 
+  @MainActor
+  func testRouteIntentSendsStructuredProposalAndParsesTypedKernelDecision() async throws {
+    let runtime = RecordingCoordinatorRuntime(
+      response: """
+      {
+        "ok": true,
+        "route": {
+          "decisionId": "decision-1",
+          "intent": "continue_run",
+          "surfaceKind": "main_chat",
+          "snapshotVersion": "snapshot-7",
+          "reasonCode": "continue_proposal",
+          "explanation": "Continue the resolved run.",
+          "sessionId": "session-1",
+          "runId": "run-1"
+        }
+      }
+      """)
+    let service = DesktopCoordinatorService(
+      runtime: runtime,
+      clientId: "test-route",
+      harnessModeProvider: { AgentHarnessMode.piMono.rawValue },
+      checkpointDefaults: UserDefaults(suiteName: "DesktopCoordinatorServiceTests.route")!)
+
+    let decision = try await service.routeIntent(
+      intent: "Continue that run",
+      surfaceKind: "main_chat",
+      snapshotVersion: "snapshot-7",
+      proposal: .continueRun,
+      syntaxFacts: DesktopCoordinatorIntentSyntaxFacts(
+        delegationNegated: nil,
+        explicitSessionId: "session-1",
+        explicitRunId: "run-1",
+        parentRunId: nil,
+        explicitProvider: nil,
+        requestedAgentCount: nil))
+
+    XCTAssertEqual(decision.decisionId, "decision-1")
+    XCTAssertEqual(decision.intent, "continue_run")
+    XCTAssertEqual(decision.sessionId, "session-1")
+    let call = try XCTUnwrap(runtime.calls.first)
+    XCTAssertEqual(call.name, "route_desktop_intent")
+    XCTAssertEqual((call.input["proposal"] as? [String: Any])?["intent"] as? String, "continue_run")
+    XCTAssertEqual((call.input["syntaxFacts"] as? [String: Any])?["explicitRunId"] as? String, "run-1")
+    XCTAssertEqual(call.input["snapshotVersion"] as? String, "snapshot-7")
+  }
+
   func testBackgroundAgentSpawnSurfacesRuntimeRejectionDetails() throws {
     let source = try sourceFile("Chat/DesktopCoordinatorService.swift")
     let start = source.range(of: "private func parseSpawnedAgent")?.lowerBound ?? source.startIndex
@@ -52,6 +99,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
       objective: "Search my recent memories and write a short story.",
       title: "Create Memory Story",
       pillId: pillId,
+      originSurface: .mainChat,
       provider: nil,
       parentRunId: nil,
       visible: true,
@@ -74,6 +122,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertEqual(call.input["title"] as? String, "Create Memory Story")
     XCTAssertEqual(call.input["visible"] as? Bool, true)
     XCTAssertEqual(call.input["externalRefId"] as? String, pillId.uuidString)
+    XCTAssertEqual(call.input["originSurfaceKind"] as? String, "main_chat")
     XCTAssertEqual(call.input["clientId"] as? String, "desktop-floating-pill")
     XCTAssertEqual(call.input["model"] as? String, "gpt-test")
     XCTAssertEqual(call.input["adapterId"] as? String, "pi-mono")
@@ -82,6 +131,71 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     let metadata = try XCTUnwrap(call.input["metadata"] as? [String: String])
     XCTAssertEqual(metadata["uiProjection"], "floating_bar")
     XCTAssertEqual(metadata["pillId"], pillId.uuidString)
+  }
+
+  @MainActor
+  func testSpawnAgentsIssuesOneCanonicalRequestAndProjectsEverySibling() async throws {
+    let runtime = RecordingCoordinatorRuntime(
+      response: """
+      {
+        "ok": true,
+        "requestedAgentCount": 3,
+        "agents": [
+          {
+            "kind": "background",
+            "delegation": null,
+            "session": {"sessionId": "ses_1", "title": "Research (1/3)", "externalRefId": "11111111-1111-1111-1111-111111111111"},
+            "run": {"runId": "run_1"},
+            "attempt": {"attemptId": "att_1"}
+          },
+          {
+            "kind": "background",
+            "delegation": null,
+            "session": {"sessionId": "ses_2", "title": "Research (2/3)", "externalRefId": "22222222-2222-2222-2222-222222222222"},
+            "run": {"runId": "run_2"},
+            "attempt": {"attemptId": "att_2"}
+          },
+          {
+            "kind": "background",
+            "delegation": null,
+            "session": {"sessionId": "ses_3", "title": "Research (3/3)", "externalRefId": "33333333-3333-3333-3333-333333333333"},
+            "run": {"runId": "run_3"},
+            "attempt": null
+          }
+        ]
+      }
+      """)
+    let service = DesktopCoordinatorService(
+      runtime: runtime,
+      clientId: "test-spawn-batch",
+      harnessModeProvider: { AgentHarnessMode.piMono.rawValue },
+      checkpointDefaults: UserDefaults(suiteName: "DesktopCoordinatorServiceTests.spawnBatch")!)
+    let groupID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
+
+    let batch = try await service.spawnAgents(
+      objective: "Research three independent approaches.",
+      title: "Research",
+      pillId: groupID,
+      requestedAgentCount: 3,
+      originSurface: .floatingBar,
+      provider: nil,
+      parentRunId: nil,
+      visible: true,
+      model: nil,
+      harnessMode: .piMono,
+      cwd: nil)
+
+    XCTAssertEqual(runtime.calls.count, 1)
+    XCTAssertEqual(runtime.calls[0].name, "spawn_agent")
+    XCTAssertEqual(runtime.calls[0].input["requestedAgentCount"] as? Int, 3)
+    XCTAssertEqual(batch.requestedAgentCount, 3)
+    XCTAssertEqual(batch.agents.map(\.sessionId), ["ses_1", "ses_2", "ses_3"])
+    XCTAssertEqual(batch.agents.map(\.runId), ["run_1", "run_2", "run_3"])
+    XCTAssertEqual(batch.agents.compactMap(\.externalRefId), [
+      "11111111-1111-1111-1111-111111111111",
+      "22222222-2222-2222-2222-222222222222",
+      "33333333-3333-3333-3333-333333333333",
+    ])
   }
 
   @MainActor
@@ -107,6 +221,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
       objective: "Use Hermes to work on this.",
       title: "Hermes Task",
       pillId: UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!,
+      originSurface: .floatingBar,
       provider: "hermes",
       parentRunId: nil,
       visible: true,
@@ -118,7 +233,60 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     let call = try XCTUnwrap(runtime.calls.first)
     XCTAssertEqual(call.name, "spawn_agent")
     XCTAssertEqual(call.input["adapterId"] as? String, "hermes")
+    XCTAssertEqual(call.input["originSurfaceKind"] as? String, "floating_bar")
     XCTAssertNil(call.input["model"])
+  }
+
+  @MainActor
+  func testSpawnOriginIsTypedAndIndependentFromChildProjectionSurface() async throws {
+    let runtime = RecordingCoordinatorRuntime(
+      response: #"{"ok":true,"session":{"sessionId":"ses","title":"Task"},"run":{"runId":"run"},"attempt":{"attemptId":"attempt"}}"#
+    )
+    let service = DesktopCoordinatorService(
+      runtime: runtime,
+      clientId: "test-origin",
+      harnessModeProvider: { AgentHarnessMode.piMono.rawValue },
+      checkpointDefaults: UserDefaults(suiteName: "DesktopCoordinatorServiceTests.origin")!
+    )
+    let pillID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
+
+    for origin in [
+      DesktopCoordinatorOriginSurface.mainChat,
+      .floatingBar,
+      .realtime,
+    ] {
+      _ = try await service.spawnAgent(
+        objective: "Do the bounded task.",
+        title: "Task",
+        pillId: pillID,
+        originSurface: origin,
+        provider: nil,
+        parentRunId: nil,
+        visible: true,
+        model: nil,
+        harnessMode: .piMono,
+        cwd: nil
+      )
+    }
+    _ = try await service.continueAgent(
+      sessionId: "ses",
+      prompt: "Continue.",
+      originSurface: .taskChat,
+      model: nil,
+      cwd: nil
+    )
+
+    XCTAssertEqual(
+      runtime.calls.compactMap { $0.input["originSurfaceKind"] as? String },
+      ["main_chat", "floating_bar", "realtime", "task_chat"]
+    )
+    XCTAssertTrue(runtime.calls.prefix(3).allSatisfy {
+      ($0.input["metadata"] as? [String: String])?["uiProjection"] == "floating_bar"
+        && $0.input["externalRefId"] as? String == pillID.uuidString
+    })
+    XCTAssertEqual(runtime.calls.last?.name, "send_agent_message")
+    XCTAssertEqual(runtime.calls.last?.input["sessionId"] as? String, "ses")
+    XCTAssertEqual(DesktopCoordinatorOriginSurface.taskChat.rawValue, "task_chat")
   }
 
   @MainActor
@@ -227,14 +395,21 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertFalse(source.contains("debug_dispatch_"))
     XCTAssertFalse(source.contains("recordLocalSuccess"))
     XCTAssertFalse(source.contains("recordPresentationCompletion"))
+    XCTAssertFalse(source.contains("shouldCreateDispatch(for:"))
+    XCTAssertFalse(source.contains("normalized.contains(\"build\")"))
   }
 
   func testMainChatSendsRawUserTextToKernel() throws {
+    // omi-test-quality: source-inspection -- static contract: main chat cannot reintroduce deprecated query authority fields
     let source = try sourceFile("Providers/ChatProvider.swift")
 
     XCTAssertTrue(source.contains("prompt: trimmedText"))
-    XCTAssertTrue(source.contains("attachmentMetadataJson: Self.attachmentContextPrompt(for: attachmentsForMessage)"))
-    XCTAssertTrue(source.contains("backfillConversationTurnsIfNeeded(for: resolvedSurface)"))
+    XCTAssertTrue(source.contains("attachments: Self.queryAttachments(attachmentsForMessage)"))
+    XCTAssertTrue(source.contains("expectedContext: kernelContext.snapshot.freshness"))
+    XCTAssertFalse(source.contains("attachmentMetadataJson:"))
+    XCTAssertFalse(source.contains("surfaceContextJson:"))
+    XCTAssertTrue(source.contains("kernelTurnProjection.recordExchange("))
+    XCTAssertFalse(source.contains("importConversationTurns("))
     XCTAssertFalse(source.contains("buildMainChatContextPacketPrompt("))
     XCTAssertFalse(source.contains("bridgePromptContexts"))
     XCTAssertFalse(source.contains("bridgePromptContexts"))
@@ -265,12 +440,12 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(source.contains("queryResult = try await resolvedAgentClient().query("))
   }
 
-  func testTurnContextOwnedByKernelRuntime() throws {
-    let turnContext = try repoFile("../agent/src/runtime/turn-context.ts")
-    XCTAssertTrue(turnContext.contains("assembleTurnContext"))
-    XCTAssertTrue(turnContext.contains("routeDesktopIntent"))
-    XCTAssertTrue(turnContext.contains("persistDesktopContextPacket"))
-    XCTAssertTrue(turnContext.contains("bindingCarriesNativeHistory"))
+  func testContextSnapshotAndRenderingAreOwnedByKernelRuntime() throws {
+    let contextSnapshot = try repoFile("../agent/src/runtime/context-snapshot.ts")
+    XCTAssertTrue(contextSnapshot.contains("export function buildContextSnapshot("))
+    XCTAssertTrue(contextSnapshot.contains("export function updateContextSource("))
+    XCTAssertTrue(contextSnapshot.contains("export function kernelSystemPolicy("))
+    XCTAssertTrue(contextSnapshot.contains("export function renderContextSnapshot("))
   }
 
   func testRealtimeStatusReadsCoordinatorOpenLoops() throws {
@@ -284,8 +459,9 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(source.contains("completedAtHighWaterMs: pendingCompletedAgentDeltaHighWaterMs"))
     XCTAssertTrue(source.contains("coordinatorOpenLoopsIsEmpty("))
     XCTAssertTrue(source.contains("coordinatorOpenLoopsIsEmpty("))
-    XCTAssertTrue(source.contains("voice seed"))
-    XCTAssertTrue(toolsSource.contains("floating-bar pill projections"))
+    XCTAssertTrue(source.contains("voice context"))
+    XCTAssertTrue(toolsSource.contains("DesktopCapabilityRegistry.realtimeSelfModelPrompt"))
+    XCTAssertFalse(toolsSource.contains("floating-bar pill projections"))
   }
 
   func testCoordinatorCompletionDeltaIsCheckpointedAndUntrusted() throws {
@@ -307,6 +483,30 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(source.contains("Do not read raw ids aloud."))
   }
 
+  func testOrdinaryQueryPathsPinProfilesOnlyDuringAtomicSessionCreation() throws {
+    let providerSource = try sourceFile("Providers/ChatProvider.swift")
+    let providerStart = try XCTUnwrap(
+      providerSource.range(of: "private func resolveKernelQuerySession("))
+    let providerTail = providerSource[providerStart.lowerBound...]
+    let providerEnd = try XCTUnwrap(
+      providerTail.range(of: "private func prepareKernelQueryContext("))
+    let providerSetup = providerTail[..<providerEnd.lowerBound]
+
+    let clientSource = try sourceFile("Chat/AgentClient.swift")
+    let runStart = try XCTUnwrap(clientSource.range(of: "static func run("))
+    let runSource = clientSource[runStart.lowerBound...]
+    let taskSource = try sourceFile(
+      "ProactiveAssistants/Assistants/TaskAgent/TaskChatRuntime.swift")
+
+    XCTAssertTrue(providerSetup.contains("creationProfile: AgentSessionCreationProfile("))
+    XCTAssertFalse(providerSetup.contains("migrateSessionExecutionProfile"))
+    XCTAssertTrue(providerSource.contains("pinnedSession: pinnedSession"))
+    XCTAssertTrue(runSource.contains("creationProfile: creationProfile"))
+    XCTAssertFalse(runSource.contains("migrateSessionExecutionProfile"))
+    XCTAssertTrue(taskSource.contains("creationProfile: creationProfile"))
+    XCTAssertFalse(taskSource.contains("migrateSessionExecutionProfile"))
+  }
+
   func testPTTVoiceSpawnUsesCanonicalBackgroundAgentProjection() throws {
     let chatSource = try sourceFile("Providers/ChatProvider.swift")
     let hubSource = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
@@ -315,29 +515,27 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(chatSource.contains("kernelTurnProjection"))
     XCTAssertFalse(chatSource.contains("func recordSurfaceTurnViaKernel("))
     XCTAssertFalse(chatSource.contains("func applyKernelTurnRecorded("))
-    XCTAssertFalse(chatSource.contains("func fetchKernelVoiceSeedContext("))
     XCTAssertFalse(chatSource.contains("setTurnRecordedHandler"))
-    XCTAssertTrue(hubSource.contains("recordTurnToKernelAwaiting("))
+    XCTAssertTrue(hubSource.contains("persistTurnDirectlyToKernel("))
     XCTAssertTrue(hubSource.contains("let surface = FloatingControlBarManager.shared.mainChatSurfaceReference()"))
-    XCTAssertTrue(hubSource.contains("ownerID: entry.ownerID"))
-    XCTAssertTrue(hubSource.contains("surfaceKind: entry.surfaceKind"))
-    XCTAssertTrue(
-      try sourceFile("Chat/AgentRuntimeProcess.swift").contains("ownerID ?? currentOwnerId()"))
+    XCTAssertTrue(hubSource.contains("guard let ownerID = RuntimeOwnerIdentity.currentOwnerId()"))
+    XCTAssertFalse(hubSource.contains("RealtimeVoiceTurnOutbox"))
     XCTAssertTrue(hubSource.contains("origin: \"realtime_voice\""))
     XCTAssertTrue(hubSource.contains("escalateToHigherModel"))
-    XCTAssertTrue(hubSource.contains("AgentDelegationResolver.shared.resolve"))
-    XCTAssertTrue(hubSource.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation"))
-    // Speculative warm must reuse mainInstance — a second ChatProvider attaches a
-    // duplicate turn_recorded handler and doubles PTT chat / pill_completion rows.
-    XCTAssertTrue(hubSource.contains("ChatProvider.mainInstance"))
-    XCTAssertTrue(hubSource.contains("speculativelyWarmAgent"))
+    XCTAssertFalse(hubSource.contains("AgentDelegationResolver"))
+    XCTAssertFalse(hubSource.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation"))
+    XCTAssertTrue(hubSource.contains("AgentRuntimeProcess.shared.invokeExternalSurfaceTool("))
+    // Realtime transport does not decide semantic routing or attach directly to
+    // ChatProvider; the kernel and journal-facing manager own those boundaries.
+    XCTAssertFalse(hubSource.contains("ChatProvider.mainInstance"))
+    XCTAssertFalse(hubSource.contains("speculativelyWarmAgent"))
     XCTAssertFalse(hubSource.contains("warmProvider = ChatProvider()"))
     XCTAssertFalse(hubSource.contains("private var warmProvider"))
     XCTAssertTrue(pillSource.contains("DesktopCoordinatorService.shared.spawnAgent("))
     XCTAssertTrue(pillSource.contains("AgentRuntimeStatusStore.shared.recordAcceptedRun("))
   }
 
-  func testPTTSeedsFreshRealtimeSessionsFromKernelVoiceSeed() throws {
+  func testPTTBuildsFreshRealtimeSessionsFromTypedKernelContextSnapshot() throws {
     let chatSource = try sourceFile("Providers/ChatProvider.swift")
     let managerSource = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
     let hubSource = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
@@ -345,24 +543,30 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     let bridgeSource = try sourceFile("Chat/AgentBridge.swift")
 
     XCTAssertTrue(chatSource.contains("kernelTurnProjection"))
-    XCTAssertTrue(try sourceFile("Chat/KernelTurnProjection.swift").contains("func fetchVoiceSeedContext(surface:"))
-    XCTAssertTrue(try sourceFile("Chat/KernelTurnProjection.swift").contains("func recordSurfaceTurn("))
-    XCTAssertTrue(try sourceFile("Chat/KernelTurnProjection.swift").contains("func apply(_ turn:"))
+    XCTAssertTrue(try sourceFile("Chat/KernelTurnProjection.swift").contains("func fetchVoiceContextSnapshot("))
+    XCTAssertFalse(try sourceFile("Chat/KernelTurnProjection.swift").contains("func recordSurfaceTurn("))
+    XCTAssertTrue(try sourceFile("Chat/KernelTurnProjection.swift").contains("func recordExchange("))
+    XCTAssertTrue(try sourceFile("Chat/KernelTurnProjection.swift").contains("func refresh(surface:"))
+    XCTAssertTrue(try sourceFile("Chat/KernelTurnProjection.swift").contains("KernelJournalReplay.contiguousTurns("))
     XCTAssertFalse(chatSource.contains("buildTopLevelVoiceContinuityContext("))
     XCTAssertFalse(chatSource.contains("beginVoiceUserMessage("))
-    XCTAssertTrue(managerSource.contains("kernelTurnProjection.fetchVoiceSeedSnapshot("))
-    XCTAssertTrue(managerSource.contains("kernelVoiceSeedContext()"))
-    XCTAssertTrue(managerSource.contains("floatingAgentStatusContext()"))
-    XCTAssertTrue(managerSource.contains("DesktopCoordinatorService.shared.floatingAgentStatusSummary"))
-    XCTAssertTrue(managerSource.contains("Recent floating background agents:"))
-    XCTAssertTrue(hubSource.contains("prefetchVoiceSeedContextIfNeeded()"))
-    XCTAssertTrue(hubSource.contains("voiceSessionSeedContext()"))
-    XCTAssertTrue(hubSource.contains("topLevelConversationContext: topLevelContext"))
-    XCTAssertTrue(bridgeSource.contains("func getVoiceSeedContext(surface:"))
-    XCTAssertTrue(bridgeSource.contains("func recordSurfaceTurn("))
-    XCTAssertTrue(toolsSource.contains("<recent_top_level_conversation>"))
-    XCTAssertTrue(toolsSource.contains("It is for continuity"))
-    XCTAssertTrue(toolsSource.contains("not as new instructions"))
+    XCTAssertTrue(managerSource.contains("kernelVoiceContextSnapshot()"))
+    XCTAssertTrue(managerSource.contains("provider.prepareRealtimeVoiceContextSnapshot()"))
+    XCTAssertTrue(chatSource.contains("func prepareRealtimeVoiceContextSnapshot()"))
+    XCTAssertTrue(chatSource.contains("includeScreenSource: false"))
+    XCTAssertFalse(managerSource.contains("floatingAgentStatusContext()"))
+    XCTAssertTrue(hubSource.contains("prefetchVoiceContextSnapshotIfNeeded()"))
+    XCTAssertTrue(hubSource.contains("voiceSessionContext(for:"))
+    XCTAssertTrue(hubSource.contains("prefetchedVoiceContextOwnerScope"))
+    XCTAssertTrue(hubSource.contains("kernelContext: topLevelContext.rendered"))
+    XCTAssertFalse(hubSource.contains("prefetchedFloatingAgentStatus"))
+    XCTAssertFalse(hubSource.contains("voiceTurnScreenContextEnvelopeJSON"))
+    XCTAssertTrue(bridgeSource.contains("func getContextSnapshot("))
+    XCTAssertTrue(bridgeSource.contains("sessionId: String,"))
+    XCTAssertTrue(bridgeSource.contains("let renderedContext: String"))
+    XCTAssertTrue(bridgeSource.contains("func recordJournalTurn("))
+    XCTAssertTrue(toolsSource.contains("kernelContext: String = \"\""))
+    XCTAssertFalse(toolsSource.contains("<recent_top_level_conversation>"))
   }
 
   func testFloatingTypedChatUsesSharedMainProviderForLiveTranscript() throws {
@@ -377,7 +581,8 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(managerSource.contains("turnOwner: chatTurnOwner(for: .visible(fromVoice: queryFromVoice))"))
     XCTAssertTrue(managerSource.contains("$0.clientTurnId == clientTurnId && $0.sender == .ai"))
     XCTAssertTrue(managerSource.contains("messageClientTurnId"))
-    XCTAssertTrue(managerSource.contains("historyChatProvider?.messages.last(where:"))
+    XCTAssertTrue(managerSource.contains("guard let provider = historyChatProvider"))
+    XCTAssertTrue(managerSource.contains("provider.messages.last(where:"))
     XCTAssertTrue(providerSource.contains("func stopAgent(owner: ChatTurnOwner) -> Bool"))
     XCTAssertTrue(providerSource.contains("owner.canInterrupt(activeTurnOwner)"))
     XCTAssertTrue(providerSource.contains("(.floatingDefault, .floatingVoice)"))
@@ -393,28 +598,32 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertFalse(providerSource.contains("return .floatingChat()"))
   }
 
-  func testVoiceSeedUsesMainChatSurfaceReference() throws {
+  func testVoiceContextSnapshotUsesDedicatedRealtimeSessionAndTypedFreshness() throws {
     let managerSource = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
     let hubSource = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
+    let providerSource = try sourceFile("Providers/ChatProvider.swift")
 
-    XCTAssertTrue(managerSource.contains("fetchVoiceSeedSnapshot("))
-    XCTAssertTrue(managerSource.contains("surface: provider.mainChatSurfaceReference()"))
-    XCTAssertTrue(hubSource.contains("await self.refreshVoiceSeedContext()"))
-    XCTAssertTrue(hubSource.contains("reconnectWarmSessionIfSeedStale()"))
-    XCTAssertTrue(hubSource.contains("sessionVoiceSeedContextSnapshot"))
+    XCTAssertTrue(managerSource.contains("provider.prepareRealtimeVoiceContextSnapshot()"))
+    XCTAssertTrue(providerSource.contains("surface: .realtimeVoice()"))
+    XCTAssertTrue(providerSource.contains("includeScreenSource: false"))
+    XCTAssertTrue(hubSource.contains("await self.refreshVoiceContextSnapshot()"))
+    XCTAssertTrue(hubSource.contains("reconnectWarmSessionIfContextStale()"))
+    XCTAssertTrue(hubSource.contains("sessionVoiceContextFreshnessIdentity"))
+    XCTAssertTrue(hubSource.contains("snapshotFreshnessIdentity: prefetchedVoiceContextFreshnessIdentity"))
   }
 
-  func testVoiceSpawnAgentRecordsHandoffIntoKernelTranscript() throws {
+  func testVoiceKernelAuthorizedToolResultFlowsIntoFinalTranscript() throws {
     let managerSource = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
     let hubSource = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
 
-    XCTAssertTrue(managerSource.contains("func recordSurfaceTurn("))
-    XCTAssertTrue(hubSource.contains("let persistedReply ="))
-    XCTAssertTrue(hubSource.contains("handoff.map {"))
-    XCTAssertTrue(hubSource.contains("assistantText: persistedReply"))
-    XCTAssertTrue(hubSource.contains("await self?.persistTurnToKernelThroughTransientFailures("))
-    XCTAssertTrue(hubSource.contains("pendingVoiceAgentHandoff = (title: pill.title, brief: resolvedBrief)"))
-    XCTAssertTrue(hubSource.contains("turnRecorded = true"))
+    XCTAssertTrue(managerSource.contains("func recordExchange("))
+    XCTAssertFalse(hubSource.contains("let persistedReply ="))
+    XCTAssertFalse(hubSource.contains("handoff.map {"))
+    XCTAssertTrue(hubSource.contains("assistantText: reply"))
+    XCTAssertTrue(hubSource.contains("persistTurnDirectlyToKernel("))
+    XCTAssertTrue(hubSource.contains("invokeExternallyAuthorizedTool("))
+    XCTAssertFalse(hubSource.contains("pendingVoiceAgentHandoff"))
+    XCTAssertTrue(hubSource.contains("journalFinalization == .pending"))
     XCTAssertFalse(hubSource.contains("recordVoiceAgentHandoff("))
   }
 
@@ -423,7 +632,8 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
 
     XCTAssertTrue(source.contains("externalRefKind: stringValue(session[\"externalRefKind\"])"))
     XCTAssertTrue(source.contains("externalRefId: stringValue(session[\"externalRefId\"])"))
-    XCTAssertTrue(source.contains("$0.externalRefKind == \"task\" && $0.externalRefId == taskId"))
+    XCTAssertTrue(source.contains("input[\"taskId\"] = taskId"))
+    XCTAssertFalse(source.contains("$0.externalRefKind == \"task\" && $0.externalRefId == taskId"))
     XCTAssertFalse(source.contains("sessionId?.contains(taskId)"))
   }
 

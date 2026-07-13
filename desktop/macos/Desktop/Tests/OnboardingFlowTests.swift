@@ -239,19 +239,19 @@ final class OnboardingFlowTests: XCTestCase {
     XCTAssertFalse(
       OnboardingFlow.shouldUnlockVoiceShortcutContinue(
         observedShortcutPress: false,
-        pttState: .idle
+        voiceTurnPhase: nil
       )
     )
     XCTAssertFalse(
       OnboardingFlow.shouldUnlockVoiceShortcutContinue(
         observedShortcutPress: true,
-        pttState: .listening
+        voiceTurnPhase: .recording
       )
     )
     XCTAssertTrue(
       OnboardingFlow.shouldUnlockVoiceShortcutContinue(
         observedShortcutPress: true,
-        pttState: .idle
+        voiceTurnPhase: nil
       )
     )
   }

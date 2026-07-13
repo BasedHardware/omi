@@ -39,7 +39,17 @@ final class SessionIdentityForbiddenIdentifiersTests: XCTestCase {
         if trimmed.hasPrefix("//") { continue }
         let lower = line.lowercased()
         for identifier in forbiddenIdentifiers {
-          if lower.contains(identifier) {
+          let containsForbiddenIdentifier: Bool
+          if identifier == "resume:" {
+            containsForbiddenIdentifier = lower.contains("resume")
+              && lower.range(
+                of: #"(?<![a-z0-9_])resume\s*:"#,
+                options: .regularExpression
+              ) != nil
+          } else {
+            containsForbiddenIdentifier = lower.contains(identifier)
+          }
+          if containsForbiddenIdentifier {
             violations.append("\(relativePath): contains forbidden identifier `\(identifier)` — \(trimmed)")
           }
         }

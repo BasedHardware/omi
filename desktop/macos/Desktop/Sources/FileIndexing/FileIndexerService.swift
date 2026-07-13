@@ -7,7 +7,11 @@ actor FileIndexerService {
     static let shared = FileIndexerService()
 
     private var _dbQueue: DatabasePool?
+    /// Shared Rewind pool epoch. `nil` denotes an explicitly injected test pool.
+    private var _dbGeneration: Int?
     private var isScanning = false
+    private var activeScanOperations = 0
+    private var scanCompletionWaiters: [CheckedContinuation<Void, Never>] = []
     private let scanPolicy: FileIndexScanPolicy
 
     /// Batch insert size
@@ -27,18 +31,43 @@ actor FileIndexerService {
     // MARK: - Database Access
 
     private func ensureDB() async throws -> DatabasePool {
-        if let db = _dbQueue { return db }
+        if let db = _dbQueue {
+            guard let generation = _dbGeneration else { return db }
+            if await RewindDatabase.shared.poolGeneration() == generation {
+                return db
+            }
+        }
 
         try await RewindDatabase.shared.initialize()
-        guard let db = await RewindDatabase.shared.getDatabaseQueue() else {
+        let (queue, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+        guard let db = queue else {
             throw FileIndexerError.databaseNotInitialized
         }
         _dbQueue = db
+        _dbGeneration = generation
         return db
     }
 
-    func invalidateCache() {
+    func invalidateCache() async {
+        if activeScanOperations > 0 {
+            await withCheckedContinuation { continuation in
+                scanCompletionWaiters.append(continuation)
+            }
+        }
         _dbQueue = nil
+        _dbGeneration = nil
+    }
+
+    private func finishScanning() {
+        isScanning = false
+    }
+
+    private func finishScanOperation() {
+        activeScanOperations = max(0, activeScanOperations - 1)
+        guard activeScanOperations == 0 else { return }
+        let waiters = scanCompletionWaiters
+        scanCompletionWaiters.removeAll()
+        waiters.forEach { $0.resume() }
     }
 
     /// Returns the total number of indexed files in the database
@@ -69,7 +98,7 @@ actor FileIndexerService {
         }
 
         isScanning = true
-        defer { isScanning = false }
+        defer { finishScanning() }
 
         log("FileIndexer: Starting onboarding pipeline")
 
@@ -118,7 +147,7 @@ actor FileIndexerService {
         }
 
         isScanning = true
-        defer { isScanning = false }
+        defer { finishScanning() }
 
         log("FileIndexer: Starting background rescan")
 
@@ -135,6 +164,8 @@ actor FileIndexerService {
     /// Returns total number of files indexed
     @discardableResult
     func scanFolders(_ folders: [URL], incremental: Bool = false) async -> Int {
+        activeScanOperations += 1
+        defer { finishScanOperation() }
         let db: DatabasePool
         do {
             db = try await ensureDB()

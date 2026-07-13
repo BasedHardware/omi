@@ -32,8 +32,8 @@ import type {
   ToolDef,
   ToolExecutor,
   EventCallback,
+  WarmupSessionConfig,
 } from "./interface.js";
-import type { WarmupSessionConfig } from "../protocol.js";
 
 type PiMonoConfig = HarnessConfig & {
   onRestart?: (reason: string) => void;
@@ -52,14 +52,7 @@ interface PiRpcEvent {
 }
 
 interface PiMonoRelayContext {
-  protocolVersion: 2;
-  requestId: string;
-  clientId: string;
-  sessionId: string;
-  runId: string;
-  attemptId: string;
-  adapterSessionId?: string;
-  disableSwiftBackedTools?: boolean;
+  capabilityRef: string;
 }
 
 interface PiAssistantMessageEvent {
@@ -546,8 +539,8 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.activePromptGeneration = 0;
   }
 
-  clearRelayContextForAttempt(attemptId: string): void {
-    this.clearRelayContext(attemptId);
+  clearRelayContextForCapability(capabilityRef: string): void {
+    this.clearRelayContext(capabilityRef);
   }
 
   async setModel(sessionId: string, model: string): Promise<void> {
@@ -701,14 +694,11 @@ export class PiMonoAdapter implements HarnessAdapter {
       return;
     }
     mkdirSync(dirname(this.contextFilePath), { recursive: true });
-    writeFileSync(this.contextFilePath, JSON.stringify({
-      adapterId: "pi-mono",
-      ...context,
-    }));
+    writeFileSync(this.contextFilePath, JSON.stringify({ capabilityRef: context.capabilityRef }));
   }
 
-  private clearRelayContext(expectedAttemptId?: string): void {
-    if (!expectedAttemptId) {
+  private clearRelayContext(expectedCapabilityRef?: string): void {
+    if (!expectedCapabilityRef) {
       rmSync(this.contextFilePath, { force: true });
       return;
     }
@@ -716,7 +706,7 @@ export class PiMonoAdapter implements HarnessAdapter {
 
     try {
       const parsed = JSON.parse(readFileSync(this.contextFilePath, "utf8")) as Record<string, unknown>;
-      if (parsed.attemptId !== expectedAttemptId) return;
+      if (parsed.capabilityRef !== expectedCapabilityRef) return;
     } catch {
       // Invalid context is unusable by the extension; remove it as stale.
     }
@@ -1064,14 +1054,7 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
         async () => "",
         signal,
         {
-          protocolVersion: 2,
-          requestId: context.requestId,
-          clientId: context.clientId,
-          sessionId: context.sessionId,
-          runId: context.runId,
-          attemptId: context.attemptId,
-          adapterSessionId: context.binding.adapterNativeSessionId,
-          disableSwiftBackedTools: context.metadata?.disableSwiftBackedTools === true,
+          capabilityRef: context.toolCapabilityRef,
         }
       );
 
@@ -1086,7 +1069,7 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
         terminalStatus: signal.aborted || this.cancelledAttempts.has(context.attemptId) ? "cancelled" : "succeeded",
       };
     } finally {
-      this.harness.clearRelayContextForAttempt(context.attemptId);
+      this.harness.clearRelayContextForCapability(context.toolCapabilityRef);
       this.cancelledAttempts.delete(context.attemptId);
       if (this.harness.hasPendingRestart) {
         await this.harness.executePendingRestart();

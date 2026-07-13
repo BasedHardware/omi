@@ -17,6 +17,10 @@ import type {
   RunStatus,
   DelegationMode,
 } from "./types.js";
+import type {
+  RunToolCapabilityRejectCode,
+} from "./run-tool-capability.js";
+import type { ToolInvocationSummary } from "./tool-invocation-ledger.js";
 import type { PromptBlock, ToolDef, RuntimeAdapter, AdapterBindingHandle } from "../adapters/interface.js";
 import type { AdapterRegistry } from "./adapter-registry.js";
 import type { OmiArtifactStorage } from "./artifact-storage.js";
@@ -24,6 +28,7 @@ import type { DesktopActionQueueItem } from "./desktop-action-queue.js";
 import type { DesktopContextPacketBuildInput } from "./desktop-context-packet.js";
 import type { ResolveSurfaceSessionResult, SurfaceRef } from "./surface-session.js";
 import type { AgentStore } from "./types.js";
+import type { ContextSnapshotProjection } from "../protocol.js";
 import type {
   DesktopArtifactDelivery,
   DesktopAttentionOverride,
@@ -45,11 +50,15 @@ export interface KernelSessionResolutionInput {
   externalRefId?: string;
   title?: string;
   defaultAdapterId?: string;
+  modelProfile?: string | null;
+  executionProfileSource?: "creation" | "child_derivation";
 }
 
 export interface ExecuteAgentRunInput extends KernelSessionResolutionInput {
   clientId: string;
   requestId: string;
+  producingTurnId?: string;
+  idempotencyKey?: string;
   prompt: string;
   promptBlocks?: PromptBlock[];
   systemPrompt?: string;
@@ -66,6 +75,85 @@ export interface ExecuteAgentRunInput extends KernelSessionResolutionInput {
   attachmentMetadataJson?: string | null;
   surfaceContextJson?: string | null;
   imagePresent?: boolean;
+  attachments?: Array<{
+    attachmentId: string;
+    displayName: string;
+    mimeType: string;
+    sizeBytes?: number;
+    uri?: string;
+  }>;
+  expectedContextSnapshotVersion?: string;
+  expectedContextSnapshotGeneration?: number;
+  expectedContextRendererFingerprint?: string;
+  expectedCapabilityVersion?: string;
+  /** Kernel-populated immutable admission snapshot; callers cannot select it. */
+  admittedContextSnapshot?: ContextSnapshotProjection;
+  /** Revokes adapter execution when the authorizing parent invocation expires. */
+  authoritySignal?: AbortSignal;
+}
+
+export interface BeginExternalSurfaceRunInput {
+  ownerId: string;
+  sessionId: string;
+  turnId: string;
+  prompt: string;
+  mode: RunMode;
+  clientId: string;
+  requestId: string;
+}
+
+export interface BeginExternalSurfaceRunResult {
+  ownerId: string;
+  sessionId: string;
+  turnId: string;
+  runId: string;
+  attemptId: string;
+  duplicate: boolean;
+}
+
+export interface CompleteExternalSurfaceRunInput {
+  ownerId: string;
+  sessionId: string;
+  runId: string;
+  attemptId: string;
+  terminalStatus: "completed" | "failed" | "cancelled";
+  errorCode?: string;
+}
+
+export interface CompleteExternalSurfaceRunResult {
+  ownerId: string;
+  sessionId: string;
+  runId: string;
+  attemptId: string;
+  terminalStatus: "completed" | "failed" | "cancelled";
+  duplicate: boolean;
+}
+
+export type ExternalSurfaceAuthorityErrorCode =
+  | "invalid_external_request"
+  | "owner_mismatch"
+  | "invalid_external_surface"
+  | "external_run_identity_collision"
+  | "run_mismatch"
+  | "attempt_mismatch"
+  | "attempt_superseded"
+  | "run_terminal"
+  | "attempt_terminal"
+  | "external_invocations_pending"
+  | "permission_target_rejected"
+  | "permission_route_rejected"
+  | "permission_request_not_authorized"
+  | "pill_management_intent_required"
+  | "sql_write_rejected";
+
+export class ExternalSurfaceAuthorityError extends Error {
+  constructor(
+    readonly code: ExternalSurfaceAuthorityErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ExternalSurfaceAuthorityError";
+  }
 }
 
 export interface KernelRunResult {
@@ -118,6 +206,7 @@ export interface KernelRunDetails {
   events: AgentEvent[];
   parentDelegations: AgentDelegation[];
   childDelegations: AgentDelegation[];
+  toolInvocations: ToolInvocationSummary[];
 }
 
 export interface InspectArtifactsInput {
@@ -249,6 +338,7 @@ export interface SendAgentMessageInput {
   maxAttempts?: number;
   recoverAfterError?: (error: unknown) => Promise<boolean>;
   metadata?: Record<string, unknown>;
+  authoritySignal?: AbortSignal;
 }
 
 export interface SpawnBackgroundAgentInput {
@@ -276,6 +366,9 @@ export interface SpawnBackgroundAgentInput {
   maxAttempts?: number;
   recoverAfterError?: (error: unknown) => Promise<boolean>;
   metadata?: Record<string, unknown>;
+  /** Kernel-admitted producer snapshot for trusted top-level surface spawns. */
+  admittedContextSnapshot?: ContextSnapshotProjection;
+  authoritySignal?: AbortSignal;
 }
 
 export interface SpawnBackgroundAgentResult {
@@ -308,6 +401,7 @@ export interface DelegateAgentInput {
   maxAttempts?: number;
   recoverAfterError?: (error: unknown) => Promise<boolean>;
   metadata?: Record<string, unknown>;
+  authoritySignal?: AbortSignal;
 }
 
 export interface DelegateAgentResult {
@@ -352,4 +446,15 @@ export interface AgentRuntimeKernelOptions {
   runtimeNodeId?: string;
   artifactStorage?: OmiArtifactStorage;
   recoverRunInput?: KernelRunRecoveryPolicy;
+  onToolCapabilityRejected?: (code: RunToolCapabilityRejectCode) => void;
+  /**
+   * Canonical execution-profile repository. Production uses the immutable
+   * SQLite profile reader; tests with synthetic adapters may inject an
+   * equivalent authoritative repository instead of reviving legacy columns.
+   */
+  toolCapabilityProfileForSession?: (sessionId: string) => {
+    generation: number;
+    adapterId: string;
+    executionRole: AgentExecutionRole;
+  };
 }

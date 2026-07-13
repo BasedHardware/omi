@@ -15,21 +15,21 @@ struct LiveTranscriptPanel: View {
 
     var body: some View {
         if displaySegments.isEmpty {
-            VStack(spacing: 16) {
+            VStack(spacing: OmiSpacing.lg) {
                 Image(systemName: "waveform")
                     .scaledFont(size: 48)
                     .foregroundColor(OmiColors.textTertiary)
                     .opacity(0.5)
                 Text("Live Transcript")
-                    .scaledFont(size: 16, weight: .medium)
+                    .scaledFont(size: OmiType.subheading, weight: .medium)
                     .foregroundColor(OmiColors.textSecondary)
                 Text("Start speaking and your transcript will appear here")
-                    .scaledFont(size: 14)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textTertiary)
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(32)
+            .padding(OmiSpacing.section)
         } else {
             LiveTranscriptView(
                 segments: displaySegments,
@@ -46,10 +46,10 @@ struct RecordingBarAudioLevels: View {
     @ObservedObject private var monitor = AudioLevelMonitor.shared
 
     var body: some View {
-        HStack(spacing: 16) {
-            HStack(spacing: 6) {
+        HStack(spacing: OmiSpacing.lg) {
+            HStack(spacing: OmiSpacing.xs) {
                 Image(systemName: "mic.fill")
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textTertiary)
                 AudioLevelWaveformView(
                     level: monitor.microphoneLevel,
@@ -58,9 +58,9 @@ struct RecordingBarAudioLevels: View {
                 )
             }
 
-            HStack(spacing: 6) {
+            HStack(spacing: OmiSpacing.xs) {
                 Image(systemName: "speaker.wave.2.fill")
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textTertiary)
                 AudioLevelWaveformView(
                     level: monitor.systemLevel,
@@ -79,7 +79,7 @@ struct RecordingBarDuration: View {
 
     var body: some View {
         Text(timer.formattedDuration)
-            .scaledFont(size: 14, weight: .medium, design: .monospaced)
+            .scaledFont(size: OmiType.body, weight: .medium, design: .monospaced)
             .foregroundColor(OmiColors.textSecondary)
     }
 }
@@ -92,14 +92,14 @@ struct RecordingBarTranscriptText: View {
     var body: some View {
         if let latestText = monitor.latestText, !monitor.isEmpty {
             Text(latestText)
-                .scaledFont(size: 14)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(OmiColors.textSecondary)
                 .lineLimit(1)
                 .truncationMode(.head)
                 .frame(maxWidth: 260, alignment: .leading)
         } else {
             Text("Listening")
-                .scaledFont(size: 14, weight: .medium)
+                .scaledFont(size: OmiType.body, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
         }
     }
@@ -128,7 +128,7 @@ struct LiveTranscriptView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: OmiSpacing.md) {
                     ForEach(segments) { segment in
                         LiveSegmentView(
                             segment: segment,
@@ -143,7 +143,7 @@ struct LiveTranscriptView: View {
                         .frame(height: 1)
                         .id("transcript-bottom")
                 }
-                .padding(16)
+                .padding(OmiSpacing.lg)
             }
             .defaultScrollAnchor(.bottom)
             .onChange(of: scrollTrigger) { _, _ in
@@ -173,7 +173,7 @@ private struct LiveSegmentView: View {
     }
 
     private var bubbleColor: Color {
-        isUser ? OmiColors.purplePrimary.opacity(0.3) : OmiColors.backgroundTertiary
+        isUser ? OmiColors.accent.opacity(0.3) : OmiColors.backgroundTertiary
     }
 
     var body: some View {
@@ -191,23 +191,23 @@ private struct LiveSegmentView: View {
     }
 
     private var segmentContent: some View {
-        VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
+        VStack(alignment: isUser ? .trailing : .leading, spacing: OmiSpacing.xxs) {
             // Speaker label and timestamp
-            HStack(spacing: 8) {
+            HStack(spacing: OmiSpacing.sm) {
                 if !isUser {
                     speakerAvatar
                 }
 
                 if !isUser, let onTap = onSpeakerTapped {
                     Button(action: onTap) {
-                        HStack(spacing: 4) {
+                        HStack(spacing: OmiSpacing.xxs) {
                             Text(speakerLabel)
-                                .scaledFont(size: 12, weight: personName != nil ? .semibold : .medium)
-                                .foregroundColor(personName != nil ? OmiColors.purplePrimary : OmiColors.textTertiary)
+                                .scaledFont(size: OmiType.caption, weight: personName != nil ? .semibold : .medium)
+                                .foregroundColor(personName != nil ? OmiColors.accent : OmiColors.textTertiary)
 
                             if personName == nil {
                                 Image(systemName: "pencil")
-                                    .scaledFont(size: 9)
+                                    .scaledFont(size: OmiType.micro)
                                     .foregroundColor(OmiColors.textQuaternary)
                                     .opacity(isHovered ? 1 : 0)
                             }
@@ -224,12 +224,12 @@ private struct LiveSegmentView: View {
                     }
                 } else {
                     Text(speakerLabel)
-                        .scaledFont(size: 12, weight: .medium)
+                        .scaledFont(size: OmiType.caption, weight: .medium)
                         .foregroundColor(OmiColors.textTertiary)
                 }
 
                 Text(formatTime(segment.start))
-                    .scaledFont(size: 11)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textQuaternary)
 
                 if isUser {
@@ -239,13 +239,13 @@ private struct LiveSegmentView: View {
 
             // Message bubble
             Text(segment.text)
-                .scaledFont(size: 14)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(OmiColors.textPrimary)
                 .textSelection(.enabled)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+                .padding(.horizontal, OmiSpacing.md)
+                .padding(.vertical, OmiSpacing.sm)
                 .background(
-                    RoundedRectangle(cornerRadius: 16)
+                    RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
                         .fill(bubbleColor)
                 )
 
@@ -253,14 +253,14 @@ private struct LiveSegmentView: View {
             if !segment.translations.isEmpty {
                 ForEach(segment.translations, id: \.lang) { translation in
                     Text(translation.text)
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(OmiColors.textSecondary)
                         .italic()
                         .textSelection(.enabled)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
+                        .padding(.horizontal, OmiSpacing.md)
+                        .padding(.vertical, OmiSpacing.xs)
                         .background(
-                            RoundedRectangle(cornerRadius: 14)
+                            RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
                                 .fill(bubbleColor.opacity(0.5))
                         )
                 }
@@ -270,11 +270,11 @@ private struct LiveSegmentView: View {
 
     private var speakerAvatar: some View {
         Circle()
-            .fill(isUser ? OmiColors.purplePrimary : (personName != nil ? OmiColors.purplePrimary.opacity(0.6) : OmiColors.backgroundQuaternary))
+            .fill(isUser ? OmiColors.accent : (personName != nil ? OmiColors.accent.opacity(0.6) : OmiColors.backgroundQuaternary))
             .frame(width: 24, height: 24)
             .overlay(
                 Text(isUser ? "Y" : (personName?.prefix(1).uppercased() ?? String(segment.speaker)))
-                    .scaledFont(size: 11, weight: .medium)
+                    .scaledFont(size: OmiType.caption, weight: .medium)
                     .foregroundColor(OmiColors.textPrimary)
             )
     }

@@ -187,10 +187,6 @@ fn daily_soft_limit_for(tier: ModelTier) -> u32 {
 
 /// Daily hard limit — at or above this, all requests are rejected (429).
 pub fn daily_hard_limit() -> u32 {
-    daily_hard_limit_for(active_tier())
-}
-
-fn daily_hard_limit_for(_tier: ModelTier) -> u32 {
     1500
 }
 
@@ -303,15 +299,9 @@ mod tests {
     }
 
     #[test]
-    fn daily_hard_limit_same_for_both_tiers() {
-        assert_eq!(daily_hard_limit_for(ModelTier::Premium), 1500);
-        assert_eq!(daily_hard_limit_for(ModelTier::Max), 1500);
-    }
-
-    #[test]
     fn soft_limit_always_below_hard_limit() {
         for tier in [ModelTier::Premium, ModelTier::Max] {
-            assert!(daily_soft_limit_for(tier) < daily_hard_limit_for(tier));
+            assert!(daily_soft_limit_for(tier) < daily_hard_limit());
         }
     }
 

@@ -10,6 +10,7 @@ final class AgentDelegationExecutor {
         let title: String?
         let spokenAck: String?
         let directedProvider: AgentPillsManager.DirectedProvider?
+        let originSurface: DesktopCoordinatorOriginSurface
         let harnessOverride: AgentHarnessMode?
         let validateAgainstOriginalUserText: Bool
 
@@ -19,6 +20,7 @@ final class AgentDelegationExecutor {
             title: String?,
             spokenAck: String?,
             directedProvider: AgentPillsManager.DirectedProvider?,
+            originSurface: DesktopCoordinatorOriginSurface,
             harnessOverride: AgentHarnessMode? = nil,
             validateAgainstOriginalUserText: Bool = true
         ) {
@@ -27,6 +29,7 @@ final class AgentDelegationExecutor {
             self.title = title
             self.spokenAck = spokenAck
             self.directedProvider = directedProvider
+            self.originSurface = originSurface
             self.harnessOverride = harnessOverride
             self.validateAgainstOriginalUserText = validateAgainstOriginalUserText
         }
@@ -38,8 +41,9 @@ final class AgentDelegationExecutor {
     func spawnResolvedDelegation(
         _ task: ResolvedAgentTask,
         model: String,
-        fromVoice: Bool
-    ) -> AgentPill? {
+        fromVoice: Bool,
+        producerJournalIntent: AgentPillProducerJournalIntent
+    ) async throws -> AgentPill? {
         guard DelegationBriefValidator.isStructurallyAcceptable(
             brief: task.brief,
             rawIntent: task.validateAgainstOriginalUserText ? task.originalUserText : nil
@@ -47,13 +51,23 @@ final class AgentDelegationExecutor {
             log("AgentDelegationExecutor: refused spawn with non-self-contained brief")
             return nil
         }
-        return AgentPillsManager.shared.spawnFromUserQuery(
-            task.brief,
-            model: model,
-            fromVoice: fromVoice,
-            preFetchedTitle: task.title,
-            preFetchedAck: task.spokenAck,
-            bridgeHarnessOverride: task.harnessOverride ?? task.directedProvider?.harnessMode
-        )
+        return try await withCheckedThrowingContinuation { continuation in
+            _ = AgentPillsManager.shared.spawn(
+                query: task.brief,
+                model: model,
+                originSurface: task.originSurface,
+                fromVoice: fromVoice,
+                preFetchedTitle: task.title,
+                preFetchedAck: task.spokenAck,
+                bridgeHarnessOverride: task.harnessOverride ?? task.directedProvider?.harnessMode,
+                producerJournalIntent: producerJournalIntent,
+                onAccepted: { result in
+                    switch result {
+                    case .success(let pill): continuation.resume(returning: pill)
+                    case .failure(let error): continuation.resume(throwing: error)
+                    }
+                }
+            )
+        }
     }
 }
