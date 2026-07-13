@@ -83,19 +83,59 @@ def test_observation_failure_warning_is_rate_limited_and_payload_free(monkeypatc
     assert matching == ['llm_gateway_observation_failed request_id=request-1 surface=anthropic_messages']
 
 
-def test_pre_route_rejection_metric_has_only_bounded_contract_labels(monkeypatch):
+def test_terminal_errors_are_warning_logs_with_only_bounded_failure_fields(monkeypatch, caplog):
+    requests = _Metric()
+    latency = _Metric()
+    monkeypatch.setattr(metrics, 'REQUESTS_TOTAL', requests)
+    monkeypatch.setattr(metrics, 'REQUEST_LATENCY_SECONDS', latency)
+
+    with caplog.at_level(logging.WARNING, logger=metrics.logger.name):
+        metrics.observe_route_result(
+            metrics.time_request(),
+            lane_id='omi:auto:conv-structure',
+            route_artifact_id='route.conv_structure.model_config.001',
+            provider='none',
+            model='none',
+            credential_source='service_forwarded_byok',
+            used_lkg=False,
+            fallback_used=False,
+            fallback_reason='byok_auth',
+            outcome='error',
+            error_class='credential_failure',
+            request_id='936c2c10-c509-41f1-95cf-2162710d5ac8',
+            api_surface='openai_chat_completions',
+            streaming=False,
+            phase='before_output',
+        )
+
+    matching = [record.message for record in caplog.records if 'llm_gateway_terminal' in record.message]
+    assert matching == [
+        'llm_gateway_terminal request_id=936c2c10-c509-41f1-95cf-2162710d5ac8 '
+        'surface=openai_chat_completions streaming=false phase=before_output '
+        'lane=omi:auto:conv-structure route=route.conv_structure.model_config.001 '
+        'provider=none model=none credential_source=service_forwarded_byok outcome=error '
+        'error_class=credential_failure failure_class=byok_auth fallback_used=false ttfb_seconds=none'
+    ]
+
+
+def test_pre_route_rejection_metric_has_only_bounded_contract_labels(monkeypatch, caplog):
     rejections = _Metric()
     monkeypatch.setattr(metrics, 'REQUEST_REJECTIONS_TOTAL', rejections)
 
-    metrics.observe_request_rejection(
-        api_surface='openai_chat_completions',
-        error_class='invalid_request',
-        request_id='5d1baae6-c824-4988-adc3-ae82df35cfa5',
-    )
+    with caplog.at_level(logging.WARNING, logger=metrics.logger.name):
+        metrics.observe_request_rejection(
+            api_surface='openai_chat_completions',
+            error_class='invalid_request',
+            request_id='5d1baae6-c824-4988-adc3-ae82df35cfa5',
+        )
 
     assert rejections.increments == [
         {
             'api_surface': 'openai_chat_completions',
             'error_class': 'invalid_request',
         }
+    ]
+    assert [record.message for record in caplog.records if 'llm_gateway_request_rejected' in record.message] == [
+        'llm_gateway_request_rejected request_id=5d1baae6-c824-4988-adc3-ae82df35cfa5 '
+        'surface=openai_chat_completions error_class=invalid_request'
     ]
