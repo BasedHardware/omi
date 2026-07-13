@@ -484,7 +484,10 @@ struct OnboardingChatView: View {
       scheduleRecoveredOnboardingFallback()
     }
     .alert("Are you sure?", isPresented: $showSkipConfirmation) {
-      Button("Skip anyway", role: .destructive) { onSkip() }
+      Button("Skip anyway", role: .destructive) {
+        PermissionDragGuidance.dismiss()
+        onSkip()
+      }
       Button("Continue setup", role: .cancel) {}
     } message: {
       Text("Omi won't be useful for you if it doesn't know enough about you.")
@@ -549,6 +552,8 @@ struct OnboardingChatView: View {
 
   /// Called when a permission is detected as granted (by the 1s timer)
   private func handlePermissionGranted(_ type: String, label: String) {
+    // Permission is granted — drop the floating drag card.
+    PermissionDragGuidance.dismiss()
     bringToFront()
     // If this was the permission we were waiting for, notify the AI
     if pendingPermissionType == type {

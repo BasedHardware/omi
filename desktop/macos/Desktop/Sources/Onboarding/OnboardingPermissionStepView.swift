@@ -38,7 +38,11 @@ struct OnboardingPermissionStepView: View {
       title: title,
       description: description,
       showsSkip: true,
-      onSkip: onSkip,
+      onSkip: {
+        // Skipping a permission step should also clear the floating drag card.
+        PermissionDragGuidance.dismiss()
+        onSkip()
+      },
       onForceComplete: onForceComplete
     ) {
       VStack(alignment: .leading, spacing: OmiSpacing.xl) {
