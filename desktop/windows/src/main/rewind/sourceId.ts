@@ -15,7 +15,13 @@ async function fetchPrimarySourceId(): Promise<string | null> {
     types: ['screen'],
     thumbnailSize: { width: 0, height: 0 } // ids only — no screen bitmap
   })
-  return sources[0]?.id ?? null
+  // A source's `id` is a sequential screen number, and getSources() makes no
+  // ordering guarantee — so sources[0] is not necessarily the primary display.
+  // `display_id` is the documented link to the Screen API; match on it and only
+  // fall back to the first source when Electron doesn't report one.
+  const primaryDisplayId = String(screen.getPrimaryDisplay().id)
+  const primary = sources.find((s) => s.display_id === primaryDisplayId)
+  return primary?.id ?? sources[0]?.id ?? null
 }
 
 /** Cached primary-screen source id; computes it (slowly) once, then reuses it. */
