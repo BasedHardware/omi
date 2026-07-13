@@ -763,6 +763,11 @@ private struct ScreenRecordingDragCardView: View {
   let targetState: ScreenRecordingDragTargetState
   let size: CGSize
 
+  /// Idle hint: the icon + chevron drift up a few points and settle, on a slow
+  /// loop, so the card reads as "drag me up into the list". Respects reduce-motion.
+  @State private var hintUp = false
+  private var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+
   var body: some View {
     ZStack {
       RadialGradient(
@@ -775,11 +780,13 @@ private struct ScreenRecordingDragCardView: View {
       VStack(spacing: 7) {
         Image(systemName: "chevron.up")
           .scaledFont(size: 14, weight: .bold)
-          .foregroundColor(OmiColors.textSecondary.opacity(0.78))
+          .foregroundColor(OmiColors.textSecondary.opacity(hintUp ? 1 : 0.6))
+          .offset(y: hintUp ? -3 : 1)
 
         AppBundleDragSource(icon: appIcon, appURL: appURL, targetState: targetState)
           .frame(width: 64, height: 64)
           .shadow(color: Color.black.opacity(0.58), radius: 12, y: 5)
+          .offset(y: hintUp ? -6 : 0)
           .help("Drag \(appName) into the Screen Recording list")
           .accessibilityLabel("Drag \(appName) to enable Screen Recording")
 
@@ -794,6 +801,12 @@ private struct ScreenRecordingDragCardView: View {
     }
     .frame(width: size.width, height: size.height)
     .background(Color.clear)
+    .onAppear {
+      guard !reduceMotion else { return }
+      withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+        hintUp = true
+      }
+    }
   }
 }
 
