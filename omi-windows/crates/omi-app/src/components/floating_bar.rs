@@ -197,8 +197,9 @@ pub fn FloatingBar() -> Element {
                 value: "{prompt_text}",
                 onfocus: move |_| is_expanded.set(true),
                 oninput: move |e| prompt_text.set(e.value()),
-                onkeypress: move |e| {
+                onkeydown: move |e| {
                     if e.key() == Key::Enter {
+                        e.prevent_default();
                         let text = prompt_text.read().trim().to_string();
                         if !text.is_empty() && !*ai_loading.read() {
                             let cfg = config.read().clone();
@@ -210,10 +211,10 @@ pub fn FloatingBar() -> Element {
                             let mut entries = history.read().clone();
                             entries.push(ChatEntry { role: "user".into(), content: text.clone() });
                             history.set(entries);
+                            pt.set(String::new());
 
                             spawn(async move {
                                 loading.set(true);
-                                pt.set(String::new());
 
                                 // Web search augmentation
                                 let web_ctx = if cfg.web_search_enabled
