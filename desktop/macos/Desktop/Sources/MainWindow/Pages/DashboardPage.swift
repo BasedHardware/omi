@@ -2032,16 +2032,18 @@ struct DashboardPage: View {
 // MARK: - Home Components
 
 private enum HomePalette {
-    static let paper = Color(red: 0.018, green: 0.019, blue: 0.021)
-    static let panel = Color(red: 0.045, green: 0.046, blue: 0.052)
-    static let tile = Color(red: 0.078, green: 0.078, blue: 0.088)
-    static let tileHover = Color(red: 0.115, green: 0.103, blue: 0.142)
-    static let ink = Color(red: 0.94, green: 0.925, blue: 0.89)
-    static let secondary = Color(red: 0.78, green: 0.765, blue: 0.725)
-    static let muted = Color(red: 0.49, green: 0.47, blue: 0.43)
-    static let faint = Color(red: 0.36, green: 0.35, blue: 0.33)
-    static let hairline = Color(red: 0.155, green: 0.155, blue: 0.172)
-    static let green = Color(red: 0.17, green: 0.78, blue: 0.38)
+    // Dashboard vocabulary mapped onto the shared elevation and text ladders.
+    // The aliases keep component intent readable without creating a second palette.
+    static let paper = OmiColors.backgroundPrimary
+    static let panel = OmiColors.backgroundSecondary
+    static let tile = OmiColors.backgroundRaised
+    static let tileHover = OmiColors.backgroundTertiary
+    static let ink = OmiColors.textPrimary
+    static let secondary = OmiColors.textSecondary
+    static let muted = OmiColors.textTertiary
+    static let faint = OmiColors.textQuaternary
+    static let hairline = OmiColors.border
+    static let green = OmiColors.success
     /// The Home jewel is intentionally neutral: one soft light shared only by
     /// the wordmark and focused ask bar, never by secondary cards or states.
     static let jewelGlow = OmiColors.accent
@@ -2420,7 +2422,7 @@ private struct HomeSuggestionRow: View {
             HStack(spacing: OmiSpacing.sm) {
                 Image(systemName: "sparkles")
                     .scaledFont(size: OmiType.caption, weight: .semibold)
-                    .foregroundStyle(isHovering ? Color(hex: 0xE3BF63) : HomePalette.muted)
+                    .foregroundStyle(isHovering ? OmiColors.warning : HomePalette.muted)
 
                 Text(text)
                     .scaledFont(size: OmiType.body, weight: .medium)
@@ -3850,7 +3852,7 @@ private enum HomeStatusState {
         case .inactive:
             return HomePalette.faint
         case .blocked:
-            return Color(red: 1.0, green: 0.24, blue: 0.30)
+            return OmiColors.error
         }
     }
 
