@@ -5,6 +5,7 @@ import { toast } from '../../../lib/toast'
 import { extractMemories, type MemorySource } from '../../../lib/memoryExtract'
 import { buildLocalGraph } from '../../../lib/kgSynthesis'
 import { summarizeMemories, appIndexMemoryIds, type MemoryBreakdown } from '../../../lib/memoryCleanup'
+import { fetchAllMemories } from '../../../lib/memoriesBulk'
 import { useMemories, type Memory } from '../../../hooks/useMemories'
 import { resetOnboarding } from '../../../lib/preferences'
 import { SettingRow } from '../SettingRow'
@@ -66,6 +67,12 @@ export function AdvancedTab(): React.JSX.Element {
   const [extracting, setExtracting] = useState(false)
   const [importing, setImporting] = useState(false)
 
+  // Sanity cap for the no-AI line-split fallback below: an enormous paste (a
+  // multi-thousand-line export dump) would otherwise turn one "Extract" click
+  // into a single absurdly large import batch. The reviewed-list UI still shows
+  // exactly what will be sent, so cap the count, not the per-request size.
+  const MAX_HEURISTIC_IMPORT_ITEMS = 500
+
   const extractDump = async (): Promise<void> => {
     if (extracting) return
     setExtracting(true)
@@ -82,11 +89,15 @@ export function AdvancedTab(): React.JSX.Element {
         const norm = (s: string): string =>
           s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, '').replace(/\s+/g, ' ').trim()
         const have = new Set(existing.map(norm))
-        const list = (await window.omi.memoryImportParse(dump)).filter((m) => !have.has(norm(m)))
+        const rawList = (await window.omi.memoryImportParse(dump)).filter((m) => !have.has(norm(m)))
+        const truncated = rawList.length > MAX_HEURISTIC_IMPORT_ITEMS
+        const list = truncated ? rawList.slice(0, MAX_HEURISTIC_IMPORT_ITEMS) : rawList
         setParsed(list)
         toast('AI extraction unavailable — used a basic line split', {
           tone: 'warn',
-          body: (e as Error).message
+          body: truncated
+            ? `${(e as Error).message} · showing first ${MAX_HEURISTIC_IMPORT_ITEMS} of ${rawList.length} lines`
+            : (e as Error).message
         })
       } catch (e2) {
         toast('Could not extract memories', { tone: 'error', body: (e2 as Error).message })
@@ -96,16 +107,28 @@ export function AdvancedTab(): React.JSX.Element {
     }
   }
 
+  // Cap aligned with the backend's MEMORIES_BATCH_MAX (backend/routers/memories.py)
+  // so a chunk can never be rejected for exceeding the server's per-request limit.
+  const IMPORT_BATCH_SIZE = 100
+
+  // Send parsed memories through POST /v3/memories/batch in chunks of at most
+  // IMPORT_BATCH_SIZE, one request per chunk, sequentially. Replaces the old
+  // one-POST-per-memory fan-out (up to hundreds of requests for a large import),
+  // which could blow through the per-Authorization rate limit and collaterally
+  // 429 unrelated chat/sync/goals calls for the same user.
   const importMemories = async (): Promise<void> => {
     if (!parsed || parsed.length === 0 || importing) return
     setImporting(true)
     let ok = 0
     let failed = 0
     let firstError = ''
-    for (const content of parsed) {
+    for (let i = 0; i < parsed.length; i += IMPORT_BATCH_SIZE) {
+      const chunk = parsed.slice(i, i + IMPORT_BATCH_SIZE)
       try {
-        await omiApi.post('/v3/memories', { content })
-        ok++
+        const r = await omiApi.post('/v3/memories/batch', {
+          memories: chunk.map((content) => ({ content }))
+        })
+        ok += r.data?.created_count ?? chunk.length
       } catch (e) {
         const msg =
           (e as { response?: { status?: number; data?: { detail?: string } }; message: string })
@@ -113,7 +136,7 @@ export function AdvancedTab(): React.JSX.Element {
           (e as { response?: { status?: number } }).response?.status?.toString() ??
           (e as Error).message
         if (!firstError) firstError = msg
-        failed++
+        failed += chunk.length
       }
     }
     setImporting(false)
@@ -174,23 +197,6 @@ export function AdvancedTab(): React.JSX.Element {
   const [memAuditing, setMemAuditing] = useState(false)
   const [memDeleting, setMemDeleting] = useState(false)
   const [memDeleteProgress, setMemDeleteProgress] = useState(0)
-
-  const fetchAllMemories = async (): Promise<Memory[]> => {
-    const byId = new Map<string, Memory>()
-    for (let offset = 0; offset < 100000; offset += 200) {
-      const r = await omiApi.get('/v3/memories', { params: { limit: 200, offset } })
-      const page = (Array.isArray(r.data) ? r.data : (r.data?.memories ?? [])) as Memory[]
-      let added = 0
-      for (const m of page) {
-        if (m.id && !byId.has(m.id)) {
-          byId.set(m.id, m)
-          added++
-        }
-      }
-      if (page.length < 200 || added === 0) break
-    }
-    return [...byId.values()]
-  }
 
   const auditMemories = async (): Promise<void> => {
     if (memAuditing || memDeleting) return
