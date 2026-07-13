@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Brain, Plus, Loader2, CheckSquare, Trash2, X } from 'lucide-react'
+import { Brain, Plus, Loader2, CheckSquare, Trash2, X, Pencil, Globe, Lock } from 'lucide-react'
 import { useMemories, type Memory } from '../hooks/useMemories'
 import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -14,7 +14,7 @@ import { isAppIndexMemory } from '../lib/memoryCleanup'
 const RENDER_CAP = 400
 
 export function Memories(): React.JSX.Element {
-  const { memories, loading, error, createMemory, refresh } = useMemories()
+  const { memories, loading, error, createMemory, editMemory, setMemoryVisibility, refresh } = useMemories()
   // Pass the live memories so the brain map scopes the server KG to entities
   // that reference a memory you actually have (no account-wide bloat / phantoms),
   // drops the layer when empty, and refetches on add/delete.
@@ -32,6 +32,50 @@ export function Memories(): React.JSX.Element {
   const [deleting, setDeleting] = useState(false)
   const [tally, setTally] = useState({ deleted: 0, failed: 0 })
   const stopRef = useRef({ stop: false }).current
+
+  // Inline edit (pencil → textarea → save/cancel) and per-row visibility toggle.
+  // Delete+recreate destroys the id/lineage the backend's temporal model
+  // preserves, so this is the only in-place remediation path on the page.
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState('')
+  const [savingEditId, setSavingEditId] = useState<string | null>(null)
+  const [togglingVisId, setTogglingVisId] = useState<string | null>(null)
+
+  const startEdit = (m: Memory): void => {
+    setEditingId(m.id)
+    setEditDraft(m.content)
+  }
+
+  const cancelEdit = (): void => {
+    setEditingId(null)
+    setEditDraft('')
+  }
+
+  const saveEdit = async (id: string): Promise<void> => {
+    const text = editDraft.trim()
+    if (!text || savingEditId) return
+    setSavingEditId(id)
+    try {
+      await editMemory(id, text)
+      cancelEdit()
+    } catch (e) {
+      toast('Could not update memory', { tone: 'error', body: (e as Error).message })
+    } finally {
+      setSavingEditId(null)
+    }
+  }
+
+  const toggleVisibility = async (m: Memory): Promise<void> => {
+    if (togglingVisId) return
+    setTogglingVisId(m.id)
+    try {
+      await setMemoryVisibility(m.id, m.visibility === 'public' ? 'private' : 'public')
+    } catch (e) {
+      toast('Could not change visibility', { tone: 'error', body: (e as Error).message })
+    } finally {
+      setTogglingVisId(null)
+    }
+  }
 
   const closeCompose = (): void => {
     setComposing(false)
@@ -264,11 +308,12 @@ export function Memories(): React.JSX.Element {
         <ul className="mx-auto grid max-w-4xl grid-cols-1 gap-3 lg:grid-cols-2">
           {rendered.map((m) => {
             const isSel = selected.has(m.id)
+            const isEditing = editingId === m.id
             return (
               <li
                 key={m.id}
                 onClick={manage ? () => toggle(m.id) : undefined}
-                className={`surface-card-interactive p-5 ${manage ? 'cursor-pointer' : ''} ${
+                className={`surface-card-interactive group p-5 ${manage ? 'cursor-pointer' : ''} ${
                   isSel ? 'ring-2 ring-white/40' : ''
                 }`}
               >
@@ -283,20 +328,97 @@ export function Memories(): React.JSX.Element {
                     />
                   )}
                   <div className="min-w-0 flex-1">
-                    <div className="font-display text-lg font-bold leading-snug text-text-primary">
-                      {m.headline || m.content.slice(0, 80)}
-                    </div>
-                    {m.headline && (
-                      <p className="mt-2.5 line-clamp-3 text-sm leading-relaxed text-text-tertiary">{m.content}</p>
+                    {isEditing ? (
+                      <div className="space-y-2">
+                        <textarea
+                          autoFocus
+                          value={editDraft}
+                          onChange={(e) => setEditDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                              e.preventDefault()
+                              void saveEdit(m.id)
+                            } else if (e.key === 'Escape') {
+                              cancelEdit()
+                            }
+                          }}
+                          rows={3}
+                          className="input-field resize-none text-sm"
+                        />
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={cancelEdit}
+                            disabled={savingEditId === m.id}
+                            className="btn-ghost px-3 py-1.5 text-sm"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => saveEdit(m.id)}
+                            disabled={savingEditId === m.id || !editDraft.trim()}
+                            className="btn-primary px-3 py-1.5 text-sm disabled:opacity-40"
+                          >
+                            {savingEditId === m.id ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="font-display text-lg font-bold leading-snug text-text-primary">
+                          {m.headline || m.content.slice(0, 80)}
+                        </div>
+                        {m.headline && (
+                          <p className="mt-2.5 line-clamp-3 text-sm leading-relaxed text-text-tertiary">
+                            {m.content}
+                          </p>
+                        )}
+                        <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-text-quaternary">
+                          <time>{new Date(m.created_at).toLocaleString()}</time>
+                          {m.category && <span className="badge text-text-tertiary">{m.category}</span>}
+                          {m.tags && m.tags.length > 0 && (
+                            <span className="truncate text-text-quaternary">{m.tags.join(' · ')}</span>
+                          )}
+                        </div>
+                      </>
                     )}
-                    <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-text-quaternary">
-                      <time>{new Date(m.created_at).toLocaleString()}</time>
-                      {m.category && <span className="badge text-text-tertiary">{m.category}</span>}
-                      {m.tags && m.tags.length > 0 && (
-                        <span className="truncate text-text-quaternary">{m.tags.join(' · ')}</span>
-                      )}
-                    </div>
                   </div>
+                  {!manage && !isEditing && (
+                    <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-all group-hover:opacity-100">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void toggleVisibility(m)
+                        }}
+                        disabled={togglingVisId === m.id}
+                        className="rounded-md p-1.5 text-white/30 transition-colors hover:bg-white/5 hover:text-white/70 disabled:opacity-50"
+                        title={
+                          m.visibility === 'public'
+                            ? 'Public — visible to your apps/personas. Click to make private.'
+                            : 'Private. Click to make public.'
+                        }
+                        aria-label={m.visibility === 'public' ? 'Make private' : 'Make public'}
+                      >
+                        {togglingVisId === m.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : m.visibility === 'public' ? (
+                          <Globe className="h-3.5 w-3.5" />
+                        ) : (
+                          <Lock className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          startEdit(m)
+                        }}
+                        className="rounded-md p-1.5 text-white/30 transition-colors hover:bg-white/5 hover:text-white/70"
+                        title="Edit memory"
+                        aria-label="Edit memory"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </li>
             )
