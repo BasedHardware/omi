@@ -372,7 +372,7 @@ struct DashboardPage: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(useLegacyHomeDesign ? Color.clear : HomePalette.paper)
+        .background(Color.clear)
     }
 
     private func applyHomeSheets<Content: View>(to content: Content) -> some View {
@@ -956,7 +956,7 @@ struct DashboardPage: View {
         .padding(OmiSpacing.lg)
         .background(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(HomePalette.panel.opacity(0.94))
+                .fill(HomePalette.panel)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
@@ -2189,7 +2189,7 @@ private struct HomeAskBar: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 29, style: .continuous)
-                .fill(HomePalette.tile.opacity(isHovering || isFocused ? 1 : 0.92))
+                .fill(isHovering || isFocused ? HomePalette.tileHover : HomePalette.tile)
         )
         .overlay {
             if isDropTargeted {
@@ -2445,7 +2445,7 @@ private struct HomeSuggestionRow: View {
             .frame(maxWidth: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: 21, style: .continuous)
-                    .fill(isHovering ? HomePalette.tileHover : HomePalette.tile.opacity(0.55))
+                    .fill(isHovering ? HomePalette.tileHover : HomePalette.tile)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 21, style: .continuous)
@@ -2463,7 +2463,11 @@ private struct HomeSuggestionRow: View {
 private struct HomeCanvasBackground: View {
     var body: some View {
         ZStack {
-            HomePalette.paper
+            OmiAdaptiveMaterialBackground(
+                material: .ultraThinMaterial,
+                fallback: HomePalette.paper,
+                materialOverlay: Color.black.opacity(0.28)
+            )
 
             // Neutral key light high behind the wordmark, with a soft ambient
             // wash so the redesigned Home stage reads against the dark canvas.
@@ -2568,7 +2572,7 @@ private struct HomeInlineAction: View {
             .padding(.vertical, OmiSpacing.sm)
             .background(
                 Capsule(style: .continuous)
-                    .fill(isHovering ? HomePalette.tileHover : HomePalette.tile.opacity(0.72))
+                    .fill(isHovering ? HomePalette.tileHover : HomePalette.tile)
             )
             .overlay(
                 Capsule(style: .continuous)
@@ -3103,7 +3107,7 @@ private struct HomeDestinationCapsule: View {
             .padding(OmiSpacing.md)
             .background(
                 RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .fill(isHovering ? HomePalette.tileHover : HomePalette.tile.opacity(0.82))
+                    .fill(isHovering ? HomePalette.tileHover : HomePalette.tile)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 15, style: .continuous)
@@ -3334,7 +3338,7 @@ private struct HomeStatRibbon: View {
         // Pin the height so the hairline dividers (greedy Rectangles) size to the
         // content instead of stretching the whole strip in taller windows.
         .frame(height: 76)
-        .background(HomePalette.tile.opacity(0.88))
+        .background(HomePalette.tile)
         .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
@@ -4128,7 +4132,7 @@ private struct HomeSettingsMenuButton: View {
         } label: {
             ZStack {
                 Circle()
-                    .fill(isHovering ? HomePalette.tileHover : HomePalette.tile.opacity(0.86))
+                    .fill(isHovering ? HomePalette.tileHover : HomePalette.tile)
                     .overlay(
                         Circle()
                             .stroke(HomePalette.hairline.opacity(isHovering ? 0.9 : 0.68), lineWidth: 1)

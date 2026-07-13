@@ -33,7 +33,7 @@ struct WhatMattersNowSection: View {
       .padding(12)
       .background(
         RoundedRectangle(cornerRadius: 14, style: .continuous)
-          .fill(OmiColors.backgroundSecondary.opacity(0.72))
+          .fill(OmiColors.backgroundSecondary)
       )
       .overlay(
         RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -125,7 +125,7 @@ private struct WhatMattersNowCard: View {
     .frame(maxWidth: .infinity, minHeight: 152, alignment: .topLeading)
     .background(
       RoundedRectangle(cornerRadius: 10, style: .continuous)
-        .fill(OmiColors.backgroundTertiary.opacity(0.72))
+        .fill(OmiColors.backgroundTertiary)
     )
     .onChange(of: showDismissReasons) { wasShowing, isShowing in
       guard wasShowing, !isShowing, !choseReason else { return }
@@ -162,7 +162,7 @@ struct FocusedGoalsSection: View {
               .lineLimit(1)
               .padding(.horizontal, 9)
               .padding(.vertical, 6)
-              .background(Capsule().fill(OmiColors.backgroundSecondary.opacity(0.8)))
+              .background(Capsule().fill(OmiColors.backgroundSecondary))
           }
           .buttonStyle(.plain)
           .accessibilityIdentifier("focused-goal-\(goal.goalId)")
