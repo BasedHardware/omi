@@ -291,7 +291,7 @@ fn default_openai_model() -> String {
 }
 
 fn default_proactive_tick_mins() -> u64 { 5 }
-fn default_anthropic_model() -> String { "claude-3-5-haiku-20241022".to_string() }
+fn default_anthropic_model() -> String { "claude-haiku-4-5-20251001".to_string() }
 fn default_auto() -> String { "auto".to_string() }
 
 fn default_persona_name() -> String {
@@ -417,6 +417,9 @@ impl AppConfig {
                     }
                 }
             };
+        }
+        if cfg.anthropic_model == "claude-3-5-haiku-20241022" {
+            cfg.anthropic_model = default_anthropic_model();
         }
         env_fallback!(cfg.anthropic_api_key,   "ANTHROPIC_API_KEY");
         env_fallback!(cfg.groq_api_key,         "GROQ_API_KEY");
