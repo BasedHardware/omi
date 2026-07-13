@@ -206,6 +206,8 @@ def evaluate_listener_deployment(expectation: DeploymentExpectation, document: M
         errors.append('gke/deployment: service account is missing')
     if not isinstance(desired, int) or desired < 1 or status.get('availableReplicas') != desired:
         errors.append('gke/deployment: desired replicas are not all available')
+    if not isinstance(desired, int) or desired < 1 or status.get('updatedReplicas') != desired:
+        errors.append('gke/deployment: desired replicas are not all updated')
     if status.get('observedGeneration') != metadata.get('generation'):
         errors.append('gke/deployment: controller has not observed the latest generation')
     if _container_env(containers).get('OMI_ENV_STAGE') != 'dev':
@@ -283,6 +285,7 @@ def evidence(
             'service_account': template_spec.get('serviceAccountName'),
             'desired_replicas': deployment_spec.get('replicas'),
             'available_replicas': deployment_status.get('availableReplicas'),
+            'updated_replicas': deployment_status.get('updatedReplicas'),
         },
         'result': 'pass' if not errors else 'fail',
         'errors': list(errors),

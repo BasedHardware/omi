@@ -51,7 +51,7 @@ def _documents(expectation: verifier.DeploymentExpectation) -> dict:
                         }
                     },
                 },
-                'status': {'observedGeneration': 4, 'availableReplicas': 1},
+                'status': {'observedGeneration': 4, 'availableReplicas': 1, 'updatedReplicas': 1},
             },
             'gke/service': {
                 'metadata': {'name': expectation.listener_service},
@@ -98,9 +98,22 @@ def test_evaluate_fails_closed_when_a_stale_revision_is_serving() -> None:
     documents['cloud_run/backend']['status']['latestReadyRevisionName'] = 'backend-old'
     documents['cloud_run/backend']['status']['traffic'] = [{'revisionName': 'backend-old', 'percent': 100}]
     documents['gke/deployment']['status']['availableReplicas'] = 0
+    documents['gke/deployment']['status']['updatedReplicas'] = 0
 
     errors = verifier.evaluate(expectation, documents)
 
     assert 'cloud_run/backend: latest ready revision is not backend-abcdef1-12345-1' in errors
     assert 'cloud_run/backend: expected revision does not receive 100% traffic' in errors
     assert 'gke/deployment: desired replicas are not all available' in errors
+    assert 'gke/deployment: desired replicas are not all updated' in errors
+
+
+def test_evaluate_fails_closed_when_available_replicas_are_not_the_updated_template() -> None:
+    expectation = _expectation()
+    documents = _documents(expectation)
+    documents['gke/deployment']['status']['updatedReplicas'] = 0
+
+    errors = verifier.evaluate(expectation, documents)
+
+    assert 'gke/deployment: desired replicas are not all available' not in errors
+    assert 'gke/deployment: desired replicas are not all updated' in errors
