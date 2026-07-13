@@ -15,6 +15,9 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Components/FocusSummaryWidget.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/RecentConversationsWidget.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/TodaysTasksWidget.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiCursor.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiFont.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiIcon.swift
   - desktop/macos/Desktop/Sources/WhatsNewToast.swift
 preconditions:
   - automation_bridge_ready
