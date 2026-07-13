@@ -3199,6 +3199,66 @@ final class DesktopAutomationActionRegistry {
       return ["blocking_main_thread_ms": "\(durationMs)"]
     }
 
+    // AUTH-03: force the stored idToken's expiry into the past through AuthService's own
+    // storage abstraction, so a harness can relaunch and prove the app REFRESHES an
+    // expired token without signing the user out. The old harness trick
+    // (`defaults write <bundle> auth_tokenExpiry -float 1000`) tampers a key the app no
+    // longer reads now that tokens are keychain-backed — it measured nothing and reported
+    // a false regression. This seam is storage-agnostic and never exposes token material.
+    // Non-prod only (double-gated: here and inside AuthService).
+    register(
+      name: "expire_auth_token",
+      summary:
+        "Expire the stored idToken via AuthService's real storage path (keychain or UserDefaults) so a relaunch must refresh it without signing out — AUTH-03. Status only, no token material. Non-prod only.",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "expire_auth_token is disabled on production bundles"]
+      }
+      return await MainActor.run { AuthService.shared.expireStoredTokenForAutomation() }
+    }
+
+    // AUTH-03 read-back: which backend actually holds the tokens, and is the stored
+    // idToken currently expired? Lets a harness assert "expired -> relaunch -> refreshed,
+    // still signed in" against the REAL storage rather than a UserDefaults key the app may
+    // no longer use. Presence/expiry booleans only — never token material. Non-prod only.
+    register(
+      name: "auth_token_status",
+      summary:
+        "Read-only auth token status (signed_in, storage backend, has_id_token, has_refresh_token, is_token_expired) — AUTH-03. No token material. Non-prod only.",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "auth_token_status is disabled on production bundles"]
+      }
+      return await MainActor.run { AuthService.shared.tokenStatusForAutomation() }
+    }
+
+    // CHAT-07: post `NSWorkspace.didWakeNotification` on the WORKSPACE notification
+    // center — the top of the real wake chain. Every production consumer then fires
+    // exactly as on a physical wake: RealtimeHubController re-warms/defers its
+    // session ("system_wake"), and AppState's observer re-broadcasts the
+    // default-center `.systemDidWake` for downstream consumers. (Posting only the
+    // default-center `.systemDidWake` would MISS RealtimeHub, which observes the
+    // workspace center directly.) Transcription restart stays guarded by
+    // wasTranscribingBeforeSleep, so a synthetic wake is a safe no-op there.
+    // Read-only with respect to user data; non-prod only.
+    register(
+      name: "simulate_system_wake",
+      summary: "Post NSWorkspace.didWakeNotification on the workspace center (the top of the real wake chain: RealtimeHub re-warm + AppState .systemDidWake re-broadcast) so post-wake restart paths run without a real sleep — CHAT-07 harness. Non-prod only.",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "simulate_system_wake is disabled on production bundles"]
+      }
+      await MainActor.run {
+        NSWorkspace.shared.notificationCenter.post(
+          name: NSWorkspace.didWakeNotification, object: nil)
+      }
+      log("DesktopAutomationBridge: simulate_system_wake posted NSWorkspace.didWakeNotification")
+      return ["posted": "NSWorkspace.didWakeNotification"]
+    }
+
     // PERM-06: trigger the permission-flow "Quit & Reopen" restart — the exact
     // AppState.restartApp() path used after granting Accessibility / Screen
     // Recording — so a harness can prove the SAME bundle relaunches with the

@@ -2299,6 +2299,61 @@ class AuthService {
         UserDefaults.standard.removeObject(forKey: .authTokenUserId)
     }
 
+    /// AUTH-03 test seam (**non-prod only**): force the stored idToken's expiry into the
+    /// past by re-saving the CURRENT tokens through `saveTokens` — the same storage path
+    /// the app really uses — so a harness can then relaunch and prove the app refreshes an
+    /// expired idToken *without signing the user out*.
+    ///
+    /// Why this exists: the tokens moved to the Keychain, so the old harness trick of
+    /// `defaults write <bundle> auth_tokenExpiry -float 1000` now tampers a key the app
+    /// no longer reads — the probe silently measured nothing and reported a false
+    /// regression. Going through `saveTokens` keeps the seam correct for BOTH backends
+    /// (keychain and the UserDefaults fallback) and is inert if the storage changes again.
+    ///
+    /// `expiresIn: 0` lands at `now - 300` (saveTokens subtracts the 5-min buffer), i.e.
+    /// already expired. Token material never leaves the process — only a redacted status.
+    func expireStoredTokenForAutomation() -> [String: String] {
+        guard AppBuild.isNonProduction else {
+            return ["error": "expire_auth_token is disabled on production bundles"]
+        }
+        guard let idToken = storedIdToken, let refreshToken = storedRefreshToken else {
+            return ["error": "no stored tokens to expire"]
+        }
+        do {
+            try saveTokens(
+                idToken: idToken,
+                refreshToken: refreshToken,
+                expiresIn: 0,
+                userId: storedTokenUserId ?? ""
+            )
+            return [
+                "expired": "true",
+                "storage": usesKeychainTokenStorage ? "keychain" : "user_defaults",
+                "is_token_expired": isTokenExpired ? "true" : "false",
+            ]
+        } catch {
+            return ["error": "failed to re-save tokens with a past expiry"]
+        }
+    }
+
+    /// AUTH-03 test seam (**non-prod only**): read-only token status. Reports which
+    /// backend actually holds the tokens and whether the stored idToken is currently
+    /// expired, so a harness can assert "expired -> relaunch -> refreshed, still signed
+    /// in" against the REAL storage instead of a UserDefaults key that may not be in use.
+    /// Presence/expiry booleans only — never token material.
+    func tokenStatusForAutomation() -> [String: String] {
+        guard AppBuild.isNonProduction else {
+            return ["error": "auth_token_status is disabled on production bundles"]
+        }
+        return [
+            "signed_in": isSignedIn ? "true" : "false",
+            "storage": usesKeychainTokenStorage ? "keychain" : "user_defaults",
+            "has_id_token": storedIdToken != nil ? "true" : "false",
+            "has_refresh_token": storedRefreshToken != nil ? "true" : "false",
+            "is_token_expired": isTokenExpired ? "true" : "false",
+        ]
+    }
+
     private var usesKeychainTokenStorage: Bool {
         tokenStorageHooks.usesKeychainTokenStorage()
     }
