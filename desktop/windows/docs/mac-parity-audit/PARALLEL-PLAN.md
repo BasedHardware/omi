@@ -6,15 +6,24 @@
 > (c) deduplicated items (several gaps were documented 2–3× across audit files).
 > Produced 2026-07-13 from a per-area dependency/collision analysis of all 13 audit files.
 
+## Launch runbook (2026-07-13)
+
+1. Merge `fix/windows-wiring-criticals`.
+2. Finish + merge `feat/windows-settings-parity` (one trivial import conflict in `main/index.ts`).
+3. Pin ALL streams' Mac references to one captured upstream commit at spawn time (Stream 1's
+   v0.12.72 pin extends to all — don't let streams drift to different Mac snapshots).
+4. Provision per-stream test accounts OR serialized live-test windows + mandatory fixture
+   teardown — 4 streams share ONE backend uid today; interleaved chat threads/extractions are
+   the top cross-stream risk.
+5. Stagger CI pushes.
+6. Each stream lands its additive `db.ts` schema PR first, immediately.
+7. Spawn the 4 streams from post-merge `main`.
+
 ## Before the streams start (pre-work, one small PR)
 
-1. **Fix the purple `--accent` violation (URGENT, INV-UI-1).** `styles/globals.css:48` defines
-   `--accent: #5b02e0` (raw violet), consumed via `bg-[color:var(--accent)]` etc. in 10+ files
-   (Toggle, Home, GenerateGoalsButton, SettingsTabRail, SettingRow, RewindTimelineBar,
-   RewindThumbnailStrip, RewindSearchBar, Sidebar, ShortcutSetupStep — the last with a literal
-   purple glow shadow). This is a live violation of the repo's no-purple ratchet, and any stream
-   touching those files would propagate it. One mechanical PR: remap to the white/neutral accent
-   per `docs/product/invariants/brand-ui.md`, land before the streams branch off.
+1. ~~Fix the purple `--accent` violation (URGENT, INV-UI-1)~~ — **already fixed on `main`**:
+   `src/renderer/src/styles/globals.css:62` is `--accent: #ffffff` with an explicit INV-UI-1
+   comment. No pre-work PR needed for this item.
 2. **Branch protocol.** Each stream: `git fetch origin && git worktree add .worktrees/<name> -b
    <branch> origin/main`, then `cd desktop/windows && pnpm bootstrap`. Small PRs to fork `main`,
    merged fast (regular merge, never squash), rebase onto `origin/main` after every merge —
@@ -51,6 +60,11 @@ same files. Everything other streams block on — staff this one first.*
 - Structured content blocks in chat: tool-call / thinking / agent-activity / discovery cards,
   markdown **tables** (GFM), typing indicator, citation cards — one content-block model in
   `ChatMessages.tsx` (this single fix was independently demanded by areas 04, 06 AND 13).
+  **Data plumbing is done** (fixed on `fix/windows-wiring-criticals`, 2026-07-13): the `done:`
+  payload's `serverId`/`citations`/`chartData`/`askForNps` are now parsed and stored (C4).
+  Remaining scope here is **rendering only** — wiring those fields into `ChatMessages.tsx`'s
+  card UI. (The stream's "no abort path" framing is also stale — C5 fixed it: AbortController +
+  generation counter + 180s watchdog + agent-task guard, in `useChat.ts`.)
 - Chat sessions sidebar (multi-thread history, date-grouped/starred/searchable) + session data
   layer.
 - Chat attachments, resources/artifacts, stall-detection banner, structured error taxonomy.
@@ -158,18 +172,21 @@ items + area 10's local onboarding steps. The most self-contained stream.*
 - **Rewind search UI un-gating** (quick win: fully built, dead `showSearch` flag) → then
   **OCR-embedding semantic search** (vs `LIKE`), FTS5, OCR bounding boxes / on-image highlight.
 - **Storage architecture**: video-chunk (H.265) vs per-frame JPEG decision (⚠ decision gate
-  below) + the wiring-audit fixes that are this stream's files anyway: 30s keyframe anchor,
-  battery-aware cadence, suspend/resume handling, orphaned-JPEG cleanup, OCR re-backfill,
-  OCR-helper `dispose()` on quit.
+  below, DECIDED — keep JPEGs for now, see Gate 2) + the wiring-audit fixes that are this
+  stream's files anyway: 30s keyframe anchor, battery-aware cadence, suspend/resume handling,
+  orphaned-JPEG cleanup, OCR re-backfill. ~~OCR-helper `dispose()` on quit~~ (fixed on
+  `fix/windows-wiring-criticals`, 2026-07-13).
 - Date navigation (browse any day), full-screen timeline player (transport controls), DB
   corruption recovery; action-item + observation extraction from screen.
 - **LiveNotes** (auto meeting-minutes during recording — flagged by 05 and 12, one owner: here).
 - **Speaker naming** (live + post-hoc person picker) + per-speaker color coding (12 + 13, same
   files: `ConversationDetail.tsx`, `LiveConversation.tsx`, `TranscriptPopup.tsx`).
-- Shell/settings: Settings inventory 6→11 sections + global settings search, Permissions repair
-  page, Help/support page (⚠ Crisp decision below), redesigned Home (stat ribbon, connect-data
-  tray — mounts Stream 3's widgets/capabilities but owns the page), sidebar changes, crash/
-  clean-exit detection (wiring-audit Major), launch-at-login default migration.
+- Shell/settings: ~~Settings inventory 6→11 sections~~ narrowed to **Notifications tab**
+  (blocked on Stream 3's proactive assistants) **+ global settings search** — Plan & Usage /
+  Transcription / Shortcuts / About are being built on `feat/windows-settings-parity` instead —
+  + Permissions repair page, Help/support page (⚠ Crisp decision below), redesigned Home (stat
+  ribbon, connect-data tray — mounts Stream 3's widgets/capabilities but owns the page), sidebar
+  changes, crash/clean-exit detection (wiring-audit Major), launch-at-login default migration.
 - File index (11): scan-dir skip-list fix (21 dirs vs 4), incremental 3h re-scan,
   **BrainGraph interactivity flip** (quick win: `interactive={false}` everywhere + standalone
   viewer route + rebuild button), onboarding file-scan **entity extraction** (LLM exploration →
@@ -203,30 +220,45 @@ items + area 10's local onboarding steps. The most self-contained stream.*
 | `main/ipc/db.ts` (SQLite schema) | shared | **additive-only**: each stream appends its own `ensureColumn`/`CREATE TABLE IF NOT EXISTS` block at the end of its own clearly-labeled section; never reorder; land schema PRs immediately |
 | `src/shared/types.ts`, `src/preload/index.ts` | shared | additive-only, same rule |
 | `pnpm-lock.yaml` | shared | on conflict: take main's + re-run `pnpm install` |
+| `capture/liveRescue.ts`, `capture/liveMicSession.ts`, `main/ipc/omiListen.ts` | **settled** (wiring branch) | Streams request changes, never edit |
+| `lib/authSession.ts`, `lib/authTeardown.ts`, `lib/apiClient.ts` | **settled** (auth) | standalone-PR changes only |
+| `lib/sync/outboxSweep.ts`, `main/ipc/dbWipe.ts`, `lib/settingsNav.ts`, new settings tabs (PlanUsage/Transcription/Shortcuts/About) | Stream 4 | request changes |
+| `lib/localAgentMemoryCache.ts` | Stream 1 | request changes |
+| `main/billing/**`, `lib/billing.ts`, `lib/usageLimit.ts` | settings-parity work | Stream 2 CONSUMES for the bar usage-limiter (reuse, don't rebuild) |
+| capture-core / auth / sync files (merged from `fix/windows-wiring-criticals`) | **settled** | request changes, do not edit |
 
 ## Decision gates for Chris (park, don't guess)
 
-1. **Trial/paywall + usage limiter** — generated API types exist with zero call sites on
-   Windows. Intentional (Windows unmetered) or gap? Blocks the Stream 2 limiter item and a
-   Stream 4 settings item.
-2. **Rewind storage architecture** — commit to H.265 video chunks on Windows (codec licensing /
-   encoder availability question) or keep JPEGs + retention tuning? Blocks the biggest area-05
-   item; everything else in Stream 4 proceeds regardless.
-3. **Help/Crisp** — Crisp is a vendor choice; adopt on Windows or different support channel?
-4. **Persona** — needs backend routes built first; separate project?
+1. **Trial/paywall + usage limiter** — **RESOLVED.** Plan & Usage tab + usage-limit popup built
+   on `feat/windows-settings-parity`; residual scope is product policy only.
+2. **Rewind storage architecture** — **DECIDED**: keep JPEGs + retention tuning for now; H.265
+   revisit after Stream 4's other work lands. BLOCKS-MID-STREAM only — everything else in
+   Stream 4 proceeds regardless.
+3. **Help/Crisp** — open, low priority, mid-stream (Stream 4). About tab links `help.omi.me`
+   meanwhile.
+4. **Persona** — needs backend routes built first; separate project. Unchanged, parked.
 5. **BLE stream** — when (if) to start the 5th stream; needs test hardware on the Windows box.
-6. **Citation metadata** — whether the backend sends citations to desktop clients at all is an
-   open backend-contract question (affects one Stream 1 card type; build the card anyway,
-   render when present).
-7. **Agent default provider** — Mac's default is the in-process `pi-mono` (zero-setup, Omi-proxied,
-   cost-controlled); Windows defaults to the user's own Claude Code login. Match Mac (needs the
-   pi SDK on Windows + Omi proxy auth) or keep Claude-Code-first?
-8. **Default chat architecture** — Mac's *default* chat answers via the local agent-SDK bridge
-   (kernel); Windows answers via backend `/v2/messages` SSE. Porting the kernel (Stream 1)
-   eventually raises whether Windows' default chat should move onto it too — that's a bigger
-   call than any single stream item.
-9. **Mac's System B (`TaskAgentManager`)** — the tmux + `claude --dangerously-skip-permissions`
-   proactive task agent. Port, replace with a kernel-based equivalent, or skip?
+   Unchanged, parked.
+6. **Citation metadata** — **mostly resolved**: backend confirmed sending memories citations in
+   the `done:` payload and Windows now stores them (C4). Residual = `chart_data` rendering only.
+7. **Agent default provider** — **DECIDED**: `pi-mono` default, as implemented on Mac
+   (in-process SDK, Omi-proxied, zero-setup; not everyone has Claude Code). Claude Code remains
+   the power-user option. Stream 1 owns the pi SDK port + proxy auth.
+8. **Default chat architecture** — **DECIDED**: the kernel is the target for DEFAULT chat too,
+   but STAGED — Stream 1 ports the kernel + pi-mono for agent sessions first, implements the
+   `/v2/desktop/messages` persistence contract, then flips default chat as a distinct milestone
+   with explicit verification: (a) shared-thread continuity proven against mobile in both
+   directions (locked invariant), (b) grounding at least as good as the backend path, (c)
+   feature-flag fallback to backend chat for the first release.
+9. **Mac's System B (`TaskAgentManager`)** — **DECIDED**: skip. Upstream is consolidating on the
+   kernel as single run authority; any future proactive task agent is kernel-based.
+
+## Parked tasks — ownership assignment
+
+- **BYOK** (key store + `withByokHeaders` helper): Stream 1 builds and publishes it as a
+  contract; Stream 2 attaches it to the listen socket.
+- **Firebase-token → DPAPI migration**: standalone small PR, not inside any stream; fallback
+  owner is Stream 4 if it doesn't get picked up independently.
 
 ## Cross-cutting corrections the audit produced (so streams don't chase ghosts)
 
