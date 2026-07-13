@@ -2482,10 +2482,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     //     overage billing, never blocked (isLimitReached alone is plan-blind);
     //   - never on the barge-in replacement path: the replacement's mint already
     //     succeeded, and an early return here would strand
-    //     pendingBargeInReplacement and fence all future warms.
+    //     pendingBargeInProvider and fence all future warms.
     // No popup here — warms are speculative; the user-facing popup comes from the
     // PTT/chat gates on an actual action.
-    if auth.isEphemeral, pendingBargeInReplacement == nil, !APIKeyService.isByokActive,
+    if auth.isEphemeral, pendingBargeInProvider == nil, !APIKeyService.isByokActive,
       !FloatingBarUsageLimiter.shared.hasPaidPlan,
       FloatingBarUsageLimiter.shared.isLimitReached
     {
