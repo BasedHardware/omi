@@ -51,26 +51,26 @@ struct FocusTestRunnerView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-                .padding(20)
+                .padding(OmiSpacing.xl)
             Divider()
             columnHeaders
-                .padding(.horizontal, 20)
-                .padding(.vertical, 6)
+                .padding(.horizontal, OmiSpacing.xl)
+                .padding(.vertical, OmiSpacing.xs)
                 .background(Color(nsColor: .windowBackgroundColor))
             Divider()
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(spacing: 1) {
+                    LazyVStack(spacing: OmiSpacing.hairline) {
                         ForEach(results) { result in
                             resultRow(result)
                                 .id(result.id)
                         }
                     }
-                    .padding(.vertical, 8)
+                    .padding(.vertical, OmiSpacing.sm)
                 }
                 .onChange(of: results.count) { _, _ in
                     if let last = results.last {
-                        withAnimation {
+                        OmiMotion.withGated {
                             proxy.scrollTo(last.id, anchor: .bottom)
                         }
                     }
@@ -78,7 +78,7 @@ struct FocusTestRunnerView: View {
             }
             Divider()
             footer
-                .padding(16)
+                .padding(OmiSpacing.lg)
         }
         .frame(width: 1400, height: 900)
         .background(Color(nsColor: .windowBackgroundColor))
@@ -87,15 +87,15 @@ struct FocusTestRunnerView: View {
     // MARK: - Header
 
     private var header: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: OmiSpacing.lg) {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                     Text("Focus Analysis Test Runner")
-                        .scaledFont(size: 16, weight: .semibold)
+                        .scaledFont(size: OmiType.subheading, weight: .semibold)
                         .foregroundColor(.primary)
 
                     Text("Replay departing frames from context switches through the focus analysis pipeline")
-                        .scaledFont(size: 12)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(.secondary)
                 }
 
@@ -103,16 +103,16 @@ struct FocusTestRunnerView: View {
 
                 Button(action: { onClose?() }) {
                     Image(systemName: "xmark.circle.fill")
-                        .scaledFont(size: 16)
+                        .scaledFont(size: OmiType.subheading)
                         .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
             }
 
-            HStack(spacing: 16) {
-                HStack(spacing: 8) {
+            HStack(spacing: OmiSpacing.lg) {
+                HStack(spacing: OmiSpacing.sm) {
                     Text("From:")
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(.secondary)
 
                     DatePicker("", selection: $periodFrom, in: ...periodTo)
@@ -122,7 +122,7 @@ struct FocusTestRunnerView: View {
                         .disabled(isRunning)
 
                     Text("To:")
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(.secondary)
 
                     DatePicker("", selection: $periodTo, in: periodFrom...Date())
@@ -136,11 +136,11 @@ struct FocusTestRunnerView: View {
 
                 if isRunning {
                     Button(action: { cancellationRequested = true }) {
-                        HStack(spacing: 4) {
+                        HStack(spacing: OmiSpacing.xxs) {
                             Image(systemName: "stop.fill")
-                                .scaledFont(size: 10)
+                                .scaledFont(size: OmiType.micro)
                             Text("Stop")
-                                .scaledFont(size: 12)
+                                .scaledFont(size: OmiType.caption)
                         }
                     }
                     .buttonStyle(.bordered)
@@ -148,11 +148,11 @@ struct FocusTestRunnerView: View {
                     .tint(.red)
                 } else {
                     Button(action: runTest) {
-                        HStack(spacing: 4) {
+                        HStack(spacing: OmiSpacing.xxs) {
                             Image(systemName: "play.fill")
-                                .scaledFont(size: 10)
+                                .scaledFont(size: OmiType.micro)
                             Text("Run Test")
-                                .scaledFont(size: 12)
+                                .scaledFont(size: OmiType.caption)
                         }
                     }
                     .buttonStyle(.borderedProminent)
@@ -161,12 +161,12 @@ struct FocusTestRunnerView: View {
             }
 
             if isRunning {
-                VStack(spacing: 4) {
+                VStack(spacing: OmiSpacing.xxs) {
                     ProgressView(value: progress)
                         .tint(.accentColor)
 
                     Text(statusMessage)
-                        .scaledFont(size: 11)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(.secondary)
                 }
             }
@@ -176,7 +176,7 @@ struct FocusTestRunnerView: View {
     // MARK: - Column Headers
 
     private var columnHeaders: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: OmiSpacing.lg) {
             Text("#")
                 .frame(width: 28, alignment: .trailing)
             Text("Time")
@@ -194,32 +194,32 @@ struct FocusTestRunnerView: View {
             Text("Time")
                 .frame(width: 50, alignment: .trailing)
         }
-        .scaledFont(size: 11, weight: .medium)
+        .scaledFont(size: OmiType.caption, weight: .medium)
         .foregroundColor(.secondary.opacity(0.7))
     }
 
     // MARK: - Result Row
 
     private func resultRow(_ testResult: FocusTestResult) -> some View {
-        HStack(spacing: 16) {
+        HStack(spacing: OmiSpacing.lg) {
             Text("\(testResult.index)")
-                .scaledFont(size: 12, design: .monospaced)
+                .scaledFont(size: OmiType.caption, design: .monospaced)
                 .foregroundColor(.secondary)
                 .frame(width: 28, alignment: .trailing)
 
             Text(testResult.timestamp, format: .dateTime.hour().minute().second())
-                .scaledFont(size: 12, design: .monospaced)
+                .scaledFont(size: OmiType.caption, design: .monospaced)
                 .foregroundColor(.secondary)
                 .frame(width: 90, alignment: .leading)
 
             Text(testResult.appName)
-                .scaledFont(size: 12)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(.secondary)
                 .frame(width: 100, alignment: .leading)
                 .lineLimit(1)
 
             Text(testResult.windowTitle ?? "—")
-                .scaledFont(size: 12)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(.secondary)
                 .frame(width: 200, alignment: .leading)
                 .lineLimit(1)
@@ -230,13 +230,13 @@ struct FocusTestRunnerView: View {
             // Description
             if let error = testResult.error {
                 Text(error)
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(.orange)
                     .frame(width: 300, alignment: .leading)
                     .lineLimit(2)
             } else if let result = testResult.result {
                 Text(result.description)
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(.secondary)
                     .frame(width: 300, alignment: .leading)
                     .lineLimit(2)
@@ -248,53 +248,53 @@ struct FocusTestRunnerView: View {
             // Message
             if let result = testResult.result, let message = result.message {
                 Text(message)
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(.primary.opacity(0.8))
                     .lineLimit(2)
             } else if testResult.error == nil {
                 Text("—")
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(.secondary.opacity(0.5))
             }
 
             Spacer()
 
             Text(String(format: "%.1fs", testResult.duration))
-                .scaledFont(size: 12, design: .monospaced)
+                .scaledFont(size: OmiType.caption, design: .monospaced)
                 .foregroundColor(.secondary.opacity(0.7))
                 .frame(width: 50, alignment: .trailing)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 8)
+        .padding(.horizontal, OmiSpacing.xl)
+        .padding(.vertical, OmiSpacing.sm)
         .background(rowBackground(for: testResult))
     }
 
     private func statusBadge(for testResult: FocusTestResult) -> some View {
         Group {
             if testResult.error != nil {
-                HStack(spacing: 4) {
+                HStack(spacing: OmiSpacing.xxs) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .scaledFont(size: 10)
+                        .scaledFont(size: OmiType.micro)
                     Text("Error")
-                        .scaledFont(size: 11, weight: .medium)
+                        .scaledFont(size: OmiType.caption, weight: .medium)
                 }
                 .foregroundColor(.orange)
             } else if let result = testResult.result {
                 switch result.status {
                 case .focused:
-                    HStack(spacing: 4) {
+                    HStack(spacing: OmiSpacing.xxs) {
                         Image(systemName: "checkmark.circle.fill")
-                            .scaledFont(size: 10)
+                            .scaledFont(size: OmiType.micro)
                         Text("Focused")
-                            .scaledFont(size: 11, weight: .medium)
+                            .scaledFont(size: OmiType.caption, weight: .medium)
                     }
                     .foregroundColor(.green)
                 case .distracted:
-                    HStack(spacing: 4) {
+                    HStack(spacing: OmiSpacing.xxs) {
                         Image(systemName: "exclamationmark.circle.fill")
-                            .scaledFont(size: 10)
+                            .scaledFont(size: OmiType.micro)
                         Text("Distracted")
-                            .scaledFont(size: 11, weight: .medium)
+                            .scaledFont(size: OmiType.caption, weight: .medium)
                     }
                     .foregroundColor(.red)
                 }
@@ -315,38 +315,38 @@ struct FocusTestRunnerView: View {
     private var footer: some View {
         HStack {
             if !results.isEmpty {
-                HStack(spacing: 16) {
+                HStack(spacing: OmiSpacing.lg) {
                     Label("\(results.count)/\(totalContextSwitches)", systemImage: "arrow.triangle.swap")
-                        .scaledFont(size: 12)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(.secondary)
 
                     Label("\(focusedCount) focused", systemImage: "checkmark.circle")
-                        .scaledFont(size: 12)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(focusedCount > 0 ? .green : .secondary)
 
                     Label("\(distractedCount) distracted", systemImage: "exclamationmark.circle")
-                        .scaledFont(size: 12)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(distractedCount > 0 ? .red : .secondary)
 
                     Label("\(distractionPercent)%", systemImage: "chart.pie")
-                        .scaledFont(size: 12)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(.secondary)
 
                     if errorsCount > 0 {
                         Label("\(errorsCount) errors", systemImage: "exclamationmark.triangle")
-                            .scaledFont(size: 12)
+                            .scaledFont(size: OmiType.caption)
                             .foregroundColor(.orange)
                     }
 
                     if elapsedTime > 0 {
                         Label(String(format: "%.1fs total", elapsedTime), systemImage: "clock")
-                            .scaledFont(size: 12)
+                            .scaledFont(size: OmiType.caption)
                             .foregroundColor(.secondary)
                     }
                 }
             } else {
                 Text("Select a time range and click Run Test")
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(.secondary.opacity(0.7))
             }
 

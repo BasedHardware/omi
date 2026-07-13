@@ -7,6 +7,9 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/ConversationDetailAutomationState.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/LiveTranscriptView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/TranscriptDetailView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/CitationCardView.swift
 preconditions:
   - automation_bridge_ready
 

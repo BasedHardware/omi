@@ -443,15 +443,15 @@ struct DashboardPage: View {
             if isLoadingCitation {
                 ZStack {
                     Color.black.opacity(0.3)
-                    VStack(spacing: 12) {
+                    VStack(spacing: OmiSpacing.md) {
                         ProgressView()
                         Text("Loading source...")
-                            .scaledFont(size: 13)
+                            .scaledFont(size: OmiType.body)
                             .foregroundColor(.white)
                     }
-                    .padding(20)
+                    .padding(OmiSpacing.xl)
                     .background(OmiColors.backgroundSecondary)
-                    .cornerRadius(12)
+                    .cornerRadius(OmiChrome.smallControlRadius)
                 }
             }
         }
@@ -592,7 +592,7 @@ struct DashboardPage: View {
             )
 
             dashboardChatErrorCard
-                .padding(.horizontal, 30)
+                .padding(.horizontal, OmiSpacing.section)
 
             ChatInputView(
                 onSend: { text in
@@ -620,9 +620,9 @@ struct DashboardPage: View {
                     chatProvider.removePendingAttachment(id: id)
                 }
             )
-            .padding(.horizontal, 30)
-            .padding(.top, 12)
-            .padding(.bottom, 20)
+            .padding(.horizontal, OmiSpacing.section)
+            .padding(.top, OmiSpacing.md)
+            .padding(.bottom, OmiSpacing.xl)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.clear)
@@ -661,7 +661,7 @@ struct DashboardPage: View {
 
                 homeHeader
                     .padding(.horizontal, sideInset)
-                    .padding(.top, 26)
+                    .padding(.top, OmiSpacing.xxl)
                     .accessibilityHidden(isHomeModalPresented)
 
                 appsPopupOverlay(
@@ -686,9 +686,9 @@ struct DashboardPage: View {
                     }
                 }
             }
-            .animation(.easeOut(duration: 0.2), value: isShowingAppsPopup)
-            .animation(.easeOut(duration: 0.2), value: homeConnectSheetIsPresented)
-            .animation(Self.homeStageAnimation, value: homeMode)
+            .omiAnimation(.easeOut(duration: 0.2), value: isShowingAppsPopup)
+            .omiAnimation(.easeOut(duration: 0.2), value: homeConnectSheetIsPresented)
+            .omiAnimation(Self.homeStageAnimation, value: homeMode)
         }
     }
 
@@ -751,11 +751,11 @@ struct DashboardPage: View {
                     onOpen: { recommendation in await openRecommendation(recommendation) }
                 )
                 .frame(width: askBarWidth)
-                .padding(.bottom, intelligenceStore.recommendations.isEmpty ? 0 : 10)
+                .padding(.bottom, intelligenceStore.recommendations.isEmpty ? 0 : OmiSpacing.sm)
 
                 dashboardIntelligenceError
                     .frame(width: askBarWidth)
-                    .padding(.bottom, intelligenceStore.error == nil ? 0 : 8)
+                    .padding(.bottom, intelligenceStore.error == nil ? 0 : OmiSpacing.sm)
 
                 FocusedGoalsSection(
                     store: intelligenceStore,
@@ -763,18 +763,18 @@ struct DashboardPage: View {
                     onShowAll: { showingAllGoals = true }
                 )
                 .frame(width: askBarWidth)
-                .padding(.bottom, intelligenceStore.goals.isEmpty ? 0 : 10)
+                .padding(.bottom, intelligenceStore.goals.isEmpty ? 0 : OmiSpacing.sm)
 
                 homeStatRibbon
                     .frame(width: askBarWidth)
-                    .padding(.bottom, 14)
+                    .padding(.bottom, OmiSpacing.md)
 
                 homeAskBar
                     .frame(width: askBarWidth)
 
                 homeSuggestionList
                     .frame(width: askBarWidth)
-                    .padding(.top, 12)
+                    .padding(.top, OmiSpacing.md)
                     .transition(.homeSuggestionsFade)
             }
         }
@@ -801,11 +801,11 @@ struct DashboardPage: View {
 
             homeAskBar
                 .frame(width: askBarWidth)
-                .padding(.top, 22)
+                .padding(.top, OmiSpacing.xl)
 
             dashboardChatErrorCard
                 .frame(width: askBarWidth)
-                .padding(.top, 8)
+                .padding(.top, OmiSpacing.sm)
         }
     }
 
@@ -896,17 +896,17 @@ struct DashboardPage: View {
                     endPoint: .bottom
                 )
             )
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
+            .padding(.horizontal, OmiSpacing.sm)
+            .padding(.vertical, OmiSpacing.xs)
 
             dashboardChatErrorCard
-                .padding(.horizontal, 12)
-                .padding(.bottom, 8)
+                .padding(.horizontal, OmiSpacing.md)
+                .padding(.bottom, OmiSpacing.sm)
         }
         // Barely-there card so the chat reads as a bounded surface while still
         // dissolving into the ambient Home canvas.
         .background(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
+            RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
                 .fill(
                     LinearGradient(
                         colors: [
@@ -920,7 +920,7 @@ struct DashboardPage: View {
                 )
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
+            RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
                 .stroke(HomePalette.stageGlow.opacity(0.10), lineWidth: 1)
                 .blur(radius: 2.5)
                 .opacity(0.65)
@@ -935,16 +935,16 @@ struct DashboardPage: View {
         // Sources feed omi; omi's memory flows out to the AI destinations —
         // the chevron between the two cards reads that direction. The tray
         // hugs its content: no scroll filler below the columns.
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: OmiSpacing.md) {
             homeConnectColumnCard {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: OmiSpacing.md) {
                     sourceColumnHeader
                     sourceConstellation
                 }
             }
 
             Image(systemName: "chevron.right")
-                .scaledFont(size: 13, weight: .bold)
+                .scaledFont(size: OmiType.body, weight: .bold)
                 .foregroundStyle(HomePalette.secondary)
                 .frame(width: 30, height: 30)
                 .background(Circle().fill(HomePalette.tile))
@@ -955,7 +955,7 @@ struct DashboardPage: View {
                 destinationStack
             }
         }
-        .padding(18)
+        .padding(OmiSpacing.lg)
         .background(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .fill(HomePalette.panel.opacity(0.94))
@@ -968,7 +968,7 @@ struct DashboardPage: View {
             HomeIconActionButton(title: "Close connect", systemImage: "xmark") {
                 closeHomeStagePanel()
             }
-            .padding(14)
+            .padding(OmiSpacing.md)
         }
         .shadow(color: .black.opacity(0.4), radius: 30, y: 16)
         .frame(width: homeStagePanelWidth(for: stageWidth))
@@ -976,7 +976,7 @@ struct DashboardPage: View {
 
     private func homeConnectColumnCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         content()
-            .padding(16)
+            .padding(OmiSpacing.lg)
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .background(
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
@@ -1038,7 +1038,7 @@ struct DashboardPage: View {
     }
 
     private var homeSuggestionList: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: OmiSpacing.sm) {
             ForEach(homeSuggestedQuestions, id: \.self) { question in
                 HomeSuggestionRow(text: question) {
                     askHomeSuggestion(question)
@@ -1093,7 +1093,7 @@ struct DashboardPage: View {
 
     private func openHomeChat(focusInput: Bool = true) {
         guard homeMode != .chat else { return }
-        withAnimation(Self.homeStageAnimation) {
+        OmiMotion.withGated(Self.homeStageAnimation) {
             homeMode = .chat
         }
         if focusInput {
@@ -1114,7 +1114,7 @@ struct DashboardPage: View {
         if target == .connect {
             homeAskFieldFocused = false
         }
-        withAnimation(Self.homeStageAnimation) {
+        OmiMotion.withGated(Self.homeStageAnimation) {
             homeMode = target
         }
         reportHomeAutomationMode()
@@ -1122,7 +1122,7 @@ struct DashboardPage: View {
 
     private func closeHomeStagePanel() {
         homeAskFieldFocused = false
-        withAnimation(Self.homeStageAnimation) {
+        OmiMotion.withGated(Self.homeStageAnimation) {
             homeMode = .hub
         }
         reportHomeAutomationMode()
@@ -1336,7 +1336,7 @@ struct DashboardPage: View {
     private var homeHeader: some View {
         HStack {
             Spacer()
-            HStack(spacing: 10) {
+            HStack(spacing: OmiSpacing.sm) {
                 HomeStatusButton(
                     title: "Capture",
                     systemImage: "viewfinder",
@@ -1367,20 +1367,20 @@ struct DashboardPage: View {
     }
 
     private var sourceColumnHeader: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Connect data")
                 .font(.system(size: 20, weight: .medium, design: .serif))
                 .foregroundStyle(HomePalette.ink)
 
             Text("Sources Omi learns from.")
-                .scaledFont(size: 12, weight: .medium)
+                .scaledFont(size: OmiType.caption, weight: .medium)
                 .foregroundStyle(HomePalette.muted)
                 .lineLimit(1)
         }
     }
 
     private var sourceConstellation: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
             HomeAIChoiceButton(title: "Gmail", brand: .gmail, isConnected: isImportConnectorConnected("email")) {
                 openImportConnector("email")
             }
@@ -1403,14 +1403,14 @@ struct DashboardPage: View {
     }
 
     private var destinationStack: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                 Text("Use omi memory anywhere")
                     .font(.system(size: 20, weight: .medium, design: .serif))
                     .foregroundStyle(HomePalette.ink)
 
                 Text("Bring your memories to the apps you use")
-                    .scaledFont(size: 12, weight: .medium)
+                    .scaledFont(size: OmiType.caption, weight: .medium)
                     .foregroundStyle(HomePalette.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -1636,7 +1636,7 @@ struct DashboardPage: View {
     /// Welcome message shown when there are no chat messages yet.
     /// Transparent — no card chrome — so it morphs into the dashboard background.
     private var dashboardChatWelcome: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: OmiSpacing.md) {
             if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
                 let logoImage = NSImage(contentsOf: logoURL)
             {
@@ -1647,17 +1647,17 @@ struct DashboardPage: View {
             }
 
             Text("Ask omi anything")
-                .scaledFont(size: 16, weight: .semibold)
+                .scaledFont(size: OmiType.subheading, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
             Text("Your personal AI assistant — knows you through your memories and conversations")
-                .scaledFont(size: 13)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(OmiColors.textSecondary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
+                .padding(.horizontal, OmiSpacing.page)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 32)
+        .padding(.vertical, OmiSpacing.section)
     }
 
     /// Handle tapping on a citation card — opens the cited conversation in a sheet.
@@ -1774,7 +1774,7 @@ struct DashboardPage: View {
     // MARK: - Dashboard Widgets (collapsible)
 
     private var dashboardWidgets: some View {
-        VStack(alignment: .leading, spacing: widgetsCollapsed ? 0 : 20) {
+        VStack(alignment: .leading, spacing: widgetsCollapsed ? 0 : OmiSpacing.xl) {
             if shouldShowSuggestionBanner {
                 PromptSuggestionBanner(
                     suggestions: postOnboardingSuggestions,
@@ -1811,38 +1811,38 @@ struct DashboardPage: View {
                 collapseButton
             }
         }
-        .padding(.horizontal, 30)
-        .padding(.top, widgetsCollapsed ? 20 : 32)
-        .padding(.bottom, 8)
-        .animation(.easeInOut(duration: 0.25), value: widgetsCollapsed)
+        .padding(.horizontal, OmiSpacing.section)
+        .padding(.top, widgetsCollapsed ? OmiSpacing.xl : OmiSpacing.section)
+        .padding(.bottom, OmiSpacing.sm)
+        .omiAnimation(.easeInOut(duration: 0.25), value: widgetsCollapsed)
     }
 
     @ViewBuilder
     private var dashboardIntelligenceError: some View {
         if let error = intelligenceStore.error, !error.isEmpty {
-            HStack(spacing: 8) {
+            HStack(spacing: OmiSpacing.sm) {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .scaledFont(size: 11)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.warning)
                 Text(error)
-                    .scaledFont(size: 11)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textSecondary)
-                Spacer(minLength: 8)
+                Spacer(minLength: OmiSpacing.sm)
                 Button("Retry") {
                     Task { await intelligenceStore.load() }
                 }
                 .buttonStyle(.plain)
-                .scaledFont(size: 11, weight: .medium)
+                .scaledFont(size: OmiType.caption, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.sm)
             .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
                     .fill(OmiColors.backgroundSecondary.opacity(0.88))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
                     .stroke(OmiColors.border.opacity(0.7), lineWidth: 1)
             )
             .accessibilityIdentifier("dashboard-intelligence-error")
@@ -1851,16 +1851,16 @@ struct DashboardPage: View {
 
     private var collapsedWidgetBar: some View {
         Button(action: { widgetsCollapsed = false }) {
-            HStack(spacing: 16) {
+            HStack(spacing: OmiSpacing.lg) {
                 // Tasks summary
-                HStack(spacing: 6) {
+                HStack(spacing: OmiSpacing.xs) {
                     Image(systemName: "checklist")
-                        .scaledFont(size: 12)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(OmiColors.textTertiary)
                     Text(incompleteTaskCount == 0
                         ? "No tasks"
                         : "\(incompleteTaskCount) task\(incompleteTaskCount == 1 ? "" : "s")")
-                        .scaledFont(size: 13, weight: .medium)
+                        .scaledFont(size: OmiType.body, weight: .medium)
                         .foregroundColor(OmiColors.textSecondary)
                 }
 
@@ -1870,14 +1870,14 @@ struct DashboardPage: View {
                     .frame(width: 3, height: 3)
 
                 // Goals summary
-                HStack(spacing: 6) {
+                HStack(spacing: OmiSpacing.xs) {
                     Image(systemName: "target")
-                        .scaledFont(size: 12)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(OmiColors.textTertiary)
                     Text(activeGoalCount == 0
                         ? "No goals"
                         : "\(activeGoalCount) goal\(activeGoalCount == 1 ? "" : "s")")
-                        .scaledFont(size: 13, weight: .medium)
+                        .scaledFont(size: OmiType.body, weight: .medium)
                         .foregroundColor(OmiColors.textSecondary)
                 }
 
@@ -1885,17 +1885,17 @@ struct DashboardPage: View {
 
                 // Expand chevron
                 Image(systemName: "chevron.down")
-                    .scaledFont(size: 11, weight: .semibold)
+                    .scaledFont(size: OmiType.caption, weight: .semibold)
                     .foregroundColor(OmiColors.textQuaternary)
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 12)
+            .padding(.horizontal, OmiSpacing.lg)
+            .padding(.vertical, OmiSpacing.md)
             .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
                     .fill(OmiColors.backgroundSecondary.opacity(0.6))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
                     .stroke(OmiColors.border.opacity(0.12), lineWidth: 1)
             )
         }
@@ -1908,7 +1908,7 @@ struct DashboardPage: View {
         // height so Tasks/Goals stop competing with ChatMessagesView for
         // vertical space; each cell still fills the row, so the two cards
         // remain visually equal-height (matching the taller intrinsic).
-        Grid(horizontalSpacing: 20, verticalSpacing: 20) {
+        Grid(horizontalSpacing: OmiSpacing.xl, verticalSpacing: OmiSpacing.xl) {
             GridRow {
                 TasksWidget(
                     overdueTasks: viewModel.overdueTasks,
@@ -1963,15 +1963,15 @@ struct DashboardPage: View {
     }
 
     private var canonicalGoalsWidget: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
             HStack {
                 Text("Goals")
-                    .scaledFont(size: 15, weight: .semibold)
+                    .scaledFont(size: OmiType.subheading, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
                 Spacer()
                 Button("All goals") { showingAllGoals = true }
                     .buttonStyle(.plain)
-                    .scaledFont(size: 10, weight: .medium)
+                    .scaledFont(size: OmiType.micro, weight: .medium)
             }
             FocusedGoalsSection(
                 store: intelligenceStore,
@@ -1980,15 +1980,15 @@ struct DashboardPage: View {
             )
             if intelligenceStore.focusedGoals.isEmpty {
                 Text("Keep a few outcomes in focus.")
-                    .scaledFont(size: 11)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textSecondary)
             }
             Spacer(minLength: 0)
         }
-        .padding(16)
+        .padding(OmiSpacing.lg)
         .frame(minWidth: 0, maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
         .background(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
                 .fill(OmiColors.backgroundSecondary.opacity(0.65))
         )
     }
@@ -1998,7 +1998,7 @@ struct DashboardPage: View {
             Spacer()
             Button(action: { widgetsCollapsed = true }) {
                 Image(systemName: "chevron.up")
-                    .scaledFont(size: 11, weight: .semibold)
+                    .scaledFont(size: OmiType.caption, weight: .semibold)
                     .foregroundColor(OmiColors.textQuaternary)
                     .frame(width: 48, height: 20)
             }
@@ -2141,20 +2141,20 @@ private struct HomeAskBar: View {
     private var isFocused: Bool { focus.wrappedValue }
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: OmiSpacing.sm) {
             if !attachments.isEmpty {
                 AttachmentPreviewRow(
                     attachments: attachments,
                     onRemove: onAttachmentRemoved
                 )
-                .padding(.top, 10)
-                .padding(.horizontal, 12)
+                .padding(.top, OmiSpacing.sm)
+                .padding(.horizontal, OmiSpacing.md)
             }
 
-            HStack(spacing: 10) {
+            HStack(spacing: OmiSpacing.sm) {
                 Button(action: pickFiles) {
                     Image(systemName: "paperclip")
-                        .scaledFont(size: 15, weight: .medium)
+                        .scaledFont(size: OmiType.subheading, weight: .medium)
                         .foregroundStyle(isFocused ? HomePalette.secondary : HomePalette.muted)
                         .frame(width: 24, height: 24)
                         .contentShape(Rectangle())
@@ -2176,8 +2176,8 @@ private struct HomeAskBar: View {
 
                 actionButton
             }
-            .padding(.leading, 16)
-            .padding(.trailing, 8)
+            .padding(.leading, OmiSpacing.lg)
+            .padding(.trailing, OmiSpacing.sm)
             .frame(height: 58)
         }
         .background(
@@ -2203,9 +2203,9 @@ private struct HomeAskBar: View {
         }
         .onHover { isHovering = $0 }
         .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted, perform: handleDrop)
-        .animation(.easeOut(duration: 0.16), value: isFocused)
-        .animation(.easeOut(duration: 0.16), value: canSend)
-        .animation(.easeOut(duration: 0.16), value: attachments.count)
+        .omiAnimation(.easeOut(duration: 0.16), value: isFocused)
+        .omiAnimation(.easeOut(duration: 0.16), value: canSend)
+        .omiAnimation(.easeOut(duration: 0.16), value: attachments.count)
     }
 
     private func pickFiles() {
@@ -2274,7 +2274,7 @@ private struct HomeAskBar: View {
                     .fill(Color.white)
 
                 Image(systemName: "arrow.up")
-                    .scaledFont(size: 13, weight: .bold)
+                    .scaledFont(size: OmiType.body, weight: .bold)
                     .foregroundStyle(Color.black)
             }
             .frame(width: 34, height: 34)
@@ -2297,7 +2297,7 @@ private struct HomeAskBar: View {
                         .scaleEffect(0.6)
                 } else {
                     Image(systemName: "square.fill")
-                        .scaledFont(size: 10, weight: .bold)
+                        .scaledFont(size: OmiType.micro, weight: .bold)
                         .foregroundStyle(HomePalette.ink)
                 }
             }
@@ -2330,15 +2330,15 @@ private struct HomeAskBarConnectButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
+            HStack(spacing: OmiSpacing.xs) {
                 Image(systemName: "link")
-                    .scaledFont(size: 11, weight: .semibold)
+                    .scaledFont(size: OmiType.caption, weight: .semibold)
 
                 Text("Connect")
-                    .scaledFont(size: 12, weight: .semibold)
+                    .scaledFont(size: OmiType.caption, weight: .semibold)
             }
             .foregroundStyle(isActive ? Color.black : HomePalette.ink)
-            .padding(.horizontal, 13)
+            .padding(.horizontal, OmiSpacing.md)
             .frame(height: 34)
             .background(
                 Capsule(style: .continuous)
@@ -2365,23 +2365,23 @@ private struct HomeSuggestionRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: OmiSpacing.sm) {
                 Image(systemName: "sparkles")
-                    .scaledFont(size: 11, weight: .semibold)
+                    .scaledFont(size: OmiType.caption, weight: .semibold)
                     .foregroundStyle(isHovering ? Color(hex: 0xE3BF63) : HomePalette.muted)
 
                 Text(text)
-                    .scaledFont(size: 13, weight: .medium)
+                    .scaledFont(size: OmiType.body, weight: .medium)
                     .foregroundStyle(isHovering ? HomePalette.ink : HomePalette.secondary)
                     .lineLimit(1)
 
                 Spacer(minLength: 8)
 
                 Image(systemName: "arrow.up.right")
-                    .scaledFont(size: 10, weight: .bold)
+                    .scaledFont(size: OmiType.micro, weight: .bold)
                     .foregroundStyle(isHovering ? HomePalette.ink : HomePalette.faint)
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, OmiSpacing.lg)
             .frame(height: 42)
             .frame(maxWidth: .infinity)
             .background(
@@ -2459,23 +2459,23 @@ private struct HomePrimaryRouteButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
-                ConnectorBrandIcon(brand: brand, size: 20, cornerRadius: 6)
+            HStack(spacing: OmiSpacing.sm) {
+                ConnectorBrandIcon(brand: brand, size: 20, cornerRadius: OmiChrome.badgeRadius)
 
                 Text(title)
-                    .scaledFont(size: 13, weight: .semibold)
+                    .scaledFont(size: OmiType.body, weight: .semibold)
                     .lineLimit(1)
             }
             .foregroundStyle(.white)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.sm)
             .frame(minWidth: 118)
             .background(
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
                     .fill(HomePalette.green.opacity(isHovering ? 0.92 : 1))
             )
             .shadow(color: HomePalette.green.opacity(isHovering ? 0.22 : 0.12), radius: 12, y: 5)
-            .contentShape(.rect(cornerRadius: 11))
+            .contentShape(.rect(cornerRadius: OmiChrome.smallControlRadius))
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
@@ -2507,20 +2507,20 @@ private struct HomeInlineAction: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 7) {
+            HStack(spacing: OmiSpacing.xs) {
                 icon
 
                 Text(title)
-                    .scaledFont(size: 12, weight: .semibold)
+                    .scaledFont(size: OmiType.caption, weight: .semibold)
                     .foregroundStyle(HomePalette.secondary)
                     .lineLimit(1)
 
                 Image(systemName: "chevron.right")
-                    .scaledFont(size: 9, weight: .bold)
+                    .scaledFont(size: OmiType.micro, weight: .bold)
                     .foregroundStyle(HomePalette.faint)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.sm)
             .background(
                 Capsule(style: .continuous)
                     .fill(isHovering ? HomePalette.tileHover : HomePalette.tile.opacity(0.72))
@@ -2538,10 +2538,10 @@ private struct HomeInlineAction: View {
     @ViewBuilder
     private var icon: some View {
         if let brand {
-            ConnectorBrandIcon(brand: brand, size: 18, cornerRadius: 5)
+            ConnectorBrandIcon(brand: brand, size: 18, cornerRadius: OmiChrome.badgeRadius)
         } else if let systemImage {
             Image(systemName: systemImage)
-                .scaledFont(size: 12, weight: .semibold)
+                .scaledFont(size: OmiType.caption, weight: .semibold)
                 .foregroundStyle(HomePalette.secondary)
                 .frame(width: 18, height: 18)
         }
@@ -2606,7 +2606,7 @@ private struct HomeSourceIconTile: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 9) {
+            VStack(spacing: OmiSpacing.sm) {
                 ZStack(alignment: .topTrailing) {
                     icon
 
@@ -2619,9 +2619,9 @@ private struct HomeSourceIconTile: View {
                     }
                 }
 
-                HStack(spacing: 4) {
+                HStack(spacing: OmiSpacing.xxs) {
                     Text(title)
-                        .scaledFont(size: 12, weight: .semibold)
+                        .scaledFont(size: OmiType.caption, weight: .semibold)
                         .foregroundStyle(HomePalette.ink)
                         .lineLimit(1)
                         .minimumScaleFactor(0.72)
@@ -2654,12 +2654,12 @@ private struct HomeSourceIconTile: View {
     @ViewBuilder
     private var icon: some View {
         if usesOmiDeviceImage {
-            HomeOmiDeviceIcon(size: 42, cornerRadius: 12)
+            HomeOmiDeviceIcon(size: 42, cornerRadius: OmiChrome.smallControlRadius)
         } else if let brand {
-            ConnectorBrandIcon(brand: brand, size: 42, cornerRadius: 12)
+            ConnectorBrandIcon(brand: brand, size: 42, cornerRadius: OmiChrome.smallControlRadius)
         } else if let systemImage {
             ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
                     .fill(Color.white.opacity(0.05))
                 Image(systemName: systemImage)
                     .scaledFont(size: 19, weight: .semibold)
@@ -2746,24 +2746,24 @@ private struct HomeDataSourceCard: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
+            HStack(spacing: OmiSpacing.md) {
                 icon
 
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                     Text(title)
-                        .scaledFont(size: 14, weight: .semibold)
+                        .scaledFont(size: OmiType.body, weight: .semibold)
                         .foregroundStyle(HomePalette.ink)
                         .lineLimit(1)
 
                     Text(subtitle)
-                        .scaledFont(size: 12, weight: .medium)
+                        .scaledFont(size: OmiType.caption, weight: .medium)
                         .foregroundStyle(HomePalette.muted)
                         .lineLimit(1)
                 }
 
                 Spacer(minLength: 10)
 
-                HStack(spacing: 5) {
+                HStack(spacing: OmiSpacing.xxs) {
                     if isConnected {
                         Circle()
                             .fill(HomePalette.green)
@@ -2771,20 +2771,20 @@ private struct HomeDataSourceCard: View {
                     }
 
                     Text(actionTitle)
-                        .scaledFont(size: 12, weight: .semibold)
+                        .scaledFont(size: OmiType.caption, weight: .semibold)
                         .foregroundStyle(isConnected ? HomePalette.green : HomePalette.secondary)
                         .lineLimit(1)
 
                     if !isConnected && actionTitle == "Browse" {
                         Image(systemName: "chevron.right")
-                            .scaledFont(size: 9, weight: .bold)
+                            .scaledFont(size: OmiType.micro, weight: .bold)
                             .foregroundStyle(HomePalette.faint)
                     }
                 }
                 .fixedSize(horizontal: true, vertical: false)
             }
-            .padding(.horizontal, 13)
-            .padding(.vertical, 11)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.md)
             .frame(height: 64)
             .frame(maxWidth: .infinity)
             .background(
@@ -2806,13 +2806,13 @@ private struct HomeDataSourceCard: View {
     @ViewBuilder
     private var icon: some View {
         if let brand {
-            ConnectorBrandIcon(brand: brand, size: 36, cornerRadius: 10)
+            ConnectorBrandIcon(brand: brand, size: 36, cornerRadius: OmiChrome.smallControlRadius)
         } else if let systemImage {
             ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
                     .fill(Color.white.opacity(0.04))
                 Image(systemName: systemImage)
-                    .scaledFont(size: 17, weight: .semibold)
+                    .scaledFont(size: OmiType.subheading, weight: .semibold)
                     .foregroundStyle(HomePalette.secondary)
             }
             .frame(width: 36, height: 36)
@@ -2863,11 +2863,11 @@ private struct HomeAIChoiceButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: OmiSpacing.sm) {
                 icon
 
                 Text(title)
-                    .scaledFont(size: 14, weight: .semibold)
+                    .scaledFont(size: OmiType.body, weight: .semibold)
                     .foregroundStyle(HomePalette.ink)
                     .lineLimit(1)
 
@@ -2875,16 +2875,16 @@ private struct HomeAIChoiceButton: View {
 
                 if isConnected {
                     Text("Connected")
-                        .scaledFont(size: 11, weight: .medium)
+                        .scaledFont(size: OmiType.caption, weight: .medium)
                         .foregroundStyle(HomePalette.faint)
                 }
 
                 Image(systemName: "chevron.right")
-                    .scaledFont(size: 10, weight: .bold)
+                    .scaledFont(size: OmiType.micro, weight: .bold)
                     .foregroundStyle(HomePalette.faint)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.md)
             .frame(height: 48)
             .frame(maxWidth: .infinity)
             .background(buttonBackground)
@@ -2904,7 +2904,7 @@ private struct HomeAIChoiceButton: View {
             ConnectorBrandIcon(brand: brand, size: 24, cornerRadius: 7)
         } else if let systemImage {
             Image(systemName: systemImage)
-                .scaledFont(size: 14, weight: .bold)
+                .scaledFont(size: OmiType.body, weight: .bold)
                 .foregroundStyle(HomePalette.ink)
                 .frame(width: 24, height: 24)
         }
@@ -2990,7 +2990,7 @@ private struct HomeOrbitButton: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 6) {
+            VStack(spacing: OmiSpacing.xs) {
                 ZStack(alignment: .topTrailing) {
                     ConnectorBrandIcon(brand: brand, size: 44, cornerRadius: 13)
                         .shadow(color: .black.opacity(isHovering ? 0.16 : 0.08), radius: 9, y: 4)
@@ -2999,24 +2999,24 @@ private struct HomeOrbitButton: View {
                         Text(badge)
                             .scaledFont(size: 8, weight: .bold)
                             .foregroundStyle(.white)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 2)
+                            .padding(.horizontal, OmiSpacing.xxs)
+                            .padding(.vertical, OmiSpacing.hairline)
                             .background(Capsule(style: .continuous).fill(HomePalette.green))
                             .offset(x: 8, y: -6)
                     }
                 }
 
                 Text(title)
-                    .scaledFont(size: 11, weight: .semibold)
+                    .scaledFont(size: OmiType.caption, weight: .semibold)
                     .foregroundStyle(HomePalette.secondary)
                     .lineLimit(1)
             }
-            .padding(8)
+            .padding(OmiSpacing.sm)
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
                     .fill(isHovering ? HomePalette.panel : Color.clear)
             )
-            .contentShape(.rect(cornerRadius: 16))
+            .contentShape(.rect(cornerRadius: OmiChrome.controlRadius))
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
@@ -3034,17 +3034,17 @@ private struct HomeDestinationCapsule: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: OmiSpacing.sm) {
                 ConnectorBrandIcon(brand: brand, size: 34, cornerRadius: 9)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                     Text(title)
-                        .scaledFont(size: 13, weight: .semibold)
+                        .scaledFont(size: OmiType.body, weight: .semibold)
                         .foregroundStyle(HomePalette.ink)
                         .lineLimit(1)
 
                     Text(subtitle)
-                        .scaledFont(size: 11, weight: .medium)
+                        .scaledFont(size: OmiType.caption, weight: .medium)
                         .foregroundStyle(HomePalette.muted)
                         .lineLimit(1)
                 }
@@ -3052,10 +3052,10 @@ private struct HomeDestinationCapsule: View {
                 Spacer(minLength: 8)
 
                 Image(systemName: "arrow.up.right")
-                    .scaledFont(size: 11, weight: .bold)
+                    .scaledFont(size: OmiType.caption, weight: .bold)
                     .foregroundStyle(isHovering ? HomePalette.green : HomePalette.faint)
             }
-            .padding(11)
+            .padding(OmiSpacing.md)
             .background(
                 RoundedRectangle(cornerRadius: 15, style: .continuous)
                     .fill(isHovering ? HomePalette.tileHover : HomePalette.tile.opacity(0.82))
@@ -3079,12 +3079,12 @@ private struct HomeCommandCard: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: OmiSpacing.md) {
                 Text("Connect Omi to ChatGPT, Claude, or ask Omi directly...")
-                    .scaledFont(size: 15, weight: .regular)
+                    .scaledFont(size: OmiType.subheading, weight: .regular)
                     .foregroundStyle(HomePalette.faint)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 2)
+                    .padding(.top, OmiSpacing.hairline)
 
                 Button(action: onAskOmi) {
                     Image(systemName: "arrow.up.circle")
@@ -3094,45 +3094,45 @@ private struct HomeCommandCard: View {
                 .buttonStyle(.plain)
                 .help("Ask Omi")
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 18)
-            .padding(.bottom, 24)
+            .padding(.horizontal, OmiSpacing.lg)
+            .padding(.top, OmiSpacing.lg)
+            .padding(.bottom, OmiSpacing.xxl)
 
-            HStack(spacing: 9) {
+            HStack(spacing: OmiSpacing.sm) {
                 Button(action: onChatGPT) {
-                    HStack(spacing: 8) {
-                        ConnectorBrandIcon(brand: .chatgpt, size: 22, cornerRadius: 6)
+                    HStack(spacing: OmiSpacing.sm) {
+                        ConnectorBrandIcon(brand: .chatgpt, size: 22, cornerRadius: OmiChrome.badgeRadius)
                         Text("Connect ChatGPT")
-                            .scaledFont(size: 13, weight: .semibold)
+                            .scaledFont(size: OmiType.body, weight: .semibold)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
+                    .padding(.vertical, OmiSpacing.sm)
                     .foregroundStyle(.white)
                     .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
                             .fill(HomePalette.green)
                     )
                 }
                 .buttonStyle(.plain)
 
                 Button(action: onClaude) {
-                    HStack(spacing: 8) {
-                        ConnectorBrandIcon(brand: .claude, size: 22, cornerRadius: 6)
+                    HStack(spacing: OmiSpacing.sm) {
+                        ConnectorBrandIcon(brand: .claude, size: 22, cornerRadius: OmiChrome.badgeRadius)
                         Text("Claude")
-                            .scaledFont(size: 13, weight: .semibold)
+                            .scaledFont(size: OmiType.body, weight: .semibold)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
+                    .padding(.vertical, OmiSpacing.sm)
                     .foregroundStyle(HomePalette.secondary)
                     .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
                             .fill(HomePalette.tile)
                     )
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 12)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.bottom, OmiSpacing.md)
         }
         .background(
             RoundedRectangle(cornerRadius: 13, style: .continuous)
@@ -3189,26 +3189,26 @@ private struct HomeSourceTile: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
                 HStack(alignment: .top) {
                     iconView
                     Spacer()
                     statusView
                 }
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                     Text(title)
-                        .scaledFont(size: 13, weight: .semibold)
+                        .scaledFont(size: OmiType.body, weight: .semibold)
                         .foregroundStyle(HomePalette.ink)
                         .lineLimit(1)
 
                     Text(subtitle)
-                        .scaledFont(size: 11)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundStyle(HomePalette.muted)
                         .lineLimit(1)
                 }
             }
-            .padding(10)
+            .padding(OmiSpacing.sm)
             .frame(minHeight: 78, alignment: .topLeading)
             .background(
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
@@ -3234,7 +3234,7 @@ private struct HomeSourceTile: View {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                     .fill(HomePalette.panel)
                 Image(systemName: systemImage)
-                    .scaledFont(size: 13, weight: .semibold)
+                    .scaledFont(size: OmiType.body, weight: .semibold)
                     .foregroundStyle(HomePalette.secondary)
             }
             .frame(width: 28, height: 28)
@@ -3246,15 +3246,15 @@ private struct HomeSourceTile: View {
         switch status {
         case .connect:
             Image(systemName: "plus")
-                .scaledFont(size: 11, weight: .bold)
+                .scaledFont(size: OmiType.caption, weight: .bold)
                 .foregroundStyle(HomePalette.secondary)
         case .connected:
             Image(systemName: "checkmark")
-                .scaledFont(size: 11, weight: .bold)
+                .scaledFont(size: OmiType.caption, weight: .bold)
                 .foregroundStyle(HomePalette.green)
         case .open:
             Image(systemName: "chevron.right")
-                .scaledFont(size: 11, weight: .bold)
+                .scaledFont(size: OmiType.caption, weight: .bold)
                 .foregroundStyle(HomePalette.secondary)
         }
     }
@@ -3281,7 +3281,7 @@ private struct HomeStatRibbon: View {
                     Rectangle()
                         .fill(HomePalette.hairline.opacity(0.7))
                         .frame(width: 1)
-                        .padding(.vertical, 16)
+                        .padding(.vertical, OmiSpacing.lg)
                 }
                 HomeStatRibbonCell(item: item)
             }
@@ -3290,9 +3290,9 @@ private struct HomeStatRibbon: View {
         // content instead of stretching the whole strip in taller windows.
         .frame(height: 76)
         .background(HomePalette.tile.opacity(0.88))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
                 .stroke(HomePalette.hairline.opacity(0.8), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.16), radius: 10, y: 8)
@@ -3306,10 +3306,10 @@ private struct HomeStatRibbonCell: View {
 
     var body: some View {
         Button(action: item.action) {
-            VStack(spacing: 4) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
+            VStack(spacing: OmiSpacing.xxs) {
+                HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.xs) {
                     Image(systemName: item.systemImage)
-                        .scaledFont(size: 11, weight: .semibold)
+                        .scaledFont(size: OmiType.caption, weight: .semibold)
                         .foregroundStyle(isHovering ? HomePalette.ink : HomePalette.secondary)
 
                     Text(item.value)
@@ -3320,14 +3320,14 @@ private struct HomeStatRibbonCell: View {
                 }
 
                 Text(item.title)
-                    .scaledFont(size: 11, weight: .medium)
+                    .scaledFont(size: OmiType.caption, weight: .medium)
                     .foregroundStyle(isHovering ? HomePalette.secondary : HomePalette.muted)
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 13)
-            .padding(.horizontal, 10)
+            .padding(.vertical, OmiSpacing.md)
+            .padding(.horizontal, OmiSpacing.sm)
             .background(isHovering ? HomePalette.tileHover : Color.clear)
             .contentShape(Rectangle())
         }
@@ -3347,18 +3347,18 @@ private struct HomeMemoryMetricCard: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
+            HStack(spacing: OmiSpacing.md) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
                         .fill(Color.white.opacity(0.055))
 
                     Image(systemName: systemImage)
-                        .scaledFont(size: 15, weight: .semibold)
+                        .scaledFont(size: OmiType.subheading, weight: .semibold)
                         .foregroundStyle(HomePalette.ink)
                 }
                 .frame(width: 42, height: 42)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                     Text(value)
                         .font(.system(size: 21, weight: .medium, design: .serif))
                         .foregroundStyle(HomePalette.ink)
@@ -3366,7 +3366,7 @@ private struct HomeMemoryMetricCard: View {
                         .minimumScaleFactor(0.72)
 
                     Text(title)
-                        .scaledFont(size: 12, weight: .medium)
+                        .scaledFont(size: OmiType.caption, weight: .medium)
                         .foregroundStyle(HomePalette.muted)
                         .lineLimit(1)
                 }
@@ -3374,10 +3374,10 @@ private struct HomeMemoryMetricCard: View {
                 Spacer(minLength: 8)
 
                 Image(systemName: "arrow.up.right")
-                    .scaledFont(size: 10, weight: .bold)
+                    .scaledFont(size: OmiType.micro, weight: .bold)
                     .foregroundStyle(isHovering ? HomePalette.glow : HomePalette.faint)
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, OmiSpacing.md)
             .frame(height: 76)
             .frame(maxWidth: .infinity)
             .background(
@@ -3406,22 +3406,22 @@ private struct HomeMetricPill: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 7) {
+            HStack(spacing: OmiSpacing.xs) {
                 Image(systemName: systemImage)
-                    .scaledFont(size: 12, weight: .semibold)
+                    .scaledFont(size: OmiType.caption, weight: .semibold)
                     .foregroundStyle(HomePalette.secondary)
 
                 Text(value)
-                    .scaledFont(size: 13, weight: .semibold)
+                    .scaledFont(size: OmiType.body, weight: .semibold)
                     .foregroundStyle(HomePalette.ink)
 
                 Text(title)
-                    .scaledFont(size: 12, weight: .medium)
+                    .scaledFont(size: OmiType.caption, weight: .medium)
                     .foregroundStyle(HomePalette.muted)
                     .lineLimit(1)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.sm)
             .frame(maxWidth: .infinity)
             .background(
                 Capsule(style: .continuous)
@@ -3448,7 +3448,7 @@ private struct HomeGlassPanel<Content: View>: View {
 
     var body: some View {
         content
-            .padding(16)
+            .padding(OmiSpacing.lg)
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .background(
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
@@ -3468,18 +3468,18 @@ private struct HomeStageHeader: View {
     let subtitle: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text(eyebrow.uppercased())
-                .scaledFont(size: 10, weight: .bold)
+                .scaledFont(size: OmiType.micro, weight: .bold)
                 .foregroundStyle(HomePalette.green)
 
             Text(title)
-                .scaledFont(size: 18, weight: .semibold)
+                .scaledFont(size: OmiType.heading, weight: .semibold)
                 .foregroundStyle(HomePalette.ink)
                 .lineLimit(1)
 
             Text(subtitle)
-                .scaledFont(size: 12)
+                .scaledFont(size: OmiType.caption)
                 .foregroundStyle(HomePalette.muted)
                 .fixedSize(horizontal: false, vertical: true)
                 .lineLimit(2)
@@ -3489,7 +3489,7 @@ private struct HomeStageHeader: View {
 
 private struct HomeBridgeChevron: View {
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: OmiSpacing.sm) {
             Rectangle()
                 .fill(
                     LinearGradient(
@@ -3501,7 +3501,7 @@ private struct HomeBridgeChevron: View {
                 .frame(width: 1, height: 150)
 
             Image(systemName: "chevron.right")
-                .scaledFont(size: 16, weight: .bold)
+                .scaledFont(size: OmiType.subheading, weight: .bold)
                 .foregroundStyle(OmiColors.textTertiary)
         }
         .frame(width: 22)
@@ -3551,17 +3551,17 @@ private struct HomeSourceRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: OmiSpacing.sm) {
                 rowIcon
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                     Text(title)
-                        .scaledFont(size: 13, weight: .semibold)
+                        .scaledFont(size: OmiType.body, weight: .semibold)
                         .foregroundStyle(OmiColors.textPrimary)
                         .lineLimit(1)
 
                     Text(subtitle)
-                        .scaledFont(size: 11)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundStyle(OmiColors.textTertiary)
                         .lineLimit(1)
                 }
@@ -3570,8 +3570,8 @@ private struct HomeSourceRow: View {
 
                 statusView
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .padding(.horizontal, OmiSpacing.sm)
+            .padding(.vertical, OmiSpacing.sm)
             .background(
                 RoundedRectangle(cornerRadius: 13, style: .continuous)
                     .fill(isHovering ? Color.white.opacity(0.08) : Color.white.opacity(0.035))
@@ -3590,13 +3590,13 @@ private struct HomeSourceRow: View {
     @ViewBuilder
     private var rowIcon: some View {
         if let brand {
-            ConnectorBrandIcon(brand: brand, size: 32, cornerRadius: 8)
+            ConnectorBrandIcon(brand: brand, size: 32, cornerRadius: OmiChrome.elementRadius)
         } else if let systemImage {
             ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
                     .fill(OmiColors.backgroundPrimary.opacity(0.78))
                 Image(systemName: systemImage)
-                    .scaledFont(size: 13, weight: .semibold)
+                    .scaledFont(size: OmiType.body, weight: .semibold)
                     .foregroundStyle(OmiColors.textSecondary)
             }
             .frame(width: 32, height: 32)
@@ -3608,15 +3608,15 @@ private struct HomeSourceRow: View {
         switch status {
         case .connect:
             Image(systemName: "plus")
-                .scaledFont(size: 12, weight: .bold)
+                .scaledFont(size: OmiType.caption, weight: .bold)
                 .foregroundStyle(OmiColors.success)
         case .connected:
             Image(systemName: "checkmark")
-                .scaledFont(size: 12, weight: .bold)
+                .scaledFont(size: OmiType.caption, weight: .bold)
                 .foregroundStyle(OmiColors.success)
         case .open:
             Image(systemName: "chevron.right")
-                .scaledFont(size: 12, weight: .bold)
+                .scaledFont(size: OmiType.caption, weight: .bold)
                 .foregroundStyle(OmiColors.success)
         }
     }
@@ -3664,17 +3664,17 @@ private struct HomeDestinationRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: OmiSpacing.sm) {
                 rowIcon
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                     Text(title)
-                        .scaledFont(size: 13, weight: .semibold)
+                        .scaledFont(size: OmiType.body, weight: .semibold)
                         .foregroundStyle(prominence == .primary ? HomePalette.ink : HomePalette.secondary)
                         .lineLimit(1)
 
                     Text(subtitle)
-                        .scaledFont(size: 11)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundStyle(HomePalette.muted)
                         .lineLimit(1)
                 }
@@ -3682,14 +3682,14 @@ private struct HomeDestinationRow: View {
                 Spacer(minLength: 8)
 
                 Image(systemName: "arrow.up.right")
-                    .scaledFont(size: 11, weight: .bold)
+                    .scaledFont(size: OmiType.caption, weight: .bold)
                     .foregroundStyle(isHovering ? HomePalette.green : HomePalette.faint)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 10)
+            .padding(.horizontal, OmiSpacing.sm)
+            .padding(.vertical, OmiSpacing.sm)
             .background(rowBackground)
             .overlay(rowStroke)
-            .contentShape(.rect(cornerRadius: 14))
+            .contentShape(.rect(cornerRadius: OmiChrome.chipRadius))
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
@@ -3705,7 +3705,7 @@ private struct HomeDestinationRow: View {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .fill(HomePalette.tile)
                 Image(systemName: systemImage)
-                    .scaledFont(size: 13, weight: .semibold)
+                    .scaledFont(size: OmiType.body, weight: .semibold)
                     .foregroundStyle(HomePalette.secondary)
             }
             .frame(width: 34, height: 34)
@@ -3713,7 +3713,7 @@ private struct HomeDestinationRow: View {
     }
 
     private var rowBackground: some View {
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
+        RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
             .fill(
                 prominence == .primary
                     ? HomePalette.green.opacity(isHovering ? 0.20 : 0.12)
@@ -3722,7 +3722,7 @@ private struct HomeDestinationRow: View {
     }
 
     private var rowStroke: some View {
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
+        RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
             .stroke(
                 prominence == .primary
                     ? HomePalette.green.opacity(isHovering ? 0.42 : 0.24)
@@ -3743,40 +3743,40 @@ private struct HomeMetricTile: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 7) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xs) {
                 HStack {
                     Image(systemName: systemImage)
-                        .scaledFont(size: 13, weight: .semibold)
+                        .scaledFont(size: OmiType.body, weight: .semibold)
                         .foregroundStyle(accent)
 
                     Spacer()
 
                     Image(systemName: "arrow.up.right")
-                        .scaledFont(size: 10, weight: .bold)
+                        .scaledFont(size: OmiType.micro, weight: .bold)
                         .foregroundStyle(isHovering ? accent : OmiColors.textQuaternary)
                 }
 
                 Text(value)
-                    .scaledFont(size: 20, weight: .semibold)
+                    .scaledFont(size: OmiType.heading, weight: .semibold)
                     .foregroundStyle(OmiColors.textPrimary)
                     .lineLimit(1)
 
                 Text(title)
-                    .scaledFont(size: 11, weight: .medium)
+                    .scaledFont(size: OmiType.caption, weight: .medium)
                     .foregroundStyle(OmiColors.textTertiary)
                     .lineLimit(1)
             }
-            .padding(11)
+            .padding(OmiSpacing.md)
             .frame(minHeight: 86, alignment: .topLeading)
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
                     .fill(Color.white.opacity(isHovering ? 0.08 : 0.04))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
                     .stroke(isHovering ? accent.opacity(0.34) : Color.white.opacity(0.07), lineWidth: 1)
             )
-            .contentShape(.rect(cornerRadius: 16))
+            .contentShape(.rect(cornerRadius: OmiChrome.controlRadius))
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
@@ -3789,13 +3789,13 @@ private struct HomeSectionHeader: View {
     let subtitle: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text(title)
-                .scaledFont(size: 20, weight: .semibold)
+                .scaledFont(size: OmiType.heading, weight: .semibold)
                 .foregroundStyle(OmiColors.textPrimary)
 
             Text(subtitle)
-                .scaledFont(size: 12)
+                .scaledFont(size: OmiType.caption)
                 .foregroundStyle(OmiColors.textTertiary)
         }
     }
@@ -3850,7 +3850,7 @@ private struct HomeStatusButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
+            HStack(spacing: OmiSpacing.sm) {
                 ZStack {
                     if isToggling {
                         ProgressView()
@@ -3858,18 +3858,18 @@ private struct HomeStatusButton: View {
                             .scaleEffect(0.55)
                     } else {
                         Image(systemName: systemImage)
-                            .scaledFont(size: 13, weight: .semibold)
+                            .scaledFont(size: OmiType.body, weight: .semibold)
                     }
                 }
                 .frame(width: 18, height: 18)
 
                 Text(title)
-                    .scaledFont(size: 12, weight: .semibold)
+                    .scaledFont(size: OmiType.caption, weight: .semibold)
                     .lineLimit(1)
             }
             .foregroundStyle(status.isActive ? HomePalette.ink : (status.isBlocked ? status.indicator : HomePalette.muted))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.sm)
             .frame(height: 34)
             .background(
                 Capsule(style: .continuous)
@@ -3926,7 +3926,7 @@ private struct HomeListeningStatusButton: View {
     var body: some View {
         HStack(spacing: 0) {
             Button(action: action) {
-                HStack(spacing: 8) {
+                HStack(spacing: OmiSpacing.sm) {
                     ZStack {
                         if isToggling {
                             ProgressView()
@@ -3934,14 +3934,14 @@ private struct HomeListeningStatusButton: View {
                                 .scaleEffect(0.55)
                         } else {
                             Image(systemName: systemImage)
-                                .scaledFont(size: 13, weight: .semibold)
+                                .scaledFont(size: OmiType.body, weight: .semibold)
                         }
                     }
                     .frame(width: 18, height: 18)
 
                     VStack(alignment: .leading, spacing: 1) {
                         Text(title)
-                            .scaledFont(size: 12, weight: .semibold)
+                            .scaledFont(size: OmiType.caption, weight: .semibold)
                             .lineLimit(1)
 
                         // Mode ("Always" / "In meeting" / …) is revealed only on
@@ -3955,8 +3955,8 @@ private struct HomeListeningStatusButton: View {
                         }
                     }
                 }
-                .padding(.leading, 12)
-                .padding(.trailing, 8)
+                .padding(.leading, OmiSpacing.md)
+                .padding(.trailing, OmiSpacing.sm)
                 .frame(height: 34)
                 .contentShape(Rectangle())
             }
@@ -3975,7 +3975,7 @@ private struct HomeListeningStatusButton: View {
 
                 Button(action: modeAction) {
                     Image(systemName: isMeetingsOnly ? "person.2.fill" : "person.fill")
-                        .scaledFont(size: 11, weight: .semibold)
+                        .scaledFont(size: OmiType.caption, weight: .semibold)
                         .foregroundStyle(modeIconColor)
                         .frame(width: 30, height: 34)
                         .contentShape(Rectangle())
@@ -3998,7 +3998,7 @@ private struct HomeListeningStatusButton: View {
         .contentShape(Capsule())
         .frame(height: 34)
         .onHover { isHovering = $0 }
-        .animation(.easeInOut(duration: 0.14), value: isHovering)
+        .omiAnimation(.easeInOut(duration: 0.14), value: isHovering)
     }
 
     private var modeIconColor: Color {
@@ -4036,7 +4036,7 @@ private struct HomeIconActionButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .scaledFont(size: 14, weight: .semibold)
+                .scaledFont(size: OmiType.body, weight: .semibold)
                 .foregroundStyle(isHovering ? HomePalette.ink : HomePalette.muted)
                 .frame(width: 34, height: 34)
                 .background(
@@ -4077,7 +4077,7 @@ private struct HomeSettingsMenuButton: View {
                     )
 
                 Image(systemName: "gearshape.fill")
-                    .scaledFont(size: 14, weight: .semibold)
+                    .scaledFont(size: OmiType.body, weight: .semibold)
                     .foregroundStyle(isHovering ? HomePalette.ink : HomePalette.secondary)
             }
             .frame(width: 34, height: 34)
@@ -4086,7 +4086,7 @@ private struct HomeSettingsMenuButton: View {
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
         .popover(isPresented: $isPresented, arrowEdge: .top) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                 popoverButton(title: "Refer a Friend", systemImage: "gift.fill") {
                     isPresented = false
                     onRefer()
@@ -4098,14 +4098,14 @@ private struct HomeSettingsMenuButton: View {
                 }
 
                 Divider()
-                    .padding(.vertical, 3)
+                    .padding(.vertical, OmiSpacing.hairline)
 
                 popoverButton(title: "Settings", systemImage: "gearshape.fill") {
                     isPresented = false
                     onSettings()
                 }
             }
-            .padding(8)
+            .padding(OmiSpacing.sm)
             .frame(width: 190)
             .background(HomePalette.panel)
         }
@@ -4115,21 +4115,21 @@ private struct HomeSettingsMenuButton: View {
 
     private func popoverButton(title: String, systemImage: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: OmiSpacing.sm) {
                 Image(systemName: systemImage)
-                    .scaledFont(size: 13, weight: .semibold)
+                    .scaledFont(size: OmiType.body, weight: .semibold)
                     .foregroundStyle(HomePalette.secondary)
                     .frame(width: 18)
 
                 Text(title)
-                    .scaledFont(size: 13, weight: .medium)
+                    .scaledFont(size: OmiType.body, weight: .medium)
                     .foregroundStyle(HomePalette.ink)
 
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 9)
-            .padding(.vertical, 7)
-            .contentShape(.rect(cornerRadius: 8))
+            .padding(.horizontal, OmiSpacing.sm)
+            .padding(.vertical, OmiSpacing.xs)
+            .contentShape(.rect(cornerRadius: OmiChrome.elementRadius))
         }
         .buttonStyle(.plain)
     }
@@ -4147,17 +4147,17 @@ private struct HomeConnectorCard: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
+            HStack(spacing: OmiSpacing.md) {
                 ConnectorBrandIcon(brand: brand, size: 36, cornerRadius: 9)
 
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                     Text(title)
-                        .scaledFont(size: 14, weight: .semibold)
+                        .scaledFont(size: OmiType.body, weight: .semibold)
                         .foregroundStyle(OmiColors.textPrimary)
                         .lineLimit(1)
 
                     Text(subtitle)
-                        .scaledFont(size: 12)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundStyle(OmiColors.textTertiary)
                         .lineLimit(1)
                 }
@@ -4165,31 +4165,31 @@ private struct HomeConnectorCard: View {
                 Spacer(minLength: 10)
 
                 if let status {
-                    HStack(spacing: 5) {
+                    HStack(spacing: OmiSpacing.xxs) {
                         Image(systemName: "checkmark")
-                            .scaledFont(size: 10, weight: .bold)
+                            .scaledFont(size: OmiType.micro, weight: .bold)
                         Text(status)
-                            .scaledFont(size: 12, weight: .semibold)
+                            .scaledFont(size: OmiType.caption, weight: .semibold)
                     }
                     .foregroundStyle(OmiColors.success)
                     .lineLimit(1)
                 } else {
-                    HStack(spacing: 5) {
+                    HStack(spacing: OmiSpacing.xxs) {
                         Image(systemName: "plus")
-                            .scaledFont(size: 10, weight: .bold)
+                            .scaledFont(size: OmiType.micro, weight: .bold)
                         Text(actionTitle)
-                            .scaledFont(size: 12, weight: .semibold)
+                            .scaledFont(size: OmiType.caption, weight: .semibold)
                     }
                     .foregroundStyle(OmiColors.success)
                     .lineLimit(1)
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.sm)
             .frame(minHeight: 56)
             .background(cardBackground)
             .overlay(cardStroke)
-            .contentShape(.rect(cornerRadius: 12))
+            .contentShape(.rect(cornerRadius: OmiChrome.smallControlRadius))
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
@@ -4197,12 +4197,12 @@ private struct HomeConnectorCard: View {
     }
 
     private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
+        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
             .fill(OmiColors.backgroundSecondary.opacity(isHovering ? 0.94 : 0.72))
     }
 
     private var cardStroke: some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
+        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
             .stroke(
                 isHovering ? OmiColors.success.opacity(0.32) : OmiColors.border.opacity(0.42),
                 lineWidth: 1
@@ -4216,52 +4216,52 @@ private struct HomeMoreAppsCard: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
+            HStack(spacing: OmiSpacing.md) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
                         .fill(OmiColors.backgroundPrimary)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
                                 .stroke(OmiColors.border.opacity(0.55), lineWidth: 1)
                         )
 
                     Image(systemName: "square.grid.2x2.fill")
-                        .scaledFont(size: 15, weight: .semibold)
+                        .scaledFont(size: OmiType.subheading, weight: .semibold)
                         .foregroundStyle(OmiColors.textSecondary)
                 }
                 .frame(width: 36, height: 36)
 
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                     Text("Connect more")
-                        .scaledFont(size: 14, weight: .semibold)
+                        .scaledFont(size: OmiType.body, weight: .semibold)
                         .foregroundStyle(OmiColors.textPrimary)
 
                     Text("Browse all apps")
-                        .scaledFont(size: 12)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundStyle(OmiColors.textTertiary)
                 }
 
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .scaledFont(size: 12, weight: .semibold)
+                    .scaledFont(size: OmiType.caption, weight: .semibold)
                     .foregroundStyle(OmiColors.success)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.sm)
             .frame(minHeight: 56)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
                     .fill(OmiColors.backgroundSecondary.opacity(isHovering ? 0.94 : 0.72))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
                     .stroke(
                         isHovering ? OmiColors.success.opacity(0.32) : OmiColors.border.opacity(0.42),
                         lineWidth: 1
                     )
             )
-            .contentShape(.rect(cornerRadius: 12))
+            .contentShape(.rect(cornerRadius: OmiChrome.smallControlRadius))
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
@@ -4270,13 +4270,13 @@ private struct HomeMoreAppsCard: View {
 
 private struct HomeFlowArrow: View {
     var body: some View {
-        VStack(spacing: 5) {
+        VStack(spacing: OmiSpacing.xxs) {
             Rectangle()
                 .fill(OmiColors.border.opacity(0.75))
                 .frame(width: 1, height: 14)
 
             Image(systemName: "chevron.down")
-                .scaledFont(size: 12, weight: .semibold)
+                .scaledFont(size: OmiType.caption, weight: .semibold)
                 .foregroundStyle(OmiColors.textSecondary)
         }
         .frame(maxWidth: .infinity)
@@ -4296,29 +4296,29 @@ private struct HomeMetricCard: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 11) {
+            HStack(spacing: OmiSpacing.md) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
                         .fill(accent.opacity(0.16))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
                                 .stroke(accent.opacity(0.28), lineWidth: 1)
                         )
 
                     Image(systemName: systemImage)
-                        .scaledFont(size: 16, weight: .semibold)
+                        .scaledFont(size: OmiType.subheading, weight: .semibold)
                         .foregroundStyle(accent)
                 }
                 .frame(width: 38, height: 38)
 
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                     Text(value)
-                        .scaledFont(size: 20, weight: .semibold)
+                        .scaledFont(size: OmiType.heading, weight: .semibold)
                         .foregroundStyle(OmiColors.textPrimary)
                         .lineLimit(1)
 
                     Text(title)
-                        .scaledFont(size: 13, weight: .medium)
+                        .scaledFont(size: OmiType.body, weight: .medium)
                         .foregroundStyle(OmiColors.textTertiary)
                         .lineLimit(1)
                 }
@@ -4326,20 +4326,20 @@ private struct HomeMetricCard: View {
                 Spacer(minLength: 8)
 
                 Image(systemName: "arrow.up.right")
-                    .scaledFont(size: 12, weight: .semibold)
+                    .scaledFont(size: OmiType.caption, weight: .semibold)
                     .foregroundStyle(isHovering ? accent : OmiColors.textQuaternary)
             }
-            .padding(12)
+            .padding(OmiSpacing.md)
             .frame(minHeight: 64)
             .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
                     .fill(OmiColors.backgroundSecondary.opacity(isHovering ? 0.96 : 0.78))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
                     .stroke(isHovering ? accent.opacity(0.34) : OmiColors.border.opacity(0.44), lineWidth: 1)
             )
-            .contentShape(.rect(cornerRadius: 14))
+            .contentShape(.rect(cornerRadius: OmiChrome.chipRadius))
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
@@ -4371,7 +4371,7 @@ private struct HomeAIButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
+            HStack(spacing: OmiSpacing.sm) {
                 if let brand {
                     ConnectorBrandIcon(brand: brand, size: 26, cornerRadius: 7)
                 } else if let systemImage {
@@ -4379,24 +4379,24 @@ private struct HomeAIButton: View {
                         RoundedRectangle(cornerRadius: 7, style: .continuous)
                             .fill(OmiColors.backgroundTertiary)
                         Image(systemName: systemImage)
-                            .scaledFont(size: 12, weight: .semibold)
+                            .scaledFont(size: OmiType.caption, weight: .semibold)
                             .foregroundStyle(OmiColors.textSecondary)
                     }
                     .frame(width: 26, height: 26)
                 }
 
                 Text(title)
-                    .scaledFont(size: 13, weight: .semibold)
+                    .scaledFont(size: OmiType.body, weight: .semibold)
                     .foregroundStyle(OmiColors.textSecondary)
                     .lineLimit(1)
 
                 Image(systemName: "chevron.right")
-                    .scaledFont(size: 10, weight: .bold)
+                    .scaledFont(size: OmiType.micro, weight: .bold)
                     .foregroundStyle(isHovering ? OmiColors.success : OmiColors.textQuaternary)
             }
-            .padding(.leading, 9)
-            .padding(.trailing, 12)
-            .padding(.vertical, 7)
+            .padding(.leading, OmiSpacing.sm)
+            .padding(.trailing, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.xs)
             .background(
                 Capsule(style: .continuous)
                     .fill(OmiColors.backgroundSecondary.opacity(isHovering ? 0.96 : 0.76))

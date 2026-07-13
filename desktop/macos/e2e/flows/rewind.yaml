@@ -6,6 +6,13 @@ app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Rewind.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/AppIconView.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/InteractiveTimelineBar.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/RewindSearchBar.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/RewindTimelinePlayerView.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/RewindTimelineView.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/ScreenshotThumbnailView.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/SearchResultsFilmstrip.swift
 preconditions:
   - auth_ready
 

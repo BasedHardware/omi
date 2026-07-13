@@ -38,7 +38,7 @@ struct SelectableMarkdown: View {
                 // Single text segment — no VStack overhead
                 textSegmentView(cachedSegments[0].content)
             } else {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: OmiSpacing.sm) {
                     ForEach(cachedSegments) { segment in
                         switch segment.kind {
                         case .text:
@@ -137,9 +137,9 @@ struct SelectableMarkdown: View {
                 .foregroundColor(sender == .user ? .white : OmiColors.textPrimary)
                 .if_available_writingToolsNone()
         }
-        .padding(12)
+        .padding(OmiSpacing.md)
         .background(bgColor)
-        .cornerRadius(8)
+        .cornerRadius(OmiChrome.elementRadius)
     }
 
     // MARK: - Attributed String Styling
@@ -157,7 +157,7 @@ struct SelectableMarkdown: View {
 
         let codeFontSize = round(13 * fontScale)
         let baseColor: Color = sender == .user ? .white : OmiColors.textPrimary
-        let linkColor: Color = sender == .user ? .white.opacity(0.9) : OmiColors.purplePrimary
+        let linkColor: Color = sender == .user ? .white.opacity(0.9) : OmiColors.accent
         let codeBgColor: Color = sender == .user
             ? .white.opacity(0.15)
             : OmiColors.backgroundTertiary
