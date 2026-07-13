@@ -47,6 +47,7 @@ desktop.ini
 # docs/ holds personal notes, EXCEPT explicitly re-included design docs
 docs/*
 !docs/conversation-sync.md
+!docs/bar-gotchas.md
 skills-lock.json
 
 # Visual brainstorming companion

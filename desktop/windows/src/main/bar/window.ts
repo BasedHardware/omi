@@ -1,3 +1,8 @@
+// ⚠ Before changing bar window logic or ANY bar animation, read
+// desktop/windows/docs/bar-gotchas.md — the four traps (OS show-fade → persistent
+// window, box-resize plummet → clip-reveal, orb remount blink → one hoisted orb,
+// eaten hardware clicks → GetAsyncKeyState watch) and the fast verification loop.
+//
 // The top-edge companion bar — Windows' answer to the Mac notch. One frameless
 // TRANSPARENT window per reveal (fixed bounds, computed per display): all
 // motion — slide-in, genesis, expand/morph — happens via CSS/canvas INSIDE the

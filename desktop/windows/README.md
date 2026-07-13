@@ -85,6 +85,14 @@ npm run build:linux
 Vite inlines the `.env` values at build time, so a packaged installer needs no `.env` —
 the config is compiled into the binary.
 
+## Floating bar
+
+The always-on-top bar window has several non-obvious Windows pathologies (OS
+show-fade, clip-reveal requirement, orb WebGL blink, eaten hardware clicks). Read
+[docs/bar-gotchas.md](docs/bar-gotchas.md) **before** changing bar window logic or
+animations — it also documents the fast verification loop (harness scripts,
+`[bar-diag]` logging).
+
 ## Conversation sync
 
 Screen-session (mic + system audio) recordings sync to the Omi cloud via
