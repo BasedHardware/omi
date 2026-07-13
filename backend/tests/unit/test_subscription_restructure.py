@@ -182,6 +182,57 @@ def test_filter_plans_keeps_neo_on_web_for_new_user(load_subscription):
     assert 'unlimited' in [d['plan_id'] for d in filtered]
 
 
+def test_filter_plans_hides_neo_on_windows_for_new_user(load_subscription):
+    """New / never-paid Windows desktop users don't see Neo — same as macOS desktop.
+
+    Regression for the platform defect: _platform_hidden_plans only hid Neo for
+    'macos', so a Windows client would have been offered the deprecated Neo plan.
+    """
+    with load_subscription() as sub_mod:
+        definitions = sub_mod.get_paid_plan_definitions()
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform='windows', ever_purchased=False)
+    plan_ids = [d['plan_id'] for d in filtered]
+    assert 'unlimited' not in plan_ids
+    assert 'operator' in plan_ids
+    assert 'architect' in plan_ids
+
+
+def test_windows_full_catalog_matches_macos_canonical(load_subscription):
+    """End-to-end catalog resolution for a Windows client (X-App-Platform: windows).
+
+    Pins the fix: a Windows client gets the SAME catalog macOS gets — Operator +
+    Architect visible under their canonical titles, Neo hidden from a new basic
+    desktop user — and NEVER the legacy 'Omi Pro' / 'Unlimited Plan' rename that
+    adapt_plans_for_legacy_client produces for pre-rollout clients.
+    """
+    with load_subscription() as sub_mod:
+        # Windows is a modern desktop client → new catalog, no legacy adaptation.
+        assert sub_mod.should_show_new_plans('windows', '0.1.0') is True
+        definitions = sub_mod.get_paid_plan_definitions()
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform='windows', ever_purchased=False)
+    by_id = {d['plan_id']: d for d in filtered}
+    assert 'operator' in by_id
+    assert 'architect' in by_id
+    assert 'unlimited' not in by_id  # Neo hidden on desktop for a new user
+    assert by_id['operator']['title'] == 'Operator'
+    assert by_id['architect']['title'] == 'Architect'
+    titles = [d['title'] for d in filtered]
+    assert 'Omi Pro' not in titles
+    assert 'Unlimited Plan' not in titles
+
+
+def test_windows_is_a_desktop_platform(load_subscription):
+    """Windows lives in the single-source-of-truth desktop platform set and tokens."""
+    with load_subscription() as sub_mod:
+        assert 'windows' in sub_mod.DESKTOP_PLATFORMS
+        assert 'macos' in sub_mod.DESKTOP_PLATFORMS
+        assert 'windows' in sub_mod._TRIAL_PAYWALL_DESKTOP_TOKENS
+        assert 'desktop' in sub_mod._TRIAL_PAYWALL_DESKTOP_TOKENS
+        # Mobile is never desktop.
+        assert 'ios' not in sub_mod.DESKTOP_PLATFORMS
+        assert 'android' not in sub_mod.DESKTOP_PLATFORMS
+
+
 def test_has_ever_purchased_signals(monkeypatch, load_subscription):
     """Paid plan, stored stripe sub id, or a stripe customer id each count as purchased."""
     with load_subscription() as sub_mod:
@@ -227,6 +278,25 @@ def test_version_gating_macos_always_new(load_subscription):
         assert sub_mod.should_show_new_plans('macos', '99.99.999') is True
 
 
+def test_version_gating_windows_always_new(load_subscription):
+    """Windows is a desktop platform: always gets the new Operator + Architect catalog.
+
+    Regression for the platform-recognition defect where only 'macos' was treated
+    as desktop, so Windows (X-App-Platform: windows) fell through to the legacy
+    catalog — hiding Operator and renaming Architect→'Omi Pro'. Windows defaults
+    permissive (pre-release), so every version and a missing version qualify.
+    """
+    with load_subscription() as sub_mod:
+        assert sub_mod.should_show_new_plans('windows', None) is True
+        assert sub_mod.should_show_new_plans('windows', '1.0.0') is True
+        assert sub_mod.should_show_new_plans('windows', '0.0.1') is True
+        assert sub_mod.should_show_new_plans('windows', '99.99.999') is True
+        # Case-insensitive, matching the macOS/mobile branches.
+        assert sub_mod.should_show_new_plans('Windows', '1.0.0') is True
+        # Unparseable version fails open on desktop (same as macOS).
+        assert sub_mod.should_show_new_plans('windows', 'not.a.version') is True
+
+
 def test_version_gating_mobile_requires_version(load_subscription):
     """Mobile requires version header and must meet minimum."""
     with load_subscription() as sub_mod:
@@ -269,10 +339,15 @@ def test_version_gating_malformed_version(load_subscription):
 
 
 def test_version_gating_unknown_platform(load_subscription):
-    """Unknown platform gets legacy catalog."""
+    """Unknown / unrecognized platform gets legacy catalog.
+
+    'linux' is not a shipping desktop plan platform, so it stays on the legacy
+    catalog (see DESKTOP_PLATFORMS — only macOS and Windows are wired for plans).
+    """
     with load_subscription() as sub_mod:
         assert sub_mod.should_show_new_plans(None, None) is False
-        assert sub_mod.should_show_new_plans('windows', '1.0.0') is False
+        assert sub_mod.should_show_new_plans('linux', '1.0.0') is False
+        assert sub_mod.should_show_new_plans('web', '1.0.0') is False
 
 
 def test_subscription_deprecation_fields():
