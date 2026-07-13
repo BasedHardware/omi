@@ -123,5 +123,3 @@ exempt:
     reason: "typed error flow-control ratchet uses a committed baseline, not diff-scoped triggers"
   - path: "backend/scripts/check_app_client_openapi_compatibility.py"
     reason: "OpenAPI generation contract has component dependencies"
-  - path: ".github/scripts/check_isinstance_return_ratchet.py"
-    reason: "backend memory isinstance-return ratchet; full-tree baseline check, not diff-scoped"
