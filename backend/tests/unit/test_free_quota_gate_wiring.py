@@ -237,16 +237,16 @@ class TestOmniRelayGate:
             ws.close.assert_awaited_once_with(code=1008, reason='quota_exceeded')
             ws.accept.assert_not_awaited()
 
-    def test_relay_skips_quota_for_byok_session(self):
+    def test_relay_skips_quota_for_byok_session_with_provider_key(self):
         import routers.omni_relay as relay
 
-        # Unsupported provider makes the handler exit right AFTER the gates,
-        # so the test stays deterministic without faking the upstream socket.
-        ws = _fake_websocket(provider='unsupported-provider')
+        # BYOK key for THIS session's provider + genuine enrollment → exempt.
+        # _upstream is forced to error so the handler exits right after the gate.
+        ws = _fake_websocket(provider='gemini')
         with patch.object(relay, 'raise_if_gateway_feature_mode_blocks_direct_model_surface'), patch.object(
             relay, 'run_blocking', _passthrough_run_blocking
         ), patch.object(relay, '_verify_ws_auth', return_value='u1'), patch.object(
-            relay, 'extract_byok_from_websocket', return_value={'openai': 'sk-user'}
+            relay, 'extract_byok_from_websocket', return_value={'gemini': 'sk-user'}
         ), patch.object(
             relay, 'set_byok_keys'
         ), patch.object(
@@ -254,12 +254,43 @@ class TestOmniRelayGate:
         ), patch.object(
             relay, 'is_trial_paywalled', return_value=False
         ), patch.object(
+            relay.users_db, 'is_byok_active', return_value=True
+        ), patch.object(
+            relay, '_upstream', return_value=(None, 'forced-exit')
+        ), patch.object(
             relay, 'get_chat_quota_snapshot'
         ) as snapshot:
             asyncio.run(relay.omni_relay(ws))
             snapshot.assert_not_called()
             ws.close.assert_awaited_once()
             assert ws.close.await_args.kwargs.get('code') == 1011
+
+    def test_relay_deepgram_only_byok_does_not_skip_quota(self):
+        # Regression: a deepgram-only BYOK header must NOT exempt the session —
+        # _upstream would fall back to Omi's platform key (the bypass
+        # enforce_chat_quota explicitly guards against).
+        import routers.omni_relay as relay
+        from models.users import PlanType
+
+        ws = _fake_websocket(provider='gemini')
+        with patch.object(relay, 'raise_if_gateway_feature_mode_blocks_direct_model_surface'), patch.object(
+            relay, 'run_blocking', _passthrough_run_blocking
+        ), patch.object(relay, '_verify_ws_auth', return_value='u1'), patch.object(
+            relay, 'extract_byok_from_websocket', return_value={'deepgram': 'dg-user'}
+        ), patch.object(
+            relay, 'set_byok_keys'
+        ), patch.object(
+            relay, 'validate_byok_websocket', return_value=None
+        ), patch.object(
+            relay, 'is_trial_paywalled', return_value=False
+        ), patch.object(
+            relay.users_db, 'is_byok_active', return_value=True
+        ), patch.object(
+            relay, 'get_chat_quota_snapshot', return_value={'plan': PlanType.basic, 'allowed': False}
+        ) as snapshot:
+            asyncio.run(relay.omni_relay(ws))
+            snapshot.assert_called_once_with('u1', 'desktop')
+            ws.close.assert_awaited_once_with(code=1008, reason='quota_exceeded')
 
     def test_relay_allows_free_user_under_cap(self):
         import routers.omni_relay as relay

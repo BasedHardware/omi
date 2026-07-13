@@ -58,6 +58,7 @@ struct MintResponse {
 
 enum MintError {
     BadProvider,
+    QuotaExceeded,
     MissingKey(&'static str),
     Upstream {
         provider: &'static str,
@@ -77,6 +78,15 @@ impl IntoResponse for MintError {
                 StatusCode::BAD_REQUEST,
                 "bad_provider",
                 "provider must be \"openai\" or \"gemini\"".to_string(),
+                None,
+                None,
+                None,
+                false,
+            ),
+            MintError::QuotaExceeded => mint_error_body(
+                StatusCode::PAYMENT_REQUIRED,
+                "quota_exceeded",
+                "Monthly free limit reached. Upgrade to keep using realtime voice.".to_string(),
                 None,
                 None,
                 None,
@@ -242,6 +252,13 @@ async fn mint_session(
     Json(request): Json<MintRequest>,
 ) -> Result<Json<MintResponse>, MintError> {
     // PaywalledAuthUser already enforced auth + paywall (402/403) before we got here.
+    // Realtime sessions are ALWAYS minted on Omi's server keys (BYOK keys are
+    // never used on this lane), so the quota verdict applies even to validated
+    // BYOK requests — otherwise a fake-fingerprint enrollment buys Omi-funded
+    // realtime past the free cap.
+    if user.quota_blocked {
+        return Err(MintError::QuotaExceeded);
+    }
     match request.provider.as_str() {
         "openai" => mint_openai(&state, &user.uid).await,
         "gemini" => mint_gemini(&state, &user.uid).await,

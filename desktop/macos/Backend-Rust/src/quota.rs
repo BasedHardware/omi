@@ -11,12 +11,19 @@
 // This checker asks the Python endpoint with the user's own bearer token
 // (single source of truth — no duplicated counting logic) and blocks only
 // when `plan_type == "basic" && allowed == false`. Paid plans are never
-// blocked here (overage billing is the Python side's concern). BYOK-active
-// users are exempted by the caller before this check runs.
+// blocked here (overage billing is the Python side's concern).
+//
+// BYOK exemption is per-lane, mirroring Python enforce_chat_quota's rule
+// ("exempt only when this request's LLM spend rides a user-supplied key"):
+// the extractor skips the 402 for validated BYOK requests because BYOK-key-
+// consuming lanes serve on the user's own keys, but lanes that spend ONLY
+// Omi-managed keys (realtime session mint) must re-check
+// `PaywalledAuthUser::quota_blocked` themselves — a fake-fingerprint BYOK
+// enrollment must not buy Omi-funded realtime.
 //
 // Errors fail open (allow) with a short TTL: an unreachable Python API must
 // never lock paying-adjacent flows, and the blast radius of failing open is
-// a few free questions.
+// a few free questions. Fail-open never replays a stale blocked=true.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -31,6 +38,10 @@ const CACHE_TTL: Duration = Duration::from_secs(60);
 
 /// TTL for a fail-open decision made when the Python API was unreachable.
 const FALLBACK_TTL: Duration = Duration::from_secs(30);
+
+/// Sweep threshold: evict expired entries once the per-uid cache grows past
+/// this many entries so a long-lived shared deployment can't grow unboundedly.
+const CACHE_SWEEP_LEN: usize = 10_000;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -58,10 +69,12 @@ impl ChatQuotaChecker {
     pub fn new(base_api_url: Option<String>) -> Self {
         Self {
             base_api_url,
+            // Constructed once at startup; a TLS/resolver init failure should be
+            // a loud startup panic, not a silent timeout-less default client.
             http: reqwest::Client::builder()
                 .timeout(REQUEST_TIMEOUT)
                 .build()
-                .unwrap_or_default(),
+                .expect("failed to build quota HTTP client"),
             cache: Mutex::new(HashMap::new()),
         }
     }
@@ -77,27 +90,34 @@ impl ChatQuotaChecker {
             return false;
         }
         let Some(base) = self.base_api_url.as_deref() else {
+            record_fallback(
+                "other",
+                "quota_gate",
+                "fail_open",
+                "config_incomplete",
+                FallbackOutcome::Degraded,
+            );
             tracing::warn!("quota: BASE_API_URL not configured, failing open");
             return false;
         };
 
         let now = Instant::now();
-        let stale: Option<bool> = {
+        {
             let cache = self.cache.lock().await;
-            match cache.get(uid) {
-                Some(entry) if entry.expires_at > now => return entry.blocked,
-                Some(entry) => Some(entry.blocked),
-                None => None,
+            if let Some(entry) = cache.get(uid) {
+                if entry.expires_at > now {
+                    return entry.blocked;
+                }
             }
-        };
+        }
 
+        // Plain fail-open: quota is a free-tier cost cap, so a Python outage
+        // hands out at most a few free questions. Never replay a stale
+        // blocked=true — a user who just upgraded must not stay 402'd through
+        // an outage. The short fallback TTL bounds re-fetch pressure.
         let (decision, ttl) = match self.fetch_quota_blocked(base, bearer_token).await {
             Some(blocked) => (blocked, CACHE_TTL),
             None => {
-                // Fail open (prefer last-known-good): quota is a free-tier cost
-                // cap, so a transient Python outage hands out at most a few free
-                // questions rather than blocking every managed lane.
-                let v = stale.unwrap_or(false);
                 record_fallback(
                     "other",
                     "quota_gate",
@@ -105,17 +125,15 @@ impl ChatQuotaChecker {
                     "quota",
                     FallbackOutcome::Degraded,
                 );
-                tracing::warn!(
-                    "quota: indeterminate check for uid={}, using fallback={} (last_known_good={:?})",
-                    uid,
-                    v,
-                    stale
-                );
-                (v, FALLBACK_TTL)
+                tracing::warn!("quota: indeterminate check for uid={}, failing open", uid);
+                (false, FALLBACK_TTL)
             }
         };
 
         let mut cache = self.cache.lock().await;
+        if cache.len() >= CACHE_SWEEP_LEN {
+            cache.retain(|_, e| e.expires_at > now);
+        }
         cache.insert(
             uid.to_string(),
             CacheEntry {

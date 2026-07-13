@@ -112,7 +112,7 @@ from utils.apps import (
 from database.memories import migrate_memories
 
 from utils.llm.persona import generate_persona_intro_message
-from utils.llm.app_generator import generate_description
+from utils.llm.app_generator import generate_description, generate_description_and_emoji
 from utils.llm.app_generation_prompts import app_generation_prompts_from_llm_payload, app_generation_prompts_response
 from utils.subscription import enforce_chat_quota
 from utils.llm.usage_tracker import track_usage, Features
@@ -1462,8 +1462,6 @@ def generate_description_and_emoji_endpoint(
     Generate an app description and representative emoji.
     Used by the quick template creator feature.
     """
-    from utils.llm.app_generator import generate_description_and_emoji
-
     # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
     enforce_chat_quota(uid, platform=x_app_platform)
     if not data.name:

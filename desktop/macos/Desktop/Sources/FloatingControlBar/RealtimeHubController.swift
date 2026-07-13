@@ -1240,11 +1240,18 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
     // Managed (Omi-billed) sessions are gated by the monthly free-tier chat limit —
     // realtime turns count as questions (desktop_chat_realtime), same pool as typed
-    // chat and PTT. BYOK/client-direct sessions are exempt. The backend enforces this
-    // too (mint/relay return 402 past the cap); this guard just avoids warming a
-    // session the server will refuse. No popup here — warms are speculative; the
-    // user-facing popup comes from the PTT/chat gates on an actual action.
-    if auth.isEphemeral, !APIKeyService.isByokActive,
+    // chat and PTT. The backend enforces this too (mint/relay return 402 past the
+    // cap for the free plan); this guard just avoids warming a session the server
+    // will refuse. Scope guards:
+    //   - free plan only: paid plans past their included allowance are served via
+    //     overage billing, never blocked (isLimitReached alone is plan-blind);
+    //   - never on the barge-in replacement path: the replacement's mint already
+    //     succeeded, and an early return here would strand
+    //     pendingBargeInReplacement and fence all future warms.
+    // No popup here — warms are speculative; the user-facing popup comes from the
+    // PTT/chat gates on an actual action.
+    if auth.isEphemeral, pendingBargeInReplacement == nil, !APIKeyService.isByokActive,
+      !FloatingBarUsageLimiter.shared.hasPaidPlan,
       FloatingBarUsageLimiter.shared.isLimitReached
     {
       log("RealtimeHub: managed session warm blocked — monthly free-tier chat limit reached")

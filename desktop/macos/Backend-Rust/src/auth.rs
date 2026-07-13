@@ -478,6 +478,12 @@ pub struct PaywalledAuthUser {
     pub name: Option<String>,
     pub email: Option<String>,
     pub byok_stripped: bool,
+    /// Monthly free-tier chat quota verdict for this request (fail-open false).
+    /// The extractor already 402s non-BYOK users when this is true; lanes that
+    /// spend ONLY Omi-managed keys regardless of BYOK (realtime session mint)
+    /// must additionally reject when it is set, since BYOK validation alone
+    /// must not buy Omi-funded spend there.
+    pub quota_blocked: bool,
 }
 
 #[async_trait]
@@ -565,23 +571,41 @@ where
             );
         }
 
-        // Monthly free-tier quota gate. BYOK users pay their own provider bill,
-        // so only Omi-managed spend is gated. Fails open inside the checker.
-        if !byok_active {
+        // Monthly free-tier quota gate. Routes that never spend managed LLM
+        // money are exempt: passive screen-activity ingestion (blocking it
+        // past the chat cap silently loses rewind data beyond the client's
+        // 7-day local retention) and the realtime usage report (telemetry —
+        // rejecting it undercounts billing for a session that crossed the cap).
+        // ponytail: path-match, keep in sync with route registrations if renamed.
+        let quota_exempt = matches!(
+            parts.uri.path(),
+            "/v1/screen-activity/sync" | "/v2/realtime/usage"
+        );
+        let mut quota_blocked = false;
+        if !quota_exempt {
             if let Some(quota) = parts.extensions.get::<crate::quota::ChatQuotaCheckerExt>() {
-                if quota.0.is_quota_blocked(&uid, token).await {
-                    return Err(AuthError {
-                        error: "quota_exceeded".to_string(),
-                        message: "Monthly free limit reached. Upgrade or bring your own keys."
-                            .to_string(),
-                    });
-                }
+                quota_blocked = quota.0.is_quota_blocked(&uid, token).await;
             } else {
+                crate::fallback::record_fallback(
+                    "other",
+                    "quota_gate",
+                    "fail_open",
+                    "config_incomplete",
+                    crate::fallback::FallbackOutcome::Degraded,
+                );
                 tracing::warn!(
                     "PaywalledAuthUser: ChatQuotaChecker extension missing, failing open for uid={}",
                     uid
                 );
             }
+        }
+        // BYOK requests skip the 402 because BYOK-key-consuming lanes serve on
+        // the user's own keys; server-key-only lanes re-check `quota_blocked`.
+        if quota_blocked && !byok_active {
+            return Err(AuthError {
+                error: "quota_exceeded".to_string(),
+                message: "Monthly free limit reached. Upgrade or bring your own keys.".to_string(),
+            });
         }
 
         Ok(PaywalledAuthUser {
@@ -589,6 +613,7 @@ where
             name,
             email,
             byok_stripped,
+            quota_blocked,
         })
     }
 }
