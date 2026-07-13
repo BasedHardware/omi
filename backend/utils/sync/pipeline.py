@@ -19,7 +19,7 @@ import time
 import wave
 from collections import deque
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 import httpx
 import numpy as np
@@ -373,10 +373,9 @@ class SyncJobRunLeaseLost(RuntimeError):
 
 def _require_run_owner(mutation: FencedSyncJobMutation, *, job_id: str) -> Dict | None:
     """Turn a non-applied Redis CAS result into the worker's stop signal."""
-    if getattr(mutation, 'applied', False):
-        return getattr(mutation, 'job', None)
-    outcome = getattr(getattr(mutation, 'outcome', None), 'value', 'unknown')
-    raise SyncJobRunLeaseLost(f'sync job run lease lost: job={job_id} outcome={outcome}')
+    if mutation.applied:
+        return mutation.job
+    raise SyncJobRunLeaseLost(f'sync job run lease lost: job={job_id} outcome={mutation.outcome.value}')
 
 
 def _update_sync_job_for_run(job_id: str, run_lock_token: str | None, updates: Dict) -> Dict | None:
@@ -1264,7 +1263,7 @@ def _finalize_sync_audio_files(uid: str, response: dict):
             )
 
 
-def _cleanup_files(file_paths: List[str]):
+def _cleanup_files(file_paths: Iterable[str]):
     """Helper to clean up temporary files."""
     for path in file_paths:
         try:
