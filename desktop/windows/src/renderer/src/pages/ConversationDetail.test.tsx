@@ -40,6 +40,17 @@ const CONVERSATION = {
   transcript_segments: []
 }
 
+// The embedded ActionItem model never actually sets `id` today, but the
+// `item.id` branch still exists in the component — pin its contract too so a
+// future change that starts returning ids doesn't silently regress it.
+const CONVERSATION_WITH_ID = {
+  ...CONVERSATION,
+  structured: {
+    ...CONVERSATION.structured,
+    action_items: [{ id: 'ai_1', description: 'Buy milk', completed: false }]
+  }
+}
+
 beforeEach(() => {
   patchMock.mockClear()
   getMock.mockReset()
@@ -104,5 +115,25 @@ describe('ConversationDetail — action item toggle (C3)', () => {
     await findByTitle('Mark as open')
     // ...then reverts once the rejected PATCH resolves — back to both items open.
     await waitFor(() => expect(getAllByTitle('Mark as done')).toHaveLength(2))
+  })
+
+  it('sends `completed` as a query param, not a JSON body, when the item has an id', async () => {
+    getMock.mockResolvedValue({ data: CONVERSATION_WITH_ID })
+    const { getByTitle } = render(
+      <MemoryRouter>
+        <ConversationDetail conversationId="conv1" />
+      </MemoryRouter>
+    )
+
+    const toggle = await waitFor(() => getByTitle('Mark as done'))
+    fireEvent.click(toggle)
+
+    // backend/routers/action_items.py toggle_action_item_completion binds
+    // `completed` as a Query(...) param — a JSON body is silently ignored and
+    // the missing required query param 422s.
+    await waitFor(() => expect(patchMock).toHaveBeenCalledTimes(1))
+    expect(patchMock).toHaveBeenCalledWith('/v1/action-items/ai_1/completed', null, {
+      params: { completed: true }
+    })
   })
 })
