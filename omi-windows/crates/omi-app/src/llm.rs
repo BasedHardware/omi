@@ -180,9 +180,9 @@ fn all_providers_for(cfg: &AppConfig, use_case: LlmUseCase) -> Vec<Provider> {
     // Auto priority lists — different order per use-case to avoid starving the UI
     let fallback_order: &[&str] = match use_case {
         // Interactive: prefer fast/cheap providers (Groq as final fallback)
-        LlmUseCase::Chat => &["anthropic", "openai", "groq"],
+        LlmUseCase::Chat => &["groq", "openai", "anthropic"],
         // Background: prefer higher-quota/cheaper providers first
-        LlmUseCase::Background => &["openai", "anthropic", "groq"],
+        LlmUseCase::Background => &["groq", "openai", "anthropic"],
     };
 
     for name in fallback_order {
