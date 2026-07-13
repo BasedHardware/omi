@@ -126,6 +126,27 @@ async def _process_conversation_task(
 
     job_id: Optional[str] = None
     generation: Optional[int] = None
+    lease_epoch: Optional[int] = None
+
+    async def mark_retryable(failure_code: str) -> None:
+        if job_id is None or generation is None or lease_epoch is None:
+            return
+        try:
+            await run_blocking(
+                db_executor,
+                finalization_jobs_db.mark_finalization_retryable,
+                job_id,
+                generation,
+                lease_epoch,
+                failure_code,
+            )
+        except Exception:
+            logger.error(
+                'pusher finalization recovery update failed uid=%s conversation=%s failure=%s',
+                uid,
+                conversation_id,
+                failure_code,
+            )
 
     try:
         if not finalization_job_id or dispatch_generation is None:
@@ -138,7 +159,7 @@ async def _process_conversation_task(
         job_id = finalization_job_id
         generation = dispatch_generation
 
-        claim_status = await run_blocking(
+        claim = await run_blocking(
             db_executor,
             finalization_jobs_db.claim_finalization_job,
             job_id,
@@ -147,11 +168,19 @@ async def _process_conversation_task(
             expected_uid=uid,
             expected_conversation_id=conversation_id,
         )
+        claim_status = claim['status']
         if claim_status == 'completed':
             await send_result({'conversation_id': conversation_id, 'success': True})
             return
         if claim_status != 'claimed':
             await send_result({'conversation_id': conversation_id, 'error': f'job_{claim_status}'})
+            return
+        lease_epoch = claim['lease_epoch']
+        if lease_epoch is None:
+            logger.error(
+                'pusher finalization claim returned no lease epoch uid=%s conversation=%s', uid, conversation_id
+            )
+            await send_result({'conversation_id': conversation_id, 'error': 'processing_failed'})
             return
 
         await finalize_persisted_conversation(uid, conversation_id, language)
@@ -161,27 +190,26 @@ async def _process_conversation_task(
             finalization_jobs_db.mark_finalization_completed,
             job_id,
             generation,
+            lease_epoch,
         )
         if not completed:
             await send_result({'conversation_id': conversation_id, 'error': 'job_completion_conflict'})
             return
         await send_result({'conversation_id': conversation_id, 'success': True})
-    except ConversationFinalizationError as error:
-        if job_id is not None and generation is not None:
-            await run_blocking(
-                db_executor,
-                finalization_jobs_db.mark_finalization_retryable,
-                job_id,
-                generation,
-                str(error),
-            )
-        logger.error('pusher finalization failed uid=%s conversation=%s error=%s', uid, conversation_id, error)
+    except ConversationFinalizationError:
+        await mark_retryable('processing_failed')
+        logger.error(
+            'pusher finalization failed uid=%s conversation=%s failure=processing_failed', uid, conversation_id
+        )
         try:
             await send_result({'conversation_id': conversation_id, 'error': 'processing_failed'})
         except Exception:
             pass
-    except Exception as error:
-        logger.error('pusher finalization task failed uid=%s conversation=%s error=%s', uid, conversation_id, error)
+    except Exception:
+        await mark_retryable('worker_failed')
+        logger.error(
+            'pusher finalization task failed uid=%s conversation=%s failure=worker_failed', uid, conversation_id
+        )
         try:
             await send_result({'conversation_id': conversation_id, 'error': 'processing_failed'})
         except Exception:

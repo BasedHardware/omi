@@ -9,8 +9,6 @@ presents its request-scoped keys.
 from __future__ import annotations
 
 import logging
-import os
-from datetime import timedelta
 from typing import Any
 
 from database import conversation_finalization_jobs as jobs_db
@@ -28,11 +26,6 @@ from utils.metrics import (
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
-
-
-def _reconcile_stale_after() -> timedelta:
-    seconds = int(os.getenv('LISTEN_FINALIZATION_RECONCILE_STALE_SECONDS', '300'))
-    return timedelta(seconds=max(30, seconds))
 
 
 def prepare_listen_finalization(
@@ -63,11 +56,11 @@ def prepare_listen_finalization(
 
     if intent['requires_byok']:
         # A task worker cannot safely acquire request-scoped keys.  In inline
-        # mode a currently live request may resume this job directly through
-        # pusher; durable mode records a recoverable blocked state instead.
         # An existing BYOK job can only resume when this request actually
         # presents keys again; it must never silently fall back to Omi keys.
-        if is_listen_finalization_dispatch_enabled() or not has_byok_keys:
+        # Cloud Tasks remains reserved for platform-key work, but a live BYOK
+        # pusher request can safely claim this same durable job in either mode.
+        if not has_byok_keys:
             record_fallback(
                 component='pusher',
                 from_mode='cloud_tasks',
@@ -109,13 +102,9 @@ def reconcile_listen_finalization_jobs(limit: int = 100, *, firestore_client: An
         _publish_job_metrics(firestore_client=firestore_client)
         return result
 
-    stale_after = _reconcile_stale_after()
+    stale_after = jobs_db.get_finalization_reconcile_stale_after()
     try:
-        candidates = jobs_db.get_finalization_replay_candidates(
-            limit=limit,
-            stale_after=stale_after,
-            firestore_client=firestore_client,
-        )
+        candidates = jobs_db.get_finalization_replay_candidates(limit=limit, firestore_client=firestore_client)
     except Exception:
         logger.exception('listen finalization reconciliation query failed')
         _publish_job_metrics(firestore_client=firestore_client)
@@ -161,11 +150,12 @@ def reconcile_listen_finalization_jobs(limit: int = 100, *, firestore_client: An
 
 
 def final_attempt_failed(
-    job_id: str, dispatch_generation: int, retry_count: int, *, firestore_client: Any = None
+    job_id: str, dispatch_generation: int, lease_epoch: int, retry_count: int, *, firestore_client: Any = None
 ) -> bool:
     marked = jobs_db.mark_finalization_dead_letter(
         job_id,
         dispatch_generation,
+        lease_epoch,
         retry_count,
         firestore_client=firestore_client,
     )

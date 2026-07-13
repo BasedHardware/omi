@@ -11,7 +11,9 @@ v1 remains completely unchanged.
 import asyncio
 import json
 import os
+import re
 import sys
+import threading
 import time
 import types
 import unittest

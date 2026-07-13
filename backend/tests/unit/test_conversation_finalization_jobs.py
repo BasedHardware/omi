@@ -17,6 +17,9 @@ class _Ref:
         del transaction
         return SimpleNamespace(exists=self.data is not None, id=self.id, to_dict=lambda: self.data)
 
+    def to_dict(self):
+        return self.data
+
 
 class _Collection:
     def __init__(self, refs: dict[str, _Ref]):
@@ -137,14 +140,18 @@ def test_duplicate_task_delivery_claims_only_once_until_lease_expires():
     ref = _Ref('job-1', {'status': 'queued', 'dispatch_generation': 2, 'attempt_count': 0})
     first = _Transaction()
 
-    assert jobs._claim_finalization_job_txn(first, ref, 2, False, 1500, now) == 'claimed'
+    claim = jobs._claim_finalization_job_txn(first, ref, 2, False, 1500, now)
+    assert claim == {'status': 'claimed', 'lease_epoch': 1}
     claim_update = first.updates[0][1]
     assert claim_update['status'] == 'leased'
     assert claim_update['attempt_count'] == 1
 
     ref.data = ref.data | claim_update
     duplicate = _Transaction()
-    assert jobs._claim_finalization_job_txn(duplicate, ref, 2, False, 1500, now + timedelta(seconds=1)) == 'leased'
+    assert jobs._claim_finalization_job_txn(duplicate, ref, 2, False, 1500, now + timedelta(seconds=1)) == {
+        'status': 'leased',
+        'lease_epoch': None,
+    }
     assert duplicate.updates == []
 
 
@@ -161,8 +168,10 @@ def test_expired_worker_lease_can_be_safely_reclaimed():
     )
     transaction = _Transaction()
 
-    assert jobs._claim_finalization_job_txn(transaction, ref, 2, False, 1500, now) == 'claimed'
+    claim = jobs._claim_finalization_job_txn(transaction, ref, 2, False, 1500, now)
+    assert claim == {'status': 'claimed', 'lease_epoch': 1}
     assert transaction.updates[0][1]['attempt_count'] == 2
+    assert transaction.updates[0][1]['lease_epoch'] == 1
 
 
 def test_live_pusher_claim_cannot_use_another_conversations_job():
@@ -188,7 +197,7 @@ def test_live_pusher_claim_cannot_use_another_conversations_job():
         expected_conversation_id='other-conversation',
     )
 
-    assert status == 'identity_mismatch'
+    assert status == {'status': 'identity_mismatch', 'lease_epoch': None}
     assert transaction.updates == []
 
 
@@ -196,7 +205,10 @@ def test_completed_and_dead_letter_jobs_never_execute_again():
     for status in ('completed', 'dead_letter'):
         transaction = _Transaction()
         ref = _Ref('job-1', {'status': status, 'dispatch_generation': 1})
-        assert jobs._claim_finalization_job_txn(transaction, ref, 1, False, 1500, _now()) == status
+        assert jobs._claim_finalization_job_txn(transaction, ref, 1, False, 1500, _now()) == {
+            'status': status,
+            'lease_epoch': None,
+        }
         assert transaction.updates == []
 
 
@@ -220,12 +232,69 @@ def test_reconciler_replaces_stale_generation_after_worker_crash():
     assert transaction.updates[0][1]['dispatch_generation'] == 5
 
 
+def test_expired_lease_reclaim_fences_a_stale_worker_terminal_write():
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 3,
+            'lease_epoch': 4,
+            'lease_expires_at': now - timedelta(seconds=1),
+        },
+    )
+
+    reclaim = _Transaction()
+    new_claim = jobs._claim_finalization_job_txn(reclaim, ref, 3, False, 1500, now)
+    assert new_claim == {'status': 'claimed', 'lease_epoch': 5}
+    ref.data = ref.data | reclaim.updates[0][1]
+
+    stale_completion = _Transaction()
+    assert jobs._mark_finalization_completed_txn(stale_completion, ref, 3, 4, now) is False
+    assert stale_completion.updates == []
+
+    current_completion = _Transaction()
+    assert jobs._mark_finalization_completed_txn(current_completion, ref, 3, 5, now) is True
+
+
 def test_final_attempt_sets_visible_dead_letter_instead_of_completed():
     transaction = _Transaction()
-    ref = _Ref('job-1', {'status': 'leased', 'dispatch_generation': 3})
+    ref = _Ref('job-1', {'status': 'leased', 'dispatch_generation': 3, 'lease_epoch': 1})
 
-    assert jobs._mark_finalization_dead_letter_txn(transaction, ref, 3, 5, _now()) is True
+    assert jobs._mark_finalization_dead_letter_txn(transaction, ref, 3, 1, 5, _now()) is True
     update = transaction.updates[0][1]
     assert update['status'] == 'dead_letter'
     assert update['task_retry_count'] == 5
     assert 'completed_at' not in update
+
+
+class _BoundedReplayCollection:
+    def __init__(self):
+        self.where_calls: list[tuple[str, str]] = []
+        self.limit_value: int | None = None
+        self.refs = [
+            _Ref('queued-job', {'status': 'queued'}),
+            _Ref('terminal-job', {'status': 'completed'}),
+        ]
+
+    def where(self, field, operator, _value):
+        self.where_calls.append((field, operator))
+        return self
+
+    def limit(self, value):
+        self.limit_value = value
+        return self
+
+    def stream(self):
+        return self.refs[: self.limit_value]
+
+
+def test_replay_candidates_use_a_server_side_bounded_due_query():
+    collection = _BoundedReplayCollection()
+    client = SimpleNamespace(collection=lambda _name: collection)
+
+    candidates = jobs.get_finalization_replay_candidates(limit=1000, firestore_client=client)
+
+    assert collection.where_calls == [('reconcile_after_at', '<=')]
+    assert collection.limit_value == 100
+    assert candidates == [{'status': 'queued', 'job_id': 'queued-job'}]

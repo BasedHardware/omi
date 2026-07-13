@@ -40,6 +40,7 @@ PUSHER_RECONNECT_BASE_DELAY = 1.0
 PUSHER_RECONNECT_MAX_DELAY = 60.0
 PENDING_REQUEST_TIMEOUT = 120
 MAX_RETRIES_PER_REQUEST = 3
+PENDING_REQUEST_RECOVERY_COOLDOWN = 300
 
 
 @dataclass
@@ -283,15 +284,26 @@ class ListenPusherSession:
                 if header_type == 201:
                     result = json.loads(msg[4:].decode("utf-8"))
                     conversation_id = result.get("conversation_id")
-                    self.pending_conversation_requests.pop(conversation_id, None)
 
                     if "error" in result:
-                        logger.error(f"Conversation processing failed: {result['error']} {self.uid} {self.session_id}")
-                        continue
-
-                    if result.get("success"):
+                        pending = self.pending_conversation_requests.get(conversation_id)
+                        if pending is not None:
+                            # The pusher has released its durable lease back to
+                            # queued. Keep the request so this live session can
+                            # reclaim it instead of stranding `processing`.
+                            pending['sent_at'] = self.deps.now() - PENDING_REQUEST_TIMEOUT - 1
+                        logger.error(f"Conversation processing failed: {self.uid} {self.session_id}")
+                    elif result.get("success"):
+                        self.pending_conversation_requests.pop(conversation_id, None)
                         logger.info(f"Conversation processed by pusher: {conversation_id} {self.uid} {self.session_id}")
                         self.deps.on_conversation_processed(conversation_id)
+                    else:
+                        pending = self.pending_conversation_requests.get(conversation_id)
+                        if pending is not None:
+                            pending['sent_at'] = self.deps.now() - PENDING_REQUEST_TIMEOUT - 1
+                        logger.warning(
+                            f"Conversation processing returned no terminal result: {conversation_id} {self.uid} {self.session_id}"
+                        )
 
             except asyncio.TimeoutError:
                 pass
@@ -316,9 +328,13 @@ class ListenPusherSession:
                     continue
                 if info['retries'] >= MAX_RETRIES_PER_REQUEST:
                     logger.warning(
-                        f"Conversation {cid} retry limit reached, keeping buffered for pusher recovery {self.uid} {self.session_id}"
+                        f"Conversation {cid} retry burst exhausted; scheduling recovery cooldown {self.uid} {self.session_id}"
                     )
-                    info['sent_at'] = now
+                    # Continue in bounded bursts rather than permanently
+                    # dropping a queued durable finalization after one live
+                    # session's transient provider failures.
+                    info['retries'] = 0
+                    info['sent_at'] = now + PENDING_REQUEST_RECOVERY_COOLDOWN - PENDING_REQUEST_TIMEOUT
                     continue
                 info['retries'] += 1
                 logger.warning(

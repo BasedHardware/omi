@@ -17,7 +17,6 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.location import async_get_google_maps_location
 from utils.conversations.process_conversation import process_conversation
 from utils.executors import db_executor, postprocess_executor, run_blocking
-from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
 
@@ -65,10 +64,11 @@ async def finalize_persisted_conversation(uid: str, conversation_id: str, langua
         )
         await trigger_external_integrations(uid, conversation)
     except Exception as error:
+        # Provider and validation exceptions can contain transcript excerpts.
+        # The job stores and logs only a bounded failure code.
         logger.error(
-            'persisted conversation finalization failed uid=%s conversation=%s error=%s',
+            'persisted conversation finalization failed uid=%s conversation=%s failure=processing_failed',
             uid,
             conversation_id,
-            sanitize(str(error)),
         )
         raise ConversationFinalizationError('processing_failed') from error
