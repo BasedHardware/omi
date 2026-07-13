@@ -2281,18 +2281,9 @@ private struct HomeAskBar: View {
 
     private var sendButton: some View {
         Button(action: handleSubmit) {
-            ZStack {
-                Circle()
-                    .fill(Color.white)
-
-                Image(systemName: "arrow.up")
-                    .scaledFont(size: OmiType.body, weight: .bold)
-                    .foregroundStyle(Color.black)
-            }
-            .frame(width: 34, height: 34)
-            .contentShape(Circle())
+            Image(systemName: "arrow.up")
         }
-        .buttonStyle(.plain)
+        .buttonStyle(HomeSendButtonStyle())
         .help("Send")
         .accessibilityLabel("Send message")
     }
@@ -2324,6 +2315,55 @@ private struct HomeAskBar: View {
 
     private var connectButton: some View {
         HomeAskBarConnectButton(isActive: isConnectActive, action: onConnect)
+    }
+}
+
+/// The Home send action is the dashboard's one living control. Its fill reacts
+/// immediately, while scale and light build more slowly so the response feels
+/// organic without making the surrounding dashboard restless.
+private struct HomeSendButtonStyle: ButtonStyle {
+    @State private var isHovering = false
+    @State private var isHoverExpanded = false
+    @State private var isGlowBreathingIn = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaledFont(size: OmiType.body, weight: .bold)
+            .foregroundStyle(OmiColors.backgroundPrimary)
+            .frame(width: 34, height: 34)
+            .background(
+                Circle()
+                    .fill(isHovering ? HomePalette.ink : OmiColors.accent)
+            )
+            .shadow(
+                color: HomePalette.jewelGlow.opacity(
+                    isHovering ? (isGlowBreathingIn ? 0.24 : 0.14) : 0
+                ),
+                radius: isHovering ? (isGlowBreathingIn ? 14 : 8) : 0
+            )
+            .scaleEffect(configuration.isPressed ? 0.94 : (isHoverExpanded ? 1.025 : 1))
+            .contentShape(Circle())
+            .omiAnimation(.easeOut(duration: 0.10), value: configuration.isPressed)
+            .omiAnimation(.easeOut(duration: 0.15), value: isHovering)
+            .onHover(perform: updateHover)
+    }
+
+    private func updateHover(_ hovering: Bool) {
+        isHovering = hovering
+
+        OmiMotion.withGated(.easeInOut(duration: hovering ? 0.55 : 0.24)) {
+            isHoverExpanded = hovering
+        }
+
+        if hovering && !OmiMotion.reduceMotion {
+            OmiMotion.withGated(.easeInOut(duration: 2.5).repeatForever(autoreverses: true)) {
+                isGlowBreathingIn = true
+            }
+        } else {
+            OmiMotion.withGated(.easeOut(duration: 0.24)) {
+                isGlowBreathingIn = false
+            }
+        }
     }
 }
 
