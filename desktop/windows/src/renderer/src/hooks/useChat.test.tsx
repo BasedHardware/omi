@@ -1,0 +1,331 @@
+// @vitest-environment jsdom
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { renderHook, act, cleanup } from '@testing-library/react'
+import type { ChatMessage } from '../../../shared/types'
+
+// useChat is the app's single chat engine. These tests cover the two wiring
+// fixes: C4 — the terminal `done:` payload (citation-stripped text + server id +
+// citations) must win over the raw streamed text; and C5 — reset() mid-stream
+// must abort the fetch and prevent the dismissed reply from writing into state
+// or SQLite (no zombie resurface, no busy-flag interleaving).
+//
+// Everything useChat imports that touches firebase/IPC/screen is mocked; the SSE
+// parser (messagesSse) and the merge helper (chatConversation) are the REAL
+// modules, since the fix lives at their boundary.
+
+vi.mock('../lib/firebase', () => ({
+  auth: { currentUser: { getIdToken: async () => 'test-token' } }
+}))
+vi.mock('../lib/pageCache', () => ({ invalidateConversationsCache: vi.fn() }))
+vi.mock('../lib/localAgent', () => ({ gatherLocalContext: async () => '' }))
+vi.mock('../lib/screenContext', () => ({ readCurrentScreen: async () => '' }))
+vi.mock('../lib/actionPlanner', () => ({
+  looksLikeAction: () => false,
+  looksLikeRawPlan: () => false,
+  planActions: vi.fn()
+}))
+vi.mock('../lib/agentLLM', () => ({ callAgentLLM: vi.fn() }))
+vi.mock('../lib/agentTask', () => ({ detectAgentTask: () => null, resolveTaskCwd: vi.fn() }))
+vi.mock('../lib/preferences', () => ({
+  getPreferences: () => ({
+    chatHistoryMode: 'per-launch',
+    automationConsentedAt: null,
+    agentCommands: {}
+  })
+}))
+const speakSpy = vi.fn((_t: string) => Promise.resolve())
+vi.mock('../lib/voice/voiceController', () => ({ speakText: (t: string) => speakSpy(t) }))
+
+import { useChat, CHAT_STREAM_TIMEOUT_MS } from './useChat'
+
+const b64 = (s: string): string => Buffer.from(s, 'utf-8').toString('base64')
+
+// A hand-driven ReadableStream reader: push() enqueues an SSE frame, close()
+// ends the stream. read() resolves immediately if data is queued, else waits for
+// the next push/close — so a test can interleave reset()/timeouts between frames.
+// Abort-aware: when the fetch signal aborts, a pending read rejects with an
+// AbortError, exactly like a real fetch stream, so the hook's catch runs.
+function makeManualStream(signal?: AbortSignal): {
+  push: (text: string) => void
+  close: () => void
+  reader: { read: () => Promise<{ done: boolean; value?: Uint8Array }> }
+} {
+  const enc = new TextEncoder()
+  const queue: Array<{ done: boolean; value?: Uint8Array }> = []
+  let pendingRes: ((v: { done: boolean; value?: Uint8Array }) => void) | null = null
+  let pendingRej: ((e: unknown) => void) | null = null
+  const abortError = (): Error =>
+    Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' })
+  const deliver = (item: { done: boolean; value?: Uint8Array }): void => {
+    if (pendingRes) {
+      pendingRes(item)
+      pendingRes = pendingRej = null
+    } else {
+      queue.push(item)
+    }
+  }
+  if (signal) {
+    signal.addEventListener('abort', () => {
+      if (pendingRej) {
+        pendingRej(abortError())
+        pendingRes = pendingRej = null
+      }
+    })
+  }
+  return {
+    push: (text) => deliver({ done: false, value: enc.encode(text) }),
+    close: () => deliver({ done: true }),
+    reader: {
+      read: () => {
+        if (signal?.aborted) return Promise.reject(abortError())
+        if (queue.length)
+          return Promise.resolve(queue.shift() as { done: boolean; value?: Uint8Array })
+        return new Promise((res, rej) => {
+          pendingRes = res
+          pendingRej = rej
+        })
+      }
+    }
+  }
+}
+
+let streams: ReturnType<typeof makeManualStream>[] = []
+let signals: Array<AbortSignal | undefined> = []
+let persisted: ChatMessage[][] = []
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  streams = []
+  signals = []
+  persisted = []
+  global.fetch = vi.fn(async (_url: unknown, init?: { signal?: AbortSignal }) => {
+    const s = makeManualStream(init?.signal)
+    streams.push(s)
+    signals.push(init?.signal)
+    return { ok: true, body: { getReader: () => s.reader } } as unknown as Response
+  }) as unknown as typeof fetch
+  ;(window as unknown as { omi: unknown }).omi = {
+    automationEnabled: false,
+    getLocalConversation: async () => null,
+    insertLocalConversation: async (c: { messages?: ChatMessage[] }) => {
+      // Snapshot the thread as-persisted so later mutations can't rewrite history.
+      persisted.push(JSON.parse(JSON.stringify(c.messages ?? [])))
+    },
+    notifyConversationsChanged: vi.fn()
+  }
+})
+afterEach(() => cleanup())
+
+const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0))
+// send() awaits the planner + context gather + fetch before the stream opens, so
+// wait for fetch to have created stream `i` before pushing frames into it.
+async function waitForStream(i: number): Promise<void> {
+  for (let k = 0; k < 100 && !streams[i]; k++) await flush()
+  if (!streams[i]) throw new Error(`stream ${i} never opened`)
+}
+const lastAssistant = (
+  msgs: { role: string; content: string }[]
+): { content: string } | undefined => [...msgs].reverse().find((m) => m.role === 'assistant')
+
+describe('useChat — C4 done payload', () => {
+  it('replaces streamed text with the citation-stripped final text and stores the server id + citations', async () => {
+    const { result } = renderHook(() => useChat())
+    const done = {
+      id: 'srv-msg-9',
+      text: 'Your standup is at 10am.', // [1] stripped by the backend
+      memories: [
+        {
+          id: 'conv-1',
+          structured: { title: 'Standup', emoji: '📝' },
+          created_at: '2026-07-13T00:00:00Z'
+        }
+      ],
+      ask_for_nps: true
+    }
+    await act(async () => {
+      const p = result.current.send('when is standup')
+      await waitForStream(0)
+      // Streamed chunks still carry the literal [1] citation marker...
+      streams[0].push('data: Your standup is at 10am. [1]\n')
+      // ...but the done frame's text has it stripped, and carries the metadata.
+      streams[0].push(`done: ${b64(JSON.stringify(done))}\n\n`)
+      streams[0].close()
+      await p
+    })
+
+    const msg = lastAssistant(result.current.history) as {
+      content: string
+      serverId?: string
+      citations?: { id: string; title: string }[]
+      askForNps?: boolean
+    }
+    expect(msg.content).toBe('Your standup is at 10am.')
+    expect(msg.content).not.toContain('[1]')
+    expect(msg.serverId).toBe('srv-msg-9')
+    expect(msg.citations).toEqual([{ id: 'conv-1', title: 'Standup', emoji: '📝' }])
+    expect(msg.askForNps).toBe(true)
+
+    // The FINAL persisted thread carries the stripped text + server id (so a
+    // reload shows no bracket leak and rating/report have an id to key off).
+    const finalThread = persisted.at(-1) as (ChatMessage & { serverId?: string })[]
+    const persistedAssistant = [...finalThread]
+      .reverse()
+      .find((m) => m.role === 'assistant') as ChatMessage & {
+      serverId?: string
+    }
+    expect(persistedAssistant.content).toBe('Your standup is at 10am.')
+    expect(persistedAssistant.content).not.toContain('[1]')
+    expect(persistedAssistant.serverId).toBe('srv-msg-9')
+  })
+
+  it('drops a message: side-frame instead of leaking its base64 into the reply', async () => {
+    const { result } = renderHook(() => useChat())
+    const sideFrame = b64(JSON.stringify({ id: 'file-msg', text: 'side' }))
+    await act(async () => {
+      const p = result.current.send('summarize this file')
+      await waitForStream(0)
+      streams[0].push('data: Here is the summary.\n')
+      // A `message:` side-frame (file-chat) must NOT be concatenated as text.
+      streams[0].push(`message: ${sideFrame}\n`)
+      streams[0].push(
+        `done: ${b64(JSON.stringify({ id: 'srv', text: 'Here is the summary.' }))}\n\n`
+      )
+      streams[0].close()
+      await p
+    })
+    const content = lastAssistant(result.current.history)?.content ?? ''
+    expect(content).toBe('Here is the summary.')
+    expect(content).not.toContain('message:')
+    expect(content).not.toContain(sideFrame)
+  })
+})
+
+describe('useChat — C5 abort on reset', () => {
+  it('aborts the fetch and never persists/renders a dismissed reply; a new send is unaffected', async () => {
+    const { result } = renderHook(() => useChat())
+
+    // Start a send and let one chunk stream in.
+    let firstSend: Promise<void>
+    await act(async () => {
+      firstSend = result.current.send('question one')
+      await waitForStream(0)
+      streams[0].push('data: partial zombie reply\n')
+      await flush()
+    })
+    expect(lastAssistant(result.current.history)?.content).toBe('partial zombie reply')
+
+    // Dismiss mid-stream.
+    act(() => result.current.reset())
+    expect(signals[0]?.aborted).toBe(true)
+    expect(result.current.history).toEqual([])
+
+    // The stream keeps draining (more text + a done frame) AFTER the dismiss —
+    // none of it may reach state or SQLite.
+    await act(async () => {
+      streams[0].push('data: more zombie\n')
+      streams[0].push(
+        `done: ${b64(JSON.stringify({ id: 'z', text: 'ZOMBIE FINAL', ask_for_nps: false }))}\n\n`
+      )
+      streams[0].close()
+      await firstSend
+    })
+    expect(result.current.history).toEqual([])
+    const anyZombiePersisted = persisted.some((thread) =>
+      thread.some((m) => /zombie|ZOMBIE FINAL/i.test(m.content))
+    )
+    expect(anyZombiePersisted).toBe(false)
+    expect(speakSpy).not.toHaveBeenCalled()
+
+    // A fresh send after the dismiss streams cleanly into a new thread.
+    await act(async () => {
+      const p = result.current.send('question two')
+      await waitForStream(1)
+      streams[1].push('data: clean answer\n')
+      streams[1].push(`done: ${b64(JSON.stringify({ id: 'srv-2', text: 'clean answer' }))}\n\n`)
+      streams[1].close()
+      await p
+    })
+    expect(lastAssistant(result.current.history)?.content).toBe('clean answer')
+    expect((lastAssistant(result.current.history) as { serverId?: string }).serverId).toBe('srv-2')
+  })
+})
+
+describe('useChat — C5 stream watchdog (180s)', () => {
+  // Under fake timers, send()'s pre-fetch awaits (token, context, fetch) are
+  // microtasks — advancing 1ms flushes them, opening the stream.
+  const pumpFakeUntilStream = async (i: number): Promise<void> => {
+    for (let k = 0; k < 100 && !streams[i]; k++) await vi.advanceTimersByTimeAsync(1)
+    if (!streams[i]) throw new Error(`stream ${i} never opened`)
+  }
+
+  it('aborts a wedged stream at the deadline, unlatches, and surfaces the timeout copy', async () => {
+    vi.useFakeTimers()
+    try {
+      const { result } = renderHook(() => useChat())
+      await act(async () => {
+        void result.current.send('never finishes')
+        await pumpFakeUntilStream(0)
+        streams[0].push('data: partial and then silence forever\n') // never closes
+        await vi.advanceTimersByTimeAsync(1)
+      })
+      expect(result.current.sending).toBe(true)
+
+      // Just before the deadline: still streaming, not aborted.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(CHAT_STREAM_TIMEOUT_MS - 1000)
+      })
+      expect(signals[0]?.aborted).toBe(false)
+      expect(result.current.sending).toBe(true)
+
+      // Crossing the deadline: watchdog aborts, engine unlatches, timeout shown.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000)
+      })
+      expect(signals[0]?.aborted).toBe(true)
+      expect(result.current.sending).toBe(false)
+      expect(lastAssistant(result.current.history)?.content).toBe(
+        'Response took too long. Try again.'
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("an earlier send's watchdog never aborts or times out a later generation", async () => {
+    vi.useFakeTimers()
+    try {
+      const { result } = renderHook(() => useChat())
+      // Send #1 wedges.
+      await act(async () => {
+        void result.current.send('first, will be dismissed')
+        await pumpFakeUntilStream(0)
+        streams[0].push('data: partial one\n')
+        await vi.advanceTimersByTimeAsync(1)
+      })
+      // Dismiss #1 and immediately open a fresh generation (#2), which wedges too.
+      await act(async () => {
+        result.current.reset()
+        void result.current.send('second, fresh generation')
+        await pumpFakeUntilStream(1)
+        streams[1].push('data: partial two\n')
+        await vi.advanceTimersByTimeAsync(1)
+      })
+      // #1's teardown must not have aborted #2 nor unlatched the engine.
+      expect(signals[1]?.aborted).toBe(false)
+      expect(result.current.sending).toBe(true)
+
+      // Advancing a FULL deadline from here fires ONLY #2's own fresh watchdog —
+      // #1's (cleared on its dismissal) can't reach across to this generation.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(CHAT_STREAM_TIMEOUT_MS)
+      })
+      expect(signals[1]?.aborted).toBe(true)
+      expect(result.current.sending).toBe(false)
+      expect(lastAssistant(result.current.history)?.content).toBe(
+        'Response took too long. Try again.'
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
