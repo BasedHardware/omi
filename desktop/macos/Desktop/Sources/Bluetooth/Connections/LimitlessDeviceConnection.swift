@@ -213,8 +213,9 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
                 let (length, newPos) = decodeVarint(payload, pos)
                 pos = newPos
 
-                let fieldData = Array(payload[pos..<min(pos + length, payload.count)])
-                pos += length
+                let fieldLength = Self.boundedFieldLength(length, at: pos, count: payload.count)
+                let fieldData = Array(payload[pos..<pos + fieldLength])
+                pos += fieldLength
 
                 if fieldNum == 2 {
                     handleStorageBuffer(fieldData)
@@ -255,10 +256,11 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
                 let (length, newPos) = decodeVarint(storageData, pos)
                 pos = newPos
 
+                let fieldLength = Self.boundedFieldLength(length, at: pos, count: storageData.count)
                 if fieldNum == 6 {
-                    flashPageData = Array(storageData[pos..<min(pos + length, storageData.count)])
+                    flashPageData = Array(storageData[pos..<pos + fieldLength])
                 }
-                pos += length
+                pos += fieldLength
             } else {
                 pos += 1
             }
@@ -723,16 +725,27 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
         return (result, pos)
     }
 
+    /// Clamps a protobuf length-delimited field length so both the payload slice
+    /// and the cursor advance are always in-bounds. A malformed varint can decode
+    /// to a negative value (a 10-byte varint sets bit 63 → `Int.min`) or a length
+    /// larger than the buffer; either would trap `Array(data[pos..<pos+length])`
+    /// or corrupt the cursor via `pos += length`. Returns the number of field
+    /// bytes to consume, always in `0...(count - pos)`.
+    static func boundedFieldLength(_ length: Int, at pos: Int, count: Int) -> Int {
+        guard length > 0, pos >= 0, pos < count else { return 0 }
+        return min(length, count - pos)
+    }
+
     // MARK: - BLE Packet Parsing
 
-    private struct BlePacket {
+    struct BlePacket {
         let index: Int
         let seq: Int
         let numFrags: Int
         let payload: [UInt8]
     }
 
-    private func parseBlePacket(_ data: [UInt8]) -> BlePacket? {
+    func parseBlePacket(_ data: [UInt8]) -> BlePacket? {
         var pos = 0
         var index: Int?
         var seq = 0
@@ -759,10 +772,11 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
                 let (length, newPos) = decodeVarint(data, pos)
                 pos = newPos
 
+                let fieldLength = Self.boundedFieldLength(length, at: pos, count: data.count)
                 if fieldNum == 4 {
-                    payload = Array(data[pos..<min(pos + length, data.count)])
+                    payload = Array(data[pos..<pos + fieldLength])
                 }
-                pos += length
+                pos += fieldLength
             } else {
                 break
             }

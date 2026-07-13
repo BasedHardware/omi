@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a crash that could occur when a paired BLE device sent a corrupt or malformed data packet"
+}
