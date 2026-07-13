@@ -13792,6 +13792,17 @@
             ],
             "title": "Chat Session Id"
           },
+          "client_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Message Id"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -13833,6 +13844,17 @@
             "title": "Id",
             "type": "string"
           },
+          "journal_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Revision"
+          },
           "langsmith_run_id": {
             "anyOf": [
               {
@@ -13859,6 +13881,28 @@
             },
             "title": "Memories Id",
             "type": "array"
+          },
+          "message_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Source"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
           },
           "plugin_id": {
             "anyOf": [
@@ -13922,6 +13966,17 @@
           },
           "sender": {
             "$ref": "#/components/schemas/MessageSender"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
           },
           "text": {
             "title": "Text",
@@ -15885,6 +15940,17 @@
             ],
             "title": "Chat Session Id"
           },
+          "client_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Message Id"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -15926,6 +15992,17 @@
             "title": "Id",
             "type": "string"
           },
+          "journal_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Revision"
+          },
           "langsmith_run_id": {
             "anyOf": [
               {
@@ -15952,6 +16029,28 @@
             },
             "title": "Memories Id",
             "type": "array"
+          },
+          "message_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Source"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
           },
           "plugin_id": {
             "anyOf": [
@@ -16015,6 +16114,17 @@
           },
           "sender": {
             "$ref": "#/components/schemas/MessageSender"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
           },
           "text": {
             "title": "Text",
