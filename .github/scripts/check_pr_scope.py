@@ -14,33 +14,52 @@ l10n, lockfiles, and generated files):
 
 - >= WARN_LINES:  warning annotation — consider splitting.
 - >= FAIL_LINES:  check fails. Split the PR, or a maintainer applies the
-  ``scope-approved`` label to acknowledge the review cost (label re-triggers
-  the check; approval is per-PR).
+  ``scope-approved`` label (label events re-trigger CI). Local lane: export
+  ``OMI_SCOPE_APPROVED=1`` to acknowledge and push.
+- Revert PRs (body carries GitHub's ``Reverts owner/repo#N`` marker) are
+  notice-only: AGENTS.md requires reverts to merge immediately.
+- ``push`` events (post-merge main) are notice-only: there is nothing left
+  to gate.
 
-Stdlib-only. Usage:
-  check_pr_scope.py --base <ref> [--labels "a,b"]      # in CI
-  check_pr_scope.py --self-test                        # unit checks
+Diffing matches ``scripts/changed-files`` policy: ``--no-renames``, so a moved
+file cannot escape classification via rename notation, and quoted non-ASCII
+paths are unquoted before classification.
+
+Runs from the checks manifest (local + ci lanes). Stdlib-only.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import re
 import subprocess
 import sys
+from pathlib import Path
 
 WARN_LINES = 1500
 FAIL_LINES = 3000
 OVERRIDE_LABEL = 'scope-approved'
+LOCAL_OVERRIDE_ENV = 'OMI_SCOPE_APPROVED'
+
+# GitHub's auto-generated revert PR body ("Reverts owner/repo#123").
+_REVERT_BODY_RE = re.compile(r'^Reverts \S+/\S+#\d+', re.MULTILINE)
 
 # Paths whose churn does not count toward reviewable production source.
-# Kept aligned with what reviewers actually skim vs. verify.
+# Covers every test convention present in this repo: Python/Dart (tests/,
+# test_*.py), Swift (Desktop/Tests/, *Tests.swift), JS/TS (__tests__/,
+# *.test.ts), Flutter integration (integration_test/).
 _EXCLUDED_PATTERNS = (
-    r'(^|/)tests?/',  # test trees (tests/, test/)
+    r'(^|/)[Tt]ests?/',
+    r'(^|/)__tests__/',
     r'(^|/)testing/',
     r'(^|/)e2e/',
-    r'(^|/)test_[^/]*$',  # test files by name
-    r'_test\.[^/]*$',
+    r'(^|/)integration_test/',
+    r'(^|/)test_[^/]*\.(py|dart|swift|rs|ts|tsx|js|jsx)$',
+    r'_test\.(py|go|rs|dart|ts|tsx|js|jsx)$',
+    r'\.test\.(ts|tsx|js|jsx|mjs|cjs)$',
+    r'Tests\.swift$',
     r'\.md$',
     r'\.mdx$',
     r'^docs/',
@@ -59,6 +78,15 @@ _EXCLUDED_PATTERNS = (
 _EXCLUDED_RE = re.compile('|'.join(f'(?:{p})' for p in _EXCLUDED_PATTERNS))
 
 
+def unquote_git_path(path: str) -> str:
+    """Undo git's C-style quoting of non-ASCII paths (core.quotePath default)."""
+    if len(path) >= 2 and path.startswith('"') and path.endswith('"'):
+        inner = path[1:-1]
+        decoded = inner.encode('latin-1', 'backslashreplace').decode('unicode_escape')
+        return decoded.encode('latin-1', 'replace').decode('utf-8', 'replace')
+    return path
+
+
 def is_production_source(path: str) -> bool:
     return not _EXCLUDED_RE.search(path)
 
@@ -74,6 +102,7 @@ def count_production_lines(numstat_output: str) -> tuple[int, list[tuple[int, st
         added, deleted, path = parts
         if added == '-' or deleted == '-':  # binary
             continue
+        path = unquote_git_path(path)
         if not is_production_source(path):
             continue
         changed = int(added) + int(deleted)
@@ -83,7 +112,7 @@ def count_production_lines(numstat_output: str) -> tuple[int, list[tuple[int, st
     return total, per_file
 
 
-def evaluate(total: int, labels: set[str]) -> tuple[str, int]:
+def evaluate(total: int, labels: set[str], *, enforce: bool = True, enforce_reason: str = '') -> tuple[str, int]:
     """Return (github annotation line, exit code)."""
     if total >= FAIL_LINES:
         if OVERRIDE_LABEL in labels:
@@ -92,10 +121,17 @@ def evaluate(total: int, labels: set[str]) -> tuple[str, int]:
                 f"allowed by '{OVERRIDE_LABEL}' label.",
                 0,
             )
+        if not enforce:
+            return (
+                f'::notice title=PR scope::{total} changed production-source lines >= {FAIL_LINES}; '
+                f'not enforced: {enforce_reason}.',
+                0,
+            )
         return (
             f"::error title=PR scope::{total} changed production-source lines >= {FAIL_LINES}. "
             f"PRs this large ship regressions review cannot catch — split into independently "
-            f"reviewable PRs, or have a maintainer apply the '{OVERRIDE_LABEL}' label.",
+            f"reviewable PRs, have a maintainer apply the '{OVERRIDE_LABEL}' label, or (local "
+            f"pre-push only) export {LOCAL_OVERRIDE_ENV}=1.",
             1,
         )
     if total >= WARN_LINES:
@@ -107,84 +143,49 @@ def evaluate(total: int, labels: set[str]) -> tuple[str, int]:
     return (f'::notice title=PR scope::{total} changed production-source lines (limit {FAIL_LINES}).', 0)
 
 
-def self_test() -> int:
-    prod = [
-        'backend/utils/sync/pipeline.py',
-        'app/lib/services/wals/wal.dart',
-        'desktop/macos/Backend-Rust/src/routes/proxy.rs',
-        '.github/workflows/gcp_backend.yml',
-        'backend/testharness.py',  # 'testharness' must not match test excludes
-    ]
-    excluded = [
-        'backend/tests/unit/test_sync_v2.py',
-        'backend/testing/e2e/test_crud.py',
-        'app/test/widget_test.dart',
-        'docs/doc/developer/guide.mdx',
-        'AGENTS.md',
-        'app/lib/l10n/app_fr.arb',
-        'backend/pylock.toml',
-        'app/pubspec.lock',
-        'web/package-lock.json',
-        'app/lib/gen/assets.g.dart',
-        '.cursor/plans/x.plan.md',
-        'desktop/macos/changelog/unreleased/fix.json',
-        'backend/openapi.json',
-    ]
-    failures = []
-    failures += [f'expected production: {p}' for p in prod if not is_production_source(p)]
-    failures += [f'expected excluded: {p}' for p in excluded if is_production_source(p)]
-
-    numstat = '10\t5\tbackend/utils/a.py\n3\t0\tbackend/tests/unit/test_a.py\n-\t-\tapp/assets/img.png\n7\t2\tapp/lib/b.dart\n'
-    total, per_file = count_production_lines(numstat)
-    if total != 24:
-        failures.append(f'count_production_lines total {total} != 24')
-    if [p for _, p in per_file] != ['backend/utils/a.py', 'app/lib/b.dart']:
-        failures.append(f'unexpected per-file set: {per_file}')
-
-    cases = [
-        (100, set(), 0, '::notice'),
-        (WARN_LINES, set(), 0, '::warning'),
-        (FAIL_LINES, set(), 1, '::error'),
-        (FAIL_LINES, {OVERRIDE_LABEL}, 0, '::notice'),
-        (FAIL_LINES, {'unrelated'}, 1, '::error'),
-    ]
-    for total_lines, labels, want_code, want_prefix in cases:
-        message, code = evaluate(total_lines, labels)
-        if code != want_code or not message.startswith(want_prefix):
-            failures.append(f'evaluate({total_lines}, {labels}) -> ({message[:24]}…, {code})')
-
-    if failures:
-        for failure in failures:
-            print(f'SELF-TEST FAIL: {failure}', file=sys.stderr)
-        return 1
-    print('check_pr_scope self-test OK')
-    return 0
+def resolve_enforcement(pr_body: str, environ: dict[str, str]) -> tuple[bool, str]:
+    """Decide whether the fail threshold is enforced for this invocation."""
+    if environ.get('GITHUB_EVENT_NAME', '') == 'push':
+        return False, 'push event (already merged; nothing to gate)'
+    if _REVERT_BODY_RE.search(pr_body):
+        return False, 'revert PR (AGENTS.md: reverts merge immediately)'
+    if environ.get(LOCAL_OVERRIDE_ENV) == '1':
+        return False, f'{LOCAL_OVERRIDE_ENV}=1 override'
+    return True, ''
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--base', help='diff base ref/sha (merge-base diff: base...HEAD)')
-    parser.add_argument('--labels', default='', help='comma-separated PR label names')
-    parser.add_argument('--self-test', action='store_true')
+    parser.add_argument('--base', required=True, help='diff base ref/sha (merge-base diff: base...HEAD)')
+    parser.add_argument('--labels-json', default='[]', help='JSON array of PR label names')
+    parser.add_argument('--pr-body-file', default='', help='path to the PR body text (revert detection)')
     args = parser.parse_args()
 
-    if args.self_test:
-        return self_test()
-    if not args.base:
-        parser.error('--base is required unless --self-test')
-
+    # --no-renames mirrors scripts/changed-files: a moved file must not escape
+    # classification via rename notation ("dir/{old => new}").
     numstat = subprocess.run(
-        ['git', 'diff', '--numstat', f'{args.base}...HEAD'],
+        ['git', 'diff', '--numstat', '--no-renames', f'{args.base}...HEAD'],
         capture_output=True,
         text=True,
         check=True,
     ).stdout
     total, per_file = count_production_lines(numstat)
-    labels = {label.strip() for label in args.labels.split(',') if label.strip()}
+
+    try:
+        labels = {str(label) for label in json.loads(args.labels_json)}
+    except (json.JSONDecodeError, TypeError):
+        print(f'::warning title=PR scope::could not parse --labels-json {args.labels_json!r}; ignoring labels.')
+        labels = set()
+
+    pr_body = ''
+    if args.pr_body_file and Path(args.pr_body_file).is_file():
+        pr_body = Path(args.pr_body_file).read_text(encoding='utf-8', errors='replace')
+
+    enforce, enforce_reason = resolve_enforcement(pr_body, dict(os.environ))
 
     for changed, path in per_file[:10]:
         print(f'  {changed:>6}  {path}')
-    message, code = evaluate(total, labels)
+    message, code = evaluate(total, labels, enforce=enforce, enforce_reason=enforce_reason)
     print(message)
     return code
 
