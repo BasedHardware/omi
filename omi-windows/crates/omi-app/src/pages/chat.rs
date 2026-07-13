@@ -242,8 +242,9 @@ pub fn ChatPage() -> Element {
                     placeholder: "Ask anything...",
                     value: "{input}",
                     oninput: move |e| input.set(e.value()),
-                    onkeypress: move |e| {
+                    onkeydown: move |e| {
                         if e.key() == Key::Enter {
+                            e.prevent_default();
                             do_send();
                         }
                     },
