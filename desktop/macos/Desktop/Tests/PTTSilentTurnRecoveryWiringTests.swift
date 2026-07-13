@@ -49,6 +49,7 @@ final class PTTSilentTurnRecoveryWiringTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/PushToTalkManager.swift")
+    // omi-test-quality: source-inspection -- static contract: every recordPTTSilentTurn discard site must wire recovery; PushToTalkManager is a @MainActor singleton with no behavioral seam
     return try String(contentsOf: url, encoding: .utf8)
   }
 }
