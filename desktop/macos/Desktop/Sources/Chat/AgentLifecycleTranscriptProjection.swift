@@ -71,7 +71,7 @@ enum AgentLifecycleTranscriptProjection {
         var identifiers = Set<String>()
         for block in blocks {
             switch block {
-            case .agentSpawn(_, let pillID, let sessionID, let runID, _, _):
+            case .agentSpawn(_, let pillID, let sessionID, let runID, _, _, _):
                 insert(runID, into: &identifiers)
                 insert(sessionID, into: &identifiers)
                 if let pillID { identifiers.insert(pillID.uuidString) }

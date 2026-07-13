@@ -211,6 +211,28 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     XCTAssertEqual(ChatLegacyCompatibilityMetadata.removeBy, "2026-10-01")
   }
 
+  func testLegacyBackendImportChronologyNormalizesCoarseTimestampPairs() {
+    struct Row: Equatable {
+      let id: String
+      let createdAt: Date
+      let sender: String
+    }
+    let timestamp = Date(timeIntervalSince1970: 100)
+    let rows = [
+      Row(id: "assistant", createdAt: timestamp, sender: "ai"),
+      Row(id: "user", createdAt: timestamp, sender: "human"),
+    ]
+
+    let plan = ChatLegacyImportChronology.plan(
+      rows,
+      createdAt: { $0.createdAt },
+      role: { $0.sender }
+    )
+
+    XCTAssertEqual(plan.map(\.row.id), ["user", "assistant"])
+    XCTAssertEqual(plan.map(\.createdAtMs), [100_000, 100_001])
+  }
+
   func testJournalProjectionUpsertsMutationByCanonicalTurnID() throws {
     let provider = ChatProvider()
     let surface = provider.mainChatSurfaceReference()

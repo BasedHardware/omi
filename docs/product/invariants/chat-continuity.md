@@ -30,6 +30,15 @@ rollback window; this is migration input, not a second store.
 
 - `conversation_turns` is the current turn projection; the monotonic
   `(conversationGeneration, turnSeq)` revision stream is the replay contract.
+  `turnSeq` identifies the latest revision and therefore is not conversational
+  chronology: context renderers order current turn heads by their immutable
+  creation time. The exchange insertion boundary makes the assistant creation
+  time strictly later than its user turn even when an imported clock ties them.
+  One-at-a-time legacy imports are normalized before admission, and the first
+  journal revision sequence is the durable insertion ordinal for any remaining
+  timestamp tie.
+  Independent user/assistant delivery acknowledgements must not invert a
+  logical exchange in the next typed or PTT prompt.
 - Journal mutations and backend-outbox insertion commit atomically. Backend chat
   writes are a downstream projection with a payload hash. Event-triggered remote
   reconciliation reads owner-scoped pages, deduplicates by stable remote and
@@ -46,6 +55,10 @@ rollback window; this is migration input, not a second store.
   through the same journal RPCs. Journal acceptance publishes the immediate
   pending projection; Swift cannot append a pre-journal optimistic row, persist
   it independently, or acknowledge it.
+- A `realtime_voice` turn is a projection of its exact main-chat companion: it
+  preserves the same external chat identity and is admitted into that chat's
+  visible timeline. Matching an external ID is not sufficient for any other
+  surface kind.
 - Pre-journal backend and Task Chat history have bounded, checkpointed one-time
   import paths. After migration, main-chat list/resolve and owner activation may
   request a cooldown-coalesced remote reconciliation; an idle timer never polls
@@ -79,6 +92,13 @@ rollback window; this is migration input, not a second store.
   a second authoritative transcript store and per-surface history APIs
 - `desktop/macos/agent/tests/conversation-journal.test.ts` — monotonic replay,
   generation fencing, idempotent producers, and atomic backend delivery
+- `desktop/macos/agent/tests/context-snapshot.test.ts` — immutable conversation
+  chronology after user/assistant reconciliation revisions arrive out of order
+- `desktop/macos/agent/tests/runtime-stdio-contract.test.ts` — the real JSONL
+  child process accepts Swift journal messages and preserves idempotency
+- `desktop/macos/Desktop/Tests/CrossSurfaceContractSmokeTests.swift` plus
+  `desktop/macos/agent/tests/cross-surface-contract-smoke.test.ts` — compact
+  typed-chat/PTT identity, replay, permission, provider, and lifecycle contract
 - `desktop/macos/agent/tests/convergence-authority-ratchet.test.ts` — no Swift
   transcript writer, voice outbox, or timestamp cursor can return
 - Continuity gauntlet (manual / harness): typed → PTT → typed follow-up → spawn →

@@ -212,7 +212,23 @@ final class DebugSuspendControl: @unchecked Sendable {
 
 actor AgentRuntimeProcess {
   static let shared = AgentRuntimeProcess()
+  nonisolated static let expectedProtocolVersion = 2
+  nonisolated static let requiredRuntimeCapabilities: Set<String> = [
+    "journal_import_remote_turn"
+  ]
   private static let ownerTransitionClientID = "runtime-owner-transition"
+
+  struct RuntimeHandshake: Equatable, Sendable {
+    let protocolVersion: Int
+    let runtimeVersion: String
+    let capabilities: Set<String>
+  }
+
+  struct DiagnosticsSnapshot: Equatable, Sendable {
+    let running: Bool
+    let protocolVersion: Int?
+    let runtimeVersion: String?
+  }
 
   struct RuntimeOwnerAuthorityStatus: Equatable, Sendable {
     let epoch: UInt64
@@ -232,6 +248,31 @@ actor AgentRuntimeProcess {
     targetHasExtension: Bool
   ) -> Bool {
     useExtension && !token.isEmpty && targetHasExtension
+  }
+
+  nonisolated static func validateRuntimeHandshake(
+    _ message: RuntimeMessage
+  ) throws -> RuntimeHandshake {
+    guard message.kind == .initMessage,
+      let protocolVersion = message.protocolVersion,
+      protocolVersion == expectedProtocolVersion
+    else {
+      throw BridgeError.agentError("Agent runtime protocol is incompatible")
+    }
+    let runtimeVersion = (message.payload["runtimeVersion"] as? String)?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard !runtimeVersion.isEmpty else {
+      throw BridgeError.agentError("Agent runtime did not identify its version")
+    }
+    let capabilities = Set(message.payload["runtimeCapabilities"] as? [String] ?? [])
+    guard requiredRuntimeCapabilities.isSubset(of: capabilities) else {
+      throw BridgeError.agentError("Agent runtime is missing required capabilities")
+    }
+    return RuntimeHandshake(
+      protocolVersion: protocolVersion,
+      runtimeVersion: runtimeVersion,
+      capabilities: capabilities
+    )
   }
 
   nonisolated static func isConfirmedOutOfMemoryDiagnostic(_ text: String) -> Bool {
@@ -472,6 +513,8 @@ actor AgentRuntimeProcess {
   private let oomDiagnosticLatch = AgentRuntimeOOMDiagnosticLatch()
   private var receivedInit = false
   private var advertisedAgentControlTools: Set<String> = []
+  private var negotiatedProtocolVersion: Int?
+  private var negotiatedRuntimeVersion: String?
   private var isRestarting = false
   private var isStopping = false
   private var stopFlight: StopFlight?
@@ -493,6 +536,14 @@ actor AgentRuntimeProcess {
       handleTermination(reason: .exit)
     }
     return isRunning && processRunning
+  }
+
+  func diagnosticsSnapshot() -> DiagnosticsSnapshot {
+    DiagnosticsSnapshot(
+      running: isRunning && process?.isRunning == true && receivedInit,
+      protocolVersion: negotiatedProtocolVersion,
+      runtimeVersion: negotiatedRuntimeVersion
+    )
   }
 
   func runtimeOwnerAuthorityStatus() -> RuntimeOwnerAuthorityStatus {
@@ -2244,6 +2295,8 @@ actor AgentRuntimeProcess {
     lastExitWasOOM = false
     receivedInit = false
     advertisedAgentControlTools.removeAll()
+    negotiatedProtocolVersion = nil
+    negotiatedRuntimeVersion = nil
 
     guard let nodePath = findNodeBinary() else {
       throw BridgeError.nodeNotFound
@@ -2599,6 +2652,8 @@ actor AgentRuntimeProcess {
     markRuntimeOwnerAuthorityDirty()
     receivedInit = false
     advertisedAgentControlTools.removeAll()
+    negotiatedProtocolVersion = nil
+    negotiatedRuntimeVersion = nil
     resumeAllRequests(throwing: BridgeError.stopped)
     resumeInitContinuations(throwing: BridgeError.stopped)
   }
@@ -2670,6 +2725,8 @@ actor AgentRuntimeProcess {
     isRunning = false
     receivedInit = false
     advertisedAgentControlTools.removeAll()
+    negotiatedProtocolVersion = nil
+    negotiatedRuntimeVersion = nil
     resumeAllRequests(throwing: error)
     resumeInitContinuations(throwing: error)
   }
@@ -2734,7 +2791,20 @@ actor AgentRuntimeProcess {
 
     switch message.kind {
     case .initMessage:
-      log("AgentRuntimeProcess: bridge ready (sessionId=\(message.payload["sessionId"] as? String ?? ""))")
+      let handshake: RuntimeHandshake
+      do {
+        handshake = try Self.validateRuntimeHandshake(message)
+      } catch {
+        log("AgentRuntimeProcess: rejecting incompatible runtime handshake")
+        resumeInitContinuations(throwing: error)
+        return
+      }
+      negotiatedProtocolVersion = handshake.protocolVersion
+      negotiatedRuntimeVersion = handshake.runtimeVersion
+      log(
+        "AgentRuntimeProcess: bridge ready "
+          + "(protocol=\(message.protocolVersion.map(String.init) ?? "unknown"), "
+          + "runtime=\(negotiatedRuntimeVersion ?? "unknown"))")
       let tools = message.payload["agentControlTools"] as? [String] ?? []
       advertisedAgentControlTools = Set(tools)
       receivedInit = true
@@ -3625,6 +3695,8 @@ actor AgentRuntimeProcess {
     markRuntimeOwnerAuthorityDirty()
     receivedInit = false
     advertisedAgentControlTools.removeAll()
+    negotiatedProtocolVersion = nil
+    negotiatedRuntimeVersion = nil
     closePipes()
     resumeAllRequests(throwing: error)
     resumeInitContinuations(throwing: error)

@@ -5,6 +5,18 @@ import XCTest
 
 final class AgentPillLifecycleTests: XCTestCase {
   @MainActor
+  func testHydratedPillUsesKernelProviderIdentityForRendering() {
+    let pill = AgentPill(query: "fixture", model: "fixture", ownerID: "owner")
+    XCTAssertNil(pill.providerIdentity)
+
+    pill.applyCanonicalProviderIdentity("openclaw")
+    XCTAssertEqual(pill.providerIdentity, .openclaw)
+
+    pill.applyCanonicalProviderIdentity("unknown")
+    XCTAssertEqual(pill.providerIdentity, .openclaw)
+  }
+
+  @MainActor
   func testVoiceResponseWaitingDrivesGlowUntilPlaybackOrClear() {
     let state = FloatingControlBarState()
     let coordinator = VoiceTurnCoordinator()
@@ -443,7 +455,7 @@ final class AgentPillLifecycleTests: XCTestCase {
         1,
         "Notch row path must construct the provider logo mark exactly once (only in notchAgentIdentityMark)"
     )
-    XCTAssertTrue(source.contains("notchAgentIdentityMark(\n                        provider: pill.bridgeHarnessOverride"))
+    XCTAssertTrue(source.contains("notchAgentIdentityMark(\n                        provider: pill.providerIdentity"))
     XCTAssertTrue(source.contains("let rowWidth = max(0, min(width - NotchAgentStackMetrics.listHorizontalInset * 2, FloatingControlBarWindow.notchExpandedWidth - NotchAgentStackMetrics.listHorizontalInset * 2))"))
     XCTAssertTrue(source.contains("static let listHorizontalInset: CGFloat = 12"))
     XCTAssertTrue(source.contains("static let listRowLeadingPadding: CGFloat = 12"))
@@ -1211,7 +1223,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("model: pill.bridgeHarnessOverride == nil ? pill.model : nil"))
     XCTAssertTrue(source.contains("harnessMode: bridgeHarnessOverride"))
     XCTAssertTrue(viewSource.contains("AgentProviderLogoMark("))
-    XCTAssertTrue(viewSource.contains("provider: pill.bridgeHarnessOverride"))
+    XCTAssertTrue(viewSource.contains("provider: pill.providerIdentity"))
     XCTAssertTrue(logoMarkSource.contains("private static let hermesLogo = load(\"hermes_logo_flat\")"))
     XCTAssertTrue(logoMarkSource.contains("private static let openClawLogo = load(\"openclaw_logo_flat\")"))
     XCTAssertTrue(logoMarkSource.contains("return hermesLogo"))
@@ -1254,7 +1266,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(routingSource.contains("var rendersProviderMark: Bool { self != nil }"))
 
     let viewSource = try floatingControlBarViewSource()
-    XCTAssertTrue(viewSource.contains("pill.bridgeHarnessOverride.rendersProviderMark"))
+    XCTAssertTrue(viewSource.contains("pill.providerIdentity.rendersProviderMark"))
     XCTAssertTrue(viewSource.contains("if provider.rendersProviderMark {"))
   }
 

@@ -3975,11 +3975,11 @@ class FloatingControlBarManager {
             ?? .realtimeVoice(chatId: "default")
     }
 
-    func kernelVoiceContextSnapshot() async -> KernelVoiceContextSnapshot {
+    func kernelVoiceContextSnapshot() async throws -> KernelVoiceContextSnapshot {
         guard let provider = historyChatProvider else {
             return .empty
         }
-        return await provider.prepareRealtimeVoiceContextSnapshot()
+        return try await provider.prepareRealtimeVoiceContextSnapshot()
     }
 
     func recordExchange(

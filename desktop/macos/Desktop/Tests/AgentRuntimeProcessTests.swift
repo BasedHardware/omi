@@ -100,6 +100,25 @@ private actor GatedRuntimeStartupHarness {
 }
 
 final class AgentRuntimeProcessTests: XCTestCase {
+  func testRuntimeHandshakeRejectsStaleV2RuntimeWithoutRequiredCapability() throws {
+    let valid = try XCTUnwrap(AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn"]}"#
+    ))
+    let handshake = try AgentRuntimeProcess.validateRuntimeHandshake(valid)
+    XCTAssertEqual(handshake.protocolVersion, AgentRuntimeProcess.expectedProtocolVersion)
+    XCTAssertTrue(handshake.capabilities.contains("journal_import_remote_turn"))
+
+    let stale = try XCTUnwrap(AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":[]}"#
+    ))
+    XCTAssertThrowsError(try AgentRuntimeProcess.validateRuntimeHandshake(stale))
+
+    let wrongProtocol = try XCTUnwrap(AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"init","protocolVersion":1,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn"]}"#
+    ))
+    XCTAssertThrowsError(try AgentRuntimeProcess.validateRuntimeHandshake(wrongProtocol))
+  }
+
   func testJournalDeadlineAcceptsResultAfterSQLiteBusyWindowWithoutWallClockDelay() {
     let simulatedArrivalNanoseconds: UInt64 = 6_170_000_000
     XCTAssertEqual(

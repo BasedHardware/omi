@@ -86,6 +86,9 @@ enum ChatContentBlockCodec {
         let pillId = (dict["pillId"] as? String).flatMap(UUID.init(uuidString:))
         let title = dict["title"] as? String ?? ""
         let objective = dict["objective"] as? String ?? ""
+        let provider = (dict["provider"] as? String)
+          .flatMap(AgentRuntimeRouting.harnessMode(from:))
+          .flatMap { $0 == .hermes || $0 == .openclaw ? $0 : nil }
         blocks.append(
           .agentSpawn(
             id: id,
@@ -93,7 +96,8 @@ enum ChatContentBlockCodec {
             sessionId: sessionId,
             runId: runId,
             title: title,
-            objective: objective
+            objective: objective,
+            provider: provider
           )
         )
       case "agentCompletion":
@@ -188,7 +192,9 @@ enum ChatContentBlockCodec {
         "summary": summary,
         "fullText": fullText,
       ]
-    case .agentSpawn(let id, let pillId, let sessionId, let runId, let title, let objective):
+    case .agentSpawn(
+      let id, let pillId, let sessionId, let runId, let title, let objective, let provider
+    ):
       var dict: [String: Any] = [
         "type": "agentSpawn",
         "id": id,
@@ -198,6 +204,7 @@ enum ChatContentBlockCodec {
         "objective": objective,
       ]
       if let pillId { dict["pillId"] = pillId.uuidString }
+      if let provider { dict["provider"] = provider.rawValue }
       return dict
     case .agentCompletion(
       let id, let pillId, let sessionId, let runId, let title, let promptSnippet, let output, let status

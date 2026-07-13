@@ -1854,78 +1854,189 @@ function serializeAgentSessionsList(
     hiddenUntilMs?: number | null;
   }[],
 ): Record<string, unknown> {
+  const maximumSerializedBytes = 40 * 1024;
   const dismissed = new Set(
     overrides
       .filter((override) => override.dismissedAtMs != null || (override.hiddenUntilMs ?? 0) > Date.now())
       .map((override) => `${override.subjectKind}:${override.subjectId}`),
   );
-  const summaries = sessions.map(serializeSessionSummary);
-  const floatingAgentPills = summaries
-    .filter((summary) => {
-      const session = summary.session as Record<string, unknown>;
-      const surfaceKind = session.surfaceKind;
-      if (surfaceKind !== "floating_bar" && surfaceKind !== "background_agent" && surfaceKind !== "floating_pill") {
-        return false;
-      }
-      const run = (summary.activeRun ?? summary.latestRun) as Record<string, unknown> | null;
-      const runId = typeof run?.runId === "string" ? run.runId : null;
-      if (runId && dismissed.has(`run:${runId}`)) return false;
-      const sessionId = typeof session.sessionId === "string" ? session.sessionId : null;
-      if (sessionId && dismissed.has(`session:${sessionId}`)) return false;
-      return true;
-    })
-    .map((summary) => serializeFloatingPillSnapshot(summary));
-  const taskAgents = summaries
-    .filter((summary) => (summary.session as Record<string, unknown>).surfaceKind === "task_chat")
-    .map((summary) => serializeTaskAgentSnapshot(summary));
+  // Keep the canonical list operation compact. A session's persisted run input
+  // can include hundreds of kilobytes of surface context, and returning that
+  // here used to make a routine realtime `list_agent_sessions` response exceed
+  // provider WebSocket limits. Full run/session detail remains available from
+  // `get_agent_run` and the internal awareness snapshot.
+  const serializedSessions: Record<string, unknown>[] = [];
+  const floatingAgentPills: Record<string, unknown>[] = [];
+  const taskAgents: Record<string, unknown>[] = [];
+  let truncated = false;
+
+  for (const summary of sessions) {
+    const serializedSession = serializeSessionListSummary(summary);
+    const run = summary.activeRun ?? summary.latestRun;
+    const runId = run?.runId ?? null;
+    const sessionId = summary.session.sessionId;
+    const surfaceKind = summary.session.surfaceKind;
+    const floatingPill = (
+      (surfaceKind === "floating_bar" || surfaceKind === "background_agent" || surfaceKind === "floating_pill")
+      && !(runId && dismissed.has(`run:${runId}`))
+      && !dismissed.has(`session:${sessionId}`)
+    ) ? serializeFloatingPillSnapshot(summary) : null;
+    const taskAgent = surfaceKind === "task_chat" ? serializeTaskAgentSnapshot(summary) : null;
+
+    serializedSessions.push(serializedSession);
+    if (floatingPill) floatingAgentPills.push(floatingPill);
+    if (taskAgent) taskAgents.push(taskAgent);
+    const candidate = {
+      sessions: serializedSessions,
+      task_agents: taskAgents,
+      floating_agent_pills: floatingAgentPills,
+      truncated: false,
+      fetched_session_count: sessions.length,
+    };
+    if (Buffer.byteLength(JSON.stringify({ ok: true, ...candidate }), "utf8") > maximumSerializedBytes) {
+      serializedSessions.pop();
+      if (floatingPill) floatingAgentPills.pop();
+      if (taskAgent) taskAgents.pop();
+      truncated = true;
+      break;
+    }
+  }
+
   return {
-    sessions: summaries,
+    sessions: serializedSessions,
     task_agents: taskAgents,
     floating_agent_pills: floatingAgentPills,
+    truncated,
+    returned_session_count: serializedSessions.length,
+    fetched_session_count: sessions.length,
   };
 }
 
-function serializeFloatingPillSnapshot(summary: Record<string, unknown>): Record<string, unknown> {
-  const session = summary.session as Record<string, unknown>;
-  const run = (summary.activeRun ?? summary.latestRun) as Record<string, unknown> | null;
-  const input = (run?.input as Record<string, unknown> | undefined) ?? {};
-  const metadata = (session.metadata as Record<string, unknown> | undefined) ?? {};
-  const runId = typeof run?.runId === "string" && run.runId ? run.runId : null;
-  const sessionId = typeof session.sessionId === "string" && session.sessionId ? session.sessionId : null;
-  const errorMessage = typeof run?.errorMessage === "string" && run.errorMessage ? run.errorMessage : null;
-  const errorCode = typeof run?.errorCode === "string" && run.errorCode ? run.errorCode : null;
+const CONTROL_LIST_TEXT_LIMIT = 512;
+
+function boundedControlListText(value: unknown, limit = CONTROL_LIST_TEXT_LIMIT): string | null {
+  if (typeof value !== "string" || value.length === 0) return null;
+  return value.length <= limit ? value : `${value.slice(0, limit)}\n[truncated]`;
+}
+
+function serializeSessionListSummary(summary: {
+  session: AgentSession;
+  latestRun?: AgentRun;
+  activeRun?: AgentRun;
+  adapterBindings: AdapterBinding[];
+}): Record<string, unknown> {
+  const session = summary.session;
+  return {
+    session: {
+      sessionId: session.sessionId,
+      ownerId: session.ownerId,
+      title: boundedControlListText(session.title, 160),
+      status: session.status,
+      surfaceKind: session.surfaceKind,
+      executionRole: session.executionRole,
+      externalRefKind: session.externalRefKind,
+      externalRefId: session.externalRefId,
+      defaultAdapterId: session.defaultAdapterId,
+      modelProfile: session.modelProfile,
+      createdAtMs: session.createdAtMs,
+      updatedAtMs: session.updatedAtMs,
+      lastActivityAtMs: session.lastActivityAtMs,
+    },
+    latestRun: summary.latestRun ? serializeRunListSummary(summary.latestRun) : null,
+    activeRun: summary.activeRun ? serializeRunListSummary(summary.activeRun) : null,
+    adapterBindings: summary.adapterBindings.map((binding) => ({
+      bindingId: binding.bindingId,
+      sessionId: binding.sessionId,
+      adapterId: binding.adapterId,
+      adapterNativeSessionId: binding.adapterNativeSessionId,
+      resumeFidelity: binding.resumeFidelity,
+      status: binding.status,
+      modelId: binding.modelId,
+      updatedAtMs: binding.updatedAtMs,
+    })),
+  };
+}
+
+function serializeRunListSummary(run: AgentRun): Record<string, unknown> {
+  const input = parseJsonObject(run.inputJson) as Record<string, unknown>;
+  return appendErrorFields(
+    {
+      runId: run.runId,
+      sessionId: run.sessionId,
+      parentRunId: run.parentRunId,
+      status: run.status,
+      mode: run.mode,
+      input: {
+        prompt: boundedControlListText(input.prompt),
+      },
+      requestedModelId: run.requestedModelId,
+      finalText: boundedControlListText(run.finalText),
+      createdAtMs: run.createdAtMs,
+      startedAtMs: run.startedAtMs,
+      completedAtMs: run.completedAtMs,
+      updatedAtMs: run.updatedAtMs,
+    },
+    run.errorCode,
+    boundedControlListText(run.errorMessage),
+  );
+}
+
+function serializeFloatingPillSnapshot(summary: {
+  session: AgentSession;
+  latestRun?: AgentRun;
+  activeRun?: AgentRun;
+}): Record<string, unknown> {
+  const session = summary.session;
+  const run = summary.activeRun ?? summary.latestRun;
+  const input = (run ? parseJsonObject(run.inputJson) : {}) as Record<string, unknown>;
+  const metadata = parseJsonObject(session.metadataJson) as Record<string, unknown>;
+  const runId = run?.runId ?? null;
+  const sessionId = session.sessionId || null;
+  const errorMessage = run?.errorMessage || null;
+  const errorCode = run?.errorCode || null;
   const pillId =
-    (typeof session.externalRefId === "string" && session.externalRefId) ||
-    (typeof metadata.pillId === "string" && metadata.pillId) ||
+    session.externalRefId ||
+    (typeof metadata.pillId === "string" ? metadata.pillId : null) ||
     runId ||
     sessionId;
+  const adapterId = session.defaultAdapterId;
+  const authoritativeProvider = adapterId === "openclaw" || adapterId === "hermes"
+    ? adapterId
+    : null;
+  const legacyProvider = metadata.provider === "openclaw" || metadata.provider === "hermes"
+    ? metadata.provider
+    : null;
   return {
     id: pillId,
     runId,
     sessionId,
-    title: session.title ?? "Background agent",
-    status: run?.status ?? session.status ?? "unknown",
-    latestActivity: run?.finalText ?? errorMessage ?? input.prompt ?? session.title ?? "",
-    query: typeof input.prompt === "string" ? input.prompt : "",
+    title: boundedControlListText(session.title, 160) ?? "Background agent",
+    status: run?.status ?? session.status,
+    latestActivity: boundedControlListText(run?.finalText ?? errorMessage ?? input.prompt ?? session.title ?? "") ?? "",
+    query: boundedControlListText(input.prompt) ?? "",
     createdAtMs: session.createdAtMs ?? null,
     completedAtMs: run?.completedAtMs ?? null,
-    provider: metadata.provider ?? null,
-    errorCode,
-    errorMessage,
+    provider: authoritativeProvider ?? legacyProvider,
+    errorCode: boundedControlListText(errorCode, 128),
+    errorMessage: boundedControlListText(errorMessage),
   };
 }
 
-function serializeTaskAgentSnapshot(summary: Record<string, unknown>): Record<string, unknown> {
-  const session = summary.session as Record<string, unknown>;
-  const run = (summary.activeRun ?? summary.latestRun) as Record<string, unknown> | null;
+function serializeTaskAgentSnapshot(summary: {
+  session: AgentSession;
+  latestRun?: AgentRun;
+  activeRun?: AgentRun;
+}): Record<string, unknown> {
+  const session = summary.session;
+  const run = summary.activeRun ?? summary.latestRun;
   return {
     taskId: session.externalRefId ?? null,
     sessionId: session.sessionId ?? null,
     runId: run?.runId ?? null,
-    title: session.title ?? null,
-    status: run?.status ?? session.status ?? "unknown",
-    statusText: run?.finalText ?? null,
-    lastError: run?.errorMessage ?? null,
+    title: boundedControlListText(session.title, 160),
+    status: run?.status ?? session.status,
+    statusText: boundedControlListText(run?.finalText),
+    lastError: boundedControlListText(run?.errorMessage),
     updatedAtMs: run?.updatedAtMs ?? session.updatedAtMs ?? null,
   };
 }
