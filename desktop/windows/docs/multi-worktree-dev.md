@@ -51,8 +51,8 @@ copies the session across origins when you want to skip the web login.
 
 `src/main/devInstance.ts` is the single source of truth.
 
-- **Primary vs linked**: a linked git worktree has a `.git` *file* (a `gitdir:`
-  pointer); the primary checkout has a `.git` *directory*. The primary always
+- **Primary vs linked**: a linked git worktree has a `.git` _file_ (a `gitdir:`
+  pointer); the primary checkout has a `.git` _directory_. The primary always
   resolves to `{ name: 'primary', rendererPort: 5179, cdpPort: 9222 }` and stays on
   the default profile — nothing about the main flow changes.
 - **Ports**: derived from the worktree folder name with the same FNV-1a + avalanche
@@ -94,7 +94,7 @@ pnpm seed:auth --dry-run               # show what would be copied
 
 The session lives in the Chromium profile's `Local Storage` leveldb, keyed by
 origin (`http://localhost:5179`). A raw file copy into another profile would land
-the data under the *wrong* origin (the target runs on a different port), so the
+the data under the _wrong_ origin (the target runs on a different port), so the
 target renderer wouldn't find it — and leveldb is a single-writer store, so you'd
 also have to close the source app first. Reading/writing `localStorage` over CDP is
 just JS on each side, so it translates origins naturally and works while both apps
@@ -104,23 +104,31 @@ seam, which is dev-only: the packaged app never opens a CDP port
 
 ## Environment overrides
 
-| Var | Effect |
-|-----|--------|
-| `OMI_INSTANCE=primary` | Force the primary instance (5179, default profile) from any worktree |
-| `OMI_INSTANCE=<name>` | Force a named instance (ports derived from `<name>`) |
-| `OMI_DEV_PORT=<n>` | Pin the renderer port (e.g. to dodge a collision) |
-| `OMI_DEV_CDP_PORT=<n>` | Pin the CDP port |
-| `OMI_SANDBOX=<name>` | Pin the userData profile suffix (`OMI_SANDBOX=1` = legacy `chat-kg`) |
-| `OMI_DEV_NO_REMOTE_DEBUG=1` | Don't open a CDP port for this instance |
-| `OMI_DEV_HW_GPU=1` | Use hardware GPU instead of the dev software-render default |
+| Var                         | Effect                                                                                                                                                                                         |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OMI_INSTANCE=primary`      | Force the primary instance (5179, default profile) from any worktree                                                                                                                           |
+| `OMI_INSTANCE=<name>`       | Force a named instance (ports derived from `<name>`)                                                                                                                                           |
+| `OMI_DEV_PORT=<n>`          | Pin the renderer port (e.g. to dodge a collision)                                                                                                                                              |
+| `OMI_DEV_CDP_PORT=<n>`      | Pin the CDP port                                                                                                                                                                               |
+| `OMI_DEV_REMOTE_DEBUG=<n>`  | Pin the CDP port; **wins over `OMI_DEV_CDP_PORT`** (it is the switch actually bound). `pnpm dev:instance` / `seed:auth` resolve the same precedence, so set it in the shell you run both from. |
+| `OMI_SANDBOX=<name>`        | Pin the userData profile suffix (`OMI_SANDBOX=1` = legacy `chat-kg`)                                                                                                                           |
+| `OMI_DEV_NO_REMOTE_DEBUG=1` | Don't open a CDP port for this instance                                                                                                                                                        |
+| `OMI_DEV_HW_GPU=1`          | Use hardware GPU instead of the dev software-render default                                                                                                                                    |
 
 ## Troubleshooting
 
-- **`pnpm dev` errors that the port is in use** — another worktree hashed to the
-  same renderer port. Set `OMI_DEV_PORT=<free port in 5180-5279>` on this one.
+- **`pnpm dev` errors that the port is in use** — two worktrees hashed to the same
+  _renderer_ port. This IS fail-loud (Vite `strictPort`). Set `OMI_DEV_PORT=<free
+port in 5180-5279>` on this one.
 - **`seed:auth` says it can't reach a CDP endpoint** — the source or target app
   isn't running (or was started with `OMI_DEV_NO_REMOTE_DEBUG=1`). Start it with
   `pnpm dev` in that checkout.
+- **`seed:auth` reaches the WRONG app / a _CDP_ port collided** — unlike renderer
+  ports, CDP-port collisions are **not** fail-loud: both apps still launch, but the
+  second to start fails to bind its CDP port, so it can't be seeded (and CDP tools
+  hit the first app). Two worktrees hashing to the same CDP port is the usual
+  cause. Fix it by pinning `OMI_DEV_CDP_PORT=<free port in 9230-9329>` on one of
+  them (`pnpm dev:instance` shows each instance's resolved CDP port).
 - **`seed:auth` warns "no firebase:authUser"** — the source app isn't signed in;
   sign into the primary app once, then re-run.
 - **Worktree looks signed-out on first run** — expected: a fresh worktree gets an
