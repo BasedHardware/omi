@@ -56,10 +56,13 @@ describe('appSettings', () => {
     expect(sanitizeAppSettings({} as never)).toEqual({
       closeToTrayNoticeShown: false,
       recordHotkey: 'Ctrl+Space',
+      summonHotkey: 'Shift+Space',
       hudContentProtection: true,
       meeting: { mode: 'ask', endGraceMinutes: 2, perApp: {}, firstRunToastShown: false },
       lastShownChangelogVersion: null
     })
+    expect(sanitizeAppSettings({ summonHotkey: '  ' } as never).summonHotkey).toBe('Shift+Space')
+    expect(sanitizeAppSettings({ summonHotkey: 'Alt+K' } as never).summonHotkey).toBe('Alt+K')
     expect(sanitizeAppSettings({ recordHotkey: '  ' } as never).recordHotkey).toBe('Ctrl+Space')
     expect(sanitizeAppSettings({ recordHotkey: 42 } as never).recordHotkey).toBe('Ctrl+Space')
     expect(

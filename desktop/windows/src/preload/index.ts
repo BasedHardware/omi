@@ -31,6 +31,7 @@ import type {
   CodingAgentId,
   CodingAgentRunArgs
 } from '../shared/types'
+import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
 
 const omi: OmiBridgeApi = {
   getCaptureSources: () => ipcRenderer.invoke('capture:getSources'),
@@ -52,6 +53,11 @@ const omi: OmiBridgeApi = {
     const listener = (_e: Electron.IpcRendererEvent, choice: CaptureChoice): void => cb(choice)
     ipcRenderer.on('recorder:hotkey', listener)
     return () => ipcRenderer.removeListener('recorder:hotkey', listener)
+  },
+  onGpuContextLost: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on(GPU_CONTEXT_LOST_CHANNEL, listener)
+    return () => ipcRenderer.removeListener(GPU_CONTEXT_LOST_CHANNEL, listener)
   },
   listenStart: (args: ListenStartArgs) => ipcRenderer.invoke('omi-listen:start', args),
   listenStop: (sessionId: string) => ipcRenderer.invoke('omi-listen:stop', sessionId),
@@ -98,6 +104,8 @@ const omi: OmiBridgeApi = {
   usageFlush: () => ipcRenderer.invoke('usage:flush'),
   usageGetSettings: () => ipcRenderer.invoke('usage:getSettings'),
   usageSetSettings: (next: UsageSettings) => ipcRenderer.invoke('usage:setSettings', next),
+  openCheckout: (url: string) => ipcRenderer.invoke('billing:openCheckout', url),
+  openExternalUrl: (url: string) => ipcRenderer.invoke('billing:openExternal', url),
   memoryImportParse: (dump: string) => ipcRenderer.invoke('memoryImport:parse', dump),
   memoryExportObsidian: (memories: ExportMemory[]) =>
     ipcRenderer.invoke('memoryExport:obsidian', memories),
@@ -265,6 +273,10 @@ const omi: OmiBridgeApi = {
   },
   getRecordHotkey: () => ipcRenderer.invoke('shortcuts:get-record'),
   setRecordHotkey: (accelerator: string) => ipcRenderer.invoke('shortcuts:set-record', accelerator),
+  getSummonHotkey: () => ipcRenderer.invoke('shortcuts:get-summon'),
+  setSummonHotkey: (accelerator: string) => ipcRenderer.invoke('shortcuts:set-summon', accelerator),
+  getAppVersion: () => ipcRenderer.invoke('app:get-version'),
+  checkForUpdates: () => ipcRenderer.invoke('update:check'),
   getPendingUpdate: () => ipcRenderer.invoke('update:get-pending'),
   suspendShortcutCapture: () => ipcRenderer.send('shortcuts:suspend-capture'),
   resumeShortcutCapture: () => ipcRenderer.send('shortcuts:resume-capture')

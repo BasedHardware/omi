@@ -9,6 +9,7 @@
 import { app, type BrowserWindow } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { setTrayUpdateReady } from './tray'
+import type { UpdateCheckResult } from '../shared/types'
 
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000 // every 4h
 
@@ -19,6 +20,29 @@ let pendingUpdate: { version: string } | null = null
  * once (usually while nobody is on Settings), so the UI queries this on mount. */
 export function getPendingUpdate(): { version: string } | null {
   return pendingUpdate
+}
+
+/**
+ * Manual update check for Settings → About. In unpackaged dev the updater never
+ * started (see initAutoUpdater's guard), so there's nothing to check — return
+ * `unsupported` and let the UI say updates install automatically. When active, run
+ * a one-shot check: a staged download reports `update-available`, a newer feed
+ * version reports `update-available`, otherwise `up-to-date`. Never throws.
+ */
+export async function checkForUpdatesNow(): Promise<UpdateCheckResult> {
+  const current = app.getVersion()
+  if (!started) return { status: 'unsupported', version: current }
+  if (pendingUpdate) return { status: 'update-available', version: pendingUpdate.version }
+  try {
+    const res = await autoUpdater.checkForUpdates()
+    const found = typeof res?.updateInfo?.version === 'string' ? res.updateInfo.version : undefined
+    if (found && found !== current) return { status: 'update-available', version: found }
+    return { status: 'up-to-date', version: current }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    console.warn('[updater] manual check failed (non-fatal):', message)
+    return { status: 'error', message }
+  }
 }
 
 export function initAutoUpdater(getMainWindow: () => BrowserWindow | null): void {

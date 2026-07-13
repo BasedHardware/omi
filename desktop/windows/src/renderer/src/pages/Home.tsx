@@ -10,6 +10,7 @@ import { maybeBuildLocalGraph } from '../lib/kgSynthesis'
 import { cn } from '../lib/utils'
 import { keepLastPositive } from '../lib/measure'
 import omiMark from '../assets/omi-mark.png'
+import { BrandImage } from '../components/ui/BrandImage'
 import { maybeStartScreenSynthesis } from '../lib/screenSynthesis'
 import { maybeStartInsightEngine } from '../lib/insightEngine'
 import { maybeStartRetentionSweep } from '../lib/retentionSweep'
@@ -499,7 +500,7 @@ export function Home(): React.JSX.Element {
                           badge (h-14 in an h-11 badge) to offset the asset's
                           ~23% built-in padding, so the dot-ring reads at ~30px. */}
                       <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white">
-                        <img src={omiMark} alt="Omi" className="h-14 w-14 object-contain" />
+                        <BrandImage src={omiMark} alt="Omi" className="h-14 w-14 object-contain" />
                       </div>
                       {/* pt-3 (12px) optically centers the first reply line on
                           the 44px badge: Inter 15px/24.75px puts the first line's

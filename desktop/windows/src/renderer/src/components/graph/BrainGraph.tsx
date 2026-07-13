@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, Billboard, Text, Line } from '@react-three/drei'
 import * as THREE from 'three'
@@ -11,6 +11,7 @@ import {
   type NodePosition
 } from '../../lib/useGraphSimulation'
 import { nodeColor } from './nodeColor'
+import { useWebglRecovery } from '../../lib/useWebglRecovery'
 
 export type BrainGraphProps = {
   graph: KnowledgeGraph
@@ -27,6 +28,17 @@ export type BrainGraphProps = {
   // Use demand for idle-heavy surfaces such as Memories so the WebGL canvas
   // stops rendering once layout/easing has settled.
   frameLoop?: 'always' | 'demand'
+  // Fired once the WebGL context/scene is created (r3f's Canvas onCreated) —
+  // the cheapest available "first frame is imminent" signal. Callers use this
+  // to swap a loading placeholder for the canvas without guessing at timing.
+  onReady?: () => void
+  // Fired whenever the canvas mounts/unmounts under pauseWhenHidden (e.g. the
+  // host tab going hidden then shown again tears down and recreates the WebGL
+  // context). A caller tracking readiness from onReady alone would otherwise
+  // treat that recreation as a no-op and show nothing during the gap — this
+  // lets it fall back to its loading state for that window instead of a blank
+  // pane. Not called when pauseWhenHidden is false (the canvas never toggles).
+  onVisibleChange?: (visible: boolean) => void
 }
 
 // Must match GraphSimulation.nodeRadius so the spheres and the collision force
@@ -121,7 +133,12 @@ function GraphNodeMesh({
   return (
     <group ref={groupRef} position={[node.x, node.y, node.z]} scale={reduced ? [1, 1, 1] : [0, 0, 0]}>
       <mesh>
-        <sphereGeometry args={[radius, 32, 32]} />
+        {/* 16×16 (down from 32×32): at the on-screen size these spheres actually
+            render — small, glowing, and softened by the halo/bloom layers below
+            — the extra polys were invisible but every one of them still had to
+            be transformed and rasterized every animated frame across all nodes.
+            This is the single biggest per-frame triangle-count cut here. */}
+        <sphereGeometry args={[radius, 16, 16]} />
         <meshStandardMaterial
           ref={coreMat}
           color={color}
@@ -133,12 +150,12 @@ function GraphNodeMesh({
       </mesh>
       {/* pulsing glow halo (scales with the shine) */}
       <mesh ref={glowMesh}>
-        <sphereGeometry args={[radius * 1.9, 24, 24]} />
+        <sphereGeometry args={[radius * 1.9, 12, 12]} />
         <meshBasicMaterial ref={glowMat} color={color} transparent opacity={0.12} depthWrite={false} />
       </mesh>
       {/* faint outer bloom for extra shine */}
       <mesh>
-        <sphereGeometry args={[radius * 3, 16, 16]} />
+        <sphereGeometry args={[radius * 3, 8, 8]} />
         <meshBasicMaterial color={color} transparent opacity={0.04} depthWrite={false} />
       </mesh>
       <Billboard position={[0, radius + labelSize * 0.9, 0]}>
@@ -177,18 +194,22 @@ function GraphEdge({
   posMap: Map<string, THREE.Vector3>
 }): React.JSX.Element {
   const ref = useRef<{ geometry: { setPositions(p: number[]): void } } | null>(null)
+  // Reused every frame instead of a fresh array literal each time — setPositions
+  // only reads these six values (it copies them into its own GPU buffer), so
+  // there's nothing gained by allocating a new array per edge per frame, only
+  // GC pressure from it.
+  const positions = useRef<number[]>([0, 0, 0, 0, 0, 0]).current
   useFrame(() => {
     const a = posMap.get(edge.sourceId) ?? sim.liveNode(edge.sourceId)
     const b = posMap.get(edge.targetId) ?? sim.liveNode(edge.targetId)
     if (!a || !b || !ref.current) return
-    ref.current.geometry.setPositions([
-      a.x ?? 0,
-      a.y ?? 0,
-      a.z ?? 0,
-      b.x ?? 0,
-      b.y ?? 0,
-      b.z ?? 0
-    ])
+    positions[0] = a.x ?? 0
+    positions[1] = a.y ?? 0
+    positions[2] = a.z ?? 0
+    positions[3] = b.x ?? 0
+    positions[4] = b.y ?? 0
+    positions[5] = b.z ?? 0
+    ref.current.geometry.setPositions(positions)
   })
   return (
     <Line
@@ -356,10 +377,18 @@ export function BrainGraph({
   interactive = true,
   shuffleKey,
   pauseWhenHidden = false,
-  frameLoop = 'always'
+  frameLoop = 'always',
+  onReady,
+  onVisibleChange
 }: BrainGraphProps): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
   const [visible, setVisible] = useState(true)
+  // Latest-ref so the effect below can depend on just `showCanvas` (only fire
+  // on real transitions) without also re-firing whenever a caller passes a
+  // new inline callback identity on every render.
+  const onVisibleChangeRef = useRef(onVisibleChange)
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref (keeps the effect below from re-firing on every render just because the caller passed a new inline callback)
+  onVisibleChangeRef.current = onVisibleChange
 
   // Off-screen GPU saving for the Memories tab only (pauseWhenHidden): UNMOUNT
   // the canvas while the host is collapsed to 0×0 (its MainViews tab is
@@ -372,19 +401,72 @@ export function BrainGraph({
     if (!pauseWhenHidden) return
     const el = hostRef.current
     if (!el) return
-    const update = (): void => setVisible(el.clientWidth > 0 && el.clientHeight > 0)
+    // Debounce HIDE decisions only, not show ones: measured on the real page,
+    // a ResizeObserver tick can report a genuine 0×0 for this container —
+    // observed immediately after the canvas's WebGL context is created, which
+    // itself briefly perturbs the compositor — immediately followed by another
+    // real tick reporting its normal size again 60-120ms later, with no actual
+    // tab switch in between. Acting on that first 0×0 unmounted+remounted the
+    // whole canvas — and doing that repeatedly, in quick succession, was
+    // observed to lose the WebGL context outright (software rendering under
+    // dev's forced-software-WebGL has a low tolerance for rapid context churn):
+    // a real crash, not just a wasted rebuild. A real "tab went inactive" stays
+    // at 0×0 well past this window, so (a) requiring the reading to hold for
+    // 250ms before hiding, and (b) refusing to even arm that timer within 500ms
+    // of the last time we showed (exactly when a just-created context's own
+    // compositor blip lands) still catches a genuine hide — just slightly
+    // later — while filtering out the blip that used to compound into a crash.
+    // Showing is always acted on immediately — there's nothing to protect there.
+    let hideTimer: ReturnType<typeof setTimeout> | undefined
+    let lastShownAt = 0
+    const update = (): void => {
+      const hasSize = el.clientWidth > 0 && el.clientHeight > 0
+      if (hasSize) {
+        if (hideTimer) {
+          clearTimeout(hideTimer)
+          hideTimer = undefined
+        }
+        lastShownAt = Date.now()
+        setVisible(true)
+        return
+      }
+      if (hideTimer || Date.now() - lastShownAt < 500) return
+      hideTimer = setTimeout(() => {
+        hideTimer = undefined
+        setVisible(el.clientWidth > 0 && el.clientHeight > 0)
+      }, 250)
+    }
     update()
     const ro = new ResizeObserver(update)
     ro.observe(el)
-    return () => ro.disconnect()
+    return () => {
+      if (hideTimer) clearTimeout(hideTimer)
+      ro.disconnect()
+    }
   }, [pauseWhenHidden])
 
   const showCanvas = !pauseWhenHidden || visible
+
+  useEffect(() => {
+    onVisibleChangeRef.current?.(showCanvas)
+  }, [showCanvas])
+
+  // Stable identity (reads onVisibleChangeRef, never the raw prop) so passing
+  // it to useWebglRecovery doesn't re-run that hook's effect every render.
+  const handleContextLost = useCallback(() => onVisibleChangeRef.current?.(false), [])
+
+  // Remount the canvas subtree on webglcontextlost so a GPU-process crash
+  // (SwiftShader included) yields a fresh context instead of Chromium's
+  // broken-image placeholder. Covers direct mounts (Onboarding) that bypass
+  // LazyBrainGraph's own recovery wrapper. onContextLost reports the loss to
+  // the caller (e.g. Memories.tsx) immediately, ahead of the debounced remount.
+  const recoveryKey = useWebglRecovery(hostRef, handleContextLost)
 
   return (
     <div ref={hostRef} className="absolute inset-0">
       {showCanvas && (
       <Canvas
+        key={recoveryKey}
         // Narrow FOV: a wide FOV projects off-center spheres into ellipses
         // ("deformed" nodes); this keeps them as round circles. CameraRig derives
         // its distance from the FOV, so the framing/zoom is unchanged.
@@ -392,6 +474,7 @@ export function BrainGraph({
         dpr={[1, 2]}
         frameloop={frameLoop}
         gl={{ antialias: true, alpha: true }}
+        onCreated={() => onReady?.()}
       >
         <GraphScene
           graph={graph}

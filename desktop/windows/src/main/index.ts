@@ -15,6 +15,8 @@ import { supportsMica } from './windowsVersion'
 import { APP_BG_HEX, WCO_SYMBOL_HEX } from '../shared/chrome'
 import iconPath from '../../resources/icon.png?asset'
 import { listCaptureSources } from './ipc/capture'
+import { isAllowedExternalScheme } from './externalUrl'
+import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
 import {
   registerOmiListenHandlers,
   startTestListenSession,
@@ -52,12 +54,16 @@ import {
   unregisterOverlayShortcut,
   suspendOverlayShortcut,
   resumeOverlayShortcut,
+  setOverlayAccelerator,
+  getOverlayAccelerator,
+  getOverlaySummonState,
   OVERLAY_ACCELERATOR
 } from './overlay/shortcut'
 import { registerOverlayHandlers } from './overlay/ipc'
 import { seedUserAssistOnce } from './usage/userAssistSeed'
 import { registerRewindHandlers } from './ipc/rewind'
 import { registerScreenHandlers } from './ipc/screen'
+import { registerBillingIpc } from './billing/checkoutWindow'
 import { helperProcess } from './ocr/helperProcess'
 import { registerInsightHandlers } from './ipc/insight'
 import {
@@ -88,7 +94,7 @@ import * as devBench from './dev/bench'
 import { initSentry } from './sentry'
 import { isQuitting, quitApp } from './lifecycle'
 import { createTray, updateTrayState, destroyTray, isTrayCreated } from './tray'
-import { initAutoUpdater, getPendingUpdate } from './updater'
+import { initAutoUpdater, getPendingUpdate, checkForUpdatesNow } from './updater'
 import {
   registerRecordShortcut,
   setRecordAccelerator,
@@ -201,7 +207,7 @@ app.on('render-process-gone', (_e, wc, details) => {
     /* window may be mid-teardown */
   }
 })
-app.on('child-process-gone', (_e, details) =>
+app.on('child-process-gone', (_e, details) => {
   // Include the utility's name/service (e.g. "Audio Service", "Video Capture")
   // so a Utility crash points at the actual subsystem rather than just "Utility".
   logFatal(
@@ -211,7 +217,18 @@ app.on('child-process-gone', (_e, details) =>
       (details.serviceName ? ` service=${details.serviceName}` : '') +
       ` reason=${details.reason} exitCode=${details.exitCode}`
   )
-)
+  // A GPU-process crash loses every live WebGL context, but the RENDERERS stay
+  // alive — so render-process-gone (which reloads) never fires, and a WebGL
+  // <canvas> (the brain map) is left painted as Chromium's broken-image
+  // placeholder with nothing to recover it. Chromium restarts the GPU process on
+  // its own; broadcast so WebGL surfaces remount and brand images re-decode.
+  // Clean exits are intentional teardown — skip.
+  if (details.type === 'GPU' && details.reason !== 'clean-exit') {
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (!w.isDestroyed()) w.webContents.send(GPU_CONTEXT_LOST_CHANNEL)
+    }
+  }
+})
 
 // Desktop-automation bridge (real Windows UI actions). ON by default; set
 // OMI_AUTOMATION='0' as a kill-switch to disable it. Gates both the IPC
@@ -376,15 +393,11 @@ function createWindow(): BrowserWindow {
     // a file://, UNC, or custom-protocol URL; passing those to shell.openExternal
     // enables NTLM-hash leak / protocol-handler abuse. Defense-in-depth alongside
     // the renderer's Markdown scheme allow-list.
-    try {
-      const scheme = new URL(url).protocol
-      if (scheme === 'http:' || scheme === 'https:' || scheme === 'mailto:') {
-        shell.openExternal(url)
-      } else {
-        console.warn('[main] blocked external open of non-web URL scheme:', scheme)
-      }
-    } catch {
-      console.warn('[main] blocked external open of unparseable URL')
+    if (isAllowedExternalScheme(url, ['http', 'https', 'mailto'])) {
+      shell.openExternal(url)
+    } else {
+      // Never log the raw URL — it may carry a token/secret in its query string.
+      console.warn('[main] blocked external open of a non-web or unparseable URL')
     }
     return { action: 'deny' }
   })
@@ -571,6 +584,7 @@ app.whenReady().then(async () => {
   registerMemoryCleanupHandlers()
   registerRewindHandlers()
   registerScreenHandlers()
+  registerBillingIpc()
   // Cross-window conversations refresh: any renderer that writes a local
   // conversation (main window OR overlay) notifies here; rebroadcast to every
   // window so each invalidates its own per-process conversations cache (e.g. an
@@ -745,8 +759,13 @@ app.whenReady().then(async () => {
   // (INV-CHAT-1): bar IPC forwards send/state routing to the main window here,
   // since bar/window.ts has no reference to it.
   registerBarIpc((channel, ...args) => withMainWindow((w) => w.webContents.send(channel, ...args)))
-  setSummonGestureAccelerator(OVERLAY_ACCELERATOR)
-  const shortcutOk = registerOverlayShortcut(OVERLAY_ACCELERATOR, handleSummonPress)
+  // Register the PERSISTED summon chord (default Shift+Space), so a rebind
+  // survives restarts and a taken chord fails loudly (surfaced in Settings) at
+  // launch. The legacy renderer `overlayShortcut` preference is re-applied by
+  // App.tsx on startup and kept in step by the Settings rebind (dual-write).
+  const summonAccel = getAppSettings().summonHotkey ?? OVERLAY_ACCELERATOR
+  setSummonGestureAccelerator(summonAccel)
+  const shortcutOk = registerOverlayShortcut(summonAccel, handleSummonPress)
   if (!shortcutOk) {
     console.warn(
       '[bar] summon shortcut unavailable; the bar can still be revealed from the top edge'
@@ -793,9 +812,16 @@ app.whenReady().then(async () => {
   // Record-chord get/rebind. Rebinds persist and never throw on a conflict — a
   // taken chord returns registered=false so the UI can prompt for another.
   ipcMain.handle('shortcuts:get-record', () => getRecordShortcut())
+  // Summon (floating-bar) chord: current binding + whether the OS claimed it, so
+  // Settings → Shortcuts can show a conflict instead of a silently-dead shortcut.
+  ipcMain.handle('shortcuts:get-summon', () => getOverlaySummonState())
   // Query the staged update on demand (the update:ready event fires once,
   // usually while Settings isn't mounted — see updater.getPendingUpdate).
   ipcMain.handle('update:get-pending', () => getPendingUpdate())
+  // App identity for Settings → About.
+  ipcMain.handle('app:get-version', () => ({ name: app.getName(), version: app.getVersion() }))
+  // Manual update check (About). Inert in unpackaged dev (returns `unsupported`).
+  ipcMain.handle('update:check', () => checkForUpdatesNow())
 
   // Suspend/resume global chords while the settings UI captures raw keys for a
   // rebind — otherwise pressing the CURRENT chord fires it instead of being
@@ -816,6 +842,24 @@ app.whenReady().then(async () => {
     const next = setRecordAccelerator(accelerator.trim())
     if (next.registered) setAppSettings({ recordHotkey: next.accelerator })
     return { ok: next.registered, registered: next.registered }
+  })
+
+  // Rebind the summon chord (mirrors overlay:setAccelerator used by onboarding):
+  // re-register globally and rebuild the bar's tap/hold gesture on the new key.
+  // Returns registered=false when the chord is taken (main rolled back). The
+  // renderer persists the accelerator in preferences (overlayShortcut) on ok, and
+  // App.tsx re-applies it to main on the next startup.
+  ipcMain.handle('shortcuts:set-summon', (_e, accelerator: string) => {
+    if (typeof accelerator !== 'string' || !accelerator.trim()) {
+      return { ok: false, registered: getOverlaySummonState().registered }
+    }
+    const ok = setOverlayAccelerator(accelerator.trim())
+    if (ok) {
+      setSummonGestureAccelerator(getOverlayAccelerator())
+      // Persist so the chord survives restarts and main re-registers it at launch.
+      setAppSettings({ summonHotkey: getOverlayAccelerator() })
+    }
+    return { ok, registered: ok }
   })
 
   // Renderer → quit for real (menu/button in the UI).

@@ -3,9 +3,10 @@
 // register/rebind/suspend/resume implementation. Public API is preserved for
 // callers (overlay/ipc.ts, index.ts) and the existing tests.
 import { createShortcutSlot } from '../shortcuts'
+import { DEFAULT_SUMMON_HOTKEY } from '../../shared/hotkeyDefaults'
 
 /** Default summon shortcut. User-rebindable during onboarding (and persisted). */
-export const OVERLAY_ACCELERATOR = 'Shift+Space'
+export const OVERLAY_ACCELERATOR = DEFAULT_SUMMON_HOTKEY
 
 const slot = createShortcutSlot(OVERLAY_ACCELERATOR)
 
@@ -44,4 +45,11 @@ export function resumeOverlayShortcut(): boolean {
 /** The accelerator currently claimed (exposed for tests/diagnostics). */
 export function getOverlayAccelerator(): string {
   return slot.getAccelerator()
+}
+
+/** Current summon chord + whether the OS actually claimed it (false → another app
+ *  owns it, so the hardcoded/default chord silently failed to register). Shown in
+ *  Settings → Shortcuts so a conflict is visible instead of a dead shortcut. */
+export function getOverlaySummonState(): { accelerator: string; registered: boolean } {
+  return { accelerator: slot.getAccelerator(), registered: slot.isRegistered() }
 }

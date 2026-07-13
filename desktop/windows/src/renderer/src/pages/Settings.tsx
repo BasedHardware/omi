@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { onSettingsTabRequest, consumeSettingsTabRequest } from '../lib/settingsNav'
 import { SettingsSearchProvider } from '../components/settings/SettingsSearchProvider'
 import { useSettingsSearch } from '../components/settings/searchContext'
 import { SettingsTabRail } from '../components/settings/SettingsTabRail'
@@ -11,6 +12,10 @@ import { PrivacyTab } from '../components/settings/tabs/PrivacyTab'
 import { AccountTab } from '../components/settings/tabs/AccountTab'
 import { AdvancedTab } from '../components/settings/tabs/AdvancedTab'
 import { AgentsTab } from '../components/settings/tabs/AgentsTab'
+import { TranscriptionTab } from '../components/settings/tabs/TranscriptionTab'
+import { PlanUsageTab } from '../components/settings/tabs/PlanUsageTab'
+import { ShortcutsTab } from '../components/settings/tabs/ShortcutsTab'
+import { AboutTab } from '../components/settings/tabs/AboutTab'
 import { Memories } from './Memories'
 
 // The Memories tab renders the full Memories page (its own layout, brain map and
@@ -19,16 +24,32 @@ import { Memories } from './Memories'
 const TAB_COMPONENTS: Partial<Record<SettingsTabId, () => React.JSX.Element>> = {
   general: GeneralTab,
   agents: AgentsTab,
+  transcription: TranscriptionTab,
   rewind: RewindTab,
   privacy: PrivacyTab,
   account: AccountTab,
-  advanced: AdvancedTab
+  'plan-usage': PlanUsageTab,
+  shortcuts: ShortcutsTab,
+  advanced: AdvancedTab,
+  about: AboutTab
 }
 
 function SettingsInner(): React.JSX.Element {
   const [active, setActive] = useState<SettingsTabId>('general')
   const { query, setQuery } = useSettingsSearch()
   const navigate = useNavigate()
+
+  // Deep-link consumer: callers elsewhere (e.g. the usage-limit popup's Upgrade
+  // button) request a tab via settingsNav before/after this view mounts; the
+  // buffered replay in onSettingsTabRequest covers the navigate-then-mount race.
+  useEffect(
+    () =>
+      onSettingsTabRequest((tab) => {
+        setActive(tab)
+        consumeSettingsTabRequest()
+      }),
+    []
+  )
 
   return (
     <div className="flex h-full min-h-0">

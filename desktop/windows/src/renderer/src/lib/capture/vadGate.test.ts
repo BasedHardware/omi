@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { VadGate, type VadGateConfig, type VadTick } from './vadGate'
+import { VadGate, resolveVadGateMode, type VadGateConfig, type VadTick } from './vadGate'
 
 const RATE = 16000
 const FRAME = 160 // 10ms @ 16kHz
@@ -27,6 +27,16 @@ function flatten(chunks: Int16Array[]): number[] {
 
 const gated = (over: Partial<VadGateConfig> = {}): VadGate =>
   new VadGate({ preSpeechPadMs: 100, redemptionMs: 200, mode: 'gated', sampleRate: RATE, ...over })
+
+describe('resolveVadGateMode', () => {
+  it('gates by default (undefined) and when explicitly enabled', () => {
+    expect(resolveVadGateMode(undefined)).toBe('gated')
+    expect(resolveVadGateMode(true)).toBe('gated')
+  })
+  it('passes through only when the gate is explicitly disabled', () => {
+    expect(resolveVadGateMode(false)).toBe('passthrough')
+  })
+})
 
 describe('VadGate — passthrough mode', () => {
   it('passes every frame and ignores speech verdicts', () => {
