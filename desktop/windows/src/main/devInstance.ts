@@ -76,12 +76,24 @@ function intEnv(value: string | undefined, fallback: number): number {
 }
 
 /**
+ * The CDP port the app ACTUALLY binds, by precedence: OMI_DEV_REMOTE_DEBUG (the
+ * switch dev/bench.ts passes to Chromium) wins over OMI_DEV_CDP_PORT, which wins
+ * over the derived/primary port. Kept here so `cdpPort` is the single source of
+ * truth for both the app (dev/bench.ts) and the helper scripts (seed-auth).
+ */
+function cdpFromEnv(env: NodeJS.ProcessEnv, fallback: number): number {
+  return intEnv(env.OMI_DEV_REMOTE_DEBUG, intEnv(env.OMI_DEV_CDP_PORT, fallback))
+}
+
+/**
  * Pure instance computation. `isPrimary` selects the branch; env vars override
  * individual fields so any checkout can be pinned back to canonical values:
- *   OMI_INSTANCE=primary  → force the primary instance (default profile, 5179)
- *   OMI_INSTANCE=<name>   → force a named instance (ports derived from <name>)
- *   OMI_DEV_PORT=<n>      → force the renderer port
- *   OMI_DEV_CDP_PORT=<n>  → force the CDP port
+ *   OMI_INSTANCE=primary      → force the primary instance (default profile, 5179)
+ *   OMI_INSTANCE=<name>       → force a named instance (ports derived from <name>)
+ *   OMI_DEV_PORT=<n>          → force the renderer port
+ *   OMI_DEV_CDP_PORT=<n>      → force the CDP port
+ *   OMI_DEV_REMOTE_DEBUG=<n>  → force the CDP port (wins over OMI_DEV_CDP_PORT;
+ *                               it is the switch actually bound in dev/bench.ts)
  */
 export function computeDevInstance(
   rawName: string,
@@ -103,7 +115,7 @@ export function computeDevInstance(
       name: 'primary',
       isPrimary: true,
       rendererPort: intEnv(env.OMI_DEV_PORT, PRIMARY_RENDERER_PORT),
-      cdpPort: intEnv(env.OMI_DEV_CDP_PORT, PRIMARY_CDP_PORT),
+      cdpPort: cdpFromEnv(env, PRIMARY_CDP_PORT),
       titleSuffix: ''
     }
   }
@@ -113,7 +125,7 @@ export function computeDevInstance(
     name,
     isPrimary: false,
     rendererPort: intEnv(env.OMI_DEV_PORT, deriveRendererPort(name)),
-    cdpPort: intEnv(env.OMI_DEV_CDP_PORT, deriveCdpPort(name)),
+    cdpPort: cdpFromEnv(env, deriveCdpPort(name)),
     titleSuffix: ` — ${name}`
   }
 }

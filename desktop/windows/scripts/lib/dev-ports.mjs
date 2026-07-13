@@ -90,30 +90,50 @@ function linkedNameUnderWorktrees(primaryRoot, startDir) {
   return first || null
 }
 
-/** Resolve { name, isPrimary, rendererPort, cdpPort } for a checkout dir + env. */
-export function resolveInstance(cwd, env = process.env) {
-  let { name, isPrimary } = findWorktreeContext(cwd)
+/** Mirror of devInstance.ts intEnv: parse a positive port, else the fallback. */
+function intEnv(value, fallback) {
+  const n = value ? Number.parseInt(value, 10) : NaN
+  return Number.isInteger(n) && n > 0 && n < 65536 ? n : fallback
+}
+
+/** CDP port precedence: OMI_DEV_REMOTE_DEBUG > OMI_DEV_CDP_PORT > fallback. */
+function cdpFromEnv(env, fallback) {
+  return intEnv(env.OMI_DEV_REMOTE_DEBUG, intEnv(env.OMI_DEV_CDP_PORT, fallback))
+}
+
+/**
+ * Mirror of devInstance.ts computeDevInstance (minus titleSuffix): resolve the
+ * instance ports honoring the SAME env overrides the app honors, so seed-auth /
+ * dev:instance never target a port the running app didn't bind.
+ */
+export function computeInstance(rawName, isPrimary, env = process.env) {
   const forced = env.OMI_INSTANCE && env.OMI_INSTANCE.trim()
   if (forced) {
     if (forced.toLowerCase() === 'primary') isPrimary = true
     else {
       isPrimary = false
-      name = forced
+      rawName = forced
     }
   }
   if (isPrimary) {
     return {
       name: 'primary',
       isPrimary: true,
-      rendererPort: PRIMARY_RENDERER_PORT,
-      cdpPort: PRIMARY_CDP_PORT
+      rendererPort: intEnv(env.OMI_DEV_PORT, PRIMARY_RENDERER_PORT),
+      cdpPort: cdpFromEnv(env, PRIMARY_CDP_PORT)
     }
   }
-  const slug = sanitizeInstanceName(name)
+  const slug = sanitizeInstanceName(rawName)
   return {
     name: slug,
     isPrimary: false,
-    rendererPort: deriveRendererPort(slug),
-    cdpPort: deriveCdpPort(slug)
+    rendererPort: intEnv(env.OMI_DEV_PORT, deriveRendererPort(slug)),
+    cdpPort: cdpFromEnv(env, deriveCdpPort(slug))
   }
+}
+
+/** Resolve { name, isPrimary, rendererPort, cdpPort } for a checkout dir + env. */
+export function resolveInstance(cwd, env = process.env) {
+  const { name, isPrimary } = findWorktreeContext(cwd)
+  return computeInstance(name, isPrimary, env)
 }

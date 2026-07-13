@@ -116,8 +116,10 @@ export function applyDevGpuStability(): void {
   // OMI_DEV_NO_REMOTE_DEBUG=1 turns it off. Localhost-only and dev-only (packaged
   // builds return above, so the port never opens in production).
   if (process.env.OMI_DEV_NO_REMOTE_DEBUG !== '1' && !hasCliSwitch('remote-debugging-port')) {
-    const cdpPort = process.env.OMI_DEV_REMOTE_DEBUG || String(resolveDevInstance().cdpPort)
-    app.commandLine.appendSwitch('remote-debugging-port', cdpPort)
+    // resolveDevInstance().cdpPort already folds in OMI_DEV_REMOTE_DEBUG >
+    // OMI_DEV_CDP_PORT > derived (see computeDevInstance), so the app, the seed
+    // script, and `pnpm dev:instance` all agree on the port.
+    app.commandLine.appendSwitch('remote-debugging-port', String(resolveDevInstance().cdpPort))
     app.commandLine.appendSwitch('remote-allow-origins', '*')
   }
   // A GPU crash must never permanently blocklist WebGL for the shared dev origin.

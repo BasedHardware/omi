@@ -32,4 +32,37 @@ describe('dev-ports.mjs parity with devInstance.ts', () => {
       expect(mjs.sanitizeInstanceName(n)).toBe(ts.sanitizeInstanceName(n))
     }
   })
+
+  // The scripts (seed-auth / dev:instance) must resolve the SAME effective ports
+  // the app binds, or the documented "set OMI_DEV_PORT to move it" remedy silently
+  // targets the wrong port. computeInstance (mjs) mirrors computeDevInstance (TS)
+  // including env-override precedence.
+  it('resolves identical ports under env overrides (precedence parity)', () => {
+    const envs: Array<Record<string, string>> = [
+      {},
+      { OMI_DEV_PORT: '5210' },
+      { OMI_DEV_CDP_PORT: '9251' },
+      { OMI_DEV_REMOTE_DEBUG: '9333' },
+      // OMI_DEV_REMOTE_DEBUG must win over OMI_DEV_CDP_PORT.
+      { OMI_DEV_CDP_PORT: '9251', OMI_DEV_REMOTE_DEBUG: '9333' },
+      { OMI_DEV_PORT: '70000', OMI_DEV_CDP_PORT: 'abc' }, // garbage → fall through
+      { OMI_INSTANCE: 'primary' },
+      { OMI_INSTANCE: 'other-wt', OMI_DEV_CDP_PORT: '9270' }
+    ]
+    for (const base of [
+      { name: 'multi-worktree-dev', isPrimary: false },
+      { name: 'omi', isPrimary: true }
+    ]) {
+      for (const env of envs) {
+        const a = ts.computeDevInstance(base.name, base.isPrimary, env)
+        const b = mjs.computeInstance(base.name, base.isPrimary, env)
+        expect({ n: b.name, p: b.isPrimary, r: b.rendererPort, c: b.cdpPort }).toEqual({
+          n: a.name,
+          p: a.isPrimary,
+          r: a.rendererPort,
+          c: a.cdpPort
+        })
+      }
+    }
+  })
 })

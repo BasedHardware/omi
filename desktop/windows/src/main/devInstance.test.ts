@@ -116,6 +116,22 @@ describe('computeDevInstance', () => {
     expect(inst.rendererPort).toBe(deriveRendererPort('wt'))
     expect(inst.cdpPort).toBe(deriveCdpPort('wt'))
   })
+
+  it('OMI_DEV_REMOTE_DEBUG wins over OMI_DEV_CDP_PORT for the CDP port', () => {
+    // OMI_DEV_REMOTE_DEBUG is the switch dev/bench.ts actually binds, so it must
+    // take precedence — otherwise seed-auth would target the wrong port.
+    const inst = computeDevInstance('wt', false, {
+      OMI_DEV_CDP_PORT: '9251',
+      OMI_DEV_REMOTE_DEBUG: '9333'
+    })
+    expect(inst.cdpPort).toBe(9333)
+    // Falls through to OMI_DEV_CDP_PORT when OMI_DEV_REMOTE_DEBUG is garbage.
+    const inst2 = computeDevInstance('wt', false, {
+      OMI_DEV_CDP_PORT: '9251',
+      OMI_DEV_REMOTE_DEBUG: 'nope'
+    })
+    expect(inst2.cdpPort).toBe(9251)
+  })
 })
 
 describe('findWorktreeContext', () => {
