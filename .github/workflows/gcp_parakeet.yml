@@ -72,7 +72,7 @@ jobs:
 
       - name: Deploy Parakeet to GKE cluster using Helm
         run: |
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-${{ env.SERVICE }} ./backend/charts/${{ env.SERVICE }} -f ./backend/charts/${{ env.SERVICE }}/${{ vars.ENV }}_omi_${{ env.SERVICE }}_values.yaml --set "image.tag=${GITHUB_SHA::7}"
+          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-${{ env.SERVICE }} ./backend/charts/${{ env.SERVICE }} -f ./backend/charts/${{ env.SERVICE }}/${{ vars.ENV }}_omi_${{ env.SERVICE }}_values.yaml --set-string "image.tag=${GITHUB_SHA::7}"
 
       - name: Verify rollout
         run: |

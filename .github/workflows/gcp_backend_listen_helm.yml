@@ -94,7 +94,7 @@ jobs:
             --set image.repository=gcr.io/${{ vars.GCP_PROJECT_ID }}/backend \
             --set gcpProjectId=${{ vars.GCP_PROJECT_ID }} \
             --set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
-            --set "image.tag=${BACKEND_LISTEN_IMAGE_TAG}" \
+            --set-string "image.tag=${BACKEND_LISTEN_IMAGE_TAG}" \
             --dry-run
 
       # The ExternalSecret resource (which tells external-secrets which GCP
@@ -121,7 +121,7 @@ jobs:
             --set image.repository=gcr.io/${{ vars.GCP_PROJECT_ID }}/backend \
             --set gcpProjectId=${{ vars.GCP_PROJECT_ID }} \
             --set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
-            --set "image.tag=${BACKEND_LISTEN_IMAGE_TAG}"
+            --set-string "image.tag=${BACKEND_LISTEN_IMAGE_TAG}"
 
       - name: Verify rollout
         run: |
