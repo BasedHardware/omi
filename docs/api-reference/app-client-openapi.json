@@ -19828,6 +19828,64 @@
         "title": "TranscriptSegment",
         "type": "object"
       },
+      "TranscriptionErrorDetail": {
+        "properties": {
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/TranscriptionOutcome"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "error",
+          "outcome",
+          "provider",
+          "retryable",
+          "message"
+        ],
+        "title": "TranscriptionErrorDetail",
+        "type": "object"
+      },
+      "TranscriptionErrorResponse": {
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/TranscriptionErrorDetail"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "TranscriptionErrorResponse",
+        "type": "object"
+      },
+      "TranscriptionOutcome": {
+        "description": "Closed, low-cardinality vocabulary for every accepted transcription.",
+        "enum": [
+          "success",
+          "expected_silence",
+          "empty_unexpected",
+          "timeout",
+          "upstream_error",
+          "config_error",
+          "invalid_input"
+        ],
+        "title": "TranscriptionOutcome",
+        "type": "string"
+      },
       "TranscriptionPreferencesResponse": {
         "properties": {
           "custom_stt_since": {
@@ -21569,6 +21627,16 @@
               }
             ],
             "title": "Language"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranscriptionOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "stt_model": {
             "anyOf": [
@@ -53906,6 +53974,16 @@
             },
             "description": "Successful Response"
           },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptionErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid audio input"
+          },
           "401": {
             "$ref": "#/components/responses/Error401"
           },
@@ -53918,6 +53996,36 @@
               }
             },
             "description": "Validation Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptionErrorResponse"
+                }
+              }
+            },
+            "description": "Upstream or unexpected-empty result"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptionErrorResponse"
+                }
+              }
+            },
+            "description": "Provider configuration unavailable"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptionErrorResponse"
+                }
+              }
+            },
+            "description": "Provider timeout"
           }
         },
         "security": [

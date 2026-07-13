@@ -15,6 +15,7 @@ from types import ModuleType
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from starlette.websockets import WebSocketDisconnect
 
 # ---------------------------------------------------------------------------
 # Module-level stubs (same pattern as test_sync_transcription_prefs.py)
@@ -571,6 +572,11 @@ class TestDeepgramPrerecordedFromBytesPCM:
 class TestTranscribePcmBytes:
     """Verify transcribe_pcm_bytes passes language/model and propagates errors."""
 
+    @pytest.fixture(autouse=True)
+    def _speech_positive_pcm(self, monkeypatch):
+        """Keep provider-routing tests focused; VAD behavior has dedicated cases."""
+        monkeypatch.setattr('utils.chat.linear16_pcm_is_silent', lambda *_args, **_kwargs: False)
+
     @patch('utils.chat.postprocess_words')
     @patch('utils.chat.prerecorded_from_bytes')
     @patch('utils.chat.get_deepgram_model_for_language')
@@ -584,7 +590,7 @@ class TestTranscribePcmBytes:
         mock_seg.text = 'Hola'
         mock_postprocess.return_value = [mock_seg]
 
-        text, lang = transcribe_pcm_bytes(b'\x00' * 100, 'test-uid', language='es')
+        text, lang = transcribe_pcm_bytes(b'\x01' * 100, 'test-uid', language='es')
 
         mock_dg.assert_called_once()
         call_kwargs = mock_dg.call_args[1]
@@ -596,27 +602,73 @@ class TestTranscribePcmBytes:
     @patch('utils.chat.prerecorded_from_bytes')
     @patch('utils.chat.get_deepgram_model_for_language')
     def test_runtime_error_propagates(self, mock_get_model, mock_dg):
-        """RuntimeError from Deepgram should propagate (not be caught)."""
+        """Provider failures should become safe typed upstream failures."""
         from utils.chat import transcribe_pcm_bytes
+        from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
 
         mock_get_model.return_value = ('en', 'nova-3')
         mock_dg.side_effect = RuntimeError('Deepgram failed')
 
-        with pytest.raises(RuntimeError, match='Deepgram failed'):
-            transcribe_pcm_bytes(b'\x00' * 100, 'test-uid')
+        with pytest.raises(TranscriptionFailure) as exc_info:
+            transcribe_pcm_bytes(b'\x01' * 100, 'test-uid')
+        assert exc_info.value.outcome == TranscriptionOutcome.UPSTREAM_ERROR
+        assert 'Deepgram failed' not in str(exc_info.value)
 
     @patch('utils.chat.prerecorded_from_bytes')
     @patch('utils.chat.get_deepgram_model_for_language')
-    def test_empty_words_returns_none(self, mock_get_model, mock_dg):
-        """Empty word list should return (None, language)."""
+    def test_empty_words_after_audio_is_unexpected(self, mock_get_model, mock_dg):
+        """Non-silent audio with an empty provider result is retryable failure."""
         from utils.chat import transcribe_pcm_bytes
+        from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
 
         mock_get_model.return_value = ('en', 'nova-3')
         mock_dg.return_value = []
 
-        text, lang = transcribe_pcm_bytes(b'\x00' * 100, 'test-uid', language='en')
-        assert text is None
-        assert lang == 'en'
+        with pytest.raises(TranscriptionFailure) as exc_info:
+            transcribe_pcm_bytes(b'\x01' * 100, 'test-uid', language='en')
+        assert exc_info.value.outcome == TranscriptionOutcome.EMPTY_UNEXPECTED
+        assert exc_info.value.retryable is True
+
+    @patch('utils.chat.linear16_pcm_is_silent', return_value=True)
+    @patch('utils.chat.prerecorded_from_bytes')
+    @patch('utils.chat.get_deepgram_model_for_language')
+    def test_linear16_vad_silence_is_expected_silence(self, mock_get_model, mock_dg, mock_vad):
+        """Only a successful local VAD silence decision gets the 200 empty path."""
+        from utils.chat import transcribe_pcm_bytes
+
+        mock_get_model.return_value = ('en', 'nova-3')
+        assert transcribe_pcm_bytes(b'\x00' * 100, 'test-uid', language='en') == (None, 'en')
+        mock_dg.assert_not_called()
+        mock_vad.assert_called_once_with(b'\x00' * 100, sample_rate=16000, channels=1)
+
+    @patch('utils.chat.prerecorded_from_bytes', side_effect=RuntimeError('encoded provider rejected input'))
+    @patch('utils.chat.get_deepgram_model_for_language')
+    def test_non_linear16_zero_bytes_are_not_claimed_as_silence(self, mock_get_model, mock_dg):
+        """Encoded bytes need provider validation; zero bytes are not PCM silence."""
+        from utils.chat import transcribe_pcm_bytes
+        from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
+
+        mock_get_model.return_value = ('en', 'nova-3')
+        with pytest.raises(TranscriptionFailure) as exc_info:
+            transcribe_pcm_bytes(b'\x00' * 100, 'test-uid', language='en', encoding='opus')
+
+        assert exc_info.value.outcome == TranscriptionOutcome.UPSTREAM_ERROR
+        mock_dg.assert_called_once()
+
+    @patch('utils.chat.linear16_pcm_is_silent')
+    @patch('utils.chat.get_deepgram_model_for_language')
+    def test_linear16_vad_decode_failure_is_invalid_input(self, mock_get_model, mock_vad):
+        from utils.chat import transcribe_pcm_bytes
+        from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
+        from utils.stt.vad import VADAudioDecodeError
+
+        mock_get_model.return_value = ('en', 'nova-3')
+        mock_vad.side_effect = VADAudioDecodeError('bad PCM')
+
+        with pytest.raises(TranscriptionFailure) as exc_info:
+            transcribe_pcm_bytes(b'\x01' * 100, 'test-uid', language='en')
+
+        assert exc_info.value.outcome == TranscriptionOutcome.INVALID_INPUT
 
     @patch('utils.chat.postprocess_words')
     @patch('utils.chat.prerecorded_from_bytes')
@@ -632,7 +684,7 @@ class TestTranscribePcmBytes:
         mock_seg.text = 'Bonjour'
         mock_postprocess.return_value = [mock_seg]
 
-        text, lang = transcribe_pcm_bytes(b'\x00' * 100, 'test-uid', language='multi')
+        text, lang = transcribe_pcm_bytes(b'\x01' * 100, 'test-uid', language='multi')
 
         assert text == 'Bonjour'
         assert lang == 'fr'
@@ -653,7 +705,7 @@ class TestTranscribePcmBytes:
         mock_seg.text = '你好'
         mock_postprocess.return_value = [mock_seg]
 
-        text, lang = transcribe_pcm_bytes(b'\x00' * 100, 'test-uid', language='zh')
+        text, lang = transcribe_pcm_bytes(b'\x01' * 100, 'test-uid', language='zh')
 
         call_kwargs = mock_dg.call_args[1]
         assert call_kwargs['model'] == 'nova-3'
@@ -662,9 +714,10 @@ class TestTranscribePcmBytes:
     @patch('utils.chat.postprocess_words')
     @patch('utils.chat.prerecorded_from_bytes')
     @patch('utils.chat.get_deepgram_model_for_language')
-    def test_whitespace_only_transcript_returns_none(self, mock_get_model, mock_dg, mock_postprocess):
-        """Whitespace-only transcript after postprocessing should return (None, language)."""
+    def test_whitespace_only_transcript_is_unexpected_empty(self, mock_get_model, mock_dg, mock_postprocess):
+        """Whitespace-only provider output is not reclassified as silence."""
         from utils.chat import transcribe_pcm_bytes
+        from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
 
         mock_get_model.return_value = ('en', 'nova-3')
         mock_dg.return_value = [{'timestamp': [0.0, 0.5], 'speaker': 'SPEAKER_00', 'text': ' '}]
@@ -672,23 +725,24 @@ class TestTranscribePcmBytes:
         mock_seg.text = '   '
         mock_postprocess.return_value = [mock_seg]
 
-        text, lang = transcribe_pcm_bytes(b'\x00' * 100, 'test-uid', language='en')
-        assert text is None
-        assert lang == 'en'
+        with pytest.raises(TranscriptionFailure) as exc_info:
+            transcribe_pcm_bytes(b'\x01' * 100, 'test-uid', language='en')
+        assert exc_info.value.outcome == TranscriptionOutcome.EMPTY_UNEXPECTED
 
     @patch('utils.chat.prerecorded_from_bytes')
     @patch('utils.chat.get_deepgram_model_for_language')
-    def test_postprocess_empty_returns_none(self, mock_get_model, mock_dg):
-        """postprocess_words returning empty list should return (None, language)."""
+    def test_postprocess_empty_is_unexpected(self, mock_get_model, mock_dg):
+        """An empty postprocessed result stays a retryable provider failure."""
         from utils.chat import transcribe_pcm_bytes
+        from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
 
         mock_get_model.return_value = ('en', 'nova-3')
         mock_dg.return_value = [{'timestamp': [0.0, 0.5], 'speaker': 'SPEAKER_00', 'text': 'hello'}]
         # postprocess_words is imported at module level; mock it
         with patch('utils.chat.postprocess_words', return_value=[]):
-            text, lang = transcribe_pcm_bytes(b'\x00' * 100, 'test-uid', language='en')
-        assert text is None
-        assert lang == 'en'
+            with pytest.raises(TranscriptionFailure) as exc_info:
+                transcribe_pcm_bytes(b'\x01' * 100, 'test-uid', language='en')
+        assert exc_info.value.outcome == TranscriptionOutcome.EMPTY_UNEXPECTED
 
 
 # ---------------------------------------------------------------------------
@@ -850,6 +904,16 @@ def _cleanup_chat_client(saved):
 class TestVoiceMessageTranscribeEndpoint:
     """Test /v2/voice-message/transcribe content-type dispatch and validation."""
 
+    def test_openapi_declares_typed_transcription_failures(self):
+        client, module, saved = _make_chat_client()
+        try:
+            operation = client.get('/openapi.json').json()['paths']['/v2/voice-message/transcribe']['post']
+            for status in ('400', '502', '503', '504'):
+                schema = operation['responses'][status]['content']['application/json']['schema']
+                assert schema['$ref'].endswith('/TranscriptionErrorResponse')
+        finally:
+            _cleanup_chat_client(saved)
+
     @patch('utils.chat.transcribe_pcm_bytes')
     def test_octet_stream_returns_transcript(self, mock_transcribe):
         """application/octet-stream should dispatch to PCM path and return JSON."""
@@ -867,6 +931,7 @@ class TestVoiceMessageTranscribeEndpoint:
             assert data['language'] == 'en'
             assert data['stt_provider'] == 'deepgram'
             assert data['stt_model'] == 'nova-3'
+            assert data['outcome'] == 'success'
             assert mock_transcribe.call_args.kwargs['keywords'] == ['Aarav', 'Ansh']
         finally:
             _cleanup_chat_client(saved)
@@ -885,8 +950,8 @@ class TestVoiceMessageTranscribeEndpoint:
         finally:
             _cleanup_chat_client(saved)
 
-    def test_octet_stream_bad_sample_rate_422(self):
-        """Non-integer sample_rate should return 422, not 500."""
+    def test_octet_stream_bad_sample_rate_400(self):
+        """Non-integer sample_rate returns a typed invalid-input failure."""
         client, module, saved = _make_chat_client()
         try:
             resp = client.post(
@@ -894,13 +959,13 @@ class TestVoiceMessageTranscribeEndpoint:
                 content=b'\x00' * 3200,
                 headers={'Content-Type': 'application/octet-stream'},
             )
-            assert resp.status_code == 422
-            assert 'integers' in resp.json()['detail']
+            assert resp.status_code == 400
+            assert resp.json()['detail']['outcome'] == 'invalid_input'
         finally:
             _cleanup_chat_client(saved)
 
-    def test_octet_stream_bad_channels_422(self):
-        """Non-integer channels should return 422, not 500."""
+    def test_octet_stream_bad_channels_400(self):
+        """Non-integer channels returns a typed invalid-input failure."""
         client, module, saved = _make_chat_client()
         try:
             resp = client.post(
@@ -908,13 +973,13 @@ class TestVoiceMessageTranscribeEndpoint:
                 content=b'\x00' * 3200,
                 headers={'Content-Type': 'application/octet-stream'},
             )
-            assert resp.status_code == 422
-            assert 'integers' in resp.json()['detail']
+            assert resp.status_code == 400
+            assert resp.json()['detail']['outcome'] == 'invalid_input'
         finally:
             _cleanup_chat_client(saved)
 
-    def test_octet_stream_sample_rate_zero_422(self):
-        """sample_rate=0 should return 422."""
+    def test_octet_stream_sample_rate_zero_400(self):
+        """sample_rate=0 returns a typed invalid-input failure."""
         client, module, saved = _make_chat_client()
         try:
             resp = client.post(
@@ -922,13 +987,13 @@ class TestVoiceMessageTranscribeEndpoint:
                 content=b'\x00' * 3200,
                 headers={'Content-Type': 'application/octet-stream'},
             )
-            assert resp.status_code == 422
-            assert 'sample_rate' in resp.json()['detail']
+            assert resp.status_code == 400
+            assert resp.json()['detail']['outcome'] == 'invalid_input'
         finally:
             _cleanup_chat_client(saved)
 
-    def test_octet_stream_channels_zero_422(self):
-        """channels=0 should return 422."""
+    def test_octet_stream_channels_zero_400(self):
+        """channels=0 returns a typed invalid-input failure."""
         client, module, saved = _make_chat_client()
         try:
             resp = client.post(
@@ -936,8 +1001,8 @@ class TestVoiceMessageTranscribeEndpoint:
                 content=b'\x00' * 3200,
                 headers={'Content-Type': 'application/octet-stream'},
             )
-            assert resp.status_code == 422
-            assert 'channels' in resp.json()['detail']
+            assert resp.status_code == 400
+            assert resp.json()['detail']['outcome'] == 'invalid_input'
         finally:
             _cleanup_chat_client(saved)
 
@@ -954,13 +1019,14 @@ class TestVoiceMessageTranscribeEndpoint:
             )
             assert resp.status_code == 200
             assert resp.json()['transcript'] == ''
+            assert resp.json()['outcome'] == 'expected_silence'
         finally:
             _cleanup_chat_client(saved)
 
     @patch('utils.chat.transcribe_pcm_bytes')
-    def test_octet_stream_runtime_error_returns_500(self, mock_transcribe):
-        """RuntimeError from transcribe_pcm_bytes should return 500."""
-        mock_transcribe.side_effect = RuntimeError('Deepgram connection failed')
+    def test_octet_stream_runtime_error_returns_safe_502(self, mock_transcribe):
+        """Provider failures return a typed safe payload without exception text."""
+        mock_transcribe.side_effect = RuntimeError('secret upstream response body')
         client, module, saved = _make_chat_client()
         try:
             resp = client.post(
@@ -968,8 +1034,53 @@ class TestVoiceMessageTranscribeEndpoint:
                 content=b'\x00' * 3200,
                 headers={'Content-Type': 'application/octet-stream'},
             )
-            assert resp.status_code == 500
-            assert 'Transcription failed' in resp.json()['detail']
+            assert resp.status_code == 502
+            detail = resp.json()['detail']
+            assert detail['error'] == 'stt_upstream_error'
+            assert detail['outcome'] == 'upstream_error'
+            assert detail['retryable'] is True
+            assert 'secret upstream response body' not in resp.text
+        finally:
+            _cleanup_chat_client(saved)
+
+    @patch('utils.chat.transcribe_pcm_bytes')
+    def test_octet_stream_timeout_returns_safe_504(self, mock_transcribe):
+        """A typed timeout has distinct status and safe retry metadata."""
+        from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
+
+        mock_transcribe.side_effect = TranscriptionFailure(TranscriptionOutcome.TIMEOUT, provider='deepgram')
+        client, module, saved = _make_chat_client()
+        try:
+            resp = client.post(
+                '/v2/voice-message/transcribe',
+                content=b'\x01' * 3200,
+                headers={'Content-Type': 'application/octet-stream'},
+            )
+            assert resp.status_code == 504
+            assert resp.json()['detail']['outcome'] == 'timeout'
+            assert resp.json()['detail']['retryable'] is True
+        finally:
+            _cleanup_chat_client(saved)
+
+    @patch('utils.chat.transcribe_pcm_bytes')
+    def test_octet_stream_provider_empty_returns_safe_502(self, mock_transcribe):
+        """Speech-positive empty output is distinct from the 200 silence path."""
+        from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
+
+        mock_transcribe.side_effect = TranscriptionFailure(
+            TranscriptionOutcome.EMPTY_UNEXPECTED,
+            provider='deepgram',
+        )
+        client, module, saved = _make_chat_client()
+        try:
+            resp = client.post(
+                '/v2/voice-message/transcribe',
+                content=b'\x01' * 3200,
+                headers={'Content-Type': 'application/octet-stream'},
+            )
+            assert resp.status_code == 502
+            assert resp.json()['detail']['outcome'] == 'empty_unexpected'
+            assert resp.json()['detail']['retryable'] is True
         finally:
             _cleanup_chat_client(saved)
 
@@ -987,11 +1098,12 @@ class TestVoiceMessageTranscribeEndpoint:
                 headers={'Content-Type': 'application/octet-stream'},
             )
             assert resp.status_code == 503
-            assert resp.json()['detail'] == {
-                'error': 'stt_provider_configuration_error',
-                'provider': 'parakeet',
-                'missing': 'HOSTED_PARAKEET_API_URL',
-            }
+            detail = resp.json()['detail']
+            assert detail['error'] == 'stt_provider_configuration_error'
+            assert detail['outcome'] == 'config_error'
+            assert detail['provider'] == 'parakeet'
+            assert detail['retryable'] is False
+            assert 'HOSTED_PARAKEET_API_URL' not in resp.text
         finally:
             _cleanup_chat_client(saved)
 
@@ -1028,6 +1140,7 @@ class TestTranscribeStreamWebSocket:
                             }
                         ]
                     )
+                    return True
 
                 mock_dg_socket.send = MagicMock(side_effect=fake_send)
                 mock_dg_socket.finalize = MagicMock()
@@ -1064,6 +1177,69 @@ class TestTranscribeStreamWebSocket:
                     with pytest.raises(Exception):
                         with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
                             ws.receive_json()  # Should not get here
+        finally:
+            _cleanup_chat_client(saved)
+
+    def test_ws_rejected_audio_send_closes_1011_without_charge_or_finalize(self):
+        """A rejected provider send must remain terminal, uncharged, and cleaned up."""
+        client, module, saved = _make_chat_client()
+        try:
+            mock_dg_socket = MagicMock()
+            mock_dg_socket.is_connection_dead = False
+            mock_dg_socket.death_reason = None
+            mock_dg_socket.send = MagicMock(return_value=False)
+            mock_dg_socket.finalize = MagicMock()
+            mock_dg_socket.finish = MagicMock()
+
+            async def mock_process_audio_dg(stream_transcript, **kwargs):
+                return mock_dg_socket
+
+            with patch.object(module, 'check_budget', return_value=(True, 0, 7200000)):
+                with patch.object(module, 'get_stt_service_for_language', return_value=(MagicMock(), 'en', 'nova-3')):
+                    with patch.object(module, 'process_audio_dg', side_effect=mock_process_audio_dg):
+                        with patch.object(module, 'record_actual_duration') as mock_record_duration:
+                            with pytest.raises(WebSocketDisconnect) as exc_info:
+                                with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
+                                    ws.send_bytes(b'\x00' * 960)
+                                    ws.receive_json()
+
+            assert exc_info.value.code == 1011
+            mock_dg_socket.send.assert_called_once_with(b'\x00' * 960)
+            mock_dg_socket.finalize.assert_not_called()
+            mock_dg_socket.finish.assert_called_once()
+            mock_record_duration.assert_not_called()
+        finally:
+            _cleanup_chat_client(saved)
+
+    def test_ws_finalize_failure_closes_1011_without_charge(self):
+        """A provider finalization failure is terminal, retryable, and cleaned up."""
+        client, module, saved = _make_chat_client()
+        try:
+            mock_dg_socket = MagicMock()
+            mock_dg_socket.is_connection_dead = False
+            mock_dg_socket.death_reason = None
+            mock_dg_socket.send = MagicMock(return_value=True)
+            mock_dg_socket.finalize = MagicMock(side_effect=RuntimeError('provider finalization failed'))
+            mock_dg_socket.finish = MagicMock()
+
+            async def mock_process_audio_dg(stream_transcript, **kwargs):
+                return mock_dg_socket
+
+            with patch.object(module, 'check_budget', return_value=(True, 0, 7200000)):
+                with patch.object(module, 'get_stt_service_for_language', return_value=(MagicMock(), 'en', 'nova-3')):
+                    with patch.object(module, 'process_audio_dg', side_effect=mock_process_audio_dg):
+                        with patch.object(module, 'record_actual_duration') as mock_record_duration:
+                            with pytest.raises(WebSocketDisconnect) as exc_info:
+                                with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
+                                    ws.send_bytes(b'\x00' * 500)
+                                    ws.send_text('finalize')
+                                    ws.receive_json()
+
+            assert exc_info.value.code == 1011
+            mock_dg_socket.send.assert_called_once_with(b'\x00' * 500)
+            mock_dg_socket.finalize.assert_called_once()
+            mock_dg_socket.finish.assert_called_once()
+            mock_record_duration.assert_not_called()
         finally:
             _cleanup_chat_client(saved)
 
@@ -1110,6 +1286,7 @@ class TestTranscribeStreamWebSocket:
                                 }
                             ]
                         )
+                    return True
 
                 mock_dg_socket.send = MagicMock(side_effect=fake_send)
                 mock_dg_socket.finalize = MagicMock()
@@ -1132,7 +1309,7 @@ class TestTranscribeStreamWebSocket:
                             assert data[0]['text'] == 'Final'
 
             # Verify finalize was called
-            mock_dg_socket.finalize.assert_called()
+            mock_dg_socket.finalize.assert_called_once()
         finally:
             _cleanup_chat_client(saved)
 
@@ -1160,6 +1337,7 @@ class TestTranscribeStreamWebSocket:
                             }
                         ]
                     )
+                    return True
 
                 mock_dg_socket.send = MagicMock(side_effect=fake_send)
                 mock_dg_socket.finalize = MagicMock()
@@ -1223,7 +1401,7 @@ class TestTranscribeStreamWebSocket:
 
             async def mock_process_audio_dg(stream_transcript, **kwargs):
                 assert kwargs.get('sample_rate') == 8000
-                mock_dg_socket.send = MagicMock()
+                mock_dg_socket.send = MagicMock(return_value=True)
                 mock_dg_socket.finalize = MagicMock()
                 mock_dg_socket.finish = MagicMock()
                 return mock_dg_socket
@@ -1246,7 +1424,7 @@ class TestTranscribeStreamWebSocket:
 
             async def mock_process_audio_dg(stream_transcript, **kwargs):
                 assert kwargs.get('sample_rate') == 48000
-                mock_dg_socket.send = MagicMock()
+                mock_dg_socket.send = MagicMock(return_value=True)
                 mock_dg_socket.finalize = MagicMock()
                 mock_dg_socket.finish = MagicMock()
                 return mock_dg_socket
@@ -1263,7 +1441,7 @@ class TestVoiceMessageTranscribeBoundary:
     """Boundary tests for /v2/voice-message/transcribe REST endpoint."""
 
     def test_octet_stream_sample_rate_above_48000_rejected(self):
-        """sample_rate > 48000 should return 422."""
+        """sample_rate > 48000 returns a typed invalid-input failure."""
         client, module, saved = _make_chat_client()
         try:
             resp = client.post(
@@ -1271,13 +1449,13 @@ class TestVoiceMessageTranscribeBoundary:
                 content=b'\x00' * 3200,
                 headers={'Content-Type': 'application/octet-stream'},
             )
-            assert resp.status_code == 422
-            assert 'sample_rate' in resp.json()['detail']
+            assert resp.status_code == 400
+            assert resp.json()['detail']['outcome'] == 'invalid_input'
         finally:
             _cleanup_chat_client(saved)
 
     def test_octet_stream_channels_above_2_rejected(self):
-        """channels > 2 should return 422."""
+        """channels > 2 returns a typed invalid-input failure."""
         client, module, saved = _make_chat_client()
         try:
             resp = client.post(
@@ -1285,8 +1463,8 @@ class TestVoiceMessageTranscribeBoundary:
                 content=b'\x00' * 3200,
                 headers={'Content-Type': 'application/octet-stream'},
             )
-            assert resp.status_code == 422
-            assert 'channels' in resp.json()['detail']
+            assert resp.status_code == 400
+            assert resp.json()['detail']['outcome'] == 'invalid_input'
         finally:
             _cleanup_chat_client(saved)
 
@@ -1444,7 +1622,7 @@ class TestWsBudgetAndSessionCap:
             mock_dg_socket.death_reason = None
 
             async def mock_process_audio_dg(stream_transcript, **kwargs):
-                mock_dg_socket.send = MagicMock()
+                mock_dg_socket.send = MagicMock(return_value=True)
                 mock_dg_socket.finalize = MagicMock()
                 mock_dg_socket.finish = MagicMock()
                 return mock_dg_socket
@@ -1523,7 +1701,7 @@ class TestWsIdleTimeout:
             mock_dg_socket.death_reason = None
 
             async def mock_process_audio_dg(stream_transcript, **kwargs):
-                mock_dg_socket.send = MagicMock()
+                mock_dg_socket.send = MagicMock(return_value=True)
                 mock_dg_socket.finalize = MagicMock()
                 mock_dg_socket.finish = MagicMock()
                 return mock_dg_socket
@@ -1555,7 +1733,7 @@ class TestWsIdleTimeout:
             mock_dg_socket.death_reason = None
 
             async def mock_process_audio_dg(stream_transcript, **kwargs):
-                mock_dg_socket.send = MagicMock()
+                mock_dg_socket.send = MagicMock(return_value=True)
                 mock_dg_socket.finalize = MagicMock()
                 mock_dg_socket.finish = MagicMock()
                 return mock_dg_socket
@@ -1618,6 +1796,45 @@ class TestVoiceMessagesBudgetHappyPath:
         finally:
             _cleanup_chat_client(saved)
 
+    def test_voice_messages_stt_failure_emits_typed_sse_error(self):
+        """An STT terminal failure is an explicit safe frame, not silent EOF."""
+        import io
+
+        from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
+
+        client, module, saved = _make_chat_client()
+        try:
+
+            async def failing_stream(*args, **kwargs):
+                raise TranscriptionFailure(
+                    TranscriptionOutcome.EMPTY_UNEXPECTED,
+                    provider='deepgram',
+                )
+                yield  # pragma: no cover - retain async-generator shape
+
+            with patch.object(module, 'retrieve_file_paths', return_value=['/tmp/test_vm.wav']):
+                with patch.object(module, 'decode_files_to_wav', return_value=['/tmp/test_vm_decoded.wav']):
+                    with patch.object(module, 'read_wav_duration_ms', return_value=1_000):
+                        with patch.object(module, 'try_consume_budget', return_value=(True, 1000, 7199000)):
+                            with patch.object(module, 'resolve_voice_message_language', return_value='en'):
+                                with patch.object(
+                                    module,
+                                    'process_voice_message_segment_stream',
+                                    side_effect=failing_stream,
+                                ):
+                                    resp = client.post(
+                                        '/v2/voice-messages',
+                                        files=[('files', ('test.wav', io.BytesIO(b'not-user-data'), 'audio/wav'))],
+                                    )
+
+            assert resp.status_code == 200
+            assert resp.text.startswith('error: {')
+            assert '"outcome":"empty_unexpected"' in resp.text
+            assert '"retryable":true' in resp.text
+            assert 'not-user-data' not in resp.text
+        finally:
+            _cleanup_chat_client(saved)
+
 
 class TestMultipartBudgetAggregation:
     """Test that multipart multi-file uploads sum WAV durations correctly."""
@@ -1659,8 +1876,8 @@ class TestWsMidSessionBudgetEnforcement:
     def test_ws_closes_when_budget_exceeded_mid_session(self):
         """WS should close with 1008 when cumulative audio exceeds remaining daily budget.
 
-        The triggering frame should NOT be counted — total_audio_bytes is only
-        incremented for frames that pass the budget check and reach Deepgram.
+        The triggering frame should NOT be counted — received audio is only
+        incremented after it passes the budget check and reaches the buffer.
         """
         client, module, saved = _make_chat_client()
         try:
@@ -1669,7 +1886,7 @@ class TestWsMidSessionBudgetEnforcement:
             mock_dg_socket.death_reason = None
 
             async def mock_process_audio_dg(stream_transcript, **kwargs):
-                mock_dg_socket.send = MagicMock()
+                mock_dg_socket.send = MagicMock(return_value=True)
                 mock_dg_socket.finalize = MagicMock()
                 mock_dg_socket.finish = MagicMock()
                 return mock_dg_socket
@@ -1702,7 +1919,7 @@ class TestWsMidSessionBudgetEnforcement:
             mock_dg_socket.death_reason = None
 
             async def mock_process_audio_dg(stream_transcript, **kwargs):
-                mock_dg_socket.send = MagicMock()
+                mock_dg_socket.send = MagicMock(return_value=True)
                 mock_dg_socket.finalize = MagicMock()
                 mock_dg_socket.finish = MagicMock()
                 return mock_dg_socket
@@ -1728,7 +1945,7 @@ class TestWsMidSessionBudgetEnforcement:
             mock_dg_socket.death_reason = None
 
             async def mock_process_audio_dg(stream_transcript, **kwargs):
-                mock_dg_socket.send = MagicMock()
+                mock_dg_socket.send = MagicMock(return_value=True)
                 mock_dg_socket.finalize = MagicMock()
                 mock_dg_socket.finish = MagicMock()
                 return mock_dg_socket

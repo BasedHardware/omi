@@ -3255,6 +3255,20 @@ export interface TranscriptSegment {
   translations?: Array<Translation> | null;
 }
 
+export interface TranscriptionErrorDetail {
+  error: string;
+  message: string;
+  outcome: TranscriptionOutcome;
+  provider: string;
+  retryable: boolean;
+}
+
+export interface TranscriptionErrorResponse {
+  detail: TranscriptionErrorDetail;
+}
+
+export type TranscriptionOutcome = "success" | "expected_silence" | "empty_unexpected" | "timeout" | "upstream_error" | "config_error" | "invalid_input";
+
 export interface TranscriptionPreferencesResponse {
   custom_stt_since?: string | null;
   language?: string;
@@ -3530,6 +3544,7 @@ export interface VerifyPhoneNumberResponse {
 
 export interface VoiceMessageTranscriptionResponse {
   language?: string | null;
+  outcome?: TranscriptionOutcome | null;
   stt_model?: string | null;
   stt_provider?: string | null;
   transcript: string;
@@ -4109,6 +4124,9 @@ export interface OmiApiSchemas {
   "TokenResponse": TokenResponse;
   "TrainingDataOptInResponse": TrainingDataOptInResponse;
   "TranscriptSegment": TranscriptSegment;
+  "TranscriptionErrorDetail": TranscriptionErrorDetail;
+  "TranscriptionErrorResponse": TranscriptionErrorResponse;
+  "TranscriptionOutcome": TranscriptionOutcome;
   "TranscriptionPreferencesResponse": TranscriptionPreferencesResponse;
   "TranscriptionPreferencesUpdate": TranscriptionPreferencesUpdate;
   "Translation": Translation;
@@ -7805,8 +7823,12 @@ export interface OmiApiPaths {
       operationId: "transcribe_voice_message_v2_voice_message_transcribe_post";
       responses: {
         "200": VoiceMessageTranscriptionResponse;
+        "400": TranscriptionErrorResponse;
         "401": void;
         "422": HTTPValidationError;
+        "502": TranscriptionErrorResponse;
+        "503": TranscriptionErrorResponse;
+        "504": TranscriptionErrorResponse;
       };
     };
   };

@@ -1334,7 +1334,9 @@ struct DashboardPage: View {
     }
 
     private var homeHeader: some View {
-        HStack {
+        let transcriptionUnavailable = appState.transcriptionServiceError != nil
+
+        return HStack {
             Spacer()
             HStack(spacing: OmiSpacing.sm) {
                 HomeStatusButton(
@@ -1346,9 +1348,11 @@ struct DashboardPage: View {
                 )
 
                 HomeListeningStatusButton(
-                    title: "Listening",
-                    systemImage: appState.isTranscribing ? "waveform.circle.fill" : "mic.circle",
-                    status: appState.isTranscribing ? .active : .inactive,
+                    title: transcriptionUnavailable ? "Transcription unavailable" : "Listening",
+                    systemImage: transcriptionUnavailable
+                        ? "exclamationmark.triangle.fill"
+                        : (appState.isTranscribing ? "waveform.circle.fill" : "mic.circle"),
+                    status: transcriptionUnavailable ? .blocked : (appState.isTranscribing ? .active : .inactive),
                     modeTitle: listeningModeTitle,
                     isMeetingsOnly: listeningCaptureMode == .onlyDuringMeetings,
                     isToggling: isTogglingListening,

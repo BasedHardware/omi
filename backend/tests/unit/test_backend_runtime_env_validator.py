@@ -58,6 +58,15 @@ def with_memory_env(payload: str) -> str:
     )
 
 
+def with_sync_ledger_fence_mode(payload: str) -> str:
+    """Keep offline Cloud Run state fixtures aligned with the protected rollout default."""
+    return payload.replace(
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
+        '        {"name": "SYNC_LEDGER_FENCE_MODE", "value": "legacy"},',
+    )
+
+
 GOOGLE_OAUTH_SECRETS = '''\
         {"name": "GOOGLE_CLIENT_ID", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_ID"}}},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET"}}},
@@ -67,12 +76,24 @@ GOOGLE_OAUTH_SECRETS = '''\
 
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
-    payload = with_memory_env(payload)
+    payload = with_memory_env(with_sync_ledger_fence_mode(payload))
     return re.sub(
         r'^(\s*\{"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN".*\}\s*\})\s*,?\s*$',
         r'\1,\n' + GOOGLE_OAUTH_SECRETS.rstrip(','),
         payload,
         flags=re.MULTILINE,
+    )
+
+
+def validate_cloud_run_workflows_only(validator, *, env: str, manifest_path: Path):
+    """Exercise a workflow fixture without unrelated full-manifest rollout contracts."""
+    manifest = validator._load_yaml(manifest_path)
+    return validator._validate_cloud_run_workflows(
+        env,
+        validator._get_env_config(manifest, env),
+        strict_provisional=False,
+        manifest_path=manifest_path,
+        manifest=manifest,
     )
 
 
@@ -498,7 +519,7 @@ def test_cloud_run_workflow_reports_missing_gateway_url(tmp_path):
         },
     )
 
-    errors = validator.validate_runtime_env(env='dev', manifest_path=manifest_path, check_workflows=True)
+    errors = validate_cloud_run_workflows_only(validator, env='dev', manifest_path=manifest_path)
 
     assert any(error.message == 'missing env OMI_LLM_GATEWAY_URL' for error in errors)
     assert any(error.scope == 'cloud_run_workflow/backend' for error in errors)
@@ -617,7 +638,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         },
     )
 
-    errors = validator.validate_runtime_env(env='dev', manifest_path=manifest_path, check_workflows=True)
+    errors = validate_cloud_run_workflows_only(validator, env='dev', manifest_path=manifest_path)
 
     assert errors == []
 
@@ -844,10 +865,11 @@ def test_provisional_prod_endpoint_requires_presence_but_not_exact_value(tmp_pat
         encoding='utf-8',
     )
 
-    errors = validator.validate_runtime_env(
-        env='prod',
-        manifest_path=manifest_path,
-        cloud_run_state_path=state_path,
+    manifest = validator._load_yaml(manifest_path)
+    errors = validator._validate_cloud_run(
+        validator._get_env_config(manifest, 'prod'),
+        validator._load_json(state_path),
+        strict_provisional=False,
     )
 
     assert errors == []
@@ -1169,7 +1191,7 @@ def test_sync_backfill_co_deploy_is_required_per_workflow(tmp_path):
         },
     )
 
-    errors = validator.validate_runtime_env(env='dev', manifest_path=manifest_path, check_workflows=True)
+    errors = validate_cloud_run_workflows_only(validator, env='dev', manifest_path=manifest_path)
 
     assert any(
         error.message == 'deploys backend-sync without backend-sync-backfill' and str(incomplete) in error.scope

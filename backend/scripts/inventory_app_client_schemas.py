@@ -32,6 +32,15 @@ LOCAL_NON_REST_SCHEMA_FILES = frozenset(
     }
 )
 
+# These helpers parse an SSE transport frame, not an OpenAPI REST response.
+# Keep this allowlist exact: adding an entry requires a behavioral parser test
+# and must not be used to exempt normal HTTP response DTO decoding.
+STREAM_PROTOCOL_DECODER_FUNCTIONS = frozenset(
+    {
+        (APP_API_DIR / 'messages.dart', 'parseVoiceMessageStreamChunk'),
+    }
+)
+
 CLASS_RE = re.compile(r'^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)\b', re.MULTILINE)
 ENUM_RE = re.compile(r'^\s*enum\s+([A-Za-z_][A-Za-z0-9_]*)\b', re.MULTILINE)
 FROM_JSON_RE = re.compile(r'\b(?:factory|static)?\s*([A-Za-z_][A-Za-z0-9_]*)?\.?fromJson\s*\(')
@@ -191,7 +200,10 @@ class AppOperationManifestItem:
     raw_decode_scope: str
 
     def to_report(self) -> dict[str, Any]:
-        raw_sites = [site for site in self.decode_sites if not site.generated_backed]
+        stream_protocol_sites = [site for site in self.decode_sites if site.context == 'stream_protocol']
+        raw_sites = [
+            site for site in self.decode_sites if not site.generated_backed and site.context != 'stream_protocol'
+        ]
         raw_response_sites = [site for site in raw_sites if site.context == 'response_decode']
         raw_request_sites = [site for site in raw_sites if site.context == 'request_encode']
         generated_backed_sites = [site for site in self.decode_sites if site.generated_backed]
@@ -212,6 +224,8 @@ class AppOperationManifestItem:
             'raw_decode_scope': self.raw_decode_scope,
             'decode_site_count': len(self.decode_sites),
             'decode_sites': [site.to_report() for site in self.decode_sites],
+            'stream_protocol_decode_site_count': len(stream_protocol_sites),
+            'stream_protocol_decode_sites': [site.to_report() for site in stream_protocol_sites],
             'generated_backed_decode_site_count': len(generated_backed_sites),
             'generated_backed_decode_sites': [site.to_report() for site in generated_backed_sites],
             'raw_decode_site_count': len(raw_sites),
@@ -291,11 +305,16 @@ def scan_dart_decode_sites() -> list[DartDecodeSite]:
         if path.name.endswith('.gen.dart') or path.name.endswith('.g.dart') or path in LOCAL_NON_REST_SCHEMA_FILES:
             continue
         lines = path.read_text().splitlines()
+        functions = _function_ranges(path.read_text())
         for index, line in enumerate(lines, start=1):
             stripped = line.strip()
             if not stripped or stripped.startswith('//') or not RAW_DECODE_RE.search(line):
                 continue
             window = '\n'.join(lines[max(0, index - 3) : min(len(lines), index + 3)])
+            enclosing_function = _enclosing_function(functions, index)
+            is_stream_protocol = (
+                enclosing_function is not None and (path, enclosing_function.name) in STREAM_PROTOCOL_DECODER_FUNCTIONS
+            )
             sites.append(
                 DartDecodeSite(
                     path=path,
@@ -303,7 +322,7 @@ def scan_dart_decode_sites() -> list[DartDecodeSite]:
                     kind=decode_site_kind(line),
                     snippet=stripped[:220],
                     generated_backed=bool(WIRE_DECODE_RE.search(window) or _WIRE_BACKED_DECODE_RE.search(window)),
-                    context=decode_site_context(line),
+                    context='stream_protocol' if is_stream_protocol else decode_site_context(line),
                 )
             )
     return sites

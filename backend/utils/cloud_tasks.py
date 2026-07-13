@@ -5,9 +5,10 @@ Cloud Tasks POSTs it back to /v2/sync-jobs/run on the backend-sync service
 with an OIDC token minted for SYNC_TASKS_INVOKER_SA.
 
 All functions fail closed when the SYNC_TASKS_* env vars are unset: enqueue
-raises (caller falls back to the inline pipeline) and verification returns
-403 — the handler ships in the shared image to services that must never
-accept task traffic.
+raises and verification returns 403 — the handler ships in the shared image
+to services that must never accept task traffic. A caller that has already
+staged audio must not start an inline worker after an enqueue exception: a
+lost create-task acknowledgement can mean the deterministic named task exists.
 """
 
 import json
@@ -119,7 +120,9 @@ def _enqueue_named_task(
 def enqueue_sync_job(payload: Dict[str, Any]) -> None:
     """Enqueue one named HTTP task (task id = job_id) for a sync job.
 
-    The caller falls back to the inline pipeline on failure.
+    Duplicate names are success. Callers retry the same name a bounded number
+    of times, then retain staged retry material if acknowledgement remains
+    uncertain; they never fall back inline after submitting this task.
     """
     if payload.get('lane') == 'backfill':
         handler_url = os.getenv('SYNC_BACKFILL_TASKS_HANDLER_URL', '')

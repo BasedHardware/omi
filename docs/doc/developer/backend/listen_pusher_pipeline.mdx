@@ -6,7 +6,7 @@ description: "Sequence diagrams for the /v4/listen WebSocket and Pusher processi
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-07-09 (recording-scoped desktop listen lifecycle binding)
+> Last updated: 2026-07-12 (terminal live-STT failure signaling)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -89,6 +89,37 @@ sequenceDiagram
         Backend->>Firestore: Write transcript_segments
         Backend-->>Client: JSON array of segments [{id, text, speaker, ...}]
     end
+```
+
+### Terminal STT provider failure
+
+Provider initialization failure, a latched dead provider socket, or an audio
+send failure is terminal for the current client WebSocket. The backend first
+awaits a bounded `service_status` event (`status=stt_failed`, semantic
+`outcome`, provider, retryability, and one of the documented reason codes), then
+closes the client with code 1011 and reason
+`transcription_service_unavailable`.
+
+The send boundary clears its local audio buffer only after the provider socket
+accepts the chunk. On failure, the bytes remain in that buffer until normal
+session teardown frees it; they are never cleared while the client connection
+stays open and appears healthy. The client close is the recovery signal for
+mobile and desktop reconnect/fallback logic. The backend deliberately does not
+replace a provider socket in-session because maintaining transcript timestamp
+continuity across that handoff requires a separate state model.
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Backend as Backend (/v4/listen)
+    participant STT as STT Provider
+
+    Client->>Backend: Audio bytes
+    Backend->>STT: Send buffered audio
+    STT--xBackend: Socket dies or send fails
+    Backend-->>Client: service_status(status=stt_failed, outcome, provider, retryable, reason)
+    Backend--xClient: Close 1011 (transcription_service_unavailable)
+    Note over Client: Reconnect or activate local recovery
 ```
 
 ## 2. Conversation Lifecycle (Silence Timeout Path)

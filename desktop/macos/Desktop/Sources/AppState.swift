@@ -182,6 +182,10 @@ class AppState: ObservableObject {
 
   // Transcription state
   @Published var isTranscribing = false
+  /// A terminal live-STT failure reported by `/v4/listen`. Audio capture can
+  /// continue into the WAL while the transport reconnects, so this stays
+  /// visible until the backend is ready or the active session is reset.
+  @Published var transcriptionServiceError: String?
   /// Monotonically increasing counter — incremented each time a new recording starts.
   /// Used to detect if a new recording began during the post-stop force-process delay.
   var recordingGeneration: UInt64 = 0
