@@ -13,6 +13,7 @@ import { maybeStartScreenSynthesis } from '../lib/screenSynthesis'
 import { maybeStartInsightEngine } from '../lib/insightEngine'
 import { maybeStartRetentionSweep } from '../lib/retentionSweep'
 import { VoiceSessionSurface } from '../components/voice/VoiceSessionSurface'
+import { nextOverflowing } from './homeScroll'
 
 function firstName(u: User | null): string {
   const display = u?.displayName?.trim().split(/\s+/)[0]
@@ -202,7 +203,7 @@ export function Home(): React.JSX.Element {
   // the viewport. Recomputed from several effects/handlers, so it lives in one spot.
   const recomputeOverflow = useCallback((): void => {
     const el = chatScrollRef.current
-    if (el) setOverflowing(el.scrollHeight > el.clientHeight + 4)
+    if (el) setOverflowing((prev) => nextOverflowing(prev, el.scrollHeight, el.clientHeight))
   }, [])
   // Split layout: false = idle (centered block), true = widgets at top + bar at
   // bottom. A small lead-in lets the first bubble render before the move starts
@@ -455,7 +456,7 @@ export function Home(): React.JSX.Element {
           onWheel={(e) => releaseFollowingIfScrolledAway(e)}
           onTouchMove={() => releaseFollowingIfScrolledAway()}
           className="h-full overflow-y-auto"
-          style={{ WebkitMaskImage: mask, maskImage: mask }}
+          style={{ WebkitMaskImage: mask, maskImage: mask, scrollbarGutter: 'stable both-edges' }}
         >
           <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col">
             <div ref={chatContentRef} className="mt-auto space-y-5 pb-2">
