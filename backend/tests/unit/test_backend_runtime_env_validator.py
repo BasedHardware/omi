@@ -988,15 +988,20 @@ def test_memory_maintenance_job_contract_passes_for_repo_manifest():
     assert validator.validate_runtime_env(env='prod') == []
 
 
-def test_memory_maintenance_job_contract_rejects_missing_dev_capacity_flag(tmp_path):
+def test_memory_maintenance_job_contract_rejects_missing_dev_capacity_flag():
     validator = load_validator()
-    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
-    job = manifest['environments']['dev']['cloud_run']['jobs']['memory-maintenance-job']
+    job = memory_maintenance_job_block()
+    job['flags'] = {
+        '--task-timeout': '3600s',
+        '--cpu': '2',
+        '--memory': '2Gi',
+    }
     del job['flags']['--memory']
-    path = tmp_path / 'runtime_env.yaml'
-    write_yaml(path, manifest)
 
-    errors = validator.validate_runtime_env(env='dev', manifest_path=path)
+    errors = validator._validate_memory_maintenance_job_contract(
+        'dev',
+        {'cloud_run': {'jobs': {'memory-maintenance-job': job}}},
+    )
 
     assert (
         validator.ValidationError(
