@@ -142,6 +142,12 @@ export function BarApp(): React.JSX.Element {
   useEffect(
     () =>
       window.omiBar.onPtt((phase) => {
+        // Always-on companion to main's [ptt-diag] trace: confirms the release
+        // IPC actually reached the renderer. If main logs `ptt up -> renderer`
+        // but this line never appears during a stuck-visualizer episode, the
+        // 'up' was lost in transit; if both appear yet the orb stays in the
+        // recording pose, endHold ran as a no-op (the machine was not `holding`).
+        console.log(`[ptt-diag] renderer recv ${phase}`)
         if (phase === 'down') beginHoldRef.current()
         else endHoldRef.current()
       }),
