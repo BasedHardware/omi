@@ -1,0 +1,3 @@
+{
+  "change": "Made Rewind database rebuilds safe to retry and prevented failed audio-backup writes from inflating saved frame counts"
+}

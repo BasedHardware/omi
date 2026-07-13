@@ -746,10 +746,29 @@ actor RewindStorage {
             ))
         }
 
+        // The active AVAssetWriter file is not a valid rebuild source yet. Reading
+        // it can expose an incomplete sample table and turn a healthy in-progress
+        // capture into a reported rebuild failure. This discovery API exists only
+        // for rebuild, so finalized-chunk ownership belongs here rather than at
+        // each caller.
+        let activeChunkPath = await VideoChunkEncoder.shared.currentChunkPath
+        chunks = Self.filterFinalizedVideoChunks(chunks, excluding: activeChunkPath)
+
         // Sort by filename (which contains timestamp)
         chunks.sort { $0.filename < $1.filename }
 
         log("RewindStorage: Found \(chunks.count) video chunks")
         return chunks
+    }
+
+    /// Production-used pure boundary for finalized rebuild candidates.
+    static func filterFinalizedVideoChunks(
+        _ chunks: [VideoChunkInfo],
+        excluding activeChunkPath: String?
+    ) -> [VideoChunkInfo] {
+        guard let activeChunkPath, !activeChunkPath.isEmpty else {
+            return chunks
+        }
+        return chunks.filter { $0.relativePath != activeChunkPath }
     }
 }

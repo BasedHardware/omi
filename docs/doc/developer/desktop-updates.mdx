@@ -23,7 +23,7 @@ Prometheus exposes the selected source, fallback reason, pointer/LKG age, feed v
 
 ## Release lifecycle
 
-The daily/manual candidate workflow batches changes on `main` and tags one candidate. Codemagic builds, signs, notarizes, smoke-tests, and uploads the candidate with `isLive: false` and `channel: candidate`. It then automatically verifies the published ZIP/DMG digests against the signed-smoke result, runs static release checks, hermetic T2, and the fault-injection suite, and promotes only the newest passing candidate to beta.
+The daily/manual candidate workflow batches changes on `main` and tags one candidate. Codemagic builds, signs, notarizes, smoke-tests, and uploads the candidate with `isLive: false` and `channel: candidate`, including the signed-smoke evidence asset. It then dispatches `desktop_qualify_beta.yml`. That workflow runs only on the administrator-managed `self-hosted`, `macos`, `omi-desktop-qualification` runner, where Docker Desktop supports the hermetic stack. It verifies the published ZIP/DMG digests against signed-smoke evidence, runs static release checks, hermetic T2, and the fault-injection suite, and requests beta promotion only for the newest passing candidate.
 
 | State | How to identify it | Customer visibility |
 | --- | --- | --- |
@@ -127,7 +127,7 @@ Merging this control-plane change does not make a beta live. For the first rollo
 1. Deploy `main` to the production shared Python backend with `gcp_backend.yml` so manifest registration and pointer promotion endpoints exist.
 2. Wait for the weekday candidate workflow, or manually dispatch `desktop_auto_release.yml` when a candidate is wanted.
 3. Wait for Codemagic to publish the signed, notarized, non-live candidate and smoke evidence.
-4. Let Codemagic run the automatic digest, static, T2, and fault-suite gates. Use `desktop/macos/scripts/qualify-desktop-beta.sh <tag>` only for manual recovery.
+4. Let the dedicated trusted macOS runner run the automatic digest, static, T2, and fault-suite gates. Use `desktop/macos/scripts/qualify-desktop-beta.sh <tag>` only for manual recovery.
 5. Verify the beta appcast and the resolution/fallback/pointer-age metrics. Nominate a stable candidate only after reviewing soak, telemetry, and the stable release-note rollup; leave stable unchanged until the separately planned stable rollout.
 
 After the dual path has proven reliable, complete the removal and static CDN follow-ups tracked in issue `#9350`.

@@ -30,27 +30,27 @@ struct LiveNameSpeakerSheet: View {
             // Header
             HStack {
                 Text("Name Speaker")
-                    .scaledFont(size: 16, weight: .semibold)
+                    .scaledFont(size: OmiType.subheading, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
                 Spacer()
                 DismissButton(action: onDismiss)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 20)
-            .padding(.bottom, 12)
+            .padding(.horizontal, OmiSpacing.xl)
+            .padding(.top, OmiSpacing.xl)
+            .padding(.bottom, OmiSpacing.md)
 
             Divider()
                 .background(OmiColors.border)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: OmiSpacing.xl) {
                     // Speaker info
                     speakerInfoSection
 
                     // People selection
                     peopleSelectionSection
                 }
-                .padding(20)
+                .padding(OmiSpacing.xl)
             }
 
             Divider()
@@ -64,24 +64,24 @@ struct LiveNameSpeakerSheet: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(OmiColors.textSecondary)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .padding(.horizontal, OmiSpacing.lg)
+                .padding(.vertical, OmiSpacing.sm)
 
                 Button(action: save) {
                     Text("Save")
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(canSave ? .black : OmiColors.textTertiary)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 8)
+                .padding(.horizontal, OmiSpacing.xl)
+                .padding(.vertical, OmiSpacing.sm)
                 .background(
                     Capsule()
                         .fill(canSave ? Color.white : OmiColors.backgroundTertiary)
                 )
                 .disabled(!canSave)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 14)
+            .padding(.horizontal, OmiSpacing.xl)
+            .padding(.vertical, OmiSpacing.md)
         }
         .frame(width: 400, height: 400)
         .background(OmiColors.backgroundPrimary)
@@ -93,31 +93,31 @@ struct LiveNameSpeakerSheet: View {
     // MARK: - Speaker Info
 
     private var speakerInfoSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+            HStack(spacing: OmiSpacing.sm) {
                 Circle()
                     .fill(OmiColors.backgroundQuaternary)
                     .frame(width: 28, height: 28)
                     .overlay(
                         Text(String(speakerId))
-                            .scaledFont(size: 12, weight: .semibold)
+                            .scaledFont(size: OmiType.caption, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
                     )
                 Text("Speaker \(speakerId)")
-                    .scaledFont(size: 14, weight: .medium)
+                    .scaledFont(size: OmiType.body, weight: .medium)
                     .foregroundColor(OmiColors.textPrimary)
             }
 
             Text("\"\(previewText)\"")
-                .scaledFont(size: 13)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(OmiColors.textSecondary)
                 .italic()
                 .lineLimit(3)
         }
-        .padding(12)
+        .padding(OmiSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
                 .fill(OmiColors.backgroundSecondary)
         )
     }
@@ -125,12 +125,12 @@ struct LiveNameSpeakerSheet: View {
     // MARK: - People Selection
 
     private var peopleSelectionSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             Text("Who is this?")
-                .scaledFont(size: 13, weight: .medium)
+                .scaledFont(size: OmiType.body, weight: .medium)
                 .foregroundColor(OmiColors.textSecondary)
 
-            FlowLayout(spacing: 8) {
+            FlowLayout(spacing: OmiSpacing.sm) {
                 // Existing people chips
                 ForEach(people) { person in
                     personChip(label: person.name, isSelected: selectedPersonId == person.id) {
@@ -151,20 +151,20 @@ struct LiveNameSpeakerSheet: View {
 
             // Inline text field for new person name
             if isAddingNewPerson {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+                    HStack(spacing: OmiSpacing.sm) {
                         TextField("Person name", text: $newPersonName)
                             .textFieldStyle(.plain)
-                            .scaledFont(size: 13)
+                            .scaledFont(size: OmiType.body)
                             .foregroundColor(OmiColors.textPrimary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 8)
+                            .padding(.horizontal, OmiSpacing.sm)
+                            .padding(.vertical, OmiSpacing.sm)
                             .background(
-                                RoundedRectangle(cornerRadius: 8)
+                                RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                                     .fill(OmiColors.backgroundSecondary)
                             )
                             .overlay(
-                                RoundedRectangle(cornerRadius: 8)
+                                RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                                     .stroke(duplicateWarning != nil ? OmiColors.error : OmiColors.border, lineWidth: 1)
                             )
                             .onChange(of: newPersonName) { _, newValue in
@@ -185,13 +185,13 @@ struct LiveNameSpeakerSheet: View {
                                     .frame(width: 14, height: 14)
                             } else {
                                 Text("Add")
-                                    .scaledFont(size: 12, weight: .medium)
+                                    .scaledFont(size: OmiType.caption, weight: .medium)
                             }
                         }
                         .buttonStyle(.plain)
                         .foregroundColor(canCreate ? .black : OmiColors.textTertiary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
+                        .padding(.horizontal, OmiSpacing.md)
+                        .padding(.vertical, OmiSpacing.xs)
                         .background(
                             Capsule()
                                 .fill(canCreate ? Color.white : OmiColors.backgroundTertiary)
@@ -201,16 +201,16 @@ struct LiveNameSpeakerSheet: View {
 
                     if let warning = duplicateWarning {
                         Text(warning)
-                            .scaledFont(size: 11)
+                            .scaledFont(size: OmiType.caption)
                             .foregroundColor(OmiColors.error)
                     }
                 }
             }
 
             Text("This name will apply to all segments from this speaker in the current recording and will be saved when the conversation ends.")
-                .scaledFont(size: 11)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textQuaternary)
-                .padding(.top, 4)
+                .padding(.top, OmiSpacing.xxs)
         }
     }
 
@@ -255,17 +255,17 @@ struct LiveNameSpeakerSheet: View {
     private func personChip(label: String, isSelected: Bool, isAction: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(label)
-                .scaledFont(size: 13, weight: isSelected ? .semibold : .regular)
-                .foregroundColor(isSelected ? .black : (isAction ? OmiColors.purplePrimary : OmiColors.textPrimary))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
+                .scaledFont(size: OmiType.body, weight: isSelected ? .semibold : .regular)
+                .foregroundColor(isSelected ? .black : (isAction ? OmiColors.accent : OmiColors.textPrimary))
+                .padding(.horizontal, OmiSpacing.md)
+                .padding(.vertical, OmiSpacing.sm)
                 .background(
                     Capsule()
                         .fill(isSelected ? Color.white : OmiColors.backgroundTertiary)
                 )
                 .overlay(
                     Capsule()
-                        .stroke(isSelected ? OmiColors.border : (isAction ? OmiColors.purplePrimary.opacity(0.3) : Color.clear), lineWidth: 1)
+                        .stroke(isSelected ? OmiColors.border : (isAction ? OmiColors.accent.opacity(0.3) : Color.clear), lineWidth: 1)
                 )
         }
         .buttonStyle(.plain)

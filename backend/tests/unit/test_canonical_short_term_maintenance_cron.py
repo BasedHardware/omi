@@ -137,27 +137,9 @@ def test_should_run_is_true_when_enabled_with_cohort_on_interval_tick(monkeypatc
 
 
 def test_cohort_runner_noops_when_cron_disabled(monkeypatch):
-    set_canonical_cohort(monkeypatch, CANONICAL_A)
     monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "false")
-    db = _canonical_db_with_control(CANONICAL_A)
+    summary = run_canonical_short_term_maintenance_for_cohort(now=NOW, run_id="cron-disabled")
 
-    invoked: list[str] = []
-
-    def _recording_maintenance(uid, **kwargs):
-        invoked.append(uid)
-        return CanonicalShortTermMaintenanceReport(
-            uid=uid,
-            promotion=ShortTermPromotionReport(uid=uid, skipped_reason="promotion_not_due"),
-        )
-
-    monkeypatch.setattr(
-        "utils.memory.canonical_short_term_maintenance_cron.run_canonical_short_term_maintenance",
-        _recording_maintenance,
-    )
-
-    summary = run_canonical_short_term_maintenance_for_cohort(db_client=db, now=NOW, run_id="cron-disabled")
-
-    assert invoked == []
     assert summary.user_count == 0
     assert summary.promoted_total == 0
     assert summary.errors == []

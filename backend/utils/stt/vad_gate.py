@@ -589,10 +589,10 @@ class GatedSTTSocket(STTSocket):
     def death_reason(self) -> Optional[str]:
         return self._conn.death_reason
 
-    def send(self, data: bytes, wall_time: Optional[float] = None) -> None:
-        """Send audio through VAD gate (if active), then to the STT provider."""
+    def send(self, data: bytes, wall_time: Optional[float] = None) -> bool:
+        """Send audio through VAD gate and report whether it was accepted."""
         if self.is_connection_dead:
-            return
+            return False
         if self._gate is None:
             return self._conn.send(data)
 
@@ -616,15 +616,25 @@ class GatedSTTSocket(STTSocket):
         if self._gated_file and gate_out.audio_to_send:
             self._gated_file.write(gate_out.audio_to_send)
         if self._passthrough_audio:
-            self._conn.send(data)
+            accepted = self._conn.send(data)
         elif gate_out.audio_to_send:
-            self._conn.send(gate_out.audio_to_send)
+            accepted = self._conn.send(gate_out.audio_to_send)
+        else:
+            # Deliberately filtered silence is accepted by the gate; it is not
+            # a provider enqueue failure and must not terminate the session.
+            accepted = True
         if gate_out.should_finalize:
             try:
                 self._conn.finalize()
             except Exception:
                 self._gate._finalize_errors += 1  # type: ignore[reportPrivateUsage]  # internal counter
                 logger.warning('finalize failed uid=%s session=%s', self._gate.uid, self._gate.session_id)
+                # A failed speech-boundary flush means the provider may have
+                # dropped the pending utterance. Report the send as rejected so
+                # the shared live-STT boundary delivers a terminal failure to
+                # the client instead of continuing as if transcription worked.
+                return False
+        return accepted
 
     def finalize(self) -> None:
         """Flush pending transcript."""

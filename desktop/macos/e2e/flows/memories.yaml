@@ -9,6 +9,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/ForceDirectedSimulation.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryGraphPage.swift
   - desktop/macos/Desktop/Sources/ViewModelContainer.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryExportDestinationSheet.swift
 preconditions:
   - automation_bridge_ready
 

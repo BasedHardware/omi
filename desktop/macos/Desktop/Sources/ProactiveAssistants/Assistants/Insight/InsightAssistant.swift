@@ -196,17 +196,25 @@ actor InsightAssistant: ProactiveAssistant {
     func handleResult(_ result: AssistantResult, sendEvent: @escaping (String, [String: Any]) -> Void) async {
         // This method is required by protocol but we use handleResultWithScreenshot instead
         guard let insightResult = result as? InsightExtractionResult else { return }
-        await handleResultWithScreenshot(insightResult, screenshotId: nil, sendEvent: sendEvent)
+        guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
+        await handleResultWithScreenshot(
+            insightResult,
+            ownerID: ownerID,
+            screenshotId: nil,
+            sendEvent: sendEvent
+        )
     }
 
     /// Handle result with screenshot ID for SQLite storage
     private func handleResultWithScreenshot(
         _ adviceResult: InsightExtractionResult,
+        ownerID: String,
         screenshotId: Int64?,
         windowTitle: String? = nil,
         screenshotData: Data? = nil,
         sendEvent: @escaping (String, [String: Any]) -> Void
     ) async {
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
         // Check if AI has new insight (should almost always be true now - only false for duplicates)
         guard adviceResult.hasInsight, let extractedInsight = adviceResult.insight else {
             log("Insight: Skipped (duplicate or no context)")
@@ -215,6 +223,7 @@ actor InsightAssistant: ProactiveAssistant {
 
         // Get min confidence threshold
         let threshold = await minConfidence
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
         let confidencePercent = Int(extractedInsight.confidence * 100)
 
         // Check confidence threshold
@@ -237,14 +246,23 @@ actor InsightAssistant: ProactiveAssistant {
             screenshotId: screenshotId,
             contextSummary: adviceResult.contextSummary,
             currentActivity: adviceResult.currentActivity,
-            windowTitle: windowTitle
+            windowTitle: windowTitle,
+            ownerID: ownerID
         )
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
 
         // Sync to backend and update local record with backendId
-        if let backendId = await syncInsightToBackend(insight: extractedInsight, insightResult: adviceResult, windowTitle: windowTitle) {
+        if let backendId = await syncInsightToBackend(
+            insight: extractedInsight,
+            insightResult: adviceResult,
+            windowTitle: windowTitle,
+            ownerID: ownerID)
+        {
+            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
             if let recordId = extractionRecord?.id {
                 do {
                     try await MemoryStorage.shared.markSynced(id: recordId, backendId: backendId)
+                    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
                 } catch {
                     logError("Insight: Failed to update sync status", error: error)
                 }
@@ -253,26 +271,33 @@ actor InsightAssistant: ProactiveAssistant {
 
         // Also update InsightStorage cache (for UI display)
         await MainActor.run {
+            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
             InsightStorage.shared.addInsight(adviceResult)
         }
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
 
         // Track insight generated
         await MainActor.run {
+            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
             AnalyticsManager.shared.insightGenerated(category: extractedInsight.category.rawValue)
         }
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
 
         // Send notification if enabled
         let notificationsEnabled = await MainActor.run {
             InsightAssistantSettings.shared.notificationsEnabled
         }
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
         if notificationsEnabled {
             await sendInsightNotification(
+                ownerID: ownerID,
                 insight: extractedInsight,
                 result: adviceResult,
                 windowTitle: windowTitle,
                 screenshotData: screenshotData
             )
         }
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
 
         // Send event to Flutter
         sendEvent("insightProvided", [
@@ -288,8 +313,10 @@ actor InsightAssistant: ProactiveAssistant {
         screenshotId: Int64?,
         contextSummary: String,
         currentActivity: String,
-        windowTitle: String? = nil
+        windowTitle: String? = nil,
+        ownerID: String
     ) async -> MemoryRecord? {
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
         // Build tags: ["tips", "<category>"]
         let categoryTag = insight.category.rawValue.lowercased()
         let tags = ["tips", categoryTag]
@@ -321,6 +348,7 @@ actor InsightAssistant: ProactiveAssistant {
 
         do {
             let inserted = try await MemoryStorage.shared.insertLocalMemory(record)
+            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
             log("Insight: Saved to SQLite (id: \(inserted.id ?? -1)) with tags \(tags)")
             return inserted
         } catch {
@@ -330,7 +358,13 @@ actor InsightAssistant: ProactiveAssistant {
     }
 
     /// Sync insight to backend API, returns backend ID if successful
-    private func syncInsightToBackend(insight: ExtractedInsight, insightResult: InsightExtractionResult, windowTitle: String? = nil) async -> String? {
+    private func syncInsightToBackend(
+        insight: ExtractedInsight,
+        insightResult: InsightExtractionResult,
+        windowTitle: String? = nil,
+        ownerID: String
+    ) async -> String? {
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
         do {
             // Build tags: ["tips", "<category>"]
             let categoryTag = insight.category.rawValue.lowercased()
@@ -348,8 +382,10 @@ actor InsightAssistant: ProactiveAssistant {
                 currentActivity: insightResult.currentActivity,
                 source: "screenshot",
                 windowTitle: windowTitle,
-                headline: insight.headline
+                headline: insight.headline,
+                expectedOwnerId: ownerID
             )
+            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
 
             log("Insight: Synced to backend (id: \(response.id))")
             return response.id
@@ -361,6 +397,7 @@ actor InsightAssistant: ProactiveAssistant {
 
     /// Send a notification for the insight (uses short headline for notification body)
     private func sendInsightNotification(
+        ownerID: String,
         insight: ExtractedInsight,
         result: InsightExtractionResult,
         windowTitle: String?,
@@ -380,6 +417,7 @@ actor InsightAssistant: ProactiveAssistant {
 
         await MainActor.run {
             NotificationService.shared.sendNotification(
+                ownerID: ownerID,
                 title: "Insight",
                 message: message,
                 assistantId: identifier,
@@ -470,6 +508,7 @@ actor InsightAssistant: ProactiveAssistant {
     // MARK: - Analysis
 
     private func processFrame(_ frame: CapturedFrame, since previousAnalysisTime: Date) async {
+        guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
         guard await isEnabled else { return }
         do {
             guard let result = try await extractAdvice(from: frame, since: previousAnalysisTime) else {
@@ -477,7 +516,13 @@ actor InsightAssistant: ProactiveAssistant {
             }
 
             // Handle the result with screenshot ID for SQLite storage
-            await handleResultWithScreenshot(result, screenshotId: frame.screenshotId, windowTitle: frame.windowTitle, screenshotData: frame.jpegData) { type, data in
+            await handleResultWithScreenshot(
+                result,
+                ownerID: ownerID,
+                screenshotId: frame.screenshotId,
+                windowTitle: frame.windowTitle,
+                screenshotData: frame.jpegData
+            ) { type, data in
                 Task { @MainActor in
                     AssistantCoordinator.shared.sendEvent(type: type, data: data)
                 }

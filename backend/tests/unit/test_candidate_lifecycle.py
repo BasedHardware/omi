@@ -31,6 +31,8 @@ class FakeRef:
         return FakeCollection(self.database, (*self.path, name))
 
     def get(self, transaction=None):
+        if transaction is not None and transaction.write_started:
+            raise AssertionError('Firestore transactions must complete all reads before the first write')
         return FakeSnapshot(self.database.rows.get(self.path))
 
     def update(self, patch):
@@ -50,11 +52,14 @@ class FakeTransaction:
     def __init__(self, database):
         self.database = database
         self.lock = database.lock
+        self.write_started = False
 
     def set(self, ref, data):
+        self.write_started = True
         self.database.rows[ref.path] = deepcopy(data)
 
     def update(self, ref, patch):
+        self.write_started = True
         if ref.path not in self.database.rows:
             raise RuntimeError('missing row')
         self.database.rows[ref.path].update(deepcopy(patch))
@@ -133,6 +138,24 @@ def create_record(fake_db, **overrides):
         account_generation=3,
         now=datetime(2026, 7, 9, tzinfo=timezone.utc),
     )
+
+
+def evidence_refs(start, stop):
+    return [
+        {'kind': 'conversation', 'id': f'conversation-{index}', 'scope': 'canonical'} for index in range(start, stop)
+    ]
+
+
+def candidate_paths(fake_db):
+    return [path for path in fake_db.rows if candidates_db.CANDIDATES_COLLECTION in path]
+
+
+def alias_paths(fake_db):
+    return [path for path in fake_db.rows if candidates_db.CANDIDATE_IDEMPOTENCY_ALIASES_COLLECTION in path]
+
+
+def pending_claim_paths(fake_db):
+    return [path for path in fake_db.rows if candidates_db.CANDIDATE_PENDING_CLAIMS_COLLECTION in path]
 
 
 def test_candidate_union_accepts_each_task_arm_and_workstream_create():
@@ -277,6 +300,340 @@ def test_candidate_idempotency_key_rejects_a_different_proposal(fake_db):
             idempotency_key='conversation-1:item-1',
             account_generation=3,
         )
+
+
+def test_idempotency_alias_normalizes_equivalent_datetime_offsets(fake_db):
+    first_proposal = task_create_proposal(
+        task_change={
+            'description': 'Send the budget',
+            'owner': 'user',
+            'due_at': datetime(2026, 7, 15, 15, tzinfo=timezone.utc),
+            'due_confidence': 0.9,
+        }
+    )
+    equivalent_offset_proposal = task_create_proposal(
+        task_change={
+            'description': 'Send the budget',
+            'owner': 'user',
+            'due_at': datetime(2026, 7, 15, 11, tzinfo=timezone(timedelta(hours=-4))),
+            'due_confidence': 0.9,
+        }
+    )
+
+    first = candidates_db.create_candidate(
+        'user-1',
+        first_proposal,
+        idempotency_key='conversation:same-request',
+        account_generation=3,
+    )
+    replay = candidates_db.create_candidate(
+        'user-1',
+        equivalent_offset_proposal,
+        idempotency_key='conversation:same-request',
+        account_generation=3,
+    )
+
+    assert replay.candidate_id == first.candidate_id
+    assert len(candidate_paths(fake_db)) == 1
+    assert len(alias_paths(fake_db)) == 1
+
+
+def test_exact_pending_task_creates_coalesce_across_sources_and_alias_each_request(fake_db):
+    due_utc = datetime(2026, 7, 15, 15, tzinfo=timezone.utc)
+    first_proposal = task_create_proposal(
+        task_change={
+            'description': 'Send the budget',
+            'owner': 'user',
+            'due_at': due_utc,
+            'due_confidence': 0.8,
+            'priority': 'low',
+        },
+        capture_confidence=0.81,
+        ownership_confidence=0.82,
+        evidence_refs=evidence_refs(0, 1),
+        source_surface='conversation',
+    )
+    first = candidates_db.create_candidate(
+        'user-1',
+        first_proposal,
+        idempotency_key='conversation:request-1',
+        account_generation=3,
+    )
+    second = candidates_db.create_candidate(
+        'user-1',
+        task_create_proposal(
+            task_change={
+                'description': '  SEND THE BUDGET  ',
+                'owner': 'user',
+                'due_at': datetime(2026, 7, 15, 11, tzinfo=timezone(timedelta(hours=-4))),
+                'due_confidence': 1,
+                'priority': 'high',
+            },
+            capture_confidence=0.96,
+            ownership_confidence=0.98,
+            evidence_refs=evidence_refs(1, 2),
+            source_surface='screen',
+        ),
+        idempotency_key='screen:request-2',
+        account_generation=3,
+    )
+    replay = candidates_db.create_candidate(
+        'user-1',
+        first_proposal,
+        idempotency_key='conversation:request-1',
+        account_generation=3,
+    )
+
+    assert second.candidate_id == first.candidate_id
+    assert replay.candidate_id == first.candidate_id
+    assert second.capture_confidence == 0.96
+    assert replay.capture_confidence == 0.96
+    assert second.ownership_confidence == 0.98
+    assert [evidence.id for evidence in second.evidence_refs] == ['conversation-0', 'conversation-1']
+    assert [evidence.id for evidence in replay.evidence_refs] == ['conversation-0', 'conversation-1']
+    assert len(candidate_paths(fake_db)) == 1
+    assert len(alias_paths(fake_db)) == 2
+    assert len(pending_claim_paths(fake_db)) == 1
+
+
+def test_fresh_high_confidence_capture_replaces_stale_low_confidence_pending_claim(fake_db):
+    captured_at = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    proposal = task_create_proposal(
+        capture_confidence=0.4,
+        ownership_confidence=0.4,
+        evidence_refs=evidence_refs(0, 1),
+    )
+    stale = candidates_db.create_candidate(
+        'user-1',
+        proposal,
+        idempotency_key='capture:stale-low-confidence',
+        account_generation=3,
+        now=captured_at,
+    )
+    refreshed_at = captured_at + candidates_db.PENDING_CANDIDATE_REUSE_WINDOW + timedelta(days=1)
+    fresh = candidates_db.create_candidate(
+        'user-1',
+        task_create_proposal(
+            capture_confidence=0.95,
+            ownership_confidence=0.95,
+            evidence_refs=evidence_refs(1, 2),
+            source_surface='screen',
+        ),
+        idempotency_key='capture:fresh-high-confidence',
+        account_generation=3,
+        now=refreshed_at,
+    )
+    stale_replay = candidates_db.create_candidate(
+        'user-1',
+        proposal,
+        idempotency_key='capture:stale-low-confidence',
+        account_generation=3,
+        now=refreshed_at,
+    )
+
+    assert fresh.candidate_id != stale.candidate_id
+    assert stale_replay.candidate_id == stale.candidate_id
+    assert fresh.created_at == refreshed_at
+    assert fresh.capture_confidence == 0.95
+    assert len(candidate_paths(fake_db)) == 2
+    assert len(alias_paths(fake_db)) == 2
+    claim = fake_db.rows[pending_claim_paths(fake_db)[0]]
+    assert claim['candidate_id'] == fresh.candidate_id
+
+
+def test_pending_candidate_evidence_union_is_stable_deduplicated_and_capped(fake_db):
+    first = candidates_db.create_candidate(
+        'user-1',
+        task_create_proposal(evidence_refs=evidence_refs(0, 15)),
+        idempotency_key='capture:first',
+        account_generation=3,
+    )
+    merged = candidates_db.create_candidate(
+        'user-1',
+        task_create_proposal(evidence_refs=evidence_refs(10, 30), source_surface='screen'),
+        idempotency_key='capture:second',
+        account_generation=3,
+    )
+
+    assert merged.candidate_id == first.candidate_id
+    assert [evidence.id for evidence in merged.evidence_refs] == [
+        f'conversation-{index}' for index in range(candidates_db.MAX_CANDIDATE_EVIDENCE_REFS)
+    ]
+
+
+@pytest.mark.parametrize(
+    'changed',
+    [
+        {'task_change': {'description': 'Send a different budget', 'owner': 'user'}},
+        {'task_change': {'description': 'Send the budget', 'owner': 'other'}},
+        {
+            'task_change': {
+                'description': 'Send the budget',
+                'owner': 'user',
+                'due_at': datetime(2026, 7, 16, tzinfo=timezone.utc),
+            }
+        },
+        {'task_change': {'description': 'Send the budget', 'owner': 'user', 'recurrence_rule': 'FREQ=WEEKLY'}},
+        {'task_change': {'description': 'Send the budget', 'owner': 'user', 'recurrence_parent_id': 'task-parent'}},
+        {'goal_id': 'goal-2'},
+        {'workstream_id': 'workstream-2'},
+    ],
+)
+def test_pending_semantic_identity_keeps_distinct_task_intent_separate(fake_db, changed):
+    first = candidates_db.create_candidate(
+        'user-1',
+        task_create_proposal(),
+        idempotency_key='capture:base',
+        account_generation=3,
+    )
+    second = candidates_db.create_candidate(
+        'user-1',
+        task_create_proposal(**changed),
+        idempotency_key='capture:changed',
+        account_generation=3,
+    )
+
+    assert second.candidate_id != first.candidate_id
+    assert len(candidate_paths(fake_db)) == 2
+    assert len(pending_claim_paths(fake_db)) == 2
+
+
+def test_resolved_semantic_claim_allows_new_occurrence_but_old_key_replays_old_candidate(fake_db):
+    proposal = task_create_proposal()
+    first = candidates_db.create_candidate('user-1', proposal, idempotency_key='capture:first', account_generation=3)
+    candidates_db.resolve_candidate_without_mutation(
+        'user-1',
+        first.candidate_id,
+        status=CandidateStatus.rejected,
+        reason='not_now',
+        account_generation=3,
+    )
+
+    second = candidates_db.create_candidate('user-1', proposal, idempotency_key='capture:second', account_generation=3)
+    replay = candidates_db.create_candidate('user-1', proposal, idempotency_key='capture:first', account_generation=3)
+
+    assert second.candidate_id != first.candidate_id
+    assert second.status == CandidateStatus.pending
+    assert replay.candidate_id == first.candidate_id
+    assert replay.status == CandidateStatus.rejected
+    assert (
+        next(iter(fake_db.rows[path] for path in pending_claim_paths(fake_db)))['candidate_id'] == second.candidate_id
+    )
+
+
+def test_accepted_active_task_coalesces_exact_cross_source_capture_until_work_closes(fake_db):
+    first = candidates_db.create_candidate(
+        'user-1',
+        task_create_proposal(),
+        idempotency_key='conversation:first',
+        account_generation=3,
+        now=datetime(2026, 7, 9, tzinfo=timezone.utc),
+    )
+    receipt = candidates_db.resolve_task_candidate('user-1', first.candidate_id, account_generation=3)
+    task_path = ('users', 'user-1', 'action_items', receipt.task_id)
+    second_proposal = task_create_proposal(
+        capture_confidence=0.99,
+        source_surface='screen',
+        evidence_refs=[{'kind': 'local_screen', 'id': 'screen-2', 'scope': 'device_local', 'device_id': 'macos_2'}],
+    )
+
+    second = candidates_db.create_candidate(
+        'user-1',
+        second_proposal,
+        idempotency_key='screen:second',
+        account_generation=3,
+        now=datetime(2026, 7, 10, tzinfo=timezone.utc),
+    )
+
+    assert second.candidate_id == first.candidate_id
+    assert second.status == CandidateStatus.accepted
+    assert len(candidate_paths(fake_db)) == 1
+    assert len(alias_paths(fake_db)) == 2
+    assert {evidence.id for evidence in second.evidence_refs} == {'conversation-1', 'screen-2'}
+    assert {evidence['id'] for evidence in fake_db.rows[task_path]['provenance']} == {
+        'conversation-1',
+        'screen-2',
+    }
+    assert fake_db.rows[task_path]['capture_confidence'] == 0.99
+
+    fake_db.rows[task_path].update(status='completed', completed=True)
+    recurrence = candidates_db.create_candidate(
+        'user-1',
+        second_proposal,
+        idempotency_key='screen:after-completion',
+        account_generation=3,
+    )
+
+    assert recurrence.candidate_id != first.candidate_id
+    assert recurrence.status == CandidateStatus.pending
+    assert len(candidate_paths(fake_db)) == 2
+
+
+def test_accepted_task_semantic_edit_releases_the_original_claim(fake_db):
+    proposal = task_create_proposal()
+    first = candidates_db.create_candidate(
+        'user-1', proposal, idempotency_key='conversation:first', account_generation=3
+    )
+    receipt = candidates_db.resolve_task_candidate('user-1', first.candidate_id, account_generation=3)
+    task_path = ('users', 'user-1', 'action_items', receipt.task_id)
+    fake_db.rows[task_path]['description'] = 'Send the revised operating plan'
+
+    second = candidates_db.create_candidate(
+        'user-1', proposal, idempotency_key='conversation:after-edit', account_generation=3
+    )
+
+    assert second.candidate_id != first.candidate_id
+    assert second.status == CandidateStatus.pending
+    assert len(candidate_paths(fake_db)) == 2
+
+
+def test_concurrent_semantic_creates_produce_one_pending_candidate_and_replay_aliases(fake_db):
+    proposal = task_create_proposal()
+
+    def create(index):
+        return candidates_db.create_candidate(
+            'user-1',
+            proposal,
+            idempotency_key=f'concurrent:{index}',
+            account_generation=3,
+        )
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        records = list(executor.map(create, range(16)))
+
+    assert len({record.candidate_id for record in records}) == 1
+    assert len(candidate_paths(fake_db)) == 1
+    assert len(alias_paths(fake_db)) == 16
+    assert len(pending_claim_paths(fake_db)) == 1
+
+
+def test_legacy_direct_id_replay_backfills_idempotency_alias(fake_db):
+    proposal = task_create_proposal()
+    first = candidates_db.create_candidate('user-1', proposal, idempotency_key='legacy:key', account_generation=3)
+    for path in alias_paths(fake_db):
+        del fake_db.rows[path]
+
+    replay = candidates_db.create_candidate('user-1', proposal, idempotency_key='legacy:key', account_generation=3)
+
+    assert replay.candidate_id == first.candidate_id
+    assert len(alias_paths(fake_db)) == 1
+    alias = fake_db.rows[alias_paths(fake_db)[0]]
+    assert alias['candidate_id'] == first.candidate_id
+    assert alias['account_generation'] == 3
+
+
+def test_pending_semantic_claim_is_scoped_to_task_create(fake_db):
+    proposal = task_create_proposal(
+        proposed_action='update',
+        task_id='task-1',
+        task_change={'description': 'Send the revised budget'},
+    )
+    first = candidates_db.create_candidate('user-1', proposal, idempotency_key='update:first', account_generation=3)
+    second = candidates_db.create_candidate('user-1', proposal, idempotency_key='update:second', account_generation=3)
+
+    assert first.candidate_id != second.candidate_id
+    assert len(candidate_paths(fake_db)) == 2
+    assert pending_claim_paths(fake_db) == []
 
 
 def test_concurrent_accept_creates_one_task_and_one_new_resolution(fake_db):

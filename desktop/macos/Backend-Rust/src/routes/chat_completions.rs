@@ -23,7 +23,7 @@ use crate::models::chat_completions::*;
 use crate::AppState;
 
 use super::llm_stub::{llm_stub_enabled, stub_chat_completions_response};
-use super::rate_limit::RateDecision;
+use super::rate_limit::{requires_server_metering, RateDecision};
 use super::retrieval_policy::{
     caller_disabled_tools, prepend_latest_user_instruction, retrieval_policy, RetrievalSource,
     REQUIRED_WEB_SEARCH_INSTRUCTION,
@@ -31,6 +31,32 @@ use super::retrieval_policy::{
 
 fn response_or_500(builder: axum::http::response::Builder, body: Body) -> Response {
     crate::routes::response_or_500("chat_completions", builder, body)
+}
+
+fn chat_metering_response(decision: &RateDecision) -> Option<Response> {
+    match decision {
+        RateDecision::Reject => Some(response_or_500(
+            Response::builder()
+                .status(StatusCode::TOO_MANY_REQUESTS)
+                .header("content-type", "application/json")
+                .header("retry-after", "60"),
+            Body::from(
+                json!({"error": {"message": "Rate limit exceeded", "type": "rate_limit_error", "code": 429}})
+                    .to_string(),
+            ),
+        )),
+        RateDecision::Unavailable => Some(response_or_500(
+            Response::builder()
+                .status(StatusCode::SERVICE_UNAVAILABLE)
+                .header("content-type", "application/json")
+                .header("retry-after", "5"),
+            Body::from(
+                json!({"error": {"message": "Chat metering is temporarily unavailable", "type": "metering_unavailable", "code": 503}})
+                    .to_string(),
+            ),
+        )),
+        RateDecision::Allow | RateDecision::DegradeToFlash => None,
+    }
 }
 
 /// Default max_tokens when client doesn't specify one.
@@ -621,6 +647,22 @@ fn sse_line(data: &serde_json::Value) -> Bytes {
     Bytes::from(format!("data: {}\n\n", json_str))
 }
 
+/// Pull every complete SSE event block out of the raw byte buffer, leaving any
+/// trailing partial event behind.
+///
+/// The buffer must stay bytes: network chunks split at arbitrary offsets, so
+/// decoding a chunk before it is framed destroys any multi-byte character that
+/// straddles the boundary. Event blocks always end on the ASCII "\n\n", so a
+/// complete block is safe to decode.
+fn drain_sse_events(buffer: &mut Vec<u8>) -> Vec<String> {
+    let mut events = Vec::new();
+    while let Some(event_end) = buffer.windows(2).position(|w| w == b"\n\n") {
+        events.push(String::from_utf8_lossy(&buffer[..event_end]).into_owned());
+        buffer.drain(..event_end + 2);
+    }
+    events
+}
+
 fn make_chunk(
     id: &str,
     created: i64,
@@ -710,22 +752,13 @@ async fn chat_completions(
     // burst of proactive/vision Gemini calls can never 429 a user's chat. The chat
     // limiter only trips on a pathological per-minute burst (runaway client), which
     // a human typing never reaches. Skipped entirely when using a BYOK key.
-    if !is_byok {
+    if requires_server_metering(is_byok) {
         let decision = state
             .chat_rate_limiter
             .check_and_record(&user.uid, state.redis.as_ref())
             .await;
-        if decision == RateDecision::Reject {
-            return Ok(response_or_500(
-                Response::builder()
-                    .status(StatusCode::TOO_MANY_REQUESTS)
-                    .header("content-type", "application/json")
-                    .header("retry-after", "60"),
-                Body::from(
-                    json!({"error": {"message": "Rate limit exceeded", "type": "rate_limit_error", "code": 429}})
-                        .to_string(),
-                ),
-            ));
+        if let Some(response) = chat_metering_response(&decision) {
+            return Ok(response);
         }
     }
 
@@ -737,17 +770,15 @@ async fn chat_completions(
         );
         byok_key.to_string()
     } else {
-        match route.provider {
-            Provider::Anthropic => state
-                .config
-                .anthropic_api_key
-                .as_ref()
-                .ok_or_else(|| {
-                    tracing::error!("chat_completions: ANTHROPIC_API_KEY not configured");
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?
-                .clone(),
-        }
+        state
+            .config
+            .anthropic_api_key
+            .as_ref()
+            .ok_or_else(|| {
+                tracing::error!("chat_completions: ANTHROPIC_API_KEY not configured");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
+            .clone()
     };
 
     // Translate request
@@ -955,7 +986,7 @@ async fn handle_streaming(
         let mut final_usage: Option<AnthropicUsage> = None;
         let mut initial_usage: Option<AnthropicUsage> = None;
         let mut sent_role = false;
-        let mut buffer = String::new();
+        let mut buffer: Vec<u8> = Vec::new();
 
         // Collect raw bytes and split into SSE events
         let mut byte_stream = std::pin::pin!(byte_stream);
@@ -968,13 +999,10 @@ async fn handle_streaming(
                 }
             };
 
-            buffer.push_str(&String::from_utf8_lossy(&chunk));
+            buffer.extend_from_slice(&chunk);
 
             // Parse SSE events from buffer
-            while let Some(event_end) = buffer.find("\n\n") {
-                let event_block = buffer[..event_end].to_string();
-                buffer = buffer[event_end + 2..].to_string();
-
+            for event_block in drain_sse_events(&mut buffer) {
                 // Extract data line
                 let data_line = event_block
                     .lines()
@@ -1256,6 +1284,14 @@ pub fn chat_completions_routes() -> Router<AppState> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn server_key_chat_fails_closed_when_metering_is_unavailable() {
+        let response = chat_metering_response(&RateDecision::Unavailable).unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.headers().get("retry-after").unwrap(), "5");
+        assert!(chat_metering_response(&RateDecision::Allow).is_none());
+    }
+
     fn test_request(messages: Vec<ChatMessage>) -> ChatCompletionRequest {
         ChatCompletionRequest {
             model: "omi-sonnet".to_string(),
@@ -1319,7 +1355,6 @@ mod tests {
         let route = resolve_model("omi-sonnet").unwrap();
         assert_eq!(route.public_model, "omi-sonnet");
         assert_eq!(route.upstream_model, "claude-sonnet-4-6");
-        assert_eq!(route.provider, Provider::Anthropic);
     }
 
     #[test]
@@ -2324,6 +2359,35 @@ mod tests {
         let openai = translate_response(&resp, "omi-sonnet");
         assert!(openai.choices[0].message.content.is_none());
         assert!(openai.choices[0].message.tool_calls.is_some());
+    }
+
+    #[test]
+    fn test_drain_sse_events_splits_on_blank_line() {
+        let mut buffer = b"event: a\ndata: {\"x\":1}\n\ndata: {\"y\":2}\n\ndata: par".to_vec();
+        let events = drain_sse_events(&mut buffer);
+
+        assert_eq!(events.len(), 2);
+        assert!(events[0].contains("\"x\":1"));
+        assert!(events[1].contains("\"y\":2"));
+        assert_eq!(buffer, b"data: par");
+    }
+
+    #[test]
+    fn test_drain_sse_events_preserves_char_split_across_chunks() {
+        // "—" (U+2014) is 3 bytes; a network chunk can land in the middle of it.
+        let event = "data: {\"text\":\"a—b\"}\n\n".as_bytes().to_vec();
+        let split = 17; // inside the em dash's 3 bytes (16..19)
+        let mut buffer = Vec::new();
+
+        buffer.extend_from_slice(&event[..split]);
+        assert!(drain_sse_events(&mut buffer).is_empty());
+
+        buffer.extend_from_slice(&event[split..]);
+        let events = drain_sse_events(&mut buffer);
+
+        assert_eq!(events.len(), 1);
+        assert!(events[0].contains("a—b"), "got {}", events[0]);
+        assert!(!events[0].contains('\u{fffd}'));
     }
 
     #[test]

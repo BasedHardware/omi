@@ -41,11 +41,11 @@ struct OnboardingPermissionStepView: View {
       onSkip: onSkip,
       onForceComplete: onForceComplete
     ) {
-      VStack(alignment: .leading, spacing: 20) {
-        VStack(alignment: .leading, spacing: 18) {
-          HStack(spacing: 14) {
+      VStack(alignment: .leading, spacing: OmiSpacing.xl) {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+          HStack(spacing: OmiSpacing.md) {
             ZStack {
-              RoundedRectangle(cornerRadius: 20, style: .continuous)
+              RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
                 .fill(OmiColors.backgroundSecondary)
                 .frame(width: 58, height: 58)
 
@@ -54,7 +54,7 @@ struct OnboardingPermissionStepView: View {
                 .foregroundColor(OmiColors.textSecondary)
             }
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text(reasonTitle)
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundColor(OmiColors.textPrimary)
@@ -110,7 +110,7 @@ struct OnboardingPermissionStepView: View {
               }
             }
           }
-          .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+          .buttonStyle(OmiButtonStyle(.primary))
           .disabled(isRequesting)
 
         }

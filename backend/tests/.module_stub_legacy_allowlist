@@ -69,8 +69,6 @@ backend/tests/unit/test_speech_profile_wav_decode.py
 backend/tests/unit/test_sync_file_paths_filename_none.py
 backend/tests/unit/test_sync_opus_decode.py
 backend/tests/unit/test_sync_pcm_decode.py
-backend/tests/unit/test_translation_cost_optimization.py
-backend/tests/unit/test_translation_optimization.py
 backend/tests/unit/test_users_webhook_url_validation.py
 backend/tests/unit/test_vertex_ai_system_role.py
 backend/tests/unit/test_voice_message_filename_none.py

@@ -186,6 +186,7 @@ class TaskAgentManager: ObservableObject {
     /// Stop and remove agent session
     func stopAgent(taskId: String) {
         guard let session = activeSessions[taskId] else { return }
+        let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
 
         logMessage("TaskAgentManager: Stopping agent for task \(taskId)")
 
@@ -202,19 +203,32 @@ class TaskAgentManager: ObservableObject {
 
         // Clear persisted agent state
         Task {
-            try? await ActionItemStorage.shared.clearAgentState(taskId: taskId)
+            guard let authorizationSnapshot else { return }
+            try? await ActionItemStorage.shared.clearAgentState(
+                taskId: taskId,
+                authorization: LocalMutationAuthorization {
+                    RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+                }
+            )
         }
     }
 
     /// Remove completed session (cleanup)
     func removeSession(taskId: String) {
+        let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
         pollingTasks[taskId]?.cancel()
         pollingTasks[taskId] = nil
         activeSessions.removeValue(forKey: taskId)
 
         // Clear persisted agent state
         Task {
-            try? await ActionItemStorage.shared.clearAgentState(taskId: taskId)
+            guard let authorizationSnapshot else { return }
+            try? await ActionItemStorage.shared.clearAgentState(
+                taskId: taskId,
+                authorization: LocalMutationAuthorization {
+                    RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+                }
+            )
         }
     }
 
@@ -559,6 +573,9 @@ class TaskAgentManager: ObservableObject {
 
     /// Persist current session state to SQLite (fire-and-forget)
     private func persistSession(_ session: AgentSession) {
+        guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+            return
+        }
         let editedFilesJson: String?
         if !session.editedFiles.isEmpty,
            let data = try? JSONEncoder().encode(session.editedFiles),
@@ -586,10 +603,15 @@ class TaskAgentManager: ObservableObject {
                     plan: plan,
                     startedAt: startedAt,
                     completedAt: completedAt,
-                    editedFilesJson: editedFilesJson
+                    editedFilesJson: editedFilesJson,
+                    authorization: LocalMutationAuthorization {
+                        RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+                    }
                 )
             } catch {
-                log("TaskAgentManager: Failed to persist session for \(taskId): \(error)")
+                if RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) {
+                    log("TaskAgentManager: Failed to persist session for \(taskId): \(error)")
+                }
             }
         }
     }

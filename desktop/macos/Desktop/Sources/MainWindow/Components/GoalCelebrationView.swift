@@ -28,8 +28,8 @@ struct GoalCelebrationView: View {
 
                 // Celebration text
                 if phase == .text, let goal = completedGoal {
-                    VStack(spacing: 16) {
-                        Text("Goal Completed!")
+                    VStack(spacing: OmiSpacing.lg) {
+                        Text("Goal completed")
                             .scaledFont(size: 32, weight: .bold)
                             .foregroundStyle(
                                 LinearGradient(
@@ -41,20 +41,20 @@ struct GoalCelebrationView: View {
                             .shadow(color: .yellow.opacity(0.6), radius: 12)
 
                         Text(goal.title)
-                            .scaledFont(size: 18, weight: .medium)
+                            .scaledFont(size: OmiType.heading, weight: .medium)
                             .foregroundColor(.white)
                             .multilineTextAlignment(.center)
-                            .padding(.horizontal, 40)
+                            .padding(.horizontal, OmiSpacing.page)
 
                         Text("\(Int(goal.targetValue)) \(goal.unit ?? "") reached")
-                            .scaledFont(size: 14)
+                            .scaledFont(size: OmiType.body)
                             .foregroundColor(.white.opacity(0.7))
                     }
                     .transition(.scale(scale: 0.7).combined(with: .opacity))
                 }
             }
         }
-        .animation(.easeInOut(duration: 0.3), value: phase)
+        .omiAnimation(.easeInOut(duration: 0.3), value: phase)
         .onReceive(NotificationCenter.default.publisher(for: .goalCompleted)) { notification in
             if let goal = notification.object as? Goal {
                 triggerCelebration(goal: goal)
@@ -69,27 +69,27 @@ struct GoalCelebrationView: View {
         log("CELEBRATION: Goal '\(goal.title)' completed, starting animation")
 
         // Phase 1: Dim (immediate)
-        withAnimation(.easeOut(duration: 0.3)) {
+        OmiMotion.withGated(.easeOut(duration: 0.3)) {
             phase = .dim
         }
 
         // Phase 2: Confetti burst (after 0.3s)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            withAnimation(.easeOut(duration: 0.3)) {
+            OmiMotion.withGated(.easeOut(duration: 0.3)) {
                 phase = .confetti
             }
         }
 
         // Phase 3: Text appears (after 0.8s)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+            OmiMotion.withGated(.spring(response: 0.5, dampingFraction: 0.7)) {
                 phase = .text
             }
         }
 
         // Phase 4: Fade out (after 3.0s)
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            withAnimation(.easeOut(duration: 0.5)) {
+            OmiMotion.withGated(.easeOut(duration: 0.5)) {
                 phase = .fadeOut
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -113,7 +113,7 @@ struct GoalConfettiView: View {
             Color(red: 0.133, green: 0.773, blue: 0.369), // Green
             Color(red: 0.2, green: 0.6, blue: 1.0), // Blue
             .pink, .orange, .cyan, .mint,
-            OmiColors.purplePrimary, OmiColors.purplePrimary.opacity(0.7)
+            OmiColors.accent, OmiColors.accent.opacity(0.7)
         ]
         return (0..<40).map { _ in
             (
@@ -157,11 +157,11 @@ struct GoalConfettiView: View {
             }
         }
         .onAppear {
-            withAnimation(.easeOut(duration: 0.8)) {
+            OmiMotion.withGated(.easeOut(duration: 0.8)) {
                 animate = true
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                withAnimation(.easeOut(duration: 0.8)) {
+                OmiMotion.withGated(.easeOut(duration: 0.8)) {
                     fadeOut = true
                 }
             }

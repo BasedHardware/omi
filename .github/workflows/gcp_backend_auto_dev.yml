@@ -41,6 +41,15 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Verify serving sync ledger fence mode before deploy
+        env:
+          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
+        run: |
+          python3 backend/scripts/verify_sync_ledger_fence_transition.py \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --desired-mode="$SYNC_LEDGER_FENCE_MODE"
+
       - name: Login to GCR
         run: gcloud auth configure-docker
 
@@ -63,6 +72,7 @@ jobs:
           CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
           CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
           OMI_LLM_GATEWAY_URL: ${{ vars.OMI_LLM_GATEWAY_URL }}
+          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
         run: |
           python3 backend/scripts/render_backend_runtime_env.py --env dev >> "$GITHUB_OUTPUT"
 
@@ -77,6 +87,8 @@ jobs:
             --repair-traffic
 
       - name: Validate backend runtime env before deploy
+        env:
+          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
         run: |
           python3 backend/scripts/validate-backend-runtime-env.py --env dev --check-workflows --check-rendered-cloud-run
 
@@ -186,7 +198,7 @@ jobs:
             --set image.repository=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} \
             --set gcpProjectId=${{ vars.GCP_PROJECT_ID }} \
             --set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
-            --set image.tag=${{ steps.image-tag.outputs.short_sha }}
+            --set-string image.tag=${{ steps.image-tag.outputs.short_sha }}
           if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=300s; then
             python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen || true
             exit 1
@@ -225,6 +237,8 @@ jobs:
             --wait-revision-ready backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }}
 
       - name: Validate backend runtime env after deploy
+        env:
+          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
         run: |
           python3 backend/scripts/validate-backend-runtime-env.py --env dev --check-workflows --check-live-cloud-run
 
@@ -261,3 +275,53 @@ jobs:
 
       - name: Show Output
         run: echo "Backend deployed to development environment"
+
+  # Keep acceptance in the source workflow's mutation lock. A cancelled deploy
+  # never creates a second workflow run that could replace a pending deploy,
+  # and a newer deploy cannot mutate the composition while this check runs.
+  verify:
+    needs: deploy
+    if: needs.deploy.result == 'success'
+    environment: development
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout deployed commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Verify exact deployed composition
+        run: |
+          python3 backend/scripts/verify_dev_backend_deployment.py \
+            --commit-sha "${{ github.sha }}" \
+            --deploy-run-id "${{ github.run_id }}" \
+            --deploy-run-attempt "${{ github.run_attempt }}" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --evidence-path artifacts/dev-backend-deployment-acceptance.json
+
+      - name: Upload deployment acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-backend-deployment-acceptance-${{ github.run_id }}
+          path: artifacts/dev-backend-deployment-acceptance.json
+          if-no-files-found: warn

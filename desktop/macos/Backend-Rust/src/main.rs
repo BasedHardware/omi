@@ -42,7 +42,6 @@ impl FormatTime for BackendTimer {
 mod auth;
 mod byok;
 mod config;
-mod encryption;
 mod fallback;
 mod llm;
 mod models;
@@ -76,13 +75,12 @@ use routes::{
     updates_routes,
     webhook_routes,
 };
-use services::{FirestoreService, IntegrationService, RedisService};
+use services::{FirestoreService, RedisService};
 
 /// Application state shared across handlers
 #[derive(Clone)]
-pub struct AppState {
+pub(crate) struct AppState {
     pub firestore: Arc<FirestoreService>,
-    pub integrations: Arc<IntegrationService>,
     pub redis: Option<Arc<RedisService>>,
     pub config: Arc<Config>,
     pub crisp_session_cache: routes::crisp::SessionCache,
@@ -213,18 +211,11 @@ async fn main() {
         .firebase_project_id
         .clone()
         .expect("FIREBASE_PROJECT_ID must be set for Firestore");
-    let firestore = match FirestoreService::new(
-        firestore_project_id.clone(),
-        config.encryption_secret.clone(),
-    )
-    .await
-    {
+    let firestore = match FirestoreService::new(firestore_project_id.clone()).await {
         Ok(fs) => Arc::new(fs),
         Err(e) => {
             tracing::warn!("Failed to initialize Firestore: {} - using placeholder", e);
-            match FirestoreService::new(firestore_project_id, config.encryption_secret.clone())
-                .await
-            {
+            match FirestoreService::new(firestore_project_id).await {
                 Ok(fs) => Arc::new(fs),
                 Err(retry_error) => {
                     tracing::error!(
@@ -237,10 +228,7 @@ async fn main() {
         }
     };
 
-    // Initialize Integration Service
-    let integrations = Arc::new(IntegrationService::new());
-
-    // Initialize Redis (optional - for conversation visibility/sharing)
+    // Initialize Redis (optional - for distributed request rate limiting)
     // Use explicit connection params to avoid URL encoding issues with special characters in password
     let redis = if let Some(host) = &config.redis_host {
         match RedisService::new_with_params(
@@ -254,14 +242,14 @@ async fn main() {
             }
             Err(e) => {
                 tracing::warn!(
-                    "Failed to create Redis client: {} - conversation sharing will not work",
+                    "Failed to create Redis client: {} - distributed rate limiting is unavailable",
                     e
                 );
                 None
             }
         }
     } else {
-        tracing::warn!("Redis not configured - conversation sharing will not work");
+        tracing::warn!("Redis not configured - distributed rate limiting is unavailable");
         None
     };
 
@@ -339,7 +327,6 @@ async fn main() {
 
     let state = AppState {
         firestore,
-        integrations,
         redis,
         config: Arc::new(config.clone()),
         crisp_session_cache: routes::crisp::new_session_cache(),
@@ -373,10 +360,10 @@ async fn main() {
         .merge(chat_completions_routes())
         .merge(updates_routes())
         .merge(webhook_routes())
+        .with_state(state)
         // ── Deprecated stubs (return 410 Gone) ───────────────────────────
-        // Current app uses Python (api.omi.me) for all data CRUD.
-        .merge(deprecated_routes())
-        .with_state(state);
+        // This state-free compatibility router cannot reach backing services.
+        .merge(deprecated_routes());
 
     // Merge both (now both are Router<()>), then add layers
     let app = main_router

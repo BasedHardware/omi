@@ -198,7 +198,13 @@ int mic_start()
     /* Power the mic 1.8V rail (and level-shifter VCCA) before starting the PDM. */
     ret = t5838_aad_init();
     if (ret) {
-        LOG_ERR("t5838 AAD init failed (%d): mic rail may be unpowered", ret);
+        /* The T5838 init powers the 1.8V mic rail (and level-shifter VCCA). If it
+         * fails the PDM mic is unpowered and would capture silence/noise, so
+         * propagate the error — main() reports a mic failure rather than booting
+         * into a false-ready state. (Consistent with the #9048 "report not-ready
+         * instead of false-ready" goal; aad_hw_start() below stays non-fatal.) */
+        LOG_ERR("t5838 AAD init failed (%d): mic rail unpowered", ret);
+        return ret;
     }
 #endif
 

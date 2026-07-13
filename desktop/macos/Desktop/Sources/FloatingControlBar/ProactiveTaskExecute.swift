@@ -2,10 +2,9 @@ import Foundation
 
 /// Prompt fragments for the "Execute" button on a proactive task notification.
 ///
-/// The floating-bar agent normally lives under `floatingBarSystemPromptPrefix`,
-/// which tells it to answer in 1–2 sentences and never ask follow-ups. That's
-/// the opposite of what we want when the user explicitly clicks **Execute** —
-/// the user wants the task *done*, not described.
+/// The floating-bar agent normally lives under a concise presentation prompt.
+/// An explicit **Execute** click supplies durable task intent while the kernel
+/// still owns routing, clarification, and capability authorization.
 ///
 /// `systemPromptSuffix` is appended after the main system prompt so it takes
 /// precedence over the floating-bar concise-answer rules, and `buildQuery`
@@ -26,21 +25,16 @@ enum ProactiveTaskExecute {
 
     /// Appended to the system prompt for execute-mode pills only. Overrides
     /// the floating-bar "1-2 sentence concise answer" stance for this pill —
-    /// the user already chose to act, so finish the work with tools rather
-    /// than asking. Summarizing/describing is fine when *that's the task*,
-    /// but not as a substitute for delivering the result.
+    /// the user already chose to act, so finish the work through the
+    /// kernel-authorized capabilities. Summarizing/describing is
+    /// fine when *that's the task*, but not as a substitute for the result.
     static let systemPromptSuffix = """
 ================================================================================
 🛠 EXECUTE MODE — OVERRIDES the floating-bar "concise answer" rules above
 ================================================================================
 The user clicked "Execute" on a proactive task notification — they want the
-task carried out end-to-end. Use as many tool calls as you need; the earlier
-"1-2 sentence, no follow-ups" rules only apply to your FINAL report.
-
-Don't ask the user for clarification. Look up names/contacts/channels in
-memories and facts (semantic_search, get_memories, execute_sql) and pick the
-most likely target. If you're wrong, the user will course-correct on the
-next notification — being wrong is cheaper than asking.
+task carried out end-to-end. Tool calls remain proposals to the kernel; use
+only the capabilities it authorizes. Keep the FINAL report concise.
 
 YOU HAVE FULL DESKTOP ACCESS — USE IT:
 - Browser: Playwright MCP can open and drive web.telegram.org, slack.com,

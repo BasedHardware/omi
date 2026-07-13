@@ -370,12 +370,6 @@ pub struct AnthropicStreamError {
 pub struct ModelRoute {
     pub public_model: &'static str,
     pub upstream_model: &'static str,
-    pub provider: Provider,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Provider {
-    Anthropic,
 }
 
 /// Model allowlist — maps public model names to upstream provider models.
@@ -384,34 +378,28 @@ pub const MODEL_ROUTES: &[ModelRoute] = &[
     ModelRoute {
         public_model: "omi-sonnet",
         upstream_model: "claude-sonnet-4-6",
-        provider: Provider::Anthropic,
     },
     ModelRoute {
         public_model: "omi-opus",
         upstream_model: "claude-opus-4-6",
-        provider: Provider::Anthropic,
     },
     // Pass-through aliases used by onboarding chat and other app components
     ModelRoute {
         public_model: "claude-opus-4-6",
         upstream_model: "claude-opus-4-6",
-        provider: Provider::Anthropic,
     },
     ModelRoute {
         public_model: "claude-sonnet-4-6",
         upstream_model: "claude-sonnet-4-6",
-        provider: Provider::Anthropic,
     },
     // Legacy dated IDs — redirect to 4.6
     ModelRoute {
         public_model: "claude-opus-4-20250514",
         upstream_model: "claude-opus-4-6",
-        provider: Provider::Anthropic,
     },
     ModelRoute {
         public_model: "claude-sonnet-4-20250514",
         upstream_model: "claude-sonnet-4-6",
-        provider: Provider::Anthropic,
     },
     // Haiku 4.5 — used by the AgentPill router classifier and ModelQoS
     // synthesis paths. Without these entries every call 400s and the
@@ -420,12 +408,10 @@ pub const MODEL_ROUTES: &[ModelRoute] = &[
     ModelRoute {
         public_model: "claude-haiku-4-5-20251001",
         upstream_model: "claude-haiku-4-5",
-        provider: Provider::Anthropic,
     },
     ModelRoute {
         public_model: "claude-haiku-4-5",
         upstream_model: "claude-haiku-4-5",
-        provider: Provider::Anthropic,
     },
 ];
 

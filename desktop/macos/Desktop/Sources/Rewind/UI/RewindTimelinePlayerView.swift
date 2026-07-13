@@ -30,7 +30,7 @@ struct RewindTimelinePlayerView: View {
                 Spacer()
 
                 // Timeline and controls at bottom
-                VStack(spacing: 12) {
+                VStack(spacing: OmiSpacing.md) {
                     // Timeline slider
                     timelineSlider
 
@@ -40,8 +40,8 @@ struct RewindTimelinePlayerView: View {
                     // Time and app info
                     frameInfo
                 }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 24)
+                .padding(.horizontal, OmiSpacing.xxl)
+                .padding(.bottom, OmiSpacing.xxl)
                 .background(
                     LinearGradient(
                         colors: [.clear, .black.opacity(0.8)],
@@ -79,7 +79,7 @@ struct RewindTimelinePlayerView: View {
                 dismiss()
             } label: {
                 Image(systemName: "xmark")
-                    .scaledFont(size: 16, weight: .semibold)
+                    .scaledFont(size: OmiType.subheading, weight: .semibold)
                     .foregroundColor(.white)
                     .frame(width: 32, height: 32)
                     .background(Color.white.opacity(0.2))
@@ -91,7 +91,7 @@ struct RewindTimelinePlayerView: View {
 
             // Screenshot count
             Text("\(viewModel.currentIndex + 1) / \(viewModel.screenshots.count)")
-                .scaledFont(size: 14, weight: .medium, design: .monospaced)
+                .scaledFont(size: OmiType.body, weight: .medium, design: .monospaced)
                 .foregroundColor(.white.opacity(0.8))
 
             Spacer()
@@ -111,21 +111,21 @@ struct RewindTimelinePlayerView: View {
                     }
                 }
             } label: {
-                HStack(spacing: 4) {
+                HStack(spacing: OmiSpacing.xxs) {
                     Image(systemName: "speedometer")
                     Text("\(viewModel.playbackSpeed, specifier: "%.1f")x")
                 }
-                .scaledFont(size: 12, weight: .medium)
+                .scaledFont(size: OmiType.caption, weight: .medium)
                 .foregroundColor(.white.opacity(0.8))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
+                .padding(.horizontal, OmiSpacing.sm)
+                .padding(.vertical, OmiSpacing.xs)
                 .background(Color.white.opacity(0.2))
-                .cornerRadius(8)
+                .cornerRadius(OmiChrome.elementRadius)
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 16)
+        .padding(.horizontal, OmiSpacing.xl)
+        .padding(.top, OmiSpacing.lg)
     }
 
     // MARK: - Frame Display
@@ -141,27 +141,27 @@ struct RewindTimelinePlayerView: View {
                 Image(nsImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .cornerRadius(8)
+                    .cornerRadius(OmiChrome.elementRadius)
                     .shadow(color: .black.opacity(0.5), radius: 20)
             } else {
-                VStack(spacing: 12) {
+                VStack(spacing: OmiSpacing.md) {
                     Image(systemName: "photo")
                         .scaledFont(size: 48)
                         .foregroundColor(.white.opacity(0.5))
                     Text("Failed to load frame")
-                        .scaledFont(size: 14)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(.white.opacity(0.5))
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, 40)
+        .padding(.horizontal, OmiSpacing.page)
     }
 
     // MARK: - Timeline Slider
 
     private var timelineSlider: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: OmiSpacing.sm) {
             // App activity visualization
             GeometryReader { geometry in
                 HStack(spacing: 1) {
@@ -174,7 +174,7 @@ struct RewindTimelinePlayerView: View {
                 }
             }
             .frame(height: 8)
-            .cornerRadius(4)
+            .cornerRadius(OmiChrome.stripRadius)
 
             // Slider
             Slider(
@@ -185,7 +185,7 @@ struct RewindTimelinePlayerView: View {
                 in: 0...Double(max(0, viewModel.screenshots.count - 1)),
                 step: 1
             )
-            .tint(OmiColors.purplePrimary)
+            .tint(OmiColors.accent)
         }
     }
 
@@ -204,13 +204,13 @@ struct RewindTimelinePlayerView: View {
     // MARK: - Playback Controls
 
     private var playbackControls: some View {
-        HStack(spacing: 24) {
+        HStack(spacing: OmiSpacing.xxl) {
             // Skip to start
             Button {
                 viewModel.seekToIndex(0)
             } label: {
                 Image(systemName: "backward.end.fill")
-                    .scaledFont(size: 20)
+                    .scaledFont(size: OmiType.heading)
                     .foregroundColor(.white)
             }
             .buttonStyle(.plain)
@@ -259,7 +259,7 @@ struct RewindTimelinePlayerView: View {
                 viewModel.seekToIndex(viewModel.screenshots.count - 1)
             } label: {
                 Image(systemName: "forward.end.fill")
-                    .scaledFont(size: 20)
+                    .scaledFont(size: OmiType.heading)
                     .foregroundColor(.white)
             }
             .buttonStyle(.plain)
@@ -274,10 +274,10 @@ struct RewindTimelinePlayerView: View {
         HStack {
             if let screenshot = viewModel.currentScreenshot {
                 // App icon and name
-                HStack(spacing: 8) {
+                HStack(spacing: OmiSpacing.sm) {
                     AppIconView(appName: screenshot.appName, size: 20)
                     Text(screenshot.appName)
-                        .scaledFont(size: 13, weight: .medium)
+                        .scaledFont(size: OmiType.body, weight: .medium)
                         .foregroundColor(.white)
                 }
 
@@ -285,7 +285,7 @@ struct RewindTimelinePlayerView: View {
 
                 // Timestamp
                 Text(screenshot.formattedDate)
-                    .scaledFont(size: 13, design: .monospaced)
+                    .scaledFont(size: OmiType.body, design: .monospaced)
                     .foregroundColor(.white.opacity(0.8))
             }
         }

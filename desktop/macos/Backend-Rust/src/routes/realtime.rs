@@ -528,8 +528,8 @@ async fn report_usage(
         return StatusCode::NO_CONTENT;
     }
     let cost = usage_cost(&report);
-    // Funnels into desktop_chat.cost_usd (counted by get_total_llm_cost/quota) plus a
-    // "desktop_chat_realtime.*" breakdown.
+    // Record both the shared desktop_chat aggregate and the
+    // "desktop_chat_realtime.*" reconciliation breakdown.
     if let Err(e) = state
         .firestore
         .record_llm_usage(&user.uid, input, output, cached, 0, total, cost, "realtime")

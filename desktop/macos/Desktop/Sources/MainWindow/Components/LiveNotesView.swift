@@ -43,19 +43,19 @@ struct LiveNotesView: View {
     private var headerView: some View {
         HStack {
             Text("Notes")
-                .scaledFont(size: 14, weight: .semibold)
+                .scaledFont(size: OmiType.body, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
             Spacer()
 
             // AI toggle
-            HStack(spacing: 6) {
+            HStack(spacing: OmiSpacing.xs) {
                 Image(systemName: "sparkles")
-                    .scaledFont(size: 12)
-                    .foregroundColor(monitor.isAiEnabled ? OmiColors.purplePrimary : OmiColors.textQuaternary)
+                    .scaledFont(size: OmiType.caption)
+                    .foregroundColor(monitor.isAiEnabled ? OmiColors.accent : OmiColors.textQuaternary)
 
                 Toggle("", isOn: $monitor.isAiEnabled)
-                    .toggleStyle(.switch)
+                    .toggleStyle(OmiToggleStyle())
                     .scaleEffect(0.7)
                     .frame(width: 40)
             }
@@ -67,14 +67,14 @@ struct LiveNotesView: View {
                     .frame(width: 16, height: 16)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, OmiSpacing.md)
+        .padding(.vertical, OmiSpacing.sm)
     }
 
     // MARK: - Empty State
 
     private var emptyStateView: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: OmiSpacing.md) {
             Spacer()
 
             Image(systemName: "note.text")
@@ -82,12 +82,12 @@ struct LiveNotesView: View {
                 .foregroundColor(OmiColors.textQuaternary)
 
             Text("Notes will appear here")
-                .scaledFont(size: 13)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(OmiColors.textTertiary)
 
             if monitor.isAiEnabled {
                 Text("AI generates notes as you speak")
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textQuaternary)
             }
 
@@ -101,7 +101,7 @@ struct LiveNotesView: View {
     private var notesListView: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 8) {
+                LazyVStack(alignment: .leading, spacing: OmiSpacing.sm) {
                     ForEach(monitor.notes) { note in
                         NoteRowView(
                             note: note,
@@ -115,12 +115,12 @@ struct LiveNotesView: View {
                         .id(note.id)
                     }
                 }
-                .padding(12)
+                .padding(OmiSpacing.md)
             }
             .onChange(of: monitor.notes.count) { _, _ in
                 // Auto-scroll to latest note
                 if let lastNote = monitor.notes.last {
-                    withAnimation(.easeOut(duration: 0.2)) {
+                    OmiMotion.withGated(.easeOut(duration: 0.2)) {
                         proxy.scrollTo(lastNote.id, anchor: .bottom)
                     }
                 }
@@ -135,10 +135,10 @@ struct LiveNotesView: View {
             Divider()
                 .background(OmiColors.border)
 
-            HStack(spacing: 8) {
+            HStack(spacing: OmiSpacing.sm) {
                 TextField("Add a note...", text: $manualNoteText)
                     .textFieldStyle(.plain)
-                    .scaledFont(size: 13)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textPrimary)
                     .focused($isInputFocused)
                     .onSubmit {
@@ -147,14 +147,14 @@ struct LiveNotesView: View {
 
                 Button(action: addManualNote) {
                     Image(systemName: "plus.circle.fill")
-                        .scaledFont(size: 18)
-                        .foregroundColor(manualNoteText.isEmpty ? OmiColors.textQuaternary : OmiColors.purplePrimary)
+                        .scaledFont(size: OmiType.heading)
+                        .foregroundColor(manualNoteText.isEmpty ? OmiColors.textQuaternary : OmiColors.accent)
                 }
                 .buttonStyle(.plain)
                 .disabled(manualNoteText.isEmpty)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.sm)
             .background(OmiColors.backgroundTertiary)
         }
     }
@@ -220,26 +220,26 @@ private struct NoteRowView: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: OmiSpacing.sm) {
             // AI indicator
             if note.isAiGenerated {
                 Image(systemName: "sparkles")
-                    .scaledFont(size: 10)
-                    .foregroundColor(OmiColors.purplePrimary)
+                    .scaledFont(size: OmiType.micro)
+                    .foregroundColor(OmiColors.accent)
                     .frame(width: 14)
             } else {
                 Image(systemName: "pencil")
-                    .scaledFont(size: 10)
+                    .scaledFont(size: OmiType.micro)
                     .foregroundColor(OmiColors.textTertiary)
                     .frame(width: 14)
             }
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                 if isEditing {
                     // Edit mode
                     TextField("", text: $editText)
                         .textFieldStyle(.plain)
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(OmiColors.textPrimary)
                         .focused($isEditFocused)
                         .onSubmit { onSaveEdit() }
@@ -248,7 +248,7 @@ private struct NoteRowView: View {
                 } else {
                     // Display mode
                     Text(note.text)
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(OmiColors.textPrimary)
                         .lineLimit(nil)
                         .onTapGesture(count: 2) {
@@ -258,7 +258,7 @@ private struct NoteRowView: View {
 
                 // Timestamp
                 Text(formattedTime)
-                    .scaledFont(size: 10)
+                    .scaledFont(size: OmiType.micro)
                     .foregroundColor(OmiColors.textQuaternary)
             }
 
@@ -266,32 +266,32 @@ private struct NoteRowView: View {
 
             // Action buttons (visible on hover or editing)
             if isHovering || isEditing {
-                HStack(spacing: 4) {
+                HStack(spacing: OmiSpacing.xxs) {
                     if isEditing {
                         Button(action: onSaveEdit) {
                             Image(systemName: "checkmark")
-                                .scaledFont(size: 11)
+                                .scaledFont(size: OmiType.caption)
                                 .foregroundColor(OmiColors.success)
                         }
                         .buttonStyle(.plain)
 
                         Button(action: onCancelEdit) {
                             Image(systemName: "xmark")
-                                .scaledFont(size: 11)
+                                .scaledFont(size: OmiType.caption)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                         .buttonStyle(.plain)
                     } else {
                         Button(action: onStartEdit) {
                             Image(systemName: "pencil")
-                                .scaledFont(size: 11)
+                                .scaledFont(size: OmiType.caption)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                         .buttonStyle(.plain)
 
                         Button(action: onDelete) {
                             Image(systemName: "trash")
-                                .scaledFont(size: 11)
+                                .scaledFont(size: OmiType.caption)
                                 .foregroundColor(OmiColors.error)
                         }
                         .buttonStyle(.plain)
@@ -299,10 +299,10 @@ private struct NoteRowView: View {
                 }
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, OmiSpacing.sm)
+        .padding(.vertical, OmiSpacing.sm)
         .background(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                 .fill(isHovering || isEditing ? OmiColors.backgroundTertiary : Color.clear)
         )
         .onHover { hovering in

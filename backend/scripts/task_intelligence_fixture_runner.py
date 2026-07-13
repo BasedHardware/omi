@@ -15,9 +15,9 @@ from utils.task_intelligence.fixture_runner import run_fixture_suite
 
 def main() -> None:
     result = run_fixture_suite(
-        capture=load_fixture('capture_v1.json'),
+        capture=load_fixture('capture_v2.json'),
         association=load_fixture('association_v1.json'),
-        ranking=load_fixture('ranking_v1.json'),
+        ranking=load_fixture('ranking_v2.json'),
     )
     print(json.dumps(result, sort_keys=True, separators=(',', ':')))
 

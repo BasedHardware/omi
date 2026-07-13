@@ -1045,6 +1045,7 @@ public class ProactiveAssistantsPlugin: NSObject {
 
     @objc private func handleNotificationTestNotification(_ notification: Notification) {
         Task { @MainActor in
+            guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
             let title = (notification.userInfo?["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
             let message = (notification.userInfo?["message"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
             let assistantId = (notification.userInfo?["assistantId"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1066,6 +1067,7 @@ public class ProactiveAssistantsPlugin: NSObject {
 
             log("NotificationTestCLI: Received test trigger (title=\(resolvedTitle), assistantId=\(resolvedAssistantId))")
             NotificationService.shared.sendNotification(
+                ownerID: ownerID,
                 title: resolvedTitle,
                 message: resolvedMessage,
                 assistantId: resolvedAssistantId,
@@ -1234,7 +1236,8 @@ public class ProactiveAssistantsPlugin: NSObject {
         // notification even though real recording was still working.
         // Re-test after a short delay; only stop if both tests fail.
         log("ProactiveAssistantsPlugin: First permission test failed, re-testing to avoid false positive")
-        Task { @MainActor [weak self] in
+        let ownerID = RuntimeOwnerIdentity.currentOwnerId()
+        Task { @MainActor [weak self, ownerID] in
             try? await Task.sleep(nanoseconds: 1_500_000_000)  // 1.5s
             guard let self = self, self.isMonitoring else { return }
 
@@ -1254,12 +1257,15 @@ public class ProactiveAssistantsPlugin: NSObject {
             self.stopMonitoring()
 
             // Send user notification
-            NotificationService.shared.sendNotification(
-                title: "Screen Recording Permission Required",
-                message: "omi needs screen recording permission to continue monitoring. Please re-enable it in System Settings.",
-                deliverSystemBanner: true,
-                respectFrequency: false
-            )
+            if let ownerID {
+                NotificationService.shared.sendNotification(
+                    ownerID: ownerID,
+                    title: "Screen Recording Permission Required",
+                    message: "omi needs screen recording permission to continue monitoring. Please re-enable it in System Settings.",
+                    deliverSystemBanner: true,
+                    respectFrequency: false
+                )
+            }
         }
     }
 
@@ -1497,6 +1503,7 @@ public class ProactiveAssistantsPlugin: NSObject {
 
     /// Attempt automatic recovery (soft first, then hard reset as last resort)
     private func attemptAutoReset() {
+        let ownerID = RuntimeOwnerIdentity.currentOwnerId()
         // Step 1: Try soft recovery first (lsregister + SCK re-request, no TCC wipe)
         if !Self.hasSoftRecoveryThisSession {
             Self.hasSoftRecoveryThisSession = true
@@ -1533,7 +1540,9 @@ public class ProactiveAssistantsPlugin: NSObject {
             NotificationCenter.default.post(name: .screenCaptureKitBroken, object: nil)
             stopMonitoring()
 
+            guard let ownerID else { return }
             NotificationService.shared.sendNotification(
+                ownerID: ownerID,
                 title: NotificationService.screenCaptureResetTitle,
                 message: "Screen recording permission needs to be re-enabled. Click to open Settings.",
                 deliverSystemBanner: true,
@@ -1548,7 +1557,9 @@ public class ProactiveAssistantsPlugin: NSObject {
         NotificationCenter.default.post(name: .screenCaptureKitBroken, object: nil)
         stopMonitoring()
 
+        guard let ownerID else { return }
         NotificationService.shared.sendNotification(
+            ownerID: ownerID,
             title: NotificationService.screenCaptureResetTitle,
             message: "Screen recording permission needs to be re-enabled. Click to open Settings.",
             deliverSystemBanner: true,

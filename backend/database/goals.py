@@ -2,12 +2,14 @@
 
 import hashlib
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 from uuid import uuid4
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
+from pydantic import ValidationError
 
 from database import _client
 from models.goal import (
@@ -21,6 +23,8 @@ from models.goal import (
     GoalType,
 )
 from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
+
+logger = logging.getLogger(__name__)
 
 goals_collection = 'goals'
 goal_history_collection = 'goal_history'
@@ -785,7 +789,14 @@ def list_goal_progress_events(
         .order_by('sequence', direction=firestore.Query.DESCENDING)
         .limit(limit)
     )
-    return [GoalProgressEvent.model_validate(_snapshot_dict(snapshot)) for snapshot in query.stream()]
+    events: list[GoalProgressEvent] = []
+    for snapshot in query.stream():
+        try:
+            events.append(GoalProgressEvent.model_validate(_snapshot_dict(snapshot)))
+        except ValidationError as e:
+            # Skip a malformed/legacy progress event rather than 500 the whole detail page.
+            logger.warning('Skipping malformed goal progress event %s: %s', getattr(snapshot, 'id', None), e)
+    return events
 
 
 def update_goal_progress(

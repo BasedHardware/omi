@@ -18,6 +18,7 @@ from utils.memory.memory_tools import (
     facts_from_bundle,
 )
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
+from utils.memory_ingestion.ids import canonical_json
 
 try:
     from utils.llm.durable_memory_patches import PROMOTION_RUBRIC as _promotion_rubric
@@ -156,8 +157,7 @@ def _json_default(value: Any) -> str:
     return str(value)
 
 
-def _canonical_json(value: Any) -> str:
-    return json.dumps(value, sort_keys=True, separators=(',', ':'), default=_json_default)
+_canonical_json = canonical_json
 
 
 def _summarize_tool_result(result: Payload) -> Payload:

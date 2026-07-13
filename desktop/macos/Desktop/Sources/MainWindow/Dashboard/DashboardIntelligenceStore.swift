@@ -144,6 +144,11 @@ final class DashboardFeedbackOutboxDefaults: DashboardFeedbackOutboxPersisting {
 
 @MainActor
 final class DashboardIntelligenceStore: ObservableObject {
+  private struct OwnerScope: Equatable {
+    let ownerID: String
+    let revision: UInt
+  }
+
   @Published private(set) var recommendations: [DashboardRecommendation] = []
   @Published private(set) var goals: [OmiAPI.GoalResponse] = []
   @Published private(set) var selectedGoalDetail: OmiAPI.GoalDetailProjection?
@@ -157,6 +162,10 @@ final class DashboardIntelligenceStore: ObservableObject {
   private let now: () -> Date
   private let deviceID: () -> String?
   private let reportAttribution: (TaskIntelligenceAttributionEvent) -> Void
+  private var activeOwnerID: String
+  private var ownerRevision: UInt = 0
+  private var activeLoadToken: UUID?
+  private var loadingOwnerID: String?
   private var pendingFeedback: [PendingDashboardFeedback]
   private var presentedInterventionIDs = Set<String>()
   private var didRegisterAutomationActions = false
@@ -172,9 +181,12 @@ final class DashboardIntelligenceStore: ObservableObject {
     self.client = client
     self.outboxStore = outboxStore
     self.now = now
-    self.deviceID = deviceIDProvider ?? { ClientDeviceService.shared.deviceIdHash }
-    self.reportAttribution = reportAttribution ?? { AnalyticsManager.shared.taskIntelligenceAttribution($0) }
-    self.pendingFeedback = outboxStore.load(ownerID: outboxStore.currentOwnerID())
+    self.deviceID = deviceIDProvider ?? { ClientDeviceService.shared.clientDeviceId }
+    self.reportAttribution =
+      reportAttribution ?? { AnalyticsManager.shared.taskIntelligenceAttribution($0) }
+    let ownerID = outboxStore.currentOwnerID()
+    activeOwnerID = ownerID
+    self.pendingFeedback = outboxStore.load(ownerID: ownerID)
   }
 
   var focusedGoals: [OmiAPI.GoalResponse] {
@@ -191,15 +203,26 @@ final class DashboardIntelligenceStore: ObservableObject {
   }
 
   func load() async {
-    guard !isLoading else { return }
+    let ownerScope = captureOwnerScope()
+    guard loadingOwnerID != ownerScope.ownerID else { return }
+    let loadToken = UUID()
+    activeLoadToken = loadToken
+    loadingOwnerID = ownerScope.ownerID
     isLoading = true
-    defer { isLoading = false }
+    defer {
+      if activeLoadToken == loadToken {
+        activeLoadToken = nil
+        loadingOwnerID = nil
+        isLoading = false
+      }
+    }
     error = nil
 
     let control: OmiAPI.TaskWorkflowControl
     do {
       control = try await client.getCandidateWorkflowControl()
     } catch {
+      guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
       accountGeneration = nil
       recommendations = []
       goals = []
@@ -207,6 +230,7 @@ final class DashboardIntelligenceStore: ObservableObject {
       logError("Dashboard: Failed to load workflow control", error: error)
       return
     }
+    guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
 
     guard control.workflowMode == .read else {
       accountGeneration = nil
@@ -215,76 +239,103 @@ final class DashboardIntelligenceStore: ObservableObject {
       return
     }
     accountGeneration = control.accountGeneration
-    let ownerID = outboxStore.currentOwnerID()
-    pendingFeedback = outboxStore.load(ownerID: ownerID)
+    pendingFeedback = outboxStore.load(ownerID: ownerScope.ownerID)
     pendingFeedback.removeAll { $0.accountGeneration != control.accountGeneration }
-    outboxStore.save(pendingFeedback, ownerID: ownerID)
-    await retryPendingFeedback(ownerID: ownerID)
+    outboxStore.save(pendingFeedback, ownerID: ownerScope.ownerID)
+    await retryPendingFeedback(ownerScope: ownerScope, loadToken: loadToken)
+    guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
     do {
       let projection = try await client.getWhatMattersNow(deviceID: deviceID())
-      recommendations = Self.project(projection, now: now())
+      guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
+      recommendations = projectForCurrentOwner(projection)
       emitPresentedInterventions(recommendations)
-    } catch {
+    } catch APIError.httpError(let statusCode, _) where statusCode == 404 {
+      guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
       // Canonical-read users outside the intelligence cohort retain calm
       // dashboard behavior while canonical Goals remain available.
       recommendations = []
+    } catch {
+      guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
+      recommendations = []
+      self.error = UserFacingErrorPresentation.message(for: error, while: .dashboard)
       logError("Dashboard: What Matters Now projection unavailable", error: error)
     }
     do {
-      goals = try await client.getCanonicalGoals(includeEnded: true)
+      let loadedGoals = try await client.getCanonicalGoals(includeEnded: true)
+      guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
+      goals = loadedGoals
     } catch {
+      guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
       goals = []
       self.error = UserFacingErrorPresentation.message(for: error, while: .dashboard)
       logError("Dashboard: Failed to load canonical goals", error: error)
       return
     }
-    error = pendingFeedback.isEmpty ? nil : "Saved feedback will retry automatically."
+    if error == nil, !pendingFeedback.isEmpty {
+      error = "Saved feedback will retry automatically."
+    }
   }
 
   /// Apply a context-triggered canonical projection without coupling dashboard
   /// eligibility to notification settings or interruption policy.
   func applyContextProjection(_ projection: OmiAPI.WhatMattersNowProjection) {
-    recommendations = Self.project(projection, now: now())
+    guard persistenceOwnerIsCurrent else {
+      refreshOwnerScopedState()
+      return
+    }
+    recommendations = projectForCurrentOwner(projection)
     emitPresentedInterventions(recommendations)
     error = nil
   }
 
   @discardableResult
   func openRecommendation(id: String) async -> Bool {
+    let ownerScope = captureOwnerScope()
     if !recommendations.contains(where: { $0.id == id }) {
       await load()
+      guard requireCurrentOwner(ownerScope) else { return false }
     }
     guard let recommendation = recommendations.first(where: { $0.id == id }),
       let recommendationActionHandler
     else {
+      guard requireCurrentOwner(ownerScope) else { return false }
       error = "This review target is no longer available."
       return false
     }
     let opened = await recommendationActionHandler(recommendation)
+    guard requireCurrentOwner(ownerScope) else { return false }
     if opened {
-      TaskContextSubjectMatcher.shared.bindRecentContext(to: TaskContextSubject(
-        kind: recommendation.subjectKind,
-        id: recommendation.subjectID,
-        workstreamID: Self.destinationWorkstreamID(recommendation.destination)
-      ))
+      TaskContextSubjectMatcher.shared.bindRecentContext(
+        to: TaskContextSubject(
+          kind: recommendation.subjectKind,
+          id: recommendation.subjectID,
+          workstreamID: Self.destinationWorkstreamID(recommendation.destination)
+        ))
       await recordPrimaryAction(recommendation)
+      guard requireCurrentOwner(ownerScope) else { return false }
     }
     return opened
   }
 
   func loadGoalDetail(goalID: String) async {
+    let ownerScope = captureOwnerScope()
     do {
-      selectedGoalDetail = try await client.getCanonicalGoalDetail(goalID: goalID)
+      let detail = try await client.getCanonicalGoalDetail(goalID: goalID)
+      guard requireCurrentOwner(ownerScope) else { return }
+      selectedGoalDetail = detail
       error = nil
     } catch {
+      guard requireCurrentOwner(ownerScope) else { return }
       selectedGoalDetail = nil
       self.error = "Goal details could not be loaded."
     }
   }
 
   func candidateForNavigation(candidateID: String) async -> OmiAPI.CandidateRecord? {
+    let ownerScope = captureOwnerScope()
     do {
       let candidate = try await client.getCanonicalCandidate(candidateID: candidateID)
+      guard requireCurrentOwner(ownerScope) else { return nil }
       guard candidate.candidateId == candidateID,
         SuggestedTasksStore.canPresentForNavigation(candidate)
       else {
@@ -293,26 +344,34 @@ final class DashboardIntelligenceStore: ObservableObject {
       }
       return candidate
     } catch {
+      guard requireCurrentOwner(ownerScope) else { return nil }
       self.error = "This Suggested item could not be opened."
       return nil
     }
   }
 
   func taskForNavigation(taskID: String) async -> TaskActionItem? {
+    let ownerScope = captureOwnerScope()
     do {
       let task = try await client.getActionItem(id: taskID)
+      guard requireCurrentOwner(ownerScope) else { return nil }
       guard task.id == taskID else {
         error = "This task is no longer available."
         return nil
       }
       return task
     } catch {
+      guard requireCurrentOwner(ownerScope) else { return nil }
       self.error = "This task could not be opened."
       return nil
     }
   }
 
   func clearGoalDetail() {
+    guard persistenceOwnerIsCurrent else {
+      refreshOwnerScopedState()
+      return
+    }
     selectedGoalDetail = nil
   }
 
@@ -323,6 +382,7 @@ final class DashboardIntelligenceStore: ObservableObject {
     successCriteria: [String],
     idempotencyKey: String
   ) async -> Bool {
+    let ownerScope = captureOwnerScope()
     guard let generation = accountGeneration else { return false }
     do {
       _ = try await client.createCanonicalGoal(
@@ -333,37 +393,46 @@ final class DashboardIntelligenceStore: ObservableObject {
         accountGeneration: generation,
         idempotencyKey: idempotencyKey
       )
+      guard requireCurrentOwner(ownerScope) else { return false }
       await load()
+      guard requireCurrentOwner(ownerScope) else { return false }
       return true
     } catch {
+      guard requireCurrentOwner(ownerScope) else { return false }
       self.error = "Goal could not be created."
       return false
     }
   }
 
   func recordPrimaryAction(_ recommendation: DashboardRecommendation) async {
-    let feedback = await recordFeedback(
+    let ownerScope = captureOwnerScope()
+    guard recommendations.contains(recommendation) else { return }
+    _ = await recordFeedback(
       recommendation,
       action: .do_now,
       reason: nil,
       laterUntil: nil,
-      idempotencyKey: "wmn:\(recommendation.interventionID):do-now"
+      idempotencyKey: "wmn:\(recommendation.interventionID):do-now",
+      ownerScope: ownerScope
     )
+    guard requireCurrentOwner(ownerScope) else { return }
     recommendations.removeAll { $0.id == recommendation.id }
-    if let feedback {
-      await recordAdvanceOutcome(recommendation: recommendation, feedback: feedback)
-    }
   }
 
   func later(_ recommendation: DashboardRecommendation) async {
+    let ownerScope = captureOwnerScope()
+    guard recommendations.contains(recommendation) else { return }
     let until = now().addingTimeInterval(24 * 60 * 60)
     _ = await recordFeedback(
       recommendation,
       action: .later,
       reason: nil,
       laterUntil: Self.iso8601(until),
-      idempotencyKey: "wmn:\(recommendation.interventionID):later:\(UUID().uuidString.lowercased())"
+      idempotencyKey:
+        "wmn:\(recommendation.interventionID):later:\(UUID().uuidString.lowercased())",
+      ownerScope: ownerScope
     )
+    guard requireCurrentOwner(ownerScope) else { return }
     recommendations.removeAll { $0.id == recommendation.id }
   }
 
@@ -371,17 +440,22 @@ final class DashboardIntelligenceStore: ObservableObject {
     _ recommendation: DashboardRecommendation,
     reason: OmiAPI.TaskIntelligenceFeedbackReason?
   ) async {
+    let ownerScope = captureOwnerScope()
+    guard recommendations.contains(recommendation) else { return }
     _ = await recordFeedback(
       recommendation,
       action: .dismiss,
       reason: reason,
       laterUntil: nil,
-      idempotencyKey: "wmn:\(recommendation.interventionID):dismiss:\(reason?.rawValue ?? "none")"
+      idempotencyKey: "wmn:\(recommendation.interventionID):dismiss:\(reason?.rawValue ?? "none")",
+      ownerScope: ownerScope
     )
+    guard requireCurrentOwner(ownerScope) else { return }
     recommendations.removeAll { $0.id == recommendation.id }
   }
 
   func focus(goalID: String, replacing replacementGoalID: String?) async -> Bool {
+    let ownerScope = captureOwnerScope()
     guard let generation = accountGeneration else { return false }
     do {
       _ = try await client.focusCanonicalGoal(
@@ -391,14 +465,20 @@ final class DashboardIntelligenceStore: ObservableObject {
         accountGeneration: generation,
         idempotencyKey: "goal-focus:\(goalID):\(UUID().uuidString.lowercased())"
       )
+      guard requireCurrentOwner(ownerScope) else { return false }
       focusReplacementGoalID = nil
       await load()
+      guard requireCurrentOwner(ownerScope) else { return false }
       return true
-    } catch APIError.httpError(let statusCode, _) where statusCode == 409 && replacementGoalID == nil {
+    } catch APIError.httpError(let statusCode, _)
+      where statusCode == 409 && replacementGoalID == nil
+    {
+      guard requireCurrentOwner(ownerScope) else { return false }
       focusReplacementGoalID = goalID
       self.error = "Choose a focused goal to replace."
       return false
     } catch {
+      guard requireCurrentOwner(ownerScope) else { return false }
       focusReplacementGoalID = nil
       self.error = "Goal focus could not be updated."
       return false
@@ -406,6 +486,7 @@ final class DashboardIntelligenceStore: ObservableObject {
   }
 
   func unfocus(goalID: String) async {
+    let ownerScope = captureOwnerScope()
     guard let generation = accountGeneration else { return }
     do {
       _ = try await client.unfocusCanonicalGoal(
@@ -413,13 +494,17 @@ final class DashboardIntelligenceStore: ObservableObject {
         accountGeneration: generation,
         idempotencyKey: "goal-unfocus:\(goalID):\(UUID().uuidString.lowercased())"
       )
+      guard requireCurrentOwner(ownerScope) else { return }
       await load()
+      guard requireCurrentOwner(ownerScope) else { return }
     } catch {
+      guard requireCurrentOwner(ownerScope) else { return }
       self.error = "Goal focus could not be updated."
     }
   }
 
   func transition(goalID: String, status: OmiAPI.GoalStatus) async {
+    let ownerScope = captureOwnerScope()
     guard let generation = accountGeneration else { return }
     do {
       _ = try await client.transitionCanonicalGoal(
@@ -427,10 +512,14 @@ final class DashboardIntelligenceStore: ObservableObject {
         status: status,
         relationshipDisposition: "retain",
         accountGeneration: generation,
-        idempotencyKey: "goal-lifecycle:\(goalID):\(status.rawValue):\(UUID().uuidString.lowercased())"
+        idempotencyKey:
+          "goal-lifecycle:\(goalID):\(status.rawValue):\(UUID().uuidString.lowercased())"
       )
+      guard requireCurrentOwner(ownerScope) else { return }
       await load()
+      guard requireCurrentOwner(ownerScope) else { return }
     } catch {
+      guard requireCurrentOwner(ownerScope) else { return }
       self.error = "Goal lifecycle could not be updated."
     }
   }
@@ -441,9 +530,10 @@ final class DashboardIntelligenceStore: ObservableObject {
     action: OmiAPI.TaskIntelligenceFeedbackAction,
     reason: OmiAPI.TaskIntelligenceFeedbackReason?,
     laterUntil: String?,
-    idempotencyKey: String
+    idempotencyKey: String,
+    ownerScope: OwnerScope
   ) async -> OmiAPI.FeedbackRecord? {
-    guard let generation = accountGeneration else { return nil }
+    guard requireCurrentOwner(ownerScope), let generation = accountGeneration else { return nil }
     let request = OmiAPI.FeedbackCreate(
       action: action,
       contextSnapshotHash: nil,
@@ -458,19 +548,20 @@ final class DashboardIntelligenceStore: ObservableObject {
       idempotencyKey: idempotencyKey,
       accountGeneration: generation
     )
-    let ownerID = outboxStore.currentOwnerID()
-    var ownerFeedback = outboxStore.load(ownerID: ownerID)
+    var ownerFeedback = outboxStore.load(ownerID: ownerScope.ownerID)
     ownerFeedback.removeAll { $0.idempotencyKey == idempotencyKey }
     ownerFeedback.append(entry)
-    outboxStore.save(ownerFeedback, ownerID: ownerID)
-    if outboxStore.currentOwnerID() == ownerID { pendingFeedback = ownerFeedback }
+    outboxStore.save(ownerFeedback, ownerID: ownerScope.ownerID)
+    guard requireCurrentOwner(ownerScope) else { return nil }
+    pendingFeedback = ownerFeedback
     do {
       let feedback = try await client.recordTaskFeedback(
         request, idempotencyKey: idempotencyKey, accountGeneration: generation)
-      ownerFeedback = outboxStore.load(ownerID: ownerID)
+      guard requireCurrentOwner(ownerScope) else { return nil }
+      ownerFeedback = outboxStore.load(ownerID: ownerScope.ownerID)
       ownerFeedback.removeAll { $0.idempotencyKey == idempotencyKey }
-      outboxStore.save(ownerFeedback, ownerID: ownerID)
-      if outboxStore.currentOwnerID() == ownerID { pendingFeedback = ownerFeedback }
+      outboxStore.save(ownerFeedback, ownerID: ownerScope.ownerID)
+      pendingFeedback = ownerFeedback
       error = nil
       reportAttribution(
         .feedbackRecorded(
@@ -485,46 +576,17 @@ final class DashboardIntelligenceStore: ObservableObject {
         ))
       return feedback
     } catch {
+      guard requireCurrentOwner(ownerScope) else { return nil }
       self.error = "Saved. Feedback will retry automatically."
       return nil
     }
   }
 
-  private func recordAdvanceOutcome(
-    recommendation: DashboardRecommendation,
-    feedback: OmiAPI.FeedbackRecord
-  ) async {
-    guard let generation = accountGeneration else { return }
-    let request = OmiAPI.OutcomeCreate(
-      attributionChainId: feedback.attributionChainId,
-      outcomeCode: .workstream_advanced,
-      subjectId: recommendation.feedbackSubjectID,
-      subjectKind: recommendation.feedbackSubjectKind
-    )
-    do {
-      let outcome = try await client.createTaskOutcome(
-        request,
-        idempotencyKey: "wmn:\(recommendation.interventionID):outcome:advance",
-        accountGeneration: generation
-      )
-      reportAttribution(
-        .outcomeRecorded(
-          interventionID: recommendation.interventionID,
-          surface: .whatMattersNow,
-          outcomeCode: outcome.outcomeCode.rawValue,
-          subjectKind: recommendation.feedbackSubjectKind.rawValue,
-          subjectID: recommendation.feedbackSubjectID,
-          candidateID: recommendation.subjectKind == .candidate ? recommendation.subjectID : nil,
-          attributionChainID: outcome.attributionChainId
-        ))
-    } catch {
-      // Outcome recording is best-effort; feedback already landed.
-    }
-  }
-
   private func emitPresentedInterventions(_ recommendations: [DashboardRecommendation]) {
     for recommendation in recommendations {
-      guard presentedInterventionIDs.insert(recommendation.interventionID).inserted else { continue }
+      guard presentedInterventionIDs.insert(recommendation.interventionID).inserted else {
+        continue
+      }
       reportAttribution(
         .interventionPresented(
           interventionID: recommendation.interventionID,
@@ -536,31 +598,117 @@ final class DashboardIntelligenceStore: ObservableObject {
     }
   }
 
-  private func retryPendingFeedback(ownerID: String) async {
+  private func retryPendingFeedback(ownerScope: OwnerScope, loadToken: UUID) async {
     var succeeded = Set<String>()
-    for entry in outboxStore.load(ownerID: ownerID) {
+    for entry in outboxStore.load(ownerID: ownerScope.ownerID) {
+      guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
       do {
         _ = try await client.recordTaskFeedback(
-          entry.request, idempotencyKey: entry.idempotencyKey, accountGeneration: entry.accountGeneration)
+          entry.request, idempotencyKey: entry.idempotencyKey,
+          accountGeneration: entry.accountGeneration)
+        guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
         succeeded.insert(entry.idempotencyKey)
       } catch {
+        guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
         continue
       }
     }
-    let remaining = outboxStore.load(ownerID: ownerID).filter {
+    guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
+    let remaining = outboxStore.load(ownerID: ownerScope.ownerID).filter {
       !succeeded.contains($0.idempotencyKey)
     }
-    outboxStore.save(remaining, ownerID: ownerID)
-    if outboxStore.currentOwnerID() == ownerID { pendingFeedback = remaining }
+    outboxStore.save(remaining, ownerID: ownerScope.ownerID)
+    pendingFeedback = remaining
+  }
+
+  private var persistenceOwnerIsCurrent: Bool {
+    activeOwnerID == outboxStore.currentOwnerID()
+  }
+
+  private func captureOwnerScope() -> OwnerScope {
+    refreshOwnerScopedState()
+    return OwnerScope(ownerID: activeOwnerID, revision: ownerRevision)
+  }
+
+  @discardableResult
+  private func requireCurrentOwner(_ ownerScope: OwnerScope) -> Bool {
+    guard ownerScopeIsCurrent(ownerScope) else {
+      refreshOwnerScopedState()
+      return false
+    }
+    return true
+  }
+
+  private func ownerScopeIsCurrent(_ ownerScope: OwnerScope) -> Bool {
+    ownerScope.ownerID == activeOwnerID
+      && ownerScope.revision == ownerRevision
+      && outboxStore.currentOwnerID() == ownerScope.ownerID
+  }
+
+  private func loadScopeIsCurrent(_ ownerScope: OwnerScope, token: UUID) -> Bool {
+    guard activeLoadToken == token, ownerScopeIsCurrent(ownerScope) else {
+      refreshOwnerScopedState()
+      return false
+    }
+    return true
+  }
+
+  @discardableResult
+  private func refreshOwnerScopedState() -> Bool {
+    let ownerID = outboxStore.currentOwnerID()
+    guard ownerID != activeOwnerID else { return false }
+
+    activeOwnerID = ownerID
+    ownerRevision &+= 1
+    activeLoadToken = nil
+    loadingOwnerID = nil
+    pendingFeedback = outboxStore.load(ownerID: ownerID)
+    recommendations = []
+    goals = []
+    selectedGoalDetail = nil
+    isLoading = false
+    accountGeneration = nil
+    focusReplacementGoalID = nil
+    presentedInterventionIDs = []
+    error = nil
+    return true
+  }
+
+  private func projectForCurrentOwner(
+    _ projection: OmiAPI.WhatMattersNowProjection
+  ) -> [DashboardRecommendation] {
+    Self.project(projection, now: now(), pendingFeedback: pendingFeedback)
   }
 
   static func project(
     _ projection: OmiAPI.WhatMattersNowProjection,
     now: Date
   ) -> [DashboardRecommendation] {
-    guard let projectionExpiry = parseDate(projection.expiresAt), projectionExpiry > now else { return [] }
+    project(projection, now: now, pendingFeedback: [])
+  }
+
+  private static func project(
+    _ projection: OmiAPI.WhatMattersNowProjection,
+    now: Date,
+    pendingFeedback: [PendingDashboardFeedback]
+  ) -> [DashboardRecommendation] {
+    guard let projectionExpiry = parseDate(projection.expiresAt), projectionExpiry > now else {
+      return []
+    }
     var seenDedupeKeys = Set<String>()
-    let recommendations = projection.recommendations.compactMap { item -> DashboardRecommendation? in
+    let recommendations = projection.recommendations.compactMap {
+      item -> DashboardRecommendation? in
+      let suppressedByPendingFeedback = pendingFeedback.contains { entry in
+        guard entry.request.action == .later || entry.request.action == .dismiss else {
+          return false
+        }
+        let matchesIntervention = entry.request.interventionId == item.interventionId
+        let matchesSubject =
+          entry.request.subjectKind == item.feedbackSubjectKind
+          && entry.request.subjectId == item.feedbackSubjectId
+        return matchesIntervention || matchesSubject
+      }
+      guard !suppressedByPendingFeedback else { return nil }
       guard let expiry = parseDate(item.expiresAt), expiry > now else { return nil }
       guard seenDedupeKeys.insert(item.dedupeKey).inserted else { return nil }
       let destination: DashboardRecommendationDestination
@@ -663,7 +811,9 @@ final class DashboardIntelligenceStore: ObservableObject {
       params: ["goal_id", "replacement_goal_id"]
     ) { [weak self] params in
       guard let self else { return ["error": "dashboard intelligence store deallocated"] }
-      guard let goalID = params["goal_id"], !goalID.isEmpty else { return ["error": "goal_id is required"] }
+      guard let goalID = params["goal_id"], !goalID.isEmpty else {
+        return ["error": "goal_id is required"]
+      }
       let success = await self.focus(goalID: goalID, replacing: params["replacement_goal_id"])
       return ["success": success ? "true" : "false", "error": self.error ?? ""]
     }
@@ -682,7 +832,9 @@ final class DashboardIntelligenceStore: ObservableObject {
     ].joined(separator: "|")
   }
 
-  private static func automationDestination(_ destination: DashboardRecommendationDestination) -> String {
+  private static func automationDestination(_ destination: DashboardRecommendationDestination)
+    -> String
+  {
     switch destination {
     case .suggested(let candidateID): return "candidate:\(candidateID)"
     case .task(let taskID, let workstreamID): return "task:\(taskID):\(workstreamID ?? "")"
@@ -691,7 +843,9 @@ final class DashboardIntelligenceStore: ObservableObject {
     }
   }
 
-  private static func destinationWorkstreamID(_ destination: DashboardRecommendationDestination) -> String? {
+  private static func destinationWorkstreamID(_ destination: DashboardRecommendationDestination)
+    -> String?
+  {
     switch destination {
     case .task(_, let workstreamID): return workstreamID
     case .thread(let workstreamID, _): return workstreamID

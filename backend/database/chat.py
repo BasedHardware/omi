@@ -1,11 +1,13 @@
 import copy
+import hashlib
+import json
 import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterator, List, Optional, cast
 
 from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition
-from google.cloud import firestore
+from google.cloud import firestore, firestore_v1
 from google.cloud.firestore_v1 import FieldFilter
 
 from models.chat import Message
@@ -18,6 +20,14 @@ logger = logging.getLogger(__name__)
 BATCH_LIMIT = 500  # Firestore hard limit
 DELETE_MESSAGES_BATCH_LIMIT = 200  # Leaves room for one session-counter write per deleted message.
 DELETE_MESSAGES_CONFLICT_RETRIES = 3
+
+
+class ClientMessageIdPayloadConflict(ValueError):
+    """The same client id was reused for a different immutable message."""
+
+
+class MessageReconcileCursorError(ValueError):
+    """A desktop journal cursor is absent or outside the authenticated scope."""
 
 
 def _typed_doc(doc: Any) -> Dict[str, Any]:
@@ -255,6 +265,94 @@ def get_messages(
     return messages
 
 
+@prepare_for_read(decrypt_func=_prepare_message_for_read)
+def get_messages_reconcile_page(
+    uid: str,
+    *,
+    limit: int,
+    cursor_message_id: Optional[str] = None,
+    app_id: Optional[str] = None,
+    chat_session_id: Optional[str] = None,
+) -> tuple[List[Dict[str, Any]], Optional[str], bool]:
+    """Return a stable, owner-scoped keyset page for the desktop journal.
+
+    `get_messages` remains offset-compatible for existing clients. This path is
+    deliberately separate: a Firestore document snapshot cursor cannot skip or
+    duplicate rows when a newer message is inserted between page requests.
+    Reported rows are scanned but not returned, with a bounded scan budget and a
+    cursor over the last inspected document so filtering cannot stall progress.
+    """
+    if limit < 1 or limit > 100:
+        raise ValueError('reconcile page limit must be between 1 and 100')
+
+    user_ref = db.collection('users').document(uid)
+    messages_collection = user_ref.collection('messages')
+    query: Any = messages_collection
+    if chat_session_id:
+        query = query.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
+    else:
+        query = query.where(filter=FieldFilter('plugin_id', '==', app_id))
+    query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
+
+    cursor_snapshot: Any = None
+    if cursor_message_id:
+        cursor_snapshot = messages_collection.document(cursor_message_id).get()
+        if not cursor_snapshot.exists:
+            raise MessageReconcileCursorError('message cursor does not exist')
+        cursor_payload = _typed_doc(cursor_snapshot)
+        cursor_in_scope = (
+            cursor_payload.get('chat_session_id') == chat_session_id
+            if chat_session_id
+            else cursor_payload.get('plugin_id') == app_id
+        )
+        if not cursor_in_scope or cursor_payload.get('created_at') is None:
+            raise MessageReconcileCursorError('message cursor is outside the requested scope')
+
+    # Four pages of reported rows may be traversed per request. The returned
+    # cursor lets a caller resume if the bounded budget is exhausted.
+    scan_budget = min(1000, max(100, limit * 4))
+    scanned = 0
+    messages: List[Dict[str, Any]] = []
+    next_cursor = cursor_message_id
+    has_more = False
+
+    while scanned < scan_budget and len(messages) < limit:
+        batch_limit = min(100, scan_budget - scanned)
+        page_query = query.start_after(cursor_snapshot) if cursor_snapshot is not None else query
+        documents = list(page_query.limit(batch_limit).stream())
+        if not documents:
+            has_more = False
+            break
+
+        reached_return_limit = False
+        for document in documents:
+            scanned += 1
+            cursor_snapshot = document
+            next_cursor = str(document.id)
+            message = _typed_doc(document)
+            if message.get('reported') is not True:
+                messages.append(message)
+                if len(messages) == limit:
+                    reached_return_limit = True
+                    break
+
+        if reached_return_limit:
+            # An extra empty page is harmless when the last returned row was the
+            # collection tail; claiming continuation avoids a racey count query.
+            has_more = True
+            break
+        if len(documents) < batch_limit:
+            has_more = False
+            break
+        has_more = True
+
+    if scanned >= scan_budget and len(messages) < limit:
+        has_more = True
+    if next_cursor == cursor_message_id and not messages:
+        next_cursor = None
+    return messages, next_cursor, has_more
+
+
 def get_message_count(uid: str) -> int:
     """Return the number of chat messages visible to the user.
 
@@ -452,8 +550,10 @@ def get_chat_files_desc(uid: str, files_id: Optional[List[str]] = None, limit: i
         chunk_ref = chunk_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
         results.extend([_typed_doc(doc) for doc in chunk_ref.stream()])
 
-    # Sort all results by created_at and limit
-    results.sort(key=lambda x: x.get('created_at', datetime.min), reverse=True)
+    # Sort all results by created_at and limit. Use a tz-aware sentinel for a missing created_at so it
+    # never TypeError-compares against the tz-aware Firestore datetimes and sinks to the bottom of the
+    # descending sort (same class as the review-queue tz sentinel in #9571).
+    results.sort(key=lambda x: x.get('created_at', datetime.min.replace(tzinfo=timezone.utc)), reverse=True)
     return results[:limit]
 
 
@@ -750,6 +850,7 @@ def save_message(
     metadata: Optional[str] = None,
     client_message_id: Optional[str] = None,
     message_source: str = 'desktop_chat',
+    journal_revision: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Save a chat message for the desktop app.
 
@@ -758,21 +859,33 @@ def save_message(
     """
     msg_id = client_message_id or str(uuid.uuid4())
     now = datetime.now(timezone.utc)
+    requested_session_id = session_id
+    idempotency_payload_hash = _message_idempotency_payload_hash(
+        text=text,
+        sender=sender,
+        app_id=app_id,
+        session_id=requested_session_id,
+        metadata=metadata,
+        message_source=message_source,
+    )
 
     message_ref = db.collection('users').document(uid).collection('messages').document(msg_id)
     if client_message_id:
         existing_message = message_ref.get()
         if existing_message.exists:
-            existing: Dict[str, Any] = _typed_doc(existing_message)
-            existing_created_at = existing.get('created_at')
-            if existing_created_at is not None and hasattr(existing_created_at, 'isoformat'):
-                existing_created_at = existing_created_at.isoformat()
-            return {
-                'id': msg_id,
-                'created_at': existing_created_at or now.isoformat(),
-                'session_id': existing.get('chat_session_id') or existing.get('session_id'),
-                'created': False,
-            }
+            existing_result = _apply_existing_message_revision(
+                message_ref,
+                text=text,
+                sender=sender,
+                app_id=app_id,
+                session_id=requested_session_id,
+                metadata=metadata,
+                message_source=message_source,
+                payload_hash=idempotency_payload_hash,
+                journal_revision=journal_revision,
+            )
+            if existing_result is not None:
+                return _message_revision_response(msg_id, existing_result, now)
 
     # Auto-acquire session (matches Rust backend behavior)
     if not session_id:
@@ -795,21 +908,30 @@ def save_message(
         'metadata': metadata,
         'message_source': message_source,
     }
+    if client_message_id:
+        doc['client_message_id'] = client_message_id
+        doc['client_message_payload_hash'] = idempotency_payload_hash
+        if journal_revision is not None:
+            doc['journal_revision'] = journal_revision
     created = True
     if client_message_id:
         try:
             message_ref.create(doc)
         except (AlreadyExists, Conflict):
-            existing = _typed_doc(message_ref.get())
-            existing_created_at = existing.get('created_at')
-            if existing_created_at is not None and hasattr(existing_created_at, 'isoformat'):
-                existing_created_at = existing_created_at.isoformat()
-            return {
-                'id': msg_id,
-                'created_at': existing_created_at or now.isoformat(),
-                'session_id': existing.get('chat_session_id') or existing.get('session_id'),
-                'created': False,
-            }
+            existing_result = _apply_existing_message_revision(
+                message_ref,
+                text=text,
+                sender=sender,
+                app_id=app_id,
+                session_id=requested_session_id,
+                metadata=metadata,
+                message_source=message_source,
+                payload_hash=idempotency_payload_hash,
+                journal_revision=journal_revision,
+            )
+            if existing_result is None:
+                raise ClientMessageIdPayloadConflict('client_message_id disappeared during revision arbitration')
+            return _message_revision_response(msg_id, existing_result, now)
     else:
         message_ref.set(doc)
 
@@ -826,7 +948,183 @@ def save_message(
                 }
             )
 
-    return {'id': msg_id, 'created_at': now.isoformat(), 'session_id': session_id, 'created': created}
+    return {
+        'id': msg_id,
+        'created_at': now.isoformat(),
+        'session_id': session_id,
+        'created': created,
+        'updated': False,
+        'journal_revision': journal_revision,
+    }
+
+
+def _apply_existing_message_revision(
+    message_ref: Any,
+    *,
+    text: str,
+    sender: str,
+    app_id: Optional[str],
+    session_id: Optional[str],
+    metadata: Optional[str],
+    message_source: str,
+    payload_hash: str,
+    journal_revision: Optional[int],
+) -> Optional[Dict[str, Any]]:
+    """Atomically arbitrate an idempotent retry or monotonic journal enrichment."""
+    transaction = db.transaction()
+
+    @firestore_v1.transactional
+    def apply(write_transaction: Any) -> Optional[Dict[str, Any]]:
+        snapshot = message_ref.get(transaction=write_transaction)
+        if not snapshot.exists:
+            return None
+        existing = _typed_doc(snapshot)
+        _assert_message_identity(
+            existing,
+            sender=sender,
+            app_id=app_id,
+            session_id=session_id,
+            message_source=message_source,
+        )
+        stored_revision = int(existing.get('journal_revision') or 1)
+        if journal_revision is None:
+            _assert_idempotent_message_payload(
+                existing,
+                text=text,
+                sender=sender,
+                app_id=app_id,
+                session_id=session_id,
+                metadata=metadata,
+                message_source=message_source,
+                payload_hash=payload_hash,
+            )
+            existing['_revision_updated'] = False
+            existing['journal_revision'] = existing.get('journal_revision')
+            return existing
+        if journal_revision < stored_revision:
+            existing['_revision_updated'] = False
+            return existing
+        if journal_revision == stored_revision:
+            _assert_idempotent_message_payload(
+                existing,
+                text=text,
+                sender=sender,
+                app_id=app_id,
+                session_id=session_id,
+                metadata=metadata,
+                message_source=message_source,
+                payload_hash=payload_hash,
+            )
+            existing['_revision_updated'] = False
+            return existing
+        patch = {
+            'text': text,
+            'metadata': metadata,
+            'client_message_payload_hash': payload_hash,
+            'journal_revision': journal_revision,
+        }
+        write_transaction.update(message_ref, patch)
+        existing.update(patch)
+        existing['_revision_updated'] = True
+        return existing
+
+    return apply(transaction)
+
+
+def _assert_message_identity(
+    existing: Dict[str, Any],
+    *,
+    sender: str,
+    app_id: Optional[str],
+    session_id: Optional[str],
+    message_source: str,
+) -> None:
+    mismatched = existing.get('sender') != sender
+    mismatched = mismatched or existing.get('message_source', 'desktop_chat') != message_source
+    existing_app_ids = [existing[field] for field in ('app_id', 'plugin_id') if field in existing] or [None]
+    mismatched = mismatched or any(existing_app_id != app_id for existing_app_id in existing_app_ids)
+    if session_id is not None:
+        existing_session_ids = [
+            existing[field] for field in ('chat_session_id', 'session_id') if field in existing
+        ] or [None]
+        mismatched = mismatched or any(
+            existing_session_id != session_id for existing_session_id in existing_session_ids
+        )
+    if mismatched:
+        raise ClientMessageIdPayloadConflict('client_message_id already exists with a different canonical identity')
+
+
+def _message_revision_response(msg_id: str, existing: Dict[str, Any], now: datetime) -> Dict[str, Any]:
+    existing_created_at = existing.get('created_at')
+    if existing_created_at is not None and hasattr(existing_created_at, 'isoformat'):
+        existing_created_at = existing_created_at.isoformat()
+    return {
+        'id': msg_id,
+        'created_at': existing_created_at or now.isoformat(),
+        'session_id': existing.get('chat_session_id') or existing.get('session_id'),
+        'created': False,
+        'updated': bool(existing.get('_revision_updated')),
+        'journal_revision': existing.get('journal_revision'),
+    }
+
+
+def _assert_idempotent_message_payload(
+    existing: Dict[str, Any],
+    *,
+    text: str,
+    sender: str,
+    app_id: Optional[str],
+    session_id: Optional[str],
+    metadata: Optional[str],
+    message_source: str,
+    payload_hash: str,
+) -> None:
+    """Reject an idempotency-key collision without exposing message content."""
+    existing_payload_hash = existing.get('client_message_payload_hash')
+    if existing_payload_hash is not None:
+        if existing_payload_hash != payload_hash:
+            raise ClientMessageIdPayloadConflict('client_message_id already exists with a different payload')
+        return
+
+    # Legacy messages predate the request-payload fingerprint. Preserve retries
+    # for them while validating every field whose original request value can be
+    # reconstructed from the stored row. New writes always use the exact hash.
+    mismatched = existing.get('text') != text or existing.get('sender') != sender
+    mismatched = mismatched or existing.get('metadata') != metadata
+    mismatched = mismatched or existing.get('message_source', 'desktop_chat') != message_source
+    existing_app_ids = [existing[field] for field in ('app_id', 'plugin_id') if field in existing] or [None]
+    mismatched = mismatched or any(existing_app_id != app_id for existing_app_id in existing_app_ids)
+    if session_id is not None:
+        existing_session_ids = [
+            existing[field] for field in ('chat_session_id', 'session_id') if field in existing
+        ] or [None]
+        mismatched = mismatched or any(
+            existing_session_id != session_id for existing_session_id in existing_session_ids
+        )
+    if mismatched:
+        raise ClientMessageIdPayloadConflict('client_message_id already exists with a different payload')
+
+
+def _message_idempotency_payload_hash(
+    *,
+    text: str,
+    sender: str,
+    app_id: Optional[str],
+    session_id: Optional[str],
+    metadata: Optional[str],
+    message_source: str,
+) -> str:
+    """Return a stable digest of the caller-controlled immutable payload."""
+    payload = {
+        'app_id': app_id,
+        'message_source': message_source,
+        'metadata': metadata,
+        'sender': sender,
+        'session_id': session_id,
+        'text': text,
+    }
+    canonical = json.dumps(payload, ensure_ascii=False, separators=(',', ':'), sort_keys=True)
+    return f'sha256:{hashlib.sha256(canonical.encode("utf-8")).hexdigest()}'
 
 
 def delete_messages(uid: str, app_id: Optional[str] = None, session_id: Optional[str] = None) -> int:

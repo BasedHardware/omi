@@ -19,16 +19,16 @@ struct ManualInstallationDisclosure<Content: View>: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       Button(action: { isExpanded.toggle() }) {
-        HStack(spacing: 4) {
+        HStack(spacing: OmiSpacing.xxs) {
           Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-            .scaledFont(size: 9, weight: .semibold)
+            .scaledFont(size: OmiType.micro, weight: .semibold)
             .frame(width: 10)
 
           Text("Manual installation")
             .scaledFont(size: fontSize, weight: .medium)
         }
         .foregroundColor(OmiColors.textTertiary)
-        .padding(.vertical, 4)
+        .padding(.vertical, OmiSpacing.xxs)
         .frame(minHeight: 28, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())

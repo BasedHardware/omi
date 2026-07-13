@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// NSVisualEffectView wrapper for dark blur background.
 struct VisualEffectView: NSViewRepresentable {
@@ -50,7 +51,7 @@ struct FloatingBackgroundModifier: ViewModifier {
 }
 
 extension View {
-    func floatingBackground(cornerRadius: CGFloat = 20) -> some View {
+    func floatingBackground(cornerRadius: CGFloat = OmiChrome.sectionRadius) -> some View {
         modifier(FloatingBackgroundModifier(cornerRadius: cornerRadius))
     }
 }
@@ -65,7 +66,7 @@ struct FloatingLoadingSpinner: View {
             .stroke(Color.white, lineWidth: 2)
             .rotationEffect(.degrees(isSpinning ? 360 : 0))
             .onAppear { isSpinning = true }
-            .animation(
+            .omiAnimation(
                 .linear(duration: 1).repeatForever(autoreverses: false),
                 value: isSpinning
             )

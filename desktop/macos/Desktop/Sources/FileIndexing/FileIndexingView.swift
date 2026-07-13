@@ -53,72 +53,66 @@ struct FileIndexingView: View {
 
             // Animation
             OnboardingLoadingAnimation(progress: progress)
-                .padding(.bottom, 20)
+                .padding(.bottom, OmiSpacing.xl)
 
             // Title
             Text(statusText)
-                .scaledFont(size: 16, weight: .medium)
+                .scaledFont(size: OmiType.subheading, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
                 .multilineTextAlignment(.center)
-                .padding(.bottom, 6)
+                .padding(.bottom, OmiSpacing.xs)
 
             // Subtitle — folder being scanned or general message
             if !scanningFolder.isEmpty {
                 Text("Scanning ~/\(scanningFolder)" + (totalFilesScanned > 0 ? " · \(totalFilesScanned.formatted()) files found" : ""))
-                    .scaledFont(size: 13)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textTertiary)
                     .multilineTextAlignment(.center)
-                    .animation(.easeInOut(duration: 0.2), value: scanningFolder)
+                    .omiAnimation(.easeInOut(duration: 0.2), value: scanningFolder)
             } else if totalFilesScanned > 0 {
                 Text("\(totalFilesScanned.formatted()) files indexed")
-                    .scaledFont(size: 13)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textTertiary)
                     .multilineTextAlignment(.center)
             } else {
                 Text("All data is secure and belongs to you. Open-source verified.")
-                    .scaledFont(size: 13)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textTertiary)
                     .multilineTextAlignment(.center)
             }
 
             // Progress bar
-            VStack(spacing: 6) {
+            VStack(spacing: OmiSpacing.xs) {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 3)
+                        RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
                             .fill(OmiColors.backgroundTertiary)
                             .frame(height: 6)
 
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(
-                                LinearGradient(
-                                    colors: [OmiColors.purplePrimary, OmiColors.purpleSecondary],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
+                        RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
+                            .fill(OmiColors.accent)
                             .frame(width: max(0, geo.size.width * progress), height: 6)
-                            .animation(.easeOut(duration: 0.3), value: progress)
+                            .omiAnimation(.easeOut(duration: 0.3), value: progress)
                     }
                 }
                 .frame(height: 6)
 
                 Text("\(Int(progress * 100))%")
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textTertiary)
                     .monospacedDigit()
             }
-            .padding(.horizontal, 40)
-            .padding(.top, 20)
+            .padding(.horizontal, OmiSpacing.page)
+            .padding(.top, OmiSpacing.xl)
 
             // Skip
             Button(action: skip) {
                 Text("Skip")
-                    .scaledFont(size: 13)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(.secondary)
             }
             .buttonStyle(.plain)
-            .padding(.top, 16)
+            .padding(.top, OmiSpacing.lg)
 
             Spacer()
         }
@@ -127,28 +121,28 @@ struct FileIndexingView: View {
     // MARK: - Info Popover
 
     private var infoPopoverContent: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             HStack {
                 Text("Behind the scenes")
-                    .scaledFont(size: 13, weight: .semibold)
+                    .scaledFont(size: OmiType.body, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
                 Spacer()
             }
 
             if !scanningFolder.isEmpty {
-                HStack(spacing: 6) {
+                HStack(spacing: OmiSpacing.xs) {
                     Image(systemName: "folder")
-                        .scaledFont(size: 10)
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .scaledFont(size: OmiType.micro)
+                        .foregroundColor(OmiColors.accent)
                     Text("Scanning ~/\(scanningFolder)")
-                        .scaledFont(size: 11)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(OmiColors.textSecondary)
                 }
             }
 
             if totalFilesScanned > 0 {
                 Text("\(totalFilesScanned.formatted()) files indexed")
-                    .scaledFont(size: 11)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textTertiary)
             }
 
@@ -158,10 +152,10 @@ struct FileIndexingView: View {
                 Divider()
 
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
                         ForEach(Array(aiMessages.enumerated()), id: \.offset) { _, msg in
                             Text(msg.text)
-                                .scaledFont(size: 11)
+                                .scaledFont(size: OmiType.caption)
                                 .foregroundColor(OmiColors.textSecondary)
                                 .lineSpacing(3)
                                 .textSelection(.enabled)
@@ -171,7 +165,7 @@ struct FileIndexingView: View {
                 .frame(maxHeight: 300)
             }
         }
-        .padding(14)
+        .padding(OmiSpacing.md)
         .frame(width: 340)
     }
 
@@ -181,15 +175,15 @@ struct FileIndexingView: View {
         ZStack {
             if graphViewModel.isEmpty {
                 // Empty fallback
-                VStack(spacing: 12) {
+                VStack(spacing: OmiSpacing.md) {
                     Image(systemName: "brain")
-                        .scaledFont(size: 40)
+                        .scaledFont(size: OmiType.hero)
                         .foregroundColor(.white.opacity(0.15))
                     Text("Your knowledge graph will grow as omi learns more about you")
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(.white.opacity(0.4))
                         .multilineTextAlignment(.center)
-                        .padding(.horizontal, 40)
+                        .padding(.horizontal, OmiSpacing.page)
                 }
             } else {
                 // 3D graph — SceneKit renders its own black background
@@ -203,22 +197,22 @@ struct FileIndexingView: View {
                     .foregroundColor(.white)
                     .shadow(color: .black.opacity(0.7), radius: 12, x: 0, y: 2)
                     .shadow(color: .black.opacity(0.4), radius: 24, x: 0, y: 4)
-                    .padding(.top, 40)
+                    .padding(.top, OmiSpacing.page)
 
                 Spacer()
 
                 Button(action: { onComplete(totalFilesScanned) }) {
                     Text("Continue")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.white)
+                        .foregroundColor(OmiColors.backgroundPrimary)
                         .frame(maxWidth: 220)
-                        .padding(.vertical, 12)
-                        .background(OmiColors.purplePrimary)
-                        .cornerRadius(12)
-                        .shadow(color: OmiColors.purplePrimary.opacity(0.4), radius: 16, x: 0, y: 4)
+                        .padding(.vertical, OmiSpacing.md)
+                        .background(OmiColors.accent)
+                        .cornerRadius(OmiChrome.smallControlRadius)
+                        .shadow(color: OmiColors.accent.opacity(0.4), radius: 16, x: 0, y: 4)
                 }
                 .buttonStyle(.plain)
-                .padding(.bottom, 40)
+                .padding(.bottom, OmiSpacing.page)
             }
 
             // Graph shortcut hints — bottom-left corner
@@ -226,8 +220,8 @@ struct FileIndexingView: View {
                 Spacer()
                 HStack {
                     graphShortcutsHint
-                        .padding(.leading, 20)
-                        .padding(.bottom, 20)
+                        .padding(.leading, OmiSpacing.xl)
+                        .padding(.bottom, OmiSpacing.xl)
                     Spacer()
                 }
             }
@@ -237,22 +231,22 @@ struct FileIndexingView: View {
     // MARK: - Graph Shortcuts Hint
 
     private var graphShortcutsHint: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             shortcutRow(icon: "cursorarrow.rays", label: "Drag to rotate")
             shortcutRow(icon: "arrow.up.and.down.and.arrow.left.and.right", label: "Right-drag to pan")
             shortcutRow(icon: "plus.magnifyingglass", label: "Scroll to zoom")
             shortcutRow(icon: "arrow.counterclockwise", label: "Double-click to reset")
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, OmiSpacing.sm)
+        .padding(.vertical, OmiSpacing.sm)
         .background(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                 .fill(.black.opacity(0.45))
         )
     }
 
     private func shortcutRow(icon: String, label: String) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: OmiSpacing.xs) {
             Image(systemName: icon)
                 .font(.system(size: 10, weight: .medium))
                 .foregroundColor(.white.opacity(0.5))
@@ -285,7 +279,7 @@ struct FileIndexingView: View {
 
             // Transition to brain map
             await MainActor.run {
-                withAnimation(.easeInOut(duration: 0.5)) {
+                OmiMotion.withGated(.easeInOut(duration: 0.5)) {
                     phase = .brainMap
                     isBrainMapPhase?.wrappedValue = true
                 }
@@ -422,7 +416,7 @@ struct FileIndexingView: View {
 
                 await MainActor.run {
                     progress = 1.0
-                    statusText = "Done!"
+                    statusText = "Done"
                 }
                 try? await Task.sleep(nanoseconds: 500_000_000)
                 return
@@ -455,7 +449,7 @@ struct FileIndexingView: View {
 
         await MainActor.run {
             progress = 1.0
-            statusText = "Done!"
+            statusText = "Done"
         }
 
         // Brief pause to show 100%

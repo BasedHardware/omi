@@ -100,6 +100,10 @@ environments:
       services:
         backend:
           env:
+            SYNC_LEDGER_FENCE_MODE:
+              env_var: SYNC_LEDGER_FENCE_MODE
+              default: legacy
+              category: rollout
             DESKTOP_UPDATE_POINTERS_MODE:
               value: primary
               category: rollout
@@ -195,6 +199,10 @@ environments:
               version: latest
         backend-sync: &dev_backend_sync
           env:
+            SYNC_LEDGER_FENCE_MODE:
+              env_var: SYNC_LEDGER_FENCE_MODE
+              default: legacy
+              category: rollout
             SYNC_FRESH_MAX_AGE_SECONDS:
               value: '21600'
               category: rollout
@@ -558,6 +566,10 @@ environments:
       services:
         backend:
           env:
+            SYNC_LEDGER_FENCE_MODE:
+              env_var: SYNC_LEDGER_FENCE_MODE
+              default: legacy
+              category: rollout
             DESKTOP_UPDATE_POINTERS_MODE:
               value: primary
               category: rollout
@@ -624,6 +636,10 @@ environments:
               version: latest
         backend-sync: &prod_backend_sync
           env:
+            SYNC_LEDGER_FENCE_MODE:
+              env_var: SYNC_LEDGER_FENCE_MODE
+              default: legacy
+              category: rollout
             SYNC_FRESH_MAX_AGE_SECONDS:
               value: '21600'
               category: rollout

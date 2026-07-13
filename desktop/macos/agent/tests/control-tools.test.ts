@@ -4,26 +4,51 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  activeControlToolOwnerId,
   AGENT_CONTROL_TOOL_NAMES,
   agentControlToolDefinitions,
   agentControlToolSchemas,
-  controlRequestKey,
-  handleAgentControlToolCall,
+  handleAgentControlToolCall as rawHandleAgentControlToolCall,
   INTERNAL_AGENT_CONTROL_TOOL_NAMES,
   isAgentControlToolName,
-  registerSignedDirectControlOwner,
-  resolveControlRequestContext,
   type AgentControlToolContext,
   withDefaultOwnerGuard,
   withMergedOwnerGuard,
 } from "../src/runtime/control-tools.js";
 import { agentControlCapabilityManifest, agentControlInputSchema } from "../src/runtime/control-tool-manifest.js";
+import { AdapterRegistry } from "../src/runtime/adapter-registry.js";
+import { AgentRuntimeKernel } from "../src/runtime/kernel.js";
+import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 import { toolNamesForAdapter } from "../src/runtime/omi-tool-manifest.js";
-import { baseRunInput, createKernelHarness, waitUntil } from "./kernel-fakes.js";
+import {
+  RunToolCapabilityBroker,
+  type AuthorizedRunToolInvocation,
+} from "../src/runtime/run-tool-capability.js";
+import { readToolInvocation } from "../src/runtime/tool-invocation-ledger.js";
+import { readSessionExecutionProfile } from "../src/runtime/session-execution-profile.js";
+import { baseRunInput, createKernelHarness, FakeRuntimeAdapter, waitUntil } from "./kernel-fakes.js";
 
 const createdDirs: string[] = [];
 const servers: Array<{ server: Server; sockPath: string }> = [];
+const ORIGIN_BOUND_CONTROL_TOOLS = new Set([
+  "send_agent_message",
+  "spawn_background_agent",
+  "spawn_agent",
+  "run_agent_and_wait",
+]);
+
+function handleAgentControlToolCall(
+  context: AgentControlToolContext,
+  name: Parameters<typeof rawHandleAgentControlToolCall>[1],
+  input: Record<string, unknown>,
+): ReturnType<typeof rawHandleAgentControlToolCall> {
+  return rawHandleAgentControlToolCall(
+    context,
+    name,
+    ORIGIN_BOUND_CONTROL_TOOLS.has(name)
+      ? { originSurfaceKind: "agent_control", ...input }
+      : input,
+  );
+}
 
 afterEach(async () => {
   await Promise.all(
@@ -41,6 +66,22 @@ afterEach(async () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+function createCapabilityBroker(store: SqliteAgentStore): RunToolCapabilityBroker {
+  return new RunToolCapabilityBroker({
+    store,
+    profileForSession: (sessionId) => {
+      const profile = readSessionExecutionProfile(store, sessionId);
+      return {
+        generation: profile.generation,
+        // These control-tool tests use the kernel's synthetic `fake` adapter;
+        // the canonical capability projection they exercise is the stdio lane.
+        adapterId: profile.adapterId === "fake" ? "acp" : profile.adapterId,
+        executionRole: profile.executionRole,
+      };
+    },
+  });
+}
 
 describe("agent control tools", () => {
   it("bridges workstream migration, artifact versioning, checkpointing, and idempotent replay", async () => {
@@ -155,6 +196,114 @@ describe("agent control tools", () => {
     ).toBe(1);
   });
 
+  it("revalidates workstream authority between commits and ledgers revocation without later writes", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const caller = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "fake",
+      executionRole: "coordinator",
+    });
+    const parent = store.insertRun({
+      sessionId: caller.sessionId,
+      clientId: "workstream-lease-client",
+      requestId: "workstream-lease-parent",
+      status: "running",
+      mode: "act",
+    });
+    const attempt = store.insertAttempt({
+      runId: parent.runId,
+      attemptNo: 1,
+      status: "running",
+      adapterId: "fake",
+      adapterInstanceId: "workstream-lease-worker",
+    });
+    const broker = createCapabilityBroker(store);
+    const capability = broker.register({
+      ownerId: "owner",
+      sessionId: caller.sessionId,
+      runId: parent.runId,
+      attemptId: attempt.attemptId,
+    });
+    const authorized = broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "lease-workstream-commits",
+      runId: parent.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: "owner",
+      toolName: "spawn_agent",
+      toolInput: { objective: "persist guarded workstream state" },
+    });
+    broker.markInvocationDispatched(authorized);
+    const lease = broker.acquireExecutionLease(authorized, () => "owner");
+    let assertionCount = 0;
+    let entered!: () => void;
+    let resume!: () => void;
+    const enteredSecondCommit = new Promise<void>((resolve) => { entered = resolve; });
+    const resumeSecondCommit = new Promise<void>((resolve) => { resume = resolve; });
+    const resultPromise = handleAgentControlToolCall({
+      ...ownerContext(kernel),
+      callerSessionId: caller.sessionId,
+      executionLease: {
+        signal: lease.signal,
+        assertCurrentAuthority: async () => {
+          assertionCount += 1;
+          if (assertionCount === 3) {
+            entered();
+            await resumeSecondCommit;
+          }
+          lease.assertCurrentAuthority();
+        },
+      },
+    }, "persist_workstream_continuity", {
+      workstreamId: "guarded-workstream",
+      context: {
+        canonicalSummary: "Guard each durable write",
+        latestEventSequence: 1,
+        selectedEvents: [],
+        artifactHeads: [],
+        provenance: {
+          snapshotVersion: "guarded:1",
+          fetchedAtMs: 10,
+          source: "canonical_backend",
+        },
+      },
+      artifacts: [{
+        logicalKey: "guarded-report",
+        evidenceRefs: [{ kind: "conversation", id: "conversation-guarded", scope: "canonical" }],
+        kind: "markdown",
+        role: "result",
+        uri: "file:///tmp/guarded-report.md",
+        contentHash: "sha256:guarded-report",
+        sourceArtifactId: "source-guarded-report",
+      }],
+    });
+
+    await enteredSecondCommit;
+    broker.revokeForOwner("owner", "owner_changed");
+    const atRevocation = workstreamWriteSnapshot(store);
+    resume();
+    const result = parseToolResult(await resultPromise);
+    expect(result).toMatchObject({ ok: false, error: { code: "owner_mismatch" } });
+    expect(workstreamWriteSnapshot(store)).toEqual(atRevocation);
+    expect(atRevocation.contextPackets).toHaveLength(1);
+    expect(atRevocation.artifactVersions).toHaveLength(0);
+    expect(atRevocation.deliveries).toHaveLength(0);
+    lease.release();
+    expect(() => broker.completeInvocation({
+      ...invocationIdentityForTest(authorized),
+      capabilityRef: authorized.capabilityRef,
+      activeOwnerId: "owner",
+      outcome: "failed",
+      result: JSON.stringify(result),
+    })).toThrow(/completion authority was revoked/);
+    expect(readToolInvocation(store, authorized.invocationId)).toMatchObject({
+      status: "outcome_unknown",
+      errorCode: "run_tool_owner_changed",
+    });
+    store.close();
+  });
+
   it("persists prepared artifacts only with a scoped live grant and without replacing context", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const context = ownerContext(kernel);
@@ -264,6 +413,46 @@ describe("agent control tools", () => {
     }
   });
 
+  it("validates structured route proposals against kernel-owned targets and adapters", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const existing = await kernel.executeRun(baseRunInput);
+
+    const continued = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "route_desktop_intent", {
+        utterance: "continue the referenced run",
+        surfaceKind: "floating_bar",
+        snapshotVersion: "snapshot:control-1",
+        proposal: { intent: "continue_run" },
+        syntaxFacts: {
+          explicitSessionId: existing.session.sessionId,
+          explicitRunId: existing.run.runId,
+        },
+      }),
+    );
+    const unavailable = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "route_desktop_intent", {
+        utterance: "use an unavailable provider",
+        surfaceKind: "realtime",
+        snapshotVersion: "snapshot:control-2",
+        proposal: { intent: "spawn_agent" },
+        syntaxFacts: { explicitProvider: "openclaw" },
+      }),
+    );
+
+    expect(continued.route).toMatchObject({
+      intent: "continue_run",
+      sessionId: existing.session.sessionId,
+      runId: existing.run.runId,
+      snapshotVersion: "snapshot:control-1",
+    });
+    expect(unavailable.route).toMatchObject({
+      intent: "reject",
+      code: "provider_unavailable",
+      snapshotVersion: "snapshot:control-2",
+    });
+    store.close();
+  });
+
   it("generates ACP/MCP tool definitions from the canonical manifest", () => {
     expect(agentControlToolDefinitions).toEqual(
       agentControlCapabilityManifest.map((tool) => ({
@@ -284,6 +473,7 @@ describe("agent control tools", () => {
   it("validates the canonical Swift background-agent spawn payload", () => {
     const parsed = agentControlToolSchemas.spawn_background_agent.safeParse({
       prompt: "Search my recent memories and write a short story.",
+      originSurfaceKind: "floating_bar",
       title: "Create Memory Story",
       surfaceKind: "background_agent",
       externalRefKind: "pill",
@@ -301,9 +491,19 @@ describe("agent control tools", () => {
     expect(parsed.success).toBe(true);
     expect(
       agentControlToolSchemas.spawn_background_agent.safeParse({
-        prompt: "",
+        prompt: "valid",
       }).success,
     ).toBe(false);
+  });
+
+  it("accepts objective-only public spawn_agent input and rejects caller-supplied routing authority", () => {
+    expect(agentControlToolSchemas.spawn_agent.safeParse({
+      objective: "Research the release plan",
+    }).success).toBe(true);
+    expect(agentControlToolSchemas.spawn_agent.safeParse({
+      objective: "Research the release plan",
+      originSurfaceKind: "main_chat",
+    }).success).toBe(false);
   });
 
   it("declares coordinator policy metadata for every control tool", () => {
@@ -740,175 +940,6 @@ describe("agent control tools", () => {
     store.close();
   });
 
-  it("resolves control owners from active request context before mutable global fallback", () => {
-    const ownerByRequest = new Map([
-      ["request-owner-a", "owner-a"],
-      ["request-owner-b", "owner-b"],
-    ]);
-    const ownerByRun = new Map([["run-owner-c", "owner-c"]]);
-    const ownerByAttempt = new Map([["attempt-owner-d", "owner-d"]]);
-    let mutableFallbackOwner = "owner-a";
-
-    mutableFallbackOwner = "owner-b";
-
-    expect(
-      activeControlToolOwnerId({
-        requestKey: "request-owner-a",
-        ownerIdForRequest: (requestId) => ownerByRequest.get(requestId),
-        fallbackOwnerId: mutableFallbackOwner,
-      }),
-    ).toBe("owner-a");
-    expect(
-      activeControlToolOwnerId({
-        requestKey: "request-owner-b",
-        ownerIdForRequest: (requestId) => ownerByRequest.get(requestId),
-        fallbackOwnerId: mutableFallbackOwner,
-      }),
-    ).toBe("owner-b");
-    expect(
-      activeControlToolOwnerId({
-        requestKey: "request-missing",
-        ownerIdForRequest: (requestId) => ownerByRequest.get(requestId),
-        fallbackOwnerId: mutableFallbackOwner,
-        allowFallbackOwner: true,
-      }),
-    ).toBe("owner-b");
-    expect(() =>
-      activeControlToolOwnerId({
-        requestKey: "request-missing",
-        ownerIdForRequest: (requestId) => ownerByRequest.get(requestId),
-        fallbackOwnerId: mutableFallbackOwner,
-      }),
-    ).toThrow("Owner-scoped control tools require active request, run, or attempt context");
-    expect(
-      activeControlToolOwnerId({
-        requestKey: "request-missing",
-        runId: "run-owner-c",
-        ownerIdForRequest: (requestId) => ownerByRequest.get(requestId),
-        ownerIdForRun: (runId) => ownerByRun.get(runId),
-        fallbackOwnerId: mutableFallbackOwner,
-      }),
-    ).toBe("owner-c");
-    expect(
-      activeControlToolOwnerId({
-        requestKey: "request-missing",
-        runId: "run-owner-c",
-        attemptId: "attempt-owner-d",
-        ownerIdForRequest: (requestId) => ownerByRequest.get(requestId),
-        ownerIdForRun: (runId) => ownerByRun.get(runId),
-        ownerIdForAttempt: (attemptId) => ownerByAttempt.get(attemptId),
-        fallbackOwnerId: mutableFallbackOwner,
-      }),
-    ).toBe("owner-d");
-  });
-
-  it("treats direct control envelope owner as a guard against active owner", () => {
-    const resolved = resolveControlRequestContext({
-      ownerGuard: " owner-active ",
-      activeOwnerId: "owner-active",
-      requestId: "request-a",
-      clientId: "client-a",
-    });
-
-    expect(resolved).toEqual({
-      requestKey: JSON.stringify(["client-a", "request-a"]),
-      activeOwnerId: "owner-active",
-      ownerGuard: "owner-active",
-    });
-    expect(() =>
-      resolveControlRequestContext({
-        ownerGuard: "owner-from-envelope",
-        activeOwnerId: "fallback-owner",
-        requestId: "request-a",
-        clientId: "client-a",
-      }),
-    ).toThrow("ownerId does not match active control owner");
-    expect(controlRequestKey({ requestId: "request:a", clientId: "client" })).toBe(
-      JSON.stringify(["client", "request:a"]),
-    );
-    expect(controlRequestKey({ requestId: "request", clientId: "client:a" })).toBe(
-      JSON.stringify(["client:a", "request"]),
-    );
-    expect(controlRequestKey({ requestId: "request", clientId: "client" })).toBe(JSON.stringify(["client", "request"]));
-  });
-
-  it("rejects direct control envelope owners before active owner context is cached", () => {
-    expect(() =>
-      resolveControlRequestContext({
-        ownerGuard: "signed-in-owner",
-        activeOwnerId: "desktop-local-user",
-        requireActiveOwner: true,
-        requireOwnerGuard: true,
-        requestId: "cold-control-request",
-        clientId: "swift-client",
-      }),
-    ).toThrow("missing active control owner");
-  });
-
-  it("rejects direct control context without active owner authority", () => {
-    expect(() =>
-      resolveControlRequestContext({
-        requireActiveOwner: true,
-        requestId: "cold-control-request",
-        clientId: "swift-client",
-      }),
-    ).toThrow("missing active control owner");
-  });
-
-  it("registers signed direct control envelopes when no request owner is active", () => {
-    const ownersByRequest = new Map<string, string>();
-    const requestKey = controlRequestKey({
-      requestId: "realtime-request",
-      clientId: "realtime-hub",
-    });
-
-    const inserted = registerSignedDirectControlOwner({
-      requestKey,
-      ownerGuard: " signed-in-owner ",
-      ownerIdForRequest: (key) => ownersByRequest.get(key),
-      registerOwner: (key, ownerId) => {
-        ownersByRequest.set(key, ownerId);
-        return true;
-      },
-    });
-
-    expect(inserted).toBe(true);
-    expect(requestKey ? ownersByRequest.get(requestKey) : undefined).toBe("signed-in-owner");
-  });
-
-  it("rejects cold direct control calls without active request context", async () => {
-    const { store, kernel } = createKernelHarness(newDatabasePath());
-    await kernel.executeRun({ ...baseRunInput, ownerId: "signed-in-owner" });
-    await kernel.executeRun({
-      ...baseRunInput,
-      ownerId: "desktop-local-user",
-      externalRefId: "local-task",
-      requestId: "local-run",
-    });
-
-    expect(() =>
-      resolveControlRequestContext({
-        ownerGuard: "signed-in-owner",
-        requireActiveOwner: true,
-        requireOwnerGuard: true,
-        requestId: "cold-direct-request",
-        clientId: "swift-client",
-      }),
-    ).toThrow("missing active control owner");
-    store.close();
-  });
-
-  it("rejects blank direct control envelope owners before global fallback", () => {
-    expect(() =>
-      resolveControlRequestContext({
-        ownerGuard: "   ",
-        activeOwnerId: "fallback-owner",
-        requestId: "request-a",
-        clientId: "client-a",
-      }),
-    ).toThrow("ownerId cannot be empty");
-  });
-
   it("injects the active owner as a default guard without overriding tool-supplied guards", () => {
     expect(withDefaultOwnerGuard({ runId: "run-a" }, "owner-active")).toEqual({
       runId: "run-a",
@@ -934,92 +965,6 @@ describe("agent control tools", () => {
     expect(() =>
       withMergedOwnerGuard({ runId: "run-a", ownerId: "owner-active" }, "owner-envelope", "owner-active"),
     ).toThrow("Owner guards do not match");
-  });
-
-  it("keeps concurrent control tool calls scoped to their active request owners", async () => {
-    const { store, kernel } = createKernelHarness(newDatabasePath());
-    await kernel.executeRun({
-      ...baseRunInput,
-      ownerId: "owner-a",
-      requestId: "run-owner-a",
-    });
-    await kernel.executeRun({
-      ...baseRunInput,
-      ownerId: "owner-b",
-      externalRefId: "task-owner-b",
-      requestId: "run-owner-b",
-    });
-    const ownerByRequest = new Map([
-      ["request-owner-a", "owner-a"],
-      ["request-owner-b", "owner-b"],
-    ]);
-    let mutableFallbackOwner = "owner-a";
-    const contextForRequest = (requestId: string): AgentControlToolContext => ({
-      kernel,
-      getOwnerId: () =>
-        activeControlToolOwnerId({
-          requestKey: requestId,
-          ownerIdForRequest: (id) => ownerByRequest.get(id),
-          fallbackOwnerId: mutableFallbackOwner,
-          allowFallbackOwner: true,
-        }),
-    });
-
-    mutableFallbackOwner = "owner-b";
-    const [ownerAResult, ownerBResult] = await Promise.all([
-      handleAgentControlToolCall(contextForRequest("request-owner-a"), "list_agent_sessions", {}),
-      handleAgentControlToolCall(contextForRequest("request-owner-b"), "list_agent_sessions", {}),
-    ]);
-    const ownerAListed = parseToolResult(ownerAResult);
-    const ownerBListed = parseToolResult(ownerBResult);
-
-    expect(ownerAListed.sessions).toHaveLength(1);
-    expect(ownerAListed.sessions[0].session.ownerId).toBe("owner-a");
-    expect(ownerBListed.sessions).toHaveLength(1);
-    expect(ownerBListed.sessions[0].session.ownerId).toBe("owner-b");
-
-    const guarded = parseToolResult(
-      await handleAgentControlToolCall(contextForRequest("request-owner-a"), "list_agent_sessions", {
-        ownerId: "owner-b",
-      }),
-    );
-    expect(guarded).toMatchObject({
-      ok: false,
-      error: { code: "control_tool_failed" },
-    });
-    expect(guarded.error.message).toContain("does not match the active control owner");
-    store.close();
-  });
-
-  it("rejects owner-scoped adapter-originated tools without active request, run, or attempt context", async () => {
-    const { store, kernel } = createKernelHarness(newDatabasePath());
-    await kernel.executeRun({ ...baseRunInput, ownerId: "signed-in-owner" });
-    const result = parseToolResult(
-      await handleAgentControlToolCall(
-        {
-          kernel,
-          getOwnerId: () =>
-            activeControlToolOwnerId({
-              requestKey: controlRequestKey({ requestId: "missing-request" }),
-              ownerIdForRequest: () => undefined,
-              fallbackOwnerId: "signed-in-owner",
-            }),
-        },
-        "list_agent_sessions",
-        {},
-      ),
-    );
-
-    expect(result).toMatchObject({
-      ok: false,
-      error: {
-        code: "control_tool_failed",
-      },
-    });
-    expect(result.error.message).toContain(
-      "Owner-scoped control tools require active request, run, or attempt context",
-    );
-    store.close();
   });
 
   it("rejects run inspection, cancellation, and artifact inspection outside the active owner", async () => {
@@ -1550,6 +1495,10 @@ describe("agent control tools", () => {
     );
 
     expect(sent.ok).toBe(true);
+    expect(sent.routeDecision).toMatchObject({
+      intent: "continue_run",
+      sessionId: first.session.sessionId,
+    });
     expect(sent.session.sessionId).toBe(first.session.sessionId);
     expect(sent.run.sessionId).toBe(first.session.sessionId);
     expect(sent.run.runId).not.toBe(first.run.runId);
@@ -1651,7 +1600,7 @@ describe("agent control tools", () => {
       ok: false,
       error: {
         code: "control_tool_failed",
-        message: "Adapter missing-adapter is outside the owning execution boundary.",
+        message: "Desktop intent effect rejected by canonical route policy (provider_unavailable).",
       },
     });
     store.close();
@@ -1763,6 +1712,7 @@ describe("agent control tools", () => {
       await handleAgentControlToolCall(ownerContext(kernel), "spawn_background_agent", {
         prompt: "draft a story idea",
         title: "Story Idea",
+        adapterId: "fake",
         externalRefKind: "pill",
         externalRefId: "pill-1",
         requestId: "background-1",
@@ -1772,6 +1722,11 @@ describe("agent control tools", () => {
     );
 
     expect(spawned.ok).toBe(true);
+    expect(spawned.routeDecision).toMatchObject({
+      intent: "spawn_agent",
+      requestedProvider: "fake",
+      requestedAgentCount: 1,
+    });
     expect(spawned.session).toMatchObject({
       ownerId: "owner",
       title: "Story Idea",
@@ -1785,6 +1740,427 @@ describe("agent control tools", () => {
       mode: "act",
       status: "queued",
     });
+    store.close();
+  });
+
+  it("binds every direct-control origin surface through the same route owner", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    for (const [index, originSurfaceKind] of [
+      "main_chat",
+      "floating_bar",
+      "realtime",
+      "task_chat",
+      "agent_control",
+    ].entries()) {
+      const spawned = parseToolResult(
+        await handleAgentControlToolCall(ownerContext(kernel), "spawn_background_agent", {
+          prompt: `origin ${originSurfaceKind}`,
+          originSurfaceKind,
+          adapterId: "fake",
+          externalRefKind: "pill",
+          externalRefId: `origin-${index}`,
+          requestId: `origin-${index}`,
+          ownerId: "owner",
+        }),
+      );
+      expect(spawned.ok).toBe(true);
+      expect(spawned.routeDecision).toMatchObject({
+        intent: "spawn_agent",
+        surfaceKind: originSurfaceKind,
+      });
+      expect(spawned.session.surfaceKind).toBe("floating_bar");
+    }
+    store.close();
+  });
+
+  it("creates a requested sibling set under one route decision", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const spawned = parseToolResult(await handleAgentControlToolCall(ownerContext(kernel), "spawn_agent", {
+      objective: "parallel bounded research",
+      originSurfaceKind: "main_chat",
+      requestedAgentCount: 3,
+      visible: true,
+      externalRefId: "sibling-set",
+      adapterId: "fake",
+      requestId: "sibling-set",
+    }));
+
+    expect(spawned.routeDecision).toMatchObject({ intent: "spawn_agent", requestedAgentCount: 3 });
+    expect(spawned.requestedAgentCount).toBe(3);
+    expect(spawned.agents).toHaveLength(3);
+    const siblingExternalRefIds = spawned.agents.map((agent: any) => agent.session.externalRefId);
+    expect(new Set(siblingExternalRefIds).size).toBe(3);
+    for (const externalRefId of siblingExternalRefIds) {
+      expect(externalRefId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    }
+    for (const row of store.allRows(
+      `SELECT s.external_ref_id, r.input_json
+       FROM sessions s JOIN runs r ON r.session_id = s.session_id
+       WHERE s.external_ref_id IN (?, ?, ?)`,
+      siblingExternalRefIds,
+    )) {
+      expect(JSON.parse(String(row.input_json)).metadata).toMatchObject({
+        pillId: row.external_ref_id,
+        siblingGroupExternalRefId: "sibling-set",
+      });
+    }
+    expect(store.getRow("SELECT COUNT(*) AS count FROM runs").count).toBe(3);
+    await waitUntil(() => store.allRows("SELECT status FROM runs").every((row) => row.status === "succeeded"));
+    store.close();
+  });
+
+  it("leases authority before the first control effect and fails the invocation with zero effects after revocation", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const caller = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "fake",
+      executionRole: "coordinator",
+    });
+    const parent = store.insertRun({
+      sessionId: caller.sessionId,
+      clientId: "lease-client",
+      requestId: "lease-parent",
+      status: "running",
+      mode: "act",
+    });
+    const attempt = store.insertAttempt({
+      runId: parent.runId,
+      attemptNo: 1,
+      status: "running",
+      adapterId: "fake",
+      adapterInstanceId: "lease-worker",
+    });
+    const broker = createCapabilityBroker(store);
+    const capability = broker.register({
+      ownerId: "owner",
+      sessionId: caller.sessionId,
+      runId: parent.runId,
+      attemptId: attempt.attemptId,
+    });
+    const authorized = broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "lease-before-first-effect",
+      runId: parent.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: "owner",
+      toolName: "spawn_agent",
+      toolInput: { objective: "must not start" },
+    });
+    broker.markInvocationDispatched(authorized);
+    const lease = broker.acquireExecutionLease(authorized, () => "owner");
+    let entered!: () => void;
+    let resume!: () => void;
+    const enteredEffectBoundary = new Promise<void>((resolve) => { entered = resolve; });
+    const resumeEffectBoundary = new Promise<void>((resolve) => { resume = resolve; });
+    const resultPromise = handleAgentControlToolCall({
+      ...ownerContext(kernel),
+      callerSessionId: caller.sessionId,
+      executionLease: {
+        signal: lease.signal,
+        assertCurrentAuthority: async () => {
+          entered();
+          await resumeEffectBoundary;
+          lease.assertCurrentAuthority();
+        },
+      },
+    }, "spawn_agent", {
+      objective: "must not start",
+      requestedAgentCount: 1,
+      visible: true,
+      adapterId: "fake",
+      requestId: "lease-before-first-effect",
+    });
+    await enteredEffectBoundary;
+    broker.revokeForOwner("owner", "owner_changed");
+    resume();
+    const result = parseToolResult(await resultPromise);
+    expect(result).toMatchObject({ ok: false, error: { code: "owner_mismatch" } });
+    expect(store.getRow("SELECT COUNT(*) AS count FROM runs").count).toBe(1);
+    lease.release();
+    expect(() => broker.completeInvocation({
+      ...invocationIdentityForTest(authorized),
+      capabilityRef: authorized.capabilityRef,
+      activeOwnerId: "owner",
+      outcome: "failed",
+      result: JSON.stringify(result),
+    })).toThrow(/completion authority was revoked/);
+    expect(readToolInvocation(store, authorized.invocationId)).toMatchObject({
+      status: "outcome_unknown",
+      errorCode: "run_tool_owner_changed",
+    });
+    store.close();
+  });
+
+  it("revalidates the lease between sibling effects and records the partial invocation as failed", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const caller = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "fake",
+      executionRole: "coordinator",
+    });
+    const parent = store.insertRun({
+      sessionId: caller.sessionId,
+      clientId: "sibling-lease-client",
+      requestId: "sibling-lease-parent",
+      status: "running",
+      mode: "act",
+    });
+    const attempt = store.insertAttempt({
+      runId: parent.runId,
+      attemptNo: 1,
+      status: "running",
+      adapterId: "fake",
+      adapterInstanceId: "sibling-lease-worker",
+    });
+    const broker = createCapabilityBroker(store);
+    const capability = broker.register({
+      ownerId: "owner",
+      sessionId: caller.sessionId,
+      runId: parent.runId,
+      attemptId: attempt.attemptId,
+    });
+    const authorized = broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "lease-between-siblings",
+      runId: parent.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: "owner",
+      toolName: "spawn_agent",
+      toolInput: { objective: "start one only", requestedAgentCount: 2 },
+    });
+    broker.markInvocationDispatched(authorized);
+    const lease = broker.acquireExecutionLease(authorized, () => "owner");
+    let assertionCount = 0;
+    let entered!: () => void;
+    let resume!: () => void;
+    const enteredSecondSibling = new Promise<void>((resolve) => { entered = resolve; });
+    const resumeSecondSibling = new Promise<void>((resolve) => { resume = resolve; });
+    const resultPromise = handleAgentControlToolCall({
+      ...ownerContext(kernel),
+      callerSessionId: caller.sessionId,
+      executionLease: {
+        signal: lease.signal,
+        assertCurrentAuthority: async () => {
+          assertionCount += 1;
+          if (assertionCount === 3) {
+            entered();
+            await resumeSecondSibling;
+          }
+          lease.assertCurrentAuthority();
+        },
+      },
+    }, "spawn_agent", {
+      objective: "start one only",
+      requestedAgentCount: 2,
+      visible: true,
+      adapterId: "fake",
+      requestId: "lease-between-siblings",
+    });
+    await enteredSecondSibling;
+    broker.revokeForOwner("owner", "owner_changed");
+    resume();
+    const result = parseToolResult(await resultPromise);
+    expect(result).toMatchObject({ ok: false, error: { code: "owner_mismatch" } });
+    expect(store.getRow("SELECT COUNT(*) AS count FROM runs").count).toBe(2);
+    lease.release();
+    expect(() => broker.completeInvocation({
+      ...invocationIdentityForTest(authorized),
+      capabilityRef: authorized.capabilityRef,
+      activeOwnerId: "owner",
+      outcome: "failed",
+      result: JSON.stringify(result),
+    })).toThrow(/completion authority was revoked/);
+    expect(readToolInvocation(store, authorized.invocationId)).toMatchObject({
+      status: "outcome_unknown",
+      errorCode: "run_tool_owner_changed",
+    });
+    store.close();
+  });
+
+  it("aborts an in-flight send when its parent invocation authority is revoked", async () => {
+    const { store, kernel, adapter } = createKernelHarness(newDatabasePath());
+    const caller = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "fake",
+      executionRole: "coordinator",
+    });
+    const parent = store.insertRun({
+      sessionId: caller.sessionId,
+      clientId: "send-lease-client",
+      requestId: "send-lease-parent",
+      status: "running",
+      mode: "act",
+    });
+    const parentAttempt = store.insertAttempt({
+      runId: parent.runId,
+      attemptNo: 1,
+      status: "running",
+      adapterId: "fake",
+      adapterInstanceId: "send-lease-worker",
+    });
+    const target = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "background_agent",
+      defaultAdapterId: "fake",
+      executionRole: "leaf",
+    });
+    const broker = createCapabilityBroker(store);
+    const capability = broker.register({
+      ownerId: "owner",
+      sessionId: caller.sessionId,
+      runId: parent.runId,
+      attemptId: parentAttempt.attemptId,
+    });
+    const authorized = broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "lease-inflight-send",
+      runId: parent.runId,
+      attemptId: parentAttempt.attemptId,
+      activeOwnerId: "owner",
+      toolName: "send_agent_message",
+      toolInput: { sessionId: target.sessionId, prompt: "continue" },
+    });
+    broker.markInvocationDispatched(authorized);
+    const lease = broker.acquireExecutionLease(authorized, () => "owner");
+    adapter.deferResult();
+    const resultPromise = handleAgentControlToolCall({
+      ...ownerContext(kernel),
+      callerSessionId: caller.sessionId,
+      executionLease: lease,
+    }, "send_agent_message", {
+      sessionId: target.sessionId,
+      prompt: "continue only while authorized",
+      mode: "act",
+      requestId: "lease-inflight-send",
+      clientId: "send-lease-client",
+    });
+    await waitUntil(() => adapter.executed.length === 1);
+    broker.revokeForOwner("owner", "owner_changed");
+    adapter.resolveDeferred({ terminalStatus: "succeeded", text: "late result" });
+    const result = parseToolResult(await resultPromise);
+    expect(result).toMatchObject({ ok: false, error: { code: "owner_mismatch" } });
+    expect(store.getRow(
+      "SELECT status FROM runs WHERE session_id = ? ORDER BY created_at_ms DESC LIMIT 1",
+      [target.sessionId],
+    ).status).toBe("cancelled");
+    lease.release();
+    expect(() => broker.completeInvocation({
+      ...invocationIdentityForTest(authorized),
+      capabilityRef: authorized.capabilityRef,
+      activeOwnerId: "owner",
+      outcome: "failed",
+      result: JSON.stringify(result),
+    })).toThrow(/completion authority was revoked/);
+    expect(readToolInvocation(store, authorized.invocationId)).toMatchObject({
+      status: "outcome_unknown",
+      errorCode: "run_tool_owner_changed",
+    });
+    store.close();
+  });
+
+  it("cannot promote a persisted leaf caller with a coordinator origin surface", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const leaf = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "delegated_agent",
+      externalRefKind: "agent",
+      externalRefId: "leaf-origin-guard",
+      defaultAdapterId: "fake",
+      executionRole: "leaf",
+    });
+    const result = parseToolResult(
+      await handleAgentControlToolCall(
+        { ...ownerContext(kernel), callerSessionId: leaf.sessionId },
+        "spawn_background_agent",
+        {
+          prompt: "try to promote me",
+          originSurfaceKind: "main_chat",
+          adapterId: "fake",
+          externalRefKind: "pill",
+          externalRefId: "must-not-exist",
+          requestId: "leaf-origin-promotion",
+          ownerId: "owner",
+        },
+      ),
+    );
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "control_tool_failed" },
+    });
+    expect(result.error.message).toMatch(/caller_role_forbidden|Leaf workers/i);
+    expect(store.allRows("SELECT * FROM runs")).toHaveLength(0);
+    store.close();
+  });
+
+  it("uses the owner default only for new direct sessions and preserves caller inheritance", async () => {
+    const store = new SqliteAgentStore({ databasePath: newDatabasePath(), reconcileOnOpen: false });
+    const registry = new AdapterRegistry();
+    registry.register("acp", () => new FakeRuntimeAdapter("acp"), 2);
+    registry.register("pi-mono", () => new FakeRuntimeAdapter("pi-mono"), 2);
+    const kernel = new AgentRuntimeKernel({ store, registry });
+    const existing = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "existing-old-profile",
+      defaultAdapterId: "acp",
+      modelProfile: "old-model",
+      defaultCwd: "/tmp/old-profile",
+      executionRole: "coordinator",
+    });
+    kernel.configureDefaultExecutionProfile({
+      ownerId: "owner",
+      adapterId: "pi-mono",
+      modelProfile: "new-model",
+      workingDirectory: "/tmp/new-profile",
+      expectedPreferenceGeneration: 0,
+    });
+
+    const direct = parseToolResult(await handleAgentControlToolCall(
+      trustedOwnerContext(kernel),
+      "spawn_agent",
+      {
+        objective: "new direct pill",
+        originSurfaceKind: "main_chat",
+        visible: true,
+        externalRefId: "new-direct-pill",
+        requestId: "new-direct-pill",
+      },
+    ));
+    const inherited = parseToolResult(await handleAgentControlToolCall(
+      { ...ownerContext(kernel), callerSessionId: existing.sessionId },
+      "spawn_background_agent",
+      {
+        prompt: "child of old session",
+        originSurfaceKind: "main_chat",
+        externalRefKind: "pill",
+        externalRefId: "old-session-child",
+        requestId: "old-session-child",
+      },
+    ));
+
+    expect(direct.session).toMatchObject({
+      defaultAdapterId: "pi-mono",
+      modelProfile: "new-model",
+      defaultCwd: "/tmp/new-profile",
+    });
+    expect(inherited.session).toMatchObject({
+      defaultAdapterId: "acp",
+      modelProfile: "old-model",
+      defaultCwd: "/tmp/old-profile",
+    });
+    expect(kernel.sessionExecutionProfile(existing.sessionId, "owner")).toMatchObject({
+      adapterId: "acp",
+      modelProfile: "old-model",
+      workingDirectory: "/tmp/old-profile",
+    });
+    await waitUntil(() => store.allRows(
+      "SELECT status FROM runs WHERE run_id IN (?, ?)",
+      [direct.run.runId, inherited.run.runId],
+    ).every((row) => row.status === "succeeded"));
     store.close();
   });
 
@@ -2126,7 +2502,7 @@ describe("agent control tools", () => {
         {
           ...ownerContext(kernel),
           defaultAdapterId: "pi-mono",
-          canSpawnAgents: false,
+          executionRole: "leaf",
         },
         "spawn_agent",
         {
@@ -2391,7 +2767,7 @@ describe("agent control tools", () => {
     store.close();
   });
 
-  it("routes delegated child runs through the resolved adapter override", async () => {
+  it("rejects delegated child runs when the requested adapter is unavailable", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const parent = await kernel.executeRun(baseRunInput);
     const buildMcpServers = vi.fn(() => []);
@@ -2407,26 +2783,15 @@ describe("agent control tools", () => {
       }),
     );
 
-    expect(delegated.ok).toBe(true);
-    expect(delegated.session.defaultAdapterId).toBe("openclaw");
-    expect(delegated.run).toMatchObject({
-      status: "failed",
-      errorCode: "adapter_not_registered",
+    expect(delegated).toMatchObject({
+      ok: false,
+      error: {
+        code: "control_tool_failed",
+        message: "Desktop intent effect rejected by canonical route policy (provider_unavailable).",
+      },
     });
-    expect(delegated.run.errorMessage).toContain("Adapter not registered: openclaw");
-    expect(buildMcpServers).toHaveBeenCalledWith("ask", undefined, undefined, {
-      ownerId: "owner",
-      requestId: "delegate-openclaw-1",
-      clientId: "delegate-client",
-      adapterId: "openclaw",
-      protocolVersion: 2,
-      includeSwiftBackedTools: true,
-      screenContext: true,
-      executionRole: "leaf",
-      surfaceKind: undefined,
-      externalRefKind: undefined,
-      externalRefId: undefined,
-    });
+    expect(buildMcpServers).not.toHaveBeenCalled();
+    expect(store.allRows("SELECT * FROM runs")).toHaveLength(1);
     store.close();
   });
 
@@ -2455,6 +2820,7 @@ describe("agent control tools", () => {
     const spawnedRaw = await handleAgentControlToolCall(ownerContext(kernel), "spawn_agent", {
       objective: "summarize inbox",
       visible: true,
+      adapterId: "fake",
       requestId: "spawn-visible-pill-1",
       clientId: "spawn-client",
       ownerId: "owner",
@@ -2816,6 +3182,42 @@ describe("agent control tools", () => {
 
 function parseToolResult(result: string): any {
   return JSON.parse(result);
+}
+
+function invocationIdentityForTest(invocation: AuthorizedRunToolInvocation) {
+  return {
+    invocationId: invocation.invocationId,
+    ownerId: invocation.ownerId,
+    sessionId: invocation.sessionId,
+    runId: invocation.runId,
+    attemptId: invocation.attemptId,
+    profileGeneration: invocation.profileGeneration,
+    manifestVersion: invocation.manifestVersion,
+    manifestDigest: invocation.manifestDigest,
+    daemonBootEpoch: invocation.daemonBootEpoch,
+    executionGeneration: invocation.executionGeneration,
+    inputHash: invocation.inputHash,
+  };
+}
+
+function workstreamWriteSnapshot(store: SqliteAgentStore) {
+  return {
+    sessions: store.allRows("SELECT * FROM sessions ORDER BY session_id"),
+    surfaceConversations: store.allRows(
+      "SELECT * FROM surface_conversations ORDER BY owner_id, surface_kind, external_ref_kind, external_ref_id",
+    ),
+    contextPackets: store.allRows("SELECT * FROM desktop_context_packets ORDER BY packet_id"),
+    contextAccessLogs: store.allRows("SELECT * FROM desktop_context_access_log ORDER BY access_id"),
+    artifactVersions: store.allRows(
+      "SELECT * FROM workstream_artifact_versions ORDER BY session_id, logical_key, version",
+    ),
+    artifacts: store.allRows("SELECT * FROM artifacts ORDER BY artifact_id"),
+    checkpoints: store.allRows(
+      "SELECT * FROM workstream_continuation_checkpoints ORDER BY owner_id, workstream_id",
+    ),
+    deliveries: store.allRows("SELECT * FROM desktop_artifact_deliveries ORDER BY delivery_id"),
+    events: store.allRows("SELECT * FROM events ORDER BY event_id"),
+  };
 }
 
 function newDatabasePath(): string {

@@ -148,6 +148,14 @@ extension AppState {
     switch event.type {
     case "service_status":
       let status = event.raw["status"] as? String ?? "unknown"
+      if status == "stt_failed" {
+        // The socket is closed immediately after this status. Keep a
+        // user-visible truth state through reconnects; only a subsequent
+        // ready status proves that live transcription recovered.
+        transcriptionServiceError = "Transcription unavailable"
+      } else if status == "ready" {
+        transcriptionServiceError = nil
+      }
       log("Transcription: Backend service status: \(status)")
 
     case "conversation_session":

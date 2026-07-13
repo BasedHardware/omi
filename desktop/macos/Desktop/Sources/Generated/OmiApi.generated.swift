@@ -6460,7 +6460,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func listCandidatesV1CandidatesGet(client: OmiApiClient, status: String? = nil, limit: Int? = nil, offset: Int? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> CandidateListResponse {
+  public static func listCandidatesV1CandidatesGet(client: OmiApiClient, status: String? = nil, limit: Int? = nil, offset: Int? = nil, surface: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> CandidateListResponse {
     let _path = "/v1/candidates"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -6474,6 +6474,9 @@ public enum OmiAPI {
     }
     if let offset {
       queryItems.append(URLQueryItem(name: "offset", value: String(offset)))
+    }
+    if let surface {
+      queryItems.append(URLQueryItem(name: "surface", value: String(surface)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }

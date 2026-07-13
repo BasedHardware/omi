@@ -57,7 +57,7 @@ Merging `desktop/macos/**` changes queues them for the next daily or manually di
    - Creates DMG + Sparkle ZIP
    - Runs `scripts/smoke-signed-desktop-artifact.sh` on the signed app, Sparkle ZIP, and DMG before publishing, including a mandatory in-app synthetic Keychain write/read/delete canary
    - Publishes an immutable non-live GitHub candidate with smoke evidence
-3. **Automatic qualification** (`scripts/qualify-desktop-beta.sh --automatic`) — verifies published asset digests against signed-smoke evidence, runs the static release checks, rebuilds the exact tag, runs hermetic T2 plus the fault-injection suite, and writes canonical `qualifiedBeta*` evidence metadata
+3. **Trusted macOS qualification runner** (`desktop_qualify_beta.yml`) — dispatched by Codemagic after candidate publication and restricted to the `self-hosted`, `macos`, `omi-desktop-qualification` runner. It verifies published asset digests against signed-smoke evidence, runs the static release checks, rebuilds the exact tag, runs hermetic T2 plus the fault-injection suite, and writes canonical `qualifiedBeta*` evidence metadata. The runner must be an administrator-managed Mac with Docker Desktop; it must never execute pull-request or arbitrary-ref workflows.
 4. **Automatic beta promotion** (`desktop_promote_beta.yml`) — rejects stale automatic targets, honors `DESKTOP_AUTO_BETA_ENABLED=false` as an emergency pause, validates digest-matched evidence, registers the immutable manifest, and atomically advances the explicit beta pointer
 
 The shared Python backend must contain the manifest/pointer endpoints before the first beta promotion. Deploy it separately with `gcp_backend.yml`; merging desktop code does not deploy the prod backend. Static GCS/CDN feed ownership remains follow-up work and is not the channel source of truth.
@@ -219,7 +219,7 @@ See `.claude/settings.json` for connection details.
 - **No Xcode project** — this is a Swift Package Manager project
 - **Build command**: `xcrun swift build -c debug --package-path Desktop` (the `xcrun` prefix is required to match the SDK version)
 - **Full dev run**: `./run.sh` — builds Swift app, starts Rust backend, starts Cloudflare tunnel, launches app
-- **Agent runtime preparation cache**: local `./run.sh` calls reuse validated agent packaging from the worktree-local `.harness/agent-runtime` cache when source, locks, preparation logic, pinned runtime, mode, OS/architecture, Node/npm versions, and every file copied from the prepared runtime are unchanged. Hits verify the complete agent `dist`, both packaged dependency trees, their symlinks, and staged Node; working `agent/node_modules` is not hashed. The script logs `Cache HIT`, `MISS`, or `BYPASS`; hits preserve output mtimes but spend roughly a second on a warm local filesystem hashing the packaged outputs for integrity (hardware/filesystem dependent). CI and `--skip-npm` always bypass the stamp. Set `OMI_AGENT_RUNTIME_FORCE_REBUILD=1` for an explicit local rebuild. Do not copy this cache between worktrees or treat it as a release artifact.
+- **Agent runtime preparation cache**: local `./run.sh` calls reuse validated agent packaging from the worktree-local `.harness/agent-runtime` cache when source, locks, preparation logic, pinned runtime, mode, OS/architecture, Node/npm versions, and every file copied from the prepared runtime are unchanged. Hits verify the complete agent `dist`, both packaged dependency trees, their symlinks, and staged Node; working `agent/node_modules` is not hashed. The script logs `Cache HIT`, `MISS`, or `BYPASS`; hits preserve output mtimes but spend roughly a second on a warm local filesystem hashing the packaged outputs for integrity (hardware/filesystem dependent). CI and `--skip-npm` always bypass the stamp. Set `OMI_AGENT_RUNTIME_FORCE_REBUILD=1` for an explicit local rebuild. Do not copy this cache between worktrees or treat it as a release artifact. The checksum-verified universal Node archives are separately shared at `~/Library/Caches/OmiDesktop/node-archives` (override with `OMI_AGENT_RUNTIME_ARCHIVE_CACHE_DIR`), so fresh linked worktrees reuse the download but still validate it before staging.
 - **Release builds**: Handled entirely by Codemagic CI (no local release script needed)
 - **DO NOT** use bare `swift build` — it will fail with SDK version mismatch
 - **DO NOT** use `xcodebuild` — there is no `.xcodeproj`
@@ -256,6 +256,18 @@ This creates `/Applications/omi-fix-rewind.app` with bundle ID `com.omi.omi-fix-
 - To actually test, ALWAYS use `./run.sh` with `OMI_APP_NAME` — it starts Rust backend + Cloudflare tunnel + Swift app together
 - **When the user says "test it"**, use the `test-local` skill to build, run, and verify via macOS automation
 
+### macOS Version Compatibility
+- The deployment floor is `.macOS("14.0")` in `Desktop/Package.swift`. Every change must work on every supported macOS version from that floor up.
+- Never call an API newer than the floor unguarded: wrap it in `if #available(macOS XX, *)` **and give the `else` branch a working fallback** (degrade the feature, don't blank it). Example: System Audio capture gates on `#available(macOS 14.4, *)` and hides cleanly below it.
+- Version-dependent system facts (renamed apps, moved paths, changed defaults) get an explicit mapping with the old value still handled — stored user data may predate the change (example: `AppIconCache.renamedApps` maps "System Preferences" → "System Settings").
+- Raising the deployment floor or dropping a fallback is a product decision — never do it as a side effect of another change.
+
+### Open-Source Merge Hygiene
+- Before starting and before committing, `git fetch origin && git rebase origin/main` (or merge) — other contributors land changes continuously; never review your diff against a stale base.
+- Keep diffs surgical: touch only lines your change needs. No drive-by reformatting, renames, or import reshuffles in files others may have in-flight PRs against.
+- After rebasing onto new upstream work, re-run the test suites for every file you touched **and** every file the rebase brought in that overlaps your change; a clean build alone is not revision.
+- If your change modifies shared surfaces (Theme tokens, `SettingsSection`, bridge actions, INV-* contract files), grep for all usages — including tests and e2e flows — and update them in the same commit so concurrent contributors inherit a consistent tree.
+
 ### Agent Logic Harness
 When touching desktop agent runtime, floating agent pills, realtime hub, PTT, or `pi-mono-extension`, run the focused harness before broader checks:
 ```bash
@@ -267,7 +279,8 @@ It is self-driving for agents: it runs the risky Swift lifecycle/state tests, fo
 
 Invariant: Main Chat, Home chat, and floating/notch chat are one timeline over one
 `ChatProvider` (`historyChatProvider`). Kernel `main_chat` turns are the durable
-source of truth; UI may optimistic-render, then must not double-apply the same turn.
+source of truth; journal acceptance publishes the immediate pending projection,
+and UI must never append a pre-journal turn.
 
 Rules (fail the PR if any break):
 1. **Single provider + floating viewport** — floating presentation is chrome + a
@@ -279,26 +292,24 @@ Rules (fail the PR if any break):
    turn handler (one replaceable slot). Speculative warm and other surfaces must
    reuse `mainInstance`; never construct a second `ChatProvider()` that calls
    `attachClient` / `setTurnRecordedHandler` on the shared runtime.
-3. **One idempotency key per logical turn** — every optimistic
-   `stageOptimisticTurn` / kernel write MUST share the SAME key with
-   `recordSurfaceTurn` / `projectCrossSurfaceTurn`. Stage first for sync UI,
-   then let `KernelTurnProjection.apply` `promoteOptimisticTurn` (in-place,
-   no append) when `turn_recorded` arrives. Keys are opaque strings; never
-   dedupe by assistant/user text.
-4. **Kernel apply is idempotent** — `KernelTurnProjection.apply` promotes
-   pending optimistic turns or appends via `recordCompletedTurn`; already-seen
-   continuity keys are ignored. Empty keys do not suppress.
+3. **One idempotency key per logical turn** — call `recordJournalExchange` (or
+   the corresponding kernel control RPC) with one opaque continuity key and
+   await acceptance before binding a visible row. Direct-control spawn receipts
+   already materialize their exchange; refresh that journal instead of issuing a
+   second write. Never dedupe by assistant/user text.
+4. **Kernel apply is idempotent** — `KernelTurnProjection` upserts only by the
+   canonical turn ID published by ordered journal replay. Rejection must leave no
+   visible row, and replay/acknowledgement must replace rather than append.
 5. **Cross-surface agent identity is structured** — `agentSpawn` / `agentCompletion`
    content blocks (plus tool-block `spawnedAgentID` / sessionId / runId lines) are
-   authoritative. Persist structured blocks through `saveMessage` metadata key
-   `content_blocks` (via `ChatContentBlockCodec`) so they survive reload; kernel
-   apply still materializes `agentCompletion` from bracket text when a turn
-   arrives without an optimistic stage. Legacy `[Background agent id=…]` bracket
+   authoritative. Persist structured blocks through the kernel journal/outbox so
+   they survive reload; kernel apply still materializes `agentCompletion` from
+   bracket text for legacy rows. Legacy `[Background agent id=…]` bracket
    text remains dual-read only. Do not invent new free-text formats; extend the
    schema + tests together.
-   Proactive notifications stage under continuity key `notification:<uuid>`
-   (origin `proactive_notification`) — same stage/promote path as other surface
-   turns; do not reintroduce `appendAssistantMessage` for timeline writes.
+   Proactive notifications use continuity key `notification:<uuid>` (origin
+   `proactive_notification`) and enter the notification-to-chat cache only after
+   journal acceptance; do not reintroduce local timeline append paths.
 6. **Pill cache is derived** — open-by-id hydrates from kernel (`listFloatingAgentPills`
    / `listAgentSessions` / `inspectAgentRun`) when the in-memory pill is missing;
    refresh-on-miss is a fast path only. Success = resolvable agent after hydrate.

@@ -242,9 +242,17 @@ def test_finalize_audio_file_group_duration_uses_32000_bytes_per_second():
 def test_conversation_merge_handler_structure():
     source = (BACKEND / 'routers' / 'sync.py').read_text()
 
-    # v2 payloads branch before the v1 parser touches audio_file_id.
-    assert "payload.get('schema_version') == 2" in source
+    # v2 payloads branch to the conversation-merge handler. The dispatch runs OUTSIDE
+    # the payload-parse try/except (which 200-drops invalid payloads) so transient
+    # failures in _run_conversation_merge_job propagate to a 500 Cloud Tasks retry
+    # instead of being masked as invalid_payload and permanently losing the artifact.
+    assert "schema_version = payload.get('schema_version')" in source
+    assert 'if schema_version == 2:' in source
     assert '_run_conversation_merge_job' in source
+    # The v2 dispatch must come AFTER the invalid-payload except block, not inside it.
+    dispatch_pos = source.index('return await _run_conversation_merge_job(payload, task_retry_count)')
+    invalid_payload_pos = source.index("'reason': 'invalid_payload'")
+    assert invalid_payload_pos < dispatch_pos
 
     # Dedicated run-lock namespace for the conversation-level build.
     assert "f'audio:{conversation_id}:conversation'" in source
