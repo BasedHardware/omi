@@ -202,9 +202,9 @@ impl AgentRuntime {
         // ── Web search via Tavily ───────────────────────────────────────────────
         let web_context = if cfg.web_search_enabled
             && !cfg.tavily_api_key.is_empty()
-            && crate::web_search::should_search(user_query)
+            && crate::web_search::needs_web_search(user_query, cfg).await
         {
-            tracing::info!("[AGENT] Detected search intent — querying Tavily");
+            tracing::info!("[AGENT] LLM decided web search needed — querying Tavily");
             match crate::web_search::search(user_query, cfg).await {
                 Ok(resp) => Some(crate::web_search::format_search_context(&resp)),
                 Err(e) => {
