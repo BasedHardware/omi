@@ -12,6 +12,16 @@ checks:
     triggers: [".github/schemas/desktop-release-manifest-v1.schema.json", ".github/scripts/desktop_release_manifest.py", ".github/scripts/test_desktop_release_manifest.py", ".github/scripts/fixtures/desktop_release_manifest/**"]
     lanes: ["local", "ci"]
     reason: "immutable desktop app/backend release-unit contract"
+  - id: pr-scope
+    command: ["python3", ".github/scripts/check_pr_scope.py", "--base", "{base}", "--labels-json", "{labels_json}", "--pr-body-file", "{pr_body_file}"]
+    triggers: ["all"]
+    lanes: ["local", "ci"]
+    reason: "PR production-source churn must stay reviewable (scope-approved label / OMI_SCOPE_APPROVED override; reverts exempt)"
+  - id: pr-scope-helper-tests
+    command: ["python3", ".github/scripts/test_check_pr_scope.py"]
+    triggers: [".github/scripts/check_pr_scope.py", ".github/scripts/test_check_pr_scope.py"]
+    lanes: ["local", "ci"]
+    reason: "scope governor classification/enforcement contract"
   - id: diff-hygiene
     command: ["python3", ".github/scripts/check_diff_hygiene.py", "--changed-files", "{changed_files}", "--base", "{base}", "--head", "{head}"]
     triggers: ["all"]
@@ -109,8 +119,6 @@ checks:
     reason: "desktop Swift production or test structure changed"
 
 exempt:
-  - path: ".github/scripts/check_pr_scope.py"
-    reason: "needs pull_request label context from the workflow event, not available to manifest lanes"
   - path: ".github/scripts/check-desktop-auto-beta-candidate.py"
     reason: "release pipeline check requires published candidate artifacts and workflow inputs"
   - path: ".github/scripts/check-desktop-prod-promotion-policy.py"

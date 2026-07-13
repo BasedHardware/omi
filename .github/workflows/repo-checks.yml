@@ -86,18 +86,6 @@ jobs:
         if: github.event_name != 'pull_request'
         run: python3 .github/scripts/run_checks.py --lane ci --base "${{ needs.changes.outputs.diff_base }}"
 
-      - name: Test PR scope governor
-        run: python3 .github/scripts/check_pr_scope.py --self-test
-
-      - name: Check PR scope
-        if: github.event_name == 'pull_request'
-        env:
-          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
-        run: |
-          python3 .github/scripts/check_pr_scope.py \
-            --base "${{ needs.changes.outputs.diff_base }}" \
-            --labels "$PR_LABELS"
-
       - name: Test brand UI ratchet helper
         run: python3 .github/scripts/test_check_brand_ui.py
 

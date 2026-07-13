@@ -184,12 +184,14 @@ def command_for_check(
     head: str,
     pr_body_file: Path,
     skip_changelog: bool,
+    labels_json: str = "[]",
 ) -> list[str]:
     replacements = {
         "{changed_files}": str(changed_files_path),
         "{base}": base,
         "{head}": head,
         "{pr_body_file}": str(pr_body_file),
+        "{labels_json}": labels_json,
     }
     command: list[str] = []
     for token in check.command:
@@ -210,6 +212,7 @@ def execute_checks(
     head: str,
     pr_body_file: Path,
     skip_changelog: bool = False,
+    labels_json: str = "[]",
 ) -> int:
     failures: list[str] = []
     for check in checks:
@@ -222,6 +225,7 @@ def execute_checks(
             head=head,
             pr_body_file=pr_body_file,
             skip_changelog=skip_changelog,
+            labels_json=labels_json,
         )
         returncode = subprocess.run(command, cwd=root, check=False).returncode
         status = "PASS" if returncode == 0 else "FAIL"
@@ -245,6 +249,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--changed-files", type=Path)
     parser.add_argument("--pr-body-file", type=Path)
     parser.add_argument("--skip-changelog", action="store_true")
+    parser.add_argument("--labels-json", default="[]", help="JSON array of PR label names for {labels_json}")
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--root", type=Path)
     return parser.parse_args()
@@ -290,6 +295,7 @@ def main() -> int:
             head=args.head,
             pr_body_file=body_path,
             skip_changelog=args.skip_changelog,
+            labels_json=args.labels_json,
         )
 
 

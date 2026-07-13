@@ -92,6 +92,7 @@ class SelectionTests(unittest.TestCase):
             names,
             {
                 "check-manifest-contract",
+                "pr-scope",
                 "diff-hygiene",
                 "architecture-guardrails",
                 "product-invariants",
