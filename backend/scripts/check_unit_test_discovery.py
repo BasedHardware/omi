@@ -51,9 +51,7 @@ POLICY_EXCLUDED_PREFIXES = {
 
 # On-demand harnesses deliberately outside every scheduled runner. Entries
 # must exist on disk; additions are a reviewed diff of this checker itself.
-MANUAL_ONLY_TESTS = {
-    'tests/container/test_parakeet_vram_stress.py': 'manual GPU stress harness; not in the nightly explicit list',
-}
+MANUAL_ONLY_TESTS: dict[str, str] = {}
 
 # Frozen copy of the selector's LEGACY_UNLISTED_TESTS. Pinned in both
 # directions: the selector's set may not grow past this baseline, and fixing
@@ -86,6 +84,21 @@ def load_workflow_texts(workflows_dir: Path) -> dict[str, str]:
     return texts
 
 
+def _runs_reference(text: str, needle: str) -> bool:
+    """True when a non-comment line both names the needle and looks like an
+    invocation (pytest/run) — a commented-out, --deselect'ed, or prose mention
+    must not count as coverage."""
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if line.startswith('#') or needle not in line:
+            continue
+        if '--deselect' in line or '--ignore' in line:
+            continue
+        if 'pytest' in line or 'run.sh' in line:
+            return True
+    return False
+
+
 def workflow_map_errors(workflow_texts: dict[str, str]) -> list[str]:
     """The runner map must describe reality: workflows exist and run their trees."""
     errors = []
@@ -96,7 +109,7 @@ def workflow_map_errors(workflow_texts: dict[str, str]) -> list[str]:
                 f'WORKFLOW_COVERED_PREFIXES maps {prefix} to .github/workflows/{workflow_file}, '
                 'which does not exist. Update the map to the real runner.'
             )
-        elif mode == 'directory' and prefix.rstrip('/') not in text:
+        elif mode == 'directory' and not _runs_reference(text, prefix.rstrip('/')):
             errors.append(
                 f'.github/workflows/{workflow_file} no longer references {prefix.rstrip("/")}; '
                 f'it cannot be credited with running that tree. Update WORKFLOW_COVERED_PREFIXES.'
@@ -122,8 +135,9 @@ def find_orphans(
                 continue
             text = workflow_texts.get(workflow_file, '')
             # directory mode: the tree reference was validated by
-            # workflow_map_errors; explicit mode: this very file must be named.
-            covered = bool(text) and (mode == 'directory' or path in text)
+            # workflow_map_errors; explicit mode: this very file must appear
+            # on a live invocation line (not a comment or --deselect).
+            covered = bool(text) and (mode == 'directory' or _runs_reference(text, path))
             break
         if not covered:
             orphans.append(path)

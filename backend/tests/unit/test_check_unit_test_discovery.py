@@ -4,7 +4,8 @@ Guards the guard: a test file that no runner discovers must fail the check
 (this exact failure shipped once — a runner rewrite silently dropped two test
 files from CI), workflow coverage claims must describe real workflows, and
 the allowlists must only ever shrink. Enforcement against the live tree is
-the CI step in backend-unit-tests.yml; these tests cover the pure functions.
+the manifest check `backend-test-discovery`; these tests cover the pure
+functions.
 """
 
 import sys
@@ -16,6 +17,7 @@ sys.path.insert(0, str(BACKEND_DIR))
 from scripts.check_unit_test_discovery import (
     LEGACY_UNLISTED_BASELINE,
     MANUAL_ONLY_TESTS,
+    _runs_reference,
     check_legacy_ratchet,
     find_orphans,
     workflow_map_errors,
@@ -52,9 +54,26 @@ def test_policy_excluded_and_allowlisted_files_are_not_orphans():
         'tests/integration/test_live.py',
         'tests/eval/test_eval.py',
         'tests/test_legacy.py',
-        next(iter(MANUAL_ONLY_TESTS)),
     }
     assert find_orphans(all_files, set(), {'tests/test_legacy.py'}, FAKE_WORKFLOWS) == []
+    assert MANUAL_ONLY_TESTS == {}  # nothing is currently blessed as manual-only
+
+
+def test_commented_out_or_deselected_references_are_not_coverage():
+    text = (
+        '# python -m pytest tests/container/test_parakeet_smoke.py -v\n'
+        'python -m pytest tests/container --deselect tests/container/test_parakeet_der_gate.py\n'
+        'echo tests/container/test_parakeet_wer_gate.py\n'
+    )
+    for path in (
+        'tests/container/test_parakeet_smoke.py',  # commented out
+        'tests/container/test_parakeet_der_gate.py',  # deselected
+        'tests/container/test_parakeet_wer_gate.py',  # prose/echo mention
+    ):
+        assert not _runs_reference(text, path), path
+    assert _runs_reference(
+        'python -m pytest tests/container/test_parakeet_smoke.py -v', 'tests/container/test_parakeet_smoke.py'
+    )
 
 
 def test_missing_workflow_file_is_an_error():
