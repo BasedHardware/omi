@@ -1,3 +1,0 @@
-{
-  "change": "Internal cleanup: removed a single-variant Provider enum and a duplicate agent-status struct in the Rust backend, and collapsed a one-implementation overlay-target protocol in Swift. No user-visible behavior change."
-}
