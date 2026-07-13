@@ -452,8 +452,10 @@ def get_chat_files_desc(uid: str, files_id: Optional[List[str]] = None, limit: i
         chunk_ref = chunk_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
         results.extend([_typed_doc(doc) for doc in chunk_ref.stream()])
 
-    # Sort all results by created_at and limit
-    results.sort(key=lambda x: x.get('created_at', datetime.min), reverse=True)
+    # Sort all results by created_at and limit. Use a tz-aware sentinel for a missing created_at so it
+    # never TypeError-compares against the tz-aware Firestore datetimes and sinks to the bottom of the
+    # descending sort (same class as the review-queue tz sentinel in #9571).
+    results.sort(key=lambda x: x.get('created_at', datetime.min.replace(tzinfo=timezone.utc)), reverse=True)
     return results[:limit]
 
 
