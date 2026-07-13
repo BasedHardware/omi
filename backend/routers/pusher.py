@@ -124,6 +124,9 @@ async def _process_conversation_task(
         data.extend(bytes(json.dumps(result), "utf-8"))
         await websocket.send_bytes(bytes(data))
 
+    job_id: Optional[str] = None
+    generation: Optional[int] = None
+
     try:
         if not finalization_job_id or dispatch_generation is None:
             # Every finalization request must be mediated by the Firestore
@@ -132,11 +135,14 @@ async def _process_conversation_task(
             await send_result({'conversation_id': conversation_id, 'error': 'durable_job_required'})
             return
 
+        job_id = finalization_job_id
+        generation = dispatch_generation
+
         claim_status = await run_blocking(
             db_executor,
             finalization_jobs_db.claim_finalization_job,
-            finalization_job_id,
-            dispatch_generation,
+            job_id,
+            generation,
             allow_byok=bool(byok_keys),
             expected_uid=uid,
             expected_conversation_id=conversation_id,
@@ -153,21 +159,22 @@ async def _process_conversation_task(
         completed = await run_blocking(
             db_executor,
             finalization_jobs_db.mark_finalization_completed,
-            finalization_job_id,
-            dispatch_generation,
+            job_id,
+            generation,
         )
         if not completed:
             await send_result({'conversation_id': conversation_id, 'error': 'job_completion_conflict'})
             return
         await send_result({'conversation_id': conversation_id, 'success': True})
     except ConversationFinalizationError as error:
-        await run_blocking(
-            db_executor,
-            finalization_jobs_db.mark_finalization_retryable,
-            finalization_job_id,
-            dispatch_generation,
-            str(error),
-        )
+        if job_id is not None and generation is not None:
+            await run_blocking(
+                db_executor,
+                finalization_jobs_db.mark_finalization_retryable,
+                job_id,
+                generation,
+                str(error),
+            )
         logger.error('pusher finalization failed uid=%s conversation=%s error=%s', uid, conversation_id, error)
         try:
             await send_result({'conversation_id': conversation_id, 'error': 'processing_failed'})
