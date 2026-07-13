@@ -282,7 +282,7 @@ pub fn AgentPage() -> Element {
             );
             // Use native LLM path — no Node.js dependency
             let rt = runtime_ref.read().clone();
-            if let Err(e) = rt.query_native(h, &system, &cfg).await {
+            if let Err(e) = rt.query_native(h, &system, false, &cfg).await {
                 tracing::error!("[AGENT PAGE] Native query failed: {e}");
                 let mut list = msgs.read().clone();
                 list.push(ChatMessage::system(format!("⚠ {e}")));
@@ -432,8 +432,9 @@ pub fn AgentPage() -> Element {
                     value: "{input_text}",
                     rows: "1",
                     oninput: move |e| input_text.set(e.value()),
-                    onkeypress: move |e| {
+                    onkeydown: move |e| {
                         if e.key() == Key::Enter && !e.modifiers().shift() {
+                            e.prevent_default();
                             let txt = input_text.read().trim().to_string();
                             send_message(txt);
                         }
