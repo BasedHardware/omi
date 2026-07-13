@@ -3160,13 +3160,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           outcome: .recovered,
           extra: ["surface": "realtime", "permission": permissionRedirect.type])
       }
+      let permissionAuthorization = PermissionRequestAuthorization.authorize(
+        userMessage: userText, precedingAssistantMessage: nil)
       let output = await ChatToolExecutor.execute(
         ToolCall(
           name: permissionRedirect.tool.rawValue,
           arguments: ["type": permissionRedirect.type],
           thoughtSignature: nil
         ),
-        originatingUserText: userText
+        originatingUserText: userText,
+        permissionAuthorization: permissionAuthorization
       )
       sendToolResultIfCurrent(
         source: source, callId: callId, name: name, output: output,

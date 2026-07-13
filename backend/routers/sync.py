@@ -1373,15 +1373,25 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
     """
     try:
         payload = await request.json()
-        if payload.get('schema_version') == 2:
-            return await _run_conversation_merge_job(payload, task_retry_count)
-        uid = payload['uid']
-        conversation_id = payload['conversation_id']
-        audio_file_id = payload['audio_file_id']
-        timestamps = list(payload['timestamps'])
+        schema_version = payload.get('schema_version')
+        if schema_version != 2:
+            uid = payload['uid']
+            conversation_id = payload['conversation_id']
+            audio_file_id = payload['audio_file_id']
+            timestamps = list(payload['timestamps'])
     except Exception as e:
         logger.error(f'audio_merge handler: invalid payload, dropping task: {e}')
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
+
+    # The v2 conversation-merge dispatch runs OUTSIDE the payload-parse guard so its
+    # transient GCS/Firestore failures (during the doc read, artifact upload, or doc
+    # stamp) propagate to FastAPI (500 -> Cloud Tasks retry) instead of being masked
+    # as 'invalid_payload' and acked 200. A masked ack permanently loses the playback
+    # artifact: the named task's tombstone makes the /urls re-enqueue a no-op, so the
+    # artifact is never rebuilt until audio_files change. _run_conversation_merge_job
+    # validates its own payload and returns 200-dropped for genuinely malformed input.
+    if schema_version == 2:
+        return await _run_conversation_merge_job(payload, task_retry_count)
 
     lock_key = f'audio:{conversation_id}:{audio_file_id}'
     lock_token = await run_blocking(db_executor, try_acquire_job_run_lock, lock_key)

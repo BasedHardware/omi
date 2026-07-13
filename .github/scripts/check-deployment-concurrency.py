@@ -44,6 +44,7 @@ LOCK_CONTRACTS = {
     ),
     "gcp_backend_agent_proxy_auto_deploy.yml": LockContract("deploy-gke-agent-proxy-development"),
     "gcp_backend_auto_dev.yml": LockContract("deploy-backend-stack-development"),
+    "dev_backend_deployment_acceptance.yml": LockContract("deploy-backend-stack-development"),
     "gcp_backend_listen_helm.yml": LockContract(
         "deploy-backend-stack-${{ github.event.inputs.environment || 'development' }}"
     ),

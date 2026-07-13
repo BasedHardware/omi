@@ -19,6 +19,7 @@ on:
       - '.github/workflows/gcp_memory_maintenance_job.yml'
       - '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml'
       - '.github/workflows/gcp_notifications_job.yml'
+      - '.github/workflows/dev_backend_deployment_acceptance.yml'
       - 'scripts/changed-files'
       - 'scripts/install-git-hooks.sh'
       - 'scripts/pre-push'
@@ -39,6 +40,7 @@ on:
       - '.github/workflows/gcp_memory_maintenance_job.yml'
       - '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml'
       - '.github/workflows/gcp_notifications_job.yml'
+      - '.github/workflows/dev_backend_deployment_acceptance.yml'
       - 'scripts/changed-files'
       - 'scripts/install-git-hooks.sh'
       - 'scripts/pre-push'
@@ -70,6 +72,9 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: backend/pylock*.toml
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
 
       - name: Install backend dependencies
         working-directory: backend
