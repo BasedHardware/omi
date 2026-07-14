@@ -23,10 +23,10 @@ final class PTTSilentTurnRecoveryWiringTests: XCTestCase {
     // Every silent-turn record must carry an explicit recovery decision — no site
     // may fall back to the `recoveryAction: "none"` default silently.
     let silentTurnCalls = source.components(separatedBy: "recordPTTSilentTurn(").count - 1
-    let recoveryDecisions = source.components(separatedBy: "recoveryResult: attemptRecovery").count - 1
+    let recoveryDecisions = source.components(separatedBy: "recoveryResult: recoveryDecision.shouldRebuildCapture").count - 1
     XCTAssertEqual(
       silentTurnCalls, recoveryDecisions,
-      "Every recordPTTSilentTurn site must pass recoveryResult: attemptRecovery")
+      "Every recordPTTSilentTurn site must pass the production recovery decision")
 
     // Every discard must be counted toward the dead-mic threshold so recovery can
     // eventually trip, and each site attempts a capture rebuild once tripped.
@@ -39,6 +39,20 @@ final class PTTSilentTurnRecoveryWiringTests: XCTestCase {
       silentTurnCalls,
       "Every silent-turn discard must guard a capture rebuild")
 
+    // A rebuild is not proven by being invoked: each silent discard and each
+    // accepted audible turn must resolve the pending recovery through the shared
+    // diagnostics surface on its next judgeable result.
+    let recoveryOutcomeRecords = source.components(
+      separatedBy: "recordSilentMicRecoveryOutcome(").count - 2
+    let successfulTurns = source.components(
+      separatedBy: "silentMicRecoveryPolicy.recordSuccessfulTurn()").count - 1
+    XCTAssertEqual(
+      recoveryOutcomeRecords,
+      silentTurnCalls + successfulTurns,
+      "Every judgeable PTT turn must record a pending capture-rebuild outcome")
+    XCTAssertTrue(source.contains("recoveryAction: \"capture_rebuild\""))
+    XCTAssertTrue(source.contains("DesktopDiagnosticsManager.shared.recordPTTDeviceRouteChanged"))
+
     // The two previously-unwired buffered paths must now participate.
     XCTAssertTrue(source.contains("source: \"buffered_hub\""))
     XCTAssertTrue(source.contains("source: \"warm_wait_fallback\""))
@@ -49,7 +63,7 @@ final class PTTSilentTurnRecoveryWiringTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/PushToTalkManager.swift")
-    // omi-test-quality: source-inspection -- static contract: every recordPTTSilentTurn discard site must wire recovery; PushToTalkManager is a @MainActor singleton with no behavioral seam
+    // omi-test-quality: source-inspection -- static contract: every recordPTTSilentTurn discard site must wire recovery and settle its outcome; PushToTalkManager is a @MainActor singleton with no behavioral seam
     return try String(contentsOf: url, encoding: .utf8)
   }
 }
