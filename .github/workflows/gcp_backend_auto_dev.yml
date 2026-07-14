@@ -56,8 +56,9 @@ jobs:
 
       - name: Reconcile generated Firestore indexes before backend deploy
         run: |
+          # Serving data can live outside the Cloud Run deployment project.
           python3 backend/scripts/reconcile_firestore_indexes.py \
-            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
             --provision-missing
 
       - name: Login to GCR

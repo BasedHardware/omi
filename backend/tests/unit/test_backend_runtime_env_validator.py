@@ -247,6 +247,60 @@ def test_repo_prod_cloud_run_workflows_match_manifest(monkeypatch):
     assert errors == []
 
 
+def test_firestore_index_reconciliation_must_target_the_runtime_project(tmp_path):
+    validator = load_validator()
+    workflow_path = tmp_path / 'deploy.yml'
+    manifest_path = tmp_path / 'runtime_env.yaml'
+    workflow = {
+        'jobs': {
+            'deploy': {
+                'steps': [
+                    {
+                        'run': (
+                            'python3 backend/scripts/reconcile_firestore_indexes.py '
+                            '--project "${{ vars.GCP_PROJECT_ID }}"'
+                        )
+                    }
+                ]
+            }
+        }
+    }
+    manifest = {
+        'schema_version': 1,
+        'environments': {
+            'dev': {
+                'gcp_project': 'deployment-project',
+                'runtime_gcp_project': 'serving-project',
+                'region': 'us-central1',
+                'gke': {},
+                'cloud_run': {
+                    'workflow_files': [str(workflow_path)],
+                    'services': {},
+                    'jobs': {},
+                },
+            }
+        },
+    }
+    write_yaml(workflow_path, workflow)
+    write_yaml(manifest_path, manifest)
+
+    errors = validate_cloud_run_workflows_only(validator, env='dev', manifest_path=manifest_path)
+
+    assert errors == [
+        validator.ValidationError(
+            f'cloud_run_workflow/{workflow_path}',
+            'Firestore index reconciliation must target vars.RUNTIME_GCP_PROJECT_ID',
+        )
+    ]
+
+    workflow['jobs']['deploy']['steps'][0]['run'] = (
+        'python3 backend/scripts/reconcile_firestore_indexes.py ' '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}"'
+    )
+    write_yaml(workflow_path, workflow)
+
+    assert validate_cloud_run_workflows_only(validator, env='dev', manifest_path=manifest_path) == []
+
+
 def test_repo_prod_rendered_cloud_run_state_matches_manifest():
     validator = load_validator()
     manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)

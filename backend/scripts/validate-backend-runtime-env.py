@@ -781,6 +781,7 @@ def _validate_cloud_run_workflows(
             continue
         workflow_path = ROOT / workflow_file
         workflow = _load_yaml(workflow_path)
+        errors.extend(_validate_firestore_index_reconciliation_project(workflow_file, workflow))
         extracted = _extract_workflow_cloud_run_targets(workflow, env=env, manifest=manifest)
         errors.extend(_validate_sync_backfill_co_deploy(workflow_file, extracted['services']))
         workflow_services.update(extracted['services'])
@@ -846,6 +847,35 @@ def _validate_cloud_run_workflows(
                 expected=_as_config_dict(job_config.get('flags')) or {},
                 actual=_substitute_values(job_state.get('flags', {}), variables=workflow_vars),
                 strict_provisional=strict_provisional,
+            )
+        )
+    return errors
+
+
+def _validate_firestore_index_reconciliation_project(workflow_file: str, workflow: ConfigDict) -> list[ValidationError]:
+    """Keep index readiness aligned with the project used by serving clients."""
+
+    runtime_project_refs = {
+        '${{ vars.RUNTIME_GCP_PROJECT_ID }}',
+        '${{vars.RUNTIME_GCP_PROJECT_ID}}',
+    }
+    errors: list[ValidationError] = []
+    for step in _workflow_steps(workflow):
+        step_dict = _as_config_dict(step)
+        if step_dict is None:
+            continue
+        run = step_dict.get('run')
+        if not isinstance(run, str) or 'reconcile_firestore_indexes.py' not in run:
+            continue
+        if any(
+            '--project' in line and any(reference in line for reference in runtime_project_refs)
+            for line in run.splitlines()
+        ):
+            continue
+        errors.append(
+            ValidationError(
+                f'cloud_run_workflow/{workflow_file}',
+                'Firestore index reconciliation must target vars.RUNTIME_GCP_PROJECT_ID',
             )
         )
     return errors
