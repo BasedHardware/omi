@@ -31,5 +31,10 @@ final class OmiTransparencyTests: XCTestCase {
     XCTAssertEqual(window.backgroundColor, .clear)
     XCTAssertTrue(window.hasShadow)
     XCTAssertTrue(window.styleMask.contains(.titled))
+    XCTAssertTrue(window.styleMask.contains(.fullSizeContentView))
+    XCTAssertTrue(window.titlebarAppearsTransparent)
+    XCTAssertEqual(window.titleVisibility, .hidden)
+    XCTAssertEqual(window.titlebarSeparatorStyle, .none)
+    XCTAssertFalse(window.isMovableByWindowBackground)
   }
 }

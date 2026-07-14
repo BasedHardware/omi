@@ -16,8 +16,13 @@ extension NSHostingView: HostingSizingConfigurable {}
 @MainActor
 enum MainWindowBackdrop {
   static func configure(_ window: NSWindow) {
+    window.styleMask.insert(.fullSizeContentView)
     window.isOpaque = false
     window.backgroundColor = .clear
+    window.titlebarAppearsTransparent = true
+    window.titleVisibility = .hidden
+    window.titlebarSeparatorStyle = .none
+    window.isMovableByWindowBackground = false
     // Unlike the borderless floating panel, the titled main window keeps its
     // standard system shadow and corner mask.
     window.hasShadow = true
@@ -78,9 +83,18 @@ struct DesktopHomeView: View {
     selectedIndex == SidebarNavItem.settings.rawValue
   }
 
+  private var windowChromePageTitle: String {
+    guard authState.isSignedIn else { return "Welcome" }
+    guard appState.hasCompletedOnboarding else { return "Set up" }
+    return SidebarNavItem(rawValue: selectedIndex)?.title ?? "Home"
+  }
+
   var body: some View {
-    Group {
-      if authState.isRestoringAuth {
+    VStack(spacing: 0) {
+      OmiWindowChromeBar(pageTitle: windowChromePageTitle)
+
+      Group {
+        if authState.isRestoringAuth {
         // State 0: Restoring auth session - show loading
         VStack(spacing: OmiSpacing.lg) {
           if let nsImage = Self.heroLogoImage {
@@ -417,10 +431,12 @@ struct DesktopHomeView: View {
             .zIndex(21)
           }
         }
+        }
       }
     }
     .background(OmiColors.backgroundPrimary)
     .frame(minWidth: minimumWindowWidth, minHeight: minimumWindowHeight)
+    .ignoresSafeArea(.container, edges: .top)
     .preferredColorScheme(.dark)
     .tint(OmiColors.accent)
     .onAppear {
@@ -931,10 +947,11 @@ struct DesktopHomeView: View {
         .clipped()
       }
 
-      // Main content area with rounded container
+      // Main content is flush with the window. The system window owns the outer
+      // corner mask; inner cards keep their own elevation and glass treatment.
       ZStack {
         // Content container background
-        RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
+        Rectangle()
           .fill(
             LinearGradient(
               colors: [
@@ -945,11 +962,6 @@ struct DesktopHomeView: View {
               endPoint: .bottomTrailing
             )
           )
-          .overlay(
-            RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
-              .stroke(OmiColors.border.opacity(0.22), lineWidth: 1)
-          )
-          .shadow(color: .black.opacity(0.22), radius: 26, x: 0, y: 14)
 
         // Page content - switch recreates views on tab change
         // Extracted into a separate struct so that pages like TasksPage
@@ -982,9 +994,7 @@ struct DesktopHomeView: View {
         .onExitCommand {
           navigateHomeOnEscapeIfNeeded()
         }
-        .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
       }
-      .padding(OmiSpacing.md)
     }
     .overlay {
       // Goal completion celebration overlay
