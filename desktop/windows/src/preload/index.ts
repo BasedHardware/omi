@@ -21,6 +21,7 @@ import type {
   OnboardingGraphEdge,
   UsageSettings,
   RewindSettings,
+  RewindCaptureDirective,
   InsightPayload,
   MeetingToastPayload,
   WhatsNewPayload,
@@ -196,6 +197,12 @@ const omi: OmiBridgeApi = {
     const listener = (_e: unknown, s: RewindSettings): void => cb(s)
     ipcRenderer.on('rewind:settings', listener)
     return () => ipcRenderer.removeListener('rewind:settings', listener)
+  },
+  rewindGetCaptureDirective: () => ipcRenderer.invoke('rewind:getCaptureDirective'),
+  onRewindCaptureDirective: (cb: (d: RewindCaptureDirective) => void) => {
+    const listener = (_e: unknown, d: RewindCaptureDirective): void => cb(d)
+    ipcRenderer.on('rewind:capture-directive', listener)
+    return () => ipcRenderer.removeListener('rewind:capture-directive', listener)
   },
   insightGetSettings: () => ipcRenderer.invoke('insight:getSettings'),
   insightSetSettings: (patch) => ipcRenderer.invoke('insight:setSettings', patch),

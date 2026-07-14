@@ -667,6 +667,10 @@ export type OmiBridgeApi = {
   rewindPrimarySourceId: () => Promise<string | null>
   rewindSaveFrame: (data: Uint8Array) => Promise<{ captured: boolean; reason?: string }>
   onRewindSettings: (cb: (s: RewindSettings) => void) => () => void
+  /** Runtime capture directive (pause + effective cadence) the main process derives
+   *  from OS power/lock state; the capture host prefers it over the base interval. */
+  rewindGetCaptureDirective: () => Promise<RewindCaptureDirective>
+  onRewindCaptureDirective: (cb: (d: RewindCaptureDirective) => void) => () => void
   /** Capture the primary screen once and OCR it, returning the recognized text
    *  (or '' on failure/timeout). Used by the chat to read the screen at send time. */
   screenReadText: () => Promise<string>
@@ -1215,6 +1219,14 @@ export type RewindSettings = {
   /** App names to never screenshot (case-insensitive substring match against the
    *  foreground app/process name). Empty = capture everything. */
   excludedApps: string[]
+}
+
+/** Runtime capture directive pushed main→renderer, derived from OS power/lock state.
+ *  `paused` tears down the capture stream (sleep/lock); `intervalMs` is the effective
+ *  cadence (base × battery multiplier). Separate from the persisted RewindSettings. */
+export type RewindCaptureDirective = {
+  paused: boolean
+  intervalMs: number
 }
 
 // --- Track 4: Rewind/Conversations/capture ---

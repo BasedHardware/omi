@@ -1071,6 +1071,16 @@ export function getRewindFrameOcrLines(id: number): OcrLine[] {
   }
 }
 
+/** Image paths of frames captured in [fromMs, toMs) — used by the orphaned-JPEG
+ *  sweep to tell a crash-orphaned file apart from one with a live DB row. */
+export function rewindImagePathsBetween(fromMs: number, toMs: number): string[] {
+  return (
+    get()
+      .prepare('SELECT image_path FROM rewind_frames WHERE ts >= ? AND ts < ?')
+      .all(fromMs, toMs) as { image_path: string }[]
+  ).map((r) => r.image_path)
+}
+
 export function deleteRewindFramesOlderThan(cutoffTs: number): RewindFrame[] {
   const d = get()
   const select = d.prepare(`SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE ts < ?`)
