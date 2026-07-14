@@ -552,6 +552,33 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  it.each(["background_agent", "delegated_agent"])(
+    "treats semantic %s surface hints as cross-surface child discovery",
+    async (surfaceKind) => {
+      const { store, kernel } = createKernelHarness(newDatabasePath());
+      const child = await kernel.executeRun({
+        ...baseRunInput,
+        requestId: `request-${surfaceKind}`,
+        surfaceKind: "floating_bar",
+      });
+
+      const listed = parseToolResult(
+        await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+          ownerId: "owner",
+          surfaceKind,
+          limit: 1,
+        }),
+      );
+
+      expect(listed.ok).toBe(true);
+      expect(listed.sessions).toHaveLength(1);
+      expect(listed.sessions[0].session.surfaceKind).toBe("floating_bar");
+      expect(listed.sessions[0].latestRun.runId).toBe(child.run.runId);
+      expect(listed.sessions[0].latestRun.finalText).toBe(child.run.finalText);
+      store.close();
+    },
+  );
+
   it("rejects unknown coordinator bundles at the control-tool boundary", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const result = parseToolResult(

@@ -341,7 +341,7 @@
         },
         "surfaceKind": {
           "type": "string",
-          "description": "Filter to a canonical surface kind.",
+          "description": "Optional surface hint. background_agent and delegated_agent discover recent child sessions across concrete surfaces.",
           "enum": [
             "main_chat",
             "task_chat",
@@ -381,7 +381,7 @@
         },
         "surfaceKind": {
           "type": "string",
-          "description": "Filter to a canonical surface kind.",
+          "description": "Optional surface hint. background_agent and delegated_agent discover recent child sessions across concrete surfaces.",
           "enum": [
             "main_chat",
             "task_chat",
@@ -450,7 +450,7 @@
               "floating_bar",
               "floating_pill"
             ],
-            "description": "Optional canonical surface filter."
+            "description": "Optional surface hint. background_agent and delegated_agent discover recent child sessions across concrete surfaces."
           },
           "limit": {
             "type": "number",

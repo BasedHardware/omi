@@ -783,9 +783,20 @@ export async function handleAgentControlToolCall(
       case "list_agent_sessions": {
         const parsed = agentControlToolSchemas.list_agent_sessions.parse(input);
         const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        // `background_agent` and `delegated_agent` describe execution intent,
+        // not persisted session surfaces. Realtime models naturally choose
+        // those semantic labels when asked about a child result; passing them
+        // through as exact surface filters hides valid `floating_bar` and
+        // `main_chat` children. Treat them as discovery aliases and let the
+        // recent-first canonical list supply the concrete surface/run.
+        const surfaceKind = parsed.surfaceKind === "background_agent"
+          || parsed.surfaceKind === "delegated_agent"
+          ? undefined
+          : parsed.surfaceKind;
         const sessions = context.kernel.listSessions({
           ...parsed,
           ownerId,
+          surfaceKind,
         });
         const overrides = context.kernel.listDesktopAttentionOverrides(ownerId);
         return stringifyToolResult(serializeAgentSessionsList(sessions, overrides));

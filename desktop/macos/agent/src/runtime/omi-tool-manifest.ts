@@ -1345,7 +1345,7 @@ const controlVoicePatches: Partial<Record<AgentControlManifestTool["name"], OmiT
         surfaceKind: {
           type: "string",
           enum: ["main_chat", "task_chat", "realtime", "delegated_agent", "background_agent", "floating_bar", "floating_pill"],
-          description: "Optional canonical surface filter.",
+          description: "Optional surface hint. background_agent and delegated_agent discover recent child sessions across concrete surfaces.",
         },
         limit: { type: "number", description: "Maximum sessions to return. Default 50." },
       },
