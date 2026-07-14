@@ -13,7 +13,14 @@ Mac reference (frozen ground truth): `.worktrees/mac-ref` @ tag `v0.12.72+12072-
 - [x] **P0 Additive schema PR — MERGED (PR #32, merge c3b01ec).** 3 tables + CRUD + drift-guard.
       Real-app-boot verified tables create; full suite 1484 pass. Drift-guard caught+fixed a real
       Track-2 leak (voice_turn_outbox missing from sign-out wipe) and exempted Track-4 app_meta.
-- [ ] **P1 AI User Profile** (enabler #1): wire get/update_ai_profile, 2-stage synthesis, daily cadence.
+- [~] **P1 AI User Profile** (enabler #1): IMPLEMENTED (main/assistants/aiUserProfile/{synthesis,service}
+      + ipc + settings flag + additive types/preload). Synthesis pure+tested; 2-stage; char-cap 10000
+      (prompt asks <2000); data_sources_used=total item count (Mac parity). Backend GET/PATCH
+      /v1/users/ai-profile (no platform branch). Opus-audited; fix pass in flight (M1 edit-path count
+      corruption, m3 service error-path tests, m4 401-vs-nodata, m6/m7/m8). **ARCH:** service is a
+      main-side capability; renderer (where the Firebase token lives) drives scheduling/session-push —
+      the auto-trigger wiring lands with P2's renderer proactive framework. Exercise via manual
+      generateNow(session) for now.
 - [ ] **P2 AssistantCoordinator** (framework): throttling (per-assistant+global clocks, freq 0–5,
       suppression snooze→master→frequency), context-switch detection, backpressure.
 - [ ] **P3 Focus assistant** + glow overlay.
@@ -145,6 +152,13 @@ full suite 1445 pass/15 skip, eslint clean. Independent Opus audit in flight bef
   a Goals History page + completion celebration. Recommend matching: FocusedGoalsSection on Home
   (Track 5 mounts) + a lightweight Goals history/detail surface, no top-level nav item. (Park final call.)
 - **G-D (Tasks rich filters):** skip per plan; DO align Tasks grouping 5→4 buckets (that's IA, not filters).
+- **M2 — Windows fallback-emitter (PLATFORM decision, affects ALL tracks):** AGENTS.md fallback
+  telemetry defines emitters for Python/Swift/Rust only; there is NO `recordFallback` in
+  desktop/windows/src. Windows features with fail-open branches (Track 3 profile degrade, Track 2
+  voice, sync, auth, listen) currently can't satisfy the "silent ops banned" rule mechanically.
+  Decision for Chris: (i) build a minimal TS/Electron fallback emitter (PostHog/metric sink) as shared
+  Windows infra, or (ii) scoped carve-out for the Electron surface. Interim in P1: non-silent
+  structured warns + TODO. Not a Track-3-owned decision.
 
 ## Parked questions for Chris (batch — do not block)
 
