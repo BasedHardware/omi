@@ -83,7 +83,9 @@ struct OnboardingTasksStepView: View {
 
             Spacer()
 
-            VStack(spacing: OmiSpacing.md) {
+            HStack(spacing: OmiSpacing.md) {
+                OnboardingBackButton()
+
                 Button(action: onComplete) {
                     Text("Take me to Omi")
                         .font(.system(size: 15, weight: .semibold))
@@ -95,7 +97,6 @@ struct OnboardingTasksStepView: View {
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(.defaultAction)
-
             }
             .padding(.bottom, OmiSpacing.section)
         }
