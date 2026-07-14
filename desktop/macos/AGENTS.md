@@ -262,6 +262,33 @@ This creates `/Applications/omi-fix-rewind.app` with bundle ID `com.omi.omi-fix-
   QA bundle. This is the compact Swift/Node/Rust contract gate; reserve full
   component suites and the live continuity gauntlet for PR readiness.
 
+### Run Variants & Parallel Worktrees
+- `./run.sh --yolo` — quick start against the dev backend, no local services. `OMI_SKIP_BACKEND=1` — app only, remote backend via `OMI_DESKTOP_API_URL`. `OMI_SKIP_TUNNEL=1` — no Cloudflare tunnel.
+- **Parallel worktrees auto-isolate.** `scripts/dev-instance.sh` derives a unique instance from each linked git worktree, so `run.sh` (and `backend/scripts/dev-serve.sh`) pick per-worktree ports (Rust 10201+, Python 8080+, automation 47777+) and bundle name (`omi-<worktree>`). Kills are pidfile-scoped (never the global `omi-desktop-backend` name), and a taken port fails loud instead of clobbering. The primary checkout is unchanged (`Omi Dev`, 10201/8080/47777). Override any of `OMI_INSTANCE` / `PORT` / `PYTHON_PORT` / `OMI_AUTOMATION_PORT` / `OMI_APP_NAME` to opt out.
+- `Omi Dev` is the canonical shared development profile (reusable permissions, auth seed source). Do not pass `OMI_APP_NAME="Omi Dev"` from a linked worktree; that creates a named bundle displayed as Omi Dev with a different bundle id and breaks permission reuse.
+- Local Python backend (per-worktree port): `cd backend && ./scripts/dev-serve.sh`.
+
+### Self-Testing the App (agents)
+
+**Hard rule: you may not ask the user to verify a feature you have not actually exercised yourself.** Compiling, "looks correct from the code", or "scroll down to see it" are not verification. If the obvious path is blocked (permission, focus, missing tool), try a long sequence of alternatives before involving the user — extend the bridge with a new action, add a temporary in-process hook, search the web for a workaround, grant the missing permission yourself if you can, write a tiny standalone harness. Roughly: spend ten serious attempts across different approaches before you escalate. Asking the user is the last move, not the first.
+
+Fast path (skips web login and sidebar click-through):
+
+1. **Build + launch a named bundle** (see Testing with Named Bundles above). `./run.sh` auto-clones Omi Dev auth/onboarding plus common shortcuts/settings **before launch**. Manual seeding:
+   ```bash
+   ./scripts/omi-auth-dump.sh                                  # capture the Omi Dev session
+   ./scripts/omi-auth-seed.sh com.omi.omi-<feature> \
+     tmp/desktop-auth.json "/Applications/omi-<feature>.app"   # clears stale Keychain; UD→KC migrate
+   ./scripts/omi-settings-seed.sh com.omi.omi-<feature>        # replay shortcuts/settings
+   ```
+2. **Prefer the local bridge — it never touches the cursor.** It calls the app's real code in-process (no synthetic mouse events). Use it before reaching for `agent-swift click`/`cliclick`/computer-use. Auto-enables on non-prod bundles; run several at once via distinct `OMI_AUTOMATION_PORT` (default 47777).
+   - `./scripts/omi-ctl state` — app-state snapshot (selected tab, auth, onboarding).
+   - `./scripts/omi-ctl navigate <screen> [settings-section]` — jump straight to a screen in ~150ms (`omi-ctl screens` lists targets).
+   - `./scripts/omi-ctl actions` then `./scripts/omi-ctl action <name> [k=v …]` — semantic actions (e.g. `refresh_all_data`). Add new ones in `DesktopAutomationActionRegistry`. See `e2e/SKILL.md` §2b.
+   - `agent-swift` only for UI the bridge can't reach yet (`click` moves the cursor).
+3. **Read logs to confirm behavior:** app + chat bridge in `/private/tmp/omi-dev.log` (dev) or `/private/tmp/omi.log`; local Rust backend on the `./run.sh` stdout; per-user issues in Sentry/PostHog.
+4. **Verify the actual behavior**, not just that the app launched — exercise the feature and check the logs/UI reflect the change.
+
 ### After Implementing Changes
 - `xcrun swift build` is for **compile checks only** — it does NOT start the backend
 - To actually test, ALWAYS use `./run.sh` with `OMI_APP_NAME` — it starts Rust backend + Cloudflare tunnel + Swift app together
