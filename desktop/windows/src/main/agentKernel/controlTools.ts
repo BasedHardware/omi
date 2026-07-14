@@ -348,9 +348,21 @@ const CONTROL_TOOL_NAME_SET = new Set<string>(Object.keys(agentControlToolSchema
  * Tools that are never advertised to a model-facing surface, only reachable
  * through trusted direct control:
  *   - `spawn_background_agent` — host coordinator entrypoint (`surfaces: []`).
+ *     Unrestricted background-spawn rights: `backgroundSpawnAuthority` hands the
+ *     kernel `trustedUserSpawn` for any non-leaf caller that omits a
+ *     `callerSessionId`.
  *   - `resolve_desktop_dispatch` — resolving a dispatch IS the user's consent;
- *     a model may never grant itself one. Also gated at runtime in
- *     `handleAgentControlToolCall`.
+ *     a model may never grant itself one.
+ *
+ * Not being advertised is not a gate — a caller can still name a tool it was
+ * never shown. Every name in this set is therefore ALSO rejected at runtime in
+ * `handleAgentControlToolCall` when the caller is not trusted direct control,
+ * which makes the set self-enforcing: adding a name here gates it everywhere.
+ *
+ * DELIBERATE DEVIATION FROM macOS. The Mac original advertises-but-does-not-gate
+ * `spawn_background_agent` (control-tools.ts:555-583, 906-916) — a model-facing
+ * coordinator there can call it by name. Windows is stricter on purpose. Do not
+ * "restore parity" by removing this gate.
  */
 export const TRUSTED_DIRECT_CONTROL_ONLY_TOOL_NAMES = new Set<string>([
   'resolve_desktop_dispatch',
@@ -538,19 +550,27 @@ export async function handleAgentControlToolCall(
       }
     })
   }
-  if (name === 'resolve_desktop_dispatch' && !context.trustedUserControl) {
-    return JSON.stringify({
-      ok: false,
-      error: {
-        code: 'policy_denied',
-        message: 'resolve_desktop_dispatch requires trusted user control'
-      }
-    })
-  }
-
   try {
     // INV-AGENT leaf-role guard. Runs before ANY tool executes, on every call.
+    // Kept ahead of the trusted-control gate below so that a leaf caller of a
+    // tool covered by BOTH is still rejected by this one — each guard keeps its
+    // own failing test.
     assertLeafControlToolsAllowed(context, name)
+
+    // Trusted-direct-control gate — still before parsing and before any kernel
+    // call. Covers EVERY name in TRUSTED_DIRECT_CONTROL_ONLY_TOOL_NAMES: being
+    // absent from a caller's advertised tool list does not stop it from naming
+    // the tool anyway.
+    if (TRUSTED_DIRECT_CONTROL_ONLY_TOOL_NAMES.has(name) && !context.trustedUserControl) {
+      return JSON.stringify({
+        ok: false,
+        error: {
+          code: 'policy_denied',
+          message: `${name} requires trusted user control`
+        }
+      })
+    }
+
     switch (name) {
       case 'list_agent_sessions': {
         const parsed = agentControlToolSchemas.list_agent_sessions.parse(input)

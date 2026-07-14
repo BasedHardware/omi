@@ -26,6 +26,7 @@ import {
   handleAgentControlToolCall,
   isAgentControlToolName,
   AGENT_CONTROL_TOOL_NAMES,
+  TRUSTED_DIRECT_CONTROL_ONLY_TOOL_NAMES,
   type AgentControlToolContext
 } from './controlTools'
 import { LEAF_AGENT_CONTROL_TOOLS } from './executionPolicy'
@@ -191,15 +192,51 @@ describe('INV-AGENT leaf-role guard (through the real dispatch path)', () => {
 // === Trusted-direct-control-only tools =======================================
 
 describe('trusted-direct-control-only tools', () => {
-  it('rejects resolve_desktop_dispatch without trusted user control', async () => {
+  // The exact set. If someone adds a trusted-only tool and the runtime gate is
+  // still hardcoded to one name, the it.each below fails for the new name.
+  const TRUSTED_ONLY = ['resolve_desktop_dispatch', 'spawn_background_agent'] as const
+
+  // Valid input for each, so a rejection can only come from the trusted-control
+  // gate and never from schema validation.
+  const validInput: Record<(typeof TRUSTED_ONLY)[number], Record<string, unknown>> = {
+    resolve_desktop_dispatch: { dispatchId: 'dsp_1', status: 'resolved' },
+    spawn_background_agent: { prompt: 'do the thing' }
+  }
+
+  it('TRUSTED_DIRECT_CONTROL_ONLY_TOOL_NAMES is exactly those two tools', () => {
+    expect([...TRUSTED_DIRECT_CONTROL_ONLY_TOOL_NAMES].sort()).toEqual([...TRUSTED_ONLY].sort())
+  })
+
+  it.each(TRUSTED_ONLY)(
+    'rejects an untrusted model-facing coordinator calling %s by name',
+    async (name) => {
+      const { kernel } = newKernel()
+      // A coordinator (NOT a leaf), so the leaf-role guard does not fire — the
+      // rejection can only be the trusted-control gate.
+      const result = await call(untrustedCoordinatorContext(kernel), name, validInput[name])
+
+      expect(result.ok).toBe(false)
+      expect(result.error?.code).toBe('policy_denied')
+      expect(result.error?.message).toBe(`${name} requires trusted user control`)
+    }
+  )
+
+  it.each(TRUSTED_ONLY)('rejects an untrusted caller of %s BEFORE any kernel work', async (name) => {
+    const { kernel, store } = newKernel()
+    const before = store.allRows('SELECT COUNT(*) AS n FROM sessions')[0].n
+    await call(untrustedCoordinatorContext(kernel), name, validInput[name])
+    const after = store.allRows('SELECT COUNT(*) AS n FROM sessions')[0].n
+    // In particular, a denied spawn_background_agent must not have created a session.
+    expect(after).toBe(before)
+  })
+
+  it.each(TRUSTED_ONLY)('lets trusted direct control PAST the gate for %s', async (name) => {
     const { kernel } = newKernel()
-    const result = await call(untrustedCoordinatorContext(kernel), 'resolve_desktop_dispatch', {
-      dispatchId: 'dsp_1',
-      status: 'resolved'
-    })
-    expect(result.ok).toBe(false)
-    expect(result.error?.code).toBe('policy_denied')
-    expect(result.error?.message).toBe('resolve_desktop_dispatch requires trusted user control')
+    const result = await call(coordinatorContext(kernel), name, validInput[name])
+
+    // These still fail downstream (no adapter registered / no such dispatch) —
+    // the point is that the failure is NOT the trusted-control denial.
+    expect(result.error?.code ?? '').not.toBe('policy_denied')
   })
 
   it('a model-facing caller is not even shown resolve_desktop_dispatch or spawn_background_agent', () => {
