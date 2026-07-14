@@ -332,6 +332,8 @@ struct OnboardingView: View {
         OnboardingFloatingBarShortcutStepView(
           appState: appState,
           chatProvider: chatProvider,
+          stepIndex: 10,
+          totalSteps: OnboardingFlow.introStepCount,
           onComplete: {
             AnalyticsManager.shared.onboardingStepCompleted(
               step: 10, stepName: "FloatingBarShortcut")
@@ -348,6 +350,8 @@ struct OnboardingView: View {
         OnboardingFloatingBarDemoView(
           appState: appState,
           chatProvider: chatProvider,
+          stepIndex: 11,
+          totalSteps: OnboardingFlow.introStepCount,
           onComplete: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 11, stepName: "FloatingBar")
             currentStep = 12
@@ -462,6 +466,7 @@ struct OnboardingView: View {
       }
     }
     .environment(\.onboardingBack, canGoBack ? goBack : nil)
+    .environment(\.onboardingJumpTo, isExportPreview ? nil : jumpTo)
     .focusable()
     .focusEffectDisabled()
     .focused($contentFocused)
@@ -478,6 +483,12 @@ struct OnboardingView: View {
   private func goBack() {
     guard canGoBack else { return }
     currentStep -= 1
+  }
+
+  /// Jump directly to any step — powers the clickable progress dots.
+  private func jumpTo(_ index: Int) {
+    guard !isExportPreview else { return }
+    currentStep = min(max(0, index), OnboardingFlow.lastStepIndex)
   }
 
   /// Arrow-key navigation runs off a local `NSEvent` monitor rather than SwiftUI

@@ -6,6 +6,8 @@ import OmiTheme
 struct OnboardingFloatingBarShortcutStepView: View {
     @ObservedObject var appState: AppState
     @ObservedObject var chatProvider: ChatProvider
+    var stepIndex: Int
+    var totalSteps: Int
     var onComplete: () -> Void
     var onSkip: () -> Void
     var onForceComplete: (() -> Void)?
@@ -41,6 +43,10 @@ struct OnboardingFloatingBarShortcutStepView: View {
 
             Divider()
                 .background(OmiColors.backgroundTertiary)
+
+            OnboardingProgressDots(stepIndex: stepIndex, totalSteps: totalSteps)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.top, OmiSpacing.xl)
 
             Spacer()
 

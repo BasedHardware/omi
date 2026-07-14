@@ -15,6 +15,19 @@ extension EnvironmentValues {
   }
 }
 
+/// Jump straight to a step index, injected by `OnboardingView`. Powers the
+/// clickable progress dots so the user can move to any step directly.
+private struct OnboardingJumpActionKey: EnvironmentKey {
+  static let defaultValue: ((Int) -> Void)? = nil
+}
+
+extension EnvironmentValues {
+  var onboardingJumpTo: ((Int) -> Void)? {
+    get { self[OnboardingJumpActionKey.self] }
+    set { self[OnboardingJumpActionKey.self] = newValue }
+  }
+}
+
 enum OnboardingRightPaneMode {
   case graph
   case message(title: String, detail: String)
@@ -27,6 +40,7 @@ enum OnboardingLayoutMode {
 
 struct OnboardingStepScaffold<Content: View>: View {
   @ObservedObject private var graphViewModel: MemoryGraphViewModel
+  @Environment(\.onboardingJumpTo) private var onboardingJumpTo
 
   let stepIndex: Int
   let totalSteps: Int
@@ -161,14 +175,8 @@ struct OnboardingStepScaffold<Content: View>: View {
   }
 
   private func progressRow(centered: Bool) -> some View {
-    HStack(spacing: OmiSpacing.sm) {
-      ForEach(0..<totalSteps, id: \.self) { index in
-        Capsule()
-          .fill(index <= stepIndex ? Color.white : Color.white.opacity(0.1))
-          .frame(width: index == stepIndex ? 28 : 8, height: 6)
-      }
-    }
-    .frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
+    OnboardingProgressDots(stepIndex: stepIndex, totalSteps: totalSteps)
+      .frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
   }
 
   private func titleBlock(centered: Bool) -> some View {
@@ -222,6 +230,50 @@ struct OnboardingLogoMark: View {
       onForceComplete?()
     }
     .accessibilityLabel("omi")
+  }
+}
+
+/// Progress dots shown at the top of an onboarding step. Each dot is clickable
+/// (via the injected `onboardingJumpTo` action) so the user can jump straight to
+/// any step. Used by `OnboardingStepScaffold` and by the custom full-width steps
+/// (floating-bar shortcut/demo) that don't use the scaffold.
+struct OnboardingProgressDots: View {
+  let stepIndex: Int
+  let totalSteps: Int
+  @Environment(\.onboardingJumpTo) private var onboardingJumpTo
+
+  var body: some View {
+    HStack(spacing: OmiSpacing.sm) {
+      ForEach(0..<totalSteps, id: \.self) { index in
+        dot(index)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private func dot(_ index: Int) -> some View {
+    let capsule = Capsule()
+      .fill(index <= stepIndex ? Color.white : Color.white.opacity(0.1))
+      .frame(width: index == stepIndex ? 28 : 8, height: 6)
+
+    if let onboardingJumpTo {
+      Button {
+        onboardingJumpTo(index)
+      } label: {
+        // Pad the hit area vertically so the 6pt dot is comfortably clickable
+        // without changing the row's visual layout.
+        capsule
+          .padding(.vertical, OmiSpacing.sm)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .onHover { inside in
+        if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+      }
+      .help("Go to step \(index + 1)")
+    } else {
+      capsule
+    }
   }
 }
 
