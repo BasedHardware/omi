@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
 import hashlib
 import json
 import os
@@ -16,6 +17,34 @@ from pathlib import Path
 
 POLL_SECONDS = 0.2
 STATUS_INTERVAL_SECONDS = 5.0
+OWNED_SIGNAL_NAMES = ("SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK")
+IS_WINDOWS = os.name == "nt"
+HAS_PROCESS_GROUPS = hasattr(os, "killpg")
+WINDOWS_STILL_ACTIVE = 259
+WINDOWS_PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+WINDOWS_ERROR_ACCESS_DENIED = 5
+
+
+def owned_signals(module: object = signal) -> tuple[int, ...]:
+    """Signals the host actually defines; Windows has no SIGHUP but adds SIGBREAK."""
+    return tuple(getattr(module, name) for name in OWNED_SIGNAL_NAMES if hasattr(module, name))
+
+
+def signal_child(child: subprocess.Popen, signum: int) -> None:
+    """Forward a signal to the owned child on any host.
+
+    POSIX children get their own session (``start_new_session``), so the whole group is
+    signalled; Windows has no such group here and ``os.kill`` would terminate outright.
+    """
+    if child.poll() is not None:
+        return
+    try:
+        if HAS_PROCESS_GROUPS:
+            os.killpg(child.pid, signum)
+        else:
+            child.terminate()
+    except OSError:
+        pass
 
 
 def atomic_json(path: Path, value: dict) -> None:
@@ -32,9 +61,26 @@ def read_json(path: Path) -> dict:
         return {}
 
 
+def windows_process_exists(pid: int) -> bool:
+    """Liveness probe for Windows, where ``os.kill(pid, 0)`` terminates the target."""
+    kernel32 = ctypes.windll.kernel32
+    handle = kernel32.OpenProcess(WINDOWS_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if not handle:
+        return kernel32.GetLastError() == WINDOWS_ERROR_ACCESS_DENIED
+    try:
+        exit_code = ctypes.c_ulong()
+        if kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)) == 0:
+            return True
+        return exit_code.value == WINDOWS_STILL_ACTIVE
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def process_exists(pid: int) -> bool:
     if pid <= 0:
         return False
+    if IS_WINDOWS:
+        return windows_process_exists(pid)
     try:
         os.kill(pid, 0)
         return True
@@ -173,15 +219,10 @@ def run_owned(
         )
 
     def forward_signal(signum: int, _frame: object) -> None:
-        if child is not None and child.poll() is None:
-            try:
-                os.killpg(child.pid, signum)
-            except ProcessLookupError:
-                pass
+        if child is not None:
+            signal_child(child, signum)
 
-    previous_handlers = {
-        signum: signal.signal(signum, forward_signal) for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
-    }
+    previous_handlers = {signum: signal.signal(signum, forward_signal) for signum in owned_signals()}
     exit_code = 1
     try:
         print(f"Pre-push single-flight log: {log_path}")
