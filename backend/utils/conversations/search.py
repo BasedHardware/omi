@@ -61,14 +61,28 @@ def _get_typesense_client() -> Any:
     return _typesense_client
 
 
+def _lazy_getattr(target: Any, name: str) -> Any:
+    # Dunders stay unresolved so introspection (copy, pickle, mock) cannot
+    # construct a real client and defeat the laziness this shim exists for.
+    if name.startswith('__') and name.endswith('__'):
+        raise AttributeError(name)
+    return getattr(target(), name)
+
+
 class _LazyCollections:
     def __getitem__(self, name: str) -> Any:
         return _get_typesense_client().collections[name]
+
+    def __getattr__(self, name: str) -> Any:
+        return _lazy_getattr(lambda: _get_typesense_client().collections, name)
 
 
 class _LazyTypesenseClient:
     def __init__(self) -> None:
         self.collections: Any = _LazyCollections()
+
+    def __getattr__(self, name: str) -> Any:
+        return _lazy_getattr(_get_typesense_client, name)
 
 
 client: Any = _LazyTypesenseClient()
