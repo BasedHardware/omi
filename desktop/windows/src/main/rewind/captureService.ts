@@ -9,6 +9,7 @@ import { helperProcess } from '../ocr/helperProcess'
 import { insertRewindFrame, setRewindFrameOcr } from '../ipc/db'
 import { setCurrentScreen } from './currentScreen'
 import { getPersistedRewindSettings, persistRewindSettings } from './rewindSettings'
+import { startCaptureDirective, setBaseCaptureInterval } from './captureDirective'
 import { BUILT_IN_EXCLUDED_APPS } from '../../shared/rewindExclusions'
 import type { RewindSettings } from '../../shared/types'
 
@@ -176,11 +177,16 @@ export async function ingestRewindFrame(jpeg: Buffer): Promise<IngestResult> {
 export function startRewindCapture(): void {
   bindPowerListeners()
   settings = getPersistedRewindSettings()
+  // Own the runtime capture directive (battery cadence now; sleep/lock later) and
+  // seed it with the user's base interval so the renderer paces correctly.
+  startCaptureDirective(settings.intervalMs)
 }
 
 /** Update the live settings and persist them so the choice survives restarts. */
 export function updateRewindSettings(next: RewindSettings): void {
   settings = persistRewindSettings(next)
+  // Re-derive the effective cadence (base × battery) from the new base interval.
+  setBaseCaptureInterval(settings.intervalMs)
 }
 
 export function getRewindSettings(): RewindSettings {

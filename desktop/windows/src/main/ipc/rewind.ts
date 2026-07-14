@@ -14,6 +14,7 @@ import {
   updateRewindSettings,
   ingestRewindFrame
 } from '../rewind/captureService'
+import { getCaptureDirective } from '../rewind/captureDirective'
 import { pruneRewindOnce } from '../rewind/retentionRunner'
 import { rewindRoot } from '../rewind/paths'
 import type { RewindSettings } from '../../shared/types'
@@ -50,6 +51,9 @@ export function registerRewindHandlers(): void {
     }
     return current
   })
+  // Current runtime capture directive (pause + effective cadence). The capture
+  // host fetches this on mount, then reacts to pushes on 'rewind:capture-directive'.
+  ipcMain.handle('rewind:getCaptureDirective', async () => getCaptureDirective())
   ipcMain.handle('rewind:pruneNow', async () => pruneRewindOnce())
   // Cached primary-screen id. The underlying desktopCapturer.getSources() can
   // take several seconds on some machines, so it's prewarmed at startup; this
