@@ -313,10 +313,18 @@
   }
 
   .input-field {
-    @apply w-full rounded-2xl border border-white/10 px-4 py-3 text-sm text-white transition-all duration-200 placeholder:text-white/40 focus:border-white/25 focus:outline-none focus:ring-1 focus:ring-white/10;
+    @apply w-full rounded-2xl border border-white/10 px-4 py-3 text-sm text-white transition-[border-color,background-color,box-shadow] duration-200 placeholder:text-white/40 focus:border-white/25 focus:outline-none focus:ring-1 focus:ring-white/10;
     background: rgba(0, 0, 0, 0.18);
     -webkit-backdrop-filter: blur(12px);
     backdrop-filter: blur(12px);
+    /* Kill the first-focus white flash: with `transition-all`, focusing painted
+       the UA's default outline for one ~200ms frame before `focus:outline-none`
+       drove it to transparent. Fix both ends — declare the transparent outline
+       at rest (no color left to flash) AND narrow the transition to the props
+       that actually change on focus (border, background, ring) so `outline`
+       never animates. Focus stays visible via the ring + border above. */
+    outline: 2px solid transparent;
+    outline-offset: 2px;
   }
 
   .input-field:focus {

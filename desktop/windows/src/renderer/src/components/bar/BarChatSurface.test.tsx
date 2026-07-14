@@ -36,6 +36,7 @@ function renderSurface(overrides: Partial<BarChatSurfaceProps> = {}): BarChatSur
     chat: baseChat,
     agents: [],
     view: 'list',
+    conversationTitle: 'Omi Chat',
     onOpenConversation: vi.fn(),
     onBack: vi.fn(),
     onClose: vi.fn(),
@@ -56,31 +57,41 @@ function renderSurface(overrides: Partial<BarChatSurfaceProps> = {}): BarChatSur
 afterEach(() => cleanup())
 
 describe('BarChatSurface', () => {
-  it('list: shows the Omi Chat row and opens the conversation on click', () => {
+  it('list: shows the Omi Chat row and opens the Omi thread (null target) on click', () => {
     const props = renderSurface({ view: 'list' })
     expect(screen.getByText('Omi Chat')).toBeTruthy()
     // The row previews the last turn.
     expect(screen.getByText('Here is the answer')).toBeTruthy()
     fireEvent.click(screen.getByText('Omi Chat'))
-    expect(props.onOpenConversation).toHaveBeenCalledTimes(1)
+    // null target = the Omi Chat thread (no agent framing/prefill).
+    expect(props.onOpenConversation).toHaveBeenCalledWith(null)
   })
 
-  it('list: renders a row per connected agent and opens the shared conversation on click', () => {
-    const props = renderSurface({
-      view: 'list',
-      agents: [
-        { id: 'acp', displayName: 'Claude Code', working: false },
-        { id: 'codex', displayName: 'Codex', working: true }
-      ]
-    })
+  it('list: renders a row per connected agent and opens the conversation FOR THAT agent on click', () => {
+    const acp = { id: 'acp' as const, displayName: 'Claude Code', working: false }
+    const codex = { id: 'codex' as const, displayName: 'Codex', working: true }
+    const props = renderSurface({ view: 'list', agents: [acp, codex] })
     expect(screen.getByText('Claude Code')).toBeTruthy()
     expect(screen.getByText('Ready')).toBeTruthy()
     // The running agent shows its live status.
     expect(screen.getByText('Codex')).toBeTruthy()
     expect(screen.getByText('Working…')).toBeTruthy()
-    // A row opens the SAME inline conversation as Omi Chat (shared thread).
+    // Regression for the reported bug: clicking "Claude Code" must open the
+    // conversation for THAT agent (its row object), not the identical no-arg
+    // open the Omi row uses — that is what made it render titled "Omi Chat".
     fireEvent.click(screen.getByText('Claude Code'))
-    expect(props.onOpenConversation).toHaveBeenCalledTimes(1)
+    expect(props.onOpenConversation).toHaveBeenCalledWith(acp)
+  })
+
+  it('conversation: header shows the passed title (agent name, not a hardcoded "Omi Chat")', () => {
+    // Regression: the header was a hardcoded <span>Omi Chat</span>, so opening an
+    // agent row still read "Omi Chat". It now renders conversationTitle.
+    renderSurface({ view: 'conversation', conversationTitle: 'Claude Code' })
+    expect(screen.getByText('Claude Code')).toBeTruthy()
+    expect(screen.queryByText('Omi Chat')).toBeNull()
+    cleanup()
+    renderSurface({ view: 'conversation', conversationTitle: 'Omi Chat' })
+    expect(screen.getByText('Omi Chat')).toBeTruthy()
   })
 
   it('list: every row leads with a status-dot column so all titles share one left margin', () => {

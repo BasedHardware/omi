@@ -238,6 +238,84 @@ describe('useChat — C4 done payload', () => {
   })
 })
 
+describe('useChat — blank-reply guard', () => {
+  it('surfaces an error instead of persisting a blank bubble when the stream ends empty', async () => {
+    const { result } = renderHook(() => useChat())
+    await act(async () => {
+      const p = result.current.send('when is standup')
+      await waitForStream(0)
+      // 200 OK, zero bytes: no data chunks, no done: frame — the stream just ends.
+      streams[0].close()
+      await p
+    })
+    // The empty pending bubble is replaced with the error copy, not left blank.
+    expect(lastAssistant(result.current.history)?.content).toBe("Omi didn't send a reply. Try again.")
+    // The FINAL persisted assistant message carries the error, never blank text.
+    const finalThread = persisted.at(-1) as { role: string; content: string }[]
+    const persistedAssistant = [...finalThread].reverse().find((m) => m.role === 'assistant')
+    expect(persistedAssistant?.content).toBe("Omi didn't send a reply. Try again.")
+    expect(persistedAssistant?.content).not.toBe('')
+    // Like the catch path, the no-reply error is never spoken.
+    expect(speakSpy).not.toHaveBeenCalled()
+  })
+
+  it('does not speak the no-reply error on a voice turn', async () => {
+    const { result } = renderHook(() => useChat())
+    await act(async () => {
+      const p = result.current.send('when is standup', { fromVoice: true })
+      await waitForStream(0)
+      streams[0].close()
+      await p
+    })
+    expect(lastAssistant(result.current.history)?.content).toBe("Omi didn't send a reply. Try again.")
+    expect(speakSpy).not.toHaveBeenCalled()
+  })
+
+  it('renders streamed text unchanged (guard does not fire)', async () => {
+    const { result } = renderHook(() => useChat())
+    await act(async () => {
+      const p = result.current.send('hi')
+      await waitForStream(0)
+      streams[0].push('data: hello there\n')
+      streams[0].push(`done: ${b64(JSON.stringify({ id: 'srv', text: 'hello there' }))}\n\n`)
+      streams[0].close()
+      await p
+    })
+    expect(lastAssistant(result.current.history)?.content).toBe('hello there')
+  })
+
+  it('renders a done-only reply (text in the done frame, no data chunks)', async () => {
+    const { result } = renderHook(() => useChat())
+    await act(async () => {
+      const p = result.current.send('hi')
+      await waitForStream(0)
+      // No `data:` chunks at all — only the terminal done frame carries text.
+      streams[0].push(`done: ${b64(JSON.stringify({ id: 'srv', text: 'from done only' }))}\n\n`)
+      streams[0].close()
+      await p
+    })
+    expect(lastAssistant(result.current.history)?.content).toBe('from done only')
+  })
+
+  it('does not fire when a done frame carries structured content with empty text', async () => {
+    const { result } = renderHook(() => useChat())
+    await act(async () => {
+      const p = result.current.send('chart me')
+      await waitForStream(0)
+      // Empty text but a chart payload — an intentional empty-but-valid completion.
+      streams[0].push(
+        `done: ${b64(JSON.stringify({ id: 'srv', text: '', chart_data: { series: [1, 2, 3] } }))}\n\n`
+      )
+      streams[0].close()
+      await p
+    })
+    const msg = lastAssistant(result.current.history) as { content: string; chartData?: unknown }
+    expect(msg.content).toBe('')
+    expect(msg.content).not.toBe("Omi didn't send a reply. Try again.")
+    expect(msg.chartData).toEqual({ series: [1, 2, 3] })
+  })
+})
+
 describe('useChat — C5 abort on reset', () => {
   it('aborts the fetch and never persists/renders a dismissed reply; a new send is unaffected', async () => {
     const { result } = renderHook(() => useChat())

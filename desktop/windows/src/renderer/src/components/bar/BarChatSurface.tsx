@@ -57,7 +57,12 @@ export type BarChatSurfaceProps = {
   /** Connected coding agents to list under "Omi Chat". */
   agents: BarAgentRow[]
   view: 'list' | 'conversation'
-  onOpenConversation: () => void
+  /** Title for the open conversation's header — "Omi Chat" for the Omi row, the
+   *  agent's displayName (e.g. "Claude Code") when an agent row opened it. */
+  conversationTitle: string
+  /** Open the inline conversation for a row: `null` = the Omi Chat thread, or the
+   *  clicked agent row (so the parent can title the header + seed the draft). */
+  onOpenConversation: (target: BarAgentRow | null) => void
   onBack: () => void
   onClose: () => void
   draft: string
@@ -143,7 +148,7 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
             every title shares one left margin. */}
         <button
           type="button"
-          onClick={props.onOpenConversation}
+          onClick={() => props.onOpenConversation(null)}
           className="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/[0.06]"
         >
           <RowStatusDot active={chat.status !== 'idle'} />
@@ -161,7 +166,7 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
           <button
             key={agent.id}
             type="button"
-            onClick={props.onOpenConversation}
+            onClick={() => props.onOpenConversation(agent)}
             className="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/[0.06]"
           >
             <RowStatusDot active={agent.working} />
@@ -193,7 +198,7 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
         >
           <ChevronLeft />
         </button>
-        <span className="text-sm font-medium text-neutral-200">Omi Chat</span>
+        <span className="text-sm font-medium text-neutral-200">{props.conversationTitle}</span>
         <button
           type="button"
           onClick={props.onClose}

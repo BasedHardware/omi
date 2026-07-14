@@ -164,8 +164,15 @@ export function Sidebar(): React.JSX.Element {
           row, pixel-identical to before. */}
       <div
         className={cn(
-          'flex items-center px-1.5 py-1',
-          collapsed ? 'flex-col gap-2' : 'justify-between'
+          // Tuck the brand toward the true top-left. `-mt-1` lifts the header
+          // ~4px closer under the drag strip; when expanded, `-ml-1.5` pulls the
+          // row ~6px left into the nav's px-2 so the orb sits ~8px from the edge
+          // (was ~14/16px). Only the left group moves — the collapse button
+          // keeps its right inset, and the nav items below keep their left
+          // rhythm (nav wrapper padding is untouched). Collapsed rail stays
+          // center-aligned (no `-ml` there).
+          'flex items-center px-1.5 py-1 -mt-1',
+          collapsed ? 'flex-col gap-2' : 'justify-between -ml-1.5'
         )}
       >
         <div className="flex min-w-0 items-center gap-2.5">

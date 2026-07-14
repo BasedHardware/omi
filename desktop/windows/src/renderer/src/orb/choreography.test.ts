@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   DOT_COUNT,
   DEFAULT_ORB_PARAMS,
+  RING_DOT_RENDER_RADIUS,
   ORB_PRESETS,
   AMP_FLOOR,
   WAVE_GAIN_MIN,
@@ -255,19 +256,23 @@ describe('mergeAmount', () => {
 describe('spinTargetFor (state-speed choreography)', () => {
   const SETTLED = 8 // stateTime past which the entry whirl has fully decayed
 
-  it('settled: idle/agents cruise at 1×; busy states spin faster, thinking the most', () => {
+  it('settled: idle/agents cruise at 1×; speaking matches thinking at full busy; listening between', () => {
     const busy = DEFAULT_ORB_PARAMS.spinBusyMult
     expect(spinTargetFor('idle', SETTLED, P)).toBe(1)
     expect(spinTargetFor('agents', SETTLED, P)).toBeCloseTo(1, 6)
     expect(spinTargetFor('thinking', SETTLED, P)).toBeCloseTo(busy, 6)
-    // speaking > listening > idle, all below thinking's cruise.
-    expect(spinTargetFor('speaking', SETTLED, P)).toBeGreaterThan(
-      spinTargetFor('listening', SETTLED, P)
+    // Speaking now cruises at the FULL busy multiplier — SAME as thinking — so the
+    // speed-up is perceived during voice interactions (PTT/TTS both map to
+    // 'speaking'; it was 1.45× and the user "never perceived the speed-up"). The
+    // user asked for "the 2x".
+    expect(spinTargetFor('speaking', SETTLED, P)).toBeCloseTo(busy, 6)
+    expect(spinTargetFor('speaking', SETTLED, P)).toBeCloseTo(
+      spinTargetFor('thinking', SETTLED, P),
+      9
     )
+    // Listening (quiet, ring visible) keeps a gentle bump strictly between idle and busy.
     expect(spinTargetFor('listening', SETTLED, P)).toBeGreaterThan(1)
-    expect(spinTargetFor('speaking', SETTLED, P)).toBeLessThan(
-      spinTargetFor('thinking', SETTLED, P)
-    )
+    expect(spinTargetFor('listening', SETTLED, P)).toBeLessThan(busy)
   })
 
   it('entry whirl: thinking and agents overshoot at t=0, then decay to cruise', () => {
@@ -302,6 +307,32 @@ describe('spinTargetFor (state-speed choreography)', () => {
     expect(spinTargetFor('thinking', 0, ORB_PRESETS.compact)).toBeGreaterThan(
       spinTargetFor('thinking', SETTLED, ORB_PRESETS.compact) + 1
     )
+  })
+
+  it('steady-state spin rate is exactly constant for non-whirl states (no within-state pulsing)', () => {
+    // The user's HARD requirement (Bug B): within a settled state the orbit SPEED
+    // must not oscillate — speed changes happen only as eased transition ramps
+    // (and the decaying entry whirl). idle/listening/speaking carry NO time
+    // dependence, so the target is identical at every stateTime.
+    for (const state of ['idle', 'listening', 'speaking'] as const) {
+      const ref = spinTargetFor(state, 0, P)
+      for (const s of [0.1, 1, 3.7, 12, 100]) {
+        expect(spinTargetFor(state, s, P)).toBe(ref)
+      }
+    }
+  })
+
+  it('whirl states settle to a constant cruise (the whirl is a transition, not steady pulsing)', () => {
+    for (const [state, cruise] of [
+      ['thinking', DEFAULT_ORB_PARAMS.spinBusyMult],
+      ['agents', 1]
+    ] as const) {
+      // Well past the whirl decay the target is flat over time (constant rate).
+      const a = spinTargetFor(state, 50, P, 50)
+      const b = spinTargetFor(state, 60, P, 60)
+      expect(a).toBeCloseTo(cruise, 6)
+      expect(a).toBe(b)
+    }
   })
 
   it('the whirl decays on the WHIRL clock, not stateTime — full overshoot at whirlTime 0 however long the state has been active', () => {
@@ -640,6 +671,29 @@ describe('waveform crossfade', () => {
     // thinking/idle on release: a lingering signal still reads as a partial wave.
     expect(waveMixFor('thinking', 0.5)).toBeCloseTo(easeInOut(0.5), 9)
     expect(waveMixFor('idle', 0)).toBe(0)
+  })
+
+  it('the resting waveform dot renders at the same radius as an orbiting ring dot (no crossfade pop)', () => {
+    // Bug A: at the ring↔waveform crossfade the white ring dots and the resting
+    // bar-dots must be the SAME rendered size, or the dot thickness visibly pops
+    // (~45% area difference before this fix). A ring dot renders at r·discRadius
+    // (the shader scales dots by u_disc); the resting waveform dot is pinned to
+    // RING_DOT_RENDER_RADIUS. A wide-pitch mount (few slots) keeps the bar wide
+    // enough that the dot is NOT clamped, so the two land exactly equal.
+    const f = computeOrbFrame({
+      t: 40,
+      state: 'speaking',
+      stateTime: 3,
+      speechMerge: 1,
+      aspect: 1,
+      waveLevels: new Array(5).fill(0)
+    })
+    // Dots have lined up on the row; each still renders at the ring-dot radius.
+    const dotRenderR = f.dots[0].r * P.discRadius
+    expect(dotRenderR).toBeCloseTo(RING_DOT_RENDER_RADIUS, 9)
+    // The resting bar-dot half-height matches that rendered radius → no pop.
+    expect(f.waveBars[0].halfH).toBeCloseTo(dotRenderR, 9)
+    expect(f.waveBars[0].halfH).toBeCloseTo(RING_DOT_RENDER_RADIUS, 9)
   })
 
   it('the dots unroll from the ring to a flat line as the mix rises', () => {

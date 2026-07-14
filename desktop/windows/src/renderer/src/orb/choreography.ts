@@ -76,7 +76,10 @@ export type OrbParams = {
 export const DEFAULT_ORB_PARAMS: OrbParams = {
   discRadius: 0.92,
   orbitRadius: 0.58,
-  dotRadius: 0.095,
+  // Bumped 0.095 → 0.1 (user: "a very tiny bit thicker", ~5%). Because the
+  // waveform's resting dot is pinned to RING_DOT_RENDER_RADIUS (below), this
+  // thickens the ring dots AND the resting waveform dots together — one knob.
+  dotRadius: 0.1,
   orbitPeriod: 3.6,
   restFraction: 0.34,
   stepDegrees: 45,
@@ -89,6 +92,19 @@ export const DEFAULT_ORB_PARAMS: OrbParams = {
   springOmega: 14,
   spinBusyMult: 2.0
 }
+
+/**
+ * The rendered radius of an orbiting ring dot, in the shader's normalized
+ * short-axis units (the shader scales each dot by `u_disc`, so the on-screen
+ * radius is `dotRadius × discRadius` — see orbRenderer/shader). Exported as the
+ * SINGLE SOURCE OF TRUTH so the waveform's resting dot (waveform.ts `waveBars`)
+ * can render at the SAME size: the ring↔waveform crossfade then swaps a ring dot
+ * for a resting bar-dot of identical radius, with no thickness pop (the two used
+ * to differ ~45% in area). Derived from the DEFAULT params — the main orb that
+ * performs the crossfade uses them; compact/notch presets size their own ring
+ * dots but the waveform row is always the default's.
+ */
+export const RING_DOT_RENDER_RADIUS = DEFAULT_ORB_PARAMS.dotRadius * DEFAULT_ORB_PARAMS.discRadius
 
 /** Named parameter variants kept for review/flipping in the harness. The
  *  default is the reviewed pick; runners-up stay selectable via ?preset=. */
@@ -477,11 +493,17 @@ export const AGENTS_WHIRL = 1.0
  * Target orbit-speed multiplier for a state at `stateTime` seconds in (1 = calm
  * idle cadence). Busy states spin the ring faster; the animator eases the LIVE
  * multiplier toward this so the change is never a jump (C9). Two shapes combine:
- *  - a steady CRUISE — thinking is busiest, speaking/listening get smaller
- *    bumps, idle/agents cruise at 1×;
+ *  - a steady CRUISE — thinking and speaking cruise at the FULL busy multiplier
+ *    (speaking was 1.45× but the user "never perceived the speed-up" during voice
+ *    interactions, which map to 'speaking' — so it now matches thinking's 2×);
+ *    listening gets a smaller bump; idle/agents cruise at 1×. The cruise carries
+ *    NO time dependence, so a settled state has a perfectly CONSTANT spin rate —
+ *    every speed change is an eased transition ramp (or the entry whirl below),
+ *    never a within-state pulse.
  *  - an entry WHIRL — thinking and agents kick off with a decaying overshoot so
- *    the ring whirls fast on entry and eases down to cruise (speaking/listening
- *    don't whirl — they merge/rest).
+ *    the ring whirls fast on entry and eases down to cruise. This flourish stays
+ *    EXCLUSIVE to thinking/agents; speaking/listening are steady from entry (they
+ *    roll into the waveform / rest, so a whirl would fight that transition).
  * Agents cruises at 1× (the pose is still), so its whole visible spin-up IS the
  * entry whirl, which plays before the dots settle into pills.
  */
@@ -501,13 +523,11 @@ export function spinTargetFor(
 ): number {
   const busy = params.spinBusyMult
   const cruise =
-    state === 'thinking'
+    state === 'thinking' || state === 'speaking'
       ? busy
-      : state === 'speaking'
-        ? 1 + (busy - 1) * 0.45
-        : state === 'listening'
-          ? 1 + (busy - 1) * 0.15
-          : 1 // idle, agents
+      : state === 'listening'
+        ? 1 + (busy - 1) * 0.15
+        : 1 // idle, agents
   if (state !== 'thinking' && state !== 'agents') return cruise
   // Scale the whirl with the preset's spin budget (compact mounts stay calmer).
   const add = WHIRL_ADD * (busy / DEFAULT_ORB_PARAMS.spinBusyMult)

@@ -93,6 +93,37 @@ export function agentRowStatus(row: BarAgentRow): string {
   return row.working ? 'Working…' : 'Ready'
 }
 
+/** The draft an agent row seeds when it opens the conversation: the agent's name
+ *  in the leading-mention form `detectAgentTask` recognizes ("Claude Code, "),
+ *  so whatever the user types next is delegated to that agent. The trailing
+ *  comma + space is the delimiter NAME_LEADS matches; every agent displayName
+ *  ("Claude Code" / "OpenClaw" / "Hermes" / "Codex") is a recognized alias. */
+export function agentDraftPrefill(displayName: string): string {
+  return `${displayName}, `
+}
+
+/**
+ * The draft to show when the conversation opens for `target` (null = Omi Chat),
+ * given the current draft and the previously-open `target`. Seeds the agent
+ * delegation phrasing when an agent row opens, drops a now-stale agent seed when
+ * returning to Omi, and never clobbers text the user actually typed. Pure so the
+ * bar's re-entry rule (agent header + prefill on an agent, clean Omi Chat after)
+ * is unit-tested without a DOM.
+ */
+export function nextConversationDraft(args: {
+  target: BarAgentRow | null
+  previous: BarAgentRow | null
+  current: string
+}): string {
+  const { target, previous, current } = args
+  const staleSeed = previous ? current === agentDraftPrefill(previous.displayName) : false
+  if (target) {
+    if (current.trim() === '' || staleSeed) return agentDraftPrefill(target.displayName)
+    return current
+  }
+  return staleSeed ? '' : current
+}
+
 /** The collapsed-pill wordmark: "Listening" whenever Omi is capturing the user's
  *  voice — an active PTT hold (recording, even though the orb pose derives as
  *  'speaking' for the reactive amplitude) OR always-on continuous listening. Omi's
