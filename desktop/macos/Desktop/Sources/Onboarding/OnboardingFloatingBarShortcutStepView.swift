@@ -20,6 +20,10 @@ struct OnboardingFloatingBarShortcutStepView: View {
     @State private var captureError: String?
     @State private var localKeyMonitor: Any?
     @State private var globalKeyMonitor: Any?
+    /// Shortcut tokens (e.g. "⌘", "O") currently held down, so their keycaps
+    /// light up while pressed and turn off on release.
+    @State private var pressedTokens: Set<String> = []
+    @State private var mainKeyDown = false
 
     /// Stashed main menu so we can restore it when leaving this step.
     static var savedMenu: NSMenu?
@@ -121,7 +125,10 @@ struct OnboardingFloatingBarShortcutStepView: View {
         VStack(spacing: OmiSpacing.md) {
             HStack(spacing: OmiSpacing.sm) {
                 ForEach(Array(shortcutSettings.askOmiShortcut.displayTokens.enumerated()), id: \.offset) { _, symbol in
-                    OnboardingKeyCapView(token: symbol, isActive: shortcutDetected)
+                    OnboardingKeyCapView(
+                        token: symbol,
+                        isActive: shortcutDetected || pressedTokens.contains(symbol)
+                    )
                 }
             }
 
@@ -250,6 +257,8 @@ struct OnboardingFloatingBarShortcutStepView: View {
     private func resetDetectionState() {
         shortcutDetected = false
         showContinue = false
+        pressedTokens = []
+        mainKeyDown = false
     }
 
     private func confirmShortcutAndContinue() {
@@ -261,11 +270,14 @@ struct OnboardingFloatingBarShortcutStepView: View {
     }
 
     private func installKeyMonitor() {
-        let mask: NSEvent.EventTypeMask = [.keyDown, .flagsChanged]
+        // .keyUp included so held keycaps can turn back off.
+        let mask: NSEvent.EventTypeMask = [.keyDown, .keyUp, .flagsChanged]
         localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { event in
-            handleShortcutEvent(event) ? nil : event
+            updatePressedTokens(from: event)
+            return handleShortcutEvent(event) ? nil : event
         }
         globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { event in
+            updatePressedTokens(from: event)
             _ = handleShortcutEvent(event)
         }
 
@@ -290,6 +302,36 @@ struct OnboardingFloatingBarShortcutStepView: View {
             NSApp.mainMenu = menu
             Self.savedMenu = nil
         }
+        pressedTokens = []
+        mainKeyDown = false
+    }
+
+    /// Watches modifier + key events so the on-screen keycaps light up while the
+    /// matching key is physically held and turn off on release. Mirrors the
+    /// floating-bar demo step.
+    private func updatePressedTokens(from event: NSEvent) {
+        let shortcut = shortcutSettings.askOmiShortcut
+        // Held modifiers, derived live from the event's flags.
+        let liveFlags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        var tokens = Set(ShortcutSettings.KeyboardShortcut.modifierTokens(for: liveFlags))
+
+        // The non-modifier key (e.g. "O", "↩"): track its own down/up.
+        if let keyCode = shortcut.keyCode, let keyDisplay = shortcut.keyDisplay {
+            switch event.type {
+            case .keyDown where event.keyCode == keyCode:
+                mainKeyDown = true
+            case .keyUp where event.keyCode == keyCode:
+                mainKeyDown = false
+            default:
+                break
+            }
+            if mainKeyDown {
+                tokens.insert(keyDisplay)
+            }
+        }
+
+        // Only light caps that belong to this shortcut.
+        pressedTokens = tokens.intersection(Set(shortcut.displayTokens))
     }
 
     private func handleShortcutEvent(_ event: NSEvent) -> Bool {
