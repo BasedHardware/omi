@@ -76,7 +76,10 @@ export default {
         // Both roles resolve through --font-app (Inter Variable, with the
         // Segoe fallback stack) so the A/B hook + any future retheme is one var.
         display: ['var(--font-app)', 'sans-serif'],
-        body: ['var(--font-app)', 'sans-serif']
+        body: ['var(--font-app)', 'sans-serif'],
+        // Monospace — JetBrains Mono Variable via --font-code (previously the
+        // `font-mono` utility fell through to Tailwind's default → Consolas).
+        mono: ['var(--font-code)', 'monospace']
       },
       backdropBlur: {
         glass: '24px',

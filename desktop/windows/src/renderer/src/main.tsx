@@ -1,6 +1,16 @@
 // App-wide typeface: Inter Variable with optical sizing (bundled, OFL). See
 // globals.css --font-app for the stack + the Phase 8 font decision notes.
 import '@fontsource-variable/inter/opsz.css'
+// Italic instances are REQUIRED because globals.css sets `font-synthesis: none`
+// (no faux-slant): without the real italic faces, every <em>/`.italic` would
+// render upright. Roman + italic together satisfy the charter's no-synthesis rule.
+import '@fontsource-variable/inter/opsz-italic.css'
+// Code/monospace typeface: JetBrains Mono Variable (bundled, OFL) — the
+// deterministic monospace behind --font-code / the `font-mono` utility (code
+// blocks, transcripts, agent output). See globals.css --font-code.
+import '@fontsource-variable/jetbrains-mono'
+// Real code italics (same font-synthesis:none rationale as Inter above).
+import '@fontsource-variable/jetbrains-mono/wght-italic.css'
 import './styles/globals.css'
 
 import { StrictMode } from 'react'

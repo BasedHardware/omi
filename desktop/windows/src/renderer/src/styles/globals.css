@@ -106,6 +106,12 @@
       'Inter Variable', 'Segoe UI Variable Text', 'Segoe UI Variable', 'Segoe UI', system-ui,
       sans-serif;
 
+    /* Code/monospace face. JetBrains Mono Variable (bundled via @fontsource) is
+       the deterministic monospace for code blocks, transcripts, and agent
+       output — Cascadia Code / Consolas are the Windows fallbacks. Consumed by
+       the `font-mono` Tailwind utility (see tailwind.config.ts). */
+    --font-code: 'JetBrains Mono Variable', 'Cascadia Code', Consolas, 'Liberation Mono', monospace;
+
     /* ── Mac-parity palette (INV-UI-1 Windows carve-out, ruling B 2026-07-14).
        Purple ports as-is from macOS OmiColors; these are NEW named tokens for
        Hub/chat/brain-graph surfaces. --accent stays neutral white (above). ── */
@@ -152,6 +158,10 @@
     color: rgba(255, 255, 255, 0.92);
     font-family: var(--font-app);
     font-optical-sizing: auto;
+    /* Never let Chromium synthesize a missing weight/style — when a glyph falls
+       through to the Segoe fallback, a faux-bold of a weight outside its axis
+       reads as smeared. Only use real font instances. */
+    font-synthesis: none;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
@@ -359,6 +369,32 @@
     background: rgba(0, 0, 0, 0.24);
   }
 
+  /* Reusable focus-visible ring — the generalized form of the .input-field
+     no-flash fix above, for any future focusable control (buttons, custom
+     inputs, menu rows). The three rules that keep the white first-focus flash
+     from ever returning:
+       1. Declare a transparent 2px outline AT REST — no UA outline color is left
+          to paint for one frame before focus styling takes over.
+       2. Transition ONLY border-color + box-shadow. NEVER `transition: all` on a
+          focusable element — that animates `outline` and reintroduces the flash.
+       3. Key off `:focus-visible`, not `:focus`, so pointer clicks don't ring —
+          only keyboard/AT focus does.
+     Apply `.focus-ring` to a control that carries its own border (so border-color
+     has something to shift). The .input-field fix stays as-is (it also swaps a
+     background on focus, so it isn't a trivially-safe refactor onto this base). */
+  .focus-ring {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    transition:
+      border-color 200ms var(--ease-out),
+      box-shadow 200ms var(--ease-out);
+  }
+
+  .focus-ring:focus-visible {
+    border-color: rgba(255, 255, 255, 0.25);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+  }
+
   .skeleton {
     @apply animate-shimmer rounded-2xl bg-gradient-to-r from-white/5 via-white/10 to-white/5 bg-[length:200%_100%];
   }
@@ -527,9 +563,12 @@
     }
   }
 
-  /* When the user enables Reduce motion in Settings, every animation
-     resolved to a near-instant no-op. Existing transitions still snap to
-     their final state, so toggle UX, hover effects, etc. don't feel dead. */
+  /* In-app "Reduce motion" toggle (Settings). This is the user's explicit
+     "make everything instant" preference and near-zeroes ALL durations — a
+     full kill-switch. It is deliberately DISTINCT from the OS-level
+     `@media (prefers-reduced-motion: reduce)` path at the end of this file,
+     which is the vestibular-safety charter path (keeps choreography/timing,
+     only strips large positional translate from entrances). Keep both. */
   html[data-reduce-motion='true'] *,
   html[data-reduce-motion='true'] *::before,
   html[data-reduce-motion='true'] *::after {
@@ -604,19 +643,41 @@
   }
 }
 
+/* Overlay scrollbars (charter 03 — macOS parity). The thumb rests fully
+   transparent and only paints while the pointer is over its scroll area. Two
+   reveal paths: `*:hover` shows the thumb of every hovered scrollable ancestor
+   (so any scroll container surfaces its bar when you point at it — no per-
+   container class needed, and no regression from the old always-visible bar),
+   and `.scroll-region` is the explicit opt-in wrapper that ALSO contains
+   overscroll (no rubber-band / scroll-chaining — the charter drops elastic
+   overscroll on Windows). Hovering the thumb itself brightens it further. The
+   2px transparent border + padding-box clip insets the visible thumb to ~6px.
+   `.no-scrollbar` below still fully hides bars where scroll is wheel/drag-driven. */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.18);
+  background: transparent;
   border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 150ms ease-out;
+}
+*:hover::-webkit-scrollbar-thumb,
+.scroll-region:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.18);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.28);
+  background-color: rgba(255, 255, 255, 0.32);
+}
+/* Opt-in wrapper for nested scroll areas: stop overscroll from chaining to the
+   parent or triggering an elastic rubber-band (dropped on Windows). */
+.scroll-region {
+  overscroll-behavior: contain;
 }
 
 /* Hide the scrollbar while keeping scroll (the Rewind activity timeline is panned
@@ -629,4 +690,83 @@
   width: 0;
   height: 0;
   display: none;
+}
+
+/* OS-level reduced-motion (charter 03) — the vestibular-safety path, DISTINCT
+   from the in-app `html[data-reduce-motion='true']` kill-switch above (that
+   toggle near-zeroes everything by user choice). Per the charter we do NOT kill
+   animation or set durations to 0 here: motion sickness is triggered by large
+   positional TRAVEL, not by fades. So we keep each entrance's choreography and
+   duration and only redefine the translate-based entrance keyframes to be
+   opacity-only. Focus rings, hover/active states, loops (typing dots, spinners),
+   and the fades themselves stay untouched. Redefining a keyframe by name inside
+   the media query overrides the base definition only while reduced-motion is on.
+   The small (6px) Tailwind `fadeIn` is intentionally left as-is (small motion,
+   below the travel threshold that warrants stripping). */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes slideInLeft {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  /* Keep the logo at its FINAL position (top: 2rem, no scale) the whole time so
+     dropping the zoom/travel can't misplace it — only the opacity animates. */
+  @keyframes logoReveal {
+    0% {
+      top: 2rem;
+      opacity: 0;
+      transform: translateY(0) scale(1);
+    }
+    25% {
+      opacity: 1;
+    }
+    100% {
+      top: 2rem;
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  @keyframes widgetFade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes bubbleIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes pageEnter {
+    0% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 1;
+    }
+  }
+  @keyframes fadeRise {
+    0% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 1;
+    }
+  }
+  @keyframes fadeDrop {
+    0% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 1;
+    }
+  }
 }
