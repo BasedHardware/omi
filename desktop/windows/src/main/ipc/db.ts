@@ -55,9 +55,7 @@ let roDb: Database.Database | null = null
 // silently broke every INSERT. These tables are a derived cache with no user
 // data worth migrating, so recreating them is safe.
 function dropIfMissingColumn(d: Database.Database, table: string, col: string): void {
-  const exists = d
-    .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?")
-    .get(table)
+  const exists = d.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table)
   if (!exists) return
   const cols = d.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
   if (!cols.some((c) => c.name === col)) d.exec(`DROP TABLE ${table}`)
@@ -185,6 +183,96 @@ function get(): Database.Database {
       dismissed INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_insights_ts ON insights(ts);
+
+    -- --- Track 4: Rewind FTS5 (full-text search over rewind_frames) ---
+    -- External-content FTS index mirroring rewind_frames(id): the triggers below
+    -- keep it in sync on every write, so search reads BM25-ranked matches without
+    -- a full-table LIKE scan. Existing rows are backfilled once by dbMigrations v2
+    -- (which runs AFTER this block — see runMigrations call in get()).
+    CREATE VIRTUAL TABLE IF NOT EXISTS rewind_frames_fts USING fts5(
+      ocr_text, window_title, app,
+      content='rewind_frames', content_rowid='id', tokenize='unicode61'
+    );
+    CREATE TRIGGER IF NOT EXISTS rewind_frames_ai AFTER INSERT ON rewind_frames BEGIN
+      INSERT INTO rewind_frames_fts(rowid, ocr_text, window_title, app)
+      VALUES (new.id, new.ocr_text, new.window_title, new.app);
+    END;
+    CREATE TRIGGER IF NOT EXISTS rewind_frames_ad AFTER DELETE ON rewind_frames BEGIN
+      INSERT INTO rewind_frames_fts(rewind_frames_fts, rowid, ocr_text, window_title, app)
+      VALUES ('delete', old.id, old.ocr_text, old.window_title, old.app);
+    END;
+    CREATE TRIGGER IF NOT EXISTS rewind_frames_au AFTER UPDATE ON rewind_frames BEGIN
+      INSERT INTO rewind_frames_fts(rewind_frames_fts, rowid, ocr_text, window_title, app)
+      VALUES ('delete', old.id, old.ocr_text, old.window_title, old.app);
+      INSERT INTO rewind_frames_fts(rowid, ocr_text, window_title, app)
+      VALUES (new.id, new.ocr_text, new.window_title, new.app);
+    END;
+
+    -- --- Track 4: Rewind embeddings (semantic-search vectors, one per frame) ---
+    CREATE TABLE IF NOT EXISTS rewind_embeddings (
+      frame_id INTEGER PRIMARY KEY,
+      dim INTEGER,
+      model TEXT,
+      vec BLOB,
+      created_at INTEGER
+    );
+
+    -- --- Track 4: Conversation folders ---
+    CREATE TABLE IF NOT EXISTS conversation_folders (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      color TEXT,
+      icon TEXT,
+      order_idx INTEGER NOT NULL DEFAULT 0,
+      is_system INTEGER NOT NULL DEFAULT 0,
+      conversation_count INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER
+    );
+
+    -- --- Track 4: Per-conversation speaker names ---
+    CREATE TABLE IF NOT EXISTS conversation_speaker_names (
+      conversation_id TEXT NOT NULL,
+      speaker_id INTEGER NOT NULL,
+      name TEXT,
+      person_id TEXT,
+      is_user INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (conversation_id, speaker_id)
+    );
+
+    -- --- Track 4: Live notes (meeting minutes; AI-generated or manual) ---
+    CREATE TABLE IF NOT EXISTS live_notes (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      text TEXT NOT NULL,
+      is_ai INTEGER NOT NULL DEFAULT 0,
+      seg_start INTEGER,
+      seg_end INTEGER,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_live_notes_session ON live_notes(session_id);
+
+    -- --- Track 4: Crash-rescue live-segment buffer ---
+    CREATE TABLE IF NOT EXISTS rescue_segments (
+      session_id TEXT NOT NULL,
+      seq INTEGER NOT NULL,
+      segment_json TEXT NOT NULL,
+      ts INTEGER NOT NULL,
+      PRIMARY KEY (session_id, seq)
+    );
+
+    -- --- Track 4: File-index scan state (last_scan_at per root, etc.) ---
+    CREATE TABLE IF NOT EXISTS file_index_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    );
+
+    -- --- Track 4: App-level flags (clean-exit, launch-at-login migrated). NOT
+    -- user-scoped — deliberately excluded from USER_DATA_TABLES so it survives
+    -- sign-out. ---
+    CREATE TABLE IF NOT EXISTS app_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    );
   `)
   // Migrate older databases that have local_conversation without these columns.
   ensureColumn(db, 'local_conversation', 'kind', "TEXT NOT NULL DEFAULT 'recording'")
@@ -195,6 +283,12 @@ function get(): Database.Database {
   ensureColumn(db, 'local_kg_nodes', 'source_refs', 'TEXT')
   // Resolved .lnk target exe, for joining indexed apps to app_usage (additive).
   ensureColumn(db, 'indexed_files', 'target_path', 'TEXT')
+  // --- Track 4: additive columns on existing tables ---
+  // Per-line OCR bounding boxes (JSON) for a future on-image highlight overlay.
+  ensureColumn(db, 'rewind_frames', 'ocr_lines_json', 'TEXT')
+  // Conversation starring + folder assignment (local mirror of the cloud fields).
+  ensureColumn(db, 'local_conversation', 'starred', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn(db, 'local_conversation', 'folder_id', 'TEXT')
   // Versioned migrations (PRAGMA user_version) — everything beyond the additive
   // baseline above. Ordered + exactly-once; see dbMigrations.ts.
   runMigrations(db)
@@ -346,7 +440,9 @@ export function getLocalConversation(id: string): LocalConversation | null {
 export function listLocalConversations(): LocalConversation[] {
   return timed('listLocalConversations', () => {
     const rows = get()
-      .prepare(`SELECT ${LOCAL_CONVERSATION_COLUMNS} FROM local_conversation ORDER BY created_at DESC`)
+      .prepare(
+        `SELECT ${LOCAL_CONVERSATION_COLUMNS} FROM local_conversation ORDER BY created_at DESC`
+      )
       .all() as LocalConversationRow[]
     return rows.map(mapLocalConversation)
   })
@@ -355,7 +451,6 @@ export function listLocalConversations(): LocalConversation[] {
 export function deleteLocalConversation(id: string): void {
   get().prepare('DELETE FROM local_conversation WHERE id = ?').run(id)
 }
-
 
 export function remapConversationId(fromId: string, toId: string): number {
   const r = get()
@@ -558,9 +653,7 @@ function getReadonly(): Database.Database {
 export function execSafeSelect(sql: string): KgSqlResult {
   const stmt = getReadonly().prepare(sql)
   const rows = stmt.all() as Record<string, unknown>[]
-  const columns = rows.length
-    ? Object.keys(rows[0])
-    : (stmt.columns().map((c) => c.name) ?? [])
+  const columns = rows.length ? Object.keys(rows[0]) : (stmt.columns().map((c) => c.name) ?? [])
   return { columns, rows }
 }
 
@@ -641,11 +734,7 @@ export function queryKgNodes(q: string, limit = 12): LocalKnowledgeGraph {
 
 // indexed_files whose filename/folder match q. Excludes apps (file_type
 // 'application') unless explicitly requested via fileType.
-export function searchIndexedFiles(
-  q: string,
-  fileType?: string,
-  limit = 20
-): IndexedFileRecord[] {
+export function searchIndexedFiles(q: string, fileType?: string, limit = 20): IndexedFileRecord[] {
   const like = `%${q}%`
   const cols =
     'path, filename, extension, file_type AS fileType, size_bytes AS sizeBytes, folder, depth, created_at AS createdAt, modified_at AS modifiedAt'
@@ -822,10 +911,12 @@ export function insertRewindFrame(f: Omit<RewindFrame, 'id'>): number {
 }
 
 export function listRewindFrames(from: number, to: number): RewindFrame[] {
-  return timed('listRewindFrames', () =>
-    get()
-      .prepare(`SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE ts BETWEEN ? AND ? ORDER BY ts`)
-      .all(from, to) as RewindFrame[]
+  return timed(
+    'listRewindFrames',
+    () =>
+      get()
+        .prepare(`SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE ts BETWEEN ? AND ? ORDER BY ts`)
+        .all(from, to) as RewindFrame[]
   )
 }
 
@@ -844,9 +935,10 @@ export function searchRewindFrames(query: string, limit = 500): RewindFrame[] {
 }
 
 export function rewindDayBounds(): { min: number; max: number } | null {
-  const row = get()
-    .prepare('SELECT MIN(ts) AS min, MAX(ts) AS max FROM rewind_frames')
-    .get() as { min: number | null; max: number | null }
+  const row = get().prepare('SELECT MIN(ts) AS min, MAX(ts) AS max FROM rewind_frames').get() as {
+    min: number | null
+    max: number | null
+  }
   return row.min == null || row.max == null ? null : { min: row.min, max: row.max }
 }
 
