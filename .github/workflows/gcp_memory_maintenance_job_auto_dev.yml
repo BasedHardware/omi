@@ -49,9 +49,6 @@ jobs:
         run: |
           echo "short_sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Google Service Account
-        run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./backend/google-credentials.json
-
       - name: Install Python deps for deploy scripts
         run: python3 -m pip install -q pyyaml
 
