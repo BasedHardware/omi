@@ -1,4 +1,3 @@
-import Combine
 import CoreBluetooth
 import Foundation
 import os.log
@@ -21,47 +20,55 @@ final class PlaudDeviceConnection: BaseDeviceConnection {
 
     private let logger = Logger(subsystem: "me.omi.desktop", category: "PlaudDeviceConnection")
 
-    private var commandQueues: [Int: PassthroughSubject<[UInt8], Never>] = [:]
-    private var audioStreamSubject = PassthroughSubject<Data, Error>()
+    private let commandOperations: DeviceOperationBroker<Int, Data>
+    private let commandGate = UncorrelatedOperationGate<Int>()
+    private let commandQueue = DeviceCommandQueue()
     private var notificationSubscription: Task<Void, Never>?
     private var sessionId: Int?
-    private var cancellables = Set<AnyCancellable>()
+    private var recordingSetupAttempted = false
+    private lazy var audioStreamController = DeviceAudioStreamController(
+        start: { [weak self] in
+            guard let self else { throw DeviceTransportError.disposed }
+            try await self.setupRecordingSession()
+        },
+        stop: { [weak self] in
+            guard let self else { return }
+            try await self.stopRecordingSession()
+        }
+    )
 
     // MARK: - Initialization
 
-    override init(device: BtDevice, transport: DeviceTransport) {
-        super.init(device: device, transport: transport)
+    override init(
+        device: BtDevice,
+        transport: DeviceTransport,
+        operationClock: any DeviceOperationClock = ContinuousDeviceOperationClock()
+    ) {
+        self.commandOperations = DeviceOperationBroker(clock: operationClock)
+        super.init(
+            device: device,
+            transport: transport,
+            operationClock: operationClock
+        )
     }
 
     // MARK: - Connection
 
-    override func connect() async throws {
-        try await super.connect()
+    override func prepareDeviceAfterConnect() async throws {
+        try await operationClock.sleep(for: .seconds(2))
 
-        // Wait for connection to stabilize
-        try? await Task.sleep(nanoseconds: 2_000_000_000)
-
-        // Subscribe to notifications
         startNotificationListener()
     }
 
-    override func disconnect() async {
-        // Stop recording if active
-        if let sessionId = sessionId {
-            do {
-                try await stopSync()
-                try await stopRecord(sessionId: sessionId)
-            } catch {
-                logger.debug("Error stopping recording during disconnect: \(error.localizedDescription)")
-            }
-        }
+    override func teardownDevice() async {
+        await audioStreamController.finish()
+        await commandQueue.close()
 
         notificationSubscription?.cancel()
         notificationSubscription = nil
-        commandQueues.removeAll()
+        await commandOperations.cancelAll(reason: .disconnected)
+        commandGate.reset()
         sessionId = nil
-
-        await super.disconnect()
     }
 
     // MARK: - Notification Handling
@@ -83,23 +90,32 @@ final class PlaudDeviceConnection: BaseDeviceConnection {
         }
     }
 
-    private func handleNotification(_ data: [UInt8]) {
+    /// Parses one physical notification. Kept internal so adapter-correlation
+    /// behavior can be verified without a real CoreBluetooth peripheral.
+    func handleNotification(_ data: [UInt8]) {
         guard !data.isEmpty else { return }
 
         if data[0] == 2 {
             // Audio data packet
             if let chunk = parseAudioChunk(Array(data.dropFirst())) {
-                audioStreamSubject.send(Data(chunk))
+                audioStreamController.yield(Data(chunk))
             }
         } else if data.count >= 3 {
             // Command response
             let cmdId = Int(data[1]) | (Int(data[2]) << 8)
             let payload = data.count > 3 ? Array(data.dropFirst(3)) : []
 
-            if commandQueues[cmdId] == nil {
-                commandQueues[cmdId] = PassthroughSubject<[UInt8], Never>()
-            }
-            commandQueues[cmdId]?.send(payload)
+            completeCommand(commandID: cmdId, payload: payload)
+        }
+    }
+
+    private func completeCommand(commandID: Int, payload: [UInt8]) {
+        guard let handle = commandGate.takeHandleForCallback(key: commandID) else { return }
+        Task {
+            await commandOperations.succeed(
+                handle: handle,
+                value: Data(payload)
+            )
         }
     }
 
@@ -117,35 +133,45 @@ final class PlaudDeviceConnection: BaseDeviceConnection {
 
     // MARK: - Command Sending
 
-    private func sendCommand(cmdId: Int, payload: [UInt8]) async throws -> [UInt8]? {
-        if commandQueues[cmdId] == nil {
-            commandQueues[cmdId] = PassthroughSubject<[UInt8], Never>()
+    func sendCommand(cmdId: Int, payload: [UInt8]) async throws -> [UInt8]? {
+        try await commandQueue.run { [weak self] in
+            guard let self else { throw DeviceTransportError.disposed }
+            return try await self.sendCommandSerially(cmdId: cmdId, payload: payload)
         }
+    }
 
+    private func sendCommandSerially(cmdId: Int, payload: [UInt8]) async throws -> [UInt8]? {
+        guard commandGate.canStart(cmdId) else {
+            throw DeviceConnectionError.operationFailed(
+                "A previous command response is ambiguous; reconnect the device"
+            )
+        }
         let command: [UInt8] = [1, UInt8(cmdId & 0xFF), UInt8((cmdId >> 8) & 0xFF)] + payload
 
-        try await transport.writeCharacteristic(
-            data: Data(command),
-            serviceUUID: DeviceUUIDs.PLAUD.service,
-            characteristicUUID: DeviceUUIDs.PLAUD.writeCharacteristic,
-            withResponse: true
-        )
-
-        // Wait for response with timeout
-        return await withCheckedContinuation { continuation in
-            var cancellable: AnyCancellable?
-            let timeoutTask = Task {
-                try? await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds
-                cancellable?.cancel()
-                continuation.resume(returning: nil)
-            }
-
-            cancellable = commandQueues[cmdId]?
-                .first()
-                .sink { response in
-                    timeoutTask.cancel()
-                    continuation.resume(returning: response)
+        do {
+            let response = try await commandOperations.perform(
+                key: cmdId,
+                timeout: .seconds(10),
+                onTerminal: { [weak self] handle, termination in
+                    self?.commandGate.terminal(handle: handle, termination: termination)
                 }
+            ) { [weak self] handle in
+                guard let self else { throw DeviceTransportError.disposed }
+                guard self.commandGate.register(handle) else {
+                    throw DeviceConnectionError.operationFailed(
+                        "Command callback identity is no longer trustworthy"
+                    )
+                }
+                try await self.transport.writeCharacteristic(
+                    data: Data(command),
+                    serviceUUID: DeviceUUIDs.PLAUD.service,
+                    characteristicUUID: DeviceUUIDs.PLAUD.writeCharacteristic,
+                    withResponse: true
+                )
+            }
+            return Array(response)
+        } catch DeviceOperationBrokerError.timedOut {
+            return nil
         }
     }
 
@@ -166,7 +192,11 @@ final class PlaudDeviceConnection: BaseDeviceConnection {
 
     private func stopRecord(sessionId: Int) async throws {
         let payload = toBytes32(sessionId) + toBytes32(0)
-        _ = try await sendCommand(cmdId: Command.stopRecord, payload: payload)
+        guard try await sendCommand(cmdId: Command.stopRecord, payload: payload) != nil else {
+            throw DeviceConnectionError.operationFailed(
+                "PLAUD did not acknowledge STOP_RECORD"
+            )
+        }
     }
 
     private func startSync(sessionId: Int, start: Int) async throws -> Bool {
@@ -177,43 +207,78 @@ final class PlaudDeviceConnection: BaseDeviceConnection {
 
     private func stopSync() async throws {
         let command: [UInt8] = [1, UInt8(Command.stopSync & 0xFF), UInt8((Command.stopSync >> 8) & 0xFF), 1]
-        try await transport.writeCharacteristic(
-            data: Data(command),
-            serviceUUID: DeviceUUIDs.PLAUD.service,
-            characteristicUUID: DeviceUUIDs.PLAUD.writeCharacteristic,
-            withResponse: true
-        )
+        try await commandQueue.run { [weak self] in
+            guard let self else { throw DeviceTransportError.disposed }
+            try await self.transport.writeCharacteristic(
+                data: Data(command),
+                serviceUUID: DeviceUUIDs.PLAUD.service,
+                characteristicUUID: DeviceUUIDs.PLAUD.writeCharacteristic,
+                withResponse: true
+            )
+        }
     }
 
-    private func setupRecordingSession() async -> Bool {
+    private func setupRecordingSession() async throws {
+        recordingSetupAttempted = true
         let maxRetries = 3
+        var lastError: Error?
 
         for attempt in 0..<maxRetries {
+            try Task.checkCancellation()
             do {
                 if attempt > 0 {
                     logger.debug("Retry attempt \(attempt)/\(maxRetries)")
-                    try await Task.sleep(nanoseconds: UInt64(attempt) * 1_000_000_000)
+                    try await operationClock.sleep(for: .seconds(attempt))
                 }
 
                 try await stopRecord(sessionId: 0)
-                try await Task.sleep(nanoseconds: 500_000_000)
+                try await operationClock.sleep(for: .milliseconds(500))
 
                 guard let recordInfo = try await startRecord() else { continue }
 
                 sessionId = recordInfo.sessionId
 
-                try await Task.sleep(nanoseconds: 1_000_000_000)
+                try await operationClock.sleep(for: .seconds(1))
 
                 if try await startSync(sessionId: recordInfo.sessionId, start: recordInfo.startTime) {
                     logger.debug("Recording session setup successful")
-                    return true
+                    return
                 }
             } catch {
+                guard !Task.isCancelled else { throw CancellationError() }
+                lastError = error
                 logger.debug("Setup error (attempt \(attempt + 1)): \(error.localizedDescription)")
             }
         }
 
-        return false
+        throw lastError ?? DeviceConnectionError.operationFailed(
+            "PLAUD recording session setup failed"
+        )
+    }
+
+    private func stopRecordingSession() async throws {
+        guard recordingSetupAttempted else { return }
+        recordingSetupAttempted = false
+        let sessionToStop = sessionId ?? 0
+        var failures: [String] = []
+        do {
+            try await stopSync()
+        } catch {
+            failures.append(error.localizedDescription)
+        }
+        do {
+            try await stopRecord(sessionId: sessionToStop)
+        } catch {
+            failures.append(error.localizedDescription)
+        }
+        sessionId = nil
+
+        guard failures.isEmpty else {
+            let message = failures.joined(separator: "; ")
+            logger.debug("Error stopping recording session: \(message)")
+            await transport.disconnect()
+            throw DeviceConnectionError.operationFailed(message)
+        }
     }
 
     // MARK: - Battery
@@ -258,7 +323,7 @@ final class PlaudDeviceConnection: BaseDeviceConnection {
     override func getBatteryLevelStream() -> AsyncThrowingStream<Int, Error> {
         // PLAUD uses command-based battery retrieval, poll every 60 seconds
         return AsyncThrowingStream { [weak self] continuation in
-            Task { [weak self] in
+            let pollingTask = Task { [weak self] in
                 guard let self = self else {
                     continuation.finish()
                     return
@@ -273,7 +338,12 @@ final class PlaudDeviceConnection: BaseDeviceConnection {
                 // Poll every 60 seconds
                 var lastLevel = initialLevel
                 while await self.isConnected() {
-                    try? await Task.sleep(nanoseconds: 60_000_000_000)
+                    do {
+                        try await self.operationClock.sleep(for: .seconds(60))
+                    } catch {
+                        break
+                    }
+                    guard !Task.isCancelled else { break }
 
                     let level = await self.getBatteryLevel()
                     if level >= 0 && level != lastLevel {
@@ -283,6 +353,9 @@ final class PlaudDeviceConnection: BaseDeviceConnection {
                 }
 
                 continuation.finish()
+            }
+            continuation.onTermination = { @Sendable _ in
+                pollingTask.cancel()
             }
         }
     }
@@ -294,46 +367,28 @@ final class PlaudDeviceConnection: BaseDeviceConnection {
     }
 
     override func getAudioStream() -> AsyncThrowingStream<Data, Error> {
-        return AsyncThrowingStream { [weak self] continuation in
-            Task { [weak self] in
-                guard let self = self else {
-                    continuation.finish()
-                    return
-                }
-
-                // Setup recording session
-                guard await self.setupRecordingSession() else {
-                    self.logger.debug("Failed to setup recording session")
-                    continuation.finish()
-                    return
-                }
-
-                // Buffer for 80-byte chunking
+        let rawStream = audioStreamController.makeStream()
+        return AsyncThrowingStream { continuation in
+            let chunkingTask = Task { @MainActor in
                 var buffer = [UInt8]()
-                let chunkSize = 80
-
-                let cancellable = self.audioStreamSubject
-                    .sink(
-                        receiveCompletion: { _ in
-                            // Flush remaining buffer
-                            if !buffer.isEmpty {
-                                continuation.yield(Data(buffer))
-                            }
-                            continuation.finish()
-                        },
-                        receiveValue: { data in
-                            buffer.append(contentsOf: data)
-                            while buffer.count >= chunkSize {
-                                let chunk = Array(buffer.prefix(chunkSize))
-                                continuation.yield(Data(chunk))
-                                buffer.removeFirst(chunkSize)
-                            }
+                do {
+                    for try await data in rawStream {
+                        buffer.append(contentsOf: data)
+                        while buffer.count >= 80 {
+                            continuation.yield(Data(buffer.prefix(80)))
+                            buffer.removeFirst(80)
                         }
-                    )
-
-                continuation.onTermination = { @Sendable _ in
-                    cancellable.cancel()
+                    }
+                    if !buffer.isEmpty {
+                        continuation.yield(Data(buffer))
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
                 }
+            }
+            continuation.onTermination = { @Sendable _ in
+                chunkingTask.cancel()
             }
         }
     }

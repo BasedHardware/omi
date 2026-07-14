@@ -141,16 +141,24 @@ actor MemoryAssistant: ProactiveAssistant {
     func handleResult(_ result: AssistantResult, sendEvent: @escaping (String, [String: Any]) -> Void) async {
         // This method is required by protocol but we use handleResultWithScreenshot instead
         guard let memoryResult = result as? MemoryExtractionResult else { return }
-        await handleResultWithScreenshot(memoryResult, screenshotId: nil, sendEvent: sendEvent)
+        guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
+        await handleResultWithScreenshot(
+            memoryResult,
+            ownerID: ownerID,
+            screenshotId: nil,
+            sendEvent: sendEvent
+        )
     }
 
     /// Handle result with screenshot ID for SQLite storage
     private func handleResultWithScreenshot(
         _ memoryResult: MemoryExtractionResult,
+        ownerID: String,
         screenshotId: Int64?,
         windowTitle: String? = nil,
         sendEvent: @escaping (String, [String: Any]) -> Void
     ) async {
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
         // Check if AI found new memories
         guard memoryResult.hasNewMemory, !memoryResult.memories.isEmpty else {
             return
@@ -158,6 +166,7 @@ actor MemoryAssistant: ProactiveAssistant {
 
         // Get min confidence threshold
         let threshold = await minConfidence
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
 
         // Only process the first memory (max 1 per analysis)
         guard let memory = memoryResult.memories.first else { return }
@@ -183,15 +192,24 @@ actor MemoryAssistant: ProactiveAssistant {
             memory: memory,
             screenshotId: screenshotId,
             contextSummary: memoryResult.contextSummary,
-            windowTitle: windowTitle
+            windowTitle: windowTitle,
+            ownerID: ownerID
         )
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
 
         // Sync to backend with full extraction data
-        if let backendId = await syncMemoryToBackend(memory: memory, contextSummary: memoryResult.contextSummary, windowTitle: windowTitle) {
+        if let backendId = await syncMemoryToBackend(
+            memory: memory,
+            contextSummary: memoryResult.contextSummary,
+            windowTitle: windowTitle,
+            ownerID: ownerID)
+        {
+            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
             // Update SQLite record with backend ID
             if let recordId = extractionRecord?.id {
                 do {
                     try await MemoryStorage.shared.markSynced(id: recordId, backendId: backendId)
+                    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
                 } catch {
                     logError("Memory: Failed to update sync status", error: error)
                 }
@@ -200,20 +218,25 @@ actor MemoryAssistant: ProactiveAssistant {
 
         // Track memory extracted
         await MainActor.run {
+            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
             AnalyticsManager.shared.memoryExtracted(memoryCount: 1)
         }
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
 
         // Send notification if enabled
         let notificationsEnabled = await MainActor.run {
             MemoryAssistantSettings.shared.notificationsEnabled
         }
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
         if notificationsEnabled {
             await sendMemoryNotification(
+                ownerID: ownerID,
                 memory: memory,
                 result: memoryResult,
                 windowTitle: windowTitle
             )
         }
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
 
         // Send event to Flutter
         sendEvent("memoryExtracted", [
@@ -228,8 +251,10 @@ actor MemoryAssistant: ProactiveAssistant {
         memory: ExtractedMemory,
         screenshotId: Int64?,
         contextSummary: String,
-        windowTitle: String? = nil
+        windowTitle: String? = nil,
+        ownerID: String
     ) async -> MemoryRecord? {
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
         // Convert ExtractedMemory category to MemoryCategory string
         let category = memory.category == .interesting ? "interesting" : "system"
 
@@ -247,6 +272,7 @@ actor MemoryAssistant: ProactiveAssistant {
 
         do {
             let inserted = try await MemoryStorage.shared.insertLocalMemory(record)
+            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
             log("Memory: Saved to SQLite (id: \(inserted.id ?? -1))")
             return inserted
         } catch {
@@ -256,7 +282,13 @@ actor MemoryAssistant: ProactiveAssistant {
     }
 
     /// Sync memory to backend API, returns backend ID if successful
-    private func syncMemoryToBackend(memory: ExtractedMemory, contextSummary: String? = nil, windowTitle: String? = nil) async -> String? {
+    private func syncMemoryToBackend(
+        memory: ExtractedMemory,
+        contextSummary: String? = nil,
+        windowTitle: String? = nil,
+        ownerID: String
+    ) async -> String? {
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
         do {
             // Convert ExtractedMemory category to MemoryCategory
             let category: MemoryCategory = memory.category == .interesting ? .interesting : .system
@@ -268,8 +300,10 @@ actor MemoryAssistant: ProactiveAssistant {
                 confidence: memory.confidence,
                 sourceApp: memory.sourceApp,
                 contextSummary: contextSummary,
-                windowTitle: windowTitle
+                windowTitle: windowTitle,
+                expectedOwnerId: ownerID
             )
+            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
 
             log("Memory: Synced to backend (id: \(response.id))")
             return response.id
@@ -281,6 +315,7 @@ actor MemoryAssistant: ProactiveAssistant {
 
     /// Send a notification for the extracted memory
     private func sendMemoryNotification(
+        ownerID: String,
         memory: ExtractedMemory,
         result: MemoryExtractionResult,
         windowTitle: String?
@@ -300,6 +335,7 @@ actor MemoryAssistant: ProactiveAssistant {
 
         await MainActor.run {
             NotificationService.shared.sendNotification(
+                ownerID: ownerID,
                 title: title,
                 message: message,
                 assistantId: identifier,
@@ -335,6 +371,7 @@ actor MemoryAssistant: ProactiveAssistant {
     // MARK: - Analysis
 
     private func processFrame(_ frame: CapturedFrame) async {
+        guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
         let enabled = await isEnabled
         guard enabled else {
             log("Memory: Skipping analysis (disabled)")
@@ -351,7 +388,12 @@ actor MemoryAssistant: ProactiveAssistant {
             log("Memory: Analysis complete - hasNewMemory: \(result.hasNewMemory), count: \(result.memories.count), context: \(result.contextSummary)")
 
             // Handle the result with screenshot ID for SQLite storage
-            await handleResultWithScreenshot(result, screenshotId: frame.screenshotId, windowTitle: frame.windowTitle) { type, data in
+            await handleResultWithScreenshot(
+                result,
+                ownerID: ownerID,
+                screenshotId: frame.screenshotId,
+                windowTitle: frame.windowTitle
+            ) { type, data in
                 Task { @MainActor in
                     AssistantCoordinator.shared.sendEvent(type: type, data: data)
                 }

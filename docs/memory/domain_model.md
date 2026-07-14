@@ -404,9 +404,9 @@ Devices are **capture surfaces only** — provenance metadata, not memory author
 | Field / header | Shape | Notes |
 |----------------|-------|-------|
 | `client_device_id` | `{platform}_{hash}` | Same shape as FCM `device_key` in `notifications.py` |
-| `hash` | sha256 → first 8 hex chars | From stable per-install id (Keychain UUID on desktop; IDFV/Android id on mobile) |
-| `X-Device-Id-Hash` | HTTP / WS upgrade header | Raw hash component only |
-| `X-App-Platform` | `macos` / `ios` / `android` | Platform component |
+| `hash` | sha256 → first 8 hex chars | From a stable per-install id (Keychain UUID on macOS; persisted local install id on Windows; IDFV/Android id on mobile) |
+| `X-Device-Id-Hash` | HTTP / WS upgrade header (first auth message for browser WS) | Raw hash component only |
+| `X-App-Platform` | `macos` / `windows` / `ios` / `android` / `web` | Platform component |
 | `X-App-Version` | optional | Stored on registry `client_devices` doc |
 
 **Nullability:** all device fields optional. Absent headers or legacy data ⇒ `client_device_id=null` ⇒ UI shows **unknown device**. Device id is **never** folded into `evidence_id` hash inputs (legacy dedup must stay byte-identical when device is absent).

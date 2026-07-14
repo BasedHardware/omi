@@ -5,9 +5,10 @@ Cloud Tasks POSTs it back to /v2/sync-jobs/run on the backend-sync service
 with an OIDC token minted for SYNC_TASKS_INVOKER_SA.
 
 All functions fail closed when the SYNC_TASKS_* env vars are unset: enqueue
-raises (caller falls back to the inline pipeline) and verification returns
-403 — the handler ships in the shared image to services that must never
-accept task traffic.
+raises and verification returns 403 — the handler ships in the shared image
+to services that must never accept task traffic. A caller that has already
+staged audio must not start an inline worker after an enqueue exception: a
+lost create-task acknowledgement can mean the deterministic named task exists.
 """
 
 import json
@@ -77,17 +78,35 @@ def is_account_deletion_dispatch_enabled() -> bool:
     return os.getenv('ACCOUNT_DELETION_DISPATCH_MODE', 'inline') == 'cloud_tasks'
 
 
+def is_listen_finalization_dispatch_enabled() -> bool:
+    """Whether platform-key listen finalization uses its durable worker."""
+    return os.getenv('LISTEN_FINALIZATION_DISPATCH_MODE', 'inline') == 'cloud_tasks'
+
+
 def get_account_deletion_tasks_max_attempts() -> int:
     return int(os.getenv('ACCOUNT_DELETION_TASKS_MAX_ATTEMPTS', get_sync_tasks_max_attempts()))
 
 
-def _enqueue_named_task(queue: str, url: str, task_id: str, payload: Dict[str, Any]) -> None:
+def get_listen_finalization_tasks_max_attempts() -> int:
+    """Must mirror the dedicated finalization queue's maxAttempts setting."""
+    return int(os.getenv('LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS', get_sync_tasks_max_attempts()))
+
+
+def _enqueue_named_task(
+    queue: str,
+    url: str,
+    task_id: str,
+    payload: Dict[str, Any],
+    *,
+    audience: Optional[str] = None,
+    invoker_sa: Optional[str] = None,
+) -> None:
     """Enqueue one named HTTP task. Duplicate names are treated as success —
     Cloud Tasks deduplicates named tasks. Any other failure raises."""
     project = os.getenv('SYNC_TASKS_PROJECT', '')
     location = os.getenv('SYNC_TASKS_LOCATION', '')
-    invoker_sa = _invoker_sa()
-    if not all([project, location, queue, url, invoker_sa]):
+    selected_invoker_sa = invoker_sa or _invoker_sa()
+    if not all([project, location, queue, url, selected_invoker_sa]):
         raise RuntimeError('Cloud Tasks dispatch enabled but task env vars are incomplete')
 
     client = _get_tasks_client()
@@ -99,7 +118,10 @@ def _enqueue_named_task(queue: str, url: str, task_id: str, payload: Dict[str, A
             url=url,
             headers={'Content-Type': 'application/json'},
             body=json.dumps(payload).encode(),
-            oidc_token=tasks_v2.OidcToken(service_account_email=invoker_sa, audience=_oidc_audience()),
+            oidc_token=tasks_v2.OidcToken(
+                service_account_email=selected_invoker_sa,
+                audience=audience or _oidc_audience(),
+            ),
         ),
         dispatch_deadline=duration_pb2.Duration(seconds=DISPATCH_DEADLINE_SECONDS),
     )
@@ -112,8 +134,20 @@ def _enqueue_named_task(queue: str, url: str, task_id: str, payload: Dict[str, A
 def enqueue_sync_job(payload: Dict[str, Any]) -> None:
     """Enqueue one named HTTP task (task id = job_id) for a sync job.
 
-    The caller falls back to the inline pipeline on failure.
+    Duplicate names are success. Callers retry the same name a bounded number
+    of times, then retain staged retry material if acknowledgement remains
+    uncertain; they never fall back inline after submitting this task.
     """
+    if payload.get('lane') == 'backfill':
+        handler_url = os.getenv('SYNC_BACKFILL_TASKS_HANDLER_URL', '')
+        _enqueue_named_task(
+            os.getenv('SYNC_BACKFILL_TASKS_QUEUE', ''),
+            handler_url,
+            str(payload['job_id']),
+            payload,
+            audience=os.getenv('SYNC_BACKFILL_TASKS_OIDC_AUDIENCE') or handler_url,
+        )
+        return
     _enqueue_named_task(os.getenv('SYNC_TASKS_QUEUE', ''), _handler_url(), str(payload['job_id']), payload)
 
 
@@ -124,8 +158,16 @@ def enqueue_audio_merge_job(payload: Dict[str, Any]) -> None:
     from /urls polling; the handler's artifact-exists check covers the rest.
     Tokens are minted with the same audience as sync tasks so a single
     verify_cloud_tasks_oidc dependency covers both handlers.
+
+    schema_version 2 = conversation-level artifact build: the name embeds the
+    audio_files fingerprint so a rebuild after late chunks gets a fresh name
+    and isn't swallowed by the named-task tombstone. 'amc-' cannot collide with
+    per-part names (audio_file ids are UUIDv4).
     """
-    task_id = f"am-{payload['conversation_id']}-{payload['audio_file_id']}"
+    if payload.get('schema_version') == 2:
+        task_id = f"amc-{payload['conversation_id']}-{payload['fingerprint']}"
+    else:
+        task_id = f"am-{payload['conversation_id']}-{payload['audio_file_id']}"
     _enqueue_named_task(
         os.getenv('AUDIO_MERGE_TASKS_QUEUE', ''),
         os.getenv('AUDIO_MERGE_HANDLER_URL', ''),
@@ -146,14 +188,41 @@ def enqueue_account_deletion_wipe(uid: str) -> None:
     )
 
 
-def verify_cloud_tasks_oidc(request: Request) -> int:
-    """FastAPI dependency for /v2/sync-jobs/run. Returns the task retry count.
+def _listen_finalization_handler_url() -> str:
+    return os.getenv('LISTEN_FINALIZATION_TASKS_HANDLER_URL', '')
+
+
+def _listen_finalization_audience() -> str:
+    return os.getenv('LISTEN_FINALIZATION_TASKS_OIDC_AUDIENCE') or _listen_finalization_handler_url()
+
+
+def _listen_finalization_invoker_sa() -> str:
+    return os.getenv('LISTEN_FINALIZATION_TASKS_INVOKER_SA') or _invoker_sa()
+
+
+def enqueue_listen_finalization_job(job_id: str, dispatch_generation: int) -> None:
+    """Wake the finalizer with opaque routing data only.
+
+    The Firestore job is canonical.  The task intentionally contains neither a
+    uid nor any conversation/BYOK material so Cloud Tasks diagnostics cannot
+    expose user content or credentials.
+    """
+    _enqueue_named_task(
+        os.getenv('LISTEN_FINALIZATION_TASKS_QUEUE', ''),
+        _listen_finalization_handler_url(),
+        f'listen-finalization-{job_id}-{dispatch_generation}',
+        {'job_id': job_id, 'dispatch_generation': dispatch_generation},
+        audience=_listen_finalization_audience(),
+        invoker_sa=_listen_finalization_invoker_sa(),
+    )
+
+
+def _verify_cloud_tasks_oidc(request: Request, *, audience: str, invoker_sa: str) -> int:
+    """Verify a configured task audience and issuer; returns task retry count.
 
     Sync function on purpose — verify_oauth2_token fetches Google certs over
     HTTP, and FastAPI runs sync dependencies in the threadpool.
     """
-    audience = _oidc_audience()
-    invoker_sa = _invoker_sa()
     if not audience or not invoker_sa:
         # Env unset: this service is not a task target (e.g. main backend
         # running the shared image) — never accept task traffic.
@@ -177,3 +246,17 @@ def verify_cloud_tasks_oidc(request: Request) -> int:
         return int(request.headers.get('x-cloudtasks-taskretrycount', '0'))
     except ValueError:
         return 0
+
+
+def verify_cloud_tasks_oidc(request: Request) -> int:
+    """FastAPI dependency for existing sync, merge, and deletion task routes."""
+    return _verify_cloud_tasks_oidc(request, audience=_oidc_audience(), invoker_sa=_invoker_sa())
+
+
+def verify_listen_finalization_cloud_tasks_oidc(request: Request) -> int:
+    """FastAPI dependency for the isolated listen finalization task route."""
+    return _verify_cloud_tasks_oidc(
+        request,
+        audience=_listen_finalization_audience(),
+        invoker_sa=_listen_finalization_invoker_sa(),
+    )

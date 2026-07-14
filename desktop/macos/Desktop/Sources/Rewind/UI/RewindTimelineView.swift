@@ -27,7 +27,7 @@ struct RewindTimelineView: View {
 
                 ZStack(alignment: .leading) {
                     // Background
-                    RoundedRectangle(cornerRadius: 4)
+                    RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
                         .fill(OmiColors.backgroundTertiary.opacity(0.5))
 
                     // Activity markers
@@ -38,7 +38,7 @@ struct RewindTimelineView: View {
                        let index = screenshots.firstIndex(where: { $0.id == selected.id }) {
                         let position = positionForIndex(index, width: width)
                         Rectangle()
-                            .fill(OmiColors.purplePrimary)
+                            .fill(OmiColors.accent)
                             .frame(width: 2, height: timelineHeight - 16)
                             .position(x: position, y: (timelineHeight - 8) / 2)
                     }
@@ -47,7 +47,7 @@ struct RewindTimelineView: View {
                     if let hoverIndex = hoveredIndex {
                         let position = positionForIndex(hoverIndex, width: width)
 
-                        VStack(spacing: 4) {
+                        VStack(spacing: OmiSpacing.xxs) {
                             // Hover preview tooltip
                             if let screenshot = screenshots[safe: hoverIndex] {
                                 HoverPreviewTooltip(screenshot: screenshot)
@@ -90,7 +90,7 @@ struct RewindTimelineView: View {
                 }
             }
             .frame(height: timelineHeight - 8)
-            .padding(.horizontal, 16)
+            .padding(.horizontal, OmiSpacing.lg)
 
             // Time labels
             timeLabels
@@ -138,7 +138,7 @@ struct RewindTimelineView: View {
         let uniqueApps = getUniqueAppsInOrder()
 
         return ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: OmiSpacing.sm) {
                 ForEach(uniqueApps, id: \.self) { appName in
                     AppIconButton(
                         appName: appName,
@@ -152,8 +152,8 @@ struct RewindTimelineView: View {
                     )
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.horizontal, OmiSpacing.lg)
+            .padding(.vertical, OmiSpacing.sm)
         }
     }
 
@@ -187,20 +187,20 @@ struct RewindTimelineView: View {
         HStack {
             if let oldest = screenshots.last {
                 Text(oldest.formattedTime)
-                    .scaledFont(size: 10, weight: .medium, design: .monospaced)
+                    .scaledFont(size: OmiType.micro, weight: .medium, design: .monospaced)
                     .foregroundColor(OmiColors.textTertiary)
             }
 
             Spacer()
 
             if let selected = selectedScreenshot {
-                VStack(spacing: 2) {
+                VStack(spacing: OmiSpacing.hairline) {
                     Text(selected.formattedTime)
-                        .scaledFont(size: 12, weight: .semibold, design: .monospaced)
+                        .scaledFont(size: OmiType.caption, weight: .semibold, design: .monospaced)
                         .foregroundColor(OmiColors.textPrimary)
 
                     Text(selected.appName)
-                        .scaledFont(size: 10)
+                        .scaledFont(size: OmiType.micro)
                         .foregroundColor(OmiColors.textSecondary)
                 }
             }
@@ -209,12 +209,12 @@ struct RewindTimelineView: View {
 
             if let newest = screenshots.first {
                 Text(newest.formattedTime)
-                    .scaledFont(size: 10, weight: .medium, design: .monospaced)
+                    .scaledFont(size: OmiType.micro, weight: .medium, design: .monospaced)
                     .foregroundColor(OmiColors.textTertiary)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 8)
+        .padding(.horizontal, OmiSpacing.lg)
+        .padding(.bottom, OmiSpacing.sm)
     }
 
     // MARK: - Helpers
@@ -308,19 +308,19 @@ struct AppIconButton: View {
 
     var body: some View {
         Button(action: onTap) {
-            VStack(spacing: 4) {
+            VStack(spacing: OmiSpacing.xxs) {
                 AppIconView(appName: appName, size: 24)
                     .opacity(isActive ? 1.0 : 0.6)
 
                 // Active indicator dot
                 Circle()
-                    .fill(isActive ? OmiColors.purplePrimary : Color.clear)
+                    .fill(isActive ? OmiColors.accent : Color.clear)
                     .frame(width: 4, height: 4)
             }
-            .padding(.horizontal, 4)
-            .padding(.vertical, 4)
+            .padding(.horizontal, OmiSpacing.xxs)
+            .padding(.vertical, OmiSpacing.xxs)
             .background(
-                RoundedRectangle(cornerRadius: 6)
+                RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
                     .fill(isHovered ? OmiColors.backgroundTertiary : Color.clear)
             )
         }
@@ -339,7 +339,7 @@ struct HoverPreviewTooltip: View {
     @State private var thumbnailImage: NSImage? = nil
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: OmiSpacing.xxs) {
             // Thumbnail
             Group {
                 if let image = thumbnailImage {
@@ -354,22 +354,22 @@ struct HoverPreviewTooltip: View {
                         .frame(width: 160, height: 100)
                 }
             }
-            .cornerRadius(6)
+            .cornerRadius(OmiChrome.badgeRadius)
 
             // Info
-            VStack(spacing: 2) {
+            VStack(spacing: OmiSpacing.hairline) {
                 Text(screenshot.formattedTime)
-                    .scaledFont(size: 11, weight: .semibold, design: .monospaced)
+                    .scaledFont(size: OmiType.caption, weight: .semibold, design: .monospaced)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Text(screenshot.appName)
-                    .scaledFont(size: 10)
+                    .scaledFont(size: OmiType.micro)
                     .foregroundColor(OmiColors.textSecondary)
             }
         }
-        .padding(8)
+        .padding(OmiSpacing.sm)
         .background(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                 .fill(OmiColors.backgroundSecondary)
                 .shadow(color: .black.opacity(0.3), radius: 8, y: 4)
         )
@@ -419,17 +419,17 @@ struct ScreenshotPreviewView: View {
             // Header
             HStack {
                 // App icon and info
-                HStack(spacing: 10) {
+                HStack(spacing: OmiSpacing.sm) {
                     AppIconView(appName: screenshot.appName, size: 24)
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                         Text(screenshot.appName)
-                            .scaledFont(size: 14, weight: .medium)
+                            .scaledFont(size: OmiType.body, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
 
                         if let title = screenshot.windowTitle, !title.isEmpty {
                             Text(title)
-                                .scaledFont(size: 12)
+                                .scaledFont(size: OmiType.caption)
                                 .foregroundColor(OmiColors.textSecondary)
                                 .lineLimit(1)
                         }
@@ -442,37 +442,37 @@ struct ScreenshotPreviewView: View {
                 if let query = searchQuery {
                     let matchCount = screenshot.matchingBlocks(for: query).count
                     if matchCount > 0 {
-                        HStack(spacing: 4) {
+                        HStack(spacing: OmiSpacing.xxs) {
                             Image(systemName: "text.magnifyingglass")
-                                .scaledFont(size: 11)
+                                .scaledFont(size: OmiType.caption)
                             Text("\(matchCount) match\(matchCount == 1 ? "" : "es")")
-                                .scaledFont(size: 11)
+                                .scaledFont(size: OmiType.caption)
                         }
-                        .foregroundColor(OmiColors.purplePrimary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(OmiColors.purplePrimary.opacity(0.15))
-                        .cornerRadius(4)
+                        .foregroundColor(OmiColors.accent)
+                        .padding(.horizontal, OmiSpacing.sm)
+                        .padding(.vertical, OmiSpacing.xxs)
+                        .background(OmiColors.accent.opacity(0.15))
+                        .cornerRadius(OmiChrome.stripRadius)
                     }
                 }
 
                 // Time
                 Text(screenshot.formattedDate)
-                    .scaledFont(size: 13, weight: .medium, design: .monospaced)
+                    .scaledFont(size: OmiType.body, weight: .medium, design: .monospaced)
                     .foregroundColor(OmiColors.textSecondary)
 
                 // Keyboard hints
-                HStack(spacing: 12) {
+                HStack(spacing: OmiSpacing.md) {
                     keyboardHint("←", label: "Prev")
                     keyboardHint("→", label: "Next")
                     keyboardHint("esc", label: "Close")
                 }
-                .padding(.leading, 16)
+                .padding(.leading, OmiSpacing.lg)
 
                 // Close button
                 Button(action: onClose) {
                     Image(systemName: "xmark")
-                        .scaledFont(size: 12, weight: .medium)
+                        .scaledFont(size: OmiType.caption, weight: .medium)
                         .foregroundColor(OmiColors.textTertiary)
                         .frame(width: 28, height: 28)
                         .background(OmiColors.backgroundTertiary)
@@ -480,8 +480,8 @@ struct ScreenshotPreviewView: View {
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.horizontal, OmiSpacing.lg)
+            .padding(.vertical, OmiSpacing.md)
             .background(OmiColors.backgroundSecondary.opacity(0.95))
 
             // Image with highlight overlays
@@ -525,7 +525,7 @@ struct ScreenshotPreviewView: View {
                         Spacer()
                         navButton(systemName: "chevron.right", action: onNext)
                     }
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, OmiSpacing.lg)
                 }
                 .onPreferenceChange(ImageSizePreferenceKey.self) { size in
                     imageSize = size
@@ -545,17 +545,17 @@ struct ScreenshotPreviewView: View {
     }
 
     private func keyboardHint(_ key: String, label: String) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: OmiSpacing.xxs) {
             Text(key)
-                .scaledFont(size: 10, weight: .medium, design: .monospaced)
+                .scaledFont(size: OmiType.micro, weight: .medium, design: .monospaced)
                 .foregroundColor(OmiColors.textSecondary)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
+                .padding(.horizontal, OmiSpacing.xs)
+                .padding(.vertical, OmiSpacing.hairline)
                 .background(OmiColors.backgroundTertiary)
-                .cornerRadius(4)
+                .cornerRadius(OmiChrome.stripRadius)
 
             Text(label)
-                .scaledFont(size: 10)
+                .scaledFont(size: OmiType.micro)
                 .foregroundColor(OmiColors.textTertiary)
         }
     }
@@ -563,7 +563,7 @@ struct ScreenshotPreviewView: View {
     private func navButton(systemName: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .scaledFont(size: 16, weight: .semibold)
+                .scaledFont(size: OmiType.subheading, weight: .semibold)
                 .foregroundColor(.white)
                 .frame(width: 40, height: 40)
                 .background(Color.black.opacity(0.5))
@@ -573,14 +573,14 @@ struct ScreenshotPreviewView: View {
     }
 
     private func ocrTextSection(_ text: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             HStack {
                 Image(systemName: "doc.text.viewfinder")
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textTertiary)
 
                 Text("Extracted Text")
-                    .scaledFont(size: 12, weight: .medium)
+                    .scaledFont(size: OmiType.caption, weight: .medium)
                     .foregroundColor(OmiColors.textSecondary)
 
                 Spacer()
@@ -589,11 +589,11 @@ struct ScreenshotPreviewView: View {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(text, forType: .string)
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: OmiSpacing.xxs) {
                         Image(systemName: "doc.on.doc")
                         Text("Copy")
                     }
-                    .scaledFont(size: 11)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textTertiary)
                 }
                 .buttonStyle(.plain)
@@ -603,13 +603,13 @@ struct ScreenshotPreviewView: View {
                 // Highlight search query in text if present
                 if let query = searchQuery {
                     Text(highlightedText(text, query: query))
-                        .scaledFont(size: 11)
+                        .scaledFont(size: OmiType.caption)
                         .textSelection(.enabled)
                         .if_available_writingToolsNone()
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     Text(text)
-                        .scaledFont(size: 11)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(OmiColors.textSecondary)
                         .textSelection(.enabled)
                         .if_available_writingToolsNone()
@@ -618,7 +618,7 @@ struct ScreenshotPreviewView: View {
             }
             .frame(maxHeight: 100)
         }
-        .padding(12)
+        .padding(OmiSpacing.md)
         .background(OmiColors.backgroundTertiary.opacity(0.8))
     }
 
@@ -632,8 +632,8 @@ struct ScreenshotPreviewView: View {
         var searchStart = lowercasedText.startIndex
         while let range = lowercasedText.range(of: lowercasedQuery, range: searchStart..<lowercasedText.endIndex) {
             if let attrRange = Range(range, in: result) {
-                result[attrRange].foregroundColor = OmiColors.purplePrimary
-                result[attrRange].backgroundColor = OmiColors.purplePrimary.opacity(0.2)
+                result[attrRange].foregroundColor = OmiColors.accent
+                result[attrRange].backgroundColor = OmiColors.accent.opacity(0.2)
                 result[attrRange].font = .system(size: 11, weight: .semibold)
             }
             searchStart = range.upperBound
@@ -703,8 +703,8 @@ struct SearchHighlightOverlay: View {
                 let screenRect = block.screenRect(for: CGSize(width: 1, height: 1)) // Normalized
 
                 Rectangle()
-                    .stroke(OmiColors.purplePrimary, lineWidth: 2)
-                    .background(OmiColors.purplePrimary.opacity(0.2))
+                    .stroke(OmiColors.accent, lineWidth: 2)
+                    .background(OmiColors.accent.opacity(0.2))
                     .frame(
                         width: screenRect.width * layout.size.width,
                         height: screenRect.height * layout.size.height

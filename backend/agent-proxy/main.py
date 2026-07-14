@@ -11,10 +11,12 @@ import base64
 import json
 import logging
 import os
+import threading
 import time
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, AsyncIterator, Dict, List, Optional, Tuple, cast
 
 import firebase_admin
 import google.auth
@@ -28,21 +30,15 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from firebase_admin import auth, credentials, firestore
 from google.cloud.firestore import ArrayUnion
 from google.cloud.firestore_v1 import Query
+from utils.executors import (
+    critical_executor,
+    db_executor,
+    drain_background_tasks,
+    run_blocking,
+    start_background_task,
+)
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Firebase init — uses GOOGLE_APPLICATION_CREDENTIALS or ADC
-cred_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
-if cred_path:
-    firebase_admin.initialize_app(credentials.Certificate(cred_path))  # type: ignore[reportUnknownMemberType]
-else:
-    firebase_admin.initialize_app()  # type: ignore[reportUnknownMemberType]
-
-db: Any = firestore.client()  # type: ignore[reportUnknownMemberType]  # google-cloud-firestore has no stubs
-
-app = FastAPI()
-logger.info("[agent-proxy] starting up")
 
 HISTORY_LIMIT = 10
 GCE_PROJECT = "based-hardware"
@@ -51,6 +47,59 @@ VM_KEEPALIVE_INTERVAL = 120  # seconds — ping VM every 2 min during active WS
 # Encryption — optional; required for users with enhanced data protection.
 ENCRYPTION_SECRET = os.getenv('ENCRYPTION_SECRET', '').encode('utf-8')
 _encryption_ok = len(ENCRYPTION_SECRET) >= 32
+_firebase_init_lock = threading.RLock()
+_firestore_db: Any = None
+
+
+def _ensure_firebase_initialized() -> None:
+    """Initialize the default Firebase app lazily on the caller-owned worker lane."""
+    try:
+        firebase_admin.get_app()
+        return
+    except ValueError:
+        pass
+
+    with _firebase_init_lock:
+        try:
+            firebase_admin.get_app()
+            return
+        except ValueError:
+            cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+            if cred_path:
+                firebase_admin.initialize_app(credentials.Certificate(cred_path))  # type: ignore[reportUnknownMemberType]
+            else:
+                firebase_admin.initialize_app()  # type: ignore[reportUnknownMemberType]
+
+
+def _get_firestore_db() -> Any:
+    """Return the lazy Firestore singleton; construction stays off import paths."""
+    global _firestore_db
+    if _firestore_db is None:
+        with _firebase_init_lock:
+            if _firestore_db is None:
+                _ensure_firebase_initialized()
+                _firestore_db = firestore.client()  # type: ignore[reportUnknownMemberType]
+    return _firestore_db
+
+
+def _verify_id_token(token: str) -> Dict[str, Any]:
+    """Verify one Firebase token after ensuring the provider app exists."""
+    _ensure_firebase_initialized()
+    return cast(Dict[str, Any], auth.verify_id_token(token))  # type: ignore[reportUnknownMemberType]
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Fail startup closed on provider readiness and drain owned persistence on shutdown."""
+    await run_blocking(critical_executor, _ensure_firebase_initialized)
+    await run_blocking(db_executor, _get_firestore_db)
+    try:
+        yield
+    finally:
+        await drain_background_tasks(timeout=10.0)
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 def _typed_doc(doc: Any) -> Dict[str, Any]:
@@ -65,7 +114,7 @@ def health() -> Dict[str, str]:
 
 def _get_user_context(uid: str) -> Tuple[Optional[Dict[str, Any]], str]:
     """Get agent VM info and data protection level from the user document."""
-    doc = db.collection('users').document(uid).get()
+    doc = _get_firestore_db().collection('users').document(uid).get()
     if doc.exists:
         data: Dict[str, Any] = _typed_doc(doc)
         agent_vm = cast(Optional[Dict[str, Any]], data.get('agentVm'))
@@ -76,7 +125,7 @@ def _get_user_context(uid: str) -> Tuple[Optional[Dict[str, Any]], str]:
 
 def _refresh_vm(uid: str) -> Optional[Dict[str, Any]]:
     """Re-read the VM info from Firestore (called after restart to get new IP)."""
-    doc = db.collection('users').document(uid).get()
+    doc = _get_firestore_db().collection('users').document(uid).get()
     if doc.exists:
         return cast(Optional[Dict[str, Any]], _typed_doc(doc).get('agentVm'))
     return None
@@ -94,7 +143,7 @@ def _get_gce_access_token() -> str:
 
 async def _check_gce_status(vm_name: str, zone: str) -> str:
     """Check the actual GCE instance status."""
-    token = _get_gce_access_token()
+    token = await run_blocking(critical_executor, _get_gce_access_token)
     url = f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}"
     async with httpx.AsyncClient() as client:
         resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
@@ -107,7 +156,7 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
     """Start a stopped/terminated GCE VM and return the new IP."""
 
     t0 = time.monotonic()
-    token = _get_gce_access_token()
+    token = await run_blocking(critical_executor, _get_gce_access_token)
     start_url = (
         f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}/start"
     )
@@ -126,7 +175,7 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
         op_url = f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/operations/{op_name}"
         for i in range(24):
             await asyncio.sleep(5)
-            token = _get_gce_access_token()
+            token = await run_blocking(critical_executor, _get_gce_access_token)
             status_resp = await client.get(op_url, headers={"Authorization": f"Bearer {token}"})
             status = status_resp.json()
             if status.get("status") == "DONE":
@@ -142,7 +191,7 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
         )
         ip = None
         for attempt in range(6):
-            token = _get_gce_access_token()
+            token = await run_blocking(critical_executor, _get_gce_access_token)
             inst_resp = await client.get(instance_url, headers={"Authorization": f"Bearer {token}"})
             instance = inst_resp.json()
             try:
@@ -171,12 +220,12 @@ def _update_firestore_vm(uid: str, ip: str | None, status: str) -> None:
     update = {"agentVm.status": status}
     if ip:
         update["agentVm.ip"] = ip
-    db.collection('users').document(uid).update(update)
+    _get_firestore_db().collection('users').document(uid).update(update)
 
 
 async def _reset_vm(vm_name: str, zone: str) -> None:
     """Hard-reset a RUNNING VM whose agent process is unresponsive."""
-    token = _get_gce_access_token()
+    token = await run_blocking(critical_executor, _get_gce_access_token)
     reset_url = (
         f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}/reset"
     )
@@ -193,7 +242,7 @@ async def _reset_vm(vm_name: str, zone: str) -> None:
             )
             for _ in range(12):
                 await asyncio.sleep(5)
-                t = _get_gce_access_token()
+                t = await run_blocking(critical_executor, _get_gce_access_token)
                 status_resp = await client.get(op_url, headers={"Authorization": f"Bearer {t}"})
                 if status_resp.json().get("status") == "DONE":
                     break
@@ -216,14 +265,14 @@ async def _ensure_vm_running(uid: str, vm: Dict[str, Any], health_failed: bool =
             if health_failed:
                 # VM is RUNNING but agent process is dead — hard reset
                 logger.info(f"[agent-proxy] VM {vm_name} is RUNNING but unhealthy, resetting...")
-                _update_firestore_vm(uid, None, "provisioning")
+                await run_blocking(db_executor, _update_firestore_vm, uid, None, "provisioning")
                 try:
                     await _reset_vm(vm_name, zone)
-                    _update_firestore_vm(uid, vm.get("ip"), "ready")
-                    return _refresh_vm(uid)
+                    await run_blocking(db_executor, _update_firestore_vm, uid, vm.get("ip"), "ready")
+                    return await run_blocking(db_executor, _refresh_vm, uid)
                 except Exception as e:
                     logger.error(f"[agent-proxy] Failed to reset VM {vm_name}: {e}")
-                    _update_firestore_vm(uid, None, "error")
+                    await run_blocking(db_executor, _update_firestore_vm, uid, None, "error")
                     return None
             return vm
         if gce_status not in ("TERMINATED", "STOPPED"):
@@ -231,24 +280,24 @@ async def _ensure_vm_running(uid: str, vm: Dict[str, Any], health_failed: bool =
 
     # VM needs restart
     logger.info(f"[agent-proxy] VM {vm_name} needs restart, starting...")
-    _update_firestore_vm(uid, None, "provisioning")
+    await run_blocking(db_executor, _update_firestore_vm, uid, None, "provisioning")
 
     try:
         ip = await _start_vm_and_wait(vm_name, zone)
-        _update_firestore_vm(uid, ip, "ready")
+        await run_blocking(db_executor, _update_firestore_vm, uid, ip, "ready")
         logger.info(f"[agent-proxy] VM {vm_name} restarted, ip={ip}")
-        return _refresh_vm(uid)
+        return await run_blocking(db_executor, _refresh_vm, uid)
     except Exception as e:
         logger.error(f"[agent-proxy] Failed to restart VM {vm_name}: {e}")
-        _update_firestore_vm(uid, None, "error")
+        await run_blocking(db_executor, _update_firestore_vm, uid, None, "error")
         return None
 
 
 async def _wait_for_vm_healthy(vm_ip: str, auth_token: str, timeout: float = 120) -> bool:
     """Poll the VM's /health endpoint until it responds OK."""
-    deadline = asyncio.get_event_loop().time() + timeout
+    deadline = asyncio.get_running_loop().time() + timeout
     async with httpx.AsyncClient(timeout=5) as client:
-        while asyncio.get_event_loop().time() < deadline:
+        while asyncio.get_running_loop().time() < deadline:
             try:
                 resp = await client.get(f"http://{vm_ip}:8080/health")
                 if resp.status_code == 200:
@@ -300,7 +349,12 @@ def _decrypt_text(text: str, uid: str) -> str:
 def _get_or_create_chat_session(uid: str) -> Dict[str, Any]:
     """Get or create the default (plugin_id=None) chat session."""
     session_ref = (
-        db.collection('users').document(uid).collection('chat_sessions').where('plugin_id', '==', None).limit(1)
+        _get_firestore_db()
+        .collection('users')
+        .document(uid)
+        .collection('chat_sessions')
+        .where('plugin_id', '==', None)
+        .limit(1)
     )
     for session in session_ref.stream():
         return _typed_doc(session)
@@ -312,7 +366,14 @@ def _get_or_create_chat_session(uid: str) -> Dict[str, Any]:
         'message_ids': [],
         'file_ids': [],
     }
-    db.collection('users').document(uid).collection('chat_sessions').document(session_data['id']).set(session_data)
+    (
+        _get_firestore_db()
+        .collection('users')
+        .document(uid)
+        .collection('chat_sessions')
+        .document(session_data['id'])
+        .set(session_data)
+    )
     return session_data
 
 
@@ -322,7 +383,8 @@ def _get_or_create_chat_session(uid: str) -> Dict[str, Any]:
 def _fetch_chat_history(uid: str, chat_session_id: str) -> List[Dict[str, Any]]:
     """Fetch last N messages from the chat session, returned oldest-first."""
     messages_ref = (
-        db.collection('users')
+        _get_firestore_db()
+        .collection('users')
         .document(uid)
         .collection('messages')
         .where('plugin_id', '==', None)
@@ -364,7 +426,7 @@ def _save_message(uid: str, text: str, sender: str, chat_session_id: str, data_p
         'chat_session_id': chat_session_id,
         'data_protection_level': level,
     }
-    user_ref = db.collection('users').document(uid)
+    user_ref = _get_firestore_db().collection('users').document(uid)
     user_ref.collection('messages').add(msg_data)
     # Link message to chat session
     session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
@@ -397,7 +459,7 @@ async def agent_ws(websocket: WebSocket):
 
     token = auth_header[7:].strip()
     try:
-        decoded_token = cast(Any, auth.verify_id_token(token))  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
+        decoded_token = await run_blocking(critical_executor, _verify_id_token, token)
         uid = cast(str, decoded_token["uid"])
     except Exception as e:
         logger.warning(f"[agent-proxy] WS rejected: invalid token: {e}")
@@ -405,7 +467,7 @@ async def agent_ws(websocket: WebSocket):
         return
 
     # Look up the user's agent VM and data protection level
-    vm, data_protection_level = _get_user_context(uid)
+    vm, data_protection_level = await run_blocking(db_executor, _get_user_context, uid)
     if not vm:
         logger.warning(f"[agent-proxy] WS rejected: uid={uid} no VM")
         await websocket.close(code=4002, reason="No agent VM available")
@@ -461,7 +523,7 @@ async def agent_ws(websocket: WebSocket):
     vm_uri = f"ws://{vm_ip}:8080/ws?token={vm_token}"
 
     # Get or create the default chat session so messages are linked properly
-    chat_session = await asyncio.to_thread(_get_or_create_chat_session, uid)
+    chat_session = await run_blocking(db_executor, _get_or_create_chat_session, uid)
     chat_session_id = chat_session['id']
 
     logger.info(f"[agent-proxy] uid={uid} connecting to vm={vm_ip}")
@@ -486,7 +548,7 @@ async def agent_ws(websocket: WebSocket):
             async def _save_ai_response(uid: str, text: str, session_id: str, protection_level: str) -> None:
                 """Fire-and-forget AI response save — never blocks event forwarding."""
                 try:
-                    await asyncio.to_thread(_save_message, uid, text, 'ai', session_id, protection_level)
+                    await run_blocking(db_executor, _save_message, uid, text, 'ai', session_id, protection_level)
                     logger.info(f"[agent-proxy] uid={uid} saved AI response ({len(text)} chars)")
                 except Exception as e:
                     logger.warning(f"[agent-proxy] uid={uid} failed to save AI response: {e}")
@@ -501,7 +563,7 @@ async def agent_ws(websocket: WebSocket):
                                 prompt = data.get('prompt', '')
                                 if not first_query_sent:
                                     # First query: fetch history and inject into prompt
-                                    history = await asyncio.to_thread(_fetch_chat_history, uid, chat_session_id)
+                                    history = await run_blocking(db_executor, _fetch_chat_history, uid, chat_session_id)
                                     data['prompt'] = _build_prompt_with_history(prompt, history)
                                     msg = json.dumps(data)
                                     first_query_sent = True
@@ -512,15 +574,17 @@ async def agent_ws(websocket: WebSocket):
                                     # Subsequent queries: Claude session already has context
                                     logger.info(f"[agent-proxy] uid={uid} follow-up query (session has context)")
                                 # Save user message in background — no need to block VM forwarding
-                                asyncio.create_task(
-                                    asyncio.to_thread(
+                                start_background_task(
+                                    run_blocking(
+                                        db_executor,
                                         _save_message,
                                         uid,
                                         prompt,
                                         'human',
                                         chat_session_id,
                                         data_protection_level,
-                                    )
+                                    ),
+                                    name=f"agent-proxy:{uid}:save-human-message",
                                 )
                         except (json.JSONDecodeError, Exception) as e:
                             logger.warning(f"[agent-proxy] failed to process message: {e}")
@@ -548,8 +612,9 @@ async def agent_ws(websocket: WebSocket):
                                 # Save per-query so each message gets its own history entry
                                 if response_text.strip():
                                     _text = response_text.strip()
-                                    asyncio.create_task(
-                                        _save_ai_response(uid, _text, chat_session_id, data_protection_level)
+                                    start_background_task(
+                                        _save_ai_response(uid, _text, chat_session_id, data_protection_level),
+                                        name=f"agent-proxy:{uid}:save-ai-message",
                                     )
                                 response_text = ''
                         except json.JSONDecodeError:
@@ -572,9 +637,9 @@ async def agent_ws(websocket: WebSocket):
                         except Exception:
                             pass
 
-            t1 = asyncio.create_task(phone_to_vm())
-            t2 = asyncio.create_task(vm_to_phone())
-            t3 = asyncio.create_task(keepalive_pinger())
+            t1 = asyncio.create_task(phone_to_vm(), name=f"ws:{uid}:phone_to_vm")
+            t2 = asyncio.create_task(vm_to_phone(), name=f"ws:{uid}:vm_to_phone")
+            t3 = asyncio.create_task(keepalive_pinger(), name=f"ws:{uid}:keepalive")
             _, pending = await asyncio.wait([t1, t2, t3], return_when=asyncio.FIRST_COMPLETED)
             for t in pending:
                 t.cancel()

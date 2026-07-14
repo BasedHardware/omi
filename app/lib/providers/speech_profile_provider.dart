@@ -222,19 +222,6 @@ class SpeechProfileProvider extends ChangeNotifier
     }
   }
 
-  _handleCompletion() async {
-    if (uploadingProfile || profileCompleted) return;
-    // Only count words from user segments, not Omi questions
-    String userText = segments.where((e) => e.speakerId != omiSpeakerId).map((e) => e.text).join(' ').trim();
-    int wordsCount = userText.split(' ').length;
-    percentageCompleted = (wordsCount / targetWordsCount).clamp(0, 1);
-    notifyListeners();
-    if (percentageCompleted == 1) {
-      await finalize();
-    }
-    notifyListeners();
-  }
-
   Future finalize() async {
     try {
       if (uploadingProfile || profileCompleted) return;

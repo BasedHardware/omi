@@ -5,6 +5,17 @@ description: Dashboard load and refresh via automation bridge
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  - desktop/macos/Desktop/Sources/AppState/AppState+DataLoading.swift
+  - desktop/macos/Desktop/Sources/Stores/DashboardTaskRefreshService.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/DashboardIntelligenceStore.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/WhatMattersNowSection.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationListView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/UserFacingErrorPresentation.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/DailyScoreWidget.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/FocusSummaryWidget.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/RecentConversationsWidget.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/TodaysTasksWidget.swift
+  - desktop/macos/Desktop/Sources/WhatsNewToast.swift
 preconditions:
   - automation_bridge_ready
 

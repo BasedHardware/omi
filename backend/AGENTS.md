@@ -94,6 +94,10 @@ backend/
                           #   - Bidirectional message pump with keepalive (120s)
                           #   - Chat history injection (last 10 messages on first query)
                           #   - Optional AES-256-GCM message encryption
+  nllb_translation/      # Subservice: self-hosted NLLB translation (separate Docker, GPU/CUDA)
+                          #   - POST /v1/translate — batch sentence translation (NLLB-200 + CTranslate2)
+                          #   - Prometheus metrics at /metrics, health at /health, readiness at /ready
+                          #   - Fallback to Google Cloud Translation V3 when NLLB is unavailable
   modal/                 # Serverless GPU services (deployed on Modal) + Cloud Run Jobs
                           #   - Speaker identification: matches segments to speech profiles (SpeechBrain, T4 GPU)
                           #   - VAD: voice activity detection (pyannote/voice-activity-detection)
@@ -114,6 +118,8 @@ database/  →  utils/  →  routers/  →  main.py
 ```
 
 Higher imports from lower, never reverse. Cross-importing between routers will break. Code paths are shared across backend, pusher, and diarizer — trace imports before assuming a change only affects one service.
+
+Runtime-selected providers must keep model-token parsing and required environment bindings in a pure `config/` module. Read mutable env at the call boundary rather than snapshotting it during import, and construct SDK clients lazily. For pre-recorded STT, `config/prerecorded_stt.py` is the single source of truth used by both `utils/stt/pre_recorded.py` and the deploy manifest validator; adding a provider or model token requires updating that contract and its runtime/deploy tests together.
 
 ## Database
 
@@ -138,9 +144,27 @@ bash test.sh             # Run all tests (CI source of truth)
 
 **Tests are selector-driven.** Local `test.sh` runs the full discovered set from `tests/unit/`, `tests/services/`, and `tests/routers/` via `scripts/select_backend_unit_tests.py`; CI uses the same selector but may run only a changed-file subset on PRs. Tests that need live services (Redis, Firebase, real API keys) go in `tests/integration/`, which is not part of selector auto-discovery; note in the PR how you ran them.
 
+**Released app-client compatibility** — `docs/api-reference/app-client-openapi.json` is a compatibility boundary, not only a generated snapshot. PR CI compares it directionally with the merge-base via `scripts/check_app_client_openapi_compatibility.py`: requests accepted by the released contract must remain accepted, and new responses must remain decodable by released clients. Additive optional request fields and response fields are allowed. Do not allowlist breaking changes; retain a deprecated boundary field/parameter or version the endpoint.
+
 **Test isolation / import purity** — never mutate `sys.modules` at module scope in tests; production modules must not construct clients or do IO at import time. Sanctioned seams: `monkeypatch.setattr` on a lazy-held singleton, FastAPI `app.dependency_overrides`. Enforced by `python scripts/check_module_stub_pollution.py` and `python scripts/scan_import_time_side_effects.py`. Full prescription: `backend/docs/test_isolation.md`.
 
 Pre-mock heavy deps before importing the module under test. Use `patch.object(target_module, "func")` not string-based `patch("module.func")` — the string form silently patches the wrong reference if the function was already imported. When modules construct objects at import time, use lazy getters to avoid triggering heavy init in tests.
+
+### Memory continuity gauntlet gates
+
+Do not confuse these gates — a green live gauntlet does **not** prove hermetic
+pipeline invariants, and hermetic tests do **not** prove deployed-backend continuity.
+
+| Gate | What it covers | What it does **not** cover |
+| --- | --- | --- |
+| **Hermetic pipeline E2E** (`testing/e2e/test_canonical_memory_pipeline.py`) | capture→consolidate→promote→read, archive excluded from default reads, surface default-access matrix, projection fail-closed without legacy bleed | Deployed revision identity, prod IAM/index deltas, live LLM consolidation |
+| **Gauntlet `--self-check`** | Required files, `canonical_memory_pipeline` workflow registration, suite/nonce wiring in `memory-continuity-gauntlet.py` | Any memory write or HTTP probe |
+| **Live gauntlet** (`memory-continuity-gauntlet.sh` with `ADMIN_KEY` + reachable backend) | Structural `/v3/memories` probes per suite on a running backend | Full Gate 2 synthetic matrix or Gate 3 prod activation |
+| **Gate 2 dev-cloud proof** (`v3_dev_cloud_proof.py` + deployed branch revision) | Multi-user synthetic matrix, indexes, IAM, auth, rollback on dev-cloud | Local hermetic fakes; not production activation |
+| **Gate 3 production proof** (`docs/rollout/memory-v3-proof-order.md`) | Prod-specific deltas after Gate 2 GO + independent review | Substitute for hermetic pipeline E2E or gauntlet self-check |
+
+CI runs `python3 backend/scripts/memory-continuity-gauntlet.py --self-check` only.
+Live suites record `NOT_RUN` when credentials/backend are unavailable — never fake `GO`.
 
 ## Self-Testing a Change (run the real path)
 
@@ -189,7 +213,9 @@ Never block the event loop — it freezes health checks, HPA scaling, and all co
     4. **Long-running coordinators need async orchestration or sized pools.** If a coordinator holds a thread pool slot for >10s, it must either use async coordination (`asyncio.create_task` + `await run_blocking(...)`) or run on a pool sized for `hold_time × peak_concurrency`. Prefer async coordination for any coordinator with hold time >60s — thread slots occupied by sleeping coordinators waste memory and starve other work.
   - **Audit command:** `grep -rn '\.result()' --include="*.py" | grep -v tests/ | grep -v __pycache__` — every hit must be a leaf operation or a coordinator on a different pool from its children.
   - **Pool observability:** `get_executor_metrics()` returns active count, queue depth, and utilization % for all pools. `log_executor_health()` runs every 60s, warns when any pool exceeds 70% utilization. Wired in `main.py` startup event.
-- **Lane 3 — Lint**: `python scripts/scan_async_blockers.py --dirs routers utils` catches blocking calls in async routes and helpers. Run from `backend/` before committing. From the repository root, use `python backend/scripts/scan_async_blockers.py --dirs backend/routers backend/utils`.
+- **Lane 3 — Lint**: `python scripts/scan_async_blockers.py --dirs routers utils` catches blocking calls in async routes and helpers.
+  The scanner follows direct calls through module-local sync helpers transitively, so moving blocking I/O behind a wrapper is not an escape; offload the helper at the async boundary with `run_blocking`.
+  Run from `backend/` before committing. From the repository root, use `python backend/scripts/scan_async_blockers.py --dirs backend/routers backend/utils`.
 - **Shutdown**: `close_all_clients()` + `shutdown_executors()` wired in `main.py` and `pusher/main.py`.
 
 ## WebSocket Concurrency (Long-Lived Connections)

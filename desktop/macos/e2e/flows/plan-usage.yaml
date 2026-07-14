@@ -1,0 +1,36 @@
+version: 2
+name: plan-usage
+tier: 2
+description: Hermetic Settings billing subscription snapshot on offline stack
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+AccountBilling.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+BillingHelpers.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/BillingWebFlow.swift
+  - desktop/macos/Desktop/Sources/UsageLimitPopupView.swift
+  - desktop/macos/Desktop/Sources/TrialBannerService.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Open Settings Account section
+    bridge.navigate:
+      target: settings
+      settingsSection: Account
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Account
+
+  - id: S2
+    name: Subscription snapshot
+    bridge.action:
+      name: subscription_snapshot
+    expect:
+      ok: true
+
+  - id: S3
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

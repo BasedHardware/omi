@@ -1,18 +1,40 @@
-# Sync dispatch — Cloud Tasks fallback
+# Sync dispatch — enqueue uncertainty and deliberate inline modes
 
-**What it means:** Sync v2 jobs are not running via Cloud Tasks and are falling back to inline processing on the API instance.
+**What it means:** A sync v2 upload normally uses a deterministic Cloud Tasks
+task. An `enqueue_uncertain` event means the create-task acknowledgement was
+lost after two same-name attempts; the task may already exist, so the service
+returns a pollable `queued` job while preserving staged GCS audio and the
+content claim. It does not start an inline worker.
 
-**Reasons (instrumentation in `sync.py`; metrics emitted on Cloud Run `backend-sync`):**
-- `enqueue_failed` — Cloud Tasks enqueue or GCS staging failed.
-- `byok` — expected; BYOK keys cannot follow a Cloud Task. Not actionable.
-- `dispatch_disabled` — `SYNC_DISPATCH_MODE` is not `cloud_tasks`. Not actionable in prod.
+**Signals (emitted by `sync.py` on Cloud Run `backend-sync`):**
 
-**Prometheus scrape gap:** Metric definitions and emit sites live in-repo (`utils/metrics.py` + `routers/sync.py` on Cloud Run `backend-sync`), but GKE Prometheus only scrapes `backend-listen` and `pusher`. The Grafana sync panel and the PAGE alert for enqueue_failed share are **paused** until Cloud Run custom metrics are exported into Prometheus.
+- `event=sync_dispatch outcome=enqueue_uncertain` — actionable hard delivery
+  uncertainty. Inspect Cloud Tasks using the job ID from the correlated request
+  log before deleting or re-enqueueing anything.
+- `omi_sync_dispatch_attempts_total{mode="enqueue_uncertain"}` — bounded
+  counter for the same condition. Divide by all dispatch attempts for a rate.
+- `omi_fallback_event component=sync_dispatch reason=byok|dispatch_disabled`
+  — intentional inline modes, not an enqueue failure. BYOK cannot cross a
+  task boundary; an explicitly disabled queue is configuration-controlled.
 
-**Operator signal (until scrape exists):** Cloud Logging on `backend-sync` for structured events matching `omi_fallback_event component=sync_dispatch reason=enqueue_failed` (and `reason=byok` / `dispatch_disabled` for context).
+**Prometheus scrape gap:** Metric definitions and emit sites live in-repo
+(`utils/metrics.py` + `routers/sync.py` on Cloud Run `backend-sync`), but GKE
+Prometheus does not currently scrape this Cloud Run service. The Grafana panel
+and alert are therefore advisory until the source-only monitoring contract in
+[#9587](https://github.com/BasedHardware/omi/issues/9587) enables verified
+delivery. Until then, use the structured Cloud Logging event above.
 
-**PromQL (when scrape exists):** `sum(rate(omi_fallback_total{component="sync_dispatch",reason="enqueue_failed"}[10m])) / clamp_min(sum(rate(omi_sync_dispatch_attempts_total[10m])), 1e-9)`
+**PromQL (when scrape exists):**
+`sum(rate(omi_sync_dispatch_attempts_total{mode="enqueue_uncertain"}[10m])) / clamp_min(sum(rate(omi_sync_dispatch_attempts_total[10m])), 1e-9)`
+
+**First checks:** Cloud Tasks queue depth/errors and the deterministic task
+name; GCS staging permissions and object presence; `SYNC_TASKS_*` runtime
+configuration; then whether the job reaches a terminal state. Do not release
+the content claim or unstage blobs while the task outcome is uncertain.
+
+**Recovery boundary:** If staging fails *before* enqueue, the service safely
+removes partial blobs, terminalizes the job, and returns 503 so the client WAL
+can retry. If acknowledgement remains uncertain after staging, the client keeps
+its WAL and polls; a missing/expired job restores normal re-upload recovery.
 
 **Owner:** backend-sync team.
-
-**First checks:** Cloud Tasks queue depth/errors, GCS staging permissions, `SYNC_TASKS_*` env on backend-sync.

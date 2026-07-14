@@ -11,15 +11,21 @@ final class OmiDeviceConnection: BaseDeviceConnection {
 
     // MARK: - Initialization
 
-    override init(device: BtDevice, transport: DeviceTransport) {
-        super.init(device: device, transport: transport)
+    override init(
+        device: BtDevice,
+        transport: DeviceTransport,
+        operationClock: any DeviceOperationClock = ContinuousDeviceOperationClock()
+    ) {
+        super.init(
+            device: device,
+            transport: transport,
+            operationClock: operationClock
+        )
     }
 
     // MARK: - Connection
 
-    override func connect() async throws {
-        try await super.connect()
-
+    override func prepareDeviceAfterConnect() async throws {
         // Check if this is an OpenGlass device (has image streaming)
         if await hasPhotoStreaming() && device.type == .omi {
             device.type = .openglass
@@ -103,7 +109,7 @@ final class OmiDeviceConnection: BaseDeviceConnection {
         )
 
         return AsyncThrowingStream { continuation in
-            Task { [weak self] in
+            let forwardingTask = Task { [weak self] in
                 guard let self = self else {
                     continuation.finish()
                     return
@@ -196,6 +202,9 @@ final class OmiDeviceConnection: BaseDeviceConnection {
                 } catch {
                     continuation.finish(throwing: error)
                 }
+            }
+            continuation.onTermination = { @Sendable _ in
+                forwardingTask.cancel()
             }
         }
     }
@@ -325,31 +334,13 @@ final class OmiDeviceConnection: BaseDeviceConnection {
                 withResponse: true
             )
 
-            // Wait for response with timeout (5 seconds)
-            let timeoutTask = Task {
-                try await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
-                return WifiSyncSetupResult.timeout()
-            }
-
-            let responseTask = Task { () -> WifiSyncSetupResult in
-                for try await data in responseStream {
-                    if !data.isEmpty {
-                        let responseCode = WifiSyncErrorCode.from(code: Int(data[0]))
-                        if responseCode.isSuccess {
-                            return .success()
-                        } else {
-                            return .failure(responseCode)
-                        }
-                    }
-                }
-                return .timeout()
-            }
-
-            // Race between timeout and response
-            let result = await withTaskGroup(of: WifiSyncSetupResult.self) { group in
+            // Race the response and timeout as structured child tasks so the
+            // losing stream/sleep is cancelled with the scope.
+            return await withTaskGroup(of: WifiSyncSetupResult.self) { [operationClock] group in
                 group.addTask {
                     do {
-                        return try await timeoutTask.value
+                        try await operationClock.sleep(for: .seconds(5))
+                        return .timeout()
                     } catch {
                         return .timeout()
                     }
@@ -357,22 +348,24 @@ final class OmiDeviceConnection: BaseDeviceConnection {
 
                 group.addTask {
                     do {
-                        return try await responseTask.value
+                        for try await data in responseStream {
+                            if !data.isEmpty {
+                                let responseCode = WifiSyncErrorCode.from(code: Int(data[0]))
+                                return responseCode.isSuccess
+                                    ? .success()
+                                    : .failure(responseCode)
+                            }
+                        }
+                        return .timeout()
                     } catch {
                         return .connectionFailed()
                     }
                 }
 
-                // Return the first completed result
                 let firstResult = await group.next() ?? .timeout()
-
-                // Cancel remaining tasks
                 group.cancelAll()
-
                 return firstResult
             }
-
-            return result
 
         } catch {
             logger.error("Failed to setup WiFi sync: \(error.localizedDescription)")
@@ -424,7 +417,7 @@ final class OmiDeviceConnection: BaseDeviceConnection {
         )
 
         return AsyncThrowingStream { continuation in
-            Task {
+            let forwardingTask = Task {
                 do {
                     for try await data in stream {
                         if !data.isEmpty {
@@ -435,6 +428,9 @@ final class OmiDeviceConnection: BaseDeviceConnection {
                 } catch {
                     continuation.finish(throwing: error)
                 }
+            }
+            continuation.onTermination = { @Sendable _ in
+                forwardingTask.cancel()
             }
         }
     }

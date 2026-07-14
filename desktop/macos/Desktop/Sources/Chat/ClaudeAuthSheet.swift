@@ -13,14 +13,14 @@ struct ClaudeAuthSheet: View {
             // Header
             HStack {
                 Text("Upgrade to Omi Pro")
-                    .scaledFont(size: 18, weight: .semibold)
+                    .scaledFont(size: OmiType.heading, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
 
                 Button(action: onCancel) {
                     Image(systemName: "xmark")
-                        .scaledFont(size: 14, weight: .medium)
+                        .scaledFont(size: OmiType.body, weight: .medium)
                         .foregroundColor(OmiColors.textTertiary)
                         .frame(width: 28, height: 28)
                         .background(OmiColors.backgroundTertiary.opacity(0.5))
@@ -28,85 +28,85 @@ struct ClaudeAuthSheet: View {
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 20)
-            .padding(.bottom, 16)
+            .padding(.horizontal, OmiSpacing.xxl)
+            .padding(.top, OmiSpacing.xl)
+            .padding(.bottom, OmiSpacing.lg)
 
             Divider()
                 .foregroundColor(OmiColors.border)
 
             // Content
-            VStack(spacing: 20) {
+            VStack(spacing: OmiSpacing.xl) {
                 // Icon
                 Image(systemName: "crown")
-                    .scaledFont(size: 40)
+                    .scaledFont(size: OmiType.hero)
                     .foregroundColor(OmiColors.textSecondary)
-                    .padding(.top, 8)
+                    .padding(.top, OmiSpacing.sm)
 
                 // Description
-                VStack(spacing: 8) {
+                VStack(spacing: OmiSpacing.sm) {
                     Text("Unlock Omi Pro for $199/month")
-                        .scaledFont(size: 15, weight: .medium)
+                        .scaledFont(size: OmiType.subheading, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
                         .multilineTextAlignment(.center)
 
                     Text("Your browser will open to the Omi Pro checkout. After subscribing, return to omi.")
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(OmiColors.textTertiary)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, OmiSpacing.xl)
 
                 if isConnecting {
-                    VStack(spacing: 12) {
+                    VStack(spacing: OmiSpacing.md) {
                         ProgressView()
                             .controlSize(.small)
 
                         Text("Complete sign-in in your browser...")
-                            .scaledFont(size: 13)
+                            .scaledFont(size: OmiType.body)
                             .foregroundColor(OmiColors.textTertiary)
                     }
-                    .padding(.top, 4)
+                    .padding(.top, OmiSpacing.xxs)
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 16)
+            .padding(.horizontal, OmiSpacing.xxl)
+            .padding(.vertical, OmiSpacing.lg)
 
             Spacer()
 
             // Actions
-            VStack(spacing: 12) {
+            VStack(spacing: OmiSpacing.md) {
                 Button(action: {
                     isConnecting = true
                     onConnect()
                 }) {
-                    HStack(spacing: 8) {
+                    HStack(spacing: OmiSpacing.sm) {
                         if isConnecting {
                             ProgressView()
                                 .controlSize(.mini)
                         }
                         Text(isConnecting ? "Opening checkout..." : "Upgrade to Omi Pro")
-                            .scaledFont(size: 14, weight: .semibold)
+                            .scaledFont(size: OmiType.body, weight: .semibold)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
+                    .padding(.vertical, OmiSpacing.sm)
                     .background(isConnecting ? OmiColors.backgroundTertiary : Color.accentColor)
-                    .foregroundColor(isConnecting ? OmiColors.textSecondary : .white)
-                    .cornerRadius(8)
+                    .foregroundColor(isConnecting ? OmiColors.textSecondary : OmiColors.backgroundPrimary)
+                    .cornerRadius(OmiChrome.elementRadius)
                 }
                 .buttonStyle(.plain)
                 .disabled(isConnecting)
 
                 Button(action: onCancel) {
                     Text("Cancel")
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 20)
+            .padding(.horizontal, OmiSpacing.xxl)
+            .padding(.bottom, OmiSpacing.xl)
         }
         .frame(width: 400, height: 380)
         .background(OmiColors.backgroundPrimary)

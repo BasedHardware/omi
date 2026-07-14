@@ -1,6 +1,7 @@
 import AppKit
 import ObjCExceptionCatcher
 import SwiftUI
+import OmiTheme
 
 // MARK: - View Exporter
 // Run with: --export-views /path/to/output/dir
@@ -222,9 +223,9 @@ enum ViewExporter {
             .foregroundColor(.white)
           Spacer()
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 20)
-        .padding(.bottom, 16)
+        .padding(.horizontal, OmiSpacing.lg)
+        .padding(.top, OmiSpacing.xl)
+        .padding(.bottom, OmiSpacing.lg)
 
         // Main nav items
         ForEach(items, id: \.2) { item in
@@ -235,13 +236,13 @@ enum ViewExporter {
 
         Divider()
           .background(Color.white.opacity(0.1))
-          .padding(.horizontal, 12)
+          .padding(.horizontal, OmiSpacing.md)
 
         // Bottom items
         ForEach(bottomItems, id: \.2) { item in
           sidebarRow(title: item.0, icon: item.1, index: item.2)
         }
-        .padding(.bottom, 12)
+        .padding(.bottom, OmiSpacing.md)
       }
       .frame(width: 220)
       .background(Color(nsColor: NSColor(red: 0.07, green: 0.07, blue: 0.07, alpha: 1)))
@@ -249,7 +250,7 @@ enum ViewExporter {
 
     private func sidebarRow(title: String, icon: String, index: Int) -> some View {
       let isSelected = index == selectedIndex
-      return HStack(spacing: 10) {
+      return HStack(spacing: OmiSpacing.sm) {
         Image(systemName: icon)
           .font(.system(size: 14))
           .foregroundColor(isSelected ? .white : .white.opacity(0.5))
@@ -259,12 +260,12 @@ enum ViewExporter {
           .foregroundColor(isSelected ? .white : .white.opacity(0.5))
         Spacer()
       }
-      .padding(.horizontal, 16)
-      .padding(.vertical, 8)
+      .padding(.horizontal, OmiSpacing.lg)
+      .padding(.vertical, OmiSpacing.sm)
       .background(
-        RoundedRectangle(cornerRadius: 8)
+        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
           .fill(isSelected ? Color.white.opacity(0.1) : Color.clear)
-          .padding(.horizontal, 8)
+          .padding(.horizontal, OmiSpacing.sm)
       )
     }
   }
@@ -289,7 +290,7 @@ enum ViewExporter {
         "full-ai-chat", 2,
         { AnyView(ChatPage(appProvider: AppProvider(), chatProvider: previewChatProvider())) }
       ),
-      ("full-memories", 3, { AnyView(MemoriesPage(viewModel: previewMemoriesViewModel())) }),
+      ("full-memories", 3, { AnyView(MemoriesPage(viewModel: previewMemoriesViewModel(), graphViewModel: MemoryGraphViewModel())) }),
       (
         "full-tasks", 4,
         {
@@ -324,20 +325,20 @@ enum ViewExporter {
     let fullView = AnyView(
       HStack(spacing: 0) {
         ZStack {
-          RoundedRectangle(cornerRadius: 16)
+          RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
             .fill(
               Color(nsColor: NSColor(red: 0.09, green: 0.09, blue: 0.09, alpha: 1)).opacity(0.4)
             )
             .overlay(
-              RoundedRectangle(cornerRadius: 16)
+              RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
                 .stroke(
                   Color(nsColor: NSColor(red: 0.15, green: 0.15, blue: 0.15, alpha: 1)).opacity(
                     0.3), lineWidth: 1)
             )
           pageContent
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius))
         }
-        .padding(12)
+        .padding(OmiSpacing.md)
       }
     )
 
@@ -635,33 +636,33 @@ enum ViewExporter {
     hostingView.layoutSubtreeIfNeeded()
 
     var success = false
-    do {
-      try ObjCExceptionCatcher.catching {
-        // Export PNG
-        guard let bitmapRep = hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds)
-        else {
-          NSLog("ViewExporter: SKIP \(name) - no bitmap")
-          return
-        }
-        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmapRep)
-
-        if let pngData = bitmapRep.representation(using: .png, properties: [:]) {
-          let pngPath = "\(dir)/\(name).png"
-          try? pngData.write(to: URL(fileURLWithPath: pngPath))
-          let kb = pngData.count / 1024
-          NSLog("ViewExporter: \(name).png (\(Int(size.width))x\(Int(size.height))) \(kb)KB")
-        }
-
-        // Export PDF (vector data preserved for SVG conversion)
-        let pdfData = hostingView.dataWithPDF(inside: hostingView.bounds)
-        let pdfPath = "\(dir)/\(name).pdf"
-        try? pdfData.write(to: URL(fileURLWithPath: pdfPath))
-        NSLog("ViewExporter: \(name).pdf (\(pdfData.count / 1024)KB)")
-
-        success = true
+    let exception = ObjCExceptionCatcher.catching {
+      // Export PNG
+      guard let bitmapRep = hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds)
+      else {
+        NSLog("ViewExporter: SKIP \(name) - no bitmap")
+        return
       }
-    } catch {
-      NSLog("ViewExporter: SKIP \(name) - \(error.localizedDescription)")
+      hostingView.cacheDisplay(in: hostingView.bounds, to: bitmapRep)
+
+      if let pngData = bitmapRep.representation(using: .png, properties: [:]) {
+        let pngPath = "\(dir)/\(name).png"
+        try? pngData.write(to: URL(fileURLWithPath: pngPath))
+        let kb = pngData.count / 1024
+        NSLog("ViewExporter: \(name).png (\(Int(size.width))x\(Int(size.height))) \(kb)KB")
+      }
+
+      // Export PDF (vector data preserved for SVG conversion)
+      let pdfData = hostingView.dataWithPDF(inside: hostingView.bounds)
+      let pdfPath = "\(dir)/\(name).pdf"
+      try? pdfData.write(to: URL(fileURLWithPath: pdfPath))
+      NSLog("ViewExporter: \(name).pdf (\(pdfData.count / 1024)KB)")
+
+      success = true
+    }
+    if let exception {
+      NSLog("ViewExporter: SKIP \(name) - \(exception.name.rawValue): \(exception.reason ?? "unknown")")
+      success = false
     }
 
     window.orderOut(nil)

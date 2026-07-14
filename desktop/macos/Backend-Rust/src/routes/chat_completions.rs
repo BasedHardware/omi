@@ -23,10 +23,40 @@ use crate::models::chat_completions::*;
 use crate::AppState;
 
 use super::llm_stub::{llm_stub_enabled, stub_chat_completions_response};
-use super::rate_limit::RateDecision;
+use super::rate_limit::{requires_server_metering, RateDecision};
+use super::retrieval_policy::{
+    caller_disabled_tools, prepend_latest_user_instruction, retrieval_policy, RetrievalSource,
+    REQUIRED_WEB_SEARCH_INSTRUCTION,
+};
 
 fn response_or_500(builder: axum::http::response::Builder, body: Body) -> Response {
     crate::routes::response_or_500("chat_completions", builder, body)
+}
+
+fn chat_metering_response(decision: &RateDecision) -> Option<Response> {
+    match decision {
+        RateDecision::Reject => Some(response_or_500(
+            Response::builder()
+                .status(StatusCode::TOO_MANY_REQUESTS)
+                .header("content-type", "application/json")
+                .header("retry-after", "60"),
+            Body::from(
+                json!({"error": {"message": "Rate limit exceeded", "type": "rate_limit_error", "code": 429}})
+                    .to_string(),
+            ),
+        )),
+        RateDecision::Unavailable => Some(response_or_500(
+            Response::builder()
+                .status(StatusCode::SERVICE_UNAVAILABLE)
+                .header("content-type", "application/json")
+                .header("retry-after", "5"),
+            Body::from(
+                json!({"error": {"message": "Chat metering is temporarily unavailable", "type": "metering_unavailable", "code": 503}})
+                    .to_string(),
+            ),
+        )),
+        RateDecision::Allow | RateDecision::DegradeToFlash => None,
+    }
 }
 
 /// Default max_tokens when client doesn't specify one.
@@ -132,6 +162,7 @@ fn compute_cost(usage: &AnthropicUsage, upstream_model: &str) -> f64 {
 
 // ── OpenAI → Anthropic request translation ──────────────────────────────────
 
+#[cfg(test)]
 fn translate_request(
     req: &ChatCompletionRequest,
     upstream_model: &str,
@@ -144,6 +175,7 @@ fn translate_request_inner(
     upstream_model: &str,
     enable_web_search: bool,
 ) -> Result<AnthropicRequest, String> {
+    let policy = retrieval_policy(&req.messages);
     let mut system_prompt: Option<String> = None;
     let mut anthropic_messages: Vec<AnthropicMessage> = Vec::new();
 
@@ -225,21 +257,31 @@ fn translate_request_inner(
         }
     }
 
-    // Translate tools. Agentic requests (which carry client tools) also get
-    // Anthropic's server-side web_search tool injected ahead of them —
-    // restoring the web access desktop chat lost when the default harness
-    // moved off Claude Code (whose built-in WebSearch it inherited). Bare
-    // completions like the pill router classifier stay tool-free. Prepending
-    // keeps the tools array byte-stable for the prompt-cache prefix.
+    // Translate tools. A turn that requires fresh public information gets
+    // Anthropic's server-side web_search tool. Keeping this scoped to the
+    // retrieval policy means normal agentic turns retain their incremental
+    // OpenAI streaming behavior; public-web turns use the gateway's bounded
+    // pause-turn continuation below.
     // Haiku is excluded: web_search_20260209 is not supported there, and a
     // tools-bearing haiku request would 400 with it attached.
-    let inject_web_search = enable_web_search && !upstream_model.starts_with("claude-haiku");
-    let anthropic_tools = req.tools.as_ref().map(|tools| {
-        let mut defs: Vec<AnthropicToolDef> = Vec::with_capacity(tools.len() + 1);
-        if inject_web_search && !tools.is_empty() {
+    let web_search_supported = enable_web_search && !upstream_model.starts_with("claude-haiku");
+    let force_web_search =
+        policy.requires(RetrievalSource::PublicWeb) && !caller_disabled_tools(req);
+    if force_web_search && !web_search_supported {
+        return Err(
+            "required public web search is unavailable for this model or deployment".to_string(),
+        );
+    }
+    let client_tools = req.tools.as_deref().unwrap_or(&[]);
+    let inject_web_search = web_search_supported && force_web_search;
+    let anthropic_tools = if client_tools.is_empty() && !inject_web_search {
+        req.tools.as_ref().map(|_| Vec::new())
+    } else {
+        let mut defs: Vec<AnthropicToolDef> = Vec::with_capacity(client_tools.len() + 1);
+        if inject_web_search {
             defs.push(web_search_tool_def());
         }
-        defs.extend(tools.iter().map(|t| {
+        defs.extend(client_tools.iter().map(|t| {
             AnthropicToolDef::Custom(AnthropicTool {
                 name: t.function.name.clone(),
                 description: t.function.description.clone(),
@@ -250,8 +292,23 @@ fn translate_request_inner(
                     .unwrap_or(json!({"type": "object", "properties": {}})),
             })
         }));
-        defs
-    });
+        Some(defs)
+    };
+
+    if force_web_search {
+        prepend_latest_user_instruction(&mut anthropic_messages, REQUIRED_WEB_SEARCH_INSTRUCTION);
+    }
+
+    tracing::info!(
+        event = "retrieval_policy",
+        required_web = policy.requires(RetrievalSource::PublicWeb),
+        required_private = policy.requires(RetrievalSource::OmiPrivate),
+        prohibited_web = policy.prohibits(RetrievalSource::PublicWeb),
+        reason = policy.reason(),
+        web_search_exposed = inject_web_search,
+        web_search_forced = force_web_search,
+        "chat_retrieval_policy"
+    );
 
     let max_tokens = req
         .max_completion_tokens
@@ -261,12 +318,20 @@ fn translate_request_inner(
 
     // Translate tool_choice from OpenAI format to Anthropic format.
     // When tool_choice is "none", strip tools entirely — Anthropic has no "none"
-    // and would auto-use tools if they're present in the request.
+    // and would auto-use tools if they're present in the request. A required
+    // public lookup must stay `auto`: Anthropic's server-side web_search tool
+    // cannot be selected as a direct named tool choice. The instruction above
+    // still requires the lookup, while `auto` lets Anthropic execute it through
+    // its supported server-tool path.
     let is_tool_choice_none = matches!(
         &req.tool_choice,
         Some(serde_json::Value::String(s)) if s == "none"
     );
-    let anthropic_tool_choice = translate_tool_choice(&req.tool_choice)?;
+    let anthropic_tool_choice = if force_web_search {
+        Some(json!({"type": "auto"}))
+    } else {
+        translate_tool_choice(&req.tool_choice)?
+    };
 
     // ── Prompt caching ──────────────────────────────────────────────────────
     // Breakpoint 1: emit the system prompt as a content block carrying an
@@ -312,6 +377,7 @@ fn translate_request_inner(
             anthropic_tools
         },
         tool_choice: anthropic_tool_choice,
+        requires_public_web: force_web_search,
     })
 }
 
@@ -583,6 +649,22 @@ fn sse_line(data: &serde_json::Value) -> Bytes {
     Bytes::from(format!("data: {}\n\n", json_str))
 }
 
+/// Pull every complete SSE event block out of the raw byte buffer, leaving any
+/// trailing partial event behind.
+///
+/// The buffer must stay bytes: network chunks split at arbitrary offsets, so
+/// decoding a chunk before it is framed destroys any multi-byte character that
+/// straddles the boundary. Event blocks always end on the ASCII "\n\n", so a
+/// complete block is safe to decode.
+fn drain_sse_events(buffer: &mut Vec<u8>) -> Vec<String> {
+    let mut events = Vec::new();
+    while let Some(event_end) = buffer.windows(2).position(|w| w == b"\n\n") {
+        events.push(String::from_utf8_lossy(&buffer[..event_end]).into_owned());
+        buffer.drain(..event_end + 2);
+    }
+    events
+}
+
 fn make_chunk(
     id: &str,
     created: i64,
@@ -631,6 +713,37 @@ async fn chat_completions(
         StatusCode::BAD_REQUEST
     })?;
 
+    let web_search_enabled = web_search_enabled();
+    let policy = retrieval_policy(&req.messages);
+    if policy.requires(RetrievalSource::PublicWeb)
+        && !caller_disabled_tools(&req)
+        && (!web_search_enabled || route.upstream_model.starts_with("claude-haiku"))
+    {
+        tracing::warn!(
+            event = "retrieval_policy",
+            required_web = true,
+            reason = policy.reason(),
+            web_search_exposed = false,
+            web_search_forced = false,
+            "required public web search is unavailable"
+        );
+        return Ok(response_or_500(
+            Response::builder()
+                .status(StatusCode::SERVICE_UNAVAILABLE)
+                .header("content-type", "application/json"),
+            Body::from(
+                json!({
+                    "error": {
+                        "message": "Public web search is temporarily unavailable. Please try again.",
+                        "type": "web_search_unavailable",
+                        "code": 503
+                    }
+                })
+                .to_string(),
+            ),
+        ));
+    }
+
     // BYOK: check for user-provided Anthropic API key (issue #7357).
     // When present, use the user's key and skip server-key rate limiting.
     let byok_anthropic_key =
@@ -641,22 +754,13 @@ async fn chat_completions(
     // burst of proactive/vision Gemini calls can never 429 a user's chat. The chat
     // limiter only trips on a pathological per-minute burst (runaway client), which
     // a human typing never reaches. Skipped entirely when using a BYOK key.
-    if !is_byok {
+    if requires_server_metering(is_byok) {
         let decision = state
             .chat_rate_limiter
             .check_and_record(&user.uid, state.redis.as_ref())
             .await;
-        if decision == RateDecision::Reject {
-            return Ok(response_or_500(
-                Response::builder()
-                    .status(StatusCode::TOO_MANY_REQUESTS)
-                    .header("content-type", "application/json")
-                    .header("retry-after", "60"),
-                Body::from(
-                    json!({"error": {"message": "Rate limit exceeded", "type": "rate_limit_error", "code": 429}})
-                        .to_string(),
-                ),
-            ));
+        if let Some(response) = chat_metering_response(&decision) {
+            return Ok(response);
         }
     }
 
@@ -668,24 +772,23 @@ async fn chat_completions(
         );
         byok_key.to_string()
     } else {
-        match route.provider {
-            Provider::Anthropic => state
-                .config
-                .anthropic_api_key
-                .as_ref()
-                .ok_or_else(|| {
-                    tracing::error!("chat_completions: ANTHROPIC_API_KEY not configured");
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?
-                .clone(),
-        }
+        state
+            .config
+            .anthropic_api_key
+            .as_ref()
+            .ok_or_else(|| {
+                tracing::error!("chat_completions: ANTHROPIC_API_KEY not configured");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
+            .clone()
     };
 
     // Translate request
-    let anthropic_req = translate_request(&req, route.upstream_model).map_err(|e| {
-        tracing::warn!("chat_completions: request translation error: {}", e);
-        StatusCode::BAD_REQUEST
-    })?;
+    let anthropic_req = translate_request_inner(&req, route.upstream_model, web_search_enabled)
+        .map_err(|e| {
+            tracing::warn!("chat_completions: request translation error: {}", e);
+            StatusCode::BAD_REQUEST
+        })?;
 
     // Bound connection establishment so a network blip can't hang the request; the
     // total-response timeout is applied per-call (non-streaming only) inside the retry
@@ -695,7 +798,18 @@ async fn chat_completions(
         .build()
         .unwrap_or_default();
 
-    if req.stream {
+    if req.stream && anthropic_req.requires_public_web {
+        handle_server_tool_streaming(
+            &client,
+            &api_key,
+            &anthropic_req,
+            route,
+            &user,
+            &state,
+            is_byok,
+        )
+        .await
+    } else if req.stream {
         handle_streaming(
             &client,
             &api_key,
@@ -722,6 +836,12 @@ async fn chat_completions(
 
 /// Max attempts for the INITIAL Anthropic request (1 try + 2 retries).
 const ANTHROPIC_MAX_ATTEMPTS: usize = 3;
+
+/// Anthropic can pause a long-running server-tool turn (for example, web
+/// search) and asks callers to resend the complete paused assistant content.
+/// Bound internal continuations so an unhealthy upstream cannot hold a client
+/// request indefinitely.
+const ANTHROPIC_MAX_PAUSE_TURN_CONTINUATIONS: usize = 3;
 
 /// Upstream HTTP statuses worth retrying — transient overload/availability blips.
 /// Note: 4xx like 400/401/402 are caller/auth errors and must NOT be retried.
@@ -791,6 +911,140 @@ async fn send_anthropic_with_retry(
     Err(StatusCode::BAD_GATEWAY)
 }
 
+struct ParsedAnthropicResponse {
+    response: AnthropicResponse,
+    /// Keep the provider's content blocks verbatim for pause-turn
+    /// continuation. The typed response intentionally drops fields that are
+    /// irrelevant to OpenAI translation (such as citations), but Anthropic
+    /// requires the original assistant content on the next request.
+    raw_content: serde_json::Value,
+}
+
+async fn receive_anthropic_response(
+    client: &reqwest::Client,
+    api_key: &str,
+    anthropic_req: &AnthropicRequest,
+) -> Result<ParsedAnthropicResponse, StatusCode> {
+    let upstream_resp = send_anthropic_with_retry(client, api_key, anthropic_req, false).await?;
+    let status = upstream_resp.status();
+    if !status.is_success() {
+        let body = upstream_resp.text().await.unwrap_or_default();
+        tracing::warn!(
+            "chat_completions: Anthropic continuation returned {}: {}",
+            status,
+            &body[..body.len().min(500)]
+        );
+        return Err(StatusCode::BAD_GATEWAY);
+    }
+
+    let raw_response: serde_json::Value = upstream_resp.json().await.map_err(|e| {
+        tracing::error!(
+            "chat_completions: failed to parse Anthropic continuation response: {}",
+            e
+        );
+        StatusCode::BAD_GATEWAY
+    })?;
+    let raw_content = raw_response
+        .get("content")
+        .cloned()
+        .filter(|content| content.is_array())
+        .ok_or_else(|| {
+            tracing::error!("chat_completions: Anthropic response omitted content blocks");
+            StatusCode::BAD_GATEWAY
+        })?;
+    let response = serde_json::from_value(raw_response).map_err(|e| {
+        tracing::error!(
+            "chat_completions: failed to decode Anthropic continuation response: {}",
+            e
+        );
+        StatusCode::BAD_GATEWAY
+    })?;
+
+    Ok(ParsedAnthropicResponse {
+        response,
+        raw_content,
+    })
+}
+
+fn accumulate_anthropic_usage(total: &mut AnthropicUsage, usage: &AnthropicUsage) {
+    total.input_tokens += usage.input_tokens;
+    total.output_tokens += usage.output_tokens;
+    total.cache_creation_input_tokens += usage.cache_creation_input_tokens;
+    total.cache_read_input_tokens += usage.cache_read_input_tokens;
+
+    let current_web_searches = total
+        .server_tool_use
+        .as_ref()
+        .map(|tool_use| tool_use.web_search_requests)
+        .unwrap_or_default();
+    let next_web_searches = usage
+        .server_tool_use
+        .as_ref()
+        .map(|tool_use| tool_use.web_search_requests)
+        .unwrap_or_default();
+    if total.server_tool_use.is_some() || usage.server_tool_use.is_some() {
+        total.server_tool_use = Some(AnthropicServerToolUsage {
+            web_search_requests: current_web_searches + next_web_searches,
+        });
+    }
+}
+
+fn append_pause_turn_continuation(
+    anthropic_req: &mut AnthropicRequest,
+    paused_assistant_content: serde_json::Value,
+) {
+    anthropic_req.messages.push(AnthropicMessage {
+        role: "assistant".to_string(),
+        content: paused_assistant_content,
+    });
+}
+
+/// Complete an Anthropic server-tool turn, including bounded `pause_turn`
+/// continuations. This stays gateway-owned: OpenAI clients never receive
+/// Anthropic's server-tool blocks, but Anthropic receives them unchanged on
+/// each continuation as its API requires.
+async fn complete_anthropic_server_tool_turn(
+    client: &reqwest::Client,
+    api_key: &str,
+    anthropic_req: &AnthropicRequest,
+) -> Result<AnthropicResponse, StatusCode> {
+    let mut continuation_request = anthropic_req.clone();
+    continuation_request.stream = false;
+    let mut continuation_count = 0usize;
+    let mut aggregate_content = Vec::new();
+    let mut aggregate_usage = AnthropicUsage::default();
+
+    loop {
+        let ParsedAnthropicResponse {
+            mut response,
+            raw_content,
+        } = receive_anthropic_response(client, api_key, &continuation_request).await?;
+        aggregate_content.append(&mut response.content);
+        accumulate_anthropic_usage(&mut aggregate_usage, &response.usage);
+
+        if response.stop_reason.as_deref() != Some("pause_turn") {
+            response.content = aggregate_content;
+            response.usage = aggregate_usage;
+            return Ok(response);
+        }
+
+        if continuation_count >= ANTHROPIC_MAX_PAUSE_TURN_CONTINUATIONS {
+            tracing::error!(
+                max_continuations = ANTHROPIC_MAX_PAUSE_TURN_CONTINUATIONS,
+                "chat_completions: Anthropic pause_turn continuation limit reached"
+            );
+            return Err(StatusCode::BAD_GATEWAY);
+        }
+
+        continuation_count += 1;
+        append_pause_turn_continuation(&mut continuation_request, raw_content);
+        tracing::info!(
+            continuation = continuation_count,
+            "chat_completions: continuing paused Anthropic server-tool turn"
+        );
+    }
+}
+
 async fn handle_non_streaming(
     client: &reqwest::Client,
     api_key: &str,
@@ -800,32 +1054,8 @@ async fn handle_non_streaming(
     state: &AppState,
     is_byok: bool,
 ) -> Result<Response, StatusCode> {
-    let upstream_resp = send_anthropic_with_retry(client, api_key, anthropic_req, false).await?;
-
-    let status = upstream_resp.status();
-    if !status.is_success() {
-        let body = upstream_resp.text().await.unwrap_or_default();
-        tracing::warn!(
-            "chat_completions: Anthropic returned {} for user {}: {}",
-            status,
-            user.uid,
-            &body[..body.len().min(500)]
-        );
-        return Ok(response_or_500(
-            Response::builder()
-                .status(StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY))
-                .header("content-type", "application/json"),
-            Body::from(body),
-        ));
-    }
-
-    let anthropic_resp: AnthropicResponse = upstream_resp.json().await.map_err(|e| {
-        tracing::error!(
-            "chat_completions: failed to parse Anthropic response: {}",
-            e
-        );
-        StatusCode::BAD_GATEWAY
-    })?;
+    let anthropic_resp =
+        complete_anthropic_server_tool_turn(client, api_key, anthropic_req).await?;
 
     // Log usage — skip for BYOK since the user pays their own bill and
     // including it would overstate Omi's spend in cost dashboards.
@@ -837,6 +1067,122 @@ async fn handle_non_streaming(
     let openai_resp = translate_response(&anthropic_resp, route.public_model);
 
     Ok(Json(openai_resp).into_response())
+}
+
+/// Public-web turns may pause while Anthropic's server-side tool runs. Resolve
+/// the bounded continuation chain before producing OpenAI SSE so clients never
+/// observe `pause_turn` as a terminal answer. The final response is emitted as
+/// normal OpenAI chunks; ordinary turns keep the lower-latency incremental
+/// streaming path below.
+async fn handle_server_tool_streaming(
+    client: &reqwest::Client,
+    api_key: &str,
+    anthropic_req: &AnthropicRequest,
+    route: &ModelRoute,
+    user: &AuthUser,
+    state: &AppState,
+    is_byok: bool,
+) -> Result<Response, StatusCode> {
+    let anthropic_resp =
+        complete_anthropic_server_tool_turn(client, api_key, anthropic_req).await?;
+
+    if !is_byok {
+        let cost = compute_cost(&anthropic_resp.usage, route.upstream_model);
+        log_usage(state, user, &anthropic_resp.usage, cost).await;
+    }
+
+    let openai_resp = translate_response(&anthropic_resp, route.public_model);
+    let choice = openai_resp
+        .choices
+        .first()
+        .expect("translated Anthropic response always has one choice");
+    let stream_id = openai_resp.id.clone();
+    let created = openai_resp.created;
+    let model = openai_resp.model.clone();
+    let mut chunks = Vec::new();
+
+    chunks.push(sse_line(&make_chunk(
+        &stream_id,
+        created,
+        &model,
+        ChunkDelta {
+            role: Some("assistant".to_string()),
+            content: None,
+            tool_calls: None,
+        },
+        None,
+        None,
+    )));
+
+    let tool_calls = choice.message.tool_calls.as_ref().map(|calls| {
+        calls
+            .iter()
+            .enumerate()
+            .map(|(index, call)| ChunkToolCall {
+                index: index as u32,
+                id: Some(call.id.clone()),
+                call_type: Some(call.call_type.clone()),
+                function: Some(ChunkFunctionCall {
+                    name: Some(call.function.name.clone()),
+                    arguments: Some(call.function.arguments.clone()),
+                }),
+            })
+            .collect::<Vec<_>>()
+    });
+    if choice.message.content.is_some() || tool_calls.is_some() {
+        chunks.push(sse_line(&make_chunk(
+            &stream_id,
+            created,
+            &model,
+            ChunkDelta {
+                role: None,
+                content: choice.message.content.clone(),
+                tool_calls,
+            },
+            None,
+            None,
+        )));
+    }
+
+    chunks.push(sse_line(&make_chunk(
+        &stream_id,
+        created,
+        &model,
+        ChunkDelta {
+            role: None,
+            content: None,
+            tool_calls: None,
+        },
+        choice.finish_reason.clone(),
+        None,
+    )));
+
+    if let Some(usage) = openai_resp.usage {
+        let usage_chunk = ChatCompletionChunk {
+            id: stream_id,
+            object: "chat.completion.chunk",
+            created,
+            model,
+            choices: vec![],
+            usage: Some(usage),
+        };
+        chunks.push(sse_line(
+            &serde_json::to_value(usage_chunk).unwrap_or(json!({})),
+        ));
+    }
+    chunks.push(Bytes::from_static(b"data: [DONE]\n\n"));
+
+    let body = Body::from_stream(futures::stream::iter(
+        chunks.into_iter().map(Ok::<Bytes, std::io::Error>),
+    ));
+    Ok(response_or_500(
+        Response::builder()
+            .status(StatusCode::OK)
+            .header("content-type", "text/event-stream")
+            .header("cache-control", "no-cache")
+            .header("connection", "keep-alive"),
+        body,
+    ))
 }
 
 async fn handle_streaming(
@@ -885,7 +1231,7 @@ async fn handle_streaming(
         let mut final_usage: Option<AnthropicUsage> = None;
         let mut initial_usage: Option<AnthropicUsage> = None;
         let mut sent_role = false;
-        let mut buffer = String::new();
+        let mut buffer: Vec<u8> = Vec::new();
 
         // Collect raw bytes and split into SSE events
         let mut byte_stream = std::pin::pin!(byte_stream);
@@ -898,13 +1244,10 @@ async fn handle_streaming(
                 }
             };
 
-            buffer.push_str(&String::from_utf8_lossy(&chunk));
+            buffer.extend_from_slice(&chunk);
 
             // Parse SSE events from buffer
-            while let Some(event_end) = buffer.find("\n\n") {
-                let event_block = buffer[..event_end].to_string();
-                buffer = buffer[event_end + 2..].to_string();
-
+            for event_block in drain_sse_events(&mut buffer) {
                 // Extract data line
                 let data_line = event_block
                     .lines()
@@ -1050,10 +1393,11 @@ async fn handle_streaming(
                         }
 
                         if delta.stop_reason.as_deref() == Some("pause_turn") {
-                            // Mapped to "stop" — the proxy cannot resume a paused
-                            // server-tool turn, so the reply ends where it is.
-                            tracing::warn!(
-                                "chat_completions: pause_turn stop_reason — terminating turn"
+                            // Public-web turns are normalized before reaching the
+                            // incremental stream. Treat this as a routing bug,
+                            // while retaining a safe OpenAI finish reason below.
+                            tracing::error!(
+                                "chat_completions: unexpected pause_turn reached incremental stream"
                             );
                         }
                         let finish = map_stop_reason(delta.stop_reason.as_deref());
@@ -1186,6 +1530,14 @@ pub fn chat_completions_routes() -> Router<AppState> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn server_key_chat_fails_closed_when_metering_is_unavailable() {
+        let response = chat_metering_response(&RateDecision::Unavailable).unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.headers().get("retry-after").unwrap(), "5");
+        assert!(chat_metering_response(&RateDecision::Allow).is_none());
+    }
+
     fn test_request(messages: Vec<ChatMessage>) -> ChatCompletionRequest {
         ChatCompletionRequest {
             model: "omi-sonnet".to_string(),
@@ -1202,6 +1554,16 @@ mod tests {
     fn user_message(text: &str) -> ChatMessage {
         ChatMessage {
             role: "user".to_string(),
+            content: Some(json!(text)),
+            name: None,
+            tool_calls: None,
+            tool_call_id: None,
+        }
+    }
+
+    fn assistant_message(text: &str) -> ChatMessage {
+        ChatMessage {
+            role: "assistant".to_string(),
             content: Some(json!(text)),
             name: None,
             tool_calls: None,
@@ -1239,7 +1601,6 @@ mod tests {
         let route = resolve_model("omi-sonnet").unwrap();
         assert_eq!(route.public_model, "omi-sonnet");
         assert_eq!(route.upstream_model, "claude-sonnet-4-6");
-        assert_eq!(route.provider, Provider::Anthropic);
     }
 
     #[test]
@@ -1934,18 +2295,15 @@ mod tests {
 
         let result = translate_request_inner(&req, "claude-sonnet-4-6", true).unwrap();
         let tools = result.tools.unwrap();
-        // Server-side web_search is injected ahead of the client tools.
-        assert_eq!(tools.len(), 2);
-        let ws = serde_json::to_value(&tools[0]).unwrap();
-        assert_eq!(ws["type"], WEB_SEARCH_TOOL_TYPE);
-        assert_eq!(ws["name"], "web_search");
-        assert_eq!(ws["max_uses"], WEB_SEARCH_MAX_USES);
-        let custom = serde_json::to_value(&tools[1]).unwrap();
+        // Keep ordinary agentic calls on their normal incremental streaming
+        // path; the server-side search tool is added only when retrieval
+        // policy requires fresh public information.
+        assert_eq!(tools.len(), 1);
+        let custom = serde_json::to_value(&tools[0]).unwrap();
         assert_eq!(custom["name"], "get_weather");
         assert_eq!(custom["description"], "Get weather for a location");
-        // Server tools carry no input_schema; custom tools must.
-        assert!(ws.get("input_schema").is_none());
         assert!(custom.get("input_schema").is_some());
+        assert!(!result.requires_public_web);
     }
 
     #[test]
@@ -1979,6 +2337,175 @@ mod tests {
         assert_eq!(tools.len(), 1);
         let only = serde_json::to_value(&tools[0]).unwrap();
         assert_eq!(only["name"], "get_weather");
+    }
+
+    #[test]
+    fn test_translate_request_forces_required_web_search_without_client_tools() {
+        let req = test_request(vec![
+            user_message("I'm working on humanpost.co now"),
+            assistant_message("Is HumanPost separate from Vost or part of it?"),
+            user_message("look it up"),
+        ]);
+
+        let result = translate_request_inner(&req, "claude-sonnet-4-6", true).unwrap();
+        let tools = result.tools.unwrap();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(
+            serde_json::to_value(&tools[0]).unwrap()["name"],
+            "web_search"
+        );
+        assert_eq!(result.tool_choice, Some(json!({"type": "auto"})));
+        let latest = result.messages.last().unwrap().content.to_string();
+        assert!(latest.contains("Public web search is required"));
+        assert!(latest.contains("look it up"));
+    }
+
+    #[test]
+    fn test_translate_request_forces_web_search_for_location_qualified_weather() {
+        // This is the same gateway request shape used by both the main
+        // pi-mono session and default delegated pi-mono child sessions. The
+        // server-side tool avoids giving either process a credential directly.
+        let mut req = test_request(vec![user_message("What's the weather in NYC right now?")]);
+        req.tools = Some(vec![ToolDefinition {
+            tool_type: "function".to_string(),
+            function: FunctionDefinition {
+                name: "search_memories".to_string(),
+                description: Some("Search Omi memories".to_string()),
+                parameters: None,
+            },
+        }]);
+        // A client may have requested one of its own functions, but a fresh
+        // public lookup must retain a provider-compatible automatic choice so
+        // the server-side web tool can run before any client tool.
+        req.tool_choice = Some(json!({
+            "type": "function",
+            "function": {"name": "search_memories"}
+        }));
+
+        let result = translate_request_inner(&req, "claude-sonnet-4-6", true).unwrap();
+        let tools = result.tools.unwrap();
+        assert_eq!(
+            serde_json::to_value(&tools[0]).unwrap()["name"],
+            "web_search"
+        );
+        assert_eq!(
+            serde_json::to_value(&tools[1]).unwrap()["name"],
+            "search_memories"
+        );
+        assert_eq!(result.tool_choice, Some(json!({"type": "auto"})));
+        assert!(result.requires_public_web);
+        assert!(result
+            .messages
+            .last()
+            .unwrap()
+            .content
+            .to_string()
+            .contains("Public web search is required"));
+    }
+
+    #[test]
+    fn test_pause_turn_continuation_preserves_raw_assistant_content_and_tools() {
+        let req = test_request(vec![user_message(
+            "Search the web for current weather in NYC",
+        )]);
+        let mut continuation = translate_request_inner(&req, "claude-sonnet-4-6", true).unwrap();
+        let original_tools = serde_json::to_value(&continuation.tools).unwrap();
+        let paused_content = json!([
+            {
+                "type": "server_tool_use",
+                "id": "srvtoolu_123",
+                "name": "web_search",
+                "input": {"query": "NYC weather"}
+            },
+            {
+                "type": "web_search_tool_result",
+                "tool_use_id": "srvtoolu_123",
+                "content": [{"type": "web_search_result", "title": "Weather"}]
+            }
+        ]);
+
+        append_pause_turn_continuation(&mut continuation, paused_content.clone());
+
+        assert_eq!(continuation.messages.last().unwrap().role, "assistant");
+        assert_eq!(
+            continuation.messages.last().unwrap().content,
+            paused_content
+        );
+        assert_eq!(
+            serde_json::to_value(&continuation.tools).unwrap(),
+            original_tools
+        );
+        assert!(continuation.requires_public_web);
+    }
+
+    #[test]
+    fn test_pause_turn_server_tool_response_decodes_and_preserves_raw_content() {
+        let paused_content = json!([
+            {
+                "type": "server_tool_use",
+                "id": "srvtoolu_123",
+                "name": "web_search",
+                "input": {"query": "NYC weather"}
+            },
+            {
+                "type": "web_search_tool_result",
+                "tool_use_id": "srvtoolu_123",
+                "content": [{"type": "web_search_result", "title": "Weather"}]
+            }
+        ]);
+        let raw_response = json!({
+            "id": "msg_123",
+            "type": "message",
+            "model": "claude-sonnet-4-6",
+            "role": "assistant",
+            "content": paused_content,
+            "stop_reason": "pause_turn",
+            "usage": {"input_tokens": 12, "output_tokens": 4}
+        });
+
+        let response: AnthropicResponse = serde_json::from_value(raw_response.clone())
+            .expect("pause_turn response with Anthropic server blocks must decode");
+        assert_eq!(response.stop_reason.as_deref(), Some("pause_turn"));
+        assert_eq!(response.content.len(), 2);
+
+        let req = test_request(vec![user_message(
+            "Search the web for current weather in NYC",
+        )]);
+        let mut continuation = translate_request_inner(&req, "claude-sonnet-4-6", true).unwrap();
+        append_pause_turn_continuation(&mut continuation, raw_response["content"].clone());
+        assert_eq!(
+            continuation.messages.last().unwrap().content,
+            raw_response["content"]
+        );
+    }
+
+    #[test]
+    fn test_translate_request_required_web_search_fails_closed_when_disabled() {
+        let req = test_request(vec![user_message("Search the web for HumanPost")]);
+        let error = translate_request_inner(&req, "claude-sonnet-4-6", false).unwrap_err();
+        assert!(error.contains("required public web search is unavailable"));
+    }
+
+    #[test]
+    fn test_translate_request_private_lookup_excludes_server_web_search() {
+        let mut req = test_request(vec![user_message("Search my conversations for HumanPost")]);
+        req.tools = Some(vec![ToolDefinition {
+            tool_type: "function".to_string(),
+            function: FunctionDefinition {
+                name: "search_conversations".to_string(),
+                description: Some("Search private conversations".to_string()),
+                parameters: None,
+            },
+        }]);
+
+        let result = translate_request_inner(&req, "claude-sonnet-4-6", true).unwrap();
+        let tools = result.tools.unwrap();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(
+            serde_json::to_value(&tools[0]).unwrap()["name"],
+            "search_conversations"
+        );
+        assert!(result.tool_choice.is_none());
     }
 
     #[test]
@@ -2191,6 +2718,35 @@ mod tests {
         let openai = translate_response(&resp, "omi-sonnet");
         assert!(openai.choices[0].message.content.is_none());
         assert!(openai.choices[0].message.tool_calls.is_some());
+    }
+
+    #[test]
+    fn test_drain_sse_events_splits_on_blank_line() {
+        let mut buffer = b"event: a\ndata: {\"x\":1}\n\ndata: {\"y\":2}\n\ndata: par".to_vec();
+        let events = drain_sse_events(&mut buffer);
+
+        assert_eq!(events.len(), 2);
+        assert!(events[0].contains("\"x\":1"));
+        assert!(events[1].contains("\"y\":2"));
+        assert_eq!(buffer, b"data: par");
+    }
+
+    #[test]
+    fn test_drain_sse_events_preserves_char_split_across_chunks() {
+        // "—" (U+2014) is 3 bytes; a network chunk can land in the middle of it.
+        let event = "data: {\"text\":\"a—b\"}\n\n".as_bytes().to_vec();
+        let split = 17; // inside the em dash's 3 bytes (16..19)
+        let mut buffer = Vec::new();
+
+        buffer.extend_from_slice(&event[..split]);
+        assert!(drain_sse_events(&mut buffer).is_empty());
+
+        buffer.extend_from_slice(&event[split..]);
+        let events = drain_sse_events(&mut buffer);
+
+        assert_eq!(events.len(), 1);
+        assert!(events[0].contains("a—b"), "got {}", events[0]);
+        assert!(!events[0].contains('\u{fffd}'));
     }
 
     #[test]

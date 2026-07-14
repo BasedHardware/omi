@@ -21,6 +21,13 @@ enum WalDisplayFilter { all, pending, synced }
 class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSyncProgressListener {
   // Services
   final AudioPlayerUtils _audioPlayerUtils = AudioPlayerUtils.instance;
+  final IWalService? _walServiceOverride;
+  final SyncUploadGate _uploadGate;
+  final bool _startBackgroundSync;
+
+  /// Completes after WAL loading and startup fair-use reconciliation finish.
+  @visibleForTesting
+  late final Future<void> initialized;
 
   // WAL management
   List<Wal> _allWals = [];
@@ -231,6 +238,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   int _walsProcessedCount = 0;
   Timer? _autoUploadTimer;
   bool _isDisposed = false;
+  late bool _freshRateLimitWasActive;
+  late bool _backfillRateLimitWasActive;
 
   // Computed properties for backward compatibility
   List<Wal> get missingWals => _allWals.where((w) => w.status == WalStatus.miss).toList();
@@ -278,20 +287,48 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   Duration get totalDuration => _audioPlayerUtils.totalDuration;
   double get playbackProgress => _audioPlayerUtils.playbackProgress;
 
-  IWalService get _walService => ServiceManager.instance().wal;
+  IWalService get _walService => _walServiceOverride ?? ServiceManager.instance().wal;
 
-  SyncProvider() {
+  SyncProvider({
+    IWalService? walService,
+    SyncUploadGate? uploadGate,
+    @visibleForTesting bool startBackgroundSync = true,
+  })  : _walServiceOverride = walService,
+        _uploadGate = uploadGate ?? SyncUploadGate.instance,
+        _startBackgroundSync = startBackgroundSync {
     _walService.subscribe(this, this);
     _audioPlayerUtils.addListener(_onAudioPlayerStateChanged);
-    SyncRateLimiter.instance.addListener(notifyListeners);
-    _initializeProvider();
+    _freshRateLimitWasActive = SyncRateLimiter.instance.isLimitedForLane('fresh');
+    _backfillRateLimitWasActive = SyncRateLimiter.instance.isLimitedForLane('backfill');
+    SyncRateLimiter.instance.addListener(_onRateLimiterChanged);
+    initialized = _initializeProvider();
   }
 
-  void _initializeProvider() async {
-    await refreshWals();
+  Future<void> _initializeProvider() async {
+    try {
+      await refreshWals();
+      if (_isDisposed) return;
+      await _uploadGate.reconcileFairUseStatus();
+      if (_isDisposed) return;
+      if (_startBackgroundSync) {
+        _attachReconciler();
+        _scheduleAutoUploadPendingPhoneFiles();
+      }
+    } catch (error, stackTrace) {
+      Logger.error('SyncProvider: initialization failed: $error\n$stackTrace');
+    }
+  }
+
+  void _onRateLimiterChanged() {
     if (_isDisposed) return;
-    _attachReconciler();
-    _scheduleAutoUploadPendingPhoneFiles();
+    final freshActive = SyncRateLimiter.instance.isLimitedForLane('fresh');
+    final backfillActive = SyncRateLimiter.instance.isLimitedForLane('backfill');
+    final cooldownEnded =
+        (_freshRateLimitWasActive && !freshActive) || (_backfillRateLimitWasActive && !backfillActive);
+    _freshRateLimitWasActive = freshActive;
+    _backfillRateLimitWasActive = backfillActive;
+    notifyListeners();
+    if (cooldownEnded && _startBackgroundSync) _scheduleAutoUploadPendingPhoneFiles();
   }
 
   /// Wire the background reconciler to the phone sync + our conversation
@@ -348,6 +385,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         .where((w) => w.status == WalStatus.miss && (w.storage == WalStorage.disk || w.storage == WalStorage.mem))
         .toList();
     if (phoneWals.isEmpty) return;
+    if (_isDisposed) return;
     Logger.debug('SyncProvider: Auto-uploading ${phoneWals.length} pending phone files to cloud');
     _isAutoUploading = true;
     await _performSync(
@@ -406,10 +444,6 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<void> syncWals() async {
-    if (SyncRateLimiter.instance.isLimited) {
-      notifyListeners();
-      return;
-    }
     _cancelAutoUploadIfNeeded();
     _updateSyncState(_syncState.toIdle());
     _totalWalsToProcess = missingWals.length;
@@ -421,10 +455,6 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<void> syncWal(Wal wal) async {
-    if (SyncRateLimiter.instance.isLimited) {
-      notifyListeners();
-      return;
-    }
     _cancelAutoUploadIfNeeded();
     _updateSyncState(_syncState.toIdle());
     await _performSync(
@@ -710,6 +740,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     _autoUploadTimer?.cancel();
     _autoUploadTimer = null;
     _audioPlayerUtils.removeListener(_onAudioPlayerStateChanged);
+    SyncRateLimiter.instance.removeListener(_onRateLimiterChanged);
     WaveformUtils.clearCache();
     _walService.unsubscribe(this);
     super.dispose();

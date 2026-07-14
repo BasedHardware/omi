@@ -267,22 +267,29 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     } else if (!isHavingRecordingDevice && !isUsingPhoneMic) {
       stateText = "";
     } else if (isUsingPhoneMic || isHavingRecordingDevice) {
-      // Show "Listening" for all active recording states — WAL ensures audio is
-      // saved locally regardless of transcription connection status.
-      if (transcriptServiceStateOk) {
-        var lastEvent = captureProvider.transcriptionServiceStatuses.lastOrNull;
-        if (lastEvent is MessageServiceStatusEvent) {
-          bool transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
-          stateText = transcriptionDiagnosticEnabled
-              ? (lastEvent.statusText ?? context.l10n.listening)
-              : context.l10n.listening;
+      if (captureProvider.terminalTranscriptionFailure != null) {
+        // Audio remains in the WAL while reconnecting, but the server has
+        // explicitly said live STT is unavailable. Do not claim "Listening".
+        stateText = context.l10n.transcriptionUnavailable;
+        statusIndicator = const PausedStatusIndicator();
+      } else {
+        // Show "Listening" for all active recording states — WAL ensures audio is
+        // saved locally regardless of transcription connection status.
+        if (transcriptServiceStateOk) {
+          var lastEvent = captureProvider.transcriptionServiceStatuses.lastOrNull;
+          if (lastEvent is MessageServiceStatusEvent) {
+            bool transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
+            stateText = transcriptionDiagnosticEnabled
+                ? (lastEvent.statusText ?? context.l10n.listening)
+                : context.l10n.listening;
+          } else {
+            stateText = context.l10n.listening;
+          }
         } else {
           stateText = context.l10n.listening;
         }
-      } else {
-        stateText = context.l10n.listening;
+        statusIndicator = const RecordingStatusIndicator();
       }
-      statusIndicator = const RecordingStatusIndicator();
     }
     Widget right = stateText.isNotEmpty || statusIndicator != null
         ? Row(
@@ -338,6 +345,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     } else if (isPhoneRecording) {
       isPaused = _isPhoneMicPaused || provider.isPaused || isCallInterrupted;
     }
+    final hasTerminalTranscriptionFailure = provider.terminalTranscriptionFailure != null;
 
     // Determine if this is an OmiGlass-type device (captures photos)
     bool hasPhotos = provider.photos.isNotEmpty;
@@ -347,9 +355,11 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         ? context.l10n.paused
         : isPaused
             ? (isDeviceRecording ? context.l10n.muted : context.l10n.paused)
-            : hasPhotos
-                ? 'Capturing'
-                : context.l10n.listening;
+            : hasTerminalTranscriptionFailure
+                ? context.l10n.transcriptionUnavailable
+                : hasPhotos
+                    ? 'Capturing'
+                    : context.l10n.listening;
 
     // When recording is active, show the unified UI design
     if (isDeviceRecording || isPhoneRecording) {
@@ -453,7 +463,9 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                     recordingType: isDeviceRecording ? 'device' : 'phone_mic',
                   );
                 }
-                _toggleRecording(context, provider);
+                if (mounted) {
+                  _toggleRecording(context, provider);
+                }
               },
               child: Container(
                 width: 28,

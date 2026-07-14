@@ -17,6 +17,25 @@ final class AppleNotesReaderServiceTests: XCTestCase {
     XCTAssertEqual(path, "/notes/NoteStore.sqlite")
   }
 
+  func testIsLikelyAttachmentDoesNotDropOrdinaryNotesContainingExecSubstring() {
+    // Regression: a raw `contains("exec")` substring match wrongly classified ordinary
+    // notes as attachment/metadata artifacts and silently dropped them from the import.
+    for title in ["Q3 execution plan", "Executive summary", "executed the migration", "executive decisions"] {
+      XCTAssertFalse(
+        AppleNotesReaderService.isLikelyAttachment(title: title, summary: "notes and details"),
+        "note titled \"\(title)\" must not be filtered as an attachment"
+      )
+    }
+  }
+
+  func testIsLikelyAttachmentStillFiltersArtifactTokens() {
+    // The metadata/artifact tokens the filter targets must still be caught.
+    XCTAssertTrue(AppleNotesReaderService.isLikelyAttachment(title: "kMDItemFSName", summary: ""))
+    XCTAssertTrue(AppleNotesReaderService.isLikelyAttachment(title: "SOLITE", summary: ""))
+    XCTAssertTrue(AppleNotesReaderService.isLikelyAttachment(title: "exec", summary: ""))
+    XCTAssertTrue(AppleNotesReaderService.isLikelyAttachment(title: "", summary: ""))
+  }
+
   func testResolveSelectedFolderAcceptsAndInfersNotesContainer() throws {
     let root = try makeTemporaryDirectory()
     defer { try? FileManager.default.removeItem(at: root) }

@@ -138,7 +138,11 @@ class _StubRequest:
 
 def _call(upload_file):
     request = _StubRequest(_StubForm([upload_file]))
-    with patch.object(mod, 'is_trial_paywalled', return_value=False):
+
+    async def run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    with patch.object(mod, 'is_trial_paywalled', return_value=False), patch.object(mod, 'run_blocking', run_blocking):
         return asyncio.run(mod.transcribe_voice_message(request=request, uid='u1', x_app_platform='ios'))
 
 

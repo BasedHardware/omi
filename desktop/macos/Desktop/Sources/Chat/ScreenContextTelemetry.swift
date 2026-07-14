@@ -1,13 +1,14 @@
 import CoreGraphics
 import Foundation
 
-enum ScreenContextFailureCode: String {
+enum ScreenContextFailureCode: String, CaseIterable {
   case permissionDenied = "permission_denied"
   case databaseUnavailable = "database_unavailable"
   case screenNowUnavailable = "screen_now_unavailable"
   case screenshotPending = "screenshot_pending"
   case screenshotFileMissing = "screenshot_file_missing"
   case screenshotChunkCorrupted = "screenshot_chunk_corrupted"
+  case screenshotSharingDisabled = "screenshot_sharing_disabled"
   case imageUnavailable = "image_unavailable"
   case policyApprovalRequired = "policy_approval_required"
   case captureFailed = "capture_failed"
@@ -270,6 +271,17 @@ enum ScreenContextToolTelemetry {
   }
 
   static func toolResultFacts(toolName: String, output: String) -> ScreenContextToolFacts? {
+    if output.hasPrefix("EXECUTION_PRECONDITION_FAILED:"),
+      output.contains("\"code\":\"execution_precondition_failed\""),
+      output.contains("\"reason\":\"screenshot_sharing_disabled\"")
+    {
+      return ScreenContextToolFacts(
+        requested: true,
+        succeeded: false,
+        approvalRequired: false,
+        failureCode: .screenshotSharingDisabled
+      )
+    }
     if output.hasPrefix("POLICY_DENIED:"), output.contains("\"code\":\"approval_required\"") {
       return ScreenContextToolFacts(
         requested: true,
@@ -291,6 +303,7 @@ enum ScreenContextToolTelemetry {
     }
 
     let normalizedOutput = output
+      .replacingOccurrences(of: "EXECUTION_PRECONDITION_FAILED: ", with: "")
       .replacingOccurrences(of: "POLICY_DENIED: ", with: "")
       .replacingOccurrences(of: "PERMISSION_REQUIRED: ", with: "")
     guard

@@ -5,6 +5,11 @@ on:
     branches: main
   pull_request:
     branches: main
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
 
 concurrency:
   group: repo-checks-${{ github.event.pull_request.number || github.ref }}
@@ -22,8 +27,6 @@ jobs:
       has_format: ${{ steps.changes.outputs.has_format }}
       has_python: ${{ steps.changes.outputs.has_python }}
       has_workflows: ${{ steps.changes.outputs.has_workflows }}
-      has_desktop_async_after_ratchet: ${{ steps.changes.outputs.has_desktop_async_after_ratchet }}
-      has_desktop_defaults_ratchet: ${{ steps.changes.outputs.has_desktop_defaults_ratchet }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -44,95 +47,88 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: backend/.python-version
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/openapi-requirements.txt
+
       - name: Save changed files
         run: |
-          git diff --name-only --diff-filter=ACM "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
+          scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
           cat /tmp/changed-files.txt
 
-      - name: Check merge conflict markers
-        run: |
-          failed=0
-          while IFS= read -r file; do
-            if [ -f "$file" ] && grep -I -nE '^(<<<<<<<|>>>>>>>)' "$file"; then
-              failed=1
-            fi
-          done < /tmp/changed-files.txt
-
-          if [ "$failed" -eq 1 ]; then
-            echo "FAIL: unresolved merge conflict markers found in changed files"
-            exit 1
-          fi
-
-      - name: Architecture guardrail warnings
-        run: python3 .github/scripts/check_arch_guardrails.py --changed-files /tmp/changed-files.txt
+      - name: Test package architecture map guardrail
+        run: python3 .github/scripts/test_check_package_architecture_maps.py
 
       - name: Test product invariant PR-body checker
         run: python3 .github/scripts/test_check_product_invariants.py
 
+      - name: Test PR preflight contracts
+        run: python3 .github/scripts/test_pr_preflight.py
+
+      - name: Run shared PR contract preflight
+        if: github.event_name == 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          scripts/pr-preflight \
+            --base "${{ needs.changes.outputs.diff_base }}" \
+            --repository "${{ github.repository }}" \
+            --pr-number "${{ github.event.pull_request.number }}"
+
+      - name: Run deterministic check manifest on main pushes
+        if: github.event_name != 'pull_request'
+        run: python3 .github/scripts/run_checks.py --lane ci --base "${{ needs.changes.outputs.diff_base }}"
+
       - name: Test brand UI ratchet helper
         run: python3 .github/scripts/test_check_brand_ui.py
 
-      - name: Check product invariant citations
-        if: github.event_name == 'pull_request'
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: |
-          printf '%s' "$PR_BODY" > /tmp/pr-body.txt
-          python3 .github/scripts/check_product_invariants.py \
-            --changed-files /tmp/changed-files.txt \
-            --pr-body-file /tmp/pr-body.txt
+      - name: Check typed error flow-control ratchet
+        run: python3 .github/scripts/check_isinstance_return_ratchet.py
 
-      - name: Check brand UI purple ratchet (INV-UI-1)
-        if: github.event_name == 'pull_request'
-        run: |
-          python3 .github/scripts/check_brand_ui.py \
-            --changed-files /tmp/changed-files.txt \
-            --base "${{ needs.changes.outputs.diff_base }}"
+      - name: Test lifecycle header checker
+        run: python3 .github/scripts/test_check_lifecycle_headers.py
 
-      - name: Check desktop changelog data
-        run: python3 .github/scripts/desktop-changelog.py validate
-
-      - name: Check desktop changelog entry
-        if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changelog/v')
-        run: |
-          SKIP_FLAG=""
-          if [ "${{ contains(github.event.pull_request.labels.*.name, 'no-changelog-needed') }}" = "true" ]; then
-            SKIP_FLAG="--skip"
-          fi
-
-          python3 .github/scripts/check-desktop-changelog.py \
-            --base "origin/${{ github.base_ref }}" \
-            --head HEAD \
-            $SKIP_FLAG
+      - name: Test version-prefixed filename lint
+        run: python3 .github/scripts/test_check_version_prefixed_filenames.py
 
       - name: Check desktop prod promotion policy
         run: python3 .github/scripts/check-desktop-prod-promotion-policy.py
 
+      - name: Test deployment concurrency policy
+        run: python3 .github/scripts/check-deployment-concurrency.py --self-test
+
+      - name: Check deployment concurrency policy
+        run: python3 .github/scripts/check-deployment-concurrency.py
+
+      - name: Check desktop release terminology
+        run: python3 .github/scripts/check-desktop-release-terminology.py
+
+      - name: Test desktop qualification metadata writer
+        run: python3 desktop/macos/scripts/release-keyvalue.py self-test
+
       - name: Test desktop release promotion gate
         run: python3 .github/scripts/test_check_desktop_release_promotion.py
 
+      - name: Test automatic desktop beta candidate gate
+        run: python3 .github/scripts/test_check_desktop_auto_beta_candidate.py
+
       - name: Check release process guards
         run: python3 .github/scripts/check-release-process-guards.py
-
-      - name: Summarize deferred-work markers
-        continue-on-error: true
-        run: python3 .github/scripts/deferred-work-marker-count.py --format github-summary >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Check desktop UserDefaults key ratchet
-        if: needs.changes.outputs.has_desktop_defaults_ratchet == 'true'
-        run: python3 desktop/macos/scripts/check-userdefaults-key-ratchet.py
-
-      - name: Check desktop asyncAfter ratchet
-        if: needs.changes.outputs.has_desktop_async_after_ratchet == 'true'
-        run: python3 desktop/macos/scripts/check-async-after-ratchet.py
 
       - name: Check GitHub Actions workflows
         if: needs.changes.outputs.has_workflows == 'true'
         run: |
           GOBIN=/tmp/actionlint-bin go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-          FILES=$(grep -E '^\.github/workflows/.*\.ya?ml$' /tmp/changed-files.txt || true)
-          if [ -n "$FILES" ]; then
-            /tmp/actionlint-bin/actionlint -shellcheck "" $FILES
+          mapfile -t files < <(grep -E '^\.github/workflows/.*\.ya?ml$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
+          if [ "${#files[@]}" -gt 0 ]; then
+            /tmp/actionlint-bin/actionlint -shellcheck "" "${files[@]}"
           fi
 
   formatting:
@@ -148,7 +144,7 @@ jobs:
 
       - name: Save changed files
         run: |
-          git diff --name-only --diff-filter=ACM "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
+          scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
           cat /tmp/changed-files.txt
 
       - name: Setup Flutter
@@ -166,7 +162,7 @@ jobs:
       - name: Check Dart formatting
         if: needs.changes.outputs.has_dart == 'true'
         run: |
-          FILES=$(grep '\.dart$' /tmp/changed-files.txt | grep -v -e '\.gen\.dart$' -e '\.g\.dart$' || true)
+          FILES=$(grep '\.dart$' /tmp/changed-files.txt | grep -v -e '\.gen\.dart$' -e '\.g\.dart$' | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           if [ -n "$FILES" ]; then
             echo "$FILES" | xargs dart format --line-length 120 --set-exit-if-changed --output=none
           fi
@@ -175,7 +171,7 @@ jobs:
         if: needs.changes.outputs.has_python == 'true'
         run: |
           pip install -q black
-          FILES=$(grep 'backend/.*\.py$' /tmp/changed-files.txt || true)
+          FILES=$(grep 'backend/.*\.py$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           if [ -n "$FILES" ]; then
             echo "$FILES" | xargs black --check --line-length 120 --skip-string-normalization
           fi
@@ -183,7 +179,7 @@ jobs:
       - name: Check ARB formatting
         if: needs.changes.outputs.has_arb == 'true'
         run: |
-          FILES=$(grep '\.arb$' /tmp/changed-files.txt || true)
+          FILES=$(grep '\.arb$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           failed=0
           for f in $FILES; do
             if ! python3 -m json.tool "$f" > /dev/null 2>&1; then
@@ -212,7 +208,7 @@ jobs:
       - name: Check C/C++ formatting
         if: needs.changes.outputs.has_firmware == 'true'
         run: |
-          FILES=$(grep -E '^(omi|omiGlass)/.*\.(c|cpp|cc|cxx|h|hpp)$' /tmp/changed-files.txt || true)
+          FILES=$(grep -E '^(omi|omiGlass)/.*\.(c|cpp|cc|cxx|h|hpp)$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           if [ -n "$FILES" ]; then
             echo "$FILES" | xargs clang-format --dry-run --Werror
           fi

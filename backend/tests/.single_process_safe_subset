@@ -51,6 +51,7 @@ tests/unit/test_mcp_oauth.py
 tests/unit/test_async_webhooks.py
 tests/unit/test_people_conversations_500s.py
 tests/unit/test_v3_account_generation_source.py
+tests/unit/test_inv_mem_1_guard.py
 tests/unit/test_memory_apply_store.py
 tests/unit/test_memory_evidence_persistence.py
 tests/unit/test_memory_ledger.py
@@ -109,6 +110,10 @@ tests/unit/test_l2_promotion_agent_v2.py
 tests/unit/test_parakeet_prerecorded.py
 tests/unit/test_parakeet_stream_session.py
 tests/unit/test_voice_message_language.py
+tests/unit/test_translation_cost_optimization.py
+tests/unit/test_translation_dedup_edge_cases.py
+tests/unit/test_translation_nllb.py
+tests/unit/test_translation_optimization.py
 tests/routers/test_users.py
 tests/unit/v3_router_probes/fastapi_route_contract.py
 tests/unit/test_desktop_transcribe.py

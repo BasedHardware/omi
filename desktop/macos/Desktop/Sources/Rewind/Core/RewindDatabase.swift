@@ -23,15 +23,20 @@ actor RewindDatabase {
     /// The user ID that was actually used to open the current database
     private var openedForUserId: String?
 
-    /// Generation counter — incremented on close() so stale task completions don't corrupt state
+    /// Generation counter — incremented on close() so stale task completions don't corrupt state.
+    /// NOTE: `initialize()` captures this before `performInitialization()` and clears
+    /// `initializationTask` only if it is unchanged afterward, so it MUST NOT be bumped
+    /// during a normal open. Pool-swap detection uses the separate `poolEpoch` below.
     private var initGeneration: Int = 0
+
+    /// Epoch of the current `dbQueue`, bumped on every close AND every pool (re)open.
+    /// Storage actors cache this alongside the pool and revalidate to detect a swap
+    /// (recovery replaces the pool) — kept distinct from `initGeneration` so bumping it
+    /// on open does not break the in-flight-close detection in `initialize()`.
+    private var poolEpoch: Int = 0
 
     /// Static user ID for nonisolated markCleanShutdown (set by configure(userId:))
     nonisolated(unsafe) static var currentUserId: String?
-
-    /// Monotonic counter incremented by configure(). Used by closeIfStale() to detect
-    /// whether a new sign-in session has started since the close was requested.
-    nonisolated(unsafe) static var configureGeneration: Int = 0
 
     /// Runtime error tracking: consecutive SQLITE_IOERR/CORRUPT errors during normal queries.
     /// When this hits the threshold, we close the database so the next initialize() attempt
@@ -51,11 +56,32 @@ actor RewindDatabase {
         return dbQueue
     }
 
+    /// Monotonic epoch of the current `dbQueue`. Bumped on every close and every
+    /// pool (re)open, so a storage actor that cached a pool can detect a swap
+    /// (corruption/maintenance recovery replaces the pool) and drop its stale
+    /// reference instead of reading/writing a closed or unlinked file.
+    func poolGeneration() -> Int {
+        return poolEpoch
+    }
+
+    /// Atomically read the current pool and its epoch together, so a caching
+    /// storage actor stores a consistent (pool, generation) pair.
+    func getDatabaseQueueWithGeneration() -> (pool: DatabasePool?, generation: Int) {
+        return (dbQueue, poolEpoch)
+    }
+
     /// Report a query error from a storage actor or subsystem.
     /// Tracks consecutive SQLITE_IOERR/CORRUPT errors. When the threshold is reached,
     /// closes the database so the next initialize() call triggers recovery.
     func reportQueryError(_ error: Error) {
         guard dbQueue != nil else { return }  // DB already closed, nothing to do
+        if isBusyDatabaseError(error) {
+            log(
+                "RewindDatabase: SQLITE_BUSY contention "
+                    + "(failure_class=db_lock_contention recovery_action=backoff recovery_result=degraded)")
+            DesktopDiagnosticsManager.shared.recordDbLockContention(source: "rewind_database")
+            return
+        }
         guard isRecoverableDatabaseError(error) else { return }
 
         consecutiveQueryIOErrors += 1
@@ -70,9 +96,15 @@ actor RewindDatabase {
     /// A sanitized SQLite corruption/I/O classifier. Avoid logging DB paths or row data.
     private func isRecoverableDatabaseError(_ error: Error) -> Bool {
         guard let dbError = error as? DatabaseError else { return false }
+        if isBusyDatabaseError(error) { return false }
         let code = dbError.resultCode
         let extendedCode = dbError.extendedResultCode.rawValue
         return code == .SQLITE_IOERR || code == .SQLITE_CORRUPT || extendedCode == 6922
+    }
+
+    private func isBusyDatabaseError(_ error: Error) -> Bool {
+        guard let dbError = error as? DatabaseError else { return false }
+        return dbError.resultCode == .SQLITE_BUSY
     }
 
     /// Handle corruption/I/O failures from cleanup and other maintenance operations.
@@ -202,56 +234,61 @@ actor RewindDatabase {
         do {
             try db.execute(sql: "DROP TABLE IF EXISTS action_items_fts")
         } catch {
-            try forceRemoveBrokenActionItemsFTSMetadata(in: db)
+            try dropActionItemsFTSShadowsIfPresent(in: db)
+            try db.execute(sql: "DROP TABLE IF EXISTS action_items_fts")
         }
     }
 
-    private static func forceRemoveBrokenActionItemsFTSMetadata(in db: Database) throws {
-        try db.execute(sql: "PRAGMA writable_schema = ON")
-        defer { try? db.execute(sql: "PRAGMA writable_schema = OFF") }
-
-        try db.execute(sql: "DELETE FROM sqlite_master WHERE type = 'table' AND name = 'action_items_fts'")
+    private static func dropActionItemsFTSShadowsIfPresent(in db: Database) throws {
         for table in actionItemsFTSShadowTables {
-            do {
-                try db.execute(sql: "DROP TABLE IF EXISTS \(table)")
-            } catch {
-                try db.execute(sql: "DELETE FROM sqlite_master WHERE type = 'table' AND name = '\(table)'")
-            }
+            try db.execute(sql: "DROP TABLE IF EXISTS \(table)")
         }
-
-        let schemaVersion = (try Int.fetchOne(db, sql: "PRAGMA schema_version")) ?? 0
-        try db.execute(sql: "PRAGMA schema_version = \(schemaVersion + 1)")
     }
 
-    /// Configure the database for a specific user.
-    /// Does NOT close or reopen the database — call initialize() after this.
-    /// initialize() will detect the user mismatch and reopen if needed.
-    func configure(userId: String?) {
+    /// Close the old effective owner's pool and configure the next owner.
+    ///
+    /// Production calls this only from `RuntimeOwnerIdentity` while the
+    /// exclusive effective-owner transition reservation is held. Opening is
+    /// intentionally lazy, but after this method returns no caller can obtain a
+    /// pool for the previous owner.
+    func retargetEffectiveOwner(to userId: String?) {
         let resolvedId = (userId?.isEmpty == false) ? userId! : "anonymous"
+        let targetChanged = configuredUserId != resolvedId
+            || (openedForUserId != nil && openedForUserId != resolvedId)
+        if targetChanged {
+            close()
+        }
         configuredUserId = resolvedId
         RewindDatabase.currentUserId = resolvedId
-        RewindDatabase.configureGeneration += 1
-        log("RewindDatabase: Configured for user \(resolvedId) (generation \(RewindDatabase.configureGeneration))")
+        log("RewindDatabase: Configured for user \(resolvedId)")
     }
 
-    /// Close the database only if no new session has started (configure() not called since).
-    /// Prevents a stale sign-out Task from closing a freshly opened database.
-    func closeIfStale(generation: Int) {
-        guard generation == RewindDatabase.configureGeneration else {
-            log("RewindDatabase: Skipping stale close (requested gen \(generation), current gen \(RewindDatabase.configureGeneration))")
-            return
-        }
-        close()
+    /// Direct configuration remains available to storage-isolation tests and
+    /// legacy callers, but it now has the same close-before-retarget semantics
+    /// as the production effective-owner boundary.
+    func configure(userId: String?) {
+        retargetEffectiveOwner(to: userId)
     }
 
     /// Close the database, allowing re-initialization for a different user.
     func close() {
+        if let runningFlagPath {
+            try? FileManager.default.removeItem(atPath: runningFlagPath)
+        }
+        if let dbQueue {
+            do {
+                try dbQueue.close()
+            } catch {
+                log("RewindDatabase: pool close reported an error; stale generation remains revoked")
+            }
+        }
         dbQueue = nil
         initializationTask = nil
         runningFlagPath = nil
         openedForUserId = nil
         initGeneration += 1
-        log("RewindDatabase: Closed database (generation \(initGeneration))")
+        poolEpoch += 1
+        log("RewindDatabase: Closed database (generation \(initGeneration), pool epoch \(poolEpoch))")
     }
 
     /// Switch to a different user's database.
@@ -264,8 +301,16 @@ actor RewindDatabase {
     /// Returns the per-user base directory: ~/Library/Application Support/Omi/users/{userId}/
     /// Falls back to the static currentUserId (set synchronously at app start) when
     /// configure() hasn't been called yet (e.g., TierManager triggers init early).
-    private func userBaseDirectory() -> URL {
-        let userId = configuredUserId ?? RewindDatabase.currentUserId ?? "anonymous"
+    private func targetUserId() -> String {
+        if RewindDatabase.currentUserId == nil,
+           UserDefaults.standard.string(forKey: .authUserId) == nil {
+            return "anonymous"
+        }
+        return configuredUserId ?? RewindDatabase.currentUserId ?? "anonymous"
+    }
+
+    private func userBaseDirectory(for userId: String? = nil) -> URL {
+        let userId = userId ?? targetUserId()
         return DesktopLocalProfile.applicationSupportURL()
             .appendingPathComponent("users", isDirectory: true)
             .appendingPathComponent(userId, isDirectory: true)
@@ -300,7 +345,7 @@ actor RewindDatabase {
     /// If the DB is open for a different user (e.g., "anonymous" before configure was called),
     /// closes it and reopens for the configured user.
     func initialize() async throws {
-        let targetUser = configuredUserId ?? RewindDatabase.currentUserId ?? "anonymous"
+        let targetUser = targetUserId()
 
         // Already initialized for the correct user
         if dbQueue != nil && openedForUserId == targetUser {
@@ -316,6 +361,7 @@ actor RewindDatabase {
         // If initialization is in progress, wait for it then re-check
         if let existingTask = initializationTask {
             _ = try? await existingTask.value
+            guard targetUserId() == targetUser else { throw CancellationError() }
             // After waiting, check if the result is for the right user
             if dbQueue != nil && openedForUserId == targetUser {
                 return
@@ -329,7 +375,9 @@ actor RewindDatabase {
         // Start initialization
         let myGeneration = initGeneration
         let task = Task {
-            try await performInitialization()
+            try await performInitialization(
+                expectedUserId: targetUser,
+                expectedGeneration: myGeneration)
         }
         initializationTask = task
 
@@ -348,10 +396,16 @@ actor RewindDatabase {
     }
 
     /// Actual initialization logic (called only once at a time)
-    private func performInitialization() async throws {
+    private func performInitialization(
+        expectedUserId: String,
+        expectedGeneration: Int
+    ) async throws {
         guard dbQueue == nil else { return }
 
-        let omiDir = userBaseDirectory()
+        // Resolve the directory once. `retargetEffectiveOwner` may run while
+        // this method is suspended in GRDB/file I/O; a stale initializer must
+        // never drift to the next owner's path or publish its old pool later.
+        let omiDir = userBaseDirectory(for: expectedUserId)
 
         // Create directory if needed (withIntermediateDirectories creates parents too)
         try FileManager.default.createDirectory(at: omiDir, withIntermediateDirectories: true)
@@ -457,8 +511,22 @@ actor RewindDatabase {
             }
         }
 
+        guard initGeneration == expectedGeneration,
+              targetUserId() == expectedUserId
+        else {
+            try? activeQueue.close()
+            throw CancellationError()
+        }
+
         dbQueue = activeQueue
-        openedForUserId = configuredUserId ?? RewindDatabase.currentUserId ?? "anonymous"
+        // Bump the pool epoch on every (re)open so storage actors that cached the
+        // previous pool revalidate and drop it — recovery may have replaced the
+        // underlying omi.db file, leaving the old pool pointing at a stale inode.
+        // This is `poolEpoch`, NOT `initGeneration`: initialize() relies on
+        // initGeneration staying unchanged across a normal open to clear its
+        // initializationTask.
+        poolEpoch += 1
+        openedForUserId = expectedUserId
         consecutiveQueryIOErrors = 0
 
         try migrate(activeQueue)
@@ -488,6 +556,34 @@ actor RewindDatabase {
     /// Migrate data from the legacy shared path (Omi/) or from the anonymous fallback
     /// (Omi/users/anonymous/) to the per-user path (Omi/users/{userId}/).
     /// Handles both first-time migration (DB move) and partial re-runs (directory merges).
+    /// Fold a directory's `omi.db-wal` into its `omi.db` so committed-but-
+    /// uncheckpointed writes survive the migration cleanup that deletes WAL/SHM.
+    /// Returns `true` when there is nothing to checkpoint or the checkpoint
+    /// succeeded, and `false` when a non-empty WAL exists but could not be
+    /// checkpointed — the caller MUST abort (not delete the WAL) in that case to
+    /// avoid a silent rollback / data loss.
+    private func checkpointWALBeforeMigration(in dir: URL, label: String, fileManager: FileManager) -> Bool {
+        let db = dir.appendingPathComponent("omi.db")
+        let wal = dir.appendingPathComponent("omi.db-wal")
+        guard fileManager.fileExists(atPath: db.path),
+            fileManager.fileExists(atPath: wal.path)
+        else {
+            return true // no WAL to fold in — nothing can be lost by the cleanup loop
+        }
+        do {
+            let pool = try DatabasePool(path: db.path, configuration: Configuration())
+            try pool.write { db in
+                try db.execute(sql: "PRAGMA wal_checkpoint(TRUNCATE)")
+            }
+            try pool.close()
+            log("RewindDatabase: Checkpointed WAL at \(label) before migration")
+            return true
+        } catch {
+            log("RewindDatabase: \(label) WAL checkpoint failed, aborting migration to avoid data loss: \(error.localizedDescription)")
+            return false
+        }
+    }
+
     private func migrateFromLegacyPathIfNeeded(to userDir: URL) {
         let fileManager = FileManager.default
         let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -502,7 +598,7 @@ actor RewindDatabase {
             .appendingPathComponent("users", isDirectory: true)
             .appendingPathComponent("anonymous", isDirectory: true)
 
-        let effectiveUserId = configuredUserId ?? RewindDatabase.currentUserId ?? "anonymous"
+        let effectiveUserId = targetUserId()
         let sourceDir: URL
         if fileManager.fileExists(atPath: legacyDB.path) {
             sourceDir = omiDir
@@ -534,25 +630,21 @@ actor RewindDatabase {
             "omi.db", "Screenshots", "Videos", "backups",
         ]
 
-        // Checkpoint WAL at destination before deleting — preserves recent writes
-        // (e.g. knowledge graph saved during onboarding, before app restart for permissions)
-        let destDB = userDir.appendingPathComponent("omi.db")
-        if fileManager.fileExists(atPath: destDB.path) {
-            let destWAL = userDir.appendingPathComponent("omi.db-wal")
-            if fileManager.fileExists(atPath: destWAL.path) {
-                do {
-                    let config = Configuration()
-                    let pool = try DatabasePool(path: destDB.path, configuration: config)
-                    try pool.write { db in
-                        try db.execute(sql: "PRAGMA wal_checkpoint(TRUNCATE)")
-                    }
-                    try pool.close()
-                    log("RewindDatabase: Checkpointed WAL at dest before migration")
-                } catch {
-                    log("RewindDatabase: WAL checkpoint failed: \(error.localizedDescription)")
-                }
-            }
-        }
+        // Fold each directory's WAL into its omi.db BEFORE the cleanup loop below
+        // deletes the path-bound WAL/SHM. An unclean prior shutdown leaves a
+        // non-empty WAL holding committed-but-uncheckpointed transactions (a clean
+        // close checkpoints and removes it); deleting that WAL outright would roll
+        // the DB back to its last checkpoint and silently drop up to
+        // wal_autocheckpoint (1000 pages, ~4MB) of recent writes:
+        //   - dest WAL: recent writes such as the knowledge graph saved during
+        //     onboarding, before the app restart for permissions.
+        //   - source WAL: the legacy data being migrated.
+        // If a checkpoint FAILS, those writes are still only in the WAL, so we must
+        // NOT proceed to delete it — abort the whole migration and leave source +
+        // dest intact. initialize() retries migration on the next launch, once the
+        // transient cause (locked DB, momentary IO error) has likely cleared.
+        guard checkpointWALBeforeMigration(in: userDir, label: "dest", fileManager: fileManager) else { return }
+        guard checkpointWALBeforeMigration(in: sourceDir, label: "source", fileManager: fileManager) else { return }
 
         // Delete WAL/SHM and running flag at source AND destination — do NOT migrate them.
         // Stale WAL/SHM at the destination (from a prior partial migration or crash) would
@@ -2319,6 +2411,27 @@ actor RewindDatabase {
             try db.execute(sql: "ALTER TABLE task_chat_messages ADD COLUMN resourcesJson TEXT")
         }
 
+        migrator.registerMigration("addConversationCacheAuthority") { db in
+            try db.alter(table: "transcription_sessions") { t in
+                t.add(column: "serverUpdatedAt", .datetime)
+                t.add(column: "cacheCompleteness", .text).notNull().defaults(to: "list")
+            }
+        }
+
+        migrator.registerMigration("addCanonicalTaskContractV1") { db in
+            try db.alter(table: "action_items") { t in
+                t.add(column: "canonicalTaskId", .text)
+                t.add(column: "taskStatus", .text)
+                t.add(column: "taskOwner", .text)
+                t.add(column: "goalId", .text)
+                t.add(column: "workstreamId", .text)
+                t.add(column: "dueConfidence", .double)
+                t.add(column: "provenanceJson", .text)
+                t.add(column: "supersededBy", .text)
+                t.add(column: "completedAt", .datetime)
+            }
+        }
+
         try migrator.migrate(queue)
     }
 
@@ -2476,6 +2589,57 @@ actor RewindDatabase {
             if record.imagePath == nil { record.imagePath = "" }
             try record.insert(db)
             return record
+        }
+    }
+
+    /// Atomically replace every database row reconstructed from one video chunk.
+    ///
+    /// Rebuilds can be retried, so inserting reconstructed rows one at a time would
+    /// duplicate the chunk on every run. The delete and complete replacement set
+    /// intentionally share one transaction: if any insert fails, SQLite restores
+    /// the previous rows instead of leaving a partially rebuilt chunk.
+    @discardableResult
+    func replaceScreenshotsForVideoChunk(path: String, screenshots: [Screenshot]) throws -> Int {
+        guard let dbQueue = dbQueue else {
+            throw RewindError.databaseNotInitialized
+        }
+        guard !path.isEmpty else {
+            throw RewindError.storageError("Cannot rebuild a video chunk with an empty path")
+        }
+        guard !screenshots.isEmpty else {
+            throw RewindError.storageError("Cannot replace a video chunk with an empty frame set")
+        }
+
+        var frameOffsets = Set<Int>()
+        for screenshot in screenshots {
+            guard screenshot.videoChunkPath == path else {
+                throw RewindError.storageError("Reconstructed frames must belong to the replaced video chunk")
+            }
+            guard let frameOffset = screenshot.frameOffset,
+                  frameOffset >= 0,
+                  frameOffsets.insert(frameOffset).inserted
+            else {
+                throw RewindError.storageError("Reconstructed frames must have unique non-negative offsets")
+            }
+        }
+
+        return try dbQueue.write { db in
+            try db.execute(
+                sql: "DELETE FROM screenshots WHERE videoChunkPath = ?",
+                arguments: [path]
+            )
+
+            for screenshot in screenshots {
+                var record = screenshot
+                // Reconstructed rows receive fresh local identities. Carrying an ID
+                // from another database or an earlier rebuild could collide with an
+                // unrelated screenshot.
+                record.id = nil
+                if record.imagePath == nil { record.imagePath = "" }
+                try record.insert(db)
+            }
+
+            return screenshots.count
         }
     }
 
@@ -3038,9 +3202,15 @@ actor RewindDatabase {
 
         do {
             let deleteResult = try await dbQueue.write { db -> DeleteResult in
+                // Exclude empty imagePaths: video-based screenshots store "" (the
+                // NOT NULL coalescing in insertScreenshot), and an empty path
+                // resolves to the Screenshots root, which the storage layer would
+                // otherwise recursively delete. RewindStorage guards this too, but
+                // never hand the empty path downstream in the first place.
                 let imagePaths = try String.fetchAll(
                     db,
-                    sql: "SELECT imagePath FROM screenshots WHERE timestamp < ? AND imagePath IS NOT NULL",
+                    sql:
+                        "SELECT imagePath FROM screenshots WHERE timestamp < ? AND imagePath IS NOT NULL AND imagePath != ''",
                     arguments: [date]
                 )
 

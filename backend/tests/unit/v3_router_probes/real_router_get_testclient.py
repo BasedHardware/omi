@@ -27,9 +27,9 @@ from tests.unit.v3_router_probes.real_router_dependency_map import (
 from tests.unit.v3_router_probes.stubs import legacy_memory_doc_factory_source, legacy_pin_stub_source
 
 MEMORY_ADAPTER_MODULES = [
-    "utils.memory.v3_request_adapter",
+    "utils.memory.v3.request_adapter",
     "testing.memory.v3_route_planner",
-    "utils.memory.v3_response_adapter",
+    "utils.memory.v3.response_adapter",
 ]
 
 
@@ -61,7 +61,8 @@ def _repo_backend_root() -> Path:
 def _probe_code() -> str:
     legacy_item_block = legacy_memory_doc_factory_source(stubbed_uid="stubbed-test-uid")
     pin_stub_block = legacy_pin_stub_source()
-    template = textwrap.dedent(r'''
+    template = textwrap.dedent(
+        r'''
         import hashlib
         import importlib
         import json
@@ -159,7 +160,7 @@ __LEGACY_ITEM_BLOCK__
         sys.modules["utils.memory"] = memory_pkg
         setattr(utils_pkg, "memory", memory_pkg)
 
-        composed = types.ModuleType("utils.memory.v3_composed_get_service")
+        composed = types.ModuleType("utils.memory.v3.composed_get_service")
         class V3ComposedRequestParams:
             def __init__(self, limit=None, offset=None, cursor=None, include_archive=False, include_historical=False):
                 self.limit = limit
@@ -177,10 +178,10 @@ __LEGACY_ITEM_BLOCK__
                 self.decision = decision
         composed.V3ComposedRequestParams = V3ComposedRequestParams
         composed.V3ComposedResponse = V3ComposedResponse
-        sys.modules["utils.memory.v3_composed_get_service"] = composed
+        sys.modules["utils.memory.v3.composed_get_service"] = composed
         setattr(memory_pkg, "v3_composed_get_service", composed)
 
-        production_runtime = types.ModuleType("utils.memory.v3_production_runtime")
+        production_runtime = types.ModuleType("utils.memory.v3.production_runtime")
         class ProductionV3GetRuntime:
             def __init__(self, enabled=False, source_decision="disabled", service=None, adapters=None, **kwargs):
                 self.enabled = enabled
@@ -193,7 +194,7 @@ __LEGACY_ITEM_BLOCK__
             return ProductionV3GetRuntime(enabled=False, source_decision="disabled")
         production_runtime.V3GetRuntime = ProductionV3GetRuntime
         production_runtime.build_v3_production_runtime = build_v3_production_runtime
-        sys.modules["utils.memory.v3_production_runtime"] = production_runtime
+        sys.modules["utils.memory.v3.production_runtime"] = production_runtime
         setattr(memory_pkg, "v3_production_runtime", production_runtime)
 
         memory_system_mod = types.ModuleType("utils.memory.memory_system")
@@ -283,9 +284,9 @@ __PIN_STUB_BLOCK__        surface_routing.pin_memory_system = pin_memory_system
                 route_refs.append(f"{method} {path}")
 
         memory_adapter_modules = [
-            "utils.memory.v3_request_adapter",
+            "utils.memory.v3.request_adapter",
             "testing.memory.v3_route_planner",
-            "utils.memory.v3_response_adapter",
+            "utils.memory.v3.response_adapter",
         ]
         loaded_adapters = [name for name in memory_adapter_modules if name in sys.modules]
 
@@ -316,7 +317,8 @@ __PIN_STUB_BLOCK__        surface_routing.pin_memory_system = pin_memory_system
             "memory_adapter_modules_loaded": loaded_adapters,
             "runtime_cutover_claimed": False,
         }, sort_keys=True))
-        ''')
+        '''
+    )
     return template.replace("__LEGACY_ITEM_BLOCK__", legacy_item_block).replace("__PIN_STUB_BLOCK__", pin_stub_block)
 
 

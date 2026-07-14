@@ -1,12 +1,24 @@
 import Foundation
 import GRDB
 
+private func withConversationCacheScope<T>(
+    _ scope: ConversationCacheWriteScope?,
+    generation: Int?,
+    operation: () throws -> T
+) throws -> T {
+    if let scope, let generation {
+        return try scope.withCurrent(generation, operation)
+    }
+    return try operation()
+}
+
 /// Actor-based storage manager for transcription sessions and segments
 /// Provides crash-safe persistence for transcription data during recording
 actor TranscriptionStorage {
     static let shared = TranscriptionStorage()
 
     private var _dbQueue: DatabasePool?
+    private var _dbGeneration = -1
     private var isInitialized = false
 
     private init() {}
@@ -19,7 +31,7 @@ actor TranscriptionStorage {
 
     /// Ensure database is initialized before use
     private func ensureInitialized() async throws -> DatabasePool {
-        if let db = _dbQueue {
+        if let db = _dbQueue, await RewindDatabase.shared.poolGeneration() == _dbGeneration {
             return db
         }
 
@@ -31,11 +43,13 @@ actor TranscriptionStorage {
             throw error
         }
 
-        guard let db = await RewindDatabase.shared.getDatabaseQueue() else {
+        let (queue, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+        guard let db = queue else {
             throw TranscriptionStorageError.databaseNotInitialized
         }
 
         _dbQueue = db
+        _dbGeneration = generation
         isInitialized = true
         return db
     }
@@ -339,14 +353,20 @@ actor TranscriptionStorage {
     }
 
     /// Soft-delete by backend conversation ID
-    func deleteByBackendId(_ backendId: String) async throws {
+    func deleteByBackendId(
+        _ backendId: String,
+        cacheScope: ConversationCacheWriteScope? = nil,
+        cacheGeneration: Int? = nil
+    ) async throws {
         let db = try await ensureInitialized()
 
         try await db.write { database in
-            try database.execute(
-                sql: "UPDATE transcription_sessions SET deleted = 1, updatedAt = ? WHERE backendId = ?",
-                arguments: [Date(), backendId]
-            )
+            try withConversationCacheScope(cacheScope, generation: cacheGeneration) {
+                try database.execute(
+                    sql: "UPDATE transcription_sessions SET deleted = 1, updatedAt = ? WHERE backendId = ?",
+                    arguments: [Date(), backendId]
+                )
+            }
         }
     }
 
@@ -797,46 +817,60 @@ actor TranscriptionStorage {
     /// Upsert a session from a ServerConversation (insert if not exists, update if exists)
     /// Returns the local session ID
     @discardableResult
-    func upsertFromServerConversation(_ conversation: ServerConversation) async throws -> (sessionId: Int64, changed: Bool) {
+    func upsertFromServerConversation(
+        _ conversation: ServerConversation,
+        cacheScope: ConversationCacheWriteScope? = nil,
+        cacheGeneration: Int? = nil
+    ) async throws -> (sessionId: Int64, changed: Bool) {
         let db = try await ensureInitialized()
 
         return try await db.write { database -> (Int64, Bool) in
-            // Check if session already exists by backendId
-            if var existingSession = try TranscriptionSessionRecord
-                .filter(Column("backendId") == conversation.id)
-                .fetchOne(database) {
-                // Skip if local record is newer than the conversation's latest timestamp.
-                // This prevents sync from overwriting recent local mutations (star, delete, title edit, etc.).
-                // Exception: finalization can create a backend-synced local shell with an id/status
-                // but no structured title/overview. Backend list/detail sync must be allowed to hydrate
-                // that shell later, even when local completion happened after the server's finished_at timestamp.
-                let serverTimestamp = conversation.finishedAt ?? conversation.startedAt ?? conversation.createdAt
-                let localMutationIsNewer = existingSession.updatedAt >= serverTimestamp
-                let shouldHydrateLocalShell = existingSession.hasHydratableServerFields(from: conversation)
-                if localMutationIsNewer && !shouldHydrateLocalShell {
-                    guard let sessionId = existingSession.id else {
-                        throw TranscriptionStorageError.invalidState("Session ID is nil")
+            try withConversationCacheScope(cacheScope, generation: cacheGeneration) {
+                // Check if session already exists by backendId
+                if var existingSession = try TranscriptionSessionRecord
+                    .filter(Column("backendId") == conversation.id)
+                    .fetchOne(database) {
+                    // Firestore update_time is the only server freshness authority.
+                    // Local cache-write time and recording timestamps are unrelated clocks.
+                    let incomingIsOlder: Bool
+                    if let incomingRevision = conversation.updatedAt,
+                       let cachedRevision = existingSession.serverUpdatedAt {
+                        incomingIsOlder = incomingRevision < cachedRevision
+                    } else {
+                        incomingIsOlder = false
                     }
-                    return (sessionId, false)
-                }
+                    let shouldHydrateLocalShell = existingSession.hasHydratableServerFields(from: conversation)
+                    let upgradesDetail = conversation.transcriptSegmentsIncluded
+                        && existingSession.cacheCompleteness == .list
+                    let requiresConservativeMerge = conversation.updatedAt == nil || incomingIsOlder
+                    if requiresConservativeMerge && !shouldHydrateLocalShell && !upgradesDetail {
+                        guard let sessionId = existingSession.id else {
+                            throw TranscriptionStorageError.invalidState("Session ID is nil")
+                        }
+                        return (sessionId, false)
+                    }
 
-                // Update existing session
-                existingSession.updateFrom(conversation, preservingNewerLocalFields: localMutationIsNewer)
-                try existingSession.update(database)
-                guard let sessionId = existingSession.id else {
-                    throw TranscriptionStorageError.invalidState("Session ID is nil after update")
+                    if requiresConservativeMerge {
+                        existingSession.hydrateMissingFields(from: conversation)
+                    } else {
+                        existingSession.updateFrom(conversation)
+                    }
+                    try existingSession.update(database)
+                    guard let sessionId = existingSession.id else {
+                        throw TranscriptionStorageError.invalidState("Session ID is nil after update")
+                    }
+                    log("TranscriptionStorage: Updated session \(sessionId) from backend \(conversation.id)")
+                    return (sessionId, true)
+                } else {
+                    // Insert new session - use inserted() to get record with ID
+                    let newSession = TranscriptionSessionRecord.from(conversation)
+                    let insertedSession = try newSession.inserted(database)
+                    guard let sessionId = insertedSession.id else {
+                        throw TranscriptionStorageError.invalidState("Session ID is nil after insert")
+                    }
+                    log("TranscriptionStorage: Inserted new session \(sessionId) from backend \(conversation.id)")
+                    return (sessionId, true)
                 }
-                log("TranscriptionStorage: Updated session \(sessionId) from backend \(conversation.id)")
-                return (sessionId, true)
-            } else {
-                // Insert new session - use inserted() to get record with ID
-                let newSession = TranscriptionSessionRecord.from(conversation)
-                let insertedSession = try newSession.inserted(database)
-                guard let sessionId = insertedSession.id else {
-                    throw TranscriptionStorageError.invalidState("Session ID is nil after insert")
-                }
-                log("TranscriptionStorage: Inserted new session \(sessionId) from backend \(conversation.id)")
-                return (sessionId, true)
             }
         }
     }
@@ -845,55 +879,75 @@ actor TranscriptionStorage {
     /// Replaces backend-owned transcript fields while preserving existing local speaker assignments.
     /// Skips when incoming segments are empty to avoid wiping locally-cached data
     /// (list endpoints often return conversations without transcript segments).
-    func upsertSegmentsFromServerConversation(_ conversation: ServerConversation, sessionId: Int64) async throws {
+    func upsertSegmentsFromServerConversation(
+        _ conversation: ServerConversation,
+        sessionId: Int64,
+        cacheScope: ConversationCacheWriteScope? = nil,
+        cacheGeneration: Int? = nil
+    ) async throws {
         guard !conversation.transcriptSegments.isEmpty else { return }
 
         let db = try await ensureInitialized()
 
         try await db.write { database in
-            let existingSegments = try TranscriptionSegmentRecord
-                .filter(Column("sessionId") == sessionId)
-                .fetchAll(database)
-            var existingBySegmentId: [String: TranscriptionSegmentRecord] = [:]
-            var existingByOrder: [Int: TranscriptionSegmentRecord] = [:]
-            for segment in existingSegments {
-                if let segmentId = segment.segmentId {
-                    existingBySegmentId[segmentId] = segment
+            try withConversationCacheScope(cacheScope, generation: cacheGeneration) {
+                let existingSegments = try TranscriptionSegmentRecord
+                    .filter(Column("sessionId") == sessionId)
+                    .fetchAll(database)
+                var existingBySegmentId: [String: TranscriptionSegmentRecord] = [:]
+                var existingByOrder: [Int: TranscriptionSegmentRecord] = [:]
+                for segment in existingSegments {
+                    if let segmentId = segment.segmentId {
+                        existingBySegmentId[segmentId] = segment
+                    }
+                    existingByOrder[segment.segmentOrder] = segment
                 }
-                existingByOrder[segment.segmentOrder] = segment
-            }
 
-            // Delete existing segments for this session
-            try database.execute(
-                sql: "DELETE FROM transcription_segments WHERE sessionId = ?",
-                arguments: [sessionId]
-            )
+                // Delete existing segments for this session
+                try database.execute(
+                    sql: "DELETE FROM transcription_segments WHERE sessionId = ?",
+                    arguments: [sessionId]
+                )
 
-            // Insert new segments
-            for (index, segment) in conversation.transcriptSegments.enumerated() {
-                var record = TranscriptionSegmentRecord.from(segment, sessionId: sessionId, segmentOrder: index)
-                let existing = segment.backendId.flatMap { existingBySegmentId[$0] } ?? existingByOrder[index]
-                if let existing, existing.hasSpeakerAssignment {
-                    record.isUser = existing.isUser
-                    record.personId = existing.personId
+                // Insert new segments
+                for (index, segment) in conversation.transcriptSegments.enumerated() {
+                    var record = TranscriptionSegmentRecord.from(segment, sessionId: sessionId, segmentOrder: index)
+                    let existing = segment.backendId.flatMap { existingBySegmentId[$0] } ?? existingByOrder[index]
+                    if let existing, existing.hasSpeakerAssignment {
+                        record.isUser = existing.isUser
+                        record.personId = existing.personId
+                    }
+                    _ = try record.inserted(database)
                 }
-                _ = try record.inserted(database)
-            }
 
-            log("TranscriptionStorage: Upserted \(conversation.transcriptSegments.count) segments for session \(sessionId)")
+                log("TranscriptionStorage: Upserted \(conversation.transcriptSegments.count) segments for session \(sessionId)")
+            }
         }
     }
 
     /// Sync a full ServerConversation (session + segments) to local storage
     @discardableResult
-    func syncServerConversation(_ conversation: ServerConversation) async throws -> Int64 {
+    func syncServerConversation(
+        _ conversation: ServerConversation,
+        cacheScope: ConversationCacheWriteScope? = nil,
+        cacheGeneration: Int? = nil
+    ) async throws -> Int64 {
         // First upsert the session
-        let (sessionId, changed) = try await upsertFromServerConversation(conversation)
+        let (sessionId, changed) = try await upsertFromServerConversation(
+            conversation,
+            cacheScope: cacheScope,
+            cacheGeneration: cacheGeneration
+        )
 
         // Detail responses can carry backend segment ids, speaker assignments, or translations even
         // when session metadata is skipped by the local-newer timestamp guard.
         if changed || conversation.transcriptPresenceState == .includedNonEmpty {
-            try await upsertSegmentsFromServerConversation(conversation, sessionId: sessionId)
+            try await upsertSegmentsFromServerConversation(
+                conversation,
+                sessionId: sessionId,
+                cacheScope: cacheScope,
+                cacheGeneration: cacheGeneration
+            )
         }
 
         return sessionId
@@ -978,9 +1032,18 @@ actor TranscriptionStorage {
             // Segments are only needed for conversation detail view, not list view
             // This makes the query O(1) instead of O(N) for much faster loading
             return sessions.compactMap { session in
-                session.toServerConversation(segments: [])
+                session.toServerConversation(segments: [], transcriptIncluded: false)
             }
         }
+    }
+
+    /// Read the richest cached projection for a detail screen.
+    func getCachedConversation(id: String) async throws -> ServerConversation? {
+        guard let session = try await getSessionByBackendId(id), let sessionId = session.id else {
+            return nil
+        }
+        let segments = try await getSegments(sessionId: sessionId)
+        return session.toServerConversation(segments: segments)
     }
 
     /// Get count of local conversations

@@ -23,6 +23,8 @@ struct DesktopHomeView: View {
   @ObservedObject private var authState = AuthState.shared
   @ObservedObject private var apiKeyService = APIKeyService.shared
   @ObservedObject private var updatePolicyManager = DesktopUpdatePolicyManager.shared
+  @ObservedObject private var automationPresentationCoordinator =
+    DesktopAutomationPresentationCoordinator.shared
   @State private var selectedIndex: Int = {
     if OMIApp.launchMode == .rewind { return SidebarNavItem.rewind.rawValue }
     let tier = UserDefaults.standard.integer(forKey: "currentTierLevel")
@@ -49,6 +51,8 @@ struct DesktopHomeView: View {
   @State private var proactiveMonitoringWarmupAnchor = Date()
   @State private var didScheduleConversationWarmup = false
   @State private var initialFileIndexingBackfill = DelayedFileIndexingBackfillState()
+  @State private var automationPresentationReadinessGate =
+    DesktopAutomationPresentationReadinessGate()
 
   // Pre-loaded hero logo to avoid NSImage init crashes during SwiftUI body evaluation
   private static let heroLogoImage: NSImage? = {
@@ -67,7 +71,7 @@ struct DesktopHomeView: View {
     Group {
       if authState.isRestoringAuth {
         // State 0: Restoring auth session - show loading
-        VStack(spacing: 16) {
+        VStack(spacing: OmiSpacing.lg) {
           if let nsImage = Self.heroLogoImage {
             Image(nsImage: nsImage)
               .resizable()
@@ -82,6 +86,11 @@ struct DesktopHomeView: View {
         .onAppear {
           log("DesktopHomeView: Showing auth loading splash")
         }
+      } else if authState.sessionPhase == .recoveryRequired {
+        SessionRecoveryView()
+          .onAppear {
+            log("DesktopHomeView: Showing recoverable auth state")
+          }
       } else if !authState.isSignedIn {
         // State 1: Not signed in - show sign in
         SignInView(authState: authState)
@@ -125,7 +134,10 @@ struct DesktopHomeView: View {
                   onUpgrade: {
                     appState.showUsageLimitPopup = false
                     selectedSettingsSection = .planUsage
-                    withAnimation(Self.pageNavigationAnimation) {
+                    // Plan and Usage now lives below Account on the merged
+                    // "Account & Plan" page — scroll straight to the plan card.
+                    highlightedSettingId = "planusage.current"
+                    OmiMotion.withGated(Self.pageNavigationAnimation) {
                       selectedIndex = SidebarNavItem.settings.rawValue
                     }
                   },
@@ -135,7 +147,7 @@ struct DesktopHomeView: View {
                   onBringYourOwnKeys: {
                     appState.showUsageLimitPopup = false
                     selectedSettingsSection = .advanced
-                    withAnimation(Self.pageNavigationAnimation) {
+                    OmiMotion.withGated(Self.pageNavigationAnimation) {
                       selectedIndex = SidebarNavItem.settings.rawValue
                     }
                   }
@@ -149,8 +161,8 @@ struct DesktopHomeView: View {
                   onDownload: { updatePolicyManager.openDownload(policy) },
                   onDismiss: { updatePolicyManager.dismiss(policy) }
                 )
-                .padding(.top, 12)
-                .padding(.horizontal, 20)
+                .padding(.top, OmiSpacing.md)
+                .padding(.horizontal, OmiSpacing.xl)
                 .transition(.move(edge: .top).combined(with: .opacity))
               }
             }
@@ -293,7 +305,7 @@ struct DesktopHomeView: View {
                 "DesktopHomeView: userDidSignOut — resetting hasCompletedOnboarding and stopping transcription"
               )
               resetSessionScopedStartupWarmups(preserveCrispReadState: false)
-              appState.conversations = []
+              appState.conversationRepository.reset()
               appState.folders = []
               appState.selectedFolderId = nil
               appState.selectedDateFilter = nil
@@ -355,7 +367,7 @@ struct DesktopHomeView: View {
             }
 
           if !viewModelContainer.isInitialLoadComplete {
-            VStack(spacing: 24) {
+            VStack(spacing: OmiSpacing.xxl) {
               if let nsImage = Self.heroLogoImage {
                 Image(nsImage: nsImage)
                   .resizable()
@@ -363,7 +375,7 @@ struct DesktopHomeView: View {
                   .frame(width: 72, height: 72)
                   .scaleEffect(logoPulse ? 1.08 : 1.0)
                   .opacity(logoPulse ? 1.0 : 0.7)
-                  .animation(
+                  .omiAnimation(
                     .easeInOut(duration: 1.2).repeatForever(autoreverses: true),
                     value: logoPulse
                   )
@@ -371,16 +383,16 @@ struct DesktopHomeView: View {
               }
 
               Text(viewModelContainer.initStatusMessage)
-                .scaledFont(size: 14, weight: .medium)
+                .scaledFont(size: OmiType.body, weight: .medium)
                 .foregroundColor(OmiColors.textTertiary)
 
               ProgressView()
                 .scaleEffect(0.8)
-                .tint(OmiColors.purplePrimary.opacity(0.6))
+                .tint(OmiColors.accent.opacity(0.6))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(OmiColors.backgroundPrimary)
-            .transition(.opacity.animation(.easeOut(duration: 0.3)))
+            .transition(.opacity.animation(OmiMotion.gated(.easeOut(duration: 0.3))))
           }
 
           if let policy = updatePolicyManager.visiblePolicy, policy.isRequired {
@@ -399,7 +411,7 @@ struct DesktopHomeView: View {
     .background(OmiColors.backgroundPrimary)
     .frame(minWidth: minimumWindowWidth, minHeight: minimumWindowHeight)
     .preferredColorScheme(.dark)
-    .tint(OmiColors.purplePrimary)
+    .tint(OmiColors.accent)
     .onAppear {
       log(
         "DesktopHomeView: View appeared - isSignedIn=\(authState.isSignedIn), hasCompletedOnboarding=\(appState.hasCompletedOnboarding)"
@@ -418,6 +430,7 @@ struct DesktopHomeView: View {
       // Redirect if current page isn't visible at current tier
       redirectIfPageHidden()
       reportAutomationState()
+      handleAutomationPresentationReadinessChange(viewModelContainer.isInitialLoadComplete)
     }
     .onChange(of: currentTierLevel) { _, _ in
       redirectIfPageHidden()
@@ -428,6 +441,16 @@ struct DesktopHomeView: View {
       // resets the window min — re-pin + re-disable to hold the minimum.
       enforceMainWindowMinimumSize()
       reportAutomationState()
+    }
+    .onChange(of: automationPresentationCoordinator.activeCommand?.generation) { _, _ in
+      guard
+        let command = automationPresentationReadinessGate.commandForConsumption(
+          automationPresentationCoordinator.activeCommand)
+      else { return }
+      handleAutomationPresentationCommand(command)
+    }
+    .onChange(of: viewModelContainer.isInitialLoadComplete) { _, isReady in
+      handleAutomationPresentationReadinessChange(isReady)
     }
     .onChange(of: selectedSettingsSection) { _, _ in reportAutomationState() }
     .onChange(of: highlightedSettingId) { _, _ in reportAutomationState() }
@@ -564,6 +587,7 @@ struct DesktopHomeView: View {
 
   private var currentAppStateLabel: String {
     if authState.isRestoringAuth { return "restoring_auth" }
+    if authState.sessionPhase == .recoveryRequired { return "auth_recovery" }
     if !authState.isSignedIn { return "signed_out" }
     if !appState.hasCompletedOnboarding { return "onboarding" }
     return "main"
@@ -640,6 +664,26 @@ struct DesktopHomeView: View {
     }
 
     reportAutomationState()
+  }
+
+  private func handleAutomationPresentationCommand(
+    _ command: DesktopAutomationPresentationCommand
+  ) {
+    NSApp.activate()
+    if let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") }) {
+      window.makeKeyAndOrderFront(nil)
+    }
+    selectedIndex = SidebarNavItem.apps.rawValue
+    reportAutomationState()
+  }
+
+  private func handleAutomationPresentationReadinessChange(_ isReady: Bool) {
+    guard
+      let command = automationPresentationReadinessGate.transition(
+        to: isReady,
+        activeCommand: automationPresentationCoordinator.activeCommand)
+    else { return }
+    handleAutomationPresentationCommand(command)
   }
 
   private func resolvedAutomationTarget(_ target: String) -> SidebarNavItem? {
@@ -847,7 +891,7 @@ struct DesktopHomeView: View {
             selectedSection: $selectedSettingsSection,
             highlightedSettingId: $highlightedSettingId,
             onBack: {
-              withAnimation(Self.pageNavigationAnimation) {
+              OmiMotion.withGated(Self.pageNavigationAnimation) {
                 selectedIndex =
                   previousIndexBeforeSettings == SidebarNavItem.settings.rawValue
                   ? SidebarNavItem.dashboard.rawValue
@@ -899,15 +943,19 @@ struct DesktopHomeView: View {
         // Extracted into a separate struct so that pages like TasksPage
         // are not re-rendered when AppState publishes unrelated changes.
         VStack(spacing: 0) {
-          if !useLegacyHomeDesign && selectedIndex != SidebarNavItem.dashboard.rawValue {
+          // Settings has its own Back affordance in SettingsSidebar, so skip the
+          // redundant Home chrome there.
+          if !useLegacyHomeDesign && selectedIndex != SidebarNavItem.dashboard.rawValue
+            && !isInSettings
+          {
             PageChromeBar(
               onHome: {
                 selectedIndex = SidebarNavItem.dashboard.rawValue
               }
             )
-            .padding(.horizontal, 18)
-            .padding(.top, 14)
-            .padding(.bottom, 4)
+            .padding(.horizontal, OmiSpacing.lg)
+            .padding(.top, OmiSpacing.md)
+            .padding(.bottom, OmiSpacing.xxs)
           }
 
           PageContentView(
@@ -924,7 +972,7 @@ struct DesktopHomeView: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
       }
-      .padding(14)
+      .padding(OmiSpacing.md)
     }
     .overlay {
       // Goal completion celebration overlay
@@ -1014,7 +1062,7 @@ struct DesktopHomeView: View {
       updateStoreActivity(for: newValue)
     }
     .onChange(of: useLegacyHomeDesign) { _, newValue in
-      withAnimation(.easeInOut(duration: 0.2)) {
+      OmiMotion.withGated(.easeInOut(duration: 0.2)) {
         isSidebarCollapsed = !newValue
       }
     }
@@ -1032,7 +1080,7 @@ struct DesktopHomeView: View {
     guard !useLegacyHomeDesign else { return }
     guard let item = SidebarNavItem(rawValue: selectedIndex) else { return }
     guard [.conversations, .memories, .tasks, .rewind].contains(item) else { return }
-    withAnimation(Self.pageNavigationAnimation) {
+    OmiMotion.withGated(Self.pageNavigationAnimation) {
       selectedIndex = SidebarNavItem.dashboard.rawValue
     }
   }
@@ -1042,7 +1090,7 @@ private struct PageChromeBar: View {
   let onHome: () -> Void
 
   var body: some View {
-    HStack(spacing: 8) {
+    HStack(spacing: OmiSpacing.sm) {
       PageChromeButton(title: "Home", systemImage: "house.fill", action: onHome)
       Spacer()
     }
@@ -1058,15 +1106,15 @@ private struct PageChromeButton: View {
 
   var body: some View {
     Button(action: action) {
-      HStack(spacing: 7) {
+      HStack(spacing: OmiSpacing.xs) {
         Image(systemName: systemImage)
-          .scaledFont(size: 12, weight: .semibold)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
         Text(title)
-          .scaledFont(size: 12, weight: .semibold)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
       }
       .foregroundStyle(isHovering ? OmiColors.textPrimary : OmiColors.textSecondary)
-      .padding(.horizontal, 11)
-      .padding(.vertical, 7)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.xs)
       .background(
         Capsule(style: .continuous)
           .fill(.ultraThinMaterial)
@@ -1101,10 +1149,12 @@ private struct PageContentView: View {
       case 0:
         DashboardPage(
           viewModel: viewModelContainer.dashboardViewModel,
+          homeStatusStore: viewModelContainer.homeStatusStore,
           appState: appState,
           appProvider: viewModelContainer.appProvider,
           chatProvider: viewModelContainer.chatProvider,
           memoriesViewModel: viewModelContainer.memoriesViewModel,
+          taskChatCoordinator: viewModelContainer.taskChatCoordinator,
           selectedIndex: $selectedTabIndex)
       case 1:
         ConversationsPageHost(appState: appState)
@@ -1113,7 +1163,9 @@ private struct PageContentView: View {
           appProvider: viewModelContainer.appProvider, chatProvider: viewModelContainer.chatProvider
         )
       case 3:
-        MemoriesPage(viewModel: viewModelContainer.memoriesViewModel)
+        MemoriesPage(
+          viewModel: viewModelContainer.memoriesViewModel,
+          graphViewModel: viewModelContainer.memoryGraphViewModel)
       case 4:
         TasksPage(
           viewModel: viewModelContainer.tasksViewModel,
@@ -1126,7 +1178,11 @@ private struct PageContentView: View {
       case 7:
         RewindPage(appState: appState)
       case 8:
-        AppsPage(appProvider: viewModelContainer.appProvider, appState: appState)
+        AppsPage(
+          appProvider: viewModelContainer.appProvider,
+          appState: appState,
+          connectorStatusStore: viewModelContainer.homeStatusStore.connectorStatusStore,
+          handlesAutomationPresentations: viewModelContainer.isInitialLoadComplete)
       case 9:
         SettingsPage(
           appState: appState,
@@ -1141,10 +1197,12 @@ private struct PageContentView: View {
       default:
         DashboardPage(
           viewModel: viewModelContainer.dashboardViewModel,
+          homeStatusStore: viewModelContainer.homeStatusStore,
           appState: appState,
           appProvider: viewModelContainer.appProvider,
           chatProvider: viewModelContainer.chatProvider,
           memoriesViewModel: viewModelContainer.memoriesViewModel,
+          taskChatCoordinator: viewModelContainer.taskChatCoordinator,
           selectedIndex: $selectedTabIndex)
       }
     }

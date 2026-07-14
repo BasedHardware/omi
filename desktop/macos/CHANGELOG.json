@@ -2,6 +2,210 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.73",
+      "date": "2026-07-14",
+      "changes": [
+        "Fixed the onboarding browser-import keychain prompt showing a confusing \"security wants to access\" dialog — it now clearly asks on behalf of Omi",
+        "Refreshed the app's look: replaced the purple accent with a clean white/neutral style, unified buttons, toggles, spacing and typography across every screen, and animations now respect the system Reduce Motion setting",
+        "Fixed push-to-talk not recovering the mic after repeated silent turns when the realtime hub was still warming up",
+        "Made chat, push-to-talk, task chat, and background agents share one reliable conversation and execution lifecycle across rapid turns and restarts",
+        "Fixed missing app icons in the Excluded Apps lists — system apps like Finder now resolve, and uninstalled apps show a letter tile instead of a generic placeholder",
+        "Moved Notifications above System Audio in General settings",
+        "Simplified Settings navigation: Account & Plan and Notifications & Privacy are now single sidebar sections",
+        "Made the notch island's hover expansion buttery-smooth: the panel no longer resizes on hover (content animates with a spring instead), icons travel with the expanding surface, and the island now animates in and out of the notch when shown or hidden",
+        "Notifications in General settings now use a toggle instead of an Enable button",
+        "Decluttered Settings: one button and one dropdown format everywhere, removed redundant status dots and the Home bar on settings pages, the sidebar Settings button opens Settings directly, and the Font Size card lost its duplicate shortcut list",
+        "Fixed the stepped sliders in Settings: step dots and thumb now sit centered on the track, with larger step markers",
+        "Fixed ad-hoc named development bundles failing to launch with embedded frameworks",
+        "Improved Bluetooth connection and reconnection reliability across supported devices",
+        "Improved Smart Tasks to show fewer, more timely recommendations with fewer exact duplicates and low-confidence suggestions",
+        "Improved desktop chat and voice reliability by recovering stale backend connections and returning faster, clearer provider timeout errors",
+        "Fixed long-context AI requests failing with \"AI request took too long\" even when the model had already produced an answer",
+        "Improved push-to-talk permission requests and made focused recommendations reliable across desktop device identities",
+        "Fixed the SD-card sync screen always showing 0 B/s instead of the real download speed",
+        "Fixed Apple Notes import silently skipping notes whose title or summary contained words like \"execution\" or \"executive\"",
+        "Added a one-click Omi connection through the approved ChatGPT app directory inside the combined ChatGPT / Codex choice, with verified authorization status and a developer-mode fallback",
+        "Hardened shared chat and push-to-talk continuity across reconnects and provider failures, with truthful compact background-agent lifecycle receipts and QA runtime diagnostics",
+        "Fixed current public-information questions, including weather and live sports schedules, so Omi reliably searches the web",
+        "Fixed duplicate subagent activity rows, synchronized live main-chat subagents into the hover list, and kept completed subagents visible until viewed or dismissed.",
+        "Made local macOS development relaunches much faster after the first build.",
+        "Kept internal subagent run identifiers out of chat prose while preserving lifecycle cards and recovery links.",
+        "Made agent kernel-context setup tolerate runtime startup latency without misreporting it as a model-query timeout.",
+        "Kept active web and other agent tools visibly in progress in chat until their lifecycle finishes.",
+        "Fixed Hermes and OpenClaw background agents inheriting Omi's managed model profile and reporting provider errors as completed work.",
+        "Fixed OpenClaw chat requests when the CLI is installed through FNM",
+        "Fixed push-to-talk background-agent launches when the realtime provider includes its optional agent-summary field.",
+        "Fixed push-to-talk agent launches so a rejected background-agent request ends the voice turn as failed instead of reporting a false success.",
+        "Fixed push-to-talk background-agent requests so accepted runs immediately appear in the subagent pill and hover status surfaces.",
+        "Fixed consecutive push-to-talk turns that could wait forever for a missing provider transcript before running an already-authorized tool",
+        "Fixed push-to-talk barge-in so holding the shortcut interrupts an active voice response and starts a new recording",
+        "Fixed push-to-talk replies being dropped after a context-refresh reconnect, including repeated and first-turn attempts.",
+        "Fixed physical push-to-talk releases that could discard a valid recording, and kept the recording state visible while chat is open.",
+        "Fixed permission requests (e.g. \"enable notifications\") being silently ignored in push-to-talk / voice mode — the consent gate now derives from the spoken turn transcript",
+        "Kept push-to-talk and typed chat on a fresh shared conversation context across consecutive turns, barge-ins, and short presses",
+        "Push-to-talk listening morphs shared floating-bar chrome during chat on every display; too-short/error copy uses a readable status banner under chrome/pill; agent voice follow-up was removed so global PTT always talks to the main agent",
+        "Fixed push-to-talk background-agent launches being lost or duplicated when the voice turn is interrupted",
+        "Prevented normal typing chords from triggering modifier-only push-to-talk while preserving intentional barge-in holds from the chat input.",
+        "Fixed unbounded audio buffering that could grow memory if a voice session stalled while connecting",
+        "Improved voice assistant discovery of active Omi agents and subagents.",
+        "Made Rewind database rebuilds safe to retry and prevented failed audio-backup writes from inflating saved frame counts",
+        "Improved desktop development build startup by reusing verified runtime downloads",
+        "Improved chat accuracy when reading your screen: large screenshots now include close-up tiles so Omi reads small text like product titles and prices exactly instead of guessing",
+        "Fixed chat and push-to-talk requests for screen sharing so they open Omi's Screen Recording permission flow",
+        "Simplified Tasks filters to match mobile — one tap now switches between To Do and Done, replacing the filter menu, and completed tasks no longer leak into the To Do list",
+        "Kept the Omi control and floating-bar settings fixed in the notch header while chat and hover agent rows expand, and restored the expanded Omi Chat header.",
+        "Fixed Tasks showing hundreds of stale tasks that were already completed or removed on other devices — the desktop list now converges to match mobile, including when all tasks are done",
+        "Show when live transcription is temporarily unavailable and clear the status after it reconnects",
+        "Fixed voice sessions reconnecting after OpenAI's 60-minute realtime limit",
+        "Fixed push-to-talk turns spinning indefinitely when realtime context admission fails after the socket becomes ready.",
+        "Fixed a realtime PTT reconnect race that could reject an otherwise-ready context admission and unnecessarily fall back to batch transcription.",
+        "Fixed macOS update recovery so a broken update notice or failed policy check still gives you a working stable download path."
+      ]
+    },
+    {
+      "version": "0.12.72",
+      "date": "2026-07-12",
+      "changes": [
+        "Fixed the chat view jumping instead of holding your place when loading earlier messages, and stopped push-to-talk from dropping a legitimately repeated word within a single turn",
+        "Fixed stopped or timed-out AI replies from resurfacing after a newer request",
+        "Improved macOS desktop test coverage checks so stale fork refs no longer create false coverage failures.",
+        "Improved macOS reliability around sign-out cleanup, capture lifecycle recovery, Bluetooth audio, and local storage persistence.",
+        "Fixed more reliability issues: Rewind's 'Rebuild Index' recovery now actually restores your video history, task search no longer returns the wrong task, screen-file indexing no longer drops your files when a folder is temporarily unreadable, and voice turns can't be duplicated in chat",
+        "Fixed more reliability issues: a system-audio cleanup deadlock, a Bluetooth crash while syncing recordings from storage, a possible hang when importing large connector sessions, agent sync no longer skipping same-second bulk edits, and the 'screen recording needs reset' notice no longer being lost if you were snoozed",
+        "Fixed audio loss and data races on macOS: duplicate-id recordings no longer overwrite earlier audio, Bluetooth reads/writes no longer race, the Memory graph layout no longer corrupts during render, and legacy Rewind migration no longer drops recent writes",
+        "Fixed more macOS defects: the Automation permission prompt is now reliably triggered on the main thread, deleting a memory no longer skips one memory the next time the list pages, rapid task reordering no longer briefly flickers back to the old order, and a Limitless storage-status check no longer risks a crash",
+        "Fixed several crashes and data-loss issues: a Rewind cleanup bug that could delete your entire screenshot history, cross-account data leaking between sign-ins, Bluetooth device crashes and silent audio, and duplicate-task deletion destroying the kept task",
+        "Updated the macOS bundled pi agent runtime packages to maintained releases.",
+        "Fixed local storage continuing to use a stale database connection after an automatic corruption recovery, which could hide recent data or repeat errors until the next restart",
+        "Fixed a rare crash when stopping or restarting a running task agent while it was being polled for progress",
+        "Improved the reliability of voice turn and response timeout recovery",
+        "Fixed a crash that could occur when a Bee device sent a corrupted audio frame",
+        "Fixed a background timer leak that accumulated wakeups over time when the voice assistant hub reconnected, reducing battery drain",
+        "Fixed Rewind capturing no video (every recorded chunk was discarded), restoring the Rewind timeline",
+        "Improved recovery for macOS updates with a verified stable repair download",
+        "Fixed system audio being captured ~6 dB too quiet, improving transcription accuracy for meetings and calls",
+        "Fixed a rare race where a recording started during a cloud sync could be dropped and never uploaded"
+      ]
+    },
+    {
+      "version": "0.12.71",
+      "date": "2026-07-11",
+      "changes": [
+        "Made macOS permission requests safer across chat and voice and kept notch transitions centered after push-to-talk",
+        "Improved push-to-talk reliability during reconnects and rapid state changes",
+        "Fixed the floating notch disappearing after macOS moves it between displays or Spaces",
+        "Added a consent-gated way to let Omi open macOS permission settings directly from main chat"
+      ]
+    },
+    {
+      "version": "0.12.70",
+      "date": "2026-07-11",
+      "changes": [
+        "Fixed voice requests for a background agent's completed result",
+        "Agent provider boundaries and worker roles are now enforced by the desktop runtime: managed work stays on Omi cloud routing, local modes stay pinned to their selected provider, leaf workers cannot create more agents, and failed required control actions cannot appear as successful completion.",
+        "Fixed agent-management questions from creating unintended background agents and duplicate completion cards",
+        "Fixed background agents so they can use your Omi memories",
+        "Improved sync recovery reliability for large offline recording backlogs",
+        "Fixed the floating Omi notch drifting away from the MacBook camera housing after it resizes",
+        "Fixed OpenClaw and Hermes agent pills and a voice-startup crash in development builds",
+        "Fixed Omi Chat getting stuck on a stale local-provider setting before its first response",
+        "Fixed Neo subscribers being blocked from Desktop audio by stale trial paywall state",
+        "Fixed voice requests so completed background agents remain discoverable",
+        "Fixed push-to-talk notch alignment and restored direct macOS permission requests in chat and voice",
+        "Fixed Push to Talk audio being lost while the realtime session reconnects",
+        "Fixed goal creation, memory editing, memory visibility, and voice-provider authorization failures that could interrupt desktop workflows",
+        "Improved desktop error messages with clear retry guidance instead of technical backend details"
+      ]
+    },
+    {
+      "version": "0.12.69",
+      "date": "2026-07-10",
+      "changes": [
+        "Improved task capture so suggestions stay quiet, retry safely, and keep working when task notifications are off",
+        "Added a quiet Suggested review lane with simple feedback and clear task provenance",
+        "Background agents now stay on Omi's managed cloud route and operate as leaf workers. Explicit User Claude sign-in uses a validated, bounded reconnect flow, and failed agent-control actions show as failures instead of misleading completion. Stalled tool calls now stop before a chat can hang for three minutes.",
+        "Made What Matters Now refresh with relevant Mac context while keeping proactive task alerts opt-in, rate-limited, and privacy-bounded",
+        "Added persistent task threads that keep shared context, cited draft history, and agent progress across related tasks and restarts",
+        "Clarified task interruption settings, task chat empty state, evidence labels, and attribution analytics for What Matters Now and Suggested",
+        "Added a calm What Matters Now dashboard and richer goal focus and history controls"
+      ]
+    },
+    {
+      "version": "0.12.68",
+      "date": "2026-07-10",
+      "changes": [
+        "Made Home load instantly when returning from another page while keeping cached status isolated to the signed-in account",
+        "Fixed requests like “look it up” searching Omi history instead of the public web",
+        "Fixed rapid back-to-back push-to-talk so every spoken turn appears in chat and the reply keeps the full transcription context"
+      ]
+    },
+    {
+      "version": "0.12.67",
+      "date": "2026-07-10",
+      "changes": [
+        "Fixed a stalled AI chat response silently ending with no message — it now shows \"Response took too long. Try again.\" so you know to retry",
+        "Improved Conversations so cached details load instantly without hiding newer summaries, statuses, titles, stars, or folders",
+        "Kept conversation details and edits isolated across account changes while preserving simultaneous title, star, and folder updates",
+        "Desktop flaky paths now fail soft with structured health-event snapshots for diagnostics export (auth, WAL, agent bridge, API retry, DB lock backoff, mode-switch waits, BLE decode, automation bind)",
+        "Fixed the This device memory filter for new desktop conversations and memories",
+        "Made the desktop brain map reopen faster by preserving its scene during navigation and reusing cached layouts when the graph has not changed.",
+        "Fixed Reset Onboarding clearing signed-in state incorrectly and leaving the app in a broken half-onboarded state",
+        "Preserved unsent chat drafts separately across the main app, notch, agents, tasks, restarts, and updates",
+        "Made desktop updates safer with qualified beta releases, explicit stable and beta channels, and verified post-relaunch install reporting",
+        "Made push-to-talk and realtime voice more reliable during barge-in, provider delays, playback fallbacks, and rapid repeated turns.",
+        "Improved transcription cloud/local fallback reliability and memory sync stability."
+      ]
+    },
+    {
+      "version": "0.12.66",
+      "date": "2026-07-09",
+      "changes": [
+        "Made the draggable floating bar use the movable pill layout on notched Macs"
+      ]
+    },
+    {
+      "version": "0.12.65",
+      "date": "2026-07-09",
+      "changes": [
+        "Prevented stale backend recording events from attaching to a newer desktop recording session"
+      ]
+    },
+    {
+      "version": "0.12.64",
+      "date": "2026-07-09",
+      "changes": [
+        "Protected signed-in sessions across app updates and added a clear recovery screen when credentials cannot be verified"
+      ]
+    },
+    {
+      "version": "0.12.63",
+      "date": "2026-07-09",
+      "changes": [
+        "Fixed desktop sign-in so expired sessions show a Sign in button instead of a dead-end AI error, and chat drafts are preserved when re-authenticating."
+      ]
+    },
+    {
+      "version": "0.12.62",
+      "date": "2026-07-09",
+      "changes": [
+        "Smoothed the notch bar's hover expansion so it no longer hops, keeps sliding after opening, or re-zooms when switching Spaces"
+      ]
+    },
+    {
+      "version": "0.12.61",
+      "date": "2026-07-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.60",
+      "date": "2026-07-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.12.59",
       "date": "2026-07-09",
       "changes": [

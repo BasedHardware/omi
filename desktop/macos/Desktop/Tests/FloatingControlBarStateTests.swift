@@ -4,6 +4,27 @@ import XCTest
 
 @MainActor
 final class FloatingControlBarStateTests: XCTestCase {
+    func testChatPTTOverlayShowsReducerOwnedRecordingAndHintState() {
+        XCTAssertTrue(
+            FloatingChatPTTOverlayPolicy.shouldShow(
+                showingAIConversation: true,
+                isVoiceListening: true
+            )
+        )
+        XCTAssertFalse(
+            FloatingChatPTTOverlayPolicy.shouldShow(
+                showingAIConversation: false,
+                isVoiceListening: true
+            )
+        )
+        XCTAssertFalse(
+            FloatingChatPTTOverlayPolicy.shouldShow(
+                showingAIConversation: true,
+                isVoiceListening: false
+            )
+        )
+    }
+
     func testNotchHoverMenuVisibilityIsSingleGatedState() {
         let state = FloatingControlBarState()
         state.usesNotchIsland = true
@@ -16,10 +37,12 @@ final class FloatingControlBarStateTests: XCTestCase {
         XCTAssertFalse(state.isNotchHoverMenuVisible)
 
         state.showingAIConversation = false
-        state.isVoiceListening = true
+        let coordinator = VoiceTurnCoordinator()
+        coordinator.configure(barState: state)
+        let turnID = coordinator.begin(intent: .hold)
         XCTAssertFalse(state.isNotchHoverMenuVisible)
 
-        state.isVoiceListening = false
+        coordinator.send(.cancel(turnID: turnID, reason: .cancelled))
         state.setNotchHoverMenuOpen(false)
         XCTAssertFalse(state.isNotchHoverMenuVisible)
         XCTAssertFalse(state.isHoveringBar)
@@ -75,39 +98,61 @@ final class FloatingControlBarStateTests: XCTestCase {
         cancellable.cancel()
     }
 
-    func testVoiceResponseGlowClearsIfNoOwnerTurnsItOff() {
-        let originalDelay = FloatingControlBarState.voiceResponseWatchdogDelay
-        FloatingControlBarState.voiceResponseWatchdogDelay = 0.02
-        defer { FloatingControlBarState.voiceResponseWatchdogDelay = originalDelay }
-
+    func testVoiceResponseGlowHasNoIndependentWatchdog() {
         let state = FloatingControlBarState()
-        state.isVoiceResponseActive = true
+        let (coordinator, _, _) = makeResponseActive(on: state)
 
-        let expectation = expectation(description: "voice response watchdog fired")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            expectation.fulfill()
-        }
-        wait(for: [expectation], timeout: 0.2)
+        XCTAssertTrue(state.isVoiceResponseActive)
+        withExtendedLifetime(coordinator) {}
+    }
+
+    func testVoiceResponseGlowClearsOnlyWhenPresenterStateIsApplied() {
+        let state = FloatingControlBarState()
+        let (coordinator, turnID, _) = makeResponseActive(on: state)
+        coordinator.send(.finish(turnID: turnID, reason: .providerFailed))
 
         XCTAssertFalse(state.isVoiceResponseActive)
     }
 
-    func testVoiceResponseGlowWatchdogIsCancelledWhenClearedExplicitly() {
-        let originalDelay = FloatingControlBarState.voiceResponseWatchdogDelay
-        FloatingControlBarState.voiceResponseWatchdogDelay = 0.02
-        defer { FloatingControlBarState.voiceResponseWatchdogDelay = originalDelay }
-
+    func testClearingConversationChromeCannotClearReducerOwnedVoiceGlow() {
         let state = FloatingControlBarState()
-        state.isVoiceResponseActive = true
-        state.isVoiceResponseActive = false
+        let (coordinator, _, _) = makeResponseActive(on: state)
 
-        let expectation = expectation(description: "cancelled watchdog would have fired")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            expectation.fulfill()
+        state.clearVisibleConversation(cancelInFlightWork: false)
+
+        XCTAssertTrue(state.isVoiceResponseActive)
+        XCTAssertEqual(state.voiceProjection, coordinator.projection)
+    }
+
+    func testStateSourceHasNoVoiceWatchdogOrConversationGlowMutation() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/FloatingControlBar/FloatingControlBarState.swift")
+        // omi-test-quality: source-inspection -- static contract: forbids autonomous voice presentation lifecycle owners
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        XCTAssertFalse(source.contains("voiceResponseWatchdog"))
+        XCTAssertFalse(source.contains("thinkingWatchdog"))
+        XCTAssertFalse(source.contains("delayedActionScheduler"))
+        XCTAssertTrue(source.contains("@Published private(set) var voiceProjection"))
+        XCTAssertTrue(source.contains("final class PTTBarPresenter"))
+        XCTAssertTrue(source.contains("private func applyVoiceProjection("))
+        XCTAssertEqual(source.components(separatedBy: "applyVoiceProjection(").count - 1, 2)
+        XCTAssertEqual(source.components(separatedBy: "voiceProjection =").count - 1, 2)
+        for forbidden in [
+            "@Published var isVoiceListening",
+            "@Published var isVoiceLocked",
+            "@Published var pttHintText",
+            "@Published var isThinking",
+            "presentVoiceResponseActive",
+            "beginVoiceResponseWaiting",
+            "clearVoiceResponseState",
+            "debugSetVoiceResponseActive",
+            "var isVoiceFollowUp",
+            "var voiceFollowUpTranscript",
+        ] {
+            XCTAssertFalse(source.contains(forbidden), "legacy voice mutation surface: \(forbidden)")
         }
-        wait(for: [expectation], timeout: 0.2)
-
-        XCTAssertFalse(state.isVoiceResponseActive)
     }
 
     // MARK: - Review feedback P2 fixes
@@ -201,6 +246,72 @@ final class FloatingControlBarStateTests: XCTestCase {
         // Mutating provider message text is reflected without copying into state.
         provider.messages[3].text = "Sure — updated."
         XCTAssertEqual(state.currentAIMessage(from: provider)?.text, "Sure — updated.")
+    }
+
+    func testViewportProjectsOneTerminalSubagentRowForCurrentAndArchivedChat() throws {
+        let state = FloatingControlBarState()
+        let provider = ChatProvider()
+        let pillID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000123"))
+        let answer = ChatMessage(
+            id: "subagent-answer",
+            clientTurnId: "turn-1",
+            text: "",
+            sender: .ai,
+            contentBlocks: [
+                .toolCall(
+                    id: "spawn-tool",
+                    name: "spawn_agent",
+                    status: .completed,
+                    output: "id: \(pillID.uuidString)\nrunId: run-1"
+                ),
+                .agentSpawn(
+                    id: "spawn-block",
+                    pillId: pillID,
+                    sessionId: "session-1",
+                    runId: "run-1",
+                    title: "Sleep agent",
+                    objective: "Sleep for five seconds"
+                ),
+                .agentCompletion(
+                    id: "completion-block",
+                    pillId: pillID,
+                    sessionId: "session-1",
+                    runId: "run-1",
+                    title: "Sleep agent",
+                    promptSnippet: "Sleep for five seconds",
+                    output: "Done.",
+                    status: "completed"
+                ),
+            ]
+        )
+        provider.messages = [answer]
+
+        state.bindAnswerMessage(answer)
+        let current = try XCTUnwrap(state.currentAIMessage(from: provider))
+        let currentGroups = ContentBlockGroup.visibleChatGroups(
+            current.contentBlocks,
+            isStreaming: current.isStreaming
+        )
+        XCTAssertEqual(currentGroups.count, 1)
+        guard case .agentCompletion(_, let currentPillID, _, let currentRunID, _, _, _, _) = currentGroups[0] else {
+            return XCTFail("current floating response must contain one terminal subagent row")
+        }
+        XCTAssertEqual(currentPillID, pillID)
+        XCTAssertEqual(currentRunID, "run-1")
+
+        state.archiveCurrentExchange(using: provider)
+        let history = state.derivedChatHistory(from: provider)
+        let historyMessage = try XCTUnwrap(history.first?.aiMessage)
+        let historyGroups = ContentBlockGroup.visibleChatGroups(
+            historyMessage.contentBlocks,
+            isStreaming: historyMessage.isStreaming
+        )
+        XCTAssertEqual(historyGroups.count, 1)
+        guard case .agentCompletion(_, let historyPillID, _, let historyRunID, _, _, _, _) = historyGroups[0] else {
+            return XCTFail("archived floating response must contain one terminal subagent row")
+        }
+        XCTAssertEqual(historyPillID, pillID)
+        XCTAssertEqual(historyRunID, "run-1")
     }
 
     /// Close/restore uses activity + viewport anchors, not copied transcript text.
@@ -446,20 +557,16 @@ final class FloatingControlBarStateTests: XCTestCase {
         XCTAssertTrue(state.isAgentSwitcherExpanded)
     }
 
-    /// Thread 3 (Cubic P2): hideConversationSurface() must fully reset all
-    /// presentation and process flags so UI state and in-flight workflows
-    /// don't desync after the Back button hides the conversation.
-    func testHideConversationSurfaceResetsAllState() {
+    func testHideConversationSurfaceDoesNotMutateReducerProjectionDirectly() {
         let state = FloatingControlBarState()
+        let coordinator = VoiceTurnCoordinator()
+        coordinator.configure(barState: state)
         let agentID = UUID()
         state.present(.agent(agentID))
         state.isAILoading = true
-        state.isVoiceFollowUp = true
-        state.voiceFollowUpTranscript = "partial transcript"
+        let turnID = coordinator.begin(intent: .hold)
+        coordinator.send(.transcriptChanged(turnID: turnID, text: "partial transcript"))
 
-        // hideConversationSurface() now cancels in-flight work via singletons
-        // (cancelChat / cancelListening) before clearing flags. The singletons
-        // are safe to call when no actual generation/PTT session is active.
         state.hideConversationSurface()
 
         XCTAssertNil(state.activeAgentChatPillID)
@@ -467,9 +574,37 @@ final class FloatingControlBarStateTests: XCTestCase {
         XCTAssertFalse(state.showingAIConversation)
         XCTAssertFalse(state.showingAIResponse)
         XCTAssertFalse(state.isAILoading)
-        XCTAssertFalse(state.isVoiceFollowUp)
-        XCTAssertEqual(state.voiceFollowUpTranscript, "")
+        // cancelListening is a no-op when PushToTalkManager is idle; projection stays
+        // reducer-owned until the coordinator cancels the turn.
+        XCTAssertEqual(state.voiceProjection, coordinator.projection)
+        XCTAssertTrue(state.isVoiceListening)
+        XCTAssertEqual(state.voiceProjection.transcript, "partial transcript")
         XCTAssertFalse(state.hasVisibleConversation)
+
+        coordinator.send(.cancel(turnID: turnID, reason: .cancelled))
+        XCTAssertFalse(state.isVoiceListening)
+        XCTAssertEqual(state.voiceProjection.transcript, "")
+    }
+
+    private func makeResponseActive(
+        on state: FloatingControlBarState
+    ) -> (VoiceTurnCoordinator, VoiceTurnID, VoiceEffectIdentity) {
+        let coordinator = VoiceTurnCoordinator()
+        coordinator.configure(barState: state)
+        let turnID = coordinator.begin(intent: .hold)
+        coordinator.send(.selectRoute(turnID: turnID, route: .deepgramBatch))
+        coordinator.send(.finalize(turnID: turnID))
+        coordinator.send(.transcriptionFinal(turnID: turnID, text: "fixture"))
+        let identity = coordinator.activeTurn!.providerEffectIdentity!
+        coordinator.send(
+            .providerResponseStartedScoped(
+                turnID: turnID,
+                identity: identity,
+                sessionID: nil,
+                responseID: nil
+            )
+        )
+        return (coordinator, turnID, identity)
     }
 
     /// INV-6: notch/floating viewport only surfaces resources from viewport

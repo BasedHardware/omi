@@ -10,6 +10,7 @@ from listen_test_helpers import (
     is_ready_event,
     is_segment_batch,
     is_streaming_segment_batch,
+    receive_message,
     receive_until,
     seed_listen_user,
 )
@@ -39,6 +40,7 @@ def test_web_listen_custom_stt_dispatches_to_stream_handler(client, monkeypatch)
         onboarding_mode=False,
         call_id=None,
         client_conversation_id=None,
+        client_device_context=None,
     ):
         captured.update(
             {
@@ -55,6 +57,8 @@ def test_web_listen_custom_stt_dispatches_to_stream_handler(client, monkeypatch)
                 "onboarding_mode": onboarding_mode,
                 "call_id": call_id,
                 "client_conversation_id": client_conversation_id,
+                "client_device_id": getattr(client_device_context, "client_device_id", None),
+                "client_platform": getattr(client_device_context, "platform", None),
             }
         )
         await websocket.send_json({"type": "fake_stt_ready", "uid": uid, "custom_stt": captured["custom_stt_mode"]})
@@ -66,7 +70,7 @@ def test_web_listen_custom_stt_dispatches_to_stream_handler(client, monkeypatch)
     with client.websocket_connect(
         "/v4/web/listen?custom_stt=enabled&sample_rate=8000&codec=pcm8&conversation_timeout=1&source=e2e"
     ) as websocket:
-        websocket.send_text(json.dumps({"type": "auth", "token": "dev-token"}))
+        websocket.send_text(json.dumps({"type": "auth", "token": "dev-token", "device_id_hash": "a1b2c3d4"}))
         auth_response = websocket.receive_json()
         assert auth_response == {"type": "auth_response", "success": True}
         ready = websocket.receive_json()
@@ -82,6 +86,8 @@ def test_web_listen_custom_stt_dispatches_to_stream_handler(client, monkeypatch)
     assert captured["conversation_timeout"] == 1
     assert captured["source"] == "e2e"
     assert captured["custom_stt_mode"] == "enabled"
+    assert captured["client_device_id"] == "web_a1b2c3d4"
+    assert captured["client_platform"] == "web"
 
 
 def test_web_listen_custom_stt_suggested_transcript_is_emitted_and_persisted(client, auth_headers, test_uid):
@@ -188,11 +194,43 @@ def test_listen_client_conversation_id_creates_requested_conversation(client, te
         receive_until(websocket, is_ready_event)
 
     assert session_event["conversation_id"] == client_conversation_id
+    assert session_event["recording_session_id"] == client_conversation_id
     conversation = read_conversation(test_uid, client_conversation_id)
     assert conversation is not None
     assert conversation["id"] == client_conversation_id
     assert getattr(conversation["source"], "value", conversation["source"]) == "desktop"
     assert getattr(conversation["status"], "value", conversation["status"]) == "in_progress"
+
+
+def test_listen_client_conversation_id_never_resumes_global_conversation(client, test_uid, monkeypatch):
+    """An identified desktop recording must not inherit a stale user-global pointer."""
+    seed_listen_user(test_uid)
+    client_conversation_id = str(uuid.uuid4())
+    stale_conversation = {
+        "id": str(uuid.uuid4()),
+        "finished_at": None,
+        "status": "in_progress",
+    }
+
+    import routers.transcribe as transcribe_router
+
+    def stale_global_lookup(_uid):
+        raise AssertionError(f"identified listen must not resume stale global conversation {stale_conversation['id']}")
+
+    monkeypatch.setattr(transcribe_router, "retrieve_in_progress_conversation", stale_global_lookup)
+
+    with client.websocket_connect(
+        "/v4/web/listen?"
+        f"custom_stt=enabled&sample_rate=8000&codec=pcm8&conversation_timeout=120"
+        f"&source=desktop&client_conversation_id={client_conversation_id}"
+    ) as websocket:
+        websocket.send_text(json.dumps({"type": "auth", "token": "dev-token"}))
+        assert websocket.receive_json() == {"type": "auth_response", "success": True}
+        session_event = receive_until(websocket, is_conversation_session_event)
+        receive_until(websocket, is_ready_event)
+
+    assert session_event["conversation_id"] == client_conversation_id
+    assert session_event["recording_session_id"] == client_conversation_id
 
 
 def test_listen_client_conversation_id_reconnects_same_session(client, test_uid):
@@ -256,6 +294,63 @@ def test_web_listen_streaming_stt_happy_path_persists_segments(client, auth_head
     assert body["source"] == "desktop"
     assert body["status"] == "in_progress"
     assert body["transcript_segments"] == emitted_segments
+
+
+def test_web_listen_streaming_stt_send_failure_emits_terminal_status_then_closes(
+    client,
+    test_uid,
+    monkeypatch,
+):
+    """A provider death is explicit and terminal instead of leaving a green socket."""
+
+    seed_listen_user(test_uid, uses_custom_stt=False)
+    sockets = install_streaming_stt_fake(monkeypatch, die_on_first_send=True)
+
+    with client.websocket_connect("/v4/web/listen?sample_rate=8000&codec=pcm8&source=desktop") as websocket:
+        websocket.send_text(json.dumps({"type": "auth", "token": "dev-token"}))
+        assert websocket.receive_json() == {"type": "auth_response", "success": True}
+        receive_until(websocket, is_conversation_session_event)
+        receive_until(websocket, is_ready_event)
+
+        websocket.send_bytes(b"\x80" * 320)
+
+        payloads = []
+        close_message = None
+        for _ in range(20):
+            message = receive_message(websocket, timeout=1.0)
+            if message.get("type") == "websocket.close":
+                close_message = message
+                break
+            text = message.get("text")
+            if text and text != "ping":
+                payloads.append(json.loads(text))
+
+    terminal_statuses = [
+        payload
+        for payload in payloads
+        if isinstance(payload, dict)
+        and payload.get("type") == "service_status"
+        and payload.get("status") == "stt_failed"
+    ]
+    assert terminal_statuses == [
+        {
+            "type": "service_status",
+            "status": "stt_failed",
+            "status_text": "The transcription provider could not complete the request.",
+            "outcome": "upstream_error",
+            "provider": "deepgram",
+            "retryable": True,
+            "reason": "send_failed",
+        }
+    ]
+    assert not any(isinstance(payload, list) for payload in payloads)
+    assert close_message == {
+        "type": "websocket.close",
+        "code": 1011,
+        "reason": "transcription_service_unavailable",
+    }
+    assert len(sockets) == 1
+    assert len(sockets[0].sent_chunks) == 1
 
 
 def test_web_listen_reconnect_reuses_active_conversation_id(client, test_uid, monkeypatch):

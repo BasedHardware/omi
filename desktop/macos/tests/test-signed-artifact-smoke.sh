@@ -27,6 +27,7 @@ fi
 for required in \
   "Launch + identity" \
   "Auth persistence" \
+  "Signed Keychain canary" \
   "Backend routing" \
   "Sparkle/update metadata" \
   "Native helper/runtime bundle integrity" \

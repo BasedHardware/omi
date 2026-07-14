@@ -34,7 +34,7 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "**Paging SLOs (Phase 1):** page only on `outcome=exhausted`, pusher degraded-session ratio. `outcome=recovered` heals are dashboard-only — do not page.\n\n**Noise budget:** ≤2 new PAGE alerts in the first 2 weeks after deploy (pusher degraded ratio). Sync enqueue_failed PAGE is paused until Cloud Run custom metrics reach Prometheus — use Cloud Logging meanwhile (see sync-dispatch runbook). LLM gateway fallback is ticket-tier.\n\nRunbooks: `backend/docs/runbooks/resilience-dashboards.md`.",
+        "content": "**Paging SLOs (Phase 1):** page only on `outcome=exhausted`, pusher degraded-session ratio. `outcome=recovered` heals are dashboard-only — do not page.\n\n**Noise budget:** ≤2 new PAGE alerts in the first 2 weeks after deploy (pusher degraded ratio). Sync enqueue uncertainty is observable in Cloud Logging until Cloud Run custom metrics reach Prometheus — see the sync-dispatch runbook. LLM gateway fallback is ticket-tier.\n\nRunbooks: `backend/docs/runbooks/resilience-dashboards.md`.",
         "mode": "markdown"
       },
       "pluginVersion": "12.1.0",
@@ -230,14 +230,14 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(omi_fallback_total{component=\"sync_dispatch\",reason=\"enqueue_failed\"}[10m])) / clamp_min(sum(rate(omi_sync_dispatch_attempts_total[10m])), 1e-9)",
-          "legendFormat": "enqueue_failed share",
+          "expr": "sum(rate(omi_sync_dispatch_attempts_total{mode=\"enqueue_uncertain\"}[10m])) / clamp_min(sum(rate(omi_sync_dispatch_attempts_total[10m])), 1e-9)",
+          "legendFormat": "enqueue uncertainty share",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Sync dispatch — enqueue_failed share (PAGE SLO)",
-      "description": "**Scrape gap:** Metric definitions and emit sites live in-repo (`utils/metrics.py` + `routers/sync.py` on Cloud Run `backend-sync`), but GKE Prometheus only scrapes backend-listen and pusher — so this panel may be empty until Cloud Run custom metrics are exported. Until then, use Cloud Logging for `omi_fallback_event component=sync_dispatch reason=enqueue_failed`. PAGE alert is paused.",
+      "title": "Sync dispatch — enqueue uncertainty share (PAGE SLO)",
+      "description": "**Scrape gap:** Metric definitions and emit sites live in-repo (`utils/metrics.py` + `routers/sync.py` on Cloud Run `backend-sync`), but GKE Prometheus only scrapes backend-listen and pusher — so this panel may be empty until Cloud Run custom metrics are exported. Until then, use Cloud Logging for `event=sync_dispatch outcome=enqueue_uncertain`.",
       "type": "timeseries"
     },
     {

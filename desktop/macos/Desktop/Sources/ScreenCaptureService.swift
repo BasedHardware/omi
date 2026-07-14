@@ -50,7 +50,7 @@ final class ScreenCaptureService: Sendable {
   @available(macOS 14.0, *)
   private static func sharedContent(forceRefresh: Bool = false) async throws -> SCShareableContent {
     if !forceRefresh,
-      !UserDefaults.standard.bool(forKey: "rewindDisableContentCache")
+      !UserDefaults.standard.bool(forKey: .rewindDisableContentCache)
     {
       let cached: SCShareableContent? = sharedContentLock.withLock {
         guard let ts = sharedContentCachedAt,
@@ -230,6 +230,20 @@ final class ScreenCaptureService: Sendable {
     // (removed duplicate open that conflicted with caller's own open call)
   }
 
+  /// Structured variant for owner-bound tool execution. It keeps the
+  /// ScreenCaptureKit request attached to the permission request lifetime so
+  /// the caller can fence every state or Settings publication after the await.
+  @MainActor
+  static func requestAllScreenCapturePermissionsAwaitingScreenCaptureKit() async -> Bool {
+    ensureLaunchServicesRegistration()
+    NSApp.activate()
+    let tccGranted = CGRequestScreenCaptureAccess()
+    if #available(macOS 14.0, *) {
+      _ = await requestScreenCaptureKitPermission()
+    }
+    return tccGranted || checkPermission()
+  }
+
   /// Guided grant flow (PERM-02 / BL-050): register the screen-recording TCC row
   /// **while Omi is frontmost**, then open System Settings so the user lands on a
   /// list that already contains Omi. Opening Settings first backgrounded the app
@@ -347,7 +361,7 @@ final class ScreenCaptureService: Sendable {
 
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/sh")
-        task.arguments = ["-c", "sleep 0.5 && open \"\(bundleURL.path)\""]
+        task.arguments = ["-c", screenCaptureRelaunchCommand(appPath: bundleURL.path)]
 
         do {
           try task.run()
@@ -390,10 +404,9 @@ final class ScreenCaptureService: Sendable {
         if success {
           log("Screen capture permission reset, restarting app...")
 
-          // Use a shell script to wait briefly, then relaunch the app
           let task = Process()
           task.executableURL = URL(fileURLWithPath: "/bin/sh")
-          task.arguments = ["-c", "sleep 0.5 && open \"\(bundleURL.path)\""]
+          task.arguments = ["-c", screenCaptureRelaunchCommand(appPath: bundleURL.path)]
 
           do {
             try task.run()
@@ -409,6 +422,14 @@ final class ScreenCaptureService: Sendable {
         }
       }
     }
+  }
+
+  nonisolated static func screenCaptureRelaunchCommand(appPath: String) -> String {
+    AppState.relaunchCommand(
+      appPath: appPath,
+      isNonProduction: AppBuild.isNonProduction,
+      automationPort: DesktopAutomationLaunchOptions.port
+    )
   }
 
   /// Get the window ID of the frontmost application's main window

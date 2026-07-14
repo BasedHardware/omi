@@ -31,7 +31,7 @@ struct ScoreWidget: View {
             let lineWidth = max(gaugeWidth * 0.085, 8)
             let fontSize = max(gaugeWidth * 0.2, 18)
 
-            VStack(spacing: 16) {
+            VStack(spacing: OmiSpacing.lg) {
                 // Semicircle gauge
                 ZStack {
                     // Background arc
@@ -44,10 +44,10 @@ struct ScoreWidget: View {
                         .trim(from: 0, to: min(weeklyScore.score / 100, 1.0))
                         .stroke(scoreColor, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                         .frame(width: gaugeWidth, height: gaugeHeight)
-                        .animation(.easeInOut(duration: 0.3), value: weeklyScore.score)
+                        .omiAnimation(.easeInOut(duration: 0.3), value: weeklyScore.score)
 
                     // Score text
-                    VStack(spacing: 2) {
+                    VStack(spacing: OmiSpacing.hairline) {
                         Text("\(Int(weeklyScore.score))%")
                             .scaledFont(size: fontSize, weight: .bold)
                             .foregroundColor(OmiColors.textPrimary)
@@ -57,11 +57,11 @@ struct ScoreWidget: View {
                 }
 
                 // Task count and subtitle
-                VStack(spacing: 4) {
+                VStack(spacing: OmiSpacing.xxs) {
                     if weeklyScore.hasTasks {
-                        HStack(spacing: 4) {
+                        HStack(spacing: OmiSpacing.xxs) {
                             Image(systemName: "checkmark.circle.fill")
-                                .scaledFont(size: 12)
+                                .scaledFont(size: OmiType.caption)
                                 .foregroundColor(scoreColor)
                             Text("\(weeklyScore.completedTasks) of \(weeklyScore.totalTasks) tasks completed")
                                 .scaledMonospacedDigitFont(size: 12)
@@ -70,17 +70,17 @@ struct ScoreWidget: View {
                         }
                     } else {
                         Text("No tasks this week")
-                            .scaledFont(size: 12)
+                            .scaledFont(size: OmiType.caption)
                             .foregroundColor(OmiColors.textTertiary)
                     }
 
                     Text("Last 7 days")
-                        .scaledFont(size: 10)
+                        .scaledFont(size: OmiType.micro)
                         .foregroundColor(OmiColors.textQuaternary)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(22)
+            .padding(OmiSpacing.xl)
         }
         .frame(minHeight: 200)
         .omiPanel(fill: OmiColors.backgroundSecondary)
@@ -117,11 +117,11 @@ struct DailyScoreWidget: View {
     }
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: OmiSpacing.lg) {
             // Header
             HStack {
                 Text("Daily Score")
-                    .scaledFont(size: 16, weight: .semibold)
+                    .scaledFont(size: OmiType.subheading, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
                 Spacer()
             }
@@ -140,9 +140,9 @@ struct DailyScoreWidget: View {
                     .frame(width: 140, height: 70)
 
                 // Score text
-                VStack(spacing: 2) {
+                VStack(spacing: OmiSpacing.hairline) {
                     Text("\(Int(score))%")
-                        .scaledFont(size: 28, weight: .bold)
+                        .scaledFont(size: OmiType.title, weight: .bold)
                         .foregroundColor(OmiColors.textPrimary)
                 }
                 .offset(y: 10)
@@ -150,9 +150,9 @@ struct DailyScoreWidget: View {
 
             // Task count
             if let ds = dailyScore, ds.totalTasks > 0 {
-                HStack(spacing: 4) {
+                HStack(spacing: OmiSpacing.xxs) {
                     Image(systemName: "checkmark.circle.fill")
-                        .scaledFont(size: 12)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(scoreColor)
                     Text("\(ds.completedTasks) of \(ds.totalTasks) tasks completed")
                         .scaledMonospacedDigitFont(size: 12)
@@ -160,11 +160,11 @@ struct DailyScoreWidget: View {
                 }
             } else {
                 Text("No tasks due today")
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textTertiary)
             }
         }
-        .padding(22)
+        .padding(OmiSpacing.xl)
         .omiPanel(fill: OmiColors.backgroundSecondary)
     }
 }

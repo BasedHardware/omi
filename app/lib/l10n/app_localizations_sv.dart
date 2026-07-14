@@ -9,6 +9,9 @@ class AppLocalizationsSv extends AppLocalizations {
   AppLocalizationsSv([String locale = 'sv']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Sessionen har gått ut — logga in igen.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override

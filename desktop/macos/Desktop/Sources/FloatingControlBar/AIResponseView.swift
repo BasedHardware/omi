@@ -8,15 +8,13 @@ struct AIResponseView: View {
     @Binding var isLoading: Bool
     let currentMessage: ChatMessage?
     @State private var isQuestionExpanded = false
-    @State private var followUpText: String = ""
+    @Binding var followUpText: String
     @State private var attachments: [ChatAttachment] = []
     @State private var isDropTargeted = false
     @FocusState private var isFollowUpFocused: Bool
 
     let userInput: String
     let chatHistory: [FloatingChatExchange]
-    @Binding var isVoiceFollowUp: Bool
-    @Binding var voiceFollowUpTranscript: String
     var canClearVisibleConversation: Bool = false
     var showsHeader: Bool = true
 
@@ -29,7 +27,7 @@ struct AIResponseView: View {
     var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
             if showsHeader {
                 headerView
                     .fixedSize(horizontal: false, vertical: true)
@@ -54,12 +52,6 @@ struct AIResponseView: View {
 
                 // Current response
                 currentContentView
-
-                // Voice follow-up indicator (shown inline when PTT is active during conversation)
-                if isVoiceFollowUp {
-                    voiceFollowUpView
-                        .id("voiceFollowUp")
-                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -69,15 +61,15 @@ struct AIResponseView: View {
                     .accessibilityLabel(shareFeedbackMessage)
             }
 
-            if !isLoading && !isVoiceFollowUp {
+            if !isLoading {
                 followUpInputView
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.top, state.usesNotchIsland ? 0 : 16)
-        .padding(.bottom, 16)
+        .padding(.horizontal, OmiSpacing.lg)
+        .padding(.top, 0)
+        .padding(.bottom, OmiSpacing.lg)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .animation(.spring(response: 0.28, dampingFraction: 0.85), value: showShareFeedback)
+        .omiAnimation(.spring(response: 0.28, dampingFraction: 0.85), value: showShareFeedback)
         .onExitCommand {
             onEscape?()
         }
@@ -107,8 +99,6 @@ struct AIResponseView: View {
                 currentMessage?.id ?? "",
                 currentMessage?.text ?? "",
                 contentBlocksToken(currentMessage?.contentBlocks ?? []),
-                String(isVoiceFollowUp),
-                voiceFollowUpTranscript,
             ].joined(separator: "\u{1F}")
         )
     }
@@ -133,7 +123,9 @@ struct AIResponseView: View {
                 return ["thinking", id, text].joined(separator: "\u{1E}")
             case .discoveryCard(let id, let title, let summary, let fullText):
                 return ["discovery", id, title, summary, fullText].joined(separator: "\u{1E}")
-            case .agentSpawn(let id, let pillId, let sessionId, let runId, let title, let objective):
+            case .agentSpawn(
+                let id, let pillId, let sessionId, let runId, let title, let objective, let provider
+            ):
                 return [
                     "agentSpawn",
                     id,
@@ -142,6 +134,7 @@ struct AIResponseView: View {
                     runId,
                     title,
                     objective,
+                    provider?.rawValue ?? "",
                 ].joined(separator: "\u{1E}")
             case .agentCompletion(
                 let id, let pillId, let sessionId, let runId, let title, let promptSnippet, let output, let status
@@ -162,32 +155,32 @@ struct AIResponseView: View {
     }
 
     private var headerView: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: OmiSpacing.md) {
             if isLoading {
                 ProgressView()
                     .scaleEffect(0.6)
                     .frame(width: 16, height: 16)
                 Text("thinking")
-                    .scaledFont(size: 14)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(.secondary)
             } else {
                 Text("omi says")
-                    .scaledFont(size: 14)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(.secondary)
             }
 
             Spacer()
 
             if canClearVisibleConversation {
-                HStack(spacing: 4) {
+                HStack(spacing: OmiSpacing.xxs) {
                     Text("esc")
-                        .scaledFont(size: 11)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(.secondary)
                         .frame(width: 30, height: 16)
                         .background(Color.white.opacity(0.1))
-                        .cornerRadius(4)
+                        .cornerRadius(OmiChrome.stripRadius)
                     Text("to clear")
-                        .scaledFont(size: 11)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(.secondary)
                 }
             }
@@ -221,10 +214,13 @@ struct AIResponseView: View {
                 case .discoveryCard(_, let title, let summary, let fullText):
                     DiscoveryCard(title: title, summary: summary, fullText: fullText)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                case .agentSpawn(_, let pillId, let sessionId, let runId, let title, let objective):
+                case .agentSpawn(
+                    _, let pillId, let sessionId, let runId, let title, let objective, let provider
+                ):
                     AgentSpawnCard(
                         title: title,
                         objective: objective,
+                        provider: provider,
                         ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
                         onOpen: openAgentRef
                     )
@@ -275,19 +271,13 @@ struct AIResponseView: View {
     }
 
     private func groupedContentBlocks(for message: ChatMessage) -> [ContentBlockGroup] {
-        let grouped = ContentBlockGroup.group(message.contentBlocks)
+        let grouped = ContentBlockGroup.visibleChatGroups(
+            message.contentBlocks,
+            isStreaming: message.isStreaming
+        )
         guard !message.isStreaming else { return grouped }
 
-        return grouped.filter { group in
-            switch group {
-            case .text, .discoveryCard, .agentSpawn, .agentCompletion:
-                return true
-            case .toolCalls(_, let calls):
-                return calls.contains { $0.spawnedAgentID != nil }
-            case .thinking:
-                return false
-            }
-        }
+        return grouped
     }
 
     // MARK: - Per-Message Hover Action Overlay
@@ -313,24 +303,24 @@ struct AIResponseView: View {
     // MARK: - Chat History
 
     private func chatExchangeView(_ exchange: FloatingChatExchange) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             if hasUserInput(exchange.question) {
-                HStack(alignment: .top, spacing: 8) {
+                HStack(alignment: .top, spacing: OmiSpacing.sm) {
                     Text(exchange.question ?? "")
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(.white)
                         .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+                .padding(.horizontal, OmiSpacing.md)
+                .padding(.vertical, OmiSpacing.sm)
                 .background(Color.white.opacity(0.1))
-                .cornerRadius(8)
+                .cornerRadius(OmiChrome.elementRadius)
             }
 
             // Response with hover actions
             messageWithHoverActions(message: exchange.aiMessage)
-                .padding(.horizontal, 4)
+                .padding(.horizontal, OmiSpacing.xxs)
         }
     }
 
@@ -338,12 +328,12 @@ struct AIResponseView: View {
 
     private var questionBar: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .top, spacing: OmiSpacing.sm) {
                 Group {
                     if isQuestionExpanded {
                         ScrollView {
                             Text(userInput)
-                                .scaledFont(size: 13)
+                                .scaledFont(size: OmiType.body)
                                 .foregroundColor(.white)
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -351,7 +341,7 @@ struct AIResponseView: View {
                         .frame(maxHeight: 120)
                     } else {
                         Text(userInput)
-                            .scaledFont(size: 13)
+                            .scaledFont(size: OmiType.body)
                             .foregroundColor(.white)
                             .lineLimit(1)
                             .truncationMode(.head)
@@ -363,17 +353,17 @@ struct AIResponseView: View {
                 if needsExpansion {
                     Button(action: { isQuestionExpanded.toggle() }) {
                         Image(systemName: isQuestionExpanded ? "chevron.up" : "chevron.down")
-                            .scaledFont(size: 10)
+                            .scaledFont(size: OmiType.micro)
                             .foregroundColor(.secondary)
                             .frame(width: 20, height: 20)
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.sm)
             .background(Color.white.opacity(0.1))
-            .cornerRadius(8)
+            .cornerRadius(OmiChrome.elementRadius)
             .contextMenu {
                 Button("Copy") {
                     NSPasteboard.general.clearContents()
@@ -402,7 +392,7 @@ struct AIResponseView: View {
     private var currentContentView: some View {
         Group {
             if let message = currentMessage {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                     if message.isStreaming {
                         // While streaming, show content without hover actions
                         contentBlocksView(for: message)
@@ -420,8 +410,8 @@ struct AIResponseView: View {
                         messageWithHoverActions(message: message)
                     }
                 }
-                .padding(.horizontal, 4)
-                .padding(.bottom, 6)
+                .padding(.horizontal, OmiSpacing.xxs)
+                .padding(.bottom, OmiSpacing.xs)
                 .contextMenu {
                     Button("Copy") {
                         NSPasteboard.general.clearContents()
@@ -436,40 +426,9 @@ struct AIResponseView: View {
             } else if isLoading {
                 TypingIndicator()
                     .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
-                    .padding(.horizontal, 4)
+                    .padding(.horizontal, OmiSpacing.xxs)
             }
         }
-    }
-
-    // MARK: - Voice Follow-Up
-
-    private var voiceFollowUpView: some View {
-        HStack(spacing: 8) {
-            // Playful realtime mic waveform (replaces the old pulsing red dot)
-            VoiceWaveformBars(isActive: isVoiceFollowUp)
-
-            Image(systemName: "mic.fill")
-                .scaledFont(size: 14, weight: .semibold)
-                .foregroundColor(.white)
-
-            if !voiceFollowUpTranscript.isEmpty {
-                Text(voiceFollowUpTranscript)
-                    .scaledFont(size: 13)
-                    .foregroundColor(.white.opacity(0.8))
-                    .lineLimit(2)
-                    .truncationMode(.head)
-            } else {
-                Text("Listening...")
-                    .scaledFont(size: 13)
-                    .foregroundColor(.white.opacity(0.5))
-            }
-
-            Spacer()
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(OmiColors.purplePrimary.opacity(0.12))
-        .cornerRadius(8)
     }
 
     // MARK: - Follow-Up Input
@@ -480,7 +439,7 @@ struct AIResponseView: View {
     @State private var isSharingLink = false
 
     private var followUpInputView: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             if !attachments.isEmpty {
                 AttachmentPreviewRow(
                     attachments: attachments,
@@ -489,10 +448,10 @@ struct AIResponseView: View {
                 .environment(\.colorScheme, .dark)
             }
 
-            HStack(spacing: 6) {
+            HStack(spacing: OmiSpacing.xs) {
                 Button(action: { shareLink() }) {
                     Image(systemName: showShareFeedback ? "checkmark" : "arrowshape.turn.up.right")
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(showShareFeedback ? .green : .secondary)
                 }
                 .buttonStyle(.plain)
@@ -501,11 +460,11 @@ struct AIResponseView: View {
 
                 TextField("Ask follow up...", text: $followUpText)
                     .textFieldStyle(.plain)
-                    .scaledFont(size: 13)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
+                    .scaledFont(size: OmiType.body)
+                    .padding(.horizontal, OmiSpacing.sm)
+                    .padding(.vertical, OmiSpacing.xs)
                     .background(Color.white.opacity(isDropTargeted ? 0.18 : 0.10))
-                    .cornerRadius(8)
+                    .cornerRadius(OmiChrome.elementRadius)
                     .focused($isFollowUpFocused)
                     .onSubmit {
                         sendFollowUp()
@@ -513,7 +472,7 @@ struct AIResponseView: View {
 
                 Button(action: { sendFollowUp() }) {
                     Image(systemName: "arrow.up.circle.fill")
-                        .scaledFont(size: 20)
+                        .scaledFont(size: OmiType.heading)
                         .foregroundColor(canSendFollowUp ? .white : .secondary)
                 }
                 .disabled(!canSendFollowUp)
@@ -528,25 +487,25 @@ struct AIResponseView: View {
     }
 
     private var shareFeedbackBanner: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: OmiSpacing.sm) {
             Image(systemName: "checkmark.circle.fill")
-                .scaledFont(size: 12, weight: .semibold)
+                .scaledFont(size: OmiType.caption, weight: .semibold)
                 .foregroundColor(.green)
 
             Text("Share link copied to your clipboard")
-                .scaledFont(size: 12, weight: .medium)
+                .scaledFont(size: OmiType.caption, weight: .medium)
                 .foregroundColor(.white)
 
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, OmiSpacing.sm)
+        .padding(.vertical, OmiSpacing.sm)
         .background(Color.green.opacity(0.18))
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                 .strokeBorder(Color.green.opacity(0.35), lineWidth: 1)
         )
-        .cornerRadius(8)
+        .cornerRadius(OmiChrome.elementRadius)
     }
 
     private func shareLink() {
@@ -566,12 +525,12 @@ struct AIResponseView: View {
     private func showShareSuccessFeedback() {
         shareFeedbackHideWorkItem?.cancel()
         shareFeedbackMessage = "Share link copied to your clipboard"
-        withAnimation {
+        OmiMotion.withGated {
             showShareFeedback = true
         }
 
         let workItem = DispatchWorkItem {
-            withAnimation {
+            OmiMotion.withGated {
                 showShareFeedback = false
                 shareFeedbackMessage = nil
             }
@@ -584,7 +543,7 @@ struct AIResponseView: View {
         let trimmed = followUpText.trimmingCharacters(in: .whitespacesAndNewlines)
         let staged = attachments
         guard !trimmed.isEmpty || !staged.isEmpty else { return }
-        followUpText = ""
+        followUpText = trimmed
         attachments = []
         if !staged.isEmpty {
             FloatingControlBarManager.shared.sharedFloatingProvider?.addAttachments(staged)
@@ -632,8 +591,8 @@ struct MessageHoverOverlay<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
                 content()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -650,13 +609,13 @@ struct MessageHoverOverlay<Content: View>: View {
                 // Show immediately
                 hideWorkItem?.cancel()
                 hideWorkItem = nil
-                withAnimation(.easeInOut(duration: 0.15)) {
+                OmiMotion.withGated(.easeInOut(duration: 0.15)) {
                     isHovered = true
                 }
             } else {
                 // Delay hide by 1.5s so user can move cursor to the buttons
                 let work = DispatchWorkItem {
-                    withAnimation(.easeInOut(duration: 0.15)) {
+                    OmiMotion.withGated(.easeInOut(duration: 0.15)) {
                         isHovered = false
                     }
                 }
@@ -672,11 +631,11 @@ struct MessageHoverOverlay<Content: View>: View {
         // `self.message` happens to point to when the click is dispatched.
         let messageText = message.text
         let currentRating = message.rating
-        return HStack(alignment: .top, spacing: 6) {
+        return HStack(alignment: .top, spacing: OmiSpacing.xs) {
             Spacer(minLength: 0)
 
-            VStack(alignment: .trailing, spacing: 2) {
-                HStack(spacing: 6) {
+            VStack(alignment: .trailing, spacing: OmiSpacing.hairline) {
+                HStack(spacing: OmiSpacing.xs) {
                     // Thumbs up
                     Button(action: { [currentRating] in
                         let newRating = currentRating == 1 ? nil : 1
@@ -686,7 +645,7 @@ struct MessageHoverOverlay<Content: View>: View {
                         if newRating != nil { showRatingFeedbackBriefly() }
                     }) {
                         Image(systemName: currentRating == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
-                            .scaledFont(size: 11)
+                            .scaledFont(size: OmiType.caption)
                             .foregroundColor(currentRating == 1 ? .green : .secondary)
                     }
                     .buttonStyle(.plain)
@@ -701,7 +660,7 @@ struct MessageHoverOverlay<Content: View>: View {
                         if newRating != nil { showRatingFeedbackBriefly() }
                     }) {
                         Image(systemName: currentRating == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
-                            .scaledFont(size: 11)
+                            .scaledFont(size: OmiType.caption)
                             .foregroundColor(currentRating == -1 ? .red : .secondary)
                     }
                     .buttonStyle(.plain)
@@ -712,7 +671,7 @@ struct MessageHoverOverlay<Content: View>: View {
                     // overlay view across re-renders.
                     Button(action: { [messageText] in copyText(messageText) }) {
                         Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
-                            .scaledFont(size: 11)
+                            .scaledFont(size: OmiType.caption)
                             .foregroundColor(showCopied ? .green : .secondary)
                     }
                     .buttonStyle(.plain)
@@ -722,7 +681,7 @@ struct MessageHoverOverlay<Content: View>: View {
                     if message.metadata != nil {
                         Button(action: { showInfoPopover.toggle() }) {
                             Image(systemName: "info.circle")
-                                .scaledFont(size: 11)
+                                .scaledFont(size: OmiType.caption)
                                 .foregroundColor(showInfoPopover ? .white : .secondary)
                         }
                         .buttonStyle(.plain)
@@ -734,14 +693,14 @@ struct MessageHoverOverlay<Content: View>: View {
                 }
 
                 if showRatingFeedback {
-                    Text("Thank you!")
-                        .scaledFont(size: 9)
+                    Text("Thank you")
+                        .scaledFont(size: OmiType.micro)
                         .foregroundColor(.secondary)
                         .transition(.opacity)
                 }
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: showRatingFeedback)
+        .omiAnimation(.easeInOut(duration: 0.2), value: showRatingFeedback)
         .frame(maxWidth: .infinity, alignment: .trailing)
         .onHover { hovering in
             isBarHovered = hovering
@@ -769,9 +728,9 @@ struct MessageHoverOverlay<Content: View>: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
         AnalyticsManager.shared.shareAction(category: "floating_bar_response_copy")
-        withAnimation { showCopied = true }
+        OmiMotion.withGated { showCopied = true }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            withAnimation { showCopied = false }
+            OmiMotion.withGated { showCopied = false }
         }
     }
 }
@@ -784,7 +743,7 @@ struct MessageMetadataPopover: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
                 // Header
                 Text("Response Context")
                     .font(.headline)
@@ -806,7 +765,7 @@ struct MessageMetadataPopover: View {
 
                 // Context fed into the prompt
                 Text("Context in Prompt")
-                    .scaledFont(size: 11, weight: .semibold)
+                    .scaledFont(size: OmiType.caption, weight: .semibold)
                     .foregroundColor(.primary)
                 metadataRow(label: "User memories/facts", value: "\(metadata.memoriesCount)")
                 metadataRow(label: "Conversation history turns", value: "\(metadata.conversationTurns)")
@@ -817,13 +776,13 @@ struct MessageMetadataPopover: View {
                 // Tool calls
                 if !metadata.toolNames.isEmpty {
                     Divider()
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                         Text("Tools used (\(metadata.toolNames.count))")
-                            .scaledFont(size: 11, weight: .semibold)
+                            .scaledFont(size: OmiType.caption, weight: .semibold)
                             .foregroundColor(.primary)
                         ForEach(metadata.toolNames, id: \.self) { tool in
                             Text("  \(tool)")
-                                .scaledFont(size: 11)
+                                .scaledFont(size: OmiType.caption)
                                 .foregroundColor(.secondary)
                                 .textSelection(.enabled)
                         }
@@ -839,28 +798,28 @@ struct MessageMetadataPopover: View {
                 // Full system prompt — always expanded, scrollable
                 if let prompt = metadata.systemPrompt, !prompt.isEmpty {
                     Divider()
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                         HStack {
                             Text("Full System Prompt")
-                                .scaledFont(size: 11, weight: .semibold)
+                                .scaledFont(size: OmiType.caption, weight: .semibold)
                                 .foregroundColor(.primary)
                             Spacer()
                             Text("\(prompt.count) chars")
-                                .scaledFont(size: 10)
+                                .scaledFont(size: OmiType.micro)
                                 .foregroundColor(.secondary)
                             Button(action: {
                                 NSPasteboard.general.clearContents()
                                 NSPasteboard.general.setString(prompt, forType: .string)
                             }) {
                                 Image(systemName: "doc.on.doc")
-                                    .scaledFont(size: 10)
+                                    .scaledFont(size: OmiType.micro)
                                     .foregroundColor(.secondary)
                             }
                             .buttonStyle(.plain)
                             .help("Copy prompt")
                         }
                         Text(prompt)
-                            .scaledFont(size: 10)
+                            .scaledFont(size: OmiType.micro)
                             .foregroundColor(.primary)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -876,11 +835,11 @@ struct MessageMetadataPopover: View {
     private func metadataRow(label: String, value: String) -> some View {
         HStack {
             Text(label)
-                .scaledFont(size: 11)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(.secondary)
             Spacer()
             Text(value)
-                .scaledFont(size: 11, weight: .medium)
+                .scaledFont(size: OmiType.caption, weight: .medium)
                 .foregroundColor(.primary)
                 .textSelection(.enabled)
         }

@@ -30,15 +30,44 @@ import Network
 @MainActor
 protocol RealtimeHubSessionDelegate: AnyObject {
   func hubDidConnect(source: RealtimeHubSession)
-  func hubDidReceiveInputTranscript(_ text: String, isFinal: Bool, source: RealtimeHubSession)
+  func hubDidReceiveInputTranscript(
+    _ text: String, isFinal: Bool, identity: RealtimeHubEventIdentity?, source: RealtimeHubSession)
   /// OpenAI native spoken audio (PCM16 mono 24 kHz).
-  func hubDidReceiveAudio(_ pcm24k: Data, source: RealtimeHubSession)
+  func hubDidReceiveAudio(
+    _ pcm24k: Data, identity: RealtimeHubEventIdentity?, source: RealtimeHubSession)
   /// Assistant text to display / speak. Gemini emits its whole reply here;
   /// OpenAI emits its spoken transcript here (for the on-screen bubble).
-  func hubDidEmitText(_ text: String, isFinal: Bool, source: RealtimeHubSession)
-  func hubDidRequestTool(name: String, callId: String, argumentsJSON: String, source: RealtimeHubSession)
-  func hubDidFinishTurn(source: RealtimeHubSession)
+  func hubDidEmitText(
+    _ text: String, isFinal: Bool, identity: RealtimeHubEventIdentity?, source: RealtimeHubSession)
+  func hubDidRequestTool(
+    name: String, callId: String, argumentsJSON: String,
+    identity: RealtimeHubEventIdentity?, source: RealtimeHubSession)
+  func hubDidFinishTurn(identity: RealtimeHubEventIdentity?, source: RealtimeHubSession)
   func hubDidError(_ message: String, source: RealtimeHubSession)
+}
+
+struct RealtimeHubEventIdentity: Equatable, Sendable {
+  let turnID: VoiceTurnID
+  let responseID: VoiceResponseID
+}
+
+enum GeminiRealtimeEventOwnership {
+  /// Gemini input-transcription messages do not include a provider item ID. Once
+  /// A has completed, receiving an event while B is active on the same socket is
+  /// ambiguous and must be dropped instead of mutating B's transcript.
+  static func inputIdentity(
+    active: RealtimeHubEventIdentity?,
+    completed: RealtimeHubEventIdentity?
+  ) -> RealtimeHubEventIdentity? {
+    guard let completed else { return active }
+    guard active == nil || active == completed else { return nil }
+    return completed
+  }
+}
+
+private struct PendingOpenAIResponseIdentity {
+  let identity: RealtimeHubEventIdentity
+  var canceled: Bool
 }
 
 /// How the client authenticates to the realtime provider:
@@ -59,10 +88,22 @@ enum HubAuth {
   var isEphemeral: Bool { if case .ephemeral = self { return true } else { return false } }
 }
 
-enum RealtimeHubBargeInStrategy {
+enum RealtimeHubBargeInStrategy: Equatable {
   case inSessionCancel
   case freshSession
 }
+
+#if DEBUG
+struct RealtimeHubInputLifecycleSnapshot: Equatable {
+  let isOpen: Bool
+  let activityOpen: Bool
+  let pendingAudioChunkCount: Int
+  let pendingVideoFrameCount: Int
+  let pendingCommit: Bool
+  let responseIdentityCount: Int
+  let inputIdentityCount: Int
+}
+#endif
 
 final class RealtimeHubSession: NSObject {
   private let provider: RealtimeHubProvider
@@ -90,12 +131,13 @@ final class RealtimeHubSession: NSObject {
 
   private var isOpen = false
   private var terminated = false
+  private var activeEventIdentity: RealtimeHubEventIdentity?
+  private var completedGeminiEventIdentity: RealtimeHubEventIdentity?
   private var pendingAudio: [Data] = []
   /// Screen frames awaiting an open socket (base64, mime) — flushed into the turn in
   /// markReady. A cold first turn would otherwise drop the frame before connect.
   private var pendingVideo: [(b64: String, mime: String)] = []
-  /// Hidden text inputs awaiting a provider-acceptable input window. Voice turn context
-  /// must survive the same cold-start/activity-window race as audio and screen frames.
+  /// Headless-test text awaiting a provider-acceptable input window.
   private var pendingTextInputs: [(text: String, logLabel: String)] = []
   private var pendingCommit = false
   /// OpenAI: call_id → function name, captured from response.output_item.added.
@@ -112,6 +154,10 @@ final class RealtimeHubSession: NSObject {
   private var openAIResponseActive = false
   private var openAIResponseCreatePending = false
   private var openAIActiveResponseID: String?
+  private var openAIPendingResponseIdentities: [PendingOpenAIResponseIdentity] = []
+  private var openAIResponseIdentities: [String: RealtimeHubEventIdentity] = [:]
+  private var openAIPendingInputIdentities: [RealtimeHubEventIdentity] = []
+  private var openAIInputItemIdentities: [String: RealtimeHubEventIdentity] = [:]
   /// Gemini: a committed turn is awaiting its spoken reply. Gates BOTH audio
   /// playback and turn completion to the CURRENT turn, so an interrupted/abandoned
   /// turn's trailing audio + bookkeeping `turnComplete` can't leak into the next
@@ -185,25 +231,45 @@ final class RealtimeHubSession: NSObject {
 
   func stop() {
     q.async { [weak self] in
-      guard let self else { return }
-      self.task?.cancel(with: .goingAway, reason: nil)
-      self.task = nil
-      self.rawWS?.close()
-      self.rawWS = nil
-      self.isOpen = false
-      self.pendingAudio.removeAll()
-      self.pendingVideo.removeAll()
-      self.pendingTextInputs.removeAll()
-      self.pendingCommit = false
-      self.openAIFunctionNames.removeAll()
-      self.dispatchedToolItems.removeAll()
-      self.activityOpen = false
-      self.pendingActivityStart = false
-      self.openAIResponseActive = false
-      self.openAIResponseCreatePending = false
-      self.openAIActiveResponseID = nil
-      self.geminiResponsePending = false
+      self?.stopOnQueue()
     }
+  }
+
+  /// Close the transport and drain its serialization queue before returning.
+  /// Owner replacement awaits this before the replacement owner becomes visible.
+  func stopAndWait() async {
+    await withCheckedContinuation { continuation in
+      q.async { [weak self] in
+        self?.stopOnQueue()
+        continuation.resume()
+      }
+    }
+  }
+
+  private func stopOnQueue() {
+    task?.cancel(with: .goingAway, reason: nil)
+    task = nil
+    rawWS?.close()
+    rawWS = nil
+    isOpen = false
+    pendingAudio.removeAll()
+    pendingVideo.removeAll()
+    pendingTextInputs.removeAll()
+    pendingCommit = false
+    openAIFunctionNames.removeAll()
+    dispatchedToolItems.removeAll()
+    activityOpen = false
+    pendingActivityStart = false
+    openAIResponseActive = false
+    openAIResponseCreatePending = false
+    openAIActiveResponseID = nil
+    openAIPendingResponseIdentities.removeAll()
+    openAIResponseIdentities.removeAll()
+    openAIPendingInputIdentities.removeAll()
+    openAIInputItemIdentities.removeAll()
+    geminiResponsePending = false
+    activeEventIdentity = nil
+    completedGeminiEventIdentity = nil
   }
 
   private func notifyError(_ message: String) {
@@ -224,7 +290,15 @@ final class RealtimeHubSession: NSObject {
       switch self.provider {
       case .openai:
         if self.openAIResponseActive {
+          if self.openAIResponseCreatePending,
+            let pendingIndex = self.openAIPendingResponseIdentities.firstIndex(where: { !$0.canceled })
+          {
+            self.openAIPendingResponseIdentities[pendingIndex].canceled = true
+          }
           self.send(json: ["type": "response.cancel"])
+          if let activeResponseID = self.openAIActiveResponseID {
+            self.openAIResponseIdentities.removeValue(forKey: activeResponseID)
+          }
           self.openAIResponseActive = false
           self.openAIResponseCreatePending = false
           self.openAIActiveResponseID = nil
@@ -244,10 +318,60 @@ final class RealtimeHubSession: NSObject {
   func sendAudio(_ pcm: Data) {
     q.async { [weak self] in
       guard let self else { return }
-      guard self.isOpen else { self.pendingAudio.append(pcm); return }
+      guard self.isOpen, self.provider == .openai || self.activityOpen else {
+        self.pendingAudio.append(pcm)
+        return
+      }
       self.appendAudioFrame(pcm)
     }
   }
+
+#if DEBUG
+  func inputLifecycleSnapshot() async -> RealtimeHubInputLifecycleSnapshot {
+    await withCheckedContinuation { continuation in
+      q.async {
+        continuation.resume(
+          returning: RealtimeHubInputLifecycleSnapshot(
+            isOpen: self.isOpen,
+            activityOpen: self.activityOpen,
+            pendingAudioChunkCount: self.pendingAudio.count,
+            pendingVideoFrameCount: self.pendingVideo.count,
+            pendingCommit: self.pendingCommit,
+            responseIdentityCount: self.openAIResponseIdentities.count,
+            inputIdentityCount: self.openAIInputItemIdentities.count))
+      }
+    }
+  }
+
+  func markReadyForTesting() {
+    q.async { [weak self] in self?.markReady() }
+  }
+
+  func seedOpenAIIdentityMapsForTesting(
+    identity: RealtimeHubEventIdentity,
+    responseID: String,
+    inputItemID: String
+  ) async {
+    await withCheckedContinuation { continuation in
+      q.async {
+        self.openAIResponseActive = true
+        self.openAIActiveResponseID = responseID
+        self.openAIResponseIdentities[responseID] = identity
+        self.openAIInputItemIdentities[inputItemID] = identity
+        continuation.resume()
+      }
+    }
+  }
+
+  func receiveOpenAIEventForTesting(_ event: [String: Any]) async {
+    await withCheckedContinuation { continuation in
+      q.async {
+        self.handleOpenAI(event)
+        continuation.resume()
+      }
+    }
+  }
+#endif
 
   /// Send one image as a video frame INSIDE the current open activity window (Gemini).
   /// Manual-VAD requires media to ride a user turn bracketed by activityStart…activityEnd;
@@ -295,10 +419,6 @@ final class RealtimeHubSession: NSObject {
 
   func sendTestTextInput(_ text: String) async -> Bool {
     await sendTextInput(text, logLabel: "test text input")
-  }
-
-  func sendTurnContextText(_ text: String) async -> Bool {
-    await sendTextInput(text, logLabel: "turn context")
   }
 
   private func sendTextInput(_ text: String, logLabel: String) async -> Bool {
@@ -359,10 +479,21 @@ final class RealtimeHubSession: NSObject {
   /// End the user's PTT turn and ask the model to respond.
   /// Start a new PTT turn. Gemini: open a fresh speech-activity window (must be
   /// done EVERY turn on a warm session). OpenAI: no-op (input_audio_buffer based).
-  func beginInputTurn(interrupting: Bool = false) {
-    guard provider == .gemini else { return }
+  func beginInputTurn(
+    turnID: VoiceTurnID? = nil,
+    responseID: VoiceResponseID? = nil,
+    interrupting: Bool = false
+  ) {
     q.async { [weak self] in
       guard let self else { return }
+      if let turnID, let responseID {
+        self.activeEventIdentity = RealtimeHubEventIdentity(
+          turnID: turnID,
+          responseID: responseID)
+      } else {
+        self.activeEventIdentity = nil
+      }
+      guard self.provider == .gemini else { return }
       // Barge-in on a live Gemini generation uses a fresh session at the controller
       // boundary. This same-session flag is only a local gate for abandoned/stale
       // Gemini events that arrive before replacement or on non-provider interruptions.
@@ -374,8 +505,13 @@ final class RealtimeHubSession: NSObject {
       self.activityOpen = true
       if self.isOpen {
         self.send(json: ["realtimeInput": ["activityStart": [:]]])
+        self.flushPendingAudioIfReady()
         self.flushPendingTextInputs()
         log("\(self.tag): turn begin (activityStart\(interrupting ? ", interrupting in-flight reply" : ""))")
+        if self.pendingCommit {
+          self.pendingCommit = false
+          self.commitInputTurnNow()
+        }
       } else {
         self.pendingActivityStart = true
       }
@@ -386,21 +522,32 @@ final class RealtimeHubSession: NSObject {
     q.async { [weak self] in
       guard let self else { return }
       self.resetTurnUsage()  // fresh per-turn usage before the model responds
-      guard self.isOpen else { self.pendingCommit = true; return }
-      self.flushPendingTextInputs()
-      log("\(self.tag): turn committed")
-      switch self.provider {
-      case .openai:
-        self.pendingOpenAIToolCallIds.removeAll()
-        self.send(json: ["type": "input_audio_buffer.commit"])
-        self.requestResponse(audio: true)
-      case .gemini:
-        self.pendingGeminiToolCallIds.removeAll()
-        self.send(json: ["realtimeInput": ["activityEnd": [:]]])
-        self.activityOpen = false
-        self.geminiResponsePending = true  // expect a spoken reply for THIS turn
-      // Gemini auto-responds at activityEnd; no explicit response request.
+      guard self.isOpen, self.provider == .openai || self.activityOpen else {
+        self.pendingCommit = true
+        return
       }
+      self.commitInputTurnNow()
+    }
+  }
+
+  private func commitInputTurnNow() {
+    flushPendingAudioIfReady()
+    flushPendingTextInputs()
+    log("\(tag): turn committed")
+    switch provider {
+    case .openai:
+      pendingOpenAIToolCallIds.removeAll()
+      if let identity = activeEventIdentity {
+        openAIPendingInputIdentities.append(identity)
+      }
+      send(json: ["type": "input_audio_buffer.commit"])
+      requestResponse(audio: true)
+    case .gemini:
+      pendingGeminiToolCallIds.removeAll()
+      send(json: ["realtimeInput": ["activityEnd": [:]]])
+      activityOpen = false
+      geminiResponsePending = true
+    // Gemini auto-responds at activityEnd; no explicit response request.
     }
   }
 
@@ -411,10 +558,28 @@ final class RealtimeHubSession: NSObject {
     q.async { [weak self] in
       guard let self else { return }
       self.geminiResponsePending = false
+      self.pendingAudio.removeAll()
+      self.pendingVideo.removeAll()
       self.pendingTextInputs.removeAll()
+      self.pendingCommit = false
+      self.pendingActivityStart = false
+      self.activeEventIdentity = nil
+      self.completedGeminiEventIdentity = nil
       switch self.provider {
       case .openai:
         self.pendingOpenAIToolCallIds.removeAll()
+        self.openAIFunctionNames.removeAll()
+        self.dispatchedToolItems.removeAll()
+        if self.openAIResponseActive {
+          self.send(json: ["type": "response.cancel"])
+        }
+        self.openAIResponseActive = false
+        self.openAIResponseCreatePending = false
+        self.openAIActiveResponseID = nil
+        self.openAIPendingResponseIdentities.removeAll()
+        self.openAIResponseIdentities.removeAll()
+        self.openAIPendingInputIdentities.removeAll()
+        self.openAIInputItemIdentities.removeAll()
         self.send(json: ["type": "input_audio_buffer.clear"])
       case .gemini:
         self.pendingGeminiToolCallIds.removeAll()
@@ -422,8 +587,6 @@ final class RealtimeHubSession: NSObject {
           self.send(json: ["realtimeInput": ["activityEnd": [:]]])
         }
         self.activityOpen = false
-        self.pendingActivityStart = false
-        self.pendingCommit = false
       }
     }
   }
@@ -455,20 +618,24 @@ final class RealtimeHubSession: NSObject {
     }
   }
 
-  /// OpenAI screenshot path: add the captured image as a user message item so it's in
-  /// context for the next response. (Gemini sends the screen as an in-turn video frame at
-  /// turn start — see RealtimeHubController.beginTurn — not via this path.)
+  /// Attach fresh pixels captured by the kernel-authorized screenshot executor.
+  /// No ambient or speculative caller may invoke this path.
   func injectImage(_ image: Data) {
     let b64 = image.base64EncodedString()
     q.async { [weak self] in
-      guard let self, self.provider == .openai else { return }
-      self.send(json: [
-        "type": "conversation.item.create",
-        "item": [
-          "type": "message", "role": "user",
-          "content": [["type": "input_image", "image_url": "data:image/jpeg;base64,\(b64)"]],
-        ],
-      ])
+      guard let self else { return }
+      switch self.provider {
+      case .openai:
+        self.send(json: [
+          "type": "conversation.item.create",
+          "item": [
+            "type": "message", "role": "user",
+            "content": [["type": "input_image", "image_url": "data:image/jpeg;base64,\(b64)"]],
+          ],
+        ])
+      case .gemini:
+        self.send(json: ["realtimeInput": ["video": ["data": b64, "mimeType": "image/jpeg"]]])
+      }
     }
   }
 
@@ -482,6 +649,10 @@ final class RealtimeHubSession: NSObject {
     openAIResponseActive = true
     openAIResponseCreatePending = true
     openAIActiveResponseID = nil
+    if let identity = activeEventIdentity {
+      openAIPendingResponseIdentities.append(
+        PendingOpenAIResponseIdentity(identity: identity, canceled: false))
+    }
     send(json: ["type": "response.create", "response": ["output_modalities": [audio ? "audio" : "text"]]])
   }
 
@@ -623,8 +794,7 @@ final class RealtimeHubSession: NSObject {
       send(json: ["realtimeInput": ["activityStart": [:]]])
     }
     flushPendingTextInputs()
-    for chunk in pendingAudio { appendAudioFrame(chunk) }
-    pendingAudio.removeAll()
+    flushPendingAudioIfReady()
     // Flush any screen frame INTO the turn (after activityStart + audio, before commit).
     for v in pendingVideo {
       send(json: ["realtimeInput": ["video": ["data": v.b64, "mimeType": v.mime]]])
@@ -632,18 +802,9 @@ final class RealtimeHubSession: NSObject {
     }
     pendingVideo.removeAll()
     flushPendingTextInputs()
-    if pendingCommit {
+    if pendingCommit, provider == .openai || activityOpen {
       pendingCommit = false
-      // Re-run commit now that we're open.
-      switch provider {
-      case .openai:
-        send(json: ["type": "input_audio_buffer.commit"])
-        requestResponse(audio: true)
-      case .gemini:
-        send(json: ["realtimeInput": ["activityEnd": [:]]])
-        activityOpen = false
-        geminiResponsePending = true
-      }
+      commitInputTurnNow()
     }
     let d = delegate
     Task { @MainActor in d?.hubDidConnect(source: self) }
@@ -660,6 +821,12 @@ final class RealtimeHubSession: NSObject {
     case .gemini:
       send(json: ["realtimeInput": ["audio": ["data": b64, "mimeType": "audio/pcm;rate=16000"]]])
     }
+  }
+
+  private func flushPendingAudioIfReady() {
+    guard isOpen, provider == .openai || activityOpen else { return }
+    for chunk in pendingAudio { appendAudioFrame(chunk) }
+    pendingAudio.removeAll()
   }
 
   // MARK: - Receive + parse
@@ -691,34 +858,72 @@ final class RealtimeHubSession: NSObject {
     }
   }
 
-  private func emitText(_ text: String, isFinal: Bool) {
-    guard !text.isEmpty || isFinal else { return }
-    let d = delegate
-    Task { @MainActor in d?.hubDidEmitText(text, isFinal: isFinal, source: self) }
-  }
-
-  private func emitTranscript(_ text: String, isFinal: Bool) {
-    let d = delegate
-    Task { @MainActor in d?.hubDidReceiveInputTranscript(text, isFinal: isFinal, source: self) }
-  }
-
-  private func emitAudio(_ pcm: Data) {
-    let d = delegate
-    Task { @MainActor in d?.hubDidReceiveAudio(pcm, source: self) }
-  }
-
-  private func emitTool(name: String, callId: String, argumentsJSON: String) {
-    log("\(tag): tool_call \(name)(\(argumentsJSON.prefix(160)))")
-    let d = delegate
-    Task { @MainActor in
-      d?.hubDidRequestTool(name: name, callId: callId, argumentsJSON: argumentsJSON, source: self)
+  private func deliverToDelegate(
+    _ body: @escaping @MainActor (RealtimeHubSessionDelegate) -> Void
+  ) {
+    guard let delegate else { return }
+    DispatchQueue.main.async {
+      MainActor.assumeIsolated {
+        body(delegate)
+      }
     }
   }
 
-  private func finishTurn() {
+  private func emitText(
+    _ text: String,
+    isFinal: Bool,
+    identity explicitIdentity: RealtimeHubEventIdentity? = nil
+  ) {
+    guard !text.isEmpty || isFinal else { return }
+    let identity = explicitIdentity ?? activeEventIdentity
+    deliverToDelegate { delegate in
+      delegate.hubDidEmitText(text, isFinal: isFinal, identity: identity, source: self)
+    }
+  }
+
+  private func emitTranscript(
+    _ text: String,
+    isFinal: Bool,
+    identity explicitIdentity: RealtimeHubEventIdentity? = nil
+  ) {
+    let identity = explicitIdentity ?? activeEventIdentity
+    deliverToDelegate { delegate in
+      delegate.hubDidReceiveInputTranscript(
+        text, isFinal: isFinal, identity: identity, source: self)
+    }
+  }
+
+  private func emitAudio(
+    _ pcm: Data,
+    identity explicitIdentity: RealtimeHubEventIdentity? = nil
+  ) {
+    let identity = explicitIdentity ?? activeEventIdentity
+    deliverToDelegate { delegate in
+      delegate.hubDidReceiveAudio(pcm, identity: identity, source: self)
+    }
+  }
+
+  private func emitTool(
+    name: String,
+    callId: String,
+    argumentsJSON: String,
+    identity explicitIdentity: RealtimeHubEventIdentity? = nil
+  ) {
+    log("\(tag): tool_call \(name)(\(argumentsJSON.prefix(160)))")
+    let identity = explicitIdentity ?? activeEventIdentity
+    deliverToDelegate { delegate in
+      delegate.hubDidRequestTool(
+        name: name, callId: callId, argumentsJSON: argumentsJSON,
+        identity: identity, source: self)
+    }
+  }
+
+  private func finishTurn(identity explicitIdentity: RealtimeHubEventIdentity? = nil) {
     reportUsageIfNeeded()
-    let d = delegate
-    Task { @MainActor in d?.hubDidFinishTurn(source: self) }
+    let identity = explicitIdentity ?? activeEventIdentity
+    deliverToDelegate { delegate in
+      delegate.hubDidFinishTurn(identity: identity, source: self)
+    }
   }
 
   // MARK: - Usage (client-reported billing, managed sessions only)
@@ -797,24 +1002,44 @@ final class RealtimeHubSession: NSObject {
     case "session.created", "session.updated":
       markReady()
     case "response.created":
-      if openAIResponseActive,
-        let response = e["response"] as? [String: Any], let id = response["id"] as? String
-      {
-        openAIActiveResponseID = id
-        openAIResponseCreatePending = false
+      guard let response = e["response"] as? [String: Any],
+        let id = response["id"] as? String,
+        !openAIPendingResponseIdentities.isEmpty
+      else { return }
+      let pending = openAIPendingResponseIdentities.removeFirst()
+      guard !pending.canceled else {
+        log("\(tag): consumed canceled response.created \(id)")
+        return
       }
+      guard openAIResponseActive else { return }
+      openAIActiveResponseID = id
+      openAIResponseIdentities[id] = pending.identity
+      openAIResponseCreatePending = false
     case "response.output_audio.delta":
-      guard isCurrentOpenAIResponseEvent(e) else { return }
-      if let b64 = e["delta"] as? String, let d = Data(base64Encoded: b64) { emitAudio(d) }
+      guard isCurrentOpenAIResponseEvent(e), let identity = openAIResponseIdentity(for: e) else { return }
+      if let b64 = e["delta"] as? String, let d = Data(base64Encoded: b64) {
+        emitAudio(d, identity: identity)
+      }
     case "response.output_audio_transcript.delta":
-      guard isCurrentOpenAIResponseEvent(e) else { return }
-      if let t = e["delta"] as? String { emitText(t, isFinal: false) }
+      guard isCurrentOpenAIResponseEvent(e), let identity = openAIResponseIdentity(for: e) else { return }
+      if let t = e["delta"] as? String { emitText(t, isFinal: false, identity: identity) }
+    case "input_audio_buffer.committed":
+      if let itemID = e["item_id"] as? String, !openAIPendingInputIdentities.isEmpty {
+        let identity = openAIPendingInputIdentities.removeFirst()
+        openAIInputItemIdentities[itemID] = identity
+      }
     case "conversation.item.input_audio_transcription.delta":
-      if let t = e["delta"] as? String { emitTranscript(t, isFinal: false) }
+      guard let identity = openAIInputIdentity(for: e) else { return }
+      if let t = e["delta"] as? String {
+        emitTranscript(t, isFinal: false, identity: identity)
+      }
     case "conversation.item.input_audio_transcription.completed":
+      guard let itemID = e["item_id"] as? String,
+        let identity = openAIInputItemIdentities.removeValue(forKey: itemID)
+      else { return }
       if let t = e["transcript"] as? String {
         log("\(tag): heard \"\(t.prefix(120))\"")
-        emitTranscript(t, isFinal: true)
+        emitTranscript(t, isFinal: true, identity: identity)
       }
     case "response.output_item.added":
       guard isCurrentOpenAIResponseEvent(e) else { return }
@@ -845,11 +1070,24 @@ final class RealtimeHubSession: NSObject {
     return eventResponseID == expected
   }
 
+  private func openAIResponseIdentity(for event: [String: Any]) -> RealtimeHubEventIdentity? {
+    let responseID = (event["response_id"] as? String)
+      ?? ((event["response"] as? [String: Any])?["id"] as? String)
+    return responseID.flatMap { openAIResponseIdentities[$0] }
+  }
+
+  private func openAIInputIdentity(for event: [String: Any]) -> RealtimeHubEventIdentity? {
+    guard let itemID = event["item_id"] as? String else { return nil }
+    return openAIInputItemIdentities[itemID]
+  }
+
   private func handleOpenAIResponseDone(_ e: [String: Any]) {
     guard isCurrentOpenAIResponseEvent(e) else {
       log("\(tag): ignoring stale response.done")
       return
     }
+    guard let responseIdentity = openAIResponseIdentity(for: e) else { return }
+    let completedResponseID = openAIActiveResponseID
     openAIResponseActive = false  // this response finished — a new one may be created
     openAIResponseCreatePending = false
     openAIActiveResponseID = nil
@@ -868,14 +1106,21 @@ final class RealtimeHubSession: NSObject {
       let argsStr = (item["arguments"] as? String) ?? "{}"
       if !name.isEmpty {
         firedTool = true
-        emitTool(name: name, callId: callId, argumentsJSON: argsStr)
+        emitTool(
+          name: name,
+          callId: callId,
+          argumentsJSON: argsStr,
+          identity: responseIdentity)
       }
     }
     // A response that only made tool calls isn't the end of the user's turn —
     // the model speaks after we return the tool result. Otherwise finish.
     if !firedTool {
-      emitText("", isFinal: true)
-      finishTurn()
+      emitText("", isFinal: true, identity: responseIdentity)
+      finishTurn(identity: responseIdentity)
+    }
+    if let completedResponseID {
+      openAIResponseIdentities.removeValue(forKey: completedResponseID)
     }
   }
 
@@ -923,7 +1168,14 @@ final class RealtimeHubSession: NSObject {
     // interrupt the server's still-open turn. We finish on turnComplete (below), which
     // arrives when the audio actually completes.
     if let it = sc["inputTranscription"] as? [String: Any], let t = it["text"] as? String {
-      emitTranscript(t, isFinal: false)
+      if let identity = GeminiRealtimeEventOwnership.inputIdentity(
+        active: activeEventIdentity,
+        completed: completedGeminiEventIdentity)
+      {
+        emitTranscript(t, isFinal: false, identity: identity)
+      } else {
+        log("\(tag): dropping ambiguous Gemini input transcription across turn boundary")
+      }
     }
     if let ot = sc["outputTranscription"] as? [String: Any], let t = ot["text"] as? String {
       emitText(t, isFinal: false)  // the spoken reply's text, for logging / the bubble
@@ -949,8 +1201,9 @@ final class RealtimeHubSession: NSObject {
       // can't prematurely end the live turn.
       if geminiResponsePending {
         geminiResponsePending = false
+        completedGeminiEventIdentity = activeEventIdentity
         emitText("", isFinal: true)
-        finishTurn()
+        finishTurn(identity: completedGeminiEventIdentity)
       }
     }
   }

@@ -106,8 +106,13 @@ def _make_chat_client():
     users.get_user_display_name = MagicMock(return_value='Test User')
     sanitizer = _install_module('utils.log_sanitizer', ModuleType('utils.log_sanitizer'))
     sanitizer.sanitize_pii = lambda value: value
-    observability = _install_module('utils.observability', ModuleType('utils.observability'))
+    observability = _install_package('utils.observability', BACKEND_DIR / 'utils' / 'observability')
     observability.submit_langsmith_feedback = MagicMock()
+    transcription_observability = _install_module(
+        'utils.observability.transcription',
+        ModuleType('utils.observability.transcription'),
+    )
+    transcription_observability.TranscriptionAttempt = MagicMock
 
     rate_limit = _install_module('utils.rate_limit_config', ModuleType('utils.rate_limit_config'))
     rate_limit.get_effective_limit = MagicMock(return_value=(100, 60))
@@ -127,6 +132,8 @@ def _make_chat_client():
     auth.get_current_user_uid = get_current_user_uid
     auth.get_current_user_uid_ws_listen = get_current_user_uid
     auth.with_rate_limit = with_rate_limit
+    # chat.py imports utils.stt.pre_recorded, which needs @timeit from this module.
+    auth.timeit = lambda f: f
     storage = _install_module('utils.other.storage', ModuleType('utils.other.storage'))
     storage.get_syncing_file_temporal_signed_url = MagicMock(return_value='https://example.test/audio.wav')
     storage.schedule_syncing_temporal_file_deletion = MagicMock()
@@ -153,6 +160,12 @@ def _make_chat_client():
     stt_streaming = _install_module('utils.stt.streaming', ModuleType('utils.stt.streaming'))
     stt_streaming.process_audio_dg = MagicMock()
     stt_streaming.get_stt_service_for_language = MagicMock()
+    # These quota-router tests do not exercise prerecorded STT. Loading the real
+    # module would import NumPy after this harness restores sys.modules between
+    # cases, which native extension modules cannot safely do in one process.
+    prerecorded = _install_module('utils.stt.pre_recorded', ModuleType('utils.stt.pre_recorded'))
+    prerecorded.PrerecordedSTTConfigurationError = type('PrerecordedSTTConfigurationError', (Exception,), {})
+    prerecorded.get_prerecorded_service = MagicMock(return_value=('deepgram', 'en', 'nova-3'))
 
     usage_tracker = _install_module('utils.llm.usage_tracker', ModuleType('utils.llm.usage_tracker'))
     usage_tracker.set_usage_context = MagicMock(return_value='usage-token')
@@ -314,5 +327,54 @@ def test_v2_voice_messages_without_visible_message_does_not_record_quota_questio
 
         assert response.status_code == 200
         module.llm_usage_db.record_chat_quota_question.assert_not_called()
+    finally:
+        _cleanup(saved)
+
+
+def test_voice_message_multipart_decode_failure_is_typed_and_cleans_staged_input():
+    """Corrupt upload decoding must not bypass the semantic error boundary."""
+    client, module, saved = _make_chat_client()
+    try:
+        cleanup = MagicMock()
+        with patch.object(module, 'retrieve_file_paths', return_value=['/tmp/test-uid_input.opus']):
+            with patch.object(module, 'decode_files_to_wav', side_effect=module.HTTPException(400, 'invalid opus')):
+                with patch.object(module, '_cleanup_temp_voice_wavs', cleanup):
+                    response = client.post(
+                        '/v2/voice-message/transcribe',
+                        files=[('files', ('corrupt.opus', io.BytesIO(b'not-opus'), 'audio/ogg'))],
+                        headers={'X-App-Platform': 'ios'},
+                    )
+
+        assert response.status_code == 400
+        assert response.json()['detail'] == {
+            'error': 'stt_invalid_input',
+            'outcome': 'invalid_input',
+            'provider': 'deepgram',
+            'retryable': False,
+            'message': 'The audio input is invalid.',
+        }
+        cleanup.assert_called_once_with(['/tmp/test-uid_input.opus'], 'test-uid')
+    finally:
+        _cleanup(saved)
+
+
+def test_voice_message_sse_decode_failure_is_typed_and_cleans_staged_input():
+    """The chat SSE upload path shares the same safe preprocessing boundary."""
+    client, module, saved = _make_chat_client()
+    try:
+        cleanup = MagicMock()
+        with patch.object(module, 'retrieve_file_paths', return_value=['/tmp/test-uid_stream.opus']):
+            with patch.object(module, 'decode_files_to_wav', side_effect=module.HTTPException(400, 'invalid opus')):
+                with patch.object(module, '_cleanup_temp_voice_wavs', cleanup):
+                    response = client.post(
+                        '/v2/voice-messages',
+                        files=[('files', ('corrupt.opus', io.BytesIO(b'not-opus'), 'audio/ogg'))],
+                        headers={'X-App-Platform': 'ios'},
+                    )
+
+        assert response.status_code == 400
+        assert response.json()['detail']['outcome'] == 'invalid_input'
+        assert response.json()['detail']['retryable'] is False
+        cleanup.assert_called_once_with(['/tmp/test-uid_stream.opus'], 'test-uid')
     finally:
         _cleanup(saved)

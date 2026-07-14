@@ -1,5 +1,6 @@
 {
     "@@locale": "tl",
+    "sessionExpiredSignInAgain": "Nag-expire ang session — mag-sign in ulit.",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {

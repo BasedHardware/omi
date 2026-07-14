@@ -47,6 +47,7 @@ ROUTE_TYPES = {'http', 'websocket'}
 AUTH_MECHANISMS = {
     'public',
     'firebase_id_token',
+    'admin_key',
     'admin_key_uid_prefix',
     'developer_api_key',
     'mcp_api_key',
@@ -72,6 +73,7 @@ TIMEOUT_CLASSES = {
     'sync_job',
     'audio_merge',
     'account_deletion_wipe',
+    'listen_finalization',
     'streaming',
     'websocket',
     'unknown',
@@ -182,6 +184,8 @@ def _timeout_class_for_path(path: str, paths_timeout: dict[str, Any]) -> str:
         return 'audio_merge'
     if path == '/v1/users/account-deletion-wipes/run':
         return 'account_deletion_wipe'
+    if path == '/v1/conversation-finalization-jobs/run':
+        return 'listen_finalization'
     if path in paths_timeout:
         return 'unknown'
     return 'default_method'
@@ -618,7 +622,10 @@ def validate_inventory(
         if not policy:
             continue
         timeout_class = policy.get('timeout_class')
-        if timeout_class in {'sync_job', 'audio_merge', 'account_deletion_wipe'} and entry['path'] not in paths_timeout:
+        if (
+            timeout_class in {'sync_job', 'audio_merge', 'account_deletion_wipe', 'listen_finalization'}
+            and entry['path'] not in paths_timeout
+        ):
             missing_timeout_overrides.append(f"{entry['route_key']} declares {timeout_class} without a path override")
         if entry['observed']['timeout_override']:
             expected_timeout_class = entry['observed']['timeout_class_hint']
@@ -798,9 +805,12 @@ def generate_backend_route_inventory() -> dict:
     logging.disable(logging.CRITICAL)
     try:
         os.chdir(BACKEND_DIR)
-        fake_firestore, fake_redis, get_mock_firestore, get_fake_redis = (
-            export_openapi.install_hermetic_dependency_patches()
-        )
+        (
+            fake_firestore,
+            fake_redis,
+            get_mock_firestore,
+            get_fake_redis,
+        ) = export_openapi.install_hermetic_dependency_patches()
         with record_and_block_all_network() as network_attempts:
             backend_main = importlib.import_module('main')
 

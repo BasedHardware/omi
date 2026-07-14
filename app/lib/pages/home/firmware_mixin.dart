@@ -245,6 +245,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   }
 
   Future downloadFirmware() async {
+    final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
     final zipUrl = latestFirmwareDetails['zip_url'];
     if (zipUrl == null) {
       Logger.debug('Error: zip_url is null in latestFirmwareDetails');
@@ -252,7 +253,6 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
         isDownloading = false;
       });
       // Reset firmware update state on error
-      final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
       deviceProvider.resetFirmwareUpdateState();
       return;
     }
@@ -310,7 +310,6 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
           setState(() {
             isDownloading = false;
           });
-          final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
           deviceProvider.resetFirmwareUpdateState();
           completer.completeError(error);
         },
@@ -324,7 +323,6 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
           isDownloading = false;
         });
       }
-      final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
       deviceProvider.resetFirmwareUpdateState();
     }
   }

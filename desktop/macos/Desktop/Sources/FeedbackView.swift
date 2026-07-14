@@ -3,6 +3,17 @@ import SwiftUI
 import UniformTypeIdentifiers
 import OmiTheme
 
+/// The Sentry event title used when a user submits feedback. Shared by the real
+/// `submitFeedback()` path and the non-prod dry-run bridge action so the dry-run
+/// can never drift from the title that actually ships to Sentry (SET-02).
+func feedbackReportTitle(for message: String) -> String {
+  message.isEmpty ? "User Report (logs only)" : "User Report: \(message)"
+}
+
+/// Filename of the JSON diagnostics attachment on the feedback Sentry event.
+/// Shared so the dry-run reports the same attachment name the real submit uses.
+let feedbackDiagnosticsAttachmentFilename = "desktop_diagnostics.json"
+
 /// Window controller for the feedback dialog
 @MainActor
 class FeedbackWindow {
@@ -57,15 +68,15 @@ struct FeedbackView: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 16) {
+    VStack(alignment: .leading, spacing: OmiSpacing.lg) {
       if showSuccess {
         // Success state
-        VStack(spacing: 12) {
+        VStack(spacing: OmiSpacing.md) {
           Image(systemName: "checkmark.circle.fill")
             .scaledFont(size: 48)
             .foregroundColor(.green)
 
-          Text("Report sent!")
+          Text("Report sent")
             .font(.headline)
 
           Text("We'll look into this issue.")
@@ -94,7 +105,7 @@ struct FeedbackView: View {
           .border(Color.gray.opacity(0.3), width: 1)
 
         HStack {
-          VStack(alignment: .leading, spacing: 4) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Name (optional)")
               .font(.caption)
               .foregroundColor(.secondary)
@@ -102,7 +113,7 @@ struct FeedbackView: View {
               .textFieldStyle(.roundedBorder)
           }
 
-          VStack(alignment: .leading, spacing: 4) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Email")
               .font(.caption)
               .foregroundColor(.secondary)
@@ -132,7 +143,7 @@ struct FeedbackView: View {
         }
       }
     }
-    .padding(20)
+    .padding(OmiSpacing.xl)
     .frame(width: 400, height: 300)
   }
 
@@ -145,7 +156,7 @@ struct FeedbackView: View {
     AnalyticsManager.shared.feedbackSubmitted(feedbackLength: message.count)
 
     // Submit to Sentry with log file attachment (dev + prod — user explicitly chose to report)
-    let sentryMessage = message.isEmpty ? "User Report (logs only)" : "User Report: \(message)"
+    let sentryMessage = feedbackReportTitle(for: message)
 
     // Capture event with log file attached via scope
     let eventId = SentrySDK.capture(message: sentryMessage) { scope in
@@ -158,7 +169,7 @@ struct FeedbackView: View {
       if let diagnosticsURL = DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment() {
         let attachment = Attachment(
           path: diagnosticsURL.path,
-          filename: "desktop_diagnostics.json",
+          filename: feedbackDiagnosticsAttachmentFilename,
           contentType: "application/json")
         scope.addAttachment(attachment)
       }
@@ -180,7 +191,7 @@ struct FeedbackView: View {
     )
 
     // Show success
-    withAnimation {
+    OmiMotion.withGated {
       showSuccess = true
       isSubmitting = false
     }

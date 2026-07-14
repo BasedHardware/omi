@@ -22,6 +22,13 @@
      Feature: point to the tests for the core path and main error path.
      No test change: explain why none was needed. -->
 
+## Root cause and durable guard (bug fixes)
+
+<!-- Name the violated contract, similar recent failures you checked, and the
+     shared state model / harness / compatibility check / static guard that
+     prevents this failure class. If a risky migration is deliberately separate,
+     link its tracking issue and explain the rollback boundary. -->
+
 ## Scoped cleanups (optional)
 
 <!-- Related fixes you made along the way (see AGENTS.md → "Leave It Better

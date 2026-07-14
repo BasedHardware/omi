@@ -1,5 +1,6 @@
 {
     "@@locale": "hu",
+    "sessionExpiredSignInAgain": "A munkamenet lejárt — jelentkezz be újra.",
     "appTitle": "Omi",
     "conversationTab": "Beszélgetés",
     "transcriptTab": "Átirat",

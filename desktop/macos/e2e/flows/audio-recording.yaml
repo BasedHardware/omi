@@ -1,13 +1,37 @@
 version: 2
 name: audio-recording
 tier: manual
-description: Audio recording flow — verify microphone permission, Start Recording button, transcription state, and stop recording
+description: Audio recording flow — verify Bluetooth or microphone source state, Start Recording, transcription state, and stop recording
 app: com.omi.computer-macos
 covers:
   - desktop/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
   - desktop/Desktop/Sources/AudioCaptureService.swift
   - desktop/Desktop/Sources/Audio/AudioSourceManager.swift
   - desktop/Desktop/Sources/AppState.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarUsageLimiter.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Transports/BleTransport.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Transports/BLEPhysicalDriver.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Transports/DeviceTransport.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/BluetoothManager.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Session/BluetoothConnectionLease.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Session/DeviceAudioStreamController.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Session/DeviceCommandQueue.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Session/DeviceOperationBroker.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Session/DeviceSessionCoordinator.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Connections/DeviceConnection.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Connections/DeviceConnectionFactory.swift
+  - desktop/macos/Desktop/Sources/Audio/AudioCodecDecoder.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Connections/BeeDeviceConnection.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Connections/FieldyDeviceConnection.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Connections/FrameDeviceConnection.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Connections/FriendPendantConnection.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Connections/OmiDeviceConnection.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Connections/PlaudDeviceConnection.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Connections/LimitlessDeviceConnection.swift
+  - desktop/macos/Desktop/Sources/Providers/DeviceProvider.swift
+  - desktop/macos/Desktop/Sources/SystemAudioCaptureService.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/AudioLevelWaveformView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/AudioSourceSelector.swift
 preconditions:
   - auth_ready
 
@@ -23,6 +47,12 @@ steps:
   - id: S2
     name: Verify Start Recording button
     do: "Check that the 'Start Recording' button with microphone icon is visible on the Dashboard. Note its position and state. If the app is already recording, a 'Stop Recording' button should be visible instead."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S2B
+    name: Verify Bluetooth audio source state
+    do: "If an Omi-compatible Bluetooth device is paired, verify its connected state is reflected before recording and that it remains the selected device audio source. If no device is available, verify the app stays usable with the microphone source and does not show a stale connected-device state."
     expect:
       interactive_count: { min: 1 }
 

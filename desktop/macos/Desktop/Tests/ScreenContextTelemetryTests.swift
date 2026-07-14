@@ -3,6 +3,22 @@ import XCTest
 @testable import Omi_Computer
 
 final class ScreenContextTelemetryTests: XCTestCase {
+  func testScreenshotSharingPreconditionHasBoundedPhysicalFailure() {
+    let metrics = ScreenContextChatCycleMetrics()
+    metrics.recordToolRequested("capture_screen")
+    metrics.recordToolResult(
+      name: "capture_screen",
+      output:
+        #"EXECUTION_PRECONDITION_FAILED: {"code":"execution_precondition_failed","ok":false,"reason":"screenshot_sharing_disabled","tool":"capture_screen"}"#
+    )
+
+    let snapshot = metrics.snapshot()
+    XCTAssertTrue(snapshot.screenToolRequested)
+    XCTAssertFalse(snapshot.screenToolSucceeded)
+    XCTAssertFalse(snapshot.screenToolApprovalRequired)
+    XCTAssertEqual(snapshot.screenToolFailureCodes, ["screenshot_sharing_disabled"])
+  }
+
   func testPolicyDeniedScreenshotResultMarksApprovalRequired() {
     let metrics = ScreenContextChatCycleMetrics()
     metrics.recordToolRequested("capture_screen")
@@ -190,23 +206,28 @@ final class ScreenContextTelemetryTests: XCTestCase {
     XCTAssertFalse(source.contains("return try await RewindDatabase.shared.getRecentScreenshots"))
   }
 
-  func testPTTScreenContextPrefetchSeparatesScreenNowRecentActivityAndVocabulary() throws {
-    let source = try String(
+  func testPTTDoesNotCreateAnAmbientScreenContextSideChannel() throws {
+    let hubSource = try String(
       contentsOf: URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()
         .deletingLastPathComponent()
         .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift"),
       encoding: .utf8
     )
+    let pttSource = try String(
+      contentsOf: URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent("Sources/FloatingControlBar/PushToTalkManager.swift"),
+      encoding: .utf8
+    )
 
-    XCTAssertTrue(source.contains("prefetchVoiceTurnScreenContextIfNeeded"))
-    XCTAssertTrue(source.contains("voiceTurnScreenContextEnvelopeJSON"))
-    XCTAssertTrue(source.contains(#""screen_now""#))
-    XCTAssertTrue(source.contains(#""recent_activity""#))
-    XCTAssertTrue(source.contains(#""transcription_vocabulary""#))
-    XCTAssertTrue(source.contains("current_screen_truth"))
-    XCTAssertTrue(source.contains("ScreenContextWorkContextBuilder.voiceTurnStaleCaptureThresholdSeconds"))
-    XCTAssertTrue(source.contains("context[\"recent_activity\"] = rawPayload[\"timeline\"] ?? []"))
+    XCTAssertFalse(hubSource.contains("prefetchVoiceTurnScreenContextIfNeeded"))
+    XCTAssertFalse(hubSource.contains("voiceTurnScreenContextEnvelopeJSON"))
+    XCTAssertFalse(hubSource.contains("ScreenContextWorkContextBuilder.payload"))
+    XCTAssertFalse(hubSource.contains("speculativeScreenshot"))
+    XCTAssertFalse(pttSource.contains("prefetchVoiceTurnScreenContextIfNeeded"))
+    XCTAssertTrue(hubSource.contains("FloatingControlBarManager.shared.kernelVoiceContextSnapshot()"))
   }
 
   func testStaleWorkContextDropsScreenNowWhenFreshCaptureFails() throws {
@@ -245,6 +266,7 @@ final class ScreenContextTelemetryTests: XCTestCase {
     XCTAssertTrue(prompt.contains("Current screen/current work questions"))
     XCTAssertTrue(prompt.contains("get_work_context first"))
     XCTAssertTrue(prompt.contains("Raw screenshot pixels"))
+    XCTAssertTrue(prompt.contains("only after explicit current-turn consent"))
     XCTAssertTrue(prompt.contains("request_permission"))
   }
 

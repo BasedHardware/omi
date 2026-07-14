@@ -234,7 +234,9 @@ def compute_app_score(app: App) -> float:
     """
     rating_avg = app.rating_avg or 0
     rating_count = app.rating_count or 0
-    installs = app.installs or 0
+    # Clamp negative install counts (counter drift) so math.log(1 + installs) below never hits a domain
+    # error; the source is also floored in redis_db.get_apps_installs_count.
+    installs = max(0, app.installs or 0)
 
     rating_factor = (rating_avg / 5) ** 2  # Steep drop for low ratings
     score = rating_factor * math.log(1 + rating_count) * math.sqrt(math.log(1 + installs))
@@ -537,12 +539,31 @@ def get_app_money_made_amount(app_id: str) -> float:
     return amount
 
 
+def _safe_usage_history_items(usage: List[Dict[str, Any]], app_id: str) -> List[UsageHistoryItem]:
+    """Build UsageHistoryItem records from raw usage docs, skipping (not raising on) a malformed one.
+
+    get_app_usage_history / get_app_money_made are Redis/process-cached and shared, so one legacy or
+    malformed usage document (a bad type enum, a missing timestamp) must not 500 the whole enrichment.
+    """
+    items: List[UsageHistoryItem] = []
+    for x in usage:
+        try:
+            items.append(UsageHistoryItem(**x))
+        except ValidationError as e:
+            logger.warning(
+                "Skipping malformed usage history item for app %s: %s",
+                app_id,
+                [err['loc'][0] for err in e.errors()],
+            )
+    return items
+
+
 def get_app_usage_history(app_id: str) -> List[Dict[str, Any]]:
     cached_usage = get_app_usage_history_cache(app_id)
     if cached_usage:
         return cached_usage
     usage = get_app_usage_history_db(app_id)
-    usage = [UsageHistoryItem(**x) for x in usage]
+    usage = _safe_usage_history_items(usage, app_id)
     # return usage by date grouped count
     by_date: 'defaultdict[Any, int]' = defaultdict(int)
     for item in usage:
@@ -561,7 +582,7 @@ def get_app_money_made(app_id: str) -> dict[str, int | float]:
     if cached_money:
         return cached_money
     usage = get_app_usage_history_db(app_id)
-    usage = [UsageHistoryItem(**x) for x in usage]
+    usage = _safe_usage_history_items(usage, app_id)
     type1 = len(list(filter(lambda x: x.type == UsageHistoryType.memory_created_external_integration, usage)))
     type2 = len(list(filter(lambda x: x.type == UsageHistoryType.memory_created_prompt, usage)))
     type3 = len(list(filter(lambda x: x.type == UsageHistoryType.chat_message_sent, usage)))

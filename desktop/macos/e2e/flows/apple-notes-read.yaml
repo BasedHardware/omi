@@ -1,0 +1,24 @@
+version: 2
+name: apple-notes-read
+tier: 2
+description: Apple Notes read-access probe rejects an invalid folder deterministically (no import/save)
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/AppleNotesReaderService.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Probe rejects a non-Notes folder without crashing
+    # A bogus folderPath fails every branch of resolveSelectedFolder, so validateSelectedFolder
+    # throws .invalidSelectedFolder regardless of whether this machine has an Apple Notes store —
+    # a deterministic, hermetic outcome that still exercises AppleNotesReaderService end to end.
+    bridge.action:
+      name: apple_notes_read_probe
+      params:
+        folderPath: "/nonexistent/omi-e2e-apple-notes-fixture"
+        maxResults: 5
+        remember: false
+    expect:
+      result.detail.ok: "false"

@@ -4,6 +4,18 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"
 
+# Repository sources are UTF-8. Native Windows Python otherwise inherits the
+# system code page, which makes source-reading tests locale-dependent.
+export PYTHONUTF8="${PYTHONUTF8:-1}"
+
+# Git exports repository-local variables while invoking hooks. They must not
+# leak into pytest: tests that create temporary repositories would otherwise
+# keep operating on the outer worktree. The runner is already anchored at the
+# backend directory, so normal Git discovery remains available after scrubbing.
+while IFS= read -r git_env_name; do
+  [[ -n "$git_env_name" ]] && unset "$git_env_name"
+done < <(git rev-parse --local-env-vars 2>/dev/null || true)
+
 PYTHON_BIN="${PYTHON:-}"
 if [[ -z "$PYTHON_BIN" ]]; then
   if [[ -x ".venv/bin/python" ]]; then
@@ -16,8 +28,21 @@ fi
 export ENCRYPTION_SECRET="omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv"
 export OPENAI_API_KEY="test-openai-key-not-real"
 export BACKEND_PYTEST_TIMING_SUMMARY="${BACKEND_PYTEST_TIMING_SUMMARY:-1}"
+# Keep the local pre-push path strict; CI deliberately overrides only the blocking
+# ceiling so cross-machine CPU differences do not make pull requests flaky.
 export BACKEND_FAST_UNIT_WARN_SECONDS="${BACKEND_FAST_UNIT_WARN_SECONDS:-0.1}"
 export BACKEND_FAST_UNIT_FAIL_SECONDS="${BACKEND_FAST_UNIT_FAIL_SECONDS:-0.12}"
+
+# The file-isolated runner already parallelizes pytest processes. Letting each process
+# start a native BLAS/OpenMP pool oversubscribes the machine and makes process CPU time
+# depend on which test first initializes NumPy. Keep one native worker per pytest process;
+# callers can still override a setting when intentionally exercising parallel kernels.
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
+export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-1}"
+export MKL_NUM_THREADS="${MKL_NUM_THREADS:-1}"
+export VECLIB_MAXIMUM_THREADS="${VECLIB_MAXIMUM_THREADS:-1}"
+export NUMEXPR_NUM_THREADS="${NUMEXPR_NUM_THREADS:-1}"
+export BLIS_NUM_THREADS="${BLIS_NUM_THREADS:-1}"
 
 pytest_args=(-v)
 
@@ -52,7 +77,9 @@ fi
 
 selected_tests=()
 while IFS= read -r test_path; do
-  [[ -n "$test_path" ]] && selected_tests+=("$test_path")
+  if [[ -n "$test_path" && "$test_path" != testing/e2e/* ]]; then
+    selected_tests+=("$test_path")
+  fi
 done < "$test_list_file"
 
 if [[ ${#selected_tests[@]} -eq 0 ]]; then
@@ -75,6 +102,7 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
   fi
 
   active_pids=()
+  failed_test_paths=()
   failed=0
   status_dir="$(mktemp -d)"
   test_index=0
@@ -159,9 +187,23 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
     IFS=$'\t' read -r status test_path < "$status_file"
     if [[ "$status" -ne 0 ]]; then
       echo "Backend unit test file failed: $test_path (status $status)"
+      failed_test_paths+=("$test_path")
       failed=1
     fi
   done
+
+  if [[ "$failed" -ne 0 ]]; then
+    rerun_list="/tmp/omi-backend-unit-failures.txt"
+    echo
+    echo "Backend unit suite failed."
+    echo "Reproduce only the failed file(s) with the same test.sh runner and timing guard:"
+    printf '  : > %q\n' "$rerun_list"
+    for test_path in "${failed_test_paths[@]}"; do
+      printf '  echo %q >> %q\n' "$test_path" "$rerun_list"
+    done
+    printf '  BACKEND_UNIT_TEST_FILE_LIST=%q bash test.sh\n' "$rerun_list"
+    echo "Do not use bare pytest for fast-unit timing failures; it omits test.sh's guard settings."
+  fi
 
   rm -rf "$status_dir"
   exit "$failed"

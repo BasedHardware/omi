@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -12,11 +13,40 @@ from typing import Any, cast
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
+BACKEND_ROOT = ROOT / 'backend'
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from config.prerecorded_stt import required_env_for_model_config  # noqa: E402
+
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
 ConfigDict = dict[str, Any]
 EnvEntry = dict[str, Any]
 EnvEntryMap = dict[str, EnvEntry]
 StringMap = dict[str, str]
+
+_NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_ENV = frozenset(
+    {
+        'MEMORY_MODE',
+        'MEMORY_ENABLED_USERS',
+        'MEMORY_V3_GET_ENABLED',
+        'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED',
+        'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED',
+        'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
+        'MEMORY_TYPESENSE_COLLECTION',
+        'TYPESENSE_HOST',
+        'TYPESENSE_HOST_PORT',
+        'TYPESENSE_API_KEY',
+    }
+)
+_NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_SECRETS = frozenset({'TYPESENSE_HOST', 'TYPESENSE_API_KEY'})
+_SYNC_LEDGER_FENCE_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill')
+_SYNC_LEDGER_FENCE_MODES = frozenset({'legacy', 'standby', 'active'})
+_MEMORY_MAINTENANCE_DEV_REQUIRED_FLAGS = {
+    '--task-timeout': '3600s',
+    '--cpu': '2',
+    '--memory': '2Gi',
+}
 
 
 def _as_config_dict(value: object) -> ConfigDict | None:
@@ -100,6 +130,7 @@ def validate_runtime_env(
         return errors
 
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
+    errors.extend(_validate_prerecorded_stt_contract(env, env_config))
     errors.extend(_validate_memory_maintenance_job_contract(env, env_config))
     if check_workflows:
         errors.extend(
@@ -108,6 +139,7 @@ def validate_runtime_env(
                 env_config,
                 strict_provisional=strict_provisional,
                 manifest_path=manifest_path,
+                manifest=manifest,
             )
         )
 
@@ -121,6 +153,7 @@ def validate_runtime_env(
 
     if cloud_run_state is not None:
         errors.extend(_validate_cloud_run(env_config, cloud_run_state, strict_provisional=strict_provisional))
+        errors.extend(_validate_sync_ledger_fence_mode(env_config, cloud_run_state))
     return errors
 
 
@@ -142,7 +175,12 @@ def _build_rendered_cloud_run_state(env_config: ConfigDict) -> ConfigDict:
                     continue
                 env_entries.append({'name': str(env_name), 'value': str(entry['value'])})
             elif 'env_var' in entry:
-                env_entries.append({'name': str(env_name), 'value': f'__rendered_{env_name}__'})
+                env_entries.append(
+                    {
+                        'name': str(env_name),
+                        'value': str(entry.get('default', f'__rendered_{env_name}__')),
+                    }
+                )
         for secret_name, raw_entry in (service_config.get('secrets') or {}).items():
             entry = _as_config_dict(raw_entry)
             if entry is None or 'secret' not in entry:
@@ -209,6 +247,69 @@ def _validate_manifest_shape(env_config: ConfigDict, env: str) -> list[Validatio
     cloud_run_services = _as_config_dict(cloud_run.get('services'))
     if cloud_run_services is None or not cloud_run_services:
         errors.append(ValidationError(env, 'cloud_run.services must be a non-empty mapping'))
+    else:
+        for service in _SYNC_LEDGER_FENCE_SERVICES:
+            service_config = _as_config_dict(cloud_run_services.get(service)) or {}
+            env_entries = _as_config_dict(service_config.get('env')) or {}
+            entry = _as_config_dict(env_entries.get('SYNC_LEDGER_FENCE_MODE'))
+            if entry is None:
+                errors.append(ValidationError(f'{env}/cloud_run/{service}', 'missing SYNC_LEDGER_FENCE_MODE'))
+                continue
+            if entry.get('env_var') != 'SYNC_LEDGER_FENCE_MODE':
+                errors.append(
+                    ValidationError(
+                        f'{env}/cloud_run/{service}',
+                        'SYNC_LEDGER_FENCE_MODE must bind the protected SYNC_LEDGER_FENCE_MODE variable',
+                    )
+                )
+            if entry.get('default') != 'legacy':
+                errors.append(
+                    ValidationError(
+                        f'{env}/cloud_run/{service}',
+                        'SYNC_LEDGER_FENCE_MODE must default to legacy until protected cutover activation',
+                    )
+                )
+    return errors
+
+
+def _validate_sync_ledger_fence_mode(env_config: ConfigDict, cloud_run_state: ConfigDict) -> list[ValidationError]:
+    """Keep the protected rollout mode identical across all sync surfaces.
+
+    A normal deploy must never regress a live active cutover back to legacy,
+    nor leave one service in standby while another starts fenced work. The
+    renderer receives the desired value from the protected environment
+    variable; its absence deliberately means the safe legacy default.
+    """
+    expected = os.getenv('SYNC_LEDGER_FENCE_MODE', 'legacy').strip().lower() or 'legacy'
+    errors: list[ValidationError] = []
+    if expected not in _SYNC_LEDGER_FENCE_MODES:
+        return [ValidationError('sync_ledger_fence', f'invalid protected mode {expected!r}')]
+
+    services = _as_config_dict(cloud_run_state.get('services')) or {}
+    for service in _SYNC_LEDGER_FENCE_SERVICES:
+        state = _as_config_dict(services.get(service))
+        if state is None:
+            # Keep the existing provisional-rendered behavior intact. Live
+            # validation will still require every cutover service once it is
+            # deployed, because no state is then provisional.
+            continue
+        actual = _env_entries_by_name(state.get('env', [])).get('SYNC_LEDGER_FENCE_MODE')
+        actual_value = _literal_env_value(actual) if actual is not None else ''
+        if actual_value not in _SYNC_LEDGER_FENCE_MODES:
+            errors.append(
+                ValidationError(
+                    f'cloud_run/{service}',
+                    'SYNC_LEDGER_FENCE_MODE must be one of legacy, standby, active',
+                )
+            )
+            continue
+        if actual_value != expected:
+            errors.append(
+                ValidationError(
+                    f'cloud_run/{service}',
+                    f'SYNC_LEDGER_FENCE_MODE mismatch: expected protected mode {expected!r}, got {actual_value!r}',
+                )
+            )
     return errors
 
 
@@ -218,6 +319,87 @@ def _manifest_literal_env_value(env_map: object, key: str) -> str | None:
     if entry is None or 'value' not in entry:
         return None
     return str(entry['value'])
+
+
+def _manifest_env_binding_is_configured(env_map: ConfigDict, secrets_map: ConfigDict, key: str) -> bool:
+    """Return whether a manifest binding will yield a non-empty runtime env value."""
+    entry = _as_config_dict(env_map.get(key))
+    if entry is not None:
+        if 'value' in entry:
+            return bool(str(entry['value']).strip())
+        if 'secret' in entry or 'env_var' in entry or 'config_map' in entry:
+            return True
+    secret_entry = _as_config_dict(secrets_map.get(key))
+    return secret_entry is not None and bool(str(secret_entry.get('secret', '')).strip())
+
+
+def _validate_prerecorded_stt_contract(env: str, env_config: ConfigDict) -> list[ValidationError]:
+    """Keep selected providers and their required runtime bindings deployable together."""
+    errors: list[ValidationError] = []
+    surfaces: list[tuple[str, ConfigDict, ConfigDict]] = []
+
+    gke = _as_config_dict(env_config.get('gke')) or {}
+    for service, raw_service in gke.items():
+        service_config = _as_config_dict(raw_service) or {}
+        surfaces.append(
+            (
+                f'{env}/gke/{service}',
+                _as_config_dict(service_config.get('env')) or {},
+                {},
+            )
+        )
+
+    cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
+    cloud_run_services = _as_config_dict(cloud_run.get('services')) or {}
+    required_cloud_run_scopes: set[str] = set()
+    if env in {'dev', 'prod'}:
+        for service in ('backend', 'backend-sync', 'backend-integration'):
+            if service not in cloud_run_services:
+                continue
+            scope = f'{env}/cloud_run/{service}'
+            required_cloud_run_scopes.add(scope)
+            service_config = _as_config_dict(cloud_run_services.get(service)) or {}
+            env_map = _as_config_dict(service_config.get('env')) or {}
+            secrets_map = _as_config_dict(service_config.get('secrets')) or {}
+            if 'STT_PRERECORDED_MODEL' not in env_map and 'STT_PRERECORDED_MODEL' not in secrets_map:
+                errors.append(ValidationError(scope, 'required Cloud Run service is missing STT_PRERECORDED_MODEL'))
+
+    for service, raw_service in cloud_run_services.items():
+        service_config = _as_config_dict(raw_service) or {}
+        surfaces.append(
+            (
+                f'{env}/cloud_run/{service}',
+                _as_config_dict(service_config.get('env')) or {},
+                _as_config_dict(service_config.get('secrets')) or {},
+            )
+        )
+
+    for scope, env_map, secrets_map in surfaces:
+        model_is_bound = 'STT_PRERECORDED_MODEL' in env_map or 'STT_PRERECORDED_MODEL' in secrets_map
+        is_required_cloud_run = scope in required_cloud_run_scopes
+        if not model_is_bound and not is_required_cloud_run:
+            continue
+
+        literal_models = _manifest_literal_env_value(env_map, 'STT_PRERECORDED_MODEL')
+        source_is_opaque = literal_models is None
+        for required_env in required_env_for_model_config(
+            literal_models,
+            source_is_opaque=source_is_opaque,
+        ):
+            if _manifest_env_binding_is_configured(env_map, secrets_map, required_env):
+                continue
+            message = (
+                f'required Cloud Run service is missing non-empty {required_env}'
+                if is_required_cloud_run
+                else f'STT_PRERECORDED_MODEL requires non-empty {required_env}'
+            )
+            errors.append(
+                ValidationError(
+                    scope,
+                    message,
+                )
+            )
+    return errors
 
 
 def _canonical_memory_surfaces(env_config: ConfigDict) -> list[tuple[str, ConfigDict]]:
@@ -246,6 +428,8 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
     so Gate 3 cannot forget ST→LT hosting.
 
     Also rejects:
+    - canonical maintenance env/secrets on notifications-job (its workflow
+      removes only those retired live bindings);
     - request-path / other-job hosts keeping MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true
       (ST→LT cron must run only on memory-maintenance-job);
     - empty MEMORY_ENABLED_USERS on a read-mode surface while the job has a non-empty allowlist;
@@ -255,6 +439,25 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
     scope = f'{env}/cloud_run/jobs/memory-maintenance-job'
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
     jobs = _as_config_dict(cloud_run.get('jobs')) or {}
+    notifications_job = _as_config_dict(jobs.get('notifications-job')) or {}
+    notifications_env = _as_config_dict(notifications_job.get('env')) or {}
+    notifications_secrets = _as_config_dict(notifications_job.get('secrets')) or {}
+    notifications_scope = f'{env}/cloud_run/jobs/notifications-job'
+    for forbidden_env in sorted(_NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_ENV.intersection(notifications_env)):
+        errors.append(
+            ValidationError(
+                notifications_scope,
+                f'env {forbidden_env} belongs only on memory-maintenance-job',
+            )
+        )
+    for forbidden_secret in sorted(_NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_SECRETS.intersection(notifications_secrets)):
+        errors.append(
+            ValidationError(
+                notifications_scope,
+                f'secret {forbidden_secret} belongs only on memory-maintenance-job',
+            )
+        )
+
     job = _as_config_dict(jobs.get('memory-maintenance-job'))
     if job is None:
         errors.append(ValidationError(scope, 'missing cloud_run.jobs.memory-maintenance-job'))
@@ -262,6 +465,20 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
 
     job_env = _as_config_dict(job.get('env')) or {}
     job_secrets = _as_config_dict(job.get('secrets')) or {}
+    if env == 'dev':
+        job_flags = _as_config_dict(job.get('flags')) or {}
+        for flag_name, expected_value in _MEMORY_MAINTENANCE_DEV_REQUIRED_FLAGS.items():
+            actual_entry = job_flags.get(flag_name)
+            if actual_entry is None:
+                errors.append(ValidationError(scope, f'missing required dev Cloud Run flag {flag_name}'))
+                continue
+            if _expected_flag_value(actual_entry) != expected_value:
+                errors.append(
+                    ValidationError(
+                        scope,
+                        f'dev Cloud Run flag {flag_name} must be {expected_value!r}',
+                    )
+                )
     for required_env in (
         'MEMORY_MODE',
         'MEMORY_ENABLED_USERS',
@@ -410,6 +627,7 @@ def _validate_gke(env_config: ConfigDict, *, strict_provisional: bool) -> list[V
                 expected=service_config.get('env', {}),
                 actual=actual_env,
                 strict_provisional=strict_provisional,
+                config_maps=_config_map_names(values.get('envFrom', [])),
             )
         )
     return errors
@@ -432,6 +650,8 @@ def _validate_cloud_run(
         service_config = _as_config_dict(raw_service_config) or {}
         service_state = _as_config_dict(state_services.get(service))
         if service_state is None:
+            if service_config.get('provisional') and not strict_provisional:
+                continue
             errors.append(ValidationError(f'cloud_run/{service}', 'missing service state'))
             continue
         actual_env = _env_entries_by_name(service_state.get('env', []))
@@ -467,6 +687,7 @@ def _validate_cloud_run_workflows(
     *,
     strict_provisional: bool,
     manifest_path: Path,
+    manifest: ConfigDict | None = None,
 ) -> list[ValidationError]:
     errors: list[ValidationError] = []
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
@@ -478,13 +699,15 @@ def _validate_cloud_run_workflows(
     expected_jobs = _as_config_dict(cloud_run.get('jobs')) or {}
     workflow_services: dict[str, ConfigDict] = {}
     workflow_jobs: dict[str, ConfigDict] = {}
+    manifest = manifest if manifest is not None else _load_yaml(manifest_path)
     for workflow_file in workflow_files:
         if not isinstance(workflow_file, str):
             errors.append(ValidationError('cloud_run/workflows', 'workflow file paths must be strings'))
             continue
         workflow_path = ROOT / workflow_file
         workflow = _load_yaml(workflow_path)
-        extracted = _extract_workflow_cloud_run_targets(workflow, env=env, manifest_path=manifest_path)
+        extracted = _extract_workflow_cloud_run_targets(workflow, env=env, manifest=manifest)
+        errors.extend(_validate_sync_backfill_co_deploy(workflow_file, extracted['services']))
         workflow_services.update(extracted['services'])
         workflow_jobs.update(extracted['jobs'])
 
@@ -540,6 +763,14 @@ def _validate_cloud_run_workflows(
                 scope=f'cloud_run_workflow/{job}',
                 expected=job_config.get('secrets', {}),
                 actual=actual_secrets,
+            )
+        )
+        errors.extend(
+            _validate_workflow_flags(
+                scope=f'cloud_run_workflow/{job}',
+                expected=_as_config_dict(job_config.get('flags')) or {},
+                actual=_substitute_values(job_state.get('flags', {}), variables=workflow_vars),
+                strict_provisional=strict_provisional,
             )
         )
     return errors
@@ -616,9 +847,16 @@ def _validate_env_entries(
     expected: ConfigDict,
     actual: EnvEntryMap,
     strict_provisional: bool,
+    config_maps: set[str] | None = None,
 ) -> list[ValidationError]:
     errors: list[ValidationError] = []
     for name, expected_entry in expected.items():
+        if 'config_map' in expected_entry:
+            config_map = _as_config_dict(expected_entry['config_map']) or {}
+            expected_name = config_map.get('name')
+            if not isinstance(expected_name, str) or expected_name not in (config_maps or set()):
+                errors.append(ValidationError(scope, f'env {name} must come from ConfigMap {expected_name!r}'))
+            continue
         actual_entry = actual.get(name)
         if actual_entry is None:
             if _is_provisional(expected_entry) and not strict_provisional:
@@ -679,6 +917,17 @@ def _env_entries_by_name(raw_env: object) -> EnvEntryMap:
     return result
 
 
+def _config_map_names(raw_env_from: object) -> set[str]:
+    entries = _as_config_list(raw_env_from) or []
+    names: set[str] = set()
+    for entry in entries:
+        config_map_ref = _as_config_dict((_as_config_dict(entry) or {}).get('configMapRef'))
+        name = config_map_ref.get('name') if config_map_ref is not None else None
+        if isinstance(name, str):
+            names.add(name)
+    return names
+
+
 def _literal_env_entries_by_name(raw_env: object, *, variables: StringMap | None = None) -> EnvEntryMap:
     raw_env_dict = _as_config_dict(raw_env)
     if raw_env_dict is None:
@@ -714,10 +963,10 @@ def _extract_workflow_cloud_run_targets(
     workflow: ConfigDict,
     *,
     env: str,
-    manifest_path: Path,
+    manifest: ConfigDict,
 ) -> dict[str, dict[str, ConfigDict]]:
     workflow_env = _as_config_dict(workflow.get('env')) or {}
-    rendered_runtime_env = _rendered_runtime_env_outputs(workflow, env=env, manifest_path=manifest_path)
+    rendered_runtime_env = _rendered_runtime_env_outputs(workflow, env=env, manifest=manifest)
     services: dict[str, ConfigDict] = {}
     jobs: dict[str, ConfigDict] = {}
     workflow_jobs = _as_config_dict(workflow.get('jobs'))
@@ -731,27 +980,117 @@ def _extract_workflow_cloud_run_targets(
         if steps is None:
             continue
         for step in steps:
-            if not _is_cloud_run_deploy_step(step):
-                continue
-            step_dict = _as_config_dict(step) or {}
-            step_with = _as_config_dict(step_dict.get('with')) or {}
-            env_vars = _parse_workflow_env_vars(
-                _resolve_step_output_reference(step_with.get('env_vars'), rendered_runtime_env)
-            )
-            secrets = _parse_workflow_env_vars(
-                _resolve_step_output_reference(step_with.get('secrets'), rendered_runtime_env)
-            )
-            flags = _parse_workflow_flags(_resolve_step_output_reference(step_with.get('flags'), rendered_runtime_env))
-            if not (env_vars or secrets or flags):
-                continue
-            service = _resolve_workflow_string(step_with.get('service'), workflow_env)
-            job_name = _resolve_workflow_string(step_with.get('job'), workflow_env)
-            payload = {'env_vars': env_vars, 'secrets': secrets, 'flags': flags}
-            if service is not None:
-                services[service] = payload
-            if job_name is not None:
-                jobs[job_name] = payload
+            for deploy_step in _expand_cloud_run_deploy_steps(step):
+                step_dict = _as_config_dict(deploy_step) or {}
+                step_with = _as_config_dict(step_dict.get('with')) or {}
+                env_vars = _parse_workflow_env_vars(
+                    _resolve_step_output_reference(step_with.get('env_vars'), rendered_runtime_env)
+                )
+                secrets = _parse_workflow_env_vars(
+                    _resolve_step_output_reference(step_with.get('secrets'), rendered_runtime_env)
+                )
+                flags = _parse_workflow_flags(
+                    _resolve_step_output_reference(step_with.get('flags'), rendered_runtime_env)
+                )
+                if not (env_vars or secrets or flags):
+                    continue
+                service = _resolve_workflow_string(step_with.get('service'), workflow_env)
+                job_name = _resolve_workflow_string(step_with.get('job'), workflow_env)
+                payload = {'env_vars': env_vars, 'secrets': secrets, 'flags': flags}
+                if service is not None:
+                    services[service] = payload
+                if job_name is not None:
+                    jobs[job_name] = payload
     return {'services': services, 'jobs': jobs}
+
+
+def _validate_sync_backfill_co_deploy(workflow_file: str, services: dict[str, ConfigDict]) -> list[ValidationError]:
+    """Fail when a workflow deploys backend-sync without its bounded backfill worker.
+
+    Union-across-workflow_files validation can mask this: manual deploy of
+    backend-sync-backfill would otherwise hide an auto-dev omission.
+    """
+    if 'backend-sync' not in services:
+        return []
+    if 'backend-sync-backfill' in services:
+        return []
+    return [
+        ValidationError(
+            f'cloud_run_workflow/{workflow_file}',
+            'deploys backend-sync without backend-sync-backfill',
+        )
+    ]
+
+
+def _expand_cloud_run_deploy_steps(step: object) -> list[ConfigDict]:
+    step_dict = _as_config_dict(step)
+    if step_dict is None:
+        return []
+    if _is_cloud_run_deploy_step(step_dict):
+        return [step_dict]
+    uses = step_dict.get('uses')
+    if not isinstance(uses, str) or not uses.startswith('./'):
+        return []
+    action = _load_local_composite_action(uses)
+    if action is None:
+        return []
+    runs = _as_config_dict(action.get('runs')) or {}
+    nested_steps = _as_config_list(runs.get('steps'))
+    if nested_steps is None:
+        return []
+    caller_with = _as_config_dict(step_dict.get('with')) or {}
+    expanded: list[ConfigDict] = []
+    for nested in nested_steps:
+        nested_dict = _as_config_dict(nested)
+        if nested_dict is None or not _is_cloud_run_deploy_step(nested_dict):
+            continue
+        if not _composite_step_active_for_caller(nested_dict, caller_with):
+            continue
+        nested_with = _as_config_dict(nested_dict.get('with')) or {}
+        expanded.append(
+            {
+                **nested_dict,
+                'with': {
+                    key: _resolve_composite_input_reference(value, caller_with) for key, value in nested_with.items()
+                },
+            }
+        )
+    return expanded
+
+
+def _composite_step_active_for_caller(nested_step: ConfigDict, caller_with: ConfigDict) -> bool:
+    """Skip composite steps gated on inputs.mode when the caller uses another mode."""
+    condition = nested_step.get('if')
+    if not isinstance(condition, str) or 'inputs.mode' not in condition:
+        return True
+    mode = str(caller_with.get('mode', ''))
+    if "inputs.mode == 'worker'" in condition:
+        return mode == 'worker'
+    if "inputs.mode == 'platform'" in condition:
+        return mode == 'platform'
+    return True
+
+
+def _load_local_composite_action(uses: str) -> ConfigDict | None:
+    action_dir = ROOT / uses[2:]
+    for name in ('action.yml', 'action.yaml'):
+        path = action_dir / name
+        if path.is_file():
+            action = _load_yaml(path)
+            runs = _as_config_dict(action.get('runs')) or {}
+            if runs.get('using') == 'composite':
+                return action
+            return None
+    return None
+
+
+def _resolve_composite_input_reference(value: object, caller_with: ConfigDict) -> object:
+    if not isinstance(value, str):
+        return value
+    resolved = value
+    for name, raw in caller_with.items():
+        resolved = resolved.replace('${{ inputs.' + str(name) + ' }}', str(raw))
+    return resolved
 
 
 def _is_cloud_run_deploy_step(step: object) -> bool:
@@ -771,7 +1110,7 @@ def _resolve_workflow_string(value: object, workflow_env: ConfigDict) -> str | N
     return resolved
 
 
-def _rendered_runtime_env_outputs(workflow: ConfigDict, *, env: str, manifest_path: Path) -> StringMap:
+def _rendered_runtime_env_outputs(workflow: ConfigDict, *, env: str, manifest: ConfigDict) -> StringMap:
     outputs: StringMap = {}
     for step in _workflow_steps(workflow):
         step_dict = _as_config_dict(step)
@@ -785,7 +1124,6 @@ def _rendered_runtime_env_outputs(workflow: ConfigDict, *, env: str, manifest_pa
         rendered_env = _extract_renderer_env(run, env=env)
         if rendered_env is None:
             continue
-        manifest = _load_yaml(manifest_path)
         env_config = _get_env_config(manifest, rendered_env)
         cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
         network = _as_config_dict(cloud_run.get('network')) or {}
@@ -806,6 +1144,7 @@ def _rendered_runtime_env_outputs(workflow: ConfigDict, *, env: str, manifest_pa
             if job_config is None:
                 continue
             output_prefix = job.replace('-', '_')
+            outputs[f'{output_prefix}_flags'] = _render_cloud_run_flags(job_config.get('flags', {}))
             outputs[f'{output_prefix}_env_vars'] = _render_cloud_run_env_vars(job_config.get('env', {}))
             outputs[f'{output_prefix}_secrets'] = _render_cloud_run_secrets(job_config.get('secrets', {}))
     return outputs
@@ -844,6 +1183,27 @@ def _resolve_step_output_reference(raw_value: object, rendered_outputs: StringMa
     resolved = raw_value
     for output_name, output_value in rendered_outputs.items():
         resolved = resolved.replace(f'{prefix}{output_name}{suffix}', output_value)
+    # The backfill worker clones backend-sync's live runtime contract and then
+    # overlays the manifest-rendered lane settings. Static validation checks
+    # that guaranteed overlay; the deploy step separately tests the live clone.
+    # Support both inline workflow steps and the sync-backfill-lifecycle composite.
+    resolved = resolved.replace(
+        '${{ steps.backfill-runtime.outputs.env_vars }}',
+        rendered_outputs.get('backend_sync_backfill_env_vars', ''),
+    )
+    resolved = resolved.replace(
+        '${{ steps.backfill-runtime.outputs.secrets }}',
+        rendered_outputs.get('backend_sync_backfill_secrets', ''),
+    )
+    sync_backfill_overlay = (
+        'SYNC_BACKFILL_TASKS_QUEUE=sync-backfill\n'
+        'SYNC_BACKFILL_TASKS_HANDLER_URL=https://backend-sync-backfill.example.invalid/v2/sync-jobs/run\n'
+        'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE=https://backend-sync-backfill.example.invalid/v2/sync-jobs/run'
+    )
+    resolved = resolved.replace(
+        '${{ steps.sync-backfill.outputs.sync_backfill_env_vars }}',
+        sync_backfill_overlay,
+    )
     return resolved
 
 

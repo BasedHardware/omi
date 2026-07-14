@@ -9,6 +9,9 @@ class AppLocalizationsFa extends AppLocalizations {
   AppLocalizationsFa([String locale = 'fa']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'جلسه منقضی شد — دوباره وارد شوید.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override

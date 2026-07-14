@@ -8,12 +8,104 @@ environments:
       backend-listen:
         values_file: backend/charts/backend-listen/dev_omi_backend_listen_values.yaml
         env:
+          DESKTOP_UPDATE_POINTERS_MODE:
+            value: primary
+            category: rollout
+          DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
+            value: '0.01'
+            category: rollout
           OMI_LLM_GATEWAY_URL:
             value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
             category: service_discovery
           OMI_ENV_STAGE:
             value: dev
             category: runtime_identity
+          STT_PRERECORDED_MODEL:
+            config_map:
+              name: dev-omi-backend-config
+              key: STT_PRERECORDED_MODEL
+          GOOGLE_CLIENT_ID:
+            config_map:
+              name: dev-omi-backend-config
+              key: GOOGLE_CLIENT_ID
+          REDIS_DB_HOST:
+            config_map:
+              name: dev-omi-backend-config
+              key: REDIS_DB_HOST
+          STT_SERVICE_MODELS:
+            config_map:
+              name: dev-omi-backend-config
+              key: STT_SERVICE_MODELS
+          TYPESENSE_HOST:
+            config_map:
+              name: dev-omi-backend-config
+              key: TYPESENSE_HOST
+          TWILIO_ACCOUNT_SID:
+            config_map:
+              name: dev-omi-backend-config
+              key: TWILIO_ACCOUNT_SID
+          TWILIO_API_KEY_SID:
+            config_map:
+              name: dev-omi-backend-config
+              key: TWILIO_API_KEY_SID
+          TWILIO_TWIML_APP_SID:
+            config_map:
+              name: dev-omi-backend-config
+              key: TWILIO_TWIML_APP_SID
+          RAPID_API_HOST:
+            config_map:
+              name: dev-omi-backend-config
+              key: RAPID_API_HOST
+          CONVERSATION_SUMMARIZED_APP_IDS:
+            config_map:
+              name: dev-omi-backend-config
+              key: CONVERSATION_SUMMARIZED_APP_IDS
+          X_OAUTH_CLIENT_ID:
+            config_map:
+              name: dev-omi-backend-config
+              key: X_OAUTH_CLIENT_ID
+          X_OAUTH_REDIRECT_URI:
+            config_map:
+              name: dev-omi-backend-config
+              key: X_OAUTH_REDIRECT_URI
+          MCP_AUTHORIZATION_SERVER_URL:
+            config_map:
+              name: dev-omi-backend-config
+              key: MCP_AUTHORIZATION_SERVER_URL
+          MCP_RESOURCE_URL:
+            config_map:
+              name: dev-omi-backend-config
+              key: MCP_RESOURCE_URL
+          MCP_OAUTH_CHATGPT_CLIENT_ID:
+            config_map:
+              name: dev-omi-backend-config
+              key: MCP_OAUTH_CHATGPT_CLIENT_ID
+          MCP_OAUTH_CHATGPT_REDIRECT_URIS:
+            config_map:
+              name: dev-omi-backend-config
+              key: MCP_OAUTH_CHATGPT_REDIRECT_URIS
+          MCP_OAUTH_PUBLIC_CLIENT_ID:
+            config_map:
+              name: dev-omi-backend-config
+              key: MCP_OAUTH_PUBLIC_CLIENT_ID
+          MCP_OAUTH_PUBLIC_REDIRECT_URIS:
+            config_map:
+              name: dev-omi-backend-config
+              key: MCP_OAUTH_PUBLIC_REDIRECT_URIS
+          DEEPGRAM_API_KEY:
+            secret:
+              name: dev-omi-backend-secrets
+              key: DEEPGRAM_API_KEY
+          MODULATE_API_KEY:
+            secret:
+              name: dev-omi-backend-secrets
+              key: MODULATE_API_KEY
+          HOSTED_PARAKEET_API_URL:
+            value: http://parakeet.omiapi.com
+            category: service_discovery
+          HOSTED_TRANSLATION_API_URL:
+            value: http://nllb.omiapi.com
+            category: service_discovery
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
             category: rollout
@@ -76,11 +168,32 @@ environments:
       services:
         backend:
           env:
+            SYNC_LEDGER_FENCE_MODE:
+              env_var: SYNC_LEDGER_FENCE_MODE
+              default: legacy
+              category: rollout
+            DESKTOP_UPDATE_POINTERS_MODE:
+              value: primary
+              category: rollout
+            DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
+              value: '0.01'
+              category: rollout
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            GOOGLE_CLIENT_ID:
+              env_var: GOOGLE_CLIENT_ID
+              category: oauth_metadata
+            STT_PRERECORDED_MODEL:
+              env_var: STT_PRERECORDED_MODEL
+              category: stt_policy
+            # Dev Cloud Run must stay within the dev Parakeet topology; never point this at
+            # the production-only parakeet.omi.me endpoint.
+            HOSTED_PARAKEET_API_URL:
+              value: http://parakeet.omiapi.com
+              category: service_discovery
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
@@ -137,9 +250,6 @@ environments:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
-            GOOGLE_CLIENT_ID:
-              secret: GOOGLE_CLIENT_ID
-              version: latest
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
               version: latest
@@ -149,13 +259,52 @@ environments:
             POSTHOG_PROJECT_API_KEY:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
-        backend-sync:
+            DEEPGRAM_API_KEY:
+              secret: DEEPGRAM_API_KEY
+              version: latest
+            MODULATE_API_KEY:
+              secret: MODULATE_API_KEY
+              version: latest
+        backend-sync: &dev_backend_sync
           env:
+            SYNC_LEDGER_FENCE_MODE:
+              env_var: SYNC_LEDGER_FENCE_MODE
+              default: legacy
+              category: rollout
+            SYNC_FRESH_MAX_AGE_SECONDS:
+              value: '21600'
+              category: rollout
+              provisional: true
+            SYNC_BACKFILL_MAX_AGE_SECONDS:
+              value: '2592000'
+              category: rollout
+              provisional: true
+            SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS:
+              value: '300'
+              category: rollout
+              provisional: true
+            SYNC_BACKFILL_USER_DAILY_HOURS:
+              value: '4'
+              category: rollout
+              provisional: true
+            SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
+              value: '555'
+              category: rollout
+              provisional: true
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            GOOGLE_CLIENT_ID:
+              env_var: GOOGLE_CLIENT_ID
+              category: oauth_metadata
+            STT_PRERECORDED_MODEL:
+              env_var: STT_PRERECORDED_MODEL
+              category: stt_policy
+            HOSTED_PARAKEET_API_URL:
+              value: http://parakeet.omiapi.com
+              category: service_discovery
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
@@ -205,15 +354,16 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            SYNC_BACKFILL_ENABLED:
+              value: 'true'
+              category: rollout
+              provisional: true
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
               version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
-              version: latest
-            GOOGLE_CLIENT_ID:
-              secret: GOOGLE_CLIENT_ID
               version: latest
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
@@ -224,6 +374,15 @@ environments:
             POSTHOG_PROJECT_API_KEY:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
+            DEEPGRAM_API_KEY:
+              secret: DEEPGRAM_API_KEY
+              version: latest
+            MODULATE_API_KEY:
+              secret: MODULATE_API_KEY
+              version: latest
+        backend-sync-backfill:
+          <<: *dev_backend_sync
+          provisional: true
         backend-integration:
           env:
             GOOGLE_CLOUD_PROJECT:
@@ -231,6 +390,15 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            GOOGLE_CLIENT_ID:
+              env_var: GOOGLE_CLIENT_ID
+              category: oauth_metadata
+            STT_PRERECORDED_MODEL:
+              env_var: STT_PRERECORDED_MODEL
+              category: stt_policy
+            HOSTED_PARAKEET_API_URL:
+              value: http://parakeet.omiapi.com
+              category: service_discovery
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
@@ -287,9 +455,6 @@ environments:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
-            GOOGLE_CLIENT_ID:
-              secret: GOOGLE_CLIENT_ID
-              version: latest
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
               version: latest
@@ -298,6 +463,12 @@ environments:
               version: latest
             POSTHOG_PROJECT_API_KEY:
               secret: POSTHOG_PROJECT_API_KEY
+              version: latest
+            DEEPGRAM_API_KEY:
+              secret: DEEPGRAM_API_KEY
+              version: latest
+            MODULATE_API_KEY:
+              secret: MODULATE_API_KEY
               version: latest
       jobs:
         notifications-job:
@@ -310,7 +481,7 @@ environments:
             # X connector sync still indexes via Pinecone (not memory maintenance).
             PINECONE_INDEX_NAME:
               value: memories-backend-dev
-              category: memory_rollout
+              category: integrations
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -325,6 +496,12 @@ environments:
               secret: PINECONE_API_KEY
               version: latest
         memory-maintenance-job:
+          # Keep the known-good dev maintenance capacity in the checked-in deploy contract.
+          # These must not rely on a prior Cloud Run revision retaining live-only patches.
+          flags:
+            --task-timeout: 3600s
+            --cpu: '2'
+            --memory: 2Gi
           env:
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
@@ -352,6 +529,9 @@ environments:
               category: memory_rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
+              category: memory_rollout
+            TYPESENSE_HOST_PORT:
+              value: '443'
               category: memory_rollout
             PINECONE_INDEX_NAME:
               value: memories-backend-dev
@@ -383,13 +563,133 @@ environments:
       backend-listen:
         values_file: backend/charts/backend-listen/prod_omi_backend_listen_values.yaml
         env:
+          DESKTOP_UPDATE_POINTERS_MODE:
+            value: primary
+            category: rollout
+          DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
+            value: '0.01'
+            category: rollout
           OMI_ENV_STAGE:
             value: prod
             category: runtime_identity
+          STT_PRERECORDED_MODEL:
+            config_map:
+              name: prod-omi-backend-config
+              key: STT_PRERECORDED_MODEL
+          GOOGLE_CLIENT_ID:
+            config_map:
+              name: prod-omi-backend-config
+              key: GOOGLE_CLIENT_ID
+          REDIS_DB_HOST:
+            config_map:
+              name: prod-omi-backend-config
+              key: REDIS_DB_HOST
+          STT_SERVICE_MODELS:
+            config_map:
+              name: prod-omi-backend-config
+              key: STT_SERVICE_MODELS
+          TYPESENSE_HOST:
+            config_map:
+              name: prod-omi-backend-config
+              key: TYPESENSE_HOST
+          TWILIO_ACCOUNT_SID:
+            config_map:
+              name: prod-omi-backend-config
+              key: TWILIO_ACCOUNT_SID
+          TWILIO_API_KEY_SID:
+            config_map:
+              name: prod-omi-backend-config
+              key: TWILIO_API_KEY_SID
+          TWILIO_TWIML_APP_SID:
+            config_map:
+              name: prod-omi-backend-config
+              key: TWILIO_TWIML_APP_SID
+          RAPID_API_HOST:
+            config_map:
+              name: prod-omi-backend-config
+              key: RAPID_API_HOST
+          CONVERSATION_SUMMARIZED_APP_IDS:
+            config_map:
+              name: prod-omi-backend-config
+              key: CONVERSATION_SUMMARIZED_APP_IDS
+          X_OAUTH_CLIENT_ID:
+            config_map:
+              name: prod-omi-backend-config
+              key: X_OAUTH_CLIENT_ID
+          X_OAUTH_REDIRECT_URI:
+            config_map:
+              name: prod-omi-backend-config
+              key: X_OAUTH_REDIRECT_URI
+          MCP_AUTHORIZATION_SERVER_URL:
+            config_map:
+              name: prod-omi-backend-config
+              key: MCP_AUTHORIZATION_SERVER_URL
+          MCP_RESOURCE_URL:
+            config_map:
+              name: prod-omi-backend-config
+              key: MCP_RESOURCE_URL
+          MCP_OAUTH_CHATGPT_CLIENT_ID:
+            config_map:
+              name: prod-omi-backend-config
+              key: MCP_OAUTH_CHATGPT_CLIENT_ID
+          MCP_OAUTH_CHATGPT_REDIRECT_URIS:
+            config_map:
+              name: prod-omi-backend-config
+              key: MCP_OAUTH_CHATGPT_REDIRECT_URIS
+          MCP_OAUTH_PUBLIC_CLIENT_ID:
+            config_map:
+              name: prod-omi-backend-config
+              key: MCP_OAUTH_PUBLIC_CLIENT_ID
+          MCP_OAUTH_PUBLIC_REDIRECT_URIS:
+            config_map:
+              name: prod-omi-backend-config
+              key: MCP_OAUTH_PUBLIC_REDIRECT_URIS
+          MCP_OAUTH_CLAUDE_CLIENT_ID:
+            config_map:
+              name: prod-omi-backend-config
+              key: MCP_OAUTH_CLAUDE_CLIENT_ID
+          MCP_OAUTH_CLAUDE_CLIENT_NAME:
+            config_map:
+              name: prod-omi-backend-config
+              key: MCP_OAUTH_CLAUDE_CLIENT_NAME
+          MCP_OAUTH_CLAUDE_REDIRECT_URIS:
+            config_map:
+              name: prod-omi-backend-config
+              key: MCP_OAUTH_CLAUDE_REDIRECT_URIS
+          DEEPGRAM_API_KEY:
+            secret:
+              name: prod-omi-backend-secrets
+              key: DEEPGRAM_API_KEY
+          MODULATE_API_KEY:
+            secret:
+              name: prod-omi-backend-secrets
+              key: MODULATE_API_KEY
+          HOSTED_PARAKEET_API_URL:
+            value: http://parakeet.omi.me
+            category: service_discovery
+          HOSTED_TRANSLATION_API_URL:
+            value: http://nllb.omi.me
+            category: service_discovery
+          OMI_LLM_GATEWAY_URL:
+            value: http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080
+            category: service_discovery
           SERVICE_ACCOUNT_JSON:
             secret:
               name: prod-omi-backend-secrets
               key: SERVICE_ACCOUNT_JSON
+          OMI_LLM_GATEWAY_FEATURE_MODE:
+            value: gateway
+            category: rollout
+          OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
+            value: 'true'
+            category: rollout
+          OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+            value: 'true'
+            category: rollout
+          OMI_LLM_GATEWAY_SERVICE_TOKEN:
+            secret:
+              name: prod-omi-backend-secrets
+              key: OMI_LLM_GATEWAY_SERVICE_TOKEN
           MEMORY_MODE:
             value: "off"
             category: memory_rollout
@@ -408,18 +708,6 @@ environments:
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
-          MCP_OAUTH_CLAUDE_CLIENT_ID:
-            secret:
-              name: prod-omi-backend-secrets
-              key: MCP_OAUTH_CLAUDE_CLIENT_ID
-          MCP_OAUTH_CLAUDE_CLIENT_NAME:
-            secret:
-              name: prod-omi-backend-secrets
-              key: MCP_OAUTH_CLAUDE_CLIENT_NAME
-          MCP_OAUTH_CLAUDE_REDIRECT_URIS:
-            secret:
-              name: prod-omi-backend-secrets
-              key: MCP_OAUTH_CLAUDE_REDIRECT_URIS
           MCP_OAUTH_CLIENTS_JSON:
             secret:
               name: prod-omi-backend-secrets
@@ -439,9 +727,40 @@ environments:
       services:
         backend:
           env:
+            SYNC_LEDGER_FENCE_MODE:
+              env_var: SYNC_LEDGER_FENCE_MODE
+              default: legacy
+              category: rollout
+            DESKTOP_UPDATE_POINTERS_MODE:
+              value: primary
+              category: rollout
+            DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
+              value: '0.01'
+              category: rollout
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            GOOGLE_CLIENT_ID:
+              env_var: GOOGLE_CLIENT_ID
+              category: oauth_metadata
+            STT_PRERECORDED_MODEL:
+              env_var: STT_PRERECORDED_MODEL
+              category: stt_policy
+            HOSTED_PARAKEET_API_URL:
+              value: http://parakeet.omi.me
+              category: service_discovery
+            OMI_LLM_GATEWAY_URL:
+              value: http://172.16.160.108
+              category: service_discovery
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
+              value: 'true'
+              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+              value: 'true'
+              category: rollout
             POSTHOG_HOST:
               value: https://app.posthog.com
               category: telemetry
@@ -463,33 +782,84 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
-          secrets:
             MCP_OAUTH_CLAUDE_CLIENT_ID:
-              secret: MCP_OAUTH_CLAUDE_CLIENT_ID
-              version: latest
+              env_var: MCP_OAUTH_CLAUDE_CLIENT_ID
+              category: oauth_metadata
             MCP_OAUTH_CLAUDE_CLIENT_NAME:
-              secret: MCP_OAUTH_CLAUDE_CLIENT_NAME
-              version: latest
+              env_var: MCP_OAUTH_CLAUDE_CLIENT_NAME
+              category: oauth_metadata
             MCP_OAUTH_CLAUDE_REDIRECT_URIS:
-              secret: MCP_OAUTH_CLAUDE_REDIRECT_URIS
-              version: latest
+              env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
+              category: oauth_metadata
+          secrets:
             MCP_OAUTH_CLIENTS_JSON:
               secret: MCP_OAUTH_CLIENTS_JSON
               version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
-            GOOGLE_CLIENT_ID:
-              secret: GOOGLE_CLIENT_ID
-              version: latest
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
               version: latest
-        backend-sync:
+            DEEPGRAM_API_KEY:
+              secret: DEEPGRAM_API_KEY
+              version: latest
+            MODULATE_API_KEY:
+              secret: MODULATE_API_KEY
+              version: latest
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+        backend-sync: &prod_backend_sync
           env:
+            SYNC_LEDGER_FENCE_MODE:
+              env_var: SYNC_LEDGER_FENCE_MODE
+              default: legacy
+              category: rollout
+            SYNC_FRESH_MAX_AGE_SECONDS:
+              value: '21600'
+              category: rollout
+              provisional: true
+            SYNC_BACKFILL_MAX_AGE_SECONDS:
+              value: '2592000'
+              category: rollout
+              provisional: true
+            SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS:
+              value: '300'
+              category: rollout
+              provisional: true
+            SYNC_BACKFILL_USER_DAILY_HOURS:
+              value: '4'
+              category: rollout
+              provisional: true
+            SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
+              value: '555'
+              category: rollout
+              provisional: true
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            GOOGLE_CLIENT_ID:
+              env_var: GOOGLE_CLIENT_ID
+              category: oauth_metadata
+            STT_PRERECORDED_MODEL:
+              env_var: STT_PRERECORDED_MODEL
+              category: stt_policy
+            HOSTED_PARAKEET_API_URL:
+              value: http://parakeet.omi.me
+              category: service_discovery
+            OMI_LLM_GATEWAY_URL:
+              value: http://172.16.160.108
+              category: service_discovery
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
+              value: 'true'
+              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+              value: 'true'
+              category: rollout
             POSTHOG_HOST:
               value: https://app.posthog.com
               category: telemetry
@@ -511,21 +881,55 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            SYNC_BACKFILL_ENABLED:
+              value: 'true'
+              category: rollout
+              provisional: true
           secrets:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
-            GOOGLE_CLIENT_ID:
-              secret: GOOGLE_CLIENT_ID
-              version: latest
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
               version: latest
+            DEEPGRAM_API_KEY:
+              secret: DEEPGRAM_API_KEY
+              version: latest
+            MODULATE_API_KEY:
+              secret: MODULATE_API_KEY
+              version: latest
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+        backend-sync-backfill:
+          <<: *prod_backend_sync
+          provisional: true
         backend-integration:
           env:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            GOOGLE_CLIENT_ID:
+              env_var: GOOGLE_CLIENT_ID
+              category: oauth_metadata
+            STT_PRERECORDED_MODEL:
+              env_var: STT_PRERECORDED_MODEL
+              category: stt_policy
+            HOSTED_PARAKEET_API_URL:
+              value: http://parakeet.omi.me
+              category: service_discovery
+            OMI_LLM_GATEWAY_URL:
+              value: http://172.16.160.108
+              category: service_discovery
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
+              value: 'true'
+              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+              value: 'true'
+              category: rollout
             POSTHOG_HOST:
               value: https://app.posthog.com
               category: telemetry
@@ -551,11 +955,17 @@ environments:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
-            GOOGLE_CLIENT_ID:
-              secret: GOOGLE_CLIENT_ID
-              version: latest
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
+              version: latest
+            DEEPGRAM_API_KEY:
+              secret: DEEPGRAM_API_KEY
+              version: latest
+            MODULATE_API_KEY:
+              secret: MODULATE_API_KEY
+              version: latest
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
       jobs:
         notifications-job:
@@ -566,7 +976,7 @@ environments:
             # X connector sync still indexes via Pinecone (not memory maintenance).
             PINECONE_INDEX_NAME:
               value: memories-backend
-              category: memory_rollout
+              category: integrations
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON

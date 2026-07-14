@@ -40,6 +40,7 @@ PUSHER_RECONNECT_BASE_DELAY = 1.0
 PUSHER_RECONNECT_MAX_DELAY = 60.0
 PENDING_REQUEST_TIMEOUT = 120
 MAX_RETRIES_PER_REQUEST = 3
+PENDING_REQUEST_RECOVERY_COOLDOWN = 300
 
 
 @dataclass
@@ -104,7 +105,13 @@ class ListenPusherSession:
     def transcript_send(self, segments: List[Dict[str, Any]]) -> None:
         self.segment_buffers.extend(segments)
 
-    def _buffer_pending_conversation_request(self, conversation_id: str):
+    def _buffer_pending_conversation_request(
+        self,
+        conversation_id: str,
+        *,
+        finalization_job_id: Optional[str] = None,
+        dispatch_generation: Optional[int] = None,
+    ):
         existing = self.pending_conversation_requests.get(conversation_id)
         if existing is None and len(self.pending_conversation_requests) >= self.config.max_pending_requests:
             oldest_id = min(
@@ -119,19 +126,35 @@ class ListenPusherSession:
         self.pending_conversation_requests[conversation_id] = {
             'sent_at': self.deps.now(),
             'retries': (existing or {}).get('retries', 0),
+            'finalization_job_id': finalization_job_id or (existing or {}).get('finalization_job_id'),
+            'dispatch_generation': dispatch_generation or (existing or {}).get('dispatch_generation'),
         }
         self.pending_request_event.set()
 
-    async def request_conversation_processing(self, conversation_id: str):
-        """Request pusher to process a conversation."""
+    async def request_conversation_processing(
+        self,
+        conversation_id: str,
+        finalization_job_id: Optional[str] = None,
+        dispatch_generation: Optional[int] = None,
+    ):
+        """Request pusher to process a conversation through its durable lease."""
         if not self.pusher_connected or not self.pusher_ws:
             logger.info(
                 f"Pusher not connected for {conversation_id}, will retry on reconnect {self.uid} {self.session_id}"
             )
-            self._buffer_pending_conversation_request(conversation_id)
+            self._buffer_pending_conversation_request(
+                conversation_id,
+                finalization_job_id=finalization_job_id,
+                dispatch_generation=dispatch_generation,
+            )
             return False
         try:
-            self._buffer_pending_conversation_request(conversation_id)
+            self._buffer_pending_conversation_request(
+                conversation_id,
+                finalization_job_id=finalization_job_id,
+                dispatch_generation=dispatch_generation,
+            )
+            pending = self.pending_conversation_requests[conversation_id]
             data = bytearray()
             data.extend(struct.pack("I", 104))
             payload: Dict[str, Any] = {
@@ -139,6 +162,9 @@ class ListenPusherSession:
                 "language": self.config.language,
                 "byok_keys": self.deps.get_byok_keys(),
             }
+            if pending.get('finalization_job_id'):
+                payload['finalization_job_id'] = pending['finalization_job_id']
+                payload['dispatch_generation'] = pending.get('dispatch_generation') or 1
             data.extend(bytes(json.dumps(payload), "utf-8"))
             await self.pusher_ws.send(cast(bytes, data))
             logger.info(f"Sent process_conversation request to pusher: {conversation_id} {self.uid} {self.session_id}")
@@ -258,15 +284,26 @@ class ListenPusherSession:
                 if header_type == 201:
                     result = json.loads(msg[4:].decode("utf-8"))
                     conversation_id = result.get("conversation_id")
-                    self.pending_conversation_requests.pop(conversation_id, None)
 
                     if "error" in result:
-                        logger.error(f"Conversation processing failed: {result['error']} {self.uid} {self.session_id}")
-                        continue
-
-                    if result.get("success"):
+                        pending = self.pending_conversation_requests.get(conversation_id)
+                        if pending is not None:
+                            # The pusher has released its durable lease back to
+                            # queued. Keep the request so this live session can
+                            # reclaim it instead of stranding `processing`.
+                            pending['sent_at'] = self.deps.now() - PENDING_REQUEST_TIMEOUT - 1
+                        logger.error(f"Conversation processing failed: {self.uid} {self.session_id}")
+                    elif result.get("success"):
+                        self.pending_conversation_requests.pop(conversation_id, None)
                         logger.info(f"Conversation processed by pusher: {conversation_id} {self.uid} {self.session_id}")
                         self.deps.on_conversation_processed(conversation_id)
+                    else:
+                        pending = self.pending_conversation_requests.get(conversation_id)
+                        if pending is not None:
+                            pending['sent_at'] = self.deps.now() - PENDING_REQUEST_TIMEOUT - 1
+                        logger.warning(
+                            f"Conversation processing returned no terminal result: {conversation_id} {self.uid} {self.session_id}"
+                        )
 
             except asyncio.TimeoutError:
                 pass
@@ -291,15 +328,23 @@ class ListenPusherSession:
                     continue
                 if info['retries'] >= MAX_RETRIES_PER_REQUEST:
                     logger.warning(
-                        f"Conversation {cid} retry limit reached, keeping buffered for pusher recovery {self.uid} {self.session_id}"
+                        f"Conversation {cid} retry burst exhausted; scheduling recovery cooldown {self.uid} {self.session_id}"
                     )
-                    info['sent_at'] = now
+                    # Continue in bounded bursts rather than permanently
+                    # dropping a queued durable finalization after one live
+                    # session's transient provider failures.
+                    info['retries'] = 0
+                    info['sent_at'] = now + PENDING_REQUEST_RECOVERY_COOLDOWN - PENDING_REQUEST_TIMEOUT
                     continue
                 info['retries'] += 1
                 logger.warning(
                     f"Retrying process_conversation for {cid} (attempt {info['retries']}/{MAX_RETRIES_PER_REQUEST}) {self.uid} {self.session_id}"
                 )
-                await self.request_conversation_processing(cid)
+                await self.request_conversation_processing(
+                    cid,
+                    info.get('finalization_job_id'),
+                    info.get('dispatch_generation'),
+                )
 
     async def _flush(self):
         await self._audio_bytes_flush(auto_reconnect=False)
@@ -430,8 +475,13 @@ class ListenPusherSession:
                     f"Reconnected to pusher, re-sending {len(self.pending_conversation_requests)} pending requests {self.uid} {self.session_id}"
                 )
                 for cid in list(self.pending_conversation_requests.keys()):
-                    self.pending_conversation_requests[cid]['sent_at'] = self.deps.now()
-                    await self.request_conversation_processing(cid)
+                    pending = self.pending_conversation_requests[cid]
+                    pending['sent_at'] = self.deps.now()
+                    await self.request_conversation_processing(
+                        cid,
+                        pending.get('finalization_job_id'),
+                        pending.get('dispatch_generation'),
+                    )
             if self.pending_speaker_sample_requests:
                 buffered = list(self.pending_speaker_sample_requests)
                 self.pending_speaker_sample_requests.clear()

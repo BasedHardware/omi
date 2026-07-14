@@ -25,7 +25,10 @@ import Network
 @MainActor
 protocol RealtimeOmniServiceDelegate: AnyObject {
     func omniDidConnect()
-    func omniDidReceiveInputTranscript(_ text: String, isFinal: Bool)
+    /// `itemID` is the provider's stable per-utterance id (OpenAI `item_id`) when
+    /// available, else nil. Consumers dedup relay re-deliveries by this id, NOT by
+    /// text, so legitimately repeated phrases within a turn are not dropped.
+    func omniDidReceiveInputTranscript(_ text: String, isFinal: Bool, itemID: String?)
     func omniDidReceiveAudio(_ pcm24k: Data)
     func omniDidFinishTurn()
     func omniDidError(_ message: String)
@@ -48,6 +51,14 @@ final class RealtimeOmniService: NSObject {
     private var isOpen = false
     private var terminated = false  // fire omniDidError at most once per turn
     private var pendingAudio: [Data] = []
+    private var pendingAudioBytes = 0
+    /// Byte cap on audio buffered while the relay session is still connecting, matching the
+    /// hub's byte-based `maxBufferedAudioBytes`. `sendAudio` queues PCM already resampled to
+    /// the provider's `requiredInputSampleRate`, so the covered duration depends on that rate
+    /// (~120 s at 16 kHz, ~80 s at 24 kHz s16le). Without a bound, a relay that stalls open
+    /// (connecting but never `session.created`) during a multi-minute locked-mode hold would
+    /// grow `pendingAudio` unboundedly.
+    private static let maxPendingAudioBytes = 3_840_000
     private var pendingCommit = false  // turn ended before the session opened; commit after activityStart
 
     // Gemini's Live endpoint resets BOTH of Apple's WebSocket stacks
@@ -114,6 +125,7 @@ final class RealtimeOmniService: NSObject {
         nw = nil
         isOpen = false
         pendingAudio.removeAll()
+        pendingAudioBytes = 0
         pendingCommit = false
     }
 
@@ -173,6 +185,21 @@ final class RealtimeOmniService: NSObject {
 
     /// Feed mic PCM16 mono at `requiredInputSampleRate`. Caller is responsible for
     /// resampling to that rate (16k mic → 24k for OpenAI).
+    /// Appends `chunk` to `buffer` (tracking total bytes in `bytes`), dropping the
+    /// oldest chunks so the buffered total never exceeds `maxBytes` (unless a single
+    /// chunk alone exceeds it, in which case that one chunk is kept). Bounds memory
+    /// while the relay is still connecting. `nonisolated static` so it is unit-testable.
+    nonisolated static func appendBoundedAudio(
+        _ chunk: Data, to buffer: inout [Data], bytes: inout Int, maxBytes: Int
+    ) {
+        buffer.append(chunk)
+        bytes += chunk.count
+        while bytes > maxBytes, buffer.count > 1 {
+            let dropped = buffer.removeFirst()
+            bytes -= dropped.count
+        }
+    }
+
     func sendAudio(_ pcm: Data) {
         // Buffer until the session is open. PTT starts the mic immediately and
         // streams chunks during the connect handshake (plus a pre-connect buffer
@@ -181,7 +208,10 @@ final class RealtimeOmniService: NSObject {
         // ("invalid argument") — markReady() sends activityStart and *then* flushes
         // pendingAudio, so queuing here preserves that ordering. (The test harness
         // only sends after omniDidConnect, so it never exercised this race.)
-        guard isOpen else { pendingAudio.append(pcm); return }
+        guard isOpen else {
+            Self.appendBoundedAudio(pcm, to: &pendingAudio, bytes: &pendingAudioBytes, maxBytes: Self.maxPendingAudioBytes)
+            return
+        }
         let b64 = pcm.base64EncodedString()
         switch provider {
         case .gptRealtime2:
@@ -328,9 +358,13 @@ final class RealtimeOmniService: NSObject {
         case "response.output_audio.delta":
             if let b64 = e["delta"] as? String, let d = Data(base64Encoded: b64) { delegate?.omniDidReceiveAudio(d) }
         case "conversation.item.input_audio_transcription.delta":
-            if let t = e["delta"] as? String { delegate?.omniDidReceiveInputTranscript(t, isFinal: false) }
+            if let t = e["delta"] as? String {
+                delegate?.omniDidReceiveInputTranscript(t, isFinal: false, itemID: e["item_id"] as? String)
+            }
         case "conversation.item.input_audio_transcription.completed":
-            if let t = e["transcript"] as? String { delegate?.omniDidReceiveInputTranscript(t, isFinal: true) }
+            if let t = e["transcript"] as? String {
+                delegate?.omniDidReceiveInputTranscript(t, isFinal: true, itemID: e["item_id"] as? String)
+            }
         case "response.done":
             delegate?.omniDidFinishTurn()
         case "error":
@@ -346,7 +380,8 @@ final class RealtimeOmniService: NSObject {
         if e["setupComplete"] != nil { markReady(); return }
         guard let sc = e["serverContent"] as? [String: Any] else { return }
         if let it = sc["inputTranscription"] as? [String: Any], let t = it["text"] as? String {
-            delegate?.omniDidReceiveInputTranscript(t, isFinal: false)
+            // Gemini input transcription carries no per-utterance id.
+            delegate?.omniDidReceiveInputTranscript(t, isFinal: false, itemID: nil)
         }
         if let parts = (sc["modelTurn"] as? [String: Any])?["parts"] as? [[String: Any]] {
             for p in parts {
@@ -358,7 +393,8 @@ final class RealtimeOmniService: NSObject {
             }
         }
         if (sc["turnComplete"] as? Bool) == true {
-            delegate?.omniDidReceiveInputTranscript("", isFinal: true)
+            // One final per Gemini turn; no id, so consumers treat it as distinct.
+            delegate?.omniDidReceiveInputTranscript("", isFinal: true, itemID: nil)
             delegate?.omniDidFinishTurn()
         }
     }
@@ -374,6 +410,7 @@ final class RealtimeOmniService: NSObject {
         }
         for chunk in pendingAudio { sendAudio(chunk) }
         pendingAudio.removeAll()
+        pendingAudioBytes = 0
         if pendingCommit {
             pendingCommit = false
             commitInputTurn()

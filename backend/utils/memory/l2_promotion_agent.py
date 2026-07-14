@@ -18,6 +18,7 @@ from utils.memory.memory_tools import (
     facts_from_bundle,
 )
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
+from utils.memory_ingestion.ids import canonical_json
 
 try:
     from utils.llm.durable_memory_patches import PROMOTION_RUBRIC as _promotion_rubric
@@ -49,15 +50,19 @@ PayloadList = List[Payload]
 
 
 class LlmFactory(Protocol):
-    def __call__(self, lane: str) -> Any: ...
+    def __call__(self, lane: str) -> Any:
+        ...
 
 
 class SafetyStatsGuard(Protocol):
-    def validate_tool_call(self, tool_name: str, params: Payload) -> None: ...
+    def validate_tool_call(self, tool_name: str, params: Payload) -> None:
+        ...
 
-    def check_context_size(self, text: str) -> None: ...
+    def check_context_size(self, text: str) -> None:
+        ...
 
-    def get_stats(self) -> Payload: ...
+    def get_stats(self) -> Payload:
+        ...
 
 
 get_llm = cast(LlmFactory | None, _get_llm)
@@ -156,8 +161,7 @@ def _json_default(value: Any) -> str:
     return str(value)
 
 
-def _canonical_json(value: Any) -> str:
-    return json.dumps(value, sort_keys=True, separators=(',', ':'), default=_json_default)
+_canonical_json = canonical_json
 
 
 def _summarize_tool_result(result: Payload) -> Payload:

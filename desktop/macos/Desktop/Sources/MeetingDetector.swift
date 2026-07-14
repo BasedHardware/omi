@@ -1,6 +1,14 @@
 import AppKit
 import Foundation
 
+private final class WeakMeetingDetector: @unchecked Sendable {
+    weak var value: MeetingDetector?
+
+    init(_ value: MeetingDetector) {
+        self.value = value
+    }
+}
+
 /// Detects whether a conferencing call ("meeting") is currently active by scanning on-screen
 /// windows for known call apps (see `ConferencingApps`).
 ///
@@ -32,6 +40,8 @@ final class MeetingDetector {
     /// `nil` whenever a meeting is detected or no pending-off is in progress.
     private var pendingOffDeadline: Date?
     private var started = false
+    private var probeGeneration: UInt64 = 0
+    private var probeTask: Task<Void, Never>?
 
     /// - Parameters:
     ///   - pollInterval: how often to re-probe (browser tab-title changes only surface via the poll).
@@ -65,6 +75,7 @@ final class MeetingDetector {
     func start() {
         guard !started else { return }
         started = true
+        probeGeneration &+= 1
 
         let nc = NSWorkspace.shared.notificationCenter
         for name in [
@@ -94,6 +105,9 @@ final class MeetingDetector {
     func stop() {
         guard started else { return }
         started = false
+        probeGeneration &+= 1
+        probeTask?.cancel()
+        probeTask = nil
 
         timer?.invalidate()
         timer = nil
@@ -111,9 +125,19 @@ final class MeetingDetector {
     /// can block (notably right after wake) — then apply the result back on the main actor.
     private func tick() {
         let probe = isMeetingNow
-        Task.detached(priority: .utility) { [weak self] in
+        probeGeneration &+= 1
+        let generation = probeGeneration
+        let weakSelf = WeakMeetingDetector(self)
+        probeTask?.cancel()
+        probeTask = Task.detached(priority: .utility) {
             let detected = probe()
-            await MainActor.run { self?.applyDetected(detected) }
+            await MainActor.run {
+                guard let detector = weakSelf.value,
+                      detector.started,
+                      detector.probeGeneration == generation
+                else { return }
+                detector.applyDetected(detected)
+            }
         }
     }
 
@@ -153,4 +177,16 @@ final class MeetingDetector {
         log("MeetingDetector: meeting \(active ? "STARTED" : "ENDED")")
         onChange(active)
     }
+
+    #if DEBUG
+    var currentProbeTaskForTesting: Task<Void, Never>? {
+        probeTask
+    }
+
+    @discardableResult
+    func triggerProbeForTesting() -> Task<Void, Never>? {
+        tick()
+        return probeTask
+    }
+    #endif
 }

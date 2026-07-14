@@ -2,6 +2,7 @@ import AppKit
 import CryptoKit
 import Foundation
 import Network
+import OmiSupport
 
 enum DesktopAutomationLaunchOptions {
   static let enableFlag = "--automation-bridge"
@@ -96,7 +97,7 @@ enum DesktopAutomationLaunchOptions {
   }
 }
 
-struct DesktopAutomationSnapshot: Codable {
+struct DesktopAutomationSnapshot: Codable, Sendable {
   var bridgeEnabled: Bool
   var bridgePort: UInt16
   var bundleIdentifier: String
@@ -123,6 +124,11 @@ struct DesktopAutomationSnapshot: Codable {
   var floatingBarVoiceResponseActive: Bool
   var floatingBarUsesNotchIsland: Bool
   var updatedAt: String
+  /// True when the live MainActor refresh timed out and this is the last cached
+  /// snapshot instead — e.g. the main thread is wedged on a blocking Keychain
+  /// read during sign-in. The bridge still answers `/state` so harnesses don't
+  /// hang; callers can detect that the live fields may be stale.
+  var snapshotStale: Bool = false
 }
 
 struct DesktopAutomationNavigationRequest: Codable {
@@ -327,6 +333,13 @@ private struct DesktopAutomationHealth: Codable {
   let bundleIdentifier: String
   let bridgePort: UInt16
   let requiresAuth: Bool
+  let backendEnvironment: String
+  let pythonBackendURL: String
+  let rustBackendURL: String
+  let agentRuntimeRunning: Bool
+  let agentRuntimeExpectedProtocolVersion: Int
+  let agentRuntimeProtocolVersion: Int?
+  let agentRuntimeVersion: String?
 }
 
 struct DesktopAutomationRouteTrace: Codable {
@@ -347,6 +360,36 @@ enum DesktopAutomationActionError: LocalizedError {
     case .invalidParams(let detail): return "invalid_params: \(detail)"
     }
   }
+}
+
+enum DesktopAutomationRevisionComparator {
+  static func matchesAtMillisecondPrecision(_ lhs: Date?, _ rhs: Date?) -> Bool {
+    guard let lhs, let rhs else { return lhs == nil && rhs == nil }
+    let lhsMilliseconds = Int64((lhs.timeIntervalSince1970 * 1_000).rounded())
+    let rhsMilliseconds = Int64((rhs.timeIntervalSince1970 * 1_000).rounded())
+    return lhsMilliseconds == rhsMilliseconds
+  }
+}
+
+private func automationSafeErrorDetail(_ raw: String) -> String {
+  var detail = raw.replacingOccurrences(of: #"[\r\n\t]+"#, with: " ", options: .regularExpression)
+  let redactions: [(String, String)] = [
+    (#"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"#, "[redacted-jwt]"),
+    (#"(?i)bearer\s+[A-Za-z0-9._~+/=-]{8,}"#, "Bearer [redacted]"),
+    (#"sk-[A-Za-z0-9_-]{20,}"#, "sk-[redacted]"),
+  ]
+  for (pattern, replacement) in redactions {
+    detail = detail.replacingOccurrences(of: pattern, with: replacement, options: .regularExpression)
+  }
+  return String(detail.prefix(500))
+}
+
+private func automationActionErrorDescription(_ error: Error) -> String {
+  if case let APIError.httpError(statusCode, detail) = error {
+    let suffix = detail.map { " detail=\(automationSafeErrorDetail($0))" } ?? ""
+    return "api_http_error status=\(statusCode)\(suffix)"
+  }
+  return automationSafeErrorDetail(error.localizedDescription)
 }
 
 private struct DesktopAutomationResponse<T: Codable>: Codable {
@@ -407,7 +450,70 @@ final class DesktopAutomationStateStore {
   }
 }
 
+/// How long `/state` waits for the live MainActor refresh before serving the last
+/// cached snapshot instead. Generous enough not to false-trip under normal load,
+/// small enough that a wedged main thread can't stall the harness.
+private let liveSnapshotMainActorTimeout: Duration = .seconds(3)
+
+/// Single-resume guard for a continuation raced between two unstructured tasks.
+private final class TimeoutRaceBox<T>: @unchecked Sendable {
+  private var resumed = false
+  private let lock = NSLock()
+  private let continuation: CheckedContinuation<T?, Never>
+
+  init(_ continuation: CheckedContinuation<T?, Never>) {
+    self.continuation = continuation
+  }
+
+  func resume(_ value: T?) {
+    lock.lock()
+    defer { lock.unlock() }
+    guard !resumed else { return }
+    resumed = true
+    continuation.resume(returning: value)
+  }
+}
+
+/// Await `operation`, but give up after `timeout` and return `nil`.
+///
+/// The automation bridge uses this so a wedged MainActor — e.g. a blocking
+/// Keychain read on the main thread during sign-in (`AuthService.storedIdToken`
+/// → `SecItemCopyMatching`) — can't hang `/state`. Crucially the operation runs
+/// in an *unstructured* task, not a `withTaskGroup` child: a task group awaits all
+/// children at scope exit, so a non-cancellable wedged `MainActor.run` would hang
+/// the timeout itself. Here we resume on whichever finishes first and leave the
+/// abandoned operation task to complete (harmlessly) on its own later. Pure and
+/// self-contained, so it is hermetically testable.
+func awaitWithTimeout<T: Sendable>(
+  _ timeout: Duration,
+  operation: @escaping @Sendable () async -> T
+) async -> T? {
+  await withCheckedContinuation { (continuation: CheckedContinuation<T?, Never>) in
+    let box = TimeoutRaceBox<T>(continuation)
+    let operationTask = Task { box.resume(await operation()) }
+    Task {
+      try? await Task.sleep(for: timeout)
+      box.resume(nil)
+      operationTask.cancel()
+    }
+  }
+}
+
 private func liveAutomationSnapshot() async -> DesktopAutomationSnapshot {
+  // Bound the MainActor hop: if the main thread is wedged (blocking Keychain read
+  // during sign-in), fall back to the last cached snapshot so `/state` still
+  // answers instead of hanging the whole bridge. See awaitWithTimeout.
+  guard let live = await awaitWithTimeout(liveSnapshotMainActorTimeout, operation: liveAutomationSnapshotFromMainActor) else {
+    log("DesktopAutomationBridge: live /state refresh timed out (main thread busy); serving cached snapshot")
+    var stale = await cachedAutomationSnapshot()
+    stale.snapshotStale = true
+    return stale
+  }
+  return live
+}
+
+@Sendable
+private func liveAutomationSnapshotFromMainActor() async -> DesktopAutomationSnapshot {
   let floating = await MainActor.run {
     let floating = FloatingControlBarManager.shared.automationState
     return (
@@ -431,6 +537,7 @@ private func liveAutomationSnapshot() async -> DesktopAutomationSnapshot {
     snapshot.floatingBarUsesNotchIsland = floating.usesNotchIsland
     snapshot.isAppActive = floating.isAppActive
     snapshot.updatedAt = ISO8601DateFormatter().string(from: Date())
+    snapshot.snapshotStale = false
   }
 }
 
@@ -479,6 +586,19 @@ actor DesktopAutomationTraceStore {
 /// `register(name:summary:params:handler:)` (e.g. from a view model's lifecycle) and
 /// remove them with `unregister(_:)`.
 @MainActor
+private func ensureConversationsTabVisibleForAutomation() async throws {
+  NotificationCenter.default.post(
+    name: .navigateToSidebarItem,
+    object: nil,
+    userInfo: ["rawValue": SidebarNavItem.conversations.rawValue]
+  )
+  // Propagate cancellation instead of swallowing it with try? — if the
+  // automation task is cancelled during the settle sleep, the caller should
+  // not continue to post further notifications.
+  try await Task.sleep(nanoseconds: 150_000_000)
+}
+
+@MainActor
 final class DesktopAutomationActionRegistry {
   static let shared = DesktopAutomationActionRegistry()
 
@@ -494,6 +614,10 @@ final class DesktopAutomationActionRegistry {
   private var didRegisterBuiltins = false
   /// Non-prod harness latch so race probes stay busy without relying on LLM latency.
   private var harnessBusyUntil: Date?
+  /// The current typed floating-bar submission and its pre-submit timeline size.
+  /// The wait action must observe this turn before it may accept an idle state.
+  private var pendingFloatingBarSubmission: (generation: Int, baselineMessageCount: Int)?
+  private var floatingBarSubmissionGeneration = 0
 
   private func harnessBusyLatchActive(now: Date = Date()) -> Bool {
     guard let until = harnessBusyUntil else { return false }
@@ -571,13 +695,321 @@ final class DesktopAutomationActionRegistry {
       return nil
     }
 
+    // CHAT-05: read the free-tier monthly chat usage-limiter state so a harness can
+    // prove the counter is deterministic without spending LLM calls. Read-only.
+    register(
+      name: "usage_limiter_snapshot",
+      summary: "Read the free-tier monthly chat usage-limiter state (deterministic counter) — CHAT-05 harness read."
+    ) { _ in
+      await MainActor.run {
+        let limiter = FloatingBarUsageLimiter.shared
+        return [
+          "is_limit_reached": limiter.isLimitReached ? "true" : "false",
+          "remaining_queries": "\(limiter.remainingQueries)",
+          "limit_description": limiter.limitDescription,
+        ]
+      }
+    }
+
+    // CHAT-05: reset the usage-limiter counter so a harness can prove it is
+    // dev-resettable (the criterion's second half) without driving real LLM usage.
+    register(
+      name: "reset_usage_limiter",
+      summary: "Reset the free-tier monthly chat usage-limiter counter (dev-resettable proof) — CHAT-05. Non-prod only."
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "reset_usage_limiter is disabled on production bundles"]
+      }
+      return await MainActor.run {
+        let limiter = FloatingBarUsageLimiter.shared
+        limiter.reset()
+        return [
+          "reset": "true",
+          "is_limit_reached": limiter.isLimitReached ? "true" : "false",
+          "remaining_queries": "\(limiter.remainingQueries)",
+        ]
+      }
+    }
+
+    register(
+      name: "task_capture_fixture",
+      summary: "Evaluate canonical screen-capture policy facts without screenshot bytes",
+      params: ["facts_json"]
+    ) { params in
+      guard let json = params["facts_json"], let data = json.data(using: .utf8) else {
+        throw DesktopAutomationActionError.invalidParams("facts_json must be canonical capture facts JSON")
+      }
+      guard let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        throw DesktopAutomationActionError.invalidParams("facts_json must be a JSON object")
+      }
+      func value<T>(_ camel: String, _ snake: String, default fallback: T) -> T {
+        payload[camel] as? T ?? payload[snake] as? T ?? fallback
+      }
+      let facts = ScreenCaptureFacts(
+        explicitCommand: value("explicitCommand", "explicit_command", default: false),
+        clearCommitment: value("clearCommitment", "clear_commitment", default: false),
+        concreteDeliverable: value("concreteDeliverable", "concrete_deliverable", default: false),
+        directRequest: value("directRequest", "direct_request", default: false),
+        inferredNextStep: value("inferredNextStep", "inferred_next_step", default: false),
+        owner: value("owner", "owner", default: "unknown"),
+        publicBroadcast: value("publicBroadcast", "public_broadcast", default: false),
+        directMention: value("directMention", "direct_mention", default: false),
+        alreadyDone: value("alreadyDone", "already_done", default: false),
+        duplicateOf: payload["duplicateOf"] as? String ?? payload["duplicate_of"] as? String,
+        refinesTask: payload["refinesTask"] as? String ?? payload["refines_task"] as? String,
+        captureConfidence: value("captureConfidence", "capture_confidence", default: 0.5),
+        ownershipConfidence: value("ownershipConfidence", "ownership_confidence", default: 0.5)
+      )
+      return ["outcome": ScreenCapturePolicy.evaluate(facts).rawValue]
+    }
+
+    register(
+      name: "configure_contextual_task_interruptions",
+      summary: "Configure the non-production contextual task interruption gate",
+      params: [
+        "enabled", "shipped_cohorts_enabled", "daily_limit", "minimum_spacing_seconds",
+        "quiet_start_minute", "quiet_end_minute", "notifications_enabled", "frequency",
+        "task_notifications_enabled",
+      ]
+    ) { params in
+      var configuration = ProactiveTaskInterruptionSettings.load()
+      configuration.userOptedIn = boolParam(params["enabled"], default: false)
+      configuration.shippedCohortsEnabled = boolParam(
+        params["shipped_cohorts_enabled"], default: false)
+      configuration.dailyLimit = max(0, intParam(params["daily_limit"], default: configuration.dailyLimit))
+      configuration.minimumSpacing = TimeInterval(max(
+        0, intParam(params["minimum_spacing_seconds"], default: Int(configuration.minimumSpacing))))
+      configuration.quietHoursStartMinute = min(max(
+        0, intParam(params["quiet_start_minute"], default: configuration.quietHoursStartMinute)), 1439)
+      configuration.quietHoursEndMinute = min(max(
+        0, intParam(params["quiet_end_minute"], default: configuration.quietHoursEndMinute)), 1439)
+      ProactiveTaskInterruptionSettings.save(configuration)
+      if params["notifications_enabled"] != nil {
+        UserDefaults.standard.set(
+          boolParam(params["notifications_enabled"], default: false),
+          forKey: NotificationService.masterEnabledDefaultsKey
+        )
+      }
+      if params["frequency"] != nil {
+        UserDefaults.standard.set(
+          max(0, min(5, intParam(params["frequency"], default: 0))),
+          forKey: NotificationService.frequencyDefaultsKey
+        )
+      }
+      if params["task_notifications_enabled"] != nil {
+        TaskAssistantSettings.shared.notificationsEnabled = boolParam(
+          params["task_notifications_enabled"], default: false)
+      }
+      return [
+        "enabled": configuration.userOptedIn ? "true" : "false",
+        "shipped_cohorts_enabled": configuration.shippedCohortsEnabled ? "true" : "false",
+        "cohort": ProactiveTaskCohort.current.rawValue,
+      ]
+    }
+
+    register(
+      name: "probe_contextual_task_interruption",
+      summary: "Evaluate a synthetic bounded recommendation through the real interruption gate",
+      params: ["can_wait", "expires_in_seconds"]
+    ) { params in
+      guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+        return ["error": "runtime_owner_unavailable"]
+      }
+      let nonce = UUID().uuidString.lowercased()
+      let trace = NotificationService.shared.sendContextualTaskInterruption(
+        TaskInterruptionCandidate(
+          recommendationID: "automation:\(nonce)",
+          interventionID: "automation-intervention:\(nonce)",
+          dedupeKey: "automation-dedupe:\(nonce)",
+          headline: "Review a relevant update",
+          whyNow: "The linked context changed materially.",
+          recommendedAction: "Review update",
+          expiresAt: Date().addingTimeInterval(TimeInterval(
+            intParam(params["expires_in_seconds"], default: 300))),
+          canWait: boolParam(params["can_wait"], default: false)
+        ),
+        authorizationSnapshot: authorizationSnapshot
+      )
+      return [
+        "reason": trace.reason.rawValue,
+        "cohort": trace.cohort.rawValue,
+        "dedupe_hash": trace.dedupeHash,
+        "intervention_id": trace.interventionID,
+      ]
+    }
+
+    register(
+      name: "set_contextual_task_focus",
+      summary: "Set deterministic focus suppression for contextual task interruptions",
+      params: ["suppressed"]
+    ) { params in
+      let suppressed = boolParam(params["suppressed"], default: true)
+      UserDefaults.standard.set(
+        suppressed, forKey: ProactiveTaskInterruptionSettings.focusSuppressedKey)
+      return ["suppressed": suppressed ? "true" : "false"]
+    }
+
+    register(
+      name: "observe_task_context",
+      summary: "Submit a normalized task-context event and optionally flush re-evaluation",
+      params: [
+        "kind", "reference", "subject_kind", "subject_id", "workstream_id", "urgency", "flush",
+      ]
+    ) { params in
+      guard let kind = TaskContextEventKind(rawValue: params["kind"] ?? "app_window") else {
+        throw DesktopAutomationActionError.invalidParams("kind is invalid")
+      }
+      guard let reference = params["reference"], !reference.isEmpty else {
+        throw DesktopAutomationActionError.invalidParams("reference is required")
+      }
+      let subject: TaskContextSubject?
+      if let subjectID = params["subject_id"], !subjectID.isEmpty,
+        let kind = OmiAPI.RecommendationSubjectKind(rawValue: params["subject_kind"] ?? "task")
+      {
+        subject = TaskContextSubject(
+          kind: kind,
+          id: subjectID,
+          workstreamID: params["workstream_id"]?.isEmpty == false ? params["workstream_id"] : nil
+        )
+      } else {
+        subject = nil
+      }
+      guard let event = TaskLocalContextEvent.normalized(
+        kind: kind,
+        rawReference: reference,
+        subject: subject,
+        urgency: TaskContextUrgency(rawValue: params["urgency"] ?? "can_wait") ?? .canWait
+      ) else {
+        throw DesktopAutomationActionError.invalidParams("context event could not be normalized")
+      }
+      let matched = TaskContextSubjectMatcher.shared.resolve(event)
+      await TaskContextualResurfacingService.shared.observe(matched)
+      let shouldFlush = boolParam(params["flush"], default: true)
+      if shouldFlush { await TaskContextualResurfacingService.shared.flush() }
+      return [
+        "reference_hash": matched.referenceHash,
+        "pending_workstreams": "\(await TaskContextualResurfacingService.shared.pendingWorkstreamCount())",
+        "flushed": shouldFlush ? "true" : "false",
+      ]
+    }
+
+    register(
+      name: "prepare_task_artifact_fixture",
+      summary: "Persist an allowlisted prepared artifact through the workstream kernel",
+      params: ["workstream_id", "logical_key", "kind", "content", "execution_ready", "grant_id"]
+    ) { params in
+      guard let workstreamID = params["workstream_id"], !workstreamID.isEmpty,
+        let logicalKey = params["logical_key"], !logicalKey.isEmpty,
+        let kind = params["kind"], !kind.isEmpty,
+        let content = params["content"], !content.isEmpty
+      else {
+        throw DesktopAutomationActionError.invalidParams(
+          "workstream_id, logical_key, kind, and content are required")
+      }
+      var configuration = ProactiveTaskInterruptionSettings.load()
+      configuration.allowedPreparationKinds.insert(kind)
+      ProactiveTaskInterruptionSettings.save(configuration)
+      let referenceDigest = SHA256.hash(data: Data("automation-preparation:\(logicalKey)".utf8))
+        .map { String(format: "%02x", $0) }.joined()
+      let evidence = OmiAPI.EvidenceRef(
+        deviceId: ClientDeviceService.shared.clientDeviceId,
+        excerptHash: "sha256:\(referenceDigest)",
+        id: "sha256:\(referenceDigest)",
+        kind: .local_screen,
+        scope: .device_local,
+        version: "automation-preparation.v1"
+      )
+      let grantID: String
+      if let supplied = params["grant_id"], !supplied.isEmpty {
+        grantID = supplied
+      } else {
+        func object(_ raw: String) throws -> [String: Any] {
+          guard let data = raw.data(using: .utf8),
+            let value = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+          else { throw DesktopAutomationActionError.invalidParams("kernel returned invalid JSON") }
+          return value
+        }
+        let prepared = try object(try await TaskChatRuntime.controlTool(
+          name: "prepare_workstream_continuity",
+          input: ["workstreamId": workstreamID, "taskIds": []]
+        ))
+        guard let session = prepared["session"] as? [String: Any],
+          let sessionID = session["agentSessionId"] as? String
+        else { throw DesktopAutomationActionError.invalidParams("kernel session unavailable") }
+        let capability = "desktop.workstream.artifact.prepare"
+        let operation = "prepare_artifact"
+        let resource = "workstream:\(workstreamID)"
+        let expiry = Int(Date().addingTimeInterval(5 * 60).timeIntervalSince1970 * 1_000)
+        let dispatch = try object(try await TaskChatRuntime.controlTool(
+          name: "create_desktop_dispatch",
+          input: [
+            "kind": "approval",
+            "priority": 1,
+            "title": "Automation prepared artifact fixture",
+            "decisionPrompt": "Authorize this non-production artifact fixture?",
+            "sourceSessionId": sessionID,
+            "capability": capability,
+            "operation": operation,
+            "resourceRef": resource,
+            "payload": ["automation_fixture": true],
+            "expiresAtMs": expiry,
+          ]
+        ))
+        guard let dispatchObject = dispatch["dispatch"] as? [String: Any],
+          let dispatchID = dispatchObject["dispatchId"] as? String
+        else { throw DesktopAutomationActionError.invalidParams("kernel dispatch unavailable") }
+        let resolved = try object(try await TaskChatRuntime.controlTool(
+          name: "resolve_desktop_dispatch",
+          input: [
+            "dispatchId": dispatchID,
+            "status": "resolved",
+            "resolvedBy": "desktop_automation",
+            "resolution": ["decision": "allow"],
+            "grant": [
+              "sessionId": sessionID,
+              "capability": capability,
+              "operation": operation,
+              "resourcePattern": resource,
+              "effect": "allow",
+              "source": "user",
+              "expiresAtMs": expiry,
+            ],
+          ]
+        ))
+        guard let grant = resolved["grant"] as? [String: Any],
+          let createdGrantID = grant["grantId"] as? String
+        else { throw DesktopAutomationActionError.invalidParams("kernel grant unavailable") }
+        grantID = createdGrantID
+      }
+      let artifact = try await KernelPreparedArtifactBridge().prepare(
+        ProactiveTaskArtifactProposal(
+          workstreamID: workstreamID,
+          logicalKey: logicalKey,
+          kind: kind,
+          content: Data(content.utf8),
+          evidenceRefs: [evidence],
+          executionReady: boolParam(params["execution_ready"], default: true),
+          coordinatorGrantID: grantID
+        ),
+        configuration: configuration
+      )
+      return [
+        "prepared": artifact == nil ? "false" : "true",
+        "version": artifact.map { "\($0.version)" } ?? "",
+        "content_hash": artifact?.contentHash ?? "",
+        "file": artifact?.fileURL.path ?? "",
+        "supersedes_artifact_id": artifact?.supersedesArtifactID ?? "",
+        "delivery_count": artifact.map { "\($0.deliveryIDs.count)" } ?? "0",
+      ]
+    }
+
     // Runs the exact service + outcome mapping the ChatGPT/Claude import
     // sheets use, so harnesses can assert outcome copy without driving the
     // TextEditor. Writes real memories on success, like the sheet would.
     register(
       name: "memory_log_import_probe",
       summary: "Import a ChatGPT/Claude memory-log text through the real connector pipeline and return the outcome message",
-      params: ["source", "text"]
+      params: ["source", "text", "fixture"]
     ) { params in
       guard let raw = params["source"], let source = OnboardingMemoryLogSource(rawValue: raw) else {
         throw DesktopAutomationActionError.invalidParams("source must be chatgpt or claude")
@@ -585,7 +1017,26 @@ final class DesktopAutomationActionRegistry {
       guard let text = params["text"], !text.isEmpty else {
         throw DesktopAutomationActionError.invalidParams("text must be non-empty")
       }
-      switch await ConnectorImportOperations.importMemoryLog(text: text, source: source) {
+      let outcome: ConnectorImportOperations.Outcome
+      if params["fixture"] == "structured" {
+        guard AppBuild.isNonProduction else {
+          return ["error": "structured memory-log fixture is disabled on production bundles"]
+        }
+        // Offline providers intentionally return a marker echo rather than JSON.
+        // Inject only the extracted provider result; the real connector operation
+        // still owns validation, durable save, and user-facing outcome mapping.
+        outcome = await ConnectorImportOperations.importMemoryLog(
+          text: text,
+          source: source,
+          extractedFixture: OnboardingMemoryLogImportService.ExtractedMemoryLog(
+            memories: [text],
+            profileSummary: "desktop qualification fixture"
+          )
+        )
+      } else {
+        outcome = await ConnectorImportOperations.importMemoryLog(text: text, source: source)
+      }
+      switch outcome {
       case .success(let result, let message):
         return [
           "outcome": "success",
@@ -612,7 +1063,7 @@ final class DesktopAutomationActionRegistry {
     register(
       name: "capture_test_transcript",
       summary: "Hermetic capture seam: start/inject/stop a test recording session without mic/STT",
-      params: ["phase", "text"]
+      params: ["phase", "text", "segments"]
     ) { params in
       guard let appState = AppState.current else { return ["error": "app state unavailable"] }
       let phase = (params["phase"] ?? "inject").lowercased()
@@ -621,6 +1072,9 @@ final class DesktopAutomationActionRegistry {
         return await appState.automationStartCaptureTestSession()
       case "inject":
         return await appState.automationInjectCaptureTestTranscript(text: params["text"] ?? "")
+      case "inject_multi":
+        return await appState.automationInjectCaptureTestTranscriptMulti(
+          segmentsJSON: params["segments"] ?? params["text"] ?? "")
       case "stop":
         return await appState.automationStopCaptureTestSession()
       case "lifecycle":
@@ -632,7 +1086,7 @@ final class DesktopAutomationActionRegistry {
         _ = await appState.automationInjectCaptureTestTranscript(text: marker)
         return await appState.automationStopCaptureTestSession()
       default:
-        return ["error": "phase must be start, inject, stop, or lifecycle"]
+        return ["error": "phase must be start, inject, inject_multi, stop, or lifecycle"]
       }
     }
 
@@ -644,7 +1098,9 @@ final class DesktopAutomationActionRegistry {
       guard let appState = AppState.current else { return ["error": "app state unavailable"] }
       let limit = max(1, intParam(params["limit"], default: 5))
       let titles = appState.conversations.prefix(limit).map { $0.structured.title }
+      let ids = appState.conversations.prefix(limit).map { $0.id }
       let titlesJSON: String
+      let idsJSON: String
       if let data = try? JSONSerialization.data(withJSONObject: Array(titles)),
         let encoded = String(data: data, encoding: .utf8)
       {
@@ -652,11 +1108,64 @@ final class DesktopAutomationActionRegistry {
       } else {
         titlesJSON = "[]"
       }
+      if let data = try? JSONSerialization.data(withJSONObject: Array(ids)),
+        let encoded = String(data: data, encoding: .utf8)
+      {
+        idsJSON = encoded
+      } else {
+        idsJSON = "[]"
+      }
+      let starredCount = appState.conversations.filter(\.starred).count
+      if appState.folders.isEmpty {
+        await appState.loadFolders()
+      }
       return [
         "conversation_count": "\(appState.totalConversationsCount ?? appState.conversations.count)",
         "loaded_count": "\(appState.conversations.count)",
         "is_transcribing": appState.isTranscribing ? "true" : "false",
         "recent_titles_json": titlesJSON,
+        "recent_ids_json": idsJSON,
+        "folder_count": "\(appState.folders.count)",
+        "starred_count": "\(starredCount)",
+        "active_folder_id": appState.selectedFolderId ?? "none",
+        "show_starred_only": appState.showStarredOnly ? "true" : "false",
+      ]
+    }
+
+    register(
+      name: "conversation_reconciliation_snapshot",
+      summary: "Exercise cache-first list/detail reconciliation and open the canonical detail",
+      params: []
+    ) { _ in
+      guard let appState = AppState.current else { return ["error": "app state unavailable"] }
+      await appState.loadConversations()
+      guard let seed = appState.conversations.first else {
+        return ["error": "no conversation available for reconciliation"]
+      }
+
+      var cachedProjectionId: String?
+      let detail = await appState.loadConversationDetail(seed) { cached in
+        cachedProjectionId = cached.id
+      }
+      let persisted = try? await TranscriptionStorage.shared.getCachedConversation(id: detail.id)
+
+      NotificationCenter.default.post(
+        name: .desktopAutomationOpenConversationRequested,
+        object: nil,
+        userInfo: ["conversationId": detail.id, "showTranscript": true]
+      )
+
+      return [
+        "list_loaded": appState.conversations.isEmpty ? "false" : "true",
+        "cached_projection_seen": cachedProjectionId == seed.id ? "true" : "false",
+        "detail_id_matches": detail.id == seed.id ? "true" : "false",
+        "detail_has_revision": detail.updatedAt == nil ? "false" : "true",
+        "detail_transcript_included": detail.transcriptSegmentsIncluded ? "true" : "false",
+        "cache_id_matches": persisted?.id == detail.id ? "true" : "false",
+        "cache_revision_matches": DesktopAutomationRevisionComparator.matchesAtMillisecondPrecision(
+          persisted?.updatedAt, detail.updatedAt)
+          ? "true" : "false",
+        "opened_detail": "true",
       ]
     }
 
@@ -753,6 +1262,24 @@ final class DesktopAutomationActionRegistry {
       PushToTalkManager.shared.endPushToTalkForAutomation()
     }
 
+    register(
+      name: "ptt_turn_snapshot",
+      summary: "Return the typed PTT lifecycle state and bounded diagnostic counters"
+    ) { _ in
+      let coordinator = VoiceTurnCoordinator.shared
+      let turn = coordinator.model.turn
+      let terminalReason = turn?.terminalReason?.rawValue ?? ""
+      let phase = turn.map { VoiceTurnCoordinator.phaseLabel($0.phase) } ?? "idle"
+      let route = turn.map { VoiceTurnCoordinator.routeLabel($0.route) } ?? "none"
+      return [
+        "phase": phase,
+        "route": route,
+        "terminal_reason": terminalReason,
+        "stale_event_count": "\(coordinator.model.staleEventCount)",
+        "invalid_transition_count": "\(coordinator.model.invalidTransitionCount)",
+      ]
+    }
+
     // Fake-voice end-to-end test: inject a raw PCM16/16kHz-mono file through the
     // real realtime omni STT path and return the transcript. No mic, no human.
     register(
@@ -828,9 +1355,28 @@ final class DesktopAutomationActionRegistry {
       name: "reset_onboarding",
       summary: "Reset onboarding state and restart the app (same path as the Reset Onboarding menu item)"
     ) { _ in
-      let appState = await MainActor.run { AppState() }
-      appState.resetOnboardingAndRestart()
+      await MainActor.run {
+        (AppState.current ?? AppState()).resetOnboardingAndRestart()
+      }
       return ["status": "resetting and restarting"]
+    }
+
+    register(
+      name: "sign_out",
+      summary: "Sign out via AuthService (local Auth emulator harness only)"
+    ) { _ in
+      guard DesktopLocalProfile.isEnabled else {
+        return ["error": "sign_out is only available with OMI_DESKTOP_LOCAL_PROFILE=1 (local Auth emulator)"]
+      }
+      guard AuthState.shared.isSignedIn else {
+        return ["signed_out": "true", "was_signed_in": "false"]
+      }
+      try await AuthService.shared.signOut()
+      return [
+        "signed_out": "true",
+        "was_signed_in": "true",
+        "is_signed_in": AuthState.shared.isSignedIn ? "true" : "false",
+      ]
     }
 
     // Send a typed query through the real floating-bar AI path
@@ -916,11 +1462,21 @@ final class DesktopAutomationActionRegistry {
     ) { params in
       let query = (params["query"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
       guard !query.isEmpty else { return ["error": "missing 'query'"] }
+      let baselineSnapshot = FloatingControlBarManager.shared.automationFloatingBarChatSnapshot(limit: 1)
+      guard baselineSnapshot["error"] == nil,
+        let baselineRaw = baselineSnapshot["message_count"],
+        let baseline = Int(baselineRaw)
+      else {
+        return ["error": baselineSnapshot["error"] ?? "floating chat timeline unavailable"]
+      }
+      self.floatingBarSubmissionGeneration += 1
+      let generation = self.floatingBarSubmissionGeneration
+      self.pendingFloatingBarSubmission = (generation: generation, baselineMessageCount: baseline)
       if !FloatingControlBarManager.shared.isVisible {
         FloatingControlBarManager.shared.show()
       }
       FloatingControlBarManager.shared.openAIInputWithQuery(query, fromVoice: false)
-      return ["sent": query]
+      return ["sent": query, "submission_generation": "\(generation)"]
     }
 
     // Force the floating-bar active state so the pill↔notch-island morph and the
@@ -932,12 +1488,15 @@ final class DesktopAutomationActionRegistry {
       params: ["state"]
     ) { params in
       let s = (params["state"] ?? "thinking").lowercased()
+      guard let debugState = VoiceTurnDebugPresentationState(rawValue: s) else {
+        return ["error": "state must be idle, listening, thinking, or answering"]
+      }
       let mgr = FloatingControlBarManager.shared
       guard let bar = mgr.barState else { return ["error": "no bar state"] }
       if s != "idle", !mgr.isVisible { mgr.show() }
-      bar.isVoiceResponseActive = (s == "answering")
-      bar.isVoiceListening = (s == "listening")
-      bar.isThinking = (s == "thinking")
+      guard VoiceTurnCoordinator.shared.applyDebugPresentationState(debugState) else {
+        return ["error": "a non-debug voice turn is active"]
+      }
       return ["state": s, "usesNotchIsland": bar.usesNotchIsland ? "true" : "false"]
     }
 
@@ -952,7 +1511,10 @@ final class DesktopAutomationActionRegistry {
       guard let provider = ChatProvider.mainInstance else {
         return ["error": "main ChatProvider not yet initialized"]
       }
-      _ = await provider.automationClearOwnerSurfaceState(chatId: "default")
+      let clear = await provider.automationClearOwnerSurfaceState(chatId: "default")
+      if let error = clear["error"] {
+        return ["error": error]
+      }
       if let error = await provider.automationResetChatForHarness() {
         return ["error": error]
       }
@@ -1097,6 +1659,61 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "set_chat_drafts",
+      summary: "Set main and floating composer drafts without sending (non-prod persistence harness)",
+      params: ["main", "floating"],
+      category: "chat",
+      surfaces: ["main_chat", "ask_omi"],
+      safety: "local",
+      sideEffects: ["local_storage"],
+      examples: ["./scripts/omi-ctl action set_chat_drafts main=main-draft floating=notch-draft"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "set_chat_drafts is disabled on production bundles"]
+      }
+      if let main = params["main"] {
+        if let provider = ChatProvider.mainInstance {
+          provider.draftText = main
+        } else {
+          ChatDraftStore.shared.setText(main, for: .mainChat(contextID: "omi:default"))
+        }
+      }
+      if let floating = params["floating"] {
+        if let barState = FloatingControlBarManager.shared.barState {
+          barState.switchAIDraft(to: .floatingMain)
+          barState.aiInputText = floating
+        } else {
+          ChatDraftStore.shared.setText(floating, for: .floatingMain)
+        }
+      }
+      ChatDraftStore.shared.flush()
+      return [
+        "main": ChatProvider.mainInstance?.draftText
+          ?? ChatDraftStore.shared.text(for: .mainChat(contextID: "omi:default")),
+        "floating": FloatingControlBarManager.shared.barState?.aiInputText
+          ?? ChatDraftStore.shared.text(for: .floatingMain),
+      ]
+    }
+
+    register(
+      name: "chat_drafts_snapshot",
+      summary: "Read current main and floating composer drafts (non-prod persistence harness)",
+      category: "chat",
+      surfaces: ["main_chat", "ask_omi"],
+      safety: "read_only"
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "chat_drafts_snapshot is disabled on production bundles"]
+      }
+      return [
+        "main": ChatProvider.mainInstance?.draftText
+          ?? ChatDraftStore.shared.text(for: .mainChat(contextID: "omi:default")),
+        "floating": FloatingControlBarManager.shared.barState?.aiInputText
+          ?? ChatDraftStore.shared.text(for: .floatingMain),
+      ]
+    }
+
+    register(
       name: "clear_owner_surface_state",
       summary: "Clear kernel main_chat turns for the active owner (non-prod continuity harness hygiene)",
       params: ["chatId"]
@@ -1145,7 +1762,9 @@ final class DesktopAutomationActionRegistry {
       guard AppBuild.isNonProduction else {
         return ["error": "resume_agent_stream is disabled on production bundles"]
       }
-      return await AgentRuntimeProcess.shared.debugResumeStream()
+      // debugResumeStream is nonisolated (off-actor SIGCONT) so it returns promptly
+      // even when the actor is blocked writing to the frozen process.
+      return AgentRuntimeProcess.shared.debugResumeStream()
     }
 
     register(
@@ -1159,19 +1778,34 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "wait_floating_bar_chat_idle",
-      summary: "Block until floating-bar chat is not sending or streaming",
+      summary: "Block until the latest submitted floating-bar turn is observed and becomes idle",
       params: ["timeoutMs", "pollMs"]
     ) { params in
       let timeoutMs = max(1_000, intParam(params["timeoutMs"], default: 180_000))
       let pollMs = max(100, intParam(params["pollMs"], default: 500))
+      guard let submission = self.pendingFloatingBarSubmission else {
+        return ["error": "no pending floating-bar submission to observe"]
+      }
       let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
+      var observedSubmission = false
       while Date() < deadline {
         var detail = FloatingControlBarManager.shared.automationFloatingBarChatSnapshot(limit: 8)
-        if detail["error"] == nil,
+        let messageCount = Int(detail["message_count"] ?? "") ?? 0
+        observedSubmission = observedSubmission
+          || messageCount > submission.baselineMessageCount
+          || detail["is_sending"] == "true"
+          || detail["is_streaming"] == "true"
+        if observedSubmission,
+           detail["error"] == nil,
            detail["is_sending"] == "false",
            detail["is_streaming"] == "false"
         {
           detail["idle"] = "true"
+          detail["submission_observed"] = "true"
+          detail["submission_generation"] = "\(submission.generation)"
+          if self.pendingFloatingBarSubmission?.generation == submission.generation {
+            self.pendingFloatingBarSubmission = nil
+          }
           return detail
         }
         try await Task.sleep(nanoseconds: UInt64(pollMs) * 1_000_000)
@@ -1179,6 +1813,8 @@ final class DesktopAutomationActionRegistry {
       var detail = FloatingControlBarManager.shared.automationFloatingBarChatSnapshot(limit: 8)
       detail["error"] = "timeout"
       detail["timeout_ms"] = "\(timeoutMs)"
+      detail["submission_observed"] = observedSubmission ? "true" : "false"
+      detail["submission_generation"] = "\(submission.generation)"
       return detail
     }
 
@@ -1332,17 +1968,17 @@ final class DesktopAutomationActionRegistry {
       guard let id = params["id"], !id.isEmpty else {
         return ["error": "missing 'id'"]
       }
-      try await APIClient.shared.deleteConversation(id: id)
-      await MainActor.run {
-        if let appState = AppState.current {
-          appState.deleteConversationLocally(id)
-        } else {
-          NotificationCenter.default.post(
-            name: .conversationDeleted,
-            object: nil,
-            userInfo: ["conversationId": id]
-          )
+      if let appState = await MainActor.run(body: { AppState.current }) {
+        guard await appState.deleteConversation(id) else {
+          throw APIError.invalidResponse
         }
+      } else {
+        try await APIClient.shared.deleteConversation(id: id)
+        NotificationCenter.default.post(
+          name: .conversationDeleted,
+          object: nil,
+          userInfo: ["conversationId": id]
+        )
       }
       return ["deleted": id]
     }
@@ -1484,10 +2120,57 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "coordinator_awareness_snapshot",
-      summary: "Read the Swift coordinator awareness projection for Agents & Attention debugging"
-    ) { _ in
-      let snapshot = try await DesktopCoordinatorService.shared.awarenessSnapshotJSON()
+      summary: "Read the Swift coordinator awareness projection for Agents & Attention debugging",
+      params: ["limit"]
+    ) { params in
+      let limit = max(1, min(200, intParam(params["limit"], default: 50)))
+      let snapshot = try await DesktopCoordinatorService.shared.awarenessSnapshotJSON(limit: limit)
       return ["snapshot": snapshot]
+    }
+
+    register(
+      name: "coordinator_inspect_run",
+      summary: "Inspect one owner-scoped kernel run and its bounded tool-invocation ledger",
+      params: ["runId"]
+    ) { params in
+      guard let runId = params["runId"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !runId.isEmpty
+      else {
+        throw DesktopAutomationActionError.invalidParams("missing runId")
+      }
+      let run = try await DesktopCoordinatorService.shared.inspectRun(runId: runId)
+      return ["run": run]
+    }
+
+    register(
+      name: "coordinator_continue_agent",
+      summary: "Continue one owner-scoped canonical agent session and return its new run handles",
+      params: ["sessionId", "prompt", "surfaceKind"]
+    ) { params in
+      guard let sessionId = params["sessionId"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !sessionId.isEmpty
+      else {
+        throw DesktopAutomationActionError.invalidParams("missing sessionId")
+      }
+      guard let prompt = params["prompt"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !prompt.isEmpty
+      else {
+        throw DesktopAutomationActionError.invalidParams("missing prompt")
+      }
+      let inspection = try await DesktopCoordinatorService.shared.continueAgent(
+        sessionId: sessionId,
+        prompt: prompt,
+        originSurface: DesktopCoordinatorOriginSurface(surfaceKind: params["surfaceKind"]),
+        model: nil,
+        cwd: nil
+      )
+      return [
+        "session_id": inspection.sessionId ?? "",
+        "run_id": inspection.runId ?? "",
+        "attempt_id": inspection.attemptId ?? "",
+        "status": inspection.status,
+        "error": inspection.errorMessage ?? "",
+      ]
     }
 
     register(
@@ -1510,13 +2193,33 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "coordinator_route_intent",
-      summary: "Route an intent through deterministic coordinator projection rules",
-      params: ["intent", "surfaceKind", "taskId"]
+      summary: "Route a structured proposal through the canonical agent kernel",
+      params: [
+        "intent", "surfaceKind", "taskId", "proposal", "snapshotVersion",
+        "sessionId", "runId", "parentRunId", "provider", "agentCount",
+      ]
     ) { params in
+      let proposal: DesktopCoordinatorIntentProposal
+      switch params["proposal"] {
+      case "spawn_agent": proposal = .spawnAgent
+      case "continue_run": proposal = .continueRun
+      case "clarify": proposal = .clarify(missing: ["automation_input"])
+      default: proposal = .answerInline
+      }
+      let syntaxFacts = DesktopCoordinatorIntentSyntaxFacts(
+        delegationNegated: nil,
+        explicitSessionId: params["sessionId"],
+        explicitRunId: params["runId"],
+        parentRunId: params["parentRunId"],
+        explicitProvider: params["provider"],
+        requestedAgentCount: params["agentCount"].flatMap(Int.init))
       let decision = try await DesktopCoordinatorService.shared.routeIntentJSON(
         intent: params["intent"] ?? "",
         surfaceKind: params["surfaceKind"],
-        taskId: params["taskId"]
+        taskId: params["taskId"],
+        snapshotVersion: params["snapshotVersion"],
+        proposal: proposal,
+        syntaxFacts: syntaxFacts
       )
       return ["decision": decision]
     }
@@ -1678,6 +2381,924 @@ final class DesktopAutomationActionRegistry {
         title: title, subtitle: subtitle, near: anchor)
       return CloudConnectorGuidanceOverlay.shared.automationState()
     }
+
+    register(
+      name: "open_conversation",
+      summary: "Open a conversation detail view (same path as POST /conversation/open)",
+      params: ["conversationId", "showTranscript", "timeoutMs"]
+    ) { params in
+      guard let conversationId = params["conversationId"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !conversationId.isEmpty
+      else {
+        return ["error": "missing conversationId"]
+      }
+      let showTranscript = boolParam(params["showTranscript"], default: false)
+      try await ensureConversationsTabVisibleForAutomation()
+      NotificationCenter.default.post(
+        name: .desktopAutomationOpenConversationRequested,
+        object: nil,
+        userInfo: ["conversationId": conversationId, "showTranscript": showTranscript]
+      )
+      let timeoutMs = max(500, intParam(params["timeoutMs"], default: 5_000))
+      let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1_000)
+      while ConversationDetailAutomationState.shared.openConversationId != conversationId,
+        Date() < deadline
+      {
+        try await Task.sleep(nanoseconds: 50_000_000)
+      }
+      return [
+        "opened": conversationId,
+        "show_transcript": showTranscript ? "true" : "false",
+        "detail_open": ConversationDetailAutomationState.shared.openConversationId == conversationId ? "true" : "false",
+      ]
+    }
+
+    register(
+      name: "open_latest_conversation",
+      summary: "Open the most recently loaded conversation detail view",
+      params: ["showTranscript", "timeoutMs"]
+    ) { params in
+      guard let appState = AppState.current else {
+        return ["error": "app state unavailable"]
+      }
+      if appState.conversations.isEmpty {
+        await appState.refreshConversations()
+      }
+      guard let conversationId = appState.conversations.first?.id else {
+        return ["error": "no conversations available"]
+      }
+      let showTranscript = boolParam(params["showTranscript"], default: false)
+      try await ensureConversationsTabVisibleForAutomation()
+      NotificationCenter.default.post(
+        name: .desktopAutomationOpenConversationRequested,
+        object: nil,
+        userInfo: ["conversationId": conversationId, "showTranscript": showTranscript]
+      )
+      let timeoutMs = max(500, intParam(params["timeoutMs"], default: 5_000))
+      let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1_000)
+      while ConversationDetailAutomationState.shared.openConversationId != conversationId,
+        Date() < deadline
+      {
+        try await Task.sleep(nanoseconds: 50_000_000)
+      }
+      return [
+        "opened": conversationId,
+        "show_transcript": showTranscript ? "true" : "false",
+        "detail_open": ConversationDetailAutomationState.shared.openConversationId == conversationId ? "true" : "false",
+      ]
+    }
+
+    register(
+      name: "conversation_detail_snapshot",
+      summary: "Return open conversation detail fields for harness assertions",
+      params: ["conversationId"]
+    ) { params in
+      var requestedId = params["conversationId"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+      if requestedId == "latest" {
+        if let appState = AppState.current, appState.conversations.isEmpty {
+          await appState.refreshConversations()
+        }
+        requestedId = AppState.current?.conversations.first?.id
+      }
+      let automation = ConversationDetailAutomationState.shared
+      let conversationId = (requestedId?.isEmpty == false ? requestedId : automation.openConversationId)
+      guard let conversationId, !conversationId.isEmpty else {
+        return [
+          "detail_open": "false",
+          "error": "no open conversation",
+        ]
+      }
+      let detailOpen = automation.openConversationId == conversationId
+      let drawerOpen = detailOpen && automation.transcriptDrawerOpen
+      do {
+        let conversation = try await APIClient.shared.getConversation(id: conversationId)
+        let segmentCount = conversation.transcriptSegments.count
+        return [
+          "detail_open": detailOpen ? "true" : "false",
+          "conversation_id": conversationId,
+          "title": conversation.structured.title,
+          "segment_count": "\(segmentCount)",
+          "transcript_drawer_open": drawerOpen ? "true" : "false",
+          "folder_id": conversation.folderId ?? "none",
+          "starred": conversation.starred ? "true" : "false",
+        ]
+      } catch {
+        guard let appState = AppState.current,
+          let cached = appState.conversations.first(where: { $0.id == conversationId })
+        else {
+          return [
+            "detail_open": detailOpen ? "true" : "false",
+            "conversation_id": conversationId,
+            "transcript_drawer_open": drawerOpen ? "true" : "false",
+            "error": error.localizedDescription,
+          ]
+        }
+        return [
+          "detail_open": detailOpen ? "true" : "false",
+          "conversation_id": conversationId,
+          "title": cached.structured.title,
+          "segment_count": "\(cached.transcriptSegments.count)",
+          "transcript_drawer_open": drawerOpen ? "true" : "false",
+          "folder_id": cached.folderId ?? "none",
+          "starred": cached.starred ? "true" : "false",
+        ]
+      }
+    }
+
+    register(
+      name: "create_test_memory",
+      summary: "Create a hermetic test memory via the real API",
+      params: ["content", "source"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "create_test_memory is disabled on production bundles"]
+      }
+      let content = params["content"] ?? "[[MARKER:memory-crud]] hermetic desktop memory"
+      let response = try await APIClient.shared.createMemory(
+        content: content,
+        source: params["source"] ?? "harness"
+      )
+      if let page = try? await APIClient.shared.getMemoriesPage(limit: 100, offset: 0) {
+        try? await MemoryStorage.shared.syncServerMemories(page.memories)
+      }
+      let memoryCount = (try? await MemoryStorage.shared.getLocalMemoriesCount()) ?? 0
+      return [
+        "created": "true",
+        "memory_id": response.id,
+        "memory_count": "\(memoryCount)",
+      ]
+    }
+
+    register(
+      name: "edit_test_memory",
+      summary: "Edit a hermetic test memory via the real API",
+      params: ["id", "marker", "content"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "edit_test_memory is disabled on production bundles"]
+      }
+      let content = params["content"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      guard !content.isEmpty else {
+        return ["error": "missing content"]
+      }
+      let id: String?
+      if let explicit = params["id"]?.trimmingCharacters(in: .whitespacesAndNewlines), !explicit.isEmpty {
+        id = explicit
+      } else if let marker = params["marker"]?.trimmingCharacters(in: .whitespacesAndNewlines), !marker.isEmpty {
+        let page = try await APIClient.shared.getMemoriesPage(limit: 100, offset: 0)
+        id = page.memories.first(where: { $0.content.contains(marker) })?.id
+      } else {
+        id = nil
+      }
+      guard let id, !id.isEmpty else {
+        return ["error": "missing id or marker match"]
+      }
+      try await APIClient.shared.editMemory(id: id, content: content)
+      if let page = try? await APIClient.shared.getMemoriesPage(limit: 100, offset: 0) {
+        try? await MemoryStorage.shared.syncServerMemories(page.memories)
+      }
+      return [
+        "edited": id,
+        "content": content,
+      ]
+    }
+
+    register(
+      name: "delete_test_memory",
+      summary: "Delete a hermetic test memory via the real API",
+      params: ["id", "marker"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "delete_test_memory is disabled on production bundles"]
+      }
+      let id: String?
+      if let explicit = params["id"]?.trimmingCharacters(in: .whitespacesAndNewlines), !explicit.isEmpty {
+        id = explicit
+      } else if let marker = params["marker"]?.trimmingCharacters(in: .whitespacesAndNewlines), !marker.isEmpty {
+        let page = try await APIClient.shared.getMemoriesPage(limit: 100, offset: 0)
+        id = page.memories.first(where: { $0.content.contains(marker) })?.id
+      } else {
+        id = nil
+      }
+      guard let id, !id.isEmpty else {
+        return ["error": "missing id or marker match"]
+      }
+      try await APIClient.shared.deleteMemory(id: id)
+      try? await MemoryStorage.shared.deleteMemoryByBackendId(id)
+      if let page = try? await APIClient.shared.getMemoriesPage(limit: 100, offset: 0) {
+        try? await MemoryStorage.shared.syncServerMemories(page.memories)
+      }
+      let memoryCount = (try? await MemoryStorage.shared.getLocalMemoriesCount()) ?? 0
+      return [
+        "deleted": id,
+        "memory_count": "\(memoryCount)",
+      ]
+    }
+
+    register(
+      name: "vocabulary_snapshot",
+      summary: "Return transcription custom vocabulary for harness assertions"
+    ) { _ in
+      let terms = AssistantSettings.shared.transcriptionVocabulary
+      let termsJSON: String
+      if let data = try? JSONSerialization.data(withJSONObject: terms),
+        let encoded = String(data: data, encoding: .utf8)
+      {
+        termsJSON = encoded
+      } else {
+        termsJSON = "[]"
+      }
+      return [
+        "term_count": "\(terms.count)",
+        "terms_json": termsJSON,
+      ]
+    }
+
+    register(
+      name: "vocabulary_set_terms",
+      summary: "Set transcription custom vocabulary (local + backend)",
+      params: ["terms"]
+    ) { params in
+      let raw = params["terms"] ?? ""
+      let terms = raw.split(separator: ",")
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+      // Persist remotely first. A Settings-page hydration already in flight may
+      // write its response into UserDefaults; the final assignment makes this
+      // completed mutation authoritative without relying on a settle delay.
+      let saved = try await APIClient.shared.updateTranscriptionPreferences(vocabulary: terms)
+      AssistantSettings.shared.transcriptionVocabulary = saved.vocabulary
+      return [
+        "saved": "true",
+        "term_count": "\(saved.vocabulary.count)",
+      ]
+    }
+
+    register(
+      name: "goals_snapshot",
+      summary: "Return dashboard goals state for harness assertions"
+    ) { _ in
+      let goals: [Goal]
+      if let apiGoals = try? await APIClient.shared.getGoals() {
+        goals = apiGoals
+      } else if let localGoals = try? await GoalStorage.shared.getLocalGoals() {
+        goals = localGoals
+      } else {
+        goals = []
+      }
+      let titles = goals.map(\.title)
+      let titlesJSON: String
+      if let data = try? JSONSerialization.data(withJSONObject: titles),
+        let encoded = String(data: data, encoding: .utf8)
+      {
+        titlesJSON = encoded
+      } else {
+        titlesJSON = "[]"
+      }
+      return [
+        "goal_count": "\(goals.count)",
+        "titles_json": titlesJSON,
+      ]
+    }
+
+    register(
+      name: "create_test_goal",
+      summary: "Create a hermetic dashboard goal via the real API",
+      params: ["title", "targetValue", "currentValue"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "create_test_goal is disabled on production bundles"]
+      }
+      let title = params["title"] ?? "[[MARKER:goals-dashboard]] harness goal"
+      let targetValue = Double(params["targetValue"] ?? "") ?? 10
+      let currentValue = Double(params["currentValue"] ?? "") ?? 0
+      let goal = try await APIClient.shared.createGoal(
+        title: title,
+        goalType: .numeric,
+        targetValue: targetValue,
+        currentValue: currentValue,
+        source: "user"
+      )
+      _ = try? await GoalStorage.shared.syncServerGoal(goal)
+      let goals = (try? await GoalStorage.shared.getLocalGoals()) ?? []
+      return [
+        "created": "true",
+        "goal_id": goal.id,
+        "goal_count": "\(goals.count)",
+      ]
+    }
+
+    register(
+      name: "apps_catalog_snapshot",
+      summary: "Return apps marketplace catalog counts for harness assertions"
+    ) { _ in
+      let v2 = try await APIClient.shared.getAppsV2()
+      let marketplaceCount = v2.groups.reduce(0) { $0 + $1.data.count }
+      let installed = try await APIClient.shared.searchApps(installedOnly: true, limit: 100)
+      return [
+        "marketplace_count": "\(marketplaceCount)",
+        "group_count": "\(v2.meta.groupCount)",
+        "capability_count": "\(v2.meta.capabilities.count)",
+        "installed_count": "\(installed.count)",
+      ]
+    }
+
+    register(
+      name: "subscription_snapshot",
+      summary: "Return cached subscription/plan info from the billing API"
+    ) { _ in
+      let response = try await APIClient.shared.getUserSubscription()
+      let subscription = response.subscription
+      return [
+        "plan": subscription.plan.rawValue,
+        "status": subscription.status.rawValue,
+        "show_subscription_ui": response.showSubscriptionUI ? "true" : "false",
+        "transcription_seconds_used": "\(response.transcriptionSecondsUsed)",
+        "transcription_seconds_limit": "\(response.transcriptionSecondsLimit)",
+      ]
+    }
+
+    register(
+      name: "settings_privacy_snapshot",
+      summary: "Return privacy toggle defaults (store recordings, cloud sync, tracking)"
+    ) { _ in
+      async let recordingTask = APIClient.shared.getRecordingPermission()
+      async let cloudSyncTask = APIClient.shared.getPrivateCloudSync()
+      let (recording, cloudSync) = try await (recordingTask, cloudSyncTask)
+      let trackingEnabled = PostHogManager.shared.hasOptedOut
+      return [
+        "store_recordings": recording.enabled ? "true" : "false",
+        "cloud_sync": cloudSync.enabled ? "true" : "false",
+        "tracking_enabled": trackingEnabled ? "true" : "false",
+      ]
+    }
+
+    register(
+      name: "create_test_folder",
+      summary: "Create a hermetic conversation folder via the real API",
+      params: ["name"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "create_test_folder is disabled on production bundles"]
+      }
+      let name = params["name"] ?? "[[MARKER:conversation-folders]] harness folder"
+      guard let appState = AppState.current else {
+        return ["error": "app state unavailable"]
+      }
+      guard let folder = await appState.createFolder(name: name) else {
+        return ["error": "failed to create folder"]
+      }
+      return [
+        "created": "true",
+        "folder_id": folder.id,
+        "folder_name": folder.name,
+        "folder_count": "\(appState.folders.count)",
+      ]
+    }
+
+    register(
+      name: "set_conversation_starred",
+      summary: "Set conversation starred status via the real API",
+      params: ["conversationId", "starred"]
+    ) { params in
+      guard let conversationId = params["conversationId"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !conversationId.isEmpty
+      else {
+        return ["error": "missing conversationId"]
+      }
+      let resolvedConversationId: String
+      if conversationId == "latest" {
+        guard let appState = AppState.current else {
+          return ["error": "app state unavailable"]
+        }
+        if appState.conversations.isEmpty {
+          await appState.refreshConversations()
+        }
+        guard let latestId = appState.conversations.first?.id else {
+          return ["error": "no conversations available"]
+        }
+        resolvedConversationId = latestId
+      } else {
+        resolvedConversationId = conversationId
+      }
+      let starred = boolParam(params["starred"], default: true)
+      guard let appState = AppState.current else {
+        return ["error": "app state unavailable"]
+      }
+      try await appState.conversationRepository.setStarred(
+        id: resolvedConversationId, starred: starred)
+      return [
+        "conversation_id": resolvedConversationId,
+        "starred": starred ? "true" : "false",
+      ]
+    }
+
+    register(
+      name: "set_conversation_folder",
+      summary: "Move a conversation into a folder via the real API",
+      params: ["conversationId", "folderId"]
+    ) { params in
+      let rawConversationId = params["conversationId"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard let rawConversationId, !rawConversationId.isEmpty else {
+        return ["error": "missing conversationId"]
+      }
+      let conversationId: String
+      if rawConversationId == "latest" {
+        guard let appState = AppState.current else {
+          return ["error": "app state unavailable"]
+        }
+        if appState.conversations.isEmpty {
+          await appState.refreshConversations()
+        }
+        guard let latestId = appState.conversations.first?.id else {
+          return ["error": "no conversations available"]
+        }
+        conversationId = latestId
+      } else {
+        conversationId = rawConversationId
+      }
+      let folderId = params["folderId"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let resolvedFolderId = (folderId?.isEmpty == false && folderId != "none") ? folderId : nil
+      guard let appState = AppState.current else {
+        return ["error": "app state unavailable"]
+      }
+      await appState.moveConversationToFolder(conversationId, folderId: resolvedFolderId)
+      return [
+        "conversation_id": conversationId,
+        "folder_id": resolvedFolderId ?? "none",
+      ]
+    }
+
+    register(
+      name: "set_transcription_language",
+      summary: "Set transcription language (local + backend)",
+      params: ["language", "autoDetect"]
+    ) { params in
+      guard let rawLanguage = params["language"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !rawLanguage.isEmpty
+      else {
+        return ["error": "missing language"]
+      }
+      let normalized = AssistantSettings.normalizeTranscriptionLanguageCode(rawLanguage)
+      if let autoDetectRaw = params["autoDetect"] {
+        AssistantSettings.shared.transcriptionAutoDetect = boolParam(autoDetectRaw, default: true)
+      }
+      AssistantSettings.shared.transcriptionLanguage = normalized
+      _ = try await APIClient.shared.updateUserLanguage(normalized)
+      return [
+        "saved": "true",
+        "language": normalized,
+        "auto_detect": AssistantSettings.shared.transcriptionAutoDetect ? "true" : "false",
+        "effective_language": AssistantSettings.shared.effectiveTranscriptionLanguage,
+      ]
+    }
+
+    register(
+      name: "transcription_language_snapshot",
+      summary: "Return transcription language settings for harness assertions"
+    ) { _ in
+      let settings = AssistantSettings.shared
+      return [
+        "language": settings.transcriptionLanguage,
+        "auto_detect": settings.transcriptionAutoDetect ? "true" : "false",
+        "effective_language": settings.effectiveTranscriptionLanguage,
+      ]
+    }
+
+    register(
+      name: "memory_graph_snapshot",
+      summary: "Return knowledge graph node/edge counts (no SceneKit rendering)",
+      params: []
+    ) { _ in
+      do {
+        let graph = try await APIClient.shared.getKnowledgeGraph()
+        return [
+          "node_count": "\(graph.nodes.count)",
+          "edge_count": "\(graph.edges.count)",
+          "is_empty": graph.nodes.isEmpty ? "true" : "false",
+        ]
+      } catch {
+        return [
+          "node_count": "0",
+          "edge_count": "0",
+          "is_empty": "true",
+          "has_error": "true",
+          "error_message": error.localizedDescription,
+        ]
+      }
+    }
+
+    register(
+      name: "open_quick_note",
+      summary: "Open Quick Note via Rewind notes path (same as dashboard Quick Note button)"
+    ) { _ in
+      NotificationCenter.default.post(name: .navigateToRewindNotes, object: nil)
+      return [
+        "posted": "navigateToRewindNotes",
+        "expected_tab_index": "\(SidebarNavItem.rewind.rawValue)",
+      ]
+    }
+
+    register(
+      name: "about_snapshot",
+      summary: "Return About settings version/build/bundle metadata"
+    ) { _ in
+      let updater = UpdaterViewModel.shared
+      return [
+        "version": updater.currentVersion,
+        "build": updater.buildNumber,
+        "bundle_id": AppBuild.bundleIdentifier,
+        "channel": updater.activeChannelLabel,
+      ]
+    }
+
+    register(
+      name: "settings_notifications_snapshot",
+      summary: "Return notification settings and local permission state"
+    ) { _ in
+      async let settingsTask = APIClient.shared.getNotificationSettings()
+      let settings = try await settingsTask
+      let appState = await MainActor.run { AppState.current }
+      let hasPermission = appState?.hasNotificationPermission ?? false
+      let bannersDisabled = appState?.isNotificationBannerDisabled ?? false
+      return [
+        "enabled": settings.enabled ? "true" : "false",
+        "frequency": "\(settings.frequency)",
+        "frequency_label": settings.frequencyDescription,
+        "has_permission": hasPermission ? "true" : "false",
+        "banners_disabled": bannersDisabled ? "true" : "false",
+      ]
+    }
+
+    register(
+      name: "set_notification_settings",
+      summary: "Update notification settings via the real API",
+      params: ["enabled", "frequency"]
+    ) { params in
+      let enabled = params["enabled"].map { boolParam($0, default: true) }
+      let frequency = params["frequency"].flatMap { Int($0) }
+      let response = try await APIClient.shared.updateNotificationSettings(
+        enabled: enabled,
+        frequency: frequency
+      )
+      return [
+        "saved": "true",
+        "enabled": response.enabled ? "true" : "false",
+        "frequency": "\(response.frequency)",
+      ]
+    }
+
+    register(
+      name: "rewind_settings_snapshot",
+      summary: "Return Rewind settings retention and excluded-app counts"
+    ) { _ in
+      let settings = RewindSettings.shared
+      let stats = await RewindIndexer.shared.getStats()
+      return [
+        "retention_days": "\(settings.retentionDays)",
+        "capture_interval": String(format: "%.1f", settings.captureInterval),
+        "excluded_app_count": "\(settings.excludedApps.count)",
+        "indexed_frames": "\(stats?.indexed ?? 0)",
+        "total_frames": "\(stats?.total ?? 0)",
+        "storage_bytes": "\(stats?.storageSize ?? 0)",
+      ]
+    }
+
+    register(
+      name: "navigate_via_shortcut",
+      summary: "Post the same sidebar navigation notification as Cmd+1..6 / Cmd+, shortcuts",
+      params: ["shortcut"]
+    ) { params in
+      let shortcut = (params["shortcut"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased()
+      guard !shortcut.isEmpty else {
+        return ["error": "missing shortcut (1-6 or comma)"]
+      }
+      let item: SidebarNavItem?
+      switch shortcut {
+      case "1", "home", "dashboard": item = .dashboard
+      case "2", "conversations": item = .conversations
+      case "3", "memories": item = .memories
+      case "4", "tasks": item = .tasks
+      case "5", "rewind": item = .rewind
+      case "6", "apps": item = .apps
+      case ",", "comma", "settings": item = .settings
+      default: item = nil
+      }
+      guard let item else {
+        return ["error": "unsupported shortcut '\(shortcut)'"]
+      }
+      NotificationCenter.default.post(
+        name: .navigateToSidebarItem,
+        object: nil,
+        userInfo: ["rawValue": item.rawValue]
+      )
+      return [
+        "navigated": item.title,
+        "selected_tab_index": "\(item.rawValue)",
+      ]
+    }
+
+    register(
+      name: "advanced_settings_snapshot",
+      summary: "Return safe Advanced settings booleans (never raw BYOK keys)",
+      params: []
+    ) { _ in
+      let focus = FocusAssistantSettings.shared
+      let task = TaskAssistantSettings.shared
+      let insight = InsightAssistantSettings.shared
+      let memory = MemoryAssistantSettings.shared
+      let assistant = AssistantSettings.shared
+      return [
+        "focus_enabled": focus.isEnabled ? "true" : "false",
+        "task_enabled": task.isEnabled ? "true" : "false",
+        "task_chat_agent_enabled": TaskAgentSettings.shared.isChatEnabled ? "true" : "false",
+        "insight_enabled": insight.isEnabled ? "true" : "false",
+        "memory_enabled": memory.isEnabled ? "true" : "false",
+        "screen_analysis_enabled": assistant.screenAnalysisEnabled ? "true" : "false",
+        "transcription_enabled": assistant.transcriptionEnabled ? "true" : "false",
+        "multi_chat_enabled": UserDefaults.standard.bool(forKey: .multiChatEnabled) ? "true" : "false",
+      ]
+    }
+
+    register(
+      name: "settings_aichat_snapshot",
+      summary: "Return AI Chat settings safe fields (provider mode, working directory presence)",
+      params: []
+    ) { _ in
+      let bridgeMode = UserDefaults.standard.string(forKey: .chatBridgeMode) ?? "piMono"
+      let workingDirectory = UserDefaults.standard.string(forKey: .aiChatWorkingDirectory) ?? ""
+      let multiChat = UserDefaults.standard.bool(forKey: .multiChatEnabled)
+      return [
+        "bridge_mode": bridgeMode,
+        "working_directory_set": workingDirectory.isEmpty ? "false" : "true",
+        "multi_chat_enabled": multiChat ? "true" : "false",
+      ]
+    }
+
+    register(
+      name: "assign_speaker_fixture",
+      summary: "Assign a person name to a conversation segment (hermetic speaker naming)",
+      params: ["conversationId", "segmentIndex", "personName"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "assign_speaker_fixture is disabled on production bundles"]
+      }
+      guard let appState = AppState.current else {
+        return ["error": "app state unavailable"]
+      }
+      let personName = params["personName"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        ?? "[[MARKER:speaker-naming]] Harness Speaker"
+      let segmentIndex = max(0, Int(params["segmentIndex"] ?? "") ?? 0)
+
+      var conversationId = params["conversationId"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+      if conversationId == "latest" || conversationId?.isEmpty != false {
+        if appState.conversations.isEmpty {
+          await appState.refreshConversations()
+        }
+        conversationId = appState.conversations.first?.id
+      }
+      guard let conversationId, !conversationId.isEmpty else {
+        return ["error": "no conversation available"]
+      }
+
+      let conversation = try await APIClient.shared.getConversation(id: conversationId)
+      guard segmentIndex < conversation.transcriptSegments.count else {
+        return [
+          "error": "segment index out of range",
+          "segment_count": "\(conversation.transcriptSegments.count)",
+        ]
+      }
+      let segment = conversation.transcriptSegments[segmentIndex]
+      guard let person = await appState.createPerson(name: personName) else {
+        return ["error": "failed to create person"]
+      }
+      let assigned = await appState.assignSpeakerToSegments(
+        conversationId: conversationId,
+        segmentIds: [segment.id],
+        personId: person.id,
+        isUser: false
+      )
+      guard assigned else {
+        return ["error": "assign segments failed"]
+      }
+      let refreshed = try await APIClient.shared.getConversation(id: conversationId)
+      let assignedSegment = refreshed.transcriptSegments.first(where: { $0.id == segment.id })
+      return [
+        "assigned": "true",
+        "conversation_id": conversationId,
+        "segment_id": segment.id,
+        "segment_index": "\(segmentIndex)",
+        "person_id": person.id,
+        "person_name": person.name,
+        "speaker_label": assignedSegment?.speaker ?? segment.speaker ?? "",
+        "segment_count": "\(refreshed.transcriptSegments.count)",
+      ]
+    }
+
+    register(
+      name: "conversation_share_probe",
+      summary: "Hermetic share affordance probe — fetches share link without clipboard",
+      params: ["conversationId"]
+    ) { params in
+      let rawConversationId = params["conversationId"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard let rawConversationId, !rawConversationId.isEmpty else {
+        return ["error": "missing conversationId"]
+      }
+      let conversationId: String
+      if rawConversationId == "latest" {
+        guard let appState = AppState.current else {
+          return ["error": "app state unavailable"]
+        }
+        if appState.conversations.isEmpty {
+          await appState.refreshConversations()
+        }
+        guard let latestId = appState.conversations.first?.id else {
+          return ["error": "no conversations available"]
+        }
+        conversationId = latestId
+      } else {
+        conversationId = rawConversationId
+      }
+      let shareURL = try await APIClient.shared.getConversationShareLink(id: conversationId)
+      let shareAvailable = !shareURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      return [
+        "conversation_id": conversationId,
+        "share_available": shareAvailable ? "true" : "false",
+        "share_url_present": shareAvailable ? "true" : "false",
+      ]
+    }
+
+    // SET-02: assemble the exact payload FeedbackView.submitFeedback() would
+    // attach — the report title + the desktop_diagnostics.json attachment + the
+    // log-attachment metadata — WITHOUT calling SentrySDK, so a harness can grep
+    // the diagnostics JSON for secrets without firing a real Sentry event. The
+    // title and diagnostics JSON come from the same builders the real submit
+    // uses (feedbackReportTitle / writeDiagnosticsAttachment), so the dry-run
+    // can't diverge from what ships. The raw log is attached unredacted to Sentry
+    // by design (trusted sink, explicit user report); we surface only its
+    // metadata here — never its contents — so the bridge response can't leak it.
+    register(
+      name: "dump_feedback_payload_dryrun",
+      summary: "Assemble the feedback report payload (title + desktop_diagnostics.json + log-attachment metadata) without submitting to Sentry; returns the diagnostics JSON for secret-scanning. Non-prod only.",
+      params: ["message"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "dump_feedback_payload_dryrun is disabled on production bundles"]
+      }
+      let message = (params["message"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+      var detail: [String: String] = [
+        "sentry_message": feedbackReportTitle(for: message),
+        "diagnostics_filename": feedbackDiagnosticsAttachmentFilename,
+        "sentry_capture_invoked": "false",
+        "would_submit_to_sentry": "false",
+      ]
+
+      if let url = DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment() {
+        defer { try? FileManager.default.removeItem(at: url) }
+        if let data = try? Data(contentsOf: url), let json = String(data: data, encoding: .utf8) {
+          detail["diagnostics_json"] = json
+          detail["diagnostics_byte_count"] = "\(data.count)"
+        } else {
+          detail["diagnostics_error"] = "unreadable_attachment"
+        }
+      } else {
+        detail["diagnostics_error"] = "attachment_write_failed"
+      }
+
+      let logPath = omiLogFilePath()
+      let logExists = FileManager.default.fileExists(atPath: logPath)
+      detail["log_attachment_filename"] = (logPath as NSString).lastPathComponent
+      detail["log_attachment_exists"] = logExists ? "true" : "false"
+      if logExists,
+        let attributes = try? FileManager.default.attributesOfItem(atPath: logPath),
+        let size = attributes[.size] as? NSNumber
+      {
+        // int64Value, not intValue (Int32): the log can exceed 2 GB in a long dev session.
+        detail["log_attachment_bytes"] = "\(size.int64Value)"
+      }
+      return detail
+    }
+
+    // Deliberately wedge the main thread for durationMs so harnesses can prove the
+    // `/state` fallback: the bridge must keep answering `/state` from the cached
+    // snapshot (snapshotStale=true) while the MainActor is blocked, instead of
+    // hanging as it did when a sign-in Keychain read wedged the main thread. The
+    // sleep is scheduled async so this action's own response returns first; the
+    // wedge then races the next `/state` live refresh. Non-prod only; mirrors
+    // `suspend_agent_stream`'s role for the agent-stall path.
+    register(
+      name: "debug_block_main_thread",
+      summary: "Block the main thread for durationMs to exercise the /state wedged-MainActor fallback. Non-prod only.",
+      params: ["durationMs"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "debug_block_main_thread is disabled on production bundles"]
+      }
+      let durationMs = min(max(intParam(params["durationMs"], default: 5000), 100), 20000)
+      // Delay the wedge briefly so this action's own POST /action response (which
+      // itself builds a live snapshot via a MainActor hop) returns *before* the
+      // main thread blocks — otherwise the response would be queued behind the
+      // sleep and take the full 3s /state fallback, which looks like a hang.
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+        Thread.sleep(forTimeInterval: Double(durationMs) / 1000.0)
+      }
+      return ["blocking_main_thread_ms": "\(durationMs)"]
+    }
+
+    // AUTH-03: force the stored idToken's expiry into the past through AuthService's own
+    // storage abstraction, so a harness can relaunch and prove the app REFRESHES an
+    // expired token without signing the user out. The old harness trick
+    // (`defaults write <bundle> auth_tokenExpiry -float 1000`) tampers a key the app no
+    // longer reads now that tokens are keychain-backed — it measured nothing and reported
+    // a false regression. This seam is storage-agnostic and never exposes token material.
+    // Non-prod only (double-gated: here and inside AuthService).
+    register(
+      name: "expire_auth_token",
+      summary:
+        "Expire the stored idToken via AuthService's real storage path (keychain or UserDefaults) so a relaunch must refresh it without signing out — AUTH-03. Status only, no token material. Non-prod only.",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "expire_auth_token is disabled on production bundles"]
+      }
+      return await MainActor.run { AuthService.shared.expireStoredTokenForAutomation() }
+    }
+
+    // AUTH-03 read-back: which backend actually holds the tokens, and is the stored
+    // idToken currently expired? Lets a harness assert "expired -> relaunch -> refreshed,
+    // still signed in" against the REAL storage rather than a UserDefaults key the app may
+    // no longer use. Presence/expiry booleans only — never token material. Non-prod only.
+    register(
+      name: "auth_token_status",
+      summary:
+        "Read-only auth token status (signed_in, storage backend, has_id_token, has_refresh_token, is_token_expired) — AUTH-03. No token material. Non-prod only.",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "auth_token_status is disabled on production bundles"]
+      }
+      return await MainActor.run { AuthService.shared.tokenStatusForAutomation() }
+    }
+
+    // CHAT-07: post `NSWorkspace.didWakeNotification` on the WORKSPACE notification
+    // center — the top of the real wake chain. Every production consumer then fires
+    // exactly as on a physical wake: RealtimeHubController re-warms/defers its
+    // session ("system_wake"), and AppState's observer re-broadcasts the
+    // default-center `.systemDidWake` for downstream consumers. (Posting only the
+    // default-center `.systemDidWake` would MISS RealtimeHub, which observes the
+    // workspace center directly.) Transcription restart stays guarded by
+    // wasTranscribingBeforeSleep, so a synthetic wake is a safe no-op there.
+    // Read-only with respect to user data; non-prod only.
+    register(
+      name: "simulate_system_wake",
+      summary: "Post NSWorkspace.didWakeNotification on the workspace center (the top of the real wake chain: RealtimeHub re-warm + AppState .systemDidWake re-broadcast) so post-wake restart paths run without a real sleep — CHAT-07 harness. Non-prod only.",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "simulate_system_wake is disabled on production bundles"]
+      }
+      await MainActor.run {
+        NSWorkspace.shared.notificationCenter.post(
+          name: NSWorkspace.didWakeNotification, object: nil)
+      }
+      log("DesktopAutomationBridge: simulate_system_wake posted NSWorkspace.didWakeNotification")
+      return ["posted": "NSWorkspace.didWakeNotification"]
+    }
+
+    // PERM-06: trigger the permission-flow "Quit & Reopen" restart — the exact
+    // AppState.restartApp() path used after granting Accessibility / Screen
+    // Recording — so a harness can prove the SAME bundle relaunches with the
+    // session intact. Distinct from `reset_onboarding`, which mutates onboarding
+    // state. The restart is scheduled after a short delay so this action's HTTP
+    // response flushes before restartApp() terminates the process. Non-prod only.
+    register(
+      name: "quit_and_reopen",
+      summary: "Trigger the permission-flow Quit & Reopen restart (AppState.restartApp) — relaunches the same bundle; auth/onboarding session persists. Non-prod only.",
+      params: ["delayMs"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "quit_and_reopen is disabled on production bundles"]
+      }
+      guard let appState = AppState.current else {
+        return ["error": "app state unavailable"]
+      }
+      if UpdaterViewModel.isUpdateInProgress {
+        return ["error": "sparkle update in progress — restart is deferred to Sparkle"]
+      }
+      let bundleId = Bundle.main.bundleIdentifier ?? ""
+      let relaunchPath = Bundle.main.bundleURL.path
+      let delayMs = min(max(intParam(params["delayMs"], default: 400), 100), 5000)
+      DispatchQueue.main.asyncAfter(deadline: .now() + Double(delayMs) / 1000.0) {
+        appState.restartApp()
+      }
+      return [
+        "restarting": "true",
+        "bundle_id": bundleId,
+        "relaunch_path": relaunchPath,
+        "delay_ms": "\(delayMs)",
+      ]
+    }
   }
 }
 
@@ -1701,13 +3322,24 @@ final class DesktopAutomationBridge {
 
   private let queue = DispatchQueue(label: "com.omi.desktop.automation-bridge")
   private var listener: NWListener?
+  private var bindAttempts = 0
+  private let maxBindAttempts = 3
+
+  /// Upper bound on a request body's declared Content-Length. Requests over this
+  /// are rejected before the body is sliced (see parseRequest); the automation
+  /// bridge only ever receives small JSON action payloads.
+  static let maxRequestBodyBytes = 8 * 1024 * 1024
 
   private init() {}
 
   func startIfNeeded() {
     guard DesktopAutomationLaunchOptions.isEnabled else { return }
     guard listener == nil else { return }
+    bindAttempts = 0
+    attemptStartListener()
+  }
 
+  private func attemptStartListener() {
     do {
       let parameters = NWParameters.tcp
       parameters.allowLocalEndpointReuse = true
@@ -1725,19 +3357,46 @@ final class DesktopAutomationBridge {
       listener.newConnectionHandler = { [weak self] connection in
         self?.handleConnection(connection)
       }
-      listener.stateUpdateHandler = { (state: NWListener.State) in
+      listener.stateUpdateHandler = { [weak self] (state: NWListener.State) in
         log("DesktopAutomationBridge: listener state changed to \(String(describing: state))")
+        if case .failed(let error) = state {
+          self?.handleListenerBindFailure(error: error)
+        }
       }
       listener.start(queue: queue)
       self.listener = listener
+      bindAttempts = 0
       DesktopAutomationLaunchOptions.writeTokenFileIfNeeded()
       Task { @MainActor in DesktopAutomationActionRegistry.shared.registerBuiltins() }
       log(
         "DesktopAutomationBridge: listening on http://127.0.0.1:\(DesktopAutomationLaunchOptions.port)"
       )
     } catch {
-      logError("DesktopAutomationBridge: failed to start listener", error: error)
+      handleListenerBindFailure(error: error)
     }
+  }
+
+  private func handleListenerBindFailure(error: Error) {
+    listener?.cancel()
+    listener = nil
+    bindAttempts += 1
+    let reason = error.localizedDescription
+    if bindAttempts < maxBindAttempts {
+      log(
+        "DesktopAutomationBridge: bind failed (attempt \(bindAttempts)/\(maxBindAttempts)), retrying: \(reason)")
+      queue.asyncAfter(deadline: .now() + Double(bindAttempts)) { [weak self] in
+        self?.attemptStartListener()
+      }
+      return
+    }
+    log(
+      "DesktopAutomationBridge: bind failed after \(maxBindAttempts) attempts "
+        + "(failure_class=bind_failed recovery_action=retry_exhausted recovery_result=exhausted): \(reason)")
+    logError("DesktopAutomationBridge: failed to start listener", error: error)
+    DesktopDiagnosticsManager.shared.recordAutomationBridgeBindFailed(
+      port: Int(DesktopAutomationLaunchOptions.port),
+      reason: reason
+    )
   }
 
   private func handleConnection(_ connection: NWConnection) {
@@ -1778,7 +3437,7 @@ final class DesktopAutomationBridge {
     }
   }
 
-  private func parseRequest(from data: Data) -> HTTPRequest? {
+  private func parseRequest(from data: Data) -> DesktopAutomationHTTPRequest? {
     guard let headerRange = data.range(of: Data("\r\n\r\n".utf8)) else {
       return nil
     }
@@ -1805,7 +3464,15 @@ final class DesktopAutomationBridge {
       let value = pieces[1].trimmingCharacters(in: .whitespaces)
       headers[key] = value
       if key == "content-length" {
-        contentLength = Int(value) ?? 0
+        // Reject negative/absurd lengths before the body-slice range and the
+        // `distance + contentLength` addition below (which would trap/overflow).
+        // Reachable pre-auth from any local process, so fail closed.
+        guard
+          let parsed = LoopbackHTTPParsing.parseContentLength(value, maxBytes: Self.maxRequestBodyBytes)
+        else {
+          return nil
+        }
+        contentLength = parsed
       }
     }
 
@@ -1816,7 +3483,7 @@ final class DesktopAutomationBridge {
     }
 
     let body = Data(data[bodyStart..<data.index(bodyStart, offsetBy: contentLength)])
-    return HTTPRequest(method: method, path: path, headers: headers, body: body)
+    return DesktopAutomationHTTPRequest(method: method, path: path, headers: headers, body: body)
   }
 
   /// Parse a `POST /action` body: `{ "name": "...", "params": { "k": "v", ... } }`.
@@ -1848,9 +3515,9 @@ final class DesktopAutomationBridge {
     return (name, params)
   }
 
-  private func route(request: HTTPRequest) async -> HTTPResponse {
+  private func route(request: DesktopAutomationHTTPRequest) async -> DesktopAutomationHTTPResponse {
     let started = DispatchTime.now().uptimeNanoseconds
-    let response = await routeUntimed(request: request)
+    let response = await self.response(for: request)
     let elapsedMs = Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000
     await DesktopAutomationTraceStore.shared.record(
       method: request.method,
@@ -1861,7 +3528,10 @@ final class DesktopAutomationBridge {
     return response
   }
 
-  private func routeUntimed(request: HTTPRequest) async -> HTTPResponse {
+  /// Internal executable route seam used by both the loopback listener and
+  /// behavioral tests. Keeping auth, dispatch, and JSON encoding on this path
+  /// prevents tests from validating a parallel fake router.
+  func response(for request: DesktopAutomationHTTPRequest) async -> DesktopAutomationHTTPResponse {
     guard acceptsLoopbackHostAndOrigin(request.headers) else {
       return jsonResponse(
         DesktopAutomationResponse<DesktopAutomationSnapshot>(
@@ -1869,13 +3539,22 @@ final class DesktopAutomationBridge {
         statusCode: 403)
     }
     if request.method == "GET", request.path == "/health", request.headers["authorization"] == nil {
+      let runtime = await AgentRuntimeProcess.shared.diagnosticsSnapshot()
       return jsonResponse(
         DesktopAutomationHealth(
           ok: true,
           name: "omi-desktop-automation",
           bundleIdentifier: Bundle.main.bundleIdentifier ?? "unknown",
           bridgePort: DesktopAutomationLaunchOptions.port,
-          requiresAuth: true
+          requiresAuth: true,
+          backendEnvironment: DesktopBackendEnvironment.shouldUseDevelopmentBackends
+            ? "development" : "production",
+          pythonBackendURL: DesktopBackendEnvironment.pythonBaseURL(),
+          rustBackendURL: DesktopBackendEnvironment.rustBackendURL(),
+          agentRuntimeRunning: runtime.running,
+          agentRuntimeExpectedProtocolVersion: AgentRuntimeProcess.expectedProtocolVersion,
+          agentRuntimeProtocolVersion: runtime.protocolVersion,
+          agentRuntimeVersion: runtime.runtimeVersion
         )
       )
     }
@@ -1974,8 +3653,7 @@ final class DesktopAutomationBridge {
           "POST /conversation/open",
           "POST /action",
           "POST /visual/export",
-          "POST /open-import",
-        ],
+        ] + DesktopAutomationPresentationRoute.allCases.map(\.capability),
         lanes: ["bridge", "visual", "ui"],
         waits: ["state", "log", "trace"],
         assertions: ["state", "log", "trace", "ax"],
@@ -2002,7 +3680,7 @@ final class DesktopAutomationBridge {
       } catch {
         return jsonResponse(
           DesktopAutomationResponse<DesktopAutomationActionResult>(
-            ok: false, result: nil, error: error.localizedDescription),
+            ok: false, result: nil, error: automationActionErrorDescription(error)),
           statusCode: 400
         )
       }
@@ -2019,75 +3697,75 @@ final class DesktopAutomationBridge {
           statusCode: 500
         )
       }
-    case ("POST", "/open-export"):
-      struct OpenResult: Codable { let destination: String }
-      do {
-        let payload = try JSONDecoder().decode(
-          DesktopAutomationExecuteExportRequest.self, from: request.body)
-        guard MemoryExportDestination(rawValue: payload.destination) != nil else {
-          return jsonResponse(
-            DesktopAutomationResponse<OpenResult>(
-              ok: false, result: nil, error: "unknown destination: \(payload.destination)"),
-            statusCode: 400)
-        }
-        await MainActor.run {
-          NSApp.activate()
-          if let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") }) {
-            window.makeKeyAndOrderFront(nil)
-          }
-          NotificationCenter.default.post(
-            name: .desktopAutomationOpenExportRequested, object: nil,
-            userInfo: ["destination": payload.destination])
-        }
-        try await Task.sleep(for: .milliseconds(300))
-        return jsonResponse(
-          DesktopAutomationResponse(
-            ok: true, result: OpenResult(destination: payload.destination), error: nil))
-      } catch {
-        return jsonResponse(
-          DesktopAutomationResponse<OpenResult>(
-            ok: false, result: nil, error: error.localizedDescription),
-          statusCode: 500)
+    case ("POST", let path) where path == DesktopAutomationPresentationRoute.openExport.rawValue:
+      struct OpenResult: Codable {
+        let destination: String
+        let generation: UInt64
       }
-    case ("POST", "/open-import"):
-      struct OpenResult: Codable { let connector: String }
-      let payload: DesktopAutomationOpenImportRequest
-      do {
-        payload = try JSONDecoder().decode(
-          DesktopAutomationOpenImportRequest.self, from: request.body)
-      } catch {
+      guard let payload = try? JSONDecoder().decode(
+        DesktopAutomationExecuteExportRequest.self, from: request.body)
+      else {
         return jsonResponse(
           DesktopAutomationResponse<OpenResult>(
-            ok: false, result: nil, error: error.localizedDescription),
+            ok: false, result: nil, error: "invalid_request"),
+          statusCode: 400)
+      }
+      let gate = await currentAutomationPresentationGate()
+      let outcome = await DesktopAutomationPresentationRequestHandler.shared.openExport(
+        identifier: payload.destination,
+        knownIdentifiers: Set(MemoryExportDestination.allCases.map(\.rawValue)),
+        gate: gate
+      )
+      guard let command = outcome.command else {
+        return jsonResponse(
+          DesktopAutomationResponse<OpenResult>(
+            ok: false, result: nil, error: outcome.errorCode),
+          statusCode: outcome.statusCode)
+      }
+      return jsonResponse(
+        DesktopAutomationResponse(
+          ok: true,
+          result: OpenResult(
+            destination: payload.destination,
+            generation: command.generation
+          ),
+          error: nil
+        ))
+    case ("POST", let path) where path == DesktopAutomationPresentationRoute.openImport.rawValue:
+      struct OpenResult: Codable {
+        let connector: String
+        let generation: UInt64
+      }
+      guard let payload = try? JSONDecoder().decode(
+        DesktopAutomationOpenImportRequest.self, from: request.body)
+      else {
+        return jsonResponse(
+          DesktopAutomationResponse<OpenResult>(
+            ok: false, result: nil, error: "invalid_request"),
           statusCode: 400)
       }
       let knownIDs = await MainActor.run { ImportConnector.all.map(\.id) }
-      guard knownIDs.contains(payload.connector) else {
+      let gate = await currentAutomationPresentationGate()
+      let outcome = await DesktopAutomationPresentationRequestHandler.shared.openImport(
+        identifier: payload.connector,
+        knownIdentifiers: Set(knownIDs),
+        gate: gate
+      )
+      guard let command = outcome.command else {
         return jsonResponse(
           DesktopAutomationResponse<OpenResult>(
-            ok: false, result: nil, error: "unknown connector: \(payload.connector)"),
-          statusCode: 400)
+            ok: false, result: nil, error: outcome.errorCode),
+          statusCode: outcome.statusCode)
       }
-      do {
-        await MainActor.run {
-          NSApp.activate()
-          if let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") }) {
-            window.makeKeyAndOrderFront(nil)
-          }
-          NotificationCenter.default.post(
-            name: .desktopAutomationOpenImportRequested, object: nil,
-            userInfo: ["connector": payload.connector])
-        }
-        try await Task.sleep(for: .milliseconds(300))
-        return jsonResponse(
-          DesktopAutomationResponse(
-            ok: true, result: OpenResult(connector: payload.connector), error: nil))
-      } catch {
-        return jsonResponse(
-          DesktopAutomationResponse<OpenResult>(
-            ok: false, result: nil, error: error.localizedDescription),
-          statusCode: 500)
-      }
+      return jsonResponse(
+        DesktopAutomationResponse(
+          ok: true,
+          result: OpenResult(
+            connector: payload.connector,
+            generation: command.generation
+          ),
+          error: nil
+        ))
     case ("POST", "/gmail-read"):
       struct RemovedRoute: Codable {
         let message: String
@@ -2131,8 +3809,24 @@ final class DesktopAutomationBridge {
     }
   }
 
+  @MainActor
+  private func currentAutomationPresentationGate() -> DesktopAutomationPresentationGate {
+    let authState = AuthState.shared
+    if authState.isRestoringAuth {
+      return .presentationUnavailable
+    }
+    guard authState.isSignedIn else {
+      return .signedOut
+    }
+    guard let appState = AppState.current else {
+      return .presentationUnavailable
+    }
+    return appState.hasCompletedOnboarding ? .ready : .onboardingIncomplete
+  }
+
   private func dispatchOpenConversation(_ payload: DesktopAutomationOpenConversationRequest) async throws {
     await activateMainWindowIfNeeded(payload.activateApp ?? true)
+    try await ensureConversationsTabVisibleForAutomation()
     await MainActor.run {
       NotificationCenter.default.post(
         name: .desktopAutomationOpenConversationRequested,
@@ -2195,6 +3889,8 @@ final class DesktopAutomationBridge {
         window = NSApp.windows.first(where: { $0 is FloatingControlBarWindow && $0.isVisible })
       } else if payload.target == "overlay" {
         window = CloudConnectorGuidanceOverlay.shared.automationWindow
+      } else if payload.target == "task_thread" {
+        window = NSApp.windows.first(where: { $0.title == "Omi — Task thread scenario" && $0.isVisible })
       } else {
         window = NSApp.windows.first(where: { window in
           window.title.lowercased().hasPrefix("omi") || window.isMainWindow || window.isKeyWindow
@@ -2285,17 +3981,20 @@ final class DesktopAutomationBridge {
     return diff == 0
   }
 
-  private func jsonResponse<T: Codable>(_ payload: T, statusCode: Int = 200) -> HTTPResponse {
+  private func jsonResponse<T: Codable>(
+    _ payload: T,
+    statusCode: Int = 200
+  ) -> DesktopAutomationHTTPResponse {
     do {
       let body = try JSONEncoder.pretty.encode(payload)
-      return HTTPResponse(
+      return DesktopAutomationHTTPResponse(
         statusCode: statusCode,
         headers: ["Content-Type": "application/json"],
         body: body
       )
     } catch {
       let fallback = Data("{\"ok\":false,\"error\":\"encode_failed\"}".utf8)
-      return HTTPResponse(
+      return DesktopAutomationHTTPResponse(
         statusCode: 500,
         headers: ["Content-Type": "application/json"],
         body: fallback
@@ -2311,50 +4010,59 @@ final class DesktopAutomationBridge {
     send(response, on: connection)
   }
 
-  private func send(_ response: HTTPResponse, on connection: NWConnection) {
-    let statusText: String
-    switch response.statusCode {
-    case 200: statusText = "OK"
-    case 400: statusText = "Bad Request"
-    case 401: statusText = "Unauthorized"
-    case 403: statusText = "Forbidden"
-    case 404: statusText = "Not Found"
-    default: statusText = "Internal Server Error"
-    }
-
-    var headerLines = [
-      "HTTP/1.1 \(response.statusCode) \(statusText)",
-      "Content-Length: \(response.body.count)",
-      "Connection: close",
-    ]
-    for (key, value) in response.headers {
-      headerLines.append("\(key): \(value)")
-    }
-    headerLines.append("")
-    headerLines.append("")
-
-    var data = Data(headerLines.joined(separator: "\r\n").utf8)
-    data.append(response.body)
-
+  private func send(_ response: DesktopAutomationHTTPResponse, on connection: NWConnection) {
     connection.send(
-      content: data,
+      content: response.serializedHTTP1Data(),
       completion: .contentProcessed { _ in
         connection.cancel()
       })
   }
 }
 
-private struct HTTPRequest {
+struct DesktopAutomationHTTPRequest {
   let method: String
   let path: String
   let headers: [String: String]
   let body: Data
 }
 
-private struct HTTPResponse {
+struct DesktopAutomationHTTPResponse {
   let statusCode: Int
   let headers: [String: String]
   let body: Data
+
+  func serializedHTTP1Data() -> Data {
+    var headerLines = [
+      "HTTP/1.1 \(statusCode) \(Self.reasonPhrase(for: statusCode))",
+      "Content-Length: \(body.count)",
+      "Connection: close",
+    ]
+    for (key, value) in headers {
+      headerLines.append("\(key): \(value)")
+    }
+    headerLines.append("")
+    headerLines.append("")
+
+    var data = Data(headerLines.joined(separator: "\r\n").utf8)
+    data.append(body)
+    return data
+  }
+
+  private static func reasonPhrase(for statusCode: Int) -> String {
+    switch statusCode {
+    case 200: return "OK"
+    case 400: return "Bad Request"
+    case 401: return "Unauthorized"
+    case 403: return "Forbidden"
+    case 404: return "Not Found"
+    case 409: return "Conflict"
+    case 410: return "Gone"
+    case 500: return "Internal Server Error"
+    case 503: return "Service Unavailable"
+    case 504: return "Gateway Timeout"
+    default: return "Unknown Status"
+    }
+  }
 }
 
 extension JSONEncoder {

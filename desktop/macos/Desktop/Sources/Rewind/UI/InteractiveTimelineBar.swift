@@ -706,23 +706,23 @@ struct TooltipView: View {
     let screenshot: Screenshot
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: OmiSpacing.xs) {
             AppIconView(appName: screenshot.appName, size: 14)
             Text(screenshot.appName)
-                .scaledFont(size: 10, weight: .medium)
+                .scaledFont(size: OmiType.micro, weight: .medium)
                 .foregroundColor(.white)
                 .lineLimit(1)
             Text(screenshot.formattedTime)
-                .scaledFont(size: 10, design: .monospaced)
+                .scaledFont(size: OmiType.micro, design: .monospaced)
                 .foregroundColor(.white.opacity(0.7))
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
+        .padding(.horizontal, OmiSpacing.sm)
+        .padding(.vertical, OmiSpacing.xxs)
         .background(
-            RoundedRectangle(cornerRadius: 6)
+            RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
                 .fill(Color.black.opacity(0.95))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 6)
+                    RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
                         .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
                 )
         )
@@ -733,21 +733,21 @@ struct GapTooltipView: View {
     let duration: TimeInterval
 
     var body: some View {
-        VStack(spacing: 2) {
+        VStack(spacing: OmiSpacing.hairline) {
             Text("No capture")
-                .scaledFont(size: 9, weight: .medium)
+                .scaledFont(size: OmiType.micro, weight: .medium)
                 .foregroundColor(.white.opacity(0.6))
             Text(formatDuration(duration))
-                .scaledFont(size: 11, weight: .semibold, design: .monospaced)
+                .scaledFont(size: OmiType.caption, weight: .semibold, design: .monospaced)
                 .foregroundColor(.white)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .padding(.horizontal, OmiSpacing.sm)
+        .padding(.vertical, OmiSpacing.xs)
         .background(
-            RoundedRectangle(cornerRadius: 6)
+            RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
                 .fill(Color.black.opacity(0.95))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 6)
+                    RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
                         .stroke(Color.orange.opacity(0.4), lineWidth: 0.5)
                 )
         )

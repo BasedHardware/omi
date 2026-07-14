@@ -8,13 +8,17 @@ This is the sanctioned Tier-2 "fake must precede import" case (see
 """
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import Barrier, Lock
 from types import ModuleType
 from unittest.mock import MagicMock
 
+from google.api_core.exceptions import Aborted
 import pytest
 
+from database import firestore_transaction_retry
 from testing.import_isolation import load_module_fresh, stub_modules
 
 _BACKEND = Path(__file__).resolve().parents[2]
@@ -50,6 +54,11 @@ def _load_modules():
         globals()["memory_ledger"] = memory_ledger
         globals()["projection_repair"] = projection_repair
         yield
+
+
+@pytest.fixture(autouse=True)
+def _isolate_retry_logging_cost(monkeypatch):
+    monkeypatch.setattr(firestore_transaction_retry, "logger", MagicMock())
 
 
 def _fact(fact_id, content, *, valid_from=None, valid_to=None):
@@ -253,6 +262,171 @@ def test_append_commit_to_history_rejects_sibling_heads():
         raise AssertionError("Expected same-parent sibling append to fail")
 
 
+def test_typed_transactional_isolates_sdk_wrapper_state_per_concurrent_call(monkeypatch):
+    barrier = Barrier(2)
+    created_wrappers = []
+    created_lock = Lock()
+
+    class StatefulTransactional:
+        def __init__(self, function):
+            self.function = function
+            self.current_id = None
+            with created_lock:
+                created_wrappers.append(self)
+
+        def __call__(self, transaction, value):
+            self.current_id = value
+            barrier.wait(timeout=2)
+            assert self.current_id == value
+            return self.function(transaction, value)
+
+    monkeypatch.setattr(memory_ledger, "transactional", StatefulTransactional)
+
+    @memory_ledger._typed_transactional
+    def operation(_transaction, value):
+        return value
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda value: operation(object(), value), ["first", "second"]))
+
+    assert results == ["first", "second"]
+    assert len(created_wrappers) == 2
+
+
+def test_contention_retry_uses_fresh_transactions_and_equal_jitter():
+    transactions = []
+    sleeps = []
+    calls = []
+
+    def transaction_factory():
+        transaction = object()
+        transactions.append(transaction)
+        return transaction
+
+    def operation(transaction):
+        calls.append(transaction)
+        if len(calls) < 3:
+            raise Aborted("read contention")
+        return "committed"
+
+    result = firestore_transaction_retry.run_with_transaction_contention_retry(
+        transaction_factory,
+        operation,
+        operation_name="test_operation",
+        sleep=sleeps.append,
+        random_value=lambda: 0.0,
+    )
+
+    assert result == "committed"
+    assert calls == transactions
+    assert len({id(transaction) for transaction in transactions}) == 3
+    assert sleeps == [0.1, 0.2]
+
+
+def test_contention_retry_accepts_sdk_exhaustion_wrapper_with_explicit_aborted_cause():
+    calls = 0
+
+    def operation(_transaction):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            try:
+                raise Aborted("commit contention")
+            except Aborted as error:
+                raise ValueError("transaction failed after SDK attempts") from error
+        return "committed"
+
+    result = firestore_transaction_retry.run_with_transaction_contention_retry(
+        object,
+        operation,
+        operation_name="test_operation",
+        sleep=lambda _delay: None,
+    )
+
+    assert result == "committed"
+    assert calls == 2
+
+
+def test_contention_retry_does_not_replay_non_contention_error():
+    calls = 0
+
+    def operation(_transaction):
+        nonlocal calls
+        calls += 1
+        raise RuntimeError("not retryable")
+
+    with pytest.raises(RuntimeError, match="not retryable"):
+        firestore_transaction_retry.run_with_transaction_contention_retry(
+            object,
+            operation,
+            operation_name="test_operation",
+            sleep=lambda _delay: None,
+        )
+
+    assert calls == 1
+
+
+def test_aborted_implicit_context_does_not_make_replacement_error_retryable():
+    calls = 0
+
+    def operation(_transaction):
+        nonlocal calls
+        calls += 1
+        try:
+            raise Aborted("handled contention")
+        except Aborted:
+            raise RuntimeError("replacement failure")
+
+    with pytest.raises(RuntimeError, match="replacement failure"):
+        firestore_transaction_retry.run_with_transaction_contention_retry(
+            object,
+            operation,
+            operation_name="test_operation",
+            sleep=lambda _delay: None,
+        )
+
+    assert calls == 1
+
+
+def test_contention_retry_exhaustion_is_bounded_and_preserves_cause():
+    sleeps = []
+
+    def operation(_transaction):
+        raise Aborted("persistent contention")
+
+    with pytest.raises(firestore_transaction_retry.FirestoreContentionExhausted) as raised:
+        firestore_transaction_retry.run_with_transaction_contention_retry(
+            object,
+            operation,
+            operation_name="test_operation",
+            max_attempts=3,
+            sleep=sleeps.append,
+            random_value=lambda: 1.0,
+        )
+
+    assert isinstance(raised.value.__cause__, Aborted)
+    assert sleeps == [0.2, 0.4]
+
+
+def test_contention_retry_rejects_invalid_attempt_count_before_transaction():
+    opened = False
+
+    def transaction_factory():
+        nonlocal opened
+        opened = True
+        return object()
+
+    with pytest.raises(ValueError, match="max_attempts must be positive"):
+        firestore_transaction_retry.run_with_transaction_contention_retry(
+            transaction_factory,
+            lambda _transaction: None,
+            operation_name="test_operation",
+            max_attempts=0,
+        )
+
+    assert opened is False
+
+
 def test_projection_repair_extracts_affected_fact_ids_and_metadata():
     mutations = [
         memory_ledger.add_fact({"id": "m1", "subject_entity_id": "user", "object_entity_ids": ["project"]}),
@@ -318,6 +492,121 @@ def test_append_commit_enqueues_projection_repairs(monkeypatch):
 
     assert result["applied"] is True
     assert queued == [("uid-1", commit)]
+
+
+def test_append_commit_retries_precommit_contention_and_enqueues_projection_once(monkeypatch):
+    queued = []
+    calls = 0
+    commit = memory_ledger.build_commit(None, [memory_ledger.add_fact({"id": "m1"})])
+
+    def append_transaction(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise Aborted("read contention")
+        return {"commit": commit, "applied": True}
+
+    def fast_retry(transaction_factory, operation, **kwargs):
+        return firestore_transaction_retry.run_with_transaction_contention_retry(
+            transaction_factory,
+            operation,
+            **kwargs,
+            sleep=lambda _delay: None,
+            random_value=lambda: 0.0,
+        )
+
+    monkeypatch.setattr(memory_ledger, "_append_commit_transaction", append_transaction)
+    monkeypatch.setattr(memory_ledger, "run_with_transaction_contention_retry", fast_retry)
+    monkeypatch.setattr(
+        memory_ledger.projection_repair,
+        "enqueue_projection_repairs",
+        lambda uid, item, **_kwargs: queued.append((uid, item)) or ["repair"],
+    )
+
+    result = memory_ledger.append_commit("uid-1", None, commit["mutations"])
+
+    assert result["applied"] is True
+    assert calls == 2
+    assert queued == [("uid-1", commit)]
+
+
+def test_append_commit_with_builder_retries_contention_and_enqueues_projection_once(monkeypatch):
+    queued = []
+    seen_transactions = []
+    commit = memory_ledger.build_commit(None, [memory_ledger.add_fact({"id": "m1"})])
+    database = MagicMock()
+    database.transaction.side_effect = [object(), object()]
+
+    def append_transaction(transaction, *args, **kwargs):
+        seen_transactions.append(transaction)
+        if len(seen_transactions) == 1:
+            raise Aborted("read contention")
+        return {"commit": commit, "applied": True}
+
+    def fast_retry(transaction_factory, operation, **kwargs):
+        return firestore_transaction_retry.run_with_transaction_contention_retry(
+            transaction_factory,
+            operation,
+            **kwargs,
+            sleep=lambda _delay: None,
+            random_value=lambda: 0.0,
+        )
+
+    monkeypatch.setattr(memory_ledger, "_append_commit_with_builder_transaction", append_transaction)
+    monkeypatch.setattr(memory_ledger, "run_with_transaction_contention_retry", fast_retry)
+    monkeypatch.setattr(
+        memory_ledger.projection_repair,
+        "enqueue_projection_repairs",
+        lambda uid, item, **_kwargs: queued.append((uid, item)) or ["repair"],
+    )
+
+    result = memory_ledger.append_commit_with_builder(
+        "uid-1",
+        None,
+        lambda _transaction: {"mutations": commit["mutations"]},
+        firestore_client=database,
+    )
+
+    assert result["applied"] is True
+    assert len(seen_transactions) == 2
+    assert seen_transactions[0] is not seen_transactions[1]
+    assert queued == [("uid-1", commit)]
+
+
+def test_append_commit_with_builder_exhaustion_never_enqueues_projection(monkeypatch):
+    queued = []
+    database = MagicMock()
+
+    def append_transaction(*args, **kwargs):
+        raise Aborted("persistent contention")
+
+    def fast_retry(transaction_factory, operation, **kwargs):
+        return firestore_transaction_retry.run_with_transaction_contention_retry(
+            transaction_factory,
+            operation,
+            **kwargs,
+            sleep=lambda _delay: None,
+            random_value=lambda: 0.0,
+        )
+
+    monkeypatch.setattr(memory_ledger, "_append_commit_with_builder_transaction", append_transaction)
+    monkeypatch.setattr(memory_ledger, "run_with_transaction_contention_retry", fast_retry)
+    monkeypatch.setattr(
+        memory_ledger.projection_repair,
+        "enqueue_projection_repairs",
+        lambda *args, **kwargs: queued.append(args),
+    )
+
+    with pytest.raises(firestore_transaction_retry.FirestoreContentionExhausted):
+        memory_ledger.append_commit_with_builder(
+            "uid-1",
+            None,
+            lambda _transaction: {"mutations": []},
+            firestore_client=database,
+        )
+
+    assert database.transaction.call_count == firestore_transaction_retry.DEFAULT_MAX_ATTEMPTS
+    assert queued == []
 
 
 def test_process_projection_repairs_applies_queued_vector_repairs(monkeypatch):

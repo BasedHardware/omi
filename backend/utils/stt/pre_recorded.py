@@ -1,27 +1,35 @@
+import logging
 import os
 import wave as _wave
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from io import BytesIO
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from threading import RLock
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, cast
 
 import fal_client
 import httpx
 import numpy as np
 from deepgram import DeepgramClient, DeepgramClientOptions
 
+from config.prerecorded_stt import (
+    PrerecordedSTTConfigurationError as _PrerecordedSTTConfigurationError,
+    PrerecordedSTTService,
+    get_prerecorded_models,
+    require_provider_environment,
+)
 from models.transcript_segment import TranscriptSegment
 from utils.byok import get_byok_key
 from utils.other.endpoints import timeit
 from utils.stt.speaker_embedding import SPEAKER_MATCH_THRESHOLD, compare_embeddings, extract_embedding_from_bytes
-import logging
 
 _DG_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
 _MODULATE_TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)
 
 logger = logging.getLogger(__name__)
 
-stt_prerecorded_models = os.getenv('STT_PRERECORDED_MODEL', 'dg-nova-3').split(',')
+# Public compatibility export used by chat/router boundaries.
+PrerecordedSTTConfigurationError = _PrerecordedSTTConfigurationError
 
 _parakeet_languages = {
     'multi',
@@ -59,7 +67,6 @@ _parakeet_languages = {
 
 
 class PrerecordedSTTProvider(ABC):
-
     @abstractmethod
     def transcribe_url(
         self,
@@ -70,7 +77,8 @@ class PrerecordedSTTProvider(ABC):
         diarize: bool = True,
         language: Optional[str] = None,
         keywords: Optional[Sequence[str]] = None,
-    ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]: ...
+    ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
+        ...
 
     @abstractmethod
     def transcribe_bytes(
@@ -84,13 +92,8 @@ class PrerecordedSTTProvider(ABC):
         language: Optional[str] = None,
         return_language: bool = False,
         keywords: Optional[Sequence[str]] = None,
-    ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]: ...
-
-
-class PrerecordedSTTService:
-    DEEPGRAM = 'deepgram'
-    MODULATE = 'modulate'
-    PARAKEET = 'parakeet'
+    ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
+        ...
 
 
 def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Optional[str], str]:
@@ -100,7 +103,7 @@ def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Option
     First model that supports the language wins; falls back to Deepgram nova-3.
     """
     base_lang = language.split('-')[0].split('_')[0].lower() if language else 'en'
-    for m in stt_prerecorded_models:
+    for m in get_prerecorded_models():
         m = m.strip()
         if m.startswith('dg-'):
             dg_model = m.replace('dg-', '', 1)
@@ -117,18 +120,38 @@ def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Option
     return PrerecordedSTTService.DEEPGRAM, language, 'nova-3'
 
 
-# Initialize Deepgram client for pre-recorded transcription
-# WARN: the pre-recorded transcription is available on deepgram cloud
-_deepgram_options = DeepgramClientOptions(options={"keepalive": "true"})
-_deepgram_client = DeepgramClient(os.getenv('DEEPGRAM_API_KEY') or '', _deepgram_options)
+# Lazily initialized because constructing the SDK client at import makes every
+# backend consumer credential-dependent, including schema export and unit discovery.
+_deepgram_options: Optional[DeepgramClientOptions] = None
+_deepgram_client: Optional[DeepgramClient] = None
+_deepgram_client_lock = RLock()
+
+
+def _get_deepgram_options() -> DeepgramClientOptions:
+    global _deepgram_options
+    if _deepgram_options is None:
+        with _deepgram_client_lock:
+            if _deepgram_options is None:
+                _deepgram_options = DeepgramClientOptions(options={"keepalive": "true"})
+    return _deepgram_options
+
+
+def _get_deepgram_client() -> DeepgramClient:
+    global _deepgram_client
+    if _deepgram_client is None:
+        with _deepgram_client_lock:
+            if _deepgram_client is None:
+                require_provider_environment(PrerecordedSTTService.DEEPGRAM)
+                _deepgram_client = DeepgramClient(os.environ['DEEPGRAM_API_KEY'], _get_deepgram_options())
+    return _deepgram_client
 
 
 def _deepgram_client_for_request() -> DeepgramClient:
     """Route to BYOK Deepgram key when set; otherwise use the process-wide client."""
     byok = get_byok_key('deepgram')
     if byok:
-        return DeepgramClient(byok, _deepgram_options)
-    return _deepgram_client
+        return DeepgramClient(byok, _get_deepgram_options())
+    return _get_deepgram_client()
 
 
 # Languages supported by nova-3
@@ -271,7 +294,12 @@ def deepgram_prerecorded(
         List of word dicts with format: {'timestamp': [start, end], 'speaker': 'SPEAKER_XX', 'text': 'word'}
         Or tuple of (words, language) if return_language=True
     """
-    logger.info(f'deepgram_prerecorded {audio_url} {speakers_count} {attempts}')
+    logger.info(
+        'deepgram_prerecorded url_len=%s speakers_count=%s attempt=%s',
+        len(audio_url),
+        speakers_count,
+        attempts,
+    )
 
     try:
         # 'multi' language means auto-detection
@@ -341,7 +369,7 @@ def deepgram_prerecorded(
         return words
 
     except Exception as e:
-        logger.error(f'Deepgram prerecorded error: {e}')
+        logger.error('Deepgram prerecorded error exception_type=%s attempt=%s', type(e).__name__, attempts + 1)
         if attempts < 1:
             return deepgram_prerecorded(
                 audio_url,
@@ -353,7 +381,7 @@ def deepgram_prerecorded(
                 model,
                 keywords,
             )
-        raise RuntimeError(f'Deepgram transcription failed after {attempts + 1} attempts: {e}')
+        raise RuntimeError(f'Deepgram transcription failed after {attempts + 1} attempts') from e
 
 
 @timeit
@@ -472,7 +500,11 @@ def deepgram_prerecorded_from_bytes(
         return words
 
     except Exception as e:
-        logger.error(f'Deepgram prerecorded from bytes error: {e}')
+        logger.error(
+            'Deepgram prerecorded from bytes error exception_type=%s attempt=%s',
+            type(e).__name__,
+            attempts + 1,
+        )
         if attempts < 1:
             return deepgram_prerecorded_from_bytes(
                 audio_bytes,
@@ -486,7 +518,7 @@ def deepgram_prerecorded_from_bytes(
                 return_language,
                 keywords,
             )
-        raise RuntimeError(f'Deepgram transcription failed after {attempts + 1} attempts: {e}')
+        raise RuntimeError(f'Deepgram transcription failed after {attempts + 1} attempts') from e
 
 
 @timeit
@@ -542,9 +574,8 @@ def modulate_prerecorded_from_bytes(
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     logger.info(f'modulate_prerecorded_from_bytes bytes_len={len(audio_bytes)} {sample_rate} {diarize} {attempts}')
 
-    api_key = os.getenv('MODULATE_API_KEY')
-    if not api_key:
-        raise ValueError('MODULATE_API_KEY environment variable is not set')
+    require_provider_environment(PrerecordedSTTService.MODULATE)
+    api_key = os.environ['MODULATE_API_KEY']
 
     try:
         url = 'https://modulate-developer-apis.com/api/velma-2-stt-batch'
@@ -594,10 +625,10 @@ def modulate_prerecorded_from_bytes(
         return words
 
     except Exception as e:
-        logger.error(f'Modulate prerecorded error: {e}')
+        logger.error('Modulate prerecorded error exception_type=%s attempt=%s', type(e).__name__, attempts + 1)
         if attempts < 2:
             return modulate_prerecorded_from_bytes(audio_bytes, sample_rate, diarize, attempts + 1, return_language)
-        raise RuntimeError(f'Modulate transcription failed after {attempts + 1} attempts: {e}')
+        raise RuntimeError(f'Modulate transcription failed after {attempts + 1} attempts') from e
 
 
 @timeit
@@ -609,7 +640,9 @@ def modulate_prerecorded(
     diarize: bool = True,
     language: Optional[str] = None,
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
-    logger.info(f'modulate_prerecorded {audio_url} {speakers_count} {attempts}')
+    logger.info(
+        'modulate_prerecorded url_len=%s speakers_count=%s attempt=%s', len(audio_url), speakers_count, attempts
+    )
     try:
         with httpx.Client(timeout=_MODULATE_TIMEOUT) as client:
             resp = client.get(audio_url)
@@ -619,10 +652,14 @@ def modulate_prerecorded(
             audio_bytes, diarize=diarize, attempts=attempts, return_language=return_language
         )
     except Exception as e:
-        logger.error(f'Modulate prerecorded (url) error: {e}')
+        logger.error(
+            'Modulate prerecorded (url) error exception_type=%s attempt=%s',
+            type(e).__name__,
+            attempts + 1,
+        )
         if attempts < 1:
             return modulate_prerecorded(audio_url, speakers_count, attempts + 1, return_language, diarize, language)
-        raise RuntimeError(f'Modulate transcription (url) failed after {attempts + 1} attempts: {e}')
+        raise RuntimeError(f'Modulate transcription (url) failed after {attempts + 1} attempts') from e
 
 
 # ---------------------------------------------------------------------------
@@ -631,7 +668,6 @@ def modulate_prerecorded(
 
 
 class DeepgramPrerecordedProvider(PrerecordedSTTProvider):
-
     def __init__(self, model: str = 'nova-3'):
         self._model = model
 
@@ -685,7 +721,6 @@ class DeepgramPrerecordedProvider(PrerecordedSTTProvider):
 
 
 class ModulatePrerecordedProvider(PrerecordedSTTProvider):
-
     def _normalize_lang(self, language: Optional[str]) -> str:
         if not language:
             return 'en'
@@ -753,9 +788,8 @@ def parakeet_prerecorded_from_bytes(
         f'parakeet_prerecorded_from_bytes bytes_len={len(audio_bytes)} {sample_rate} {diarize} {attempts} encoding={encoding}'
     )
 
-    api_url = os.getenv('HOSTED_PARAKEET_API_URL')
-    if not api_url:
-        raise ValueError('HOSTED_PARAKEET_API_URL environment variable is not set')
+    require_provider_environment(PrerecordedSTTService.PARAKEET)
+    api_url = os.environ['HOSTED_PARAKEET_API_URL']
 
     try:
         if encoding:
@@ -778,8 +812,17 @@ def parakeet_prerecorded_from_bytes(
                 response = client.post(url, files={'file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')})
                 use_v2 = False
         response.raise_for_status()
-        result: Dict[str, Any] = response.json()
+        payload: Any = response.json()
 
+        # A Parakeet result always carries both keys, even for silence ({"text": "",
+        # "segments": []}). A 200 body with neither key is a degraded or foreign
+        # responder (misrouted ILB, proxy error shell), not a no-speech verdict. Raise
+        # so the sync job stays truthful and clients keep the audio as retry material
+        # instead of marking the WAL synced and discarding it. See #9586.
+        if not isinstance(payload, dict) or ('segments' not in payload and 'text' not in payload):
+            raise RuntimeError('Parakeet response contained neither segments nor text')
+
+        result: Dict[str, Any] = cast(Dict[str, Any], payload)
         raw_segments = result.get('segments', [])
         segments: List[Dict[str, Any]] = list(raw_segments) if isinstance(raw_segments, list) else []  # type: ignore[reportUnknownArgumentType]  # untyped external JSON
         full_text = (result.get('text') or '').strip()
@@ -823,12 +866,12 @@ def parakeet_prerecorded_from_bytes(
         return words
 
     except Exception as e:
-        logger.error(f'Parakeet prerecorded error: {e}')
+        logger.error('Parakeet prerecorded error exception_type=%s attempt=%s', type(e).__name__, attempts + 1)
         if attempts < 1:
             return parakeet_prerecorded_from_bytes(
                 audio_bytes, sample_rate, diarize, attempts + 1, None, channels, language, return_language
             )
-        raise RuntimeError(f'Parakeet transcription failed after {attempts + 1} attempts: {e}')
+        raise RuntimeError(f'Parakeet transcription failed after {attempts + 1} attempts') from e
 
 
 @timeit
@@ -863,10 +906,14 @@ def parakeet_prerecorded(
             audio_bytes, diarize=diarize, attempts=attempts, return_language=return_language, language=language
         )
     except Exception as e:
-        logger.error(f'Parakeet prerecorded (url) error: {e}')
+        logger.error(
+            'Parakeet prerecorded (url) error exception_type=%s attempt=%s',
+            type(e).__name__,
+            attempts + 1,
+        )
         if attempts < 1:
             return parakeet_prerecorded(audio_url, speakers_count, attempts + 1, return_language, diarize, language)
-        raise RuntimeError(f'Parakeet transcription (url) failed after {attempts + 1} attempts: {e}')
+        raise RuntimeError(f'Parakeet transcription (url) failed after {attempts + 1} attempts') from e
 
 
 def _parakeet_assign_speaker_sync(
@@ -930,7 +977,6 @@ def _wrap_pcm_as_wav(pcm_bytes: bytes, sample_rate: int, channels: int, bits_per
 
 
 class ParakeetPrerecordedProvider(PrerecordedSTTProvider):
-
     def transcribe_url(
         self,
         audio_url: str,
@@ -974,20 +1020,14 @@ class ParakeetPrerecordedProvider(PrerecordedSTTProvider):
         )
 
 
-def get_prerecorded_provider(language: str = 'en') -> PrerecordedSTTProvider:
-    """Factory: return the active provider based on STT_PRERECORDED_MODEL with language fallback."""
-    base_lang = language.split('-')[0].split('_')[0].lower() if language else 'en'
-    for m in stt_prerecorded_models:
-        m = m.strip()
-        if m == 'modulate-velma-2':
-            return ModulatePrerecordedProvider()
-        if m == 'parakeet':
-            if base_lang in _parakeet_languages:
-                return ParakeetPrerecordedProvider()
-            continue
-        if m.startswith('dg-'):
-            return DeepgramPrerecordedProvider(model=m.replace('dg-', '', 1))
-    return DeepgramPrerecordedProvider(model='nova-3')
+def get_prerecorded_provider(language: Optional[str] = 'en') -> PrerecordedSTTProvider:
+    """Construct exactly the language-aware provider selected for telemetry."""
+    service, _provider_language, model = get_prerecorded_service(language)
+    if service == PrerecordedSTTService.MODULATE:
+        return ModulatePrerecordedProvider()
+    if service == PrerecordedSTTService.PARAKEET:
+        return ParakeetPrerecordedProvider()
+    return DeepgramPrerecordedProvider(model=model)
 
 
 # ---------------------------------------------------------------------------
@@ -1006,7 +1046,7 @@ def prerecorded(
     keywords: Optional[Sequence[str]] = None,
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     """Route pre-recorded URL transcription through STT_PRERECORDED_MODEL."""
-    provider = get_prerecorded_provider()
+    provider = get_prerecorded_provider(language)
     return provider.transcribe_url(
         audio_url,
         speakers_count=speakers_count,
@@ -1031,7 +1071,7 @@ def prerecorded_from_bytes(
     keywords: Optional[Sequence[str]] = None,
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     """Route pre-recorded bytes transcription through STT_PRERECORDED_MODEL."""
-    provider = get_prerecorded_provider()
+    provider = get_prerecorded_provider(language)
     return provider.transcribe_bytes(
         audio_bytes,
         sample_rate=sample_rate,

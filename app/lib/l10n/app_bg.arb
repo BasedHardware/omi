@@ -1,5 +1,6 @@
 {
     "@@locale": "bg",
+    "sessionExpiredSignInAgain": "Сесията изтече — влезте отново.",
     "appTitle": "Omi",
     "conversationTab": "Разговор",
     "transcriptTab": "Транскрипт",

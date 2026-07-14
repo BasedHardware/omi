@@ -181,11 +181,157 @@ a stale SQLite re-read clobbering it — so `requery_suppressed_during_drag=true
 TASK-06 assertion; the control proves the guard is load-bearing. The action **forces the
 filtered-requery branch** internally, so the assertion is never vacuous even with no user
 filter active; it polls the requery counter (no fixed sleeps) for a deterministic signal.
-The default task filter (`.last7Days`, a date tag) also arms the path in normal use, so
-`requery_fires_without_suppress=true` confirms the injected push *would* have requeried
-without the drag guard. `had_non_status_filters=false` means no filter is active and the
-requery path is inert (the suppression assertion is then vacuous — apply a date/tag
-filter first). Non-production bundles only.
+The Tasks page no longer exposes user filters (the popover was replaced by the
+mobile-parity completed toggle), so the forced branch is the only way the requery
+path arms; `requery_fires_without_suppress=true` confirms the injected push *would*
+have requeried without the drag guard. Non-production bundles only.
+
+### 2g. Inspect the feedback payload without submitting (SET-02)
+`FeedbackView.submitFeedback()` always fires a real Sentry event and attaches the app log
+plus a `desktop_diagnostics.json`, so there's no way to verify the payload is token-free
+without spamming Sentry. `dump_feedback_payload_dryrun` (non-prod only) assembles the
+**same** payload — the report title (`feedbackReportTitle`) and the diagnostics JSON
+(`writeDiagnosticsAttachment`, the exact builder the real submit uses) — and returns it
+**without** calling `SentrySDK`, so the diagnostics JSON can be secret-scanned.
+
+```bash
+cd desktop/macos
+./scripts/omi-ctl action dump_feedback_payload_dryrun message="mic dropped mid-call" \
+  | python3 -c 'import json,sys,re; d=json.load(sys.stdin)["result"]["detail"]; \
+assert d["sentry_capture_invoked"]=="false" and d["would_submit_to_sentry"]=="false"; \
+dj=d["diagnostics_json"]; \
+pats=[r"eyJ[A-Za-z0-9_-]{10,}",r"AIza[0-9A-Za-z_-]{10,}",r"omi_(auto|mcp)_[0-9a-f]{8,}",r"AMf-[A-Za-z0-9_-]{10,}",r"[Bb]earer\s+\S{12,}",r"(?i)_API_KEY\s*[=:]\s*\S+"]; \
+hits=[p for p in pats if re.search(p,dj)]; \
+print("title:", d["sentry_message"]); print("secret hits:", hits or "NONE")'
+```
+Assert `sentry_capture_invoked=false`, `would_submit_to_sentry=false`, and **no secret
+hits** in `diagnostics_json`. Empty `message` yields the "User Report (logs only)" title.
+The action returns the log only as **metadata** (`log_attachment_filename`/`_exists`/`_bytes`) —
+never its contents — so the bridge response itself can't leak the raw log. To confirm no
+Sentry event fired, check the app log has no "User report submitted to Sentry" line.
+
+### 2h. Prove /state survives a wedged main thread (bridge responsiveness)
+`GET /state` refreshes live UI fields on the MainActor. If the main thread is wedged
+(e.g. a sign-in Keychain read blocking on `SecItemCopyMatching`), that hop used to hang
+the whole bridge — `curl /state` timed out with 0 bytes. `liveAutomationSnapshot()` now
+bounds the hop (`awaitWithTimeout`, 3s) and falls back to the last cached snapshot with
+`snapshotStale=true`, so `/state` always answers. `debug_block_main_thread` (non-prod)
+wedges the main thread on demand so this is testable:
+```bash
+cd desktop/macos
+# wedge the main thread for 8s, then /state must still answer (stale) within ~3s
+./scripts/omi-ctl action debug_block_main_thread durationMs=8000
+./scripts/omi-ctl state | python3 -c 'import json,sys; d=json.load(sys.stdin)["result"]; print("stale:", d.get("snapshotStale"))'
+#   expect snapshotStale=true during the wedge (cached fallback), false again once it clears
+```
+Typed flow: `scripts/omi-harness run e2e/flows/bridge-state-wedge-fallback.yaml --lane bridge`.
+Hermetic ratchet for the timeout itself: `xcrun swift test --package-path Desktop --filter AwaitWithTimeoutTests`.
+
+### 2i. Prove Quit & Reopen relaunches the same bundle, session intact (PERM-06)
+The permission "Quit & Reopen" flow (shown after granting Accessibility / Screen Recording)
+calls `AppState.restartApp()` — relaunch the same bundle, keep the auth/onboarding session.
+`quit_and_reopen` (non-prod) triggers that exact path (not the onboarding-mutating
+`reset_onboarding`), delayed so the action's HTTP response flushes before the process
+terminates. The relaunch is `open <bundle>` and drops argv/env — but on non-prod builds
+`restartApp()` re-passes `--automation-port=<current port>` as an argv, so the reopened
+app **rebinds the SAME port** you launched with (argv beats any launchd-inherited
+`OMI_AUTOMATION_PORT`). Keep polling the original `OMI_AUTOMATION_PORT`; no rediscovery.
+
+Two traps make a naive `wait-ready` lie, so the recipe below guards against both:
+- **Wait for a *new* listener pid.** `quit_and_reopen` returns immediately and only
+  schedules the restart ~`delay_ms` later; the pre-quit process is still alive and
+  answering for ~1s. Poll until the pid *listening on the port* differs from the one
+  you captured before, or you'll assert the OLD process's state (false PASS). Track the
+  listener via `lsof -tiTCP:$PORT -sTCP:LISTEN`, not `pgrep` — a `pgrep -f` pattern also
+  matches the shell running this recipe.
+- **Poll with *fresh* `omi-ctl` calls.** The relaunch is a fresh process, so it mints a
+  new bridge auth token and writes it to the same port-keyed token file. A single
+  long-lived `omi-ctl` process caches the token from its first read, so it would keep
+  presenting the *stale* token and 401 forever (false FAIL). Each `./scripts/omi-ctl`
+  invocation is a fresh process that re-reads the token file — so loop over separate
+  calls, don't reuse one `wait-ready`.
+```bash
+cd desktop/macos
+export OMI_AUTOMATION_PORT=47894           # whatever port you launched the bundle with
+BEFORE_PID=$(lsof -tiTCP:$OMI_AUTOMATION_PORT -sTCP:LISTEN 2>/dev/null | head -1)
+./scripts/omi-ctl state | python3 -c 'import json,sys; d=json.load(sys.stdin)["result"]; print("before", d["bundleIdentifier"], d["isSignedIn"], d["hasCompletedOnboarding"])'
+./scripts/omi-ctl action quit_and_reopen        # detail: {"restarting":"true", "bundle_id":…, "relaunch_path":…, "delay_ms":"400"}
+# wait for the OLD listener to be replaced by a NEW one on the SAME port (fresh omi-ctl each try)
+for i in $(seq 1 60); do
+  PID=$(lsof -tiTCP:$OMI_AUTOMATION_PORT -sTCP:LISTEN 2>/dev/null | head -1)
+  if [ -n "$PID" ] && [ "$PID" != "$BEFORE_PID" ] && ./scripts/omi-ctl state >/dev/null 2>&1; then break; fi
+  sleep 1
+done
+./scripts/omi-ctl state | python3 -c 'import json,sys; d=json.load(sys.stdin)["result"]; print("after", d["bundleIdentifier"], d["isSignedIn"], d["hasCompletedOnboarding"], d["bridgePort"])'
+#   assert: same bundleIdentifier, isSignedIn=true, hasCompletedOnboarding=true, bridgePort=47894 (session intact, SAME port)
+# the reopened process's own argv carries the re-passed port (proves the fix):
+#   ps -o command= -p "$(lsof -tiTCP:$OMI_AUTOMATION_PORT -sTCP:LISTEN | head -1)"  → …/Omi Computer --automation-port=47894
+```
+Hermetic ratchets: `xcrun swift test --package-path Desktop --filter QuitAndReopenActionTests`
+and `--filter RestartRelaunchCommandTests` (non-prod relaunch re-passes the port as argv).
+
+### 2j. Prove the chat usage limiter is deterministic + dev-resettable (CHAT-05)
+The free-tier monthly chat limiter (`FloatingBarUsageLimiter`, 30 messages/month) is
+deterministic and dev-resettable. Driving it to the limit through real chat would burn
+LLM calls, so two non-prod bridge actions expose the counter directly: `usage_limiter_snapshot`
+(read `is_limit_reached` / `remaining_queries` / `limit_description`) and `reset_usage_limiter`
+(reset the counter). No LLM spend. Note: `reset_usage_limiter` is the sign-out-style
+`FloatingBarUsageLimiter.reset()` — it clears the cached quota **and** cached-plan state
+(and its `UserDefaults` key) on the non-prod bundle; the next subscription poll repopulates
+it. Assert on `is_limit_reached` (not `remaining_queries`, which reads `Int.max` when no
+quota is loaded).
+```bash
+cd desktop/macos
+./scripts/omi-ctl action usage_limiter_snapshot   # {"is_limit_reached":…, "remaining_queries":…, "limit_description":…}
+./scripts/omi-ctl action reset_usage_limiter      # {"reset":"true","is_limit_reached":"false","remaining_queries":…}
+./scripts/omi-ctl action usage_limiter_snapshot   # assert is_limit_reached=false after reset (dev-resettable proven)
+```
+Hermetic ratchets: `xcrun swift test --package-path Desktop --filter FloatingBarUsageLimiterTests`
+(deterministic counter + `testResetClearsLimitReachedState`) and `--filter UsageLimiterActionTests`
+(the non-prod actions wire to the limiter and the reset is prod-gated).
+
+### 2k. Prove rapid reorders coalesce through the 500ms debounce (TASK-05)
+`reorder_task` flushes the sortOrder sync by default (deterministic SQLite reads for
+CRUD recipes) — which *hides* the debounce under test. Pass `flush=false` to leave the
+production 500ms debounce running: rapid calls must coalesce into exactly ONE
+`TasksVM: Synced N sort orders` log line, with no lost update.
+```bash
+cd desktop/macos
+./scripts/omi-ctl action seed_tasks count=5 prefix=T05x      # note the returned ids
+MARK="T05-$(date +%s)"; echo "$MARK" >> /private/tmp/omi-dev.log
+# three reorders inside one debounce window (each returns immediately, flushed=false)
+./scripts/omi-ctl action reorder_task id=<id1> index=0 category=nodeadline flush=false
+./scripts/omi-ctl action reorder_task id=<id2> index=1 category=nodeadline flush=false
+./scripts/omi-ctl action reorder_task id=<id3> index=2 category=nodeadline flush=false
+sleep 2   # > 500ms debounce + sync
+awk "/$MARK/{f=1} f" /private/tmp/omi-dev.log | grep -c 'TasksVM: Synced'   # assert exactly 1
+./scripts/omi-ctl action dump_tasks limit=5000                 # assert final order persisted (no lost update)
+```
+Hermetic ratchets: `--filter HardeningSeamActionTests` (flush param wiring) and
+`--filter Task03ReorderStressTests` (150-reorder collision-free/deterministic property).
+
+### 2l. Prove post-wake restart paths without sleeping the machine (CHAT-07)
+`simulate_system_wake` (non-prod) posts `NSWorkspace.didWakeNotification` on the
+**workspace** notification center — the top of the real wake chain. Every production
+consumer then fires exactly as on a physical wake: `RealtimeHubController` re-warms
+(or defers) its session, and AppState re-broadcasts the default-center
+`.systemDidWake` downstream. (Posting only `.systemDidWake` would silently miss
+RealtimeHub, which observes the workspace center directly.) The stray-turn_end half
+of CHAT-07 is the CHAT-02 suspend/resume path (a SIGSTOP'd agent across a "sleep" is
+the same stale-subprocess class) — already runtime-proven; see §2e.
+```bash
+cd desktop/macos
+MARK="C07-$(date +%s)"; echo "$MARK" >> /private/tmp/omi-dev.log
+./scripts/omi-ctl action simulate_system_wake     # {"posted":"NSWorkspace.didWakeNotification"}
+sleep 2
+awk "/$MARK/{f=1} f" /private/tmp/omi-dev.log | grep -E 'System woke from sleep|system_wake'
+#   assert: "System woke from sleep" (AppState observer ran) AND a RealtimeHub system_wake line —
+#   either "re-warming idle session" or "deferring system_wake ..." (defer while mid-turn). With no
+#   warm session yet, requestSessionRefresh no-ops by design (guard session != nil); warm one first
+#   with a ptt_test_burst if you need the re-warm line specifically.
+```
+Hermetic ratchet: `--filter HardeningSeamActionTests` (action posts the real top-of-chain
+signal on the workspace center, non-prod gated).
 
 ### The full loop
 ```bash
@@ -273,7 +419,7 @@ System Tray Menu
 **Main sidebar navigation:**
 - Icons are `image` type elements with accessibility identifiers: `sidebar_dashboard`, `sidebar_chat`, `sidebar_memories`, `sidebar_tasks`, `sidebar_rewind`, `sidebar_apps`, `sidebar_settings`
 - Use `find key sidebar_dashboard click` for reliable navigation (survives UI changes)
-- Keyboard shortcuts: Cmd+1 (Dashboard), Cmd+2 (Chat), Cmd+3 (Memories), Cmd+4 (Tasks), Cmd+5 (Rewind), Cmd+6 (Apps), Cmd+, (Settings)
+- Keyboard shortcuts: Cmd+1 (Dashboard), Cmd+2 (Conversations), Cmd+3 (Memories), Cmd+4 (Tasks), Cmd+5 (Rewind), Cmd+6 (Apps), Cmd+, (Settings)
 - Use `click` — these are SwiftUI views with onTapGesture
 
 **Settings sidebar navigation:**
@@ -298,14 +444,14 @@ Reference flows in `desktop/macos/e2e/flows/*.yaml` describe the app's key user 
 |------|--------|-------|--------|
 | `flows/navigation.yaml` | SidebarView, DesktopHomeView | 6/6 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/RVS7NChPvj.html) |
 | `flows/dashboard.yaml` | DashboardPage, GoalsWidget, TasksWidget | 3/6 (3 skipped) | [report](https://flow-walker.beastoin.workers.dev/runs/ghCdGIUAA2.html) |
-| `flows/chat.yaml` | ChatPage, ChatProvider | 5/5 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/z62Nll0IzR.html) |
+| `flows/chat-hermetic.yaml` | ChatPage, ChatProvider | 5/5 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/z62Nll0IzR.html) |
 | `flows/memories.yaml` | MemoriesPage, MemoryGraphPage | 5/6 (1 skipped) | [report](https://flow-walker.beastoin.workers.dev/runs/Mkp6ahc12I.html) |
 | `flows/tasks.yaml` | TasksPage, TasksStore | 4/5 (1 skipped) | [report](https://flow-walker.beastoin.workers.dev/runs/ealB_-UdqS.html) |
-| `flows/settings.yaml` | SettingsPage, SettingsSidebar | 9/9 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/RoTW8GeljN.html) |
+| `flows/settings-basic.yaml` | SettingsPage, SettingsSidebar | 9/9 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/RoTW8GeljN.html) |
 | `flows/language.yaml` | SettingsPage, SettingsSidebar | 5 steps | — |
 | `flows/rewind.yaml` | RewindPage | 4/4 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/1HE5OsPOOy.html) |
 | `flows/apps.yaml` | IntegrationsPage | 6/6 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/VDGw-wbHqa.html) |
-| `flows/refer.yaml` | ReferPage | 3/3 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/Jz8ymviOy1.html) |
+| `flows/refer-external.yaml` | Profile menu → affiliate URL | 3/3 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/Jz8ymviOy1.html) |
 | `flows/screen-recording-permission.yaml` | RewindPage, ScreenCaptureService, PermissionsPage | 7/7 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/3WoXUG6xkT.html) |
 | `flows/audio-recording.yaml` | ConversationsPage, AudioCaptureService, AppState | 7/7 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/UdkzB-dYG_.html) |
 

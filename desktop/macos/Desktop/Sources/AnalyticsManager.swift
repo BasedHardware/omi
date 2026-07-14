@@ -65,7 +65,7 @@ class AnalyticsManager {
 
   func onboardingChatToolUsed(tool: String, properties: [String: Any] = [:]) {
     var props = properties
-    props["tool"] = tool
+    props["tool"] = ChatTelemetryDimension.toolName(tool)
     PostHogManager.shared.track("Onboarding Chat Tool Used", properties: props)
   }
 
@@ -74,20 +74,32 @@ class AnalyticsManager {
     PostHogManager.shared.track("Onboarding Chat Message", properties: props)
   }
 
-  /// Track full onboarding chat message content for debugging user issues.
+  /// Track onboarding chat shape without sending the user's message content.
   func onboardingChatMessageDetailed(role: String, text: String, step: String, toolCalls: [String]? = nil, model: String? = nil, error: String? = nil) {
     var props: [String: Any] = [
       "role": role,
       "step": step,
-      "text": String(text.prefix(2000)),
       "text_length": text.count,
     ]
     if let toolCalls = toolCalls, !toolCalls.isEmpty {
-      props["tool_calls"] = toolCalls.joined(separator: ", ")
+      let boundedTools = Array(Set(toolCalls.map(ChatTelemetryDimension.toolName))).sorted().prefix(8)
+      props["tool_calls"] = boundedTools.joined(separator: ",")
+      props["tool_call_count"] = toolCalls.count
     }
-    if let model = model { props["model"] = model }
-    if let error = error { props["error"] = error }
+    if let model = model { props["model"] = Self.boundedAnalyticsDimension(model) }
+    if let error = error {
+      let errorClass = PostHogManager.diagnosticErrorClass(error)
+      props["error"] = errorClass
+      props["error_class"] = errorClass
+    }
     PostHogManager.shared.track("onboarding_chat_message_detailed", properties: props)
+  }
+
+  private static func boundedAnalyticsDimension(_ value: String) -> String {
+    let normalized = value.lowercased().map { character in
+      character.isLetter || character.isNumber || "._:-".contains(character) ? character : "_"
+    }
+    return String(normalized.prefix(80))
   }
 
   // MARK: - Authentication Events
@@ -100,8 +112,8 @@ class AnalyticsManager {
     PostHogManager.shared.signInCompleted(provider: provider)
   }
 
-  func signInFailed(provider: String, error: String) {
-    PostHogManager.shared.signInFailed(provider: provider, error: error)
+  func signInFailed(provider: String, error: String, errorClass: String? = nil) {
+    PostHogManager.shared.signInFailed(provider: provider, error: error, errorClass: errorClass)
   }
 
   func authFlowEvent(_ eventName: String, properties: [String: Any]) {
@@ -384,8 +396,6 @@ class AnalyticsManager {
 
     // App bundle location - helps diagnose installation issues
     if let bundlePath = Bundle.main.bundlePath as String? {
-      diagnostics["bundle_path"] = bundlePath
-
       // Categorize the installation location
       if bundlePath.hasPrefix("/Volumes/") {
         diagnostics["install_location"] = "dmg_mounted"
@@ -400,6 +410,7 @@ class AnalyticsManager {
       } else {
         diagnostics["install_location"] = "other"
       }
+      diagnostics["is_standard_install"] = bundlePath.hasPrefix("/Applications/")
     }
 
     // Device info
@@ -534,30 +545,20 @@ class AnalyticsManager {
 
   // MARK: - Claude Agent Events
 
-  /// Track when a Claude agent query completes (one full send → response cycle)
-  func chatAgentQueryCompleted(
-    durationMs: Int,
-    toolCallCount: Int,
-    toolNames: [String],
-    costUsd: Double,
-    messageLength: Int,
-    screenToolRequested: Bool = false,
-    screenToolSucceeded: Bool = false,
-    screenToolApprovalRequired: Bool = false,
-    screenToolFailureCodes: [String] = []
-  ) {
-    let props: [String: Any] = [
-      "duration_ms": durationMs,
-      "tool_call_count": toolCallCount,
-      "tool_names": toolNames.joined(separator: ","),
-      "cost_usd": costUsd,
-      "response_length": messageLength,
-      "screen_tool_requested": screenToolRequested,
-      "screen_tool_succeeded": screenToolSucceeded,
-      "screen_tool_approval_required": screenToolApprovalRequired,
-      "screen_tool_failure_codes": screenToolFailureCodes.joined(separator: ","),
+  func chatQueryTelemetry(_ event: ChatQueryTelemetryEvent) {
+    let payload = event.analyticsPayload
+    PostHogManager.shared.track(payload.eventName, properties: payload.properties)
+    let diagnosticKeys = [
+      "duration_ms", "error_class", "cancel_reason", "partial_response",
+      "surface", "harness", "runtime_surface",
     ]
-    PostHogManager.shared.track("chat_agent_query_completed", properties: props)
+    let diagnostics = diagnosticKeys.compactMap { key -> String? in
+      guard let value = payload.properties[key] else { return nil }
+      return "\(key)=\(value)"
+    }.joined(separator: " ")
+    log(
+      "Chat telemetry event=\(payload.eventName) attempt_id=\(payload.properties["attempt_id"] ?? "missing") \(diagnostics)"
+    )
   }
 
   func screenContextToolResult(
@@ -620,26 +621,11 @@ class AnalyticsManager {
 
   /// Track individual tool calls made by the Claude agent
   func chatToolCallCompleted(toolName: String, durationMs: Int) {
-    let cleanName: String
-    if toolName.hasPrefix("mcp__") {
-      cleanName = String(toolName.split(separator: "__").last ?? Substring(toolName))
-    } else {
-      cleanName = toolName
-    }
     let props: [String: Any] = [
-      "tool_name": cleanName,
+      "tool_name": ChatTelemetryDimension.toolName(toolName),
       "duration_ms": durationMs,
     ]
     PostHogManager.shared.track("chat_tool_call_completed", properties: props)
-  }
-
-  /// Track when the Claude agent bridge fails to start or errors
-  func chatAgentError(error: String, rawError: String? = nil) {
-    var props: [String: Any] = ["error": error]
-    if let raw = rawError, raw != error {
-      props["raw_error"] = String(raw.prefix(500))
-    }
-    PostHogManager.shared.track("chat_agent_error", properties: props)
   }
 
   // MARK: - Conversation Events (Additional)
@@ -713,6 +699,14 @@ class AnalyticsManager {
     PostHogManager.shared.taskExtracted(taskCount: taskCount)
   }
 
+  func taskIntelligenceAttribution(_ event: TaskIntelligenceAttributionEvent) {
+    PostHogManager.shared.taskIntelligenceAttribution(event)
+  }
+
+  func proactiveTaskGateEvaluated(_ trace: TaskInterruptionGateTrace) {
+    PostHogManager.shared.proactiveTaskGateEvaluated(trace)
+  }
+
   func taskPromoted(taskCount: Int) {
     PostHogManager.shared.taskPromoted(taskCount: taskCount)
   }
@@ -761,12 +755,32 @@ class AnalyticsManager {
     PostHogManager.shared.updateAvailable(version: version, context: context, item: item)
   }
 
+  func updateInstallStarted(attempt: UpdateInstallAttempt) {
+    PostHogManager.shared.updateInstallStarted(attempt: attempt)
+  }
+
   func updateInstalled(
-    version: String,
-    context: UpdateAnalyticsContext,
-    item: UpdateItemAnalytics
+    attempt: UpdateInstallAttempt,
+    installedVersion: String,
+    installedBuild: String
   ) {
-    PostHogManager.shared.updateInstalled(version: version, context: context, item: item)
+    PostHogManager.shared.updateInstalled(
+      attempt: attempt,
+      installedVersion: installedVersion,
+      installedBuild: installedBuild
+    )
+  }
+
+  func updateInstallVerificationFailed(
+    attempt: UpdateInstallAttempt,
+    installedVersion: String,
+    installedBuild: String
+  ) {
+    PostHogManager.shared.updateInstallVerificationFailed(
+      attempt: attempt,
+      installedVersion: installedVersion,
+      installedBuild: installedBuild
+    )
   }
 
   func updateCheckFailed(diagnostics: UpdateFailureDiagnostics) {

@@ -44,9 +44,9 @@ The backend exposes the Prometheus counter `llm_gateway_chat_extraction_requests
 
 ## Deployment
 
-Development LLM Gateway deploys are intentionally allowed before production deploys. The dedicated manual workflow and the automatic workflow deploy only to development until the production rollout checklist is explicitly completed and the workflow guard is removed.
+Development gateway deploys continue automatically from `main`. Production deployment is manual-only through the dedicated workflow and requires the independent production service-token secret before Helm can run.
 
-Gateway deploys must go through `backend/scripts/deploy-llm-gateway.sh`. The helper validates backend/gateway env wiring, deploys backend secrets through `backend/scripts/deploy-backend-secrets.sh`, adopts the known development ingress if it was bootstrapped before Helm owned it, and then runs the Helm upgrade. Do not copy raw `helm upgrade` commands into workflows; that bypasses the dev-only guardrail and required secret/env preflight.
+Gateway deploys must go through `backend/scripts/deploy-llm-gateway.sh`. The helper validates backend/gateway env wiring, deploys backend secrets through `backend/scripts/deploy-backend-secrets.sh`, adopts known gateway ingress resources if they predate Helm ownership, and then runs the Helm upgrade. Do not copy raw `helm upgrade` commands into workflows; that bypasses the required secret/env preflight.
 
 Primary user chat should follow later as a separate lane, likely:
 
@@ -170,6 +170,8 @@ dev:  http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
 prod: http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080
 ```
 
+Cloud Run callers use the private internal load-balancer address `http://172.16.160.108`, reserved as `prod-omi-self-hosted-llm-ip-address`. The production gateway chart owns the internal ingress and backend config for that address; do not point Cloud Run at Kubernetes DNS.
+
 Repo wiring:
 
 - gateway chart: `backend/charts/llm-gateway/`
@@ -183,7 +185,8 @@ Backend-listen env:
 |---|---|
 | `OMI_LLM_GATEWAY_URL` | Internal service URL above |
 | `OMI_LLM_GATEWAY_SERVICE_TOKEN` | `*-omi-backend-secrets` key `OMI_LLM_GATEWAY_SERVICE_TOKEN` |
-| `OMI_LLM_GATEWAY_FEATURE_MODE` | Dev serving flip: `gateway` routes non-BYOK `get_llm` traffic through per-feature `omi:auto:*` lanes |
+| `OMI_LLM_GATEWAY_FEATURE_MODE` | `gateway` routes non-BYOK `get_llm` traffic through per-feature `omi:auto:*` lanes |
+| `OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE` | Required and set to `true` on prod callers; prevents an accidental production route flip without an explicit checked-in enablement |
 | `OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION` | When `true`, acknowledged direct surfaces (BYOK, agentic, file chat, omni realtime) stay on providers |
 | `OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED` | Broad dev shadow kill switch; keep `false` while feature mode is serving |
 | `OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED` | Feature-level shadow kill switch for conversation structure extraction |
@@ -199,6 +202,7 @@ Gateway env:
 | `OMI_LLM_GATEWAY_SERVICE_TOKEN` | same `*-omi-backend-secrets` key `OMI_LLM_GATEWAY_SERVICE_TOKEN` |
 | `LLM_GATEWAY_ALLOWED_CALLERS` | `backend` |
 | `OPENAI_API_KEY` | existing `*-omi-backend-secrets` key `OPENAI_API_KEY` |
+| `ANTHROPIC_API_KEY` | existing `*-omi-backend-secrets` key `ANTHROPIC_API_KEY` (required for managed Messages lanes) |
 | `GEMINI_API_KEY` | existing `*-omi-backend-secrets` key `GEMINI_API_KEY` (required for gemini-backed feature lanes) |
 | `OPENROUTER_API_KEY` | existing `*-omi-backend-secrets` key `OPENROUTER_API_KEY` (required for openrouter-backed feature lanes) |
 | `METRICS_SECRET` | existing `*-omi-backend-secrets` key `METRICS_SECRET` |
@@ -267,7 +271,7 @@ PROD readiness order:
 3. Run the prod values validation command.
 4. Manually dispatch `gcp_llm_gateway.yml` to `prod`.
 5. Run prod `/ready` and chat-completions smoke checks from the prod GKE network.
-6. Deploy backend-listen prod values after gateway prod smoke passes.
+6. Deploy backend-listen and the Cloud Run callers after gateway prod smoke passes; keep `OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=true` so acknowledged direct surfaces retain their existing provider routes.
 
 ## Major Library Choices
 
@@ -617,6 +621,13 @@ containing `llm_gateway_backend_event` with the same low-cardinality dimensions
 plus `kind`, `field`, `route`, and `service`. This gives rollout owners a stable
 query surface even when backend caller metrics are hard to inspect per runtime
 surface.
+
+Gateway terminal errors and request rejections emit warning-level, privacy-safe
+Cloud Logging lines. `llm_gateway_terminal` includes only the opaque request ID,
+route metadata, credential source, and bounded `error_class` / `failure_class`;
+it never includes provider bodies, prompts, or credentials. Successful terminal
+events remain metrics and info-level logs to avoid turning normal traffic into
+an operational alert stream.
 
 Shadow-only features can also emit privacy-safe comparison buckets through
 `llm_gateway_chat_extraction_comparisons_total{feature,field,outcome}`. These

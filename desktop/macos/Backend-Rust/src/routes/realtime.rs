@@ -484,11 +484,13 @@ struct UsageReport {
 
 fn usage_cost(r: &UsageReport) -> f64 {
     let rates = realtime_rates(&r.provider, &r.model);
-    (r.input_text_tokens as f64 * rates.in_text
-        + r.input_audio_tokens as f64 * rates.in_audio
-        + r.input_cached_tokens as f64 * rates.cached
-        + r.output_text_tokens as f64 * rates.out_text
-        + r.output_audio_tokens as f64 * rates.out_audio)
+    // Token counts are fully client-reported. Clamp negatives to 0 so a tampered
+    // client cannot drive `cost` (and the Firestore cost/quota ledger) negative.
+    (r.input_text_tokens.max(0) as f64 * rates.in_text
+        + r.input_audio_tokens.max(0) as f64 * rates.in_audio
+        + r.input_cached_tokens.max(0) as f64 * rates.cached
+        + r.output_text_tokens.max(0) as f64 * rates.out_text
+        + r.output_audio_tokens.max(0) as f64 * rates.out_audio)
         / 1_000_000.0
 }
 
@@ -498,16 +500,19 @@ async fn report_usage(
     user: PaywalledAuthUser,
     Json(report): Json<UsageReport>,
 ) -> StatusCode {
-    let input = report.input_text_tokens + report.input_audio_tokens;
-    let output = report.output_text_tokens + report.output_audio_tokens;
-    let cached = report.input_cached_tokens;
+    // Token counts are fully client-reported; clamp negatives to 0 before summing
+    // so a tampered client cannot record negative usage that understates cost or
+    // resets accrued quota in the shared llm_usage ledger.
+    let input = report.input_text_tokens.max(0) + report.input_audio_tokens.max(0);
+    let output = report.output_text_tokens.max(0) + report.output_audio_tokens.max(0);
+    let cached = report.input_cached_tokens.max(0);
     let total = input + output + cached;
     if total <= 0 {
         return StatusCode::NO_CONTENT;
     }
     let cost = usage_cost(&report);
-    // Funnels into desktop_chat.cost_usd (counted by get_total_llm_cost/quota) plus a
-    // "desktop_chat_realtime.*" breakdown.
+    // Record both the shared desktop_chat aggregate and the
+    // "desktop_chat_realtime.*" reconciliation breakdown.
     if let Err(e) = state
         .firestore
         .record_llm_usage(&user.uid, input, output, cached, 0, total, cost, "realtime")
@@ -549,6 +554,48 @@ pub fn realtime_routes() -> Router<AppState> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn usage_cost_never_negative_for_negative_client_tokens() {
+        // A tampered client reporting negative token counts must not yield a
+        // negative cost that would understate/negate the shared cost ledger.
+        let report = UsageReport {
+            provider: "openai".to_string(),
+            model: String::new(),
+            input_text_tokens: -1_000_000,
+            input_audio_tokens: -1_000_000,
+            input_cached_tokens: -1_000_000,
+            output_text_tokens: -1_000_000,
+            output_audio_tokens: -1_000_000,
+        };
+        assert_eq!(usage_cost(&report), 0.0);
+    }
+
+    #[test]
+    fn usage_cost_ignores_negative_fields_but_counts_positive_ones() {
+        // A mix of one legitimate positive field and negative padding must equal
+        // the cost of the positive field alone (negatives clamped, not subtracted).
+        let mixed = UsageReport {
+            provider: "openai".to_string(),
+            model: String::new(),
+            input_text_tokens: 1000,
+            input_audio_tokens: -5000,
+            input_cached_tokens: -5000,
+            output_text_tokens: 0,
+            output_audio_tokens: 0,
+        };
+        let positive_only = UsageReport {
+            provider: "openai".to_string(),
+            model: String::new(),
+            input_text_tokens: 1000,
+            input_audio_tokens: 0,
+            input_cached_tokens: 0,
+            output_text_tokens: 0,
+            output_audio_tokens: 0,
+        };
+        assert_eq!(usage_cost(&mixed), usage_cost(&positive_only));
+        assert!(usage_cost(&mixed) > 0.0);
+    }
 
     #[test]
     fn gemini_auth_token_body_is_flat_at_request_root() {

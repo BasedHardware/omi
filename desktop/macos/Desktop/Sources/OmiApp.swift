@@ -40,11 +40,13 @@ class AuthState: ObservableObject {
   private static let kAuthUserEmail = "auth_userEmail"
   private static let kAuthUserId = "auth_userId"
 
-  @Published var isSignedIn: Bool
+  @Published private(set) var sessionPhase: AuthSessionPhase
   @Published var isLoading: Bool = false
-  @Published var isRestoringAuth: Bool = true
   @Published var error: String?
   @Published var userEmail: String?
+
+  var isSignedIn: Bool { sessionPhase == .authenticated }
+  var isRestoringAuth: Bool { sessionPhase == .restoring }
 
   private init() {
     BundleEnvironment.loadIfNeeded()
@@ -55,13 +57,13 @@ class AuthState: ObservableObject {
 
     if DesktopLocalProfile.isEnabled {
       // Harness-owned emulator auth replaces any persisted cloud session.
-      self.isSignedIn = false
+      self.sessionPhase = .restoring
       self.userEmail = nil
-      self.isRestoringAuth = true
     } else {
-      self.isSignedIn = savedSignedIn
+      // `auth_isSignedIn` is only a restore hint. Never expose authenticated UI
+      // until AuthService has validated a usable credential for this launch.
+      self.sessionPhase = savedSignedIn ? .restoring : .signedOut
       self.userEmail = savedEmail
-      self.isRestoringAuth = savedSignedIn
     }
     NSLog(
       "OMI AuthState: Initialized localProfile=%@ savedSignedIn=%@ email=%@ isRestoringAuth=%@",
@@ -71,8 +73,14 @@ class AuthState: ObservableObject {
   }
 
   func update(isSignedIn: Bool, userEmail: String? = nil) {
-    self.isSignedIn = isSignedIn
+    transition(to: isSignedIn ? .authenticated : .signedOut)
     self.userEmail = userEmail
+  }
+
+  func transition(to phase: AuthSessionPhase) {
+    guard sessionPhase != phase else { return }
+    sessionPhase = phase
+    NSLog("OMI AUTH: session phase -> %@", String(describing: phase))
   }
 
   /// Get the user's Firebase UID from UserDefaults (fallback when Firebase SDK auth fails)
@@ -244,6 +252,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var initialSettingsSyncTask: Task<Void, Never>?
 
   func applicationWillFinishLaunching(_ notification: Notification) {
+    if AuthStorageCanary.isRequested { return }
     // Single-instance guard: a second live copy of the same bundle id + launch mode
     // would race the first against the shared Rewind SQLite DB
     // (~/Library/Application Support/Omi/…) and the bundle-id UserDefaults domain,
@@ -259,6 +268,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       ViewExporter.run()
       return
     }
+
+    // The release pipeline launches the exact signed artifact in this isolated
+    // mode before publication. Run before installer, database, defaults, or
+    // background-service startup so the probe has no product side effects.
+    if AuthStorageCanary.runIfRequested() { return }
 
     // Running from the mounted DMG / a translocated mount breaks TCC permissions
     // and Sparkle updates — install to /Applications and relaunch before any
@@ -284,7 +298,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
     log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
-    let restoreMainWindowAfterUpdateRelaunch = UpdateRelaunchWindowPolicy.consumePendingRelaunch()
+    let pendingUpdateRelaunch = UpdateRelaunchWindowPolicy.consumePendingRelaunch()
+    let restoreMainWindowAfterUpdateRelaunch = pendingUpdateRelaunch?.restoreMainWindow
     if let restoreMainWindowAfterUpdateRelaunch {
       log(
         "AppDelegate: Sparkle update relaunch detected; restoreMainWindow=\(restoreMainWindowAfterUpdateRelaunch)"
@@ -378,76 +393,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       // sustained freezes — the ones users actually feel — are reported.
       options.appHangTimeoutInterval = isDev ? 0 : 3.0
       options.beforeSend = { event in
-        // Allow user feedback through from all builds (dev + prod)
-        if event.message?.formatted.hasPrefix("User Report") == true { return event }
-        // Never send other events from dev builds — they pollute production Sentry data
-        if isDev { return nil }
-        // Filter out HTTP errors targeting dev/local URLs — noise when tunnels or local backends are down
-        if let urlTag = event.tags?["url"],
-          urlTag.contains("localhost") || urlTag.contains("127.0.0.1")
-            || urlTag.contains("trycloudflare.com")
-        {
-          return nil
-        }
-        // Filter out transient network/socket errors captured as exceptions —
-        // offline, timeouts, dropped connections, cancellations. These are not
-        // actionable app bugs and dominate event volume. (logError filters the
-        // message-event path; this covers SDK-auto and legacy exception captures.)
-        // NSURLErrorDomain: -999 cancelled, -1001 timeout, -1003/-1004 host/connect,
-        // -1005 lost, -1009 offline, -1011 bad response, -1020 not allowed.
-        // NSPOSIXErrorDomain: 54 reset, 57 not connected, 89 cancelled.
-        let transientNetworkCodes: [(domain: String, codes: [String])] = [
-          (
-            "NSURLErrorDomain",
-            ["-999", "-1001", "-1003", "-1004", "-1005", "-1009", "-1011", "-1020"]
-          ),
-          ("NSPOSIXErrorDomain", ["54", "57", "89"]),
-        ]
-        if let exceptions = event.exceptions,
-          exceptions.contains(where: { exc in
-            let value = exc.value
-            return transientNetworkCodes.contains { entry in
-              exc.type == entry.domain
-                && entry.codes.contains { value.contains("Code=\($0)") || value.contains("Code: \($0)") }
-            }
-          })
-        {
-          return nil
-        }
-        // Filter out backend Gemini key-expiry/auth failures. These mean the
-        // server-side API key needs rotation — a backend config issue, not a
-        // per-client bug. A single expired key otherwise floods Sentry with one
-        // event per request across every user.
-        if let message = event.message?.formatted {
-          let lower = message.lowercased()
-          if lower.contains("api key expired") || lower.contains("renew the api key")
-            || lower.contains("api_key_invalid")
-            // GeminiClient maps raw backend auth failures (unauthorized / permission denied /
-            // api key / forbidden) to this user-facing string before it reaches Sentry, so the
-            // raw-message checks above miss it. Same root cause (server-side key needs rotation),
-            // same flood (one bad key emits one event per task-extraction frame for every user).
-            || lower.contains("ai service authentication error")
-            // Backend rejects the auth header on batch (PTT) transcription with a 401
-            // INVALID_AUTH / "Invalid credentials." body — a transient stale-token or BYOK
-            // misconfig, not a per-client app bug. The 30s refresh timer recovers it; left
-            // unfiltered it floods Sentry (one event per failed batch). Same class as the
-            // AuthError.notSignedIn filter below.
-            || lower.contains("invalid_auth")
-          {
-            return nil
-          }
-        }
-        // Filter out AuthError.notSignedIn — this is thrown when token refresh transiently
-        // fails (network blip, expired token mid-refresh). The user is still signed in per
-        // UserDefaults; the 30s refresh timer will retry. Not actionable as a Sentry error.
-        if let exceptions = event.exceptions,
-          exceptions.contains(where: { exc in
-            exc.type == "Omi_Computer.AuthError" && exc.value.contains("notSignedIn")
-          })
-        {
-          return nil
-        }
-        return event
+        // The drop decision is extracted to the pure `shouldDropSentryEvent` so the
+        // filter list is unit-testable without constructing Sentry events (SET-05).
+        let drop = Self.shouldDropSentryEvent(
+          isUserReport: event.message?.formatted.hasPrefix("User Report") == true,
+          isDev: isDev,
+          urlTag: event.tags?["url"],
+          messageFormatted: event.message?.formatted,
+          exceptions: (event.exceptions ?? []).map { (type: $0.type, value: $0.value) })
+        return drop ? nil : event
       }
     }
     log(
@@ -460,21 +414,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     if DesktopLocalProfile.isEnabled {
       log("Local harness: skipping Firebase SDK configure; bootstrapping Auth emulator via REST")
-      AuthState.shared.isRestoringAuth = true
+      AuthState.shared.transition(to: .restoring)
       Task { @MainActor in
         await AuthService.shared.bootstrapLocalHarnessAuthIfNeeded()
       }
       DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
         if AuthState.shared.isRestoringAuth {
           log("Local harness auth watchdog: clearing stuck restoring_auth splash")
-          AuthState.shared.isRestoringAuth = false
+          AuthState.shared.transition(to: .recoveryRequired)
         }
       }
     } else if let path = plistPath,
       let options = FirebaseOptions(contentsOfFile: path)
     {
       FirebaseApp.configure(options: options)
-      AuthService.shared.configure()
+      Task { @MainActor in
+        await AuthService.shared.configure()
+      }
     } else {
       log("Firebase configure skipped (plistPath=\(plistPath ?? "nil"))")
     }
@@ -482,6 +438,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Initialize analytics (PostHog)
     AnalyticsManager.shared.initialize()
     AnalyticsManager.shared.detectAndReportCrash()
+    if let attempt = pendingUpdateRelaunch?.attempt {
+      let installedVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+        as? String ?? "unknown"
+      let installedBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        ?? "unknown"
+      if installedBuild == attempt.targetBuild {
+        AnalyticsManager.shared.updateInstalled(
+          attempt: attempt,
+          installedVersion: installedVersion,
+          installedBuild: installedBuild
+        )
+        log("Sparkle: Verified installed update attempt \(attempt.id) at build \(installedBuild)")
+      } else {
+        AnalyticsManager.shared.updateInstallVerificationFailed(
+          attempt: attempt,
+          installedVersion: installedVersion,
+          installedBuild: installedBuild
+        )
+        log(
+          "Sparkle: Update attempt \(attempt.id) expected build \(attempt.targetBuild), relaunched build \(installedBuild)"
+        )
+      }
+    }
     AnalyticsManager.shared.appLaunched()
 
     // Tier gating: migrate old boolean key to new 6-tier system
@@ -498,11 +477,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     AnalyticsManager.shared.trackFirstLaunchIfNeeded()
-
-    // Set per-user database path before any async tasks can trigger DB initialization.
-    // This is synchronous and must happen before ViewModelContainer initializes SQLite.
-    let userId = UserDefaults.standard.string(forKey: "auth_userId")
-    RewindDatabase.currentUserId = (userId?.isEmpty == false) ? userId : "anonymous"
 
     // Start resource monitoring (memory, CPU, disk)
     ResourceMonitor.shared.start()
@@ -654,6 +628,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
       ) { _ in
         Self.recordForegroundState()
+        Task { @MainActor in
+          await AuthSessionCoordinator.shared.ensureValidSessionDebounced(
+            trigger: .appBecameActive,
+            auth: AuthService.shared
+          )
+        }
       })
     windowObservers.append(
       center.addObserver(
@@ -1083,7 +1063,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   @MainActor @objc private func resetOnboarding() {
     AnalyticsManager.shared.menuBarActionClicked(action: "reset_onboarding")
-    AppState().resetOnboardingAndRestart()
+    (AppState.current ?? AppState()).resetOnboardingAndRestart()
   }
 
   @MainActor @objc private func reportIssue() {
@@ -1094,7 +1074,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   @MainActor @objc private func signOut() {
     AnalyticsManager.shared.menuBarActionClicked(action: "sign_out")
     ProactiveAssistantsPlugin.shared.stopMonitoring()
-    try? AuthService.shared.signOut()
+    Task { @MainActor in
+      try? await AuthService.shared.signOut()
+    }
   }
 
   @MainActor @objc private func quitApp() {
@@ -1331,10 +1313,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     ResourceMonitor.shared.stop()
 
     if !AnalyticsManager.isDevBuild {
-      SentrySDK.capture(message: "App Terminating") { scope in
-        scope.setLevel(.info)
-        scope.setTag(value: "lifecycle", key: "event_type")
-      }
+      let breadcrumb = Breadcrumb(level: .info, category: "lifecycle")
+      breadcrumb.message = "App Terminating"
+      SentrySDK.addBreadcrumb(breadcrumb)
     }
   }
 
@@ -1525,19 +1506,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
       }
 
-      let schedulerDelay = max(
-        0,
-        StartupWarmupPolicy.recurringTaskSchedulerInitialDelay
-          - StartupWarmupPolicy.transcriptionRetryRecoveryDelay
-      )
-      if schedulerDelay > 0 {
-        try? await Task.sleep(nanoseconds: UInt64(schedulerDelay * 1_000_000_000))
-      }
-      guard !Task.isCancelled else { return }
-
-      await MainActor.run {
-        RecurringTaskScheduler.shared.start()
-      }
+      // Legacy recurring-task investigations silently started agent work and
+      // could create durable continuity without an explicit user action. Keep
+      // the compatibility service stopped; contextual resurfacing owns future
+      // proactive entry points without silently launching work.
     }
   }
 
@@ -1562,5 +1534,63 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       guard !Task.isCancelled else { return }
       await SettingsSyncManager.shared.syncFromServer()
     }
+  }
+}
+
+extension AppDelegate {
+  /// Pure Sentry `beforeSend` triage (SET-05): decides whether an event must be
+  /// dropped (`beforeSend` returns nil). Extracted from the SDK closure so the drop
+  /// list is unit-testable; it takes only the event fields the closure inspects, so
+  /// no Sentry `Event` needs constructing in tests. Keep in lockstep with the
+  /// `options.beforeSend` closure in `applicationDidFinishLaunching`.
+  static func shouldDropSentryEvent(
+    isUserReport: Bool,
+    isDev: Bool,
+    urlTag: String?,
+    messageFormatted: String?,
+    exceptions: [(type: String, value: String)]
+  ) -> Bool {
+    // Always keep user feedback (dev + prod).
+    if isUserReport { return false }
+    // Never send other events from dev builds — they pollute production Sentry data.
+    if isDev { return true }
+    // Drop HTTP errors targeting dev/local URLs — noise when tunnels or local backends are down.
+    if let urlTag,
+      urlTag.contains("localhost") || urlTag.contains("127.0.0.1")
+        || urlTag.contains("trycloudflare.com")
+    {
+      return true
+    }
+    // Drop transient network/socket errors captured as exceptions (offline, timeouts,
+    // dropped connections, cancellations) — not actionable, dominate event volume.
+    let transientNetworkCodes: [(domain: String, codes: [String])] = [
+      ("NSURLErrorDomain", ["-999", "-1001", "-1003", "-1004", "-1005", "-1009", "-1011", "-1020"]),
+      ("NSPOSIXErrorDomain", ["54", "57", "89"]),
+    ]
+    if exceptions.contains(where: { exc in
+      transientNetworkCodes.contains { entry in
+        exc.type == entry.domain
+          && entry.codes.contains { exc.value.contains("Code=\($0)") || exc.value.contains("Code: \($0)") }
+      }
+    }) {
+      return true
+    }
+    // Drop backend Gemini key-expiry/auth failures — server-side key rotation, not a
+    // per-client bug; one bad key otherwise floods Sentry with one event per request.
+    if let lower = messageFormatted?.lowercased(),
+      lower.contains("api key expired") || lower.contains("renew the api key")
+        || lower.contains("api_key_invalid")
+        || lower.contains("ai service authentication error")
+        || lower.contains("invalid_auth")
+    {
+      return true
+    }
+    // Drop AuthError.notSignedIn — transient refresh failure; the 30s timer retries.
+    if exceptions.contains(where: {
+      $0.type == "Omi_Computer.AuthError" && $0.value.contains("notSignedIn")
+    }) {
+      return true
+    }
+    return false
   }
 }

@@ -227,7 +227,7 @@ final class TranscriptionStorageRecoveryTests: XCTestCase {
         XCTAssertEqual(preserved.overview, "Backend overview")
     }
 
-    func testEmptyJsonArraysStillAllowLaterStructuredHydration() async throws {
+    func testUnknownRevisionEmptyProjectionDoesNotBlockLaterStructuredHydration() async throws {
         let backendId = "backend-conversation-json-array-hydration"
         let sessionId = try await createCompletedShell(
             backendId: backendId,
@@ -248,10 +248,10 @@ final class TranscriptionStorageRecoveryTests: XCTestCase {
             folderId: nil
         )
         let emptyResult = try await TranscriptionStorage.shared.upsertFromServerConversation(emptyStructured)
-        XCTAssertTrue(emptyResult.changed)
+        XCTAssertFalse(emptyResult.changed)
         let storedEmpty = try await TranscriptionStorage.shared.getSession(id: sessionId)
         let empty = try XCTUnwrap(storedEmpty)
-        XCTAssertEqual(empty.actionItemsJson, "[]")
+        XCTAssertNil(empty.actionItemsJson)
 
         try await TranscriptionStorage.shared.updateTitleByBackendId(backendId, title: "Local title edit")
         let storedLocalMutation = try await TranscriptionStorage.shared.getSession(id: sessionId)
@@ -408,6 +408,173 @@ final class TranscriptionStorageRecoveryTests: XCTestCase {
         XCTAssertEqual(bundle.segments[0].personId, "person-local")
     }
 
+    func testServerRevisionReplacesStaleMetadataWithoutDowngradingCachedDetail() async throws {
+        let backendId = "backend-versioned-cache"
+        let sessionId = try await createCompletedShell(
+            backendId: backendId,
+            strategy: .localSegments,
+            segmentText: "local segment"
+        )
+        let created = Date(timeIntervalSince1970: 100)
+        let revision1 = Date(timeIntervalSince1970: 1_000)
+        let revision2 = Date(timeIntervalSince1970: 2_000)
+
+        let detail = makeServerConversation(
+            id: backendId,
+            createdAt: created,
+            updatedAt: revision1,
+            startedAt: created,
+            finishedAt: created.addingTimeInterval(60),
+            title: "First server title",
+            overview: "First summary",
+            starred: false,
+            folderId: nil,
+            transcriptSegments: [
+                TranscriptSegment(
+                    id: "segment-1",
+                    backendId: "segment-1",
+                    text: "canonical transcript",
+                    speaker: "SPEAKER_00",
+                    isUser: true,
+                    personId: nil,
+                    start: 0,
+                    end: 1
+                )
+            ],
+            transcriptSegmentsIncluded: true
+        )
+        _ = try await TranscriptionStorage.shared.syncServerConversation(detail)
+
+        let newerListProjection = makeServerConversation(
+            id: backendId,
+            createdAt: created,
+            updatedAt: revision2,
+            startedAt: created,
+            finishedAt: created.addingTimeInterval(60),
+            title: "Newer server title",
+            overview: "Processing finished",
+            starred: true,
+            folderId: "work"
+        )
+        _ = try await TranscriptionStorage.shared.syncServerConversation(newerListProjection)
+
+        let storedRecord = try await TranscriptionStorage.shared.getSession(id: sessionId)
+        let record = try XCTUnwrap(storedRecord)
+        XCTAssertEqual(record.serverUpdatedAt, revision2)
+        XCTAssertEqual(record.cacheCompleteness, .detail)
+        XCTAssertEqual(record.title, "Newer server title")
+        XCTAssertEqual(record.overview, "Processing finished")
+        XCTAssertTrue(record.starred)
+        XCTAssertEqual(record.folderId, "work")
+        let storedDetail = try await TranscriptionStorage.shared.getCachedConversation(id: backendId)
+        let cachedDetail = try XCTUnwrap(storedDetail)
+        XCTAssertEqual(cachedDetail.transcriptSegments.map(\.text), ["canonical transcript"])
+        XCTAssertTrue(cachedDetail.transcriptSegmentsIncluded)
+    }
+
+    func testOlderServerRevisionCannotRegressCachedConversation() async throws {
+        let backendId = "backend-version-ordering"
+        let sessionId = try await createCompletedShell(
+            backendId: backendId,
+            strategy: .localSegments,
+            segmentText: "local segment"
+        )
+        let created = Date(timeIntervalSince1970: 100)
+        let newest = makeServerConversation(
+            id: backendId,
+            createdAt: created,
+            updatedAt: Date(timeIntervalSince1970: 3_000),
+            startedAt: created,
+            finishedAt: created.addingTimeInterval(60),
+            title: "Newest",
+            overview: "Newest summary",
+            starred: true,
+            folderId: "new-folder"
+        )
+        _ = try await TranscriptionStorage.shared.syncServerConversation(newest)
+        let stale = makeServerConversation(
+            id: backendId,
+            createdAt: created,
+            updatedAt: Date(timeIntervalSince1970: 2_000),
+            startedAt: created,
+            finishedAt: created.addingTimeInterval(60),
+            title: "Stale",
+            overview: "Stale summary",
+            starred: false,
+            folderId: nil
+        )
+
+        _ = try await TranscriptionStorage.shared.syncServerConversation(stale)
+
+        let storedRecord = try await TranscriptionStorage.shared.getSession(id: sessionId)
+        let record = try XCTUnwrap(storedRecord)
+        XCTAssertEqual(record.title, "Newest")
+        XCTAssertEqual(record.overview, "Newest summary")
+        XCTAssertTrue(record.starred)
+        XCTAssertEqual(record.folderId, "new-folder")
+    }
+
+    func testOlderDetailProjectionAddsTranscriptWithoutRegressingNewerListMetadata() async throws {
+        let backendId = "backend-older-detail"
+        let sessionId = try await createCompletedShell(
+            backendId: backendId,
+            strategy: .localSegments,
+            segmentText: "local segment"
+        )
+        let created = Date(timeIntervalSince1970: 100)
+        let newestRevision = Date(timeIntervalSince1970: 3_000)
+        let newestList = makeServerConversation(
+            id: backendId,
+            createdAt: created,
+            updatedAt: newestRevision,
+            startedAt: created,
+            finishedAt: created.addingTimeInterval(60),
+            title: "Newest title",
+            overview: "Newest summary",
+            starred: true,
+            folderId: "new-folder"
+        )
+        _ = try await TranscriptionStorage.shared.syncServerConversation(newestList)
+        let olderDetail = makeServerConversation(
+            id: backendId,
+            createdAt: created,
+            updatedAt: Date(timeIntervalSince1970: 2_000),
+            startedAt: created,
+            finishedAt: created.addingTimeInterval(60),
+            title: "Stale title",
+            overview: "Stale summary",
+            starred: false,
+            folderId: nil,
+            transcriptSegments: [
+                TranscriptSegment(
+                    id: "segment-1",
+                    backendId: "segment-1",
+                    text: "detail transcript",
+                    speaker: "SPEAKER_00",
+                    isUser: true,
+                    personId: nil,
+                    start: 0,
+                    end: 1
+                )
+            ],
+            transcriptSegmentsIncluded: true
+        )
+
+        _ = try await TranscriptionStorage.shared.syncServerConversation(olderDetail)
+
+        let storedRecord = try await TranscriptionStorage.shared.getSession(id: sessionId)
+        let record = try XCTUnwrap(storedRecord)
+        XCTAssertEqual(record.serverUpdatedAt, newestRevision)
+        XCTAssertEqual(record.title, "Newest title")
+        XCTAssertEqual(record.overview, "Newest summary")
+        XCTAssertTrue(record.starred)
+        XCTAssertEqual(record.folderId, "new-folder")
+        XCTAssertEqual(record.cacheCompleteness, .detail)
+        let storedDetail = try await TranscriptionStorage.shared.getCachedConversation(id: backendId)
+        let detail = try XCTUnwrap(storedDetail)
+        XCTAssertEqual(detail.transcriptSegments.map(\.text), ["detail transcript"])
+    }
+
     private func createCompletedShell(
         backendId: String,
         strategy: TranscriptionFinalizationStrategy,
@@ -436,6 +603,7 @@ final class TranscriptionStorageRecoveryTests: XCTestCase {
     private func makeServerConversation(
         id: String,
         createdAt: Date,
+        updatedAt: Date? = nil,
         startedAt: Date,
         finishedAt: Date,
         title: String,
@@ -450,6 +618,7 @@ final class TranscriptionStorageRecoveryTests: XCTestCase {
         ServerConversation(
             id: id,
             createdAt: createdAt,
+            updatedAt: updatedAt,
             startedAt: startedAt,
             finishedAt: finishedAt,
             structured: Structured(

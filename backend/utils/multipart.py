@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import cast
 
 from fastapi import HTTPException, Request
 from fastapi.routing import APIRoute
@@ -56,23 +57,34 @@ class FileSizeLimitedMultiPartParser(MultiPartParser):
 
 
 async def parse_multipart_form(request: Request, *, max_part_size: int) -> FormData:
-    if request._form is not None:
-        return request._form
+    cached_form = _get_cached_form(request)
+    if cached_form is not None:
+        return cached_form
     if _is_urlencoded(request):
-        request._form = await FormParser(
+        form = await FormParser(
             request.headers,
             _size_limited_stream(request, max_size=max_part_size),
         ).parse()
-        return request._form
+        _set_cached_form(request, form)
+        return form
     if not _is_multipart(request):
         return await request.form()
 
     parser = FileSizeLimitedMultiPartParser(request.headers, request.stream(), max_part_size=max_part_size)
     try:
-        request._form = await parser.parse()
+        form = await parser.parse()
     except MultiPartException as exc:
         raise HTTPException(status_code=400, detail=exc.message)
-    return request._form
+    _set_cached_form(request, form)
+    return form
+
+
+def _get_cached_form(request: Request) -> FormData | None:
+    return cast(FormData | None, getattr(request, '_form', None))
+
+
+def _set_cached_form(request: Request, form: FormData) -> None:
+    setattr(request, '_form', form)
 
 
 def _is_multipart(request: Request) -> bool:

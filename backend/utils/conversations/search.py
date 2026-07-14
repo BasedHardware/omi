@@ -35,19 +35,43 @@ def _is_typesense_transient_error(exc: BaseException) -> bool:
     }
 
 
-client = typesense.Client(
-    {
-        'nodes': [
+# Client creation must remain lazy: retrieval helpers import this module in
+# offline tests and unrelated request paths where Typesense is intentionally
+# unconfigured. Tests can still inject a fake through the legacy ``client``
+# seam without causing a real client to be constructed.
+_typesense_client: Any | None = None
+
+
+def _get_typesense_client() -> Any:
+    global _typesense_client
+    if _typesense_client is None:
+        _typesense_client = typesense.Client(
             {
-                'host': os.getenv('TYPESENSE_HOST'),
-                'port': os.getenv('TYPESENSE_HOST_PORT'),
-                'protocol': os.getenv('TYPESENSE_PROTOCOL', 'https'),
+                'nodes': [
+                    {
+                        'host': os.getenv('TYPESENSE_HOST'),
+                        'port': os.getenv('TYPESENSE_HOST_PORT'),
+                        'protocol': os.getenv('TYPESENSE_PROTOCOL', 'https'),
+                    }
+                ],
+                'api_key': os.getenv('TYPESENSE_API_KEY'),
+                'connection_timeout_seconds': 2,
             }
-        ],
-        'api_key': os.getenv('TYPESENSE_API_KEY'),
-        'connection_timeout_seconds': 2,
-    }
-)
+        )
+    return _typesense_client
+
+
+class _LazyCollections:
+    def __getitem__(self, name: str) -> Any:
+        return _get_typesense_client().collections[name]
+
+
+class _LazyTypesenseClient:
+    def __init__(self) -> None:
+        self.collections: Any = _LazyCollections()
+
+
+client: Any = _LazyTypesenseClient()
 
 
 def _utc_iso(ts: int) -> str:
@@ -71,6 +95,12 @@ def search_conversations(
     end_date: Optional[int] = None,
     speaker_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    # page/per_page arrive from SearchRequest where both are Optional and unbounded, so None, 0,
+    # negative, or a huge value would otherwise TypeError here (len(...) >= per_page / page + 1) or trip
+    # Typesense RequestMalformed and 500 the request. Clamp at this shared boundary, mirroring the
+    # clamps in routers/memories.py and routers/mcp.py. Typesense caps a single page at 250 hits.
+    page = max(1, page or 1)
+    per_page = max(1, min(per_page or 10, 250))
     try:
         stripped_query = query.strip() if query else ''
         has_filter_only_browse = bool(speaker_id) or start_date is not None or end_date is not None
@@ -106,7 +136,10 @@ def search_conversations(
             'page': page,
         }
 
-        results: Dict[str, Any] = cast(Dict[str, Any], client.collections['conversations'].documents.search(search_parameters))  # type: ignore[reportUnknownMemberType]  # typesense client untyped
+        results: Dict[str, Any] = cast(
+            Dict[str, Any],
+            client.collections['conversations'].documents.search(search_parameters),
+        )  # type: ignore[reportUnknownMemberType]  # typesense client untyped
         memories: List[Dict[str, Any]] = []
         for item in results.get('hits', []):
             doc: Dict[str, Any] = item.get('document', {})

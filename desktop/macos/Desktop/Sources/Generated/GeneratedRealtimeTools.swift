@@ -18,6 +18,8 @@ enum HubTool: String {
   case getActionItems = "get_action_items"
   case createActionItem = "create_action_item"
   case updateActionItem = "update_action_item"
+  case checkPermissionStatus = "check_permission_status"
+  case requestPermission = "request_permission"
   case getTasks = "get_tasks"
   case createCalendarEvent = "create_calendar_event"
   case askHigherModel = "ask_higher_model"
@@ -71,7 +73,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "list_agent_sessions",
-    "description": "List canonical Omi-managed agent sessions/runs across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. Use when the user asks what canonical agents or subagents are active, recent, failed, or manageable.",
+    "description": "List canonical Omi-managed agents and subagents, including their sessions/runs, across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. For a prior child agent's final answer, do not infer run completion from session status or restrict discovery to status='open'. List recent sessions, then inspect the returned run with get_agent_run. Keep internal ids out of the user-visible response.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -95,7 +97,7 @@ enum GeneratedRealtimeTools {
             "floating_bar",
             "floating_pill"
           ],
-          "description": "Optional canonical surface filter."
+          "description": "Optional surface hint. background_agent and delegated_agent discover recent child sessions across concrete surfaces."
         },
         "limit": {
           "type": "number",
@@ -108,7 +110,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "get_agent_run",
-    "description": "Inspect one canonical Omi-managed agent run. Prefer an agentRef from list_agent_sessions.",
+    "description": "Inspect one canonical Omi-managed agent run. Prefer an agentRef or runId from list_agent_sessions. For a completed child, answer from run.finalText and do not expose the internal id.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -520,6 +522,54 @@ enum GeneratedRealtimeTools {
   },
   {
     "type": "function",
+    "name": "check_permission_status",
+    "description": "Check whether Omi has the requested macOS permission through the kernel-authorized native executor.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "screen_recording",
+            "microphone",
+            "notifications",
+            "accessibility",
+            "automation",
+            "full_disk_access"
+          ],
+          "description": "Optional permission type. Omit to return all supported permissions."
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "type": "function",
+    "name": "request_permission",
+    "description": "Request Omi's macOS permission through the kernel-authorized native executor by opening the native prompt or relevant System Settings pane. Screen share, screen sharing, and screen-share mean Screen Recording. Supports Screen Recording, microphone, notifications, Accessibility, Automation, and Full Disk Access.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "screen_recording",
+            "microphone",
+            "notifications",
+            "accessibility",
+            "automation",
+            "full_disk_access"
+          ],
+          "description": "Permission type: screen_recording, microphone, notifications, accessibility, automation, or full_disk_access"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    }
+  },
+  {
+    "type": "function",
     "name": "get_tasks",
     "description": "Read the user's tasks (overdue + due today) locally and get them back as text to speak. Fast synchronous read — use this for 'what are my tasks', 'what's due today', 'what's on my list'. Reading tasks is always a direct call, never background work.",
     "parameters": {
@@ -531,7 +581,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "create_calendar_event",
-    "description": "Create a Google Calendar event for the user. Use for simple calendar requests like 'put this on my calendar', 'schedule lunch tomorrow', or 'create an event'. Requires start_time and end_time as ISO-8601 strings with timezone. Use spawn_agent instead for multi-step scheduling, finding availability, rescheduling, deleting, or coordinating with people.",
+    "description": "Create one specified Google Calendar event. Requires start_time and end_time as ISO-8601 strings with timezone. This capability does not find availability, reschedule, delete, or coordinate with people.",
     "parameters": {
       "type": "object",
       "properties": {

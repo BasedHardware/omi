@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from config.memory_rollout import PASSED, MemoryRolloutCapabilities, MemoryRolloutMode, MemoryRolloutStageGate
 from models.memory_search_gateway import SearchMode, SearchVectorHit
-from models.product_memory import MemoryTier
+from models.product_memory import MemoryTier, ProcessingState
 from tests.unit.fixtures.memory_adapter_fakes import (
     FirestoreFake as _FirestoreFake,
     VectorCandidateResult as _VectorCandidateResult,
@@ -62,17 +62,18 @@ def test_mcp_rest_search_route_wires_app_key_scope_grant_before_memory_vector_ad
     )
 
 
-def test_mcp_rest_uid_only_routes_keep_legacy_mcp_api_key_dependency():
+def test_mcp_rest_memory_list_derives_uid_from_single_authorization_context():
     mcp_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp.py'
     contents = mcp_py.read_text(encoding='utf-8')
     profile_route = contents[contents.index('@router.get("/v1/mcp/profile"') : contents.index('class CleanerMemory')]
     list_route = contents[contents.index('@router.get("/v1/mcp/memories"') : contents.index('class SimpleStructured')]
     assert 'uid: str = Depends(get_uid_from_mcp_api_key)' in profile_route
-    assert 'uid: str = Depends(get_uid_from_mcp_api_key)' in list_route
+    assert 'uid: str = Depends(get_uid_from_mcp_api_key)' not in list_route
     assert 'get_mcp_memory_default_memory_read_context' not in profile_route
     assert (
         'auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_read_context)' in list_route
     )
+    assert 'uid = auth_context.uid' in list_route
 
 
 def test_mcp_sse_search_tool_wires_app_key_scope_grant_before_memory_vector_adapter_and_legacy_search():
@@ -129,7 +130,8 @@ def test_mcp_sse_transport_authenticates_full_mcp_api_key_context_without_inferr
         in contents
     )
     assert 'def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthContext]:' in contents
-    assert 'mcp_api_key_db.get_user_and_scopes_by_api_key(token)' in contents
+    assert 'mcp_api_key_db.get_api_key_auth_result(token)' in contents
+    assert 'record_api_key_repairs(key_kind="mcp", operation="auth"' in contents
     assert 'McpVerifiedAuth(' in contents
     assert 'scopes=tuple(user_data.get("scopes") or ())' in contents
     assert 'memory_context=_mcp_memory_context_from_api_key_user_data(user_data)' in contents
@@ -387,6 +389,23 @@ def test_mcp_default_memory_memory_adapter_uses_product_search_when_read_rollout
     assert all((item['archive_default_visible'] is False for item in results))
     assert all((item['policy']['consumer'] == 'mcp' for item in results))
     assert all((item['policy']['archive_capability'] is False for item in results))
+
+
+def test_mcp_default_memory_adapter_excludes_pending_admission_text():
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    pending = _memory_item(
+        'pending-explicit',
+        now=now,
+        content='coffee pending explicit memory',
+        processing_state=ProcessingState.pending,
+    )
+    db_client = _FirestoreFake({f'users/u1/memory_items/{pending.memory_id}': _stored_item(pending)})
+
+    results = search_default_mcp_memories(
+        uid='u1', query='coffee', limit=10, db_client=db_client, rollout_capabilities=_read_capabilities(), now=now
+    )
+
+    assert results == []
 
 
 def test_mcp_default_memory_memory_adapter_returns_none_when_rollout_or_default_grant_disabled():

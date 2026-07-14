@@ -139,15 +139,14 @@ class TestInvalidInputHandling:
         resp = client.delete("/v3/memories/nonexistent-mem-id", headers=auth_headers)
         assert resp.status_code == 404
 
-    def test_empty_action_item_description_currently_accepted(self, client, auth_headers):
-        """Document current contract: empty descriptions are accepted by the route model."""
+    def test_empty_action_item_description_rejected(self, client, auth_headers):
+        """Empty descriptions are rejected by TaskCreate min_length=1 validation."""
         resp = client.post(
             "/v1/action-items",
             json={"description": ""},
             headers=auth_headers,
         )
-        assert resp.status_code == 200, resp.text
-        assert resp.json()["description"] == ""
+        assert resp.status_code == 422, resp.text
 
 
 class TestEdgeCases:

@@ -486,16 +486,16 @@ private struct CloudConnectorCardHeaderView: View {
   let onDismiss: () -> Void
 
   var body: some View {
-    HStack(alignment: .top, spacing: 13) {
+    HStack(alignment: .top, spacing: OmiSpacing.md) {
       SpatialOverlayAccentIcon(systemName: "checklist", diameter: 38)
 
-      VStack(alignment: .leading, spacing: 4) {
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
         Text(title)
           .scaledFont(size: 13.5, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
           .fixedSize(horizontal: false, vertical: true)
         Text(subtitle)
-          .scaledFont(size: 12, weight: .medium)
+          .scaledFont(size: OmiType.caption, weight: .medium)
           .foregroundColor(OmiColors.textTertiary)
           .lineSpacing(1.5)
           .fixedSize(horizontal: false, vertical: true)
@@ -505,7 +505,7 @@ private struct CloudConnectorCardHeaderView: View {
 
       Button(action: onDismiss) {
         Image(systemName: "xmark")
-          .scaledFont(size: 10, weight: .bold)
+          .scaledFont(size: OmiType.micro, weight: .bold)
           .foregroundColor(OmiColors.textSecondary)
           .frame(width: 22, height: 22)
           .background(Circle().fill(Color.white.opacity(0.10)))
@@ -526,9 +526,9 @@ private struct CloudConnectorInstructionCardView: View {
 
   var body: some View {
     CloudConnectorCardHeaderView(title: title, subtitle: subtitle, onDismiss: onDismiss)
-    .padding(.leading, 16)
-    .padding(.trailing, 12)
-    .padding(.vertical, 15)
+    .padding(.leading, OmiSpacing.lg)
+    .padding(.trailing, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.lg)
     .frame(width: size.width, height: size.height, alignment: .topLeading)
     .background(SpatialOverlayCardBackground())
     .contentShape(Rectangle())
@@ -546,24 +546,24 @@ private struct CloudConnectorFieldCopyCardView: View {
   @State private var copiedFieldID: String?
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 10) {
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       CloudConnectorCardHeaderView(title: title, subtitle: subtitle, onDismiss: onDismiss)
 
-      VStack(alignment: .leading, spacing: 10) {
+      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
         ForEach(sections) { section in
           sectionView(section)
         }
       }
     }
-    .padding(.leading, 16)
-    .padding(.trailing, 12)
-    .padding(.vertical, 15)
+    .padding(.leading, OmiSpacing.lg)
+    .padding(.trailing, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.lg)
     .frame(width: size.width, height: size.height, alignment: .topLeading)
     .background(SpatialOverlayCardBackground())
   }
 
   private func sectionView(_ section: CloudConnectorCopySection) -> some View {
-    VStack(alignment: .leading, spacing: 6) {
+    VStack(alignment: .leading, spacing: OmiSpacing.xs) {
       if section.hasVisibleTitle {
         Text(section.title)
           .scaledFont(size: 10.5, weight: .semibold)
@@ -571,7 +571,7 @@ private struct CloudConnectorFieldCopyCardView: View {
           .lineLimit(1)
       }
 
-      VStack(alignment: .leading, spacing: 6) {
+      VStack(alignment: .leading, spacing: OmiSpacing.xs) {
         ForEach(section.fields) { field in
           fieldRow(field)
         }
@@ -580,7 +580,7 @@ private struct CloudConnectorFieldCopyCardView: View {
   }
 
   private func fieldRow(_ field: CloudConnectorCopyField) -> some View {
-    HStack(spacing: 8) {
+    HStack(spacing: OmiSpacing.sm) {
       Text(field.label)
         .scaledFont(size: 11.5, weight: .medium)
         .foregroundColor(OmiColors.textTertiary)
@@ -600,8 +600,8 @@ private struct CloudConnectorFieldCopyCardView: View {
         Text("—")
           .scaledFont(size: 10.5, weight: .semibold)
           .foregroundColor(OmiColors.textTertiary)
-          .padding(.horizontal, 9)
-          .padding(.vertical, 4)
+          .padding(.horizontal, OmiSpacing.sm)
+          .padding(.vertical, OmiSpacing.xxs)
       } else {
         copyButton(field)
       }
@@ -615,7 +615,7 @@ private struct CloudConnectorFieldCopyCardView: View {
     } label: {
       ZStack {
         Image(systemName: copiedFieldID == field.id ? "checkmark" : "doc.on.doc")
-          .scaledFont(size: 10, weight: .bold)
+          .scaledFont(size: OmiType.micro, weight: .bold)
       }
       .frame(width: 28, height: 22)
       .foregroundColor(copiedFieldID == field.id ? OmiColors.success : OmiColors.textPrimary)
@@ -722,22 +722,22 @@ private struct CloudConnectorGuidanceView: View {
   }
 
   private var bubble: some View {
-    HStack(spacing: 11) {
+    HStack(spacing: OmiSpacing.md) {
       SpatialOverlayAccentIcon(systemName: arrowIcon, diameter: 34)
 
-      VStack(alignment: .leading, spacing: 2) {
+      VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         Text("Finish in Claude")
-          .scaledFont(size: 13, weight: .semibold)
+          .scaledFont(size: OmiType.body, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
         Text("Click the \(actionLabel) button.")
-          .scaledFont(size: 12, weight: .medium)
+          .scaledFont(size: OmiType.caption, weight: .medium)
           .foregroundColor(OmiColors.textTertiary)
       }
       Spacer(minLength: 0)
     }
-    .padding(.horizontal, 15)
-    .padding(.vertical, 12)
-    .background(SpatialOverlayCardBackground(cornerRadius: 18))
+    .padding(.horizontal, OmiSpacing.lg)
+    .padding(.vertical, OmiSpacing.md)
+    .background(SpatialOverlayCardBackground(cornerRadius: OmiChrome.controlRadius))
   }
 }
 

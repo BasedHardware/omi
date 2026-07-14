@@ -3,12 +3,10 @@ import CoreBluetooth
 import Foundation
 import os.log
 
-// MARK: - Notification Names for BLE Events
-
-extension Notification.Name {
-    static let bleDeviceConnected = Notification.Name("bleDeviceConnected")
-    static let bleDeviceDisconnected = Notification.Name("bleDeviceDisconnected")
-    static let bleDeviceFailedToConnect = Notification.Name("bleDeviceFailedToConnect")
+enum BluetoothCentralEvent: Equatable, Sendable {
+    case connected(lease: BluetoothConnectionLease)
+    case failedToConnect(lease: BluetoothConnectionLease, reason: String)
+    case disconnected(lease: BluetoothConnectionLease, reason: String?)
 }
 
 @MainActor
@@ -19,6 +17,7 @@ protocol DeviceBluetoothManaging: AnyObject {
     var bluetoothStatePublisher: AnyPublisher<CBManagerState, Never> { get }
     var isScanningPublisher: AnyPublisher<Bool, Never> { get }
     var discoveredDevicesPublisher: AnyPublisher<[BtDevice], Never> { get }
+    var centralEventPublisher: AnyPublisher<BluetoothCentralEvent, Never> { get }
 
     func prepareForStateUpdates()
     func startScanning(timeout: TimeInterval)
@@ -38,15 +37,17 @@ final class BluetoothManager: NSObject, ObservableObject {
 
     // MARK: - Private Properties
 
-    /// The underlying CBCentralManager (exposed for transport creation)
+    /// The underlying CBCentralManager
     /// Created lazily to avoid triggering Bluetooth permission dialog at app startup
-    private(set) lazy var centralManager: CBCentralManager = {
+    private lazy var centralManager: CBCentralManager = {
         let manager = CBCentralManager(delegate: nil, queue: nil)
         manager.delegate = self
         return manager
     }()
     private var scanTimer: Timer?
     private var discoveredPeripherals: [UUID: CBPeripheral] = [:]
+    private let centralEventSubject = PassthroughSubject<BluetoothCentralEvent, Never>()
+    private let connectionLeases = BluetoothConnectionLeaseRegistry()
 
     private let logger = Logger(subsystem: "me.omi.desktop", category: "BluetoothManager")
 
@@ -65,7 +66,7 @@ final class BluetoothManager: NSObject, ObservableObject {
     /// Start scanning for supported BLE devices
     /// - Parameter timeout: Scan duration in seconds (default: 5)
     func startScanning(timeout: TimeInterval = 5.0) {
-        guard bluetoothState == .poweredOn else {
+        guard centralManager.state == .poweredOn else {
             logger.warning("Cannot scan: Bluetooth not powered on (state: \(String(describing: self.bluetoothState)))")
             return
         }
@@ -125,38 +126,32 @@ final class BluetoothManager: NSObject, ObservableObject {
         return discoveredPeripherals[uuid]
     }
 
-    /// Connect to a device
-    /// - Parameter device: The device to connect to
-    func connect(to device: BtDevice) {
-        guard let peripheral = peripheral(for: device) else {
-            logger.error("Cannot connect: peripheral not found for device \(device.id)")
-            return
-        }
-
-        logger.info("Connecting to \(device.displayName) (\(device.id))")
-        centralManager.connect(peripheral, options: nil)
-    }
-
-    /// Disconnect from a device
-    /// - Parameter device: The device to disconnect from
-    func disconnect(from device: BtDevice) {
-        guard let peripheral = peripheral(for: device) else {
-            logger.warning("Cannot disconnect: peripheral not found for device \(device.id)")
-            return
-        }
-
-        logger.info("Disconnecting from \(device.displayName)")
-        centralManager.cancelPeripheralConnection(peripheral)
-    }
-
-    /// Cancel connection to a peripheral
-    func cancelConnection(_ peripheral: CBPeripheral) {
-        centralManager.cancelPeripheralConnection(peripheral)
-    }
-
     /// Check if Bluetooth is available and ready
     var isBluetoothReady: Bool {
         bluetoothState == .poweredOn
+    }
+
+    func beginConnection(
+        to peripheral: CBPeripheral,
+        sessionGeneration: UInt64
+    ) throws -> BluetoothConnectionLease {
+        guard bluetoothState == .poweredOn else {
+            throw BluetoothConnectionLeaseError.centralUnavailable
+        }
+        let lease = try connectionLeases.begin(
+            peripheralID: peripheral.identifier,
+            sessionGeneration: sessionGeneration
+        )
+        centralManager.connect(peripheral, options: nil)
+        return lease
+    }
+
+    func cancelConnection(
+        to peripheral: CBPeripheral,
+        lease: BluetoothConnectionLease
+    ) {
+        guard connectionLeases.requestCancellation(lease) else { return }
+        centralManager.cancelPeripheralConnection(peripheral)
     }
 
     /// Trigger the Bluetooth permission dialog by attempting to scan
@@ -200,7 +195,7 @@ final class BluetoothManager: NSObject, ObservableObject {
     }
 }
 
-extension BluetoothManager: DeviceBluetoothManaging {
+extension BluetoothManager: DeviceBluetoothManaging, BluetoothCentralConnectionControlling {
     var currentBluetoothState: CBManagerState { bluetoothState }
     var currentIsScanning: Bool { isScanning }
     var currentDiscoveredDevices: [BtDevice] { discoveredDevices }
@@ -212,6 +207,9 @@ extension BluetoothManager: DeviceBluetoothManaging {
     }
     var discoveredDevicesPublisher: AnyPublisher<[BtDevice], Never> {
         $discoveredDevices.eraseToAnyPublisher()
+    }
+    var centralEventPublisher: AnyPublisher<BluetoothCentralEvent, Never> {
+        centralEventSubject.eraseToAnyPublisher()
     }
 
     func prepareForStateUpdates() {
@@ -247,6 +245,15 @@ extension BluetoothManager: CBCentralManagerDelegate {
             // Stop scanning if Bluetooth becomes unavailable
             if central.state != .poweredOn && self.isScanning {
                 self.stopScanning()
+            }
+
+            if central.state != .poweredOn {
+                let reason = "Bluetooth central became \(newStateDesc)"
+                for lease in self.connectionLeases.reset() {
+                    self.centralEventSubject.send(
+                        .disconnected(lease: lease, reason: reason)
+                    )
+                }
             }
         }
     }
@@ -288,12 +295,20 @@ extension BluetoothManager: CBCentralManagerDelegate {
         Task { @MainActor in
             self.logger.info("Connected to \(peripheral.name ?? peripheral.identifier.uuidString)")
 
-            // Post notification for BleTransport to handle
-            NotificationCenter.default.post(
-                name: .bleDeviceConnected,
-                object: nil,
-                userInfo: ["peripheralId": peripheral.identifier]
+            guard let resolution = self.connectionLeases.markConnected(
+                peripheralID: peripheral.identifier
+            ) else {
+                self.logger.warning("Ignoring unleased CoreBluetooth connect callback for \(peripheral.identifier)")
+                central.cancelPeripheralConnection(peripheral)
+                return
+            }
+
+            self.centralEventSubject.send(
+                .connected(lease: resolution.lease)
             )
+            if resolution.shouldCancel {
+                central.cancelPeripheralConnection(peripheral)
+            }
         }
     }
 
@@ -305,14 +320,18 @@ extension BluetoothManager: CBCentralManagerDelegate {
         Task { @MainActor in
             self.logger.error("Failed to connect to \(peripheral.name ?? peripheral.identifier.uuidString): \(error?.localizedDescription ?? "unknown error")")
 
-            // Post notification for BleTransport to handle
-            NotificationCenter.default.post(
-                name: .bleDeviceFailedToConnect,
-                object: nil,
-                userInfo: [
-                    "peripheralId": peripheral.identifier,
-                    "error": error as Any
-                ]
+            guard let lease = self.connectionLeases.finish(
+                peripheralID: peripheral.identifier
+            ) else {
+                self.logger.warning("Ignoring unleased CoreBluetooth connection failure for \(peripheral.identifier)")
+                return
+            }
+
+            self.centralEventSubject.send(
+                .failedToConnect(
+                    lease: lease,
+                    reason: error?.localizedDescription ?? "Unknown error"
+                )
             )
         }
     }
@@ -329,14 +348,18 @@ extension BluetoothManager: CBCentralManagerDelegate {
                 self.logger.info("Disconnected from \(peripheral.name ?? peripheral.identifier.uuidString)")
             }
 
-            // Post notification for BleTransport to handle
-            NotificationCenter.default.post(
-                name: .bleDeviceDisconnected,
-                object: nil,
-                userInfo: [
-                    "peripheralId": peripheral.identifier,
-                    "error": error as Any
-                ]
+            guard let lease = self.connectionLeases.finish(
+                peripheralID: peripheral.identifier
+            ) else {
+                self.logger.warning("Ignoring unleased CoreBluetooth disconnect callback for \(peripheral.identifier)")
+                return
+            }
+
+            self.centralEventSubject.send(
+                .disconnected(
+                    lease: lease,
+                    reason: error?.localizedDescription
+                )
             )
         }
     }

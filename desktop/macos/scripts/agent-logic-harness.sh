@@ -5,6 +5,7 @@
 #   cd desktop/macos && ./scripts/agent-logic-harness.sh
 #   ./scripts/agent-logic-harness.sh --swift-only
 #   ./scripts/agent-logic-harness.sh --node-only
+#   ./scripts/agent-logic-harness.sh --cross-surface-smoke
 #   ./scripts/agent-logic-harness.sh --skip-install
 #   ./scripts/agent-logic-harness.sh --verbose
 set -euo pipefail
@@ -16,6 +17,7 @@ REPO_ROOT="$(cd "$DESKTOP_DIR/../.." && pwd)"
 RUN_SWIFT=1
 RUN_NODE=1
 RUN_GAUNTLET=0
+RUN_CROSS_SURFACE_SMOKE=0
 SKIP_INSTALL=0
 VERBOSE=0
 INTERNAL_FAILURE_PROBE=0
@@ -34,9 +36,15 @@ Runs:
   3. pi-mono-extension package tests:
      npm ci if needed, then node --experimental-strip-types --test index.test.ts
 
+  --cross-surface-smoke runs only the compact deterministic contract suite:
+    cross-surface Swift projections, the matching agent-runtime protocol and
+    provider tests, and Rust retrieval-policy tests. It does not launch the app,
+    audio capture, or a live provider.
+
 Options:
   --swift-only    Run only Swift focused tests
   --node-only     Run only Node/package focused tests
+  --cross-surface-smoke  Run the compact cross-surface contract smoke suite only
   --skip-install  Do not run npm ci for pi-mono-extension if deps are missing
   --with-gauntlet   After unit tests, run agent-continuity-gauntlet.sh (requires live app)
   --verbose       Stream command output instead of saving it quietly
@@ -53,6 +61,11 @@ while [[ $# -gt 0 ]]; do
     --node-only)
       RUN_SWIFT=0
       RUN_NODE=1
+      ;;
+    --cross-surface-smoke)
+      RUN_SWIFT=0
+      RUN_NODE=0
+      RUN_CROSS_SURFACE_SMOKE=1
       ;;
     --skip-install)
       SKIP_INSTALL=1
@@ -81,7 +94,7 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-if [[ "$INTERNAL_FAILURE_PROBE" -eq 0 && "$RUN_SWIFT" -eq 0 && "$RUN_NODE" -eq 0 ]]; then
+if [[ "$INTERNAL_FAILURE_PROBE" -eq 0 && "$RUN_SWIFT" -eq 0 && "$RUN_NODE" -eq 0 && "$RUN_CROSS_SURFACE_SMOKE" -eq 0 ]]; then
   echo "Nothing selected." >&2
   exit 2
 fi
@@ -169,7 +182,15 @@ run_swift_focus() {
   (
     cd "$DESKTOP_DIR"
     xcrun swift test --package-path Desktop \
-      --filter 'AgentPillLifecycleTests|PushToTalkStateMachineTests|RealtimeHubSpawnAgentTests|AgentContinuityGauntletTests|KernelTurnRecordedProjectionTests|ChatTimelineContinuityTests|FloatingControlBarStateTests|RuntimeOwnerIdentityTests'
+      --filter 'AgentPillLifecycleTests|PushToTalkStateMachineTests|VoiceTurnReducerTests|VoiceTurnCoordinatorTests|VoiceTurnOutputOwnershipTests|LegacyVoiceJournalImporterTests|RealtimeHubBargeInContinuityTests|RealtimeHubSessionInputLifecycleTests|RealtimeHubSpawnAgentTests|RealtimeProviderToolResultPolicyTests|AgentContinuityGauntletTests|KernelTurnRecordedProjectionTests|ChatTimelineContinuityTests|FloatingControlBarStateTests|RuntimeOwnerIdentityTests|TaskThreadProjectionTests'
+  )
+}
+
+run_cross_surface_swift_smoke() {
+  (
+    cd "$DESKTOP_DIR"
+    xcrun swift test --package-path Desktop \
+      --filter 'CrossSurfaceContractSmokeTests|AgentRuntimeStatusStoreTests|RealtimeHubSpawnAgentTests|DesktopAutomationBridgeRouteTests/testUnauthenticatedHealthReportsBackendAndRuntimeProtocolIdentity'
   )
 }
 
@@ -178,14 +199,42 @@ run_agent_runtime_focus() {
     cd "$DESKTOP_DIR"
     scripts/test-tool-surfaces.sh
   )
+}
+
+ensure_agent_runtime_deps() {
+  if [[ -d "$DESKTOP_DIR/agent/node_modules" ]]; then
+    return
+  fi
+  if [[ "$SKIP_INSTALL" -eq 1 ]]; then
+    echo "agent/node_modules missing and --skip-install was set" >&2
+    return 1
+  fi
   (
     cd "$DESKTOP_DIR/agent"
-    npm test -- --run \
-      tests/codemagic-pi-mono-extension-ci.test.ts \
+    npm ci --no-fund --no-audit
+  )
+}
+
+run_cross_surface_agent_smoke() {
+  ensure_agent_runtime_deps
+  (
+    cd "$DESKTOP_DIR/agent"
+    npm run build
+    node node_modules/vitest/vitest.mjs run \
+      tests/cross-surface-contract-smoke.test.ts \
+      tests/runtime-stdio-contract.test.ts \
+      tests/protocol-v2.test.ts \
+      tests/conversation-journal.test.ts \
+      tests/control-tools.test.ts \
       tests/runtime-adapter.test.ts \
-      tests/pi-mono-adapter.test.ts \
-      tests/surface-session.test.ts \
-      tests/chat-continuity-invariant.test.ts
+      tests/pi-mono-adapter.test.ts
+  )
+}
+
+run_cross_surface_rust_smoke() {
+  (
+    cd "$DESKTOP_DIR/Backend-Rust"
+    cargo test retrieval_policy
   )
 }
 
@@ -241,6 +290,12 @@ fi
 if [[ "$RUN_NODE" -eq 1 ]]; then
   run_step "agent runtime focused tests" run_agent_runtime_focus
   run_step "pi-mono-extension exact package tests" run_pi_mono_extension_exact
+fi
+
+if [[ "$RUN_CROSS_SURFACE_SMOKE" -eq 1 ]]; then
+  run_step "cross-surface Swift contract smoke" run_cross_surface_swift_smoke
+  run_step "cross-surface agent contract smoke" run_cross_surface_agent_smoke
+  run_step "cross-surface Rust retrieval contract smoke" run_cross_surface_rust_smoke
 fi
 
 if [[ "$RUN_GAUNTLET" -eq 1 ]]; then

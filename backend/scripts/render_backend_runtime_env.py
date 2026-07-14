@@ -38,14 +38,17 @@ def main() -> int:
         output_prefix = _output_prefix(service)
         _emit_output(f'{output_prefix}_env_vars', _render_env_vars(service_config.get('env', {})))
         _emit_output(f'{output_prefix}_secrets', _render_secrets(service_config.get('secrets', {})))
+        _emit_output(f'{output_prefix}_secret_names', _render_secret_names(service_config.get('secrets', {})))
     jobs = _as_config_dict(cloud_run.get('jobs')) or {}
     for job, raw_job_config in jobs.items():
         job_config = _as_config_dict(raw_job_config)
         if job_config is None:
             raise ValueError(f'Cloud Run job {job} must be a mapping')
         output_prefix = _output_prefix(job)
+        _emit_output(f'{output_prefix}_flags', _render_flags(_as_config_dict(job_config.get('flags')) or {}))
         _emit_output(f'{output_prefix}_env_vars', _render_env_vars(job_config.get('env', {})))
         _emit_output(f'{output_prefix}_secrets', _render_secrets(job_config.get('secrets', {})))
+        _emit_output(f'{output_prefix}_secret_names', _render_secret_names(job_config.get('secrets', {})))
     return 0
 
 
@@ -82,6 +85,10 @@ def _render_secrets(secret_entries: ConfigDict) -> str:
     return '\n'.join(lines)
 
 
+def _render_secret_names(secret_entries: ConfigDict) -> str:
+    return ','.join(secret_entries.keys())
+
+
 def _render_flags(flag_entries: ConfigDict) -> str:
     flags: list[str] = []
     for name, raw_entry in flag_entries.items():
@@ -104,6 +111,9 @@ def _runtime_value(name: str, entry: ConfigDict, *, allow_missing: bool = False)
         value = os.environ.get(env_var, '')
         if value:
             return value
+        default = entry.get('default')
+        if default is not None:
+            return str(default)
         if allow_missing:
             return None
         raise ValueError(f'{name} requires ${env_var} to be set')

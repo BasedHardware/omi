@@ -4,48 +4,42 @@ import XCTest
 
 @MainActor
 final class ChatToolExecutorSpawnAgentTests: XCTestCase {
-  func testFloatingPillCannotSpawnNestedFloatingPill() async {
-    let before = AgentPillsManager.shared.pills.count
-    let toolCall = ToolCall(
-      name: "spawn_agent",
-      arguments: ["brief": "Sleep for 10 seconds", "title": "Sleep Agent"],
-      thoughtSignature: nil)
+  private var ownerFixture: RuntimeOwnerAuthorityTestFixture!
 
-    let result = await ChatToolExecutor.execute(
-      toolCall,
-      originatingClientScope: "floating-pill")
-
-    XCTAssertTrue(result.contains("unavailable from an existing floating background agent"))
-    XCTAssertEqual(AgentPillsManager.shared.pills.count, before)
+  override func setUp() async throws {
+    try await super.setUp()
+    ownerFixture = RuntimeOwnerAuthorityTestFixture()
+    await ownerFixture.establish(authOwnerID: "spawn-test-owner")
   }
 
-  func testChatSpawnAgentRejectsEmptyObjectiveBeforeSpawning() async {
+  override func tearDown() async throws {
+    await ownerFixture.restore()
+    ownerFixture = nil
+    try await super.tearDown()
+  }
+
+  func testDirectPermissionToolsRemainCanonicalPhysicalExecutors() {
+    XCTAssertEqual(
+      GeneratedToolExecutors.chatDispatch(for: "check_permission_status"),
+      .checkPermissionStatus)
+    XCTAssertEqual(
+      GeneratedToolExecutors.chatDispatch(for: "request_permission"),
+      .requestPermission)
+  }
+
+  func testSpawnAgentHasNoDormantSwiftExecutionPath() async {
     let before = AgentPillsManager.shared.pills.count
     let toolCall = ToolCall(
       name: "spawn_agent",
-      arguments: ["title": "New Search"],
+      arguments: ["objective": "Private owner A task", "title": "Agent"],
       thoughtSignature: nil)
 
     let result = await ChatToolExecutor.execute(
       toolCall,
       originatingChatMode: .act,
-      originatingClientScope: nil)
+      expectedOwnerID: "spawn-test-owner")
 
-    XCTAssertTrue(result.contains("Missing objective"))
+    XCTAssertEqual(result, "Unknown tool: spawn_agent")
     XCTAssertEqual(AgentPillsManager.shared.pills.count, before)
-  }
-
-  func testChatSpawnAgentRoutesThroughCoordinatorSpawn() throws {
-    let sourceURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources")
-      .appendingPathComponent("Providers/ChatToolExecutor.swift")
-    let source = try String(contentsOf: sourceURL, encoding: .utf8)
-
-    XCTAssertTrue(source.contains("DesktopCoordinatorService.shared.spawnAgent("))
-    XCTAssertTrue(source.contains("AgentPillsManager.shared.upsertSpawnedPill("))
-    XCTAssertTrue(source.contains("refreshProjectedPillsFromKernel"))
-    XCTAssertFalse(source.contains("AgentPillsManager.shared.spawnFromUserQuery("))
   }
 }

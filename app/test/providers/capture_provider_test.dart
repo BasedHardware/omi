@@ -558,7 +558,7 @@ void main() {
       await tester.pump();
 
       final context = tester.element(find.byType(Scaffold));
-      final expectedText = AppLocalizations.of(context)!.transcriptionPausedReconnecting;
+      final expectedText = AppLocalizations.of(context).transcriptionPausedReconnecting;
 
       expect(find.byType(SnackBar), findsOneWidget);
       expect(find.text(expectedText), findsOneWidget);
@@ -576,11 +576,53 @@ void main() {
       await tester.pump();
 
       final context = tester.element(find.byType(Scaffold));
-      final expectedText = AppLocalizations.of(context)!.transcriptionPausedReconnecting;
+      final expectedText = AppLocalizations.of(context).transcriptionPausedReconnecting;
 
       expect(find.byType(SnackBar), findsNothing);
       expect(find.text(expectedText), findsNothing);
       provider.dispose();
+    });
+  });
+
+  group('terminal live transcription status', () {
+    test('preserves server STT failure across socket close until ready', () {
+      final provider = CaptureProvider();
+      final failure = MessageServiceStatusEvent(
+        status: 'stt_failed',
+        outcome: 'upstream_error',
+        provider: 'deepgram',
+        retryable: true,
+        reason: 'connection_lost',
+      );
+
+      provider.onMessageEventReceived(failure);
+      expect(provider.terminalTranscriptionFailure?.outcome, 'upstream_error');
+      expect(provider.terminalTranscriptionFailure?.retryable, isTrue);
+
+      provider.onClosed();
+      expect(provider.terminalTranscriptionFailure?.status, 'stt_failed');
+
+      provider.onMessageEventReceived(MessageServiceStatusEvent(status: 'ready'));
+      expect(provider.terminalTranscriptionFailure, isNull);
+      provider.dispose();
+    });
+
+    test('parses legacy and populated service-status payloads additively', () {
+      final legacy = MessageServiceStatusEvent.fromJson({'type': 'service_status', 'status': 'ready'});
+      final failed = MessageServiceStatusEvent.fromJson({
+        'type': 'service_status',
+        'status': 'stt_failed',
+        'outcome': 'timeout',
+        'provider': 'parakeet',
+        'retryable': true,
+        'reason': 'send_failed',
+      });
+
+      expect(legacy.outcome, isNull);
+      expect(failed.outcome, 'timeout');
+      expect(failed.provider, 'parakeet');
+      expect(failed.retryable, isTrue);
+      expect(failed.reason, 'send_failed');
     });
   });
 

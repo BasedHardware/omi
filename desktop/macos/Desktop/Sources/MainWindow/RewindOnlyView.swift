@@ -11,7 +11,7 @@ struct RewindOnlyView: View {
     var body: some View {
         Group {
             if authState.isRestoringAuth {
-                VStack(spacing: 16) {
+                VStack(spacing: OmiSpacing.lg) {
                     if let iconURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
                        let nsImage = NSImage(contentsOf: iconURL) {
                         Image(nsImage: nsImage)
@@ -24,6 +24,11 @@ struct RewindOnlyView: View {
                         .tint(.white.opacity(0.6))
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if authState.sessionPhase == .recoveryRequired {
+                SessionRecoveryView()
+                    .onAppear {
+                        log("RewindOnlyView: Showing recoverable auth state")
+                    }
             } else if !authState.isSignedIn {
                 // Not signed in - show sign in view
                 SignInView(authState: authState)
@@ -43,7 +48,7 @@ struct RewindOnlyView: View {
         .background(OmiColors.backgroundPrimary)
         .frame(minWidth: 800, minHeight: 500)
         .preferredColorScheme(.dark)
-        .tint(OmiColors.purplePrimary)
+        .tint(OmiColors.accent)
         .onAppear {
             log("RewindOnlyView: View appeared - isSignedIn=\(authState.isSignedIn)")
             // Force dark appearance on the window
@@ -66,7 +71,7 @@ struct RewindOnlyView: View {
 
             // Settings button overlay in top-right corner
             settingsButton
-                .padding(16)
+                .padding(OmiSpacing.lg)
         }
     }
 
@@ -97,9 +102,9 @@ struct RewindOnlyView: View {
             }
         } label: {
             Image(systemName: "gearshape.fill")
-                .scaledFont(size: 14)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(.white.opacity(0.7))
-                .padding(10)
+                .padding(OmiSpacing.sm)
                 .background(Color.black.opacity(0.5))
                 .clipShape(Circle())
         }
@@ -190,15 +195,15 @@ struct RewindSettingsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
                 // Header
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                     Text("Rewind Settings")
                         .scaledFont(size: 24, weight: .bold)
                         .foregroundColor(.white)
 
                     Text("Configure screen capture and storage")
-                        .scaledFont(size: 14)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(.white.opacity(0.6))
                 }
 
@@ -211,8 +216,7 @@ struct RewindSettingsView: View {
                     subtitle: "Capture screenshots for Rewind timeline"
                 ) {
                     Toggle("", isOn: $screenAnalysisEnabled)
-                        .toggleStyle(.switch)
-                        .tint(OmiColors.purplePrimary)
+                        .toggleStyle(OmiToggleStyle())
                 }
 
                 // Retention Period
@@ -242,7 +246,7 @@ struct RewindSettingsView: View {
 
                 Spacer()
             }
-            .padding(24)
+            .padding(OmiSpacing.xxl)
         }
         .background(OmiColors.backgroundPrimary)
     }
@@ -252,14 +256,14 @@ struct RewindSettingsView: View {
         subtitle: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        HStack(alignment: .center, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .center, spacing: OmiSpacing.lg) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                 Text(title)
-                    .scaledFont(size: 14, weight: .medium)
+                    .scaledFont(size: OmiType.body, weight: .medium)
                     .foregroundColor(.white)
 
                 Text(subtitle)
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(.white.opacity(0.5))
             }
 
@@ -267,23 +271,23 @@ struct RewindSettingsView: View {
 
             content()
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, OmiSpacing.sm)
     }
 
     private var storageInfoSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
             Text("Storage")
-                .scaledFont(size: 14, weight: .semibold)
+                .scaledFont(size: OmiType.body, weight: .semibold)
                 .foregroundColor(.white.opacity(0.8))
 
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                     Text("Screenshots stored locally")
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(.white.opacity(0.7))
 
                     Text("~/Library/Application Support/Omi/users/\(UserDefaults.standard.string(forKey: "auth_userId") ?? "")/")
-                        .scaledFont(size: 11, design: .monospaced)
+                        .scaledFont(size: OmiType.caption, design: .monospaced)
                         .foregroundColor(.white.opacity(0.4))
                 }
 
@@ -294,19 +298,19 @@ struct RewindSettingsView: View {
                     NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: url.path)
                 }
                 .buttonStyle(.plain)
-                .foregroundColor(OmiColors.purplePrimary)
-                .scaledFont(size: 12, weight: .medium)
+                .foregroundColor(OmiColors.accent)
+                .scaledFont(size: OmiType.caption, weight: .medium)
             }
         }
-        .padding(16)
+        .padding(OmiSpacing.lg)
         .background(Color.white.opacity(0.05))
-        .cornerRadius(12)
+        .cornerRadius(OmiChrome.smallControlRadius)
     }
 
     private var permissionsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
             Text("Permissions")
-                .scaledFont(size: 14, weight: .semibold)
+                .scaledFont(size: OmiType.body, weight: .semibold)
                 .foregroundColor(.white.opacity(0.8))
 
             Button {
@@ -314,28 +318,28 @@ struct RewindSettingsView: View {
             } label: {
                 HStack {
                     Image(systemName: "rectangle.on.rectangle")
-                        .scaledFont(size: 16)
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .scaledFont(size: OmiType.subheading)
+                        .foregroundColor(OmiColors.accent)
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                         Text("Screen Recording")
-                            .scaledFont(size: 13, weight: .medium)
+                            .scaledFont(size: OmiType.body, weight: .medium)
                             .foregroundColor(.white)
 
                         Text("Required for Rewind to capture your screen")
-                            .scaledFont(size: 11)
+                            .scaledFont(size: OmiType.caption)
                             .foregroundColor(.white.opacity(0.5))
                     }
 
                     Spacer()
 
                     Text("Open Settings")
-                        .scaledFont(size: 12, weight: .medium)
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .scaledFont(size: OmiType.caption, weight: .medium)
+                        .foregroundColor(OmiColors.accent)
                 }
-                .padding(12)
+                .padding(OmiSpacing.md)
                 .background(Color.white.opacity(0.05))
-                .cornerRadius(8)
+                .cornerRadius(OmiChrome.elementRadius)
             }
             .buttonStyle(.plain)
         }

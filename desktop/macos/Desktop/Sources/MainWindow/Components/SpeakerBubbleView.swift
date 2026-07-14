@@ -40,27 +40,27 @@ struct SpeakerBubbleView: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: OmiSpacing.sm) {
             if !isUser {
                 // Avatar for other speakers
                 avatar
             }
 
-            VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
+            VStack(alignment: isUser ? .trailing : .leading, spacing: OmiSpacing.xxs) {
                 // Speaker label — clickable for non-user speakers
                 if !isUser, let onTap = onSpeakerTapped {
                     Button(action: onTap) {
-                        HStack(spacing: 4) {
+                        HStack(spacing: OmiSpacing.xxs) {
                             Text(speakerLabel)
-                                .scaledFont(size: 12, weight: .medium)
+                                .scaledFont(size: OmiType.caption, weight: .medium)
                             if personName == nil {
                                 Image(systemName: "pencil")
-                                    .scaledFont(size: 10)
+                                    .scaledFont(size: OmiType.micro)
                             }
                         }
-                        .padding(.vertical, 2)
+                        .padding(.vertical, OmiSpacing.hairline)
                         .contentShape(Rectangle())
-                        .foregroundColor(personName != nil ? OmiColors.purplePrimary : OmiColors.textTertiary)
+                        .foregroundColor(personName != nil ? OmiColors.accent : OmiColors.textTertiary)
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("transcript_speaker_button_\(segment.id)")
@@ -74,7 +74,7 @@ struct SpeakerBubbleView: View {
                     }
                 } else {
                     Text(speakerLabel)
-                        .scaledFont(size: 12, weight: .medium)
+                        .scaledFont(size: OmiType.caption, weight: .medium)
                         .foregroundColor(OmiColors.textTertiary)
                 }
 
@@ -84,12 +84,12 @@ struct SpeakerBubbleView: View {
                 // With 400 segments in a conversation, this caused 2+ second main thread hangs.
                 // Users can still copy the full transcript via the "Copy" button in the header.
                 Text(segment.text)
-                    .scaledFont(size: 14)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textPrimary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, OmiSpacing.md)
+                    .padding(.vertical, OmiSpacing.sm)
                     .background(
-                        RoundedRectangle(cornerRadius: 18)
+                        RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
                             .fill(bubbleColor)
                     )
 
@@ -97,13 +97,13 @@ struct SpeakerBubbleView: View {
                 if !segment.translations.isEmpty {
                     ForEach(segment.translations, id: \.lang) { translation in
                         Text(translation.text)
-                            .scaledFont(size: 13)
+                            .scaledFont(size: OmiType.body)
                             .foregroundColor(OmiColors.textSecondary)
                             .italic()
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
+                            .padding(.horizontal, OmiSpacing.md)
+                            .padding(.vertical, OmiSpacing.sm)
                             .background(
-                                RoundedRectangle(cornerRadius: 18)
+                                RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
                                     .fill(bubbleColor.opacity(0.5))
                             )
                     }
@@ -111,7 +111,7 @@ struct SpeakerBubbleView: View {
 
                 // Timestamp
                 Text(formatTime(segment.start))
-                    .scaledFont(size: 11)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textQuaternary)
             }
 
@@ -125,11 +125,11 @@ struct SpeakerBubbleView: View {
 
     private var avatar: some View {
         Circle()
-            .fill(isUser ? OmiColors.purplePrimary : (personName != nil ? OmiColors.purplePrimary.opacity(0.3) : OmiColors.backgroundQuaternary))
+            .fill(isUser ? OmiColors.accent : (personName != nil ? OmiColors.accent.opacity(0.3) : OmiColors.backgroundQuaternary))
             .frame(width: 32, height: 32)
             .overlay(
                 Text(avatarInitial)
-                    .scaledFont(size: 13, weight: .semibold)
+                    .scaledFont(size: OmiType.body, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
             )
     }
@@ -137,7 +137,7 @@ struct SpeakerBubbleView: View {
 
 #if canImport(PreviewsMacros)
 #Preview {
-    VStack(spacing: 16) {
+    VStack(spacing: OmiSpacing.lg) {
         Text("SpeakerBubbleView Preview")
             .foregroundColor(.white)
     }

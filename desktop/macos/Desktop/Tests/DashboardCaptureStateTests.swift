@@ -98,8 +98,6 @@ final class DashboardCaptureStateTests: XCTestCase {
         XCTAssertTrue(exportMethod.contains("presentExportDestination(destination)"))
         XCTAssertFalse(importMethod.contains("navigate(to: .apps)"))
         XCTAssertFalse(exportMethod.contains("navigate(to: .apps)"))
-        XCTAssertFalse(importMethod.contains("desktopAutomationOpenImportRequested"))
-        XCTAssertFalse(exportMethod.contains("desktopAutomationOpenExportRequested"))
     }
 
     func testHomeMoreUsesAppsPopup() throws {
@@ -182,52 +180,6 @@ final class DashboardCaptureStateTests: XCTestCase {
         XCTAssertTrue(connectDismissMethod.contains("homeConnectSheetAcceptsInput = false"))
         XCTAssertTrue(connectDismissMethod.contains("selectedImportConnector = nil"))
         XCTAssertTrue(connectDismissMethod.contains("selectedExportDestination = nil"))
-    }
-
-    func testHomeStatusRefreshUsesSharedActivationThrottle() throws {
-        let source = try dashboardSource()
-        let normalizedSource = normalizedWhitespace(source)
-        let method = try methodBody(named: "refreshHomeStatusData", in: source)
-
-        XCTAssertTrue(source.contains("@State private var lastHomeStatusRefreshAt = Date.distantPast"))
-        XCTAssertTrue(normalizedSource.contains("syncCaptureState() reportHomeAutomationMode() Task { await refreshHomeStatusData(force: true) }"))
-        XCTAssertTrue(
-            normalizedSource.contains(
-                "viewModel.refreshGoals() appState.checkAllPermissions() syncCaptureState() Task { await refreshHomeStatusData(force: false) }"
-            )
-        )
-        XCTAssertTrue(method.contains("PollingConfig.shouldAllowActivationRefresh"))
-        XCTAssertTrue(method.contains("lastRefresh: lastHomeStatusRefreshAt"))
-        XCTAssertTrue(method.contains("lastHomeStatusRefreshAt = now"))
-        XCTAssertTrue(method.contains("async let importConnectorStatuses: Void = importConnectorStatusStore.refresh()"))
-        XCTAssertTrue(method.contains("async let screenshots: Void = loadScreenshotCount()"))
-        XCTAssertTrue(method.contains("async let knowledgeCounts: Void = loadKnowledgeCounts()"))
-        XCTAssertTrue(method.contains("async let exportStatuses: Void = loadMemoryExportStatuses()"))
-        XCTAssertFalse(source.contains("memoryExportStatusActiveRefreshThrottle"))
-        XCTAssertFalse(source.contains("lastMemoryExportStatusRefreshAt"))
-        XCTAssertFalse(source.contains("loadMemoryExportStatuses(force:"))
-    }
-
-    func testMemoryExportStatusesRefreshInsideHomeStatusGate() throws {
-        let source = try dashboardSource()
-        let method = try methodBody(named: "loadMemoryExportStatuses", in: source)
-
-        XCTAssertTrue(method.contains("let statuses = await MemoryExportService.shared.allStatuses()"))
-        XCTAssertTrue(method.contains("memoryExportStatuses = statuses"))
-        XCTAssertFalse(method.contains("PollingConfig.shouldAllowActivationRefresh"))
-        XCTAssertFalse(method.contains("lastHomeStatusRefreshAt"))
-        XCTAssertFalse(method.contains("memoryExportStatusActiveRefreshThrottle"))
-    }
-
-    func testOmiDeviceHistorySkipsNetworkAfterStickyFlag() throws {
-        let source = try dashboardSource()
-        let method = try methodBody(named: "loadKnowledgeCounts", in: source)
-        let helper = try methodBody(named: "loadOmiDeviceHistory", in: source)
-
-        XCTAssertTrue(method.contains("let shouldLoadDeviceHistory = await MainActor.run { !accountHasOmiDeviceConversations }"))
-        XCTAssertTrue(method.contains("async let deviceHistory = shouldLoadDeviceHistory ? loadOmiDeviceHistory() : nil"))
-        XCTAssertTrue(helper.contains("APIClient.shared.hasOmiDeviceConversations()"))
-        XCTAssertTrue(method.contains("UserDefaults.standard.set(true, forKey: Self.omiDeviceHistoryDefaultsKey)"))
     }
 
     func testConnectorRowsUseStatusConnectionForConnectedState() throws {

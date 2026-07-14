@@ -1,0 +1,152 @@
+# Single source of truth for deterministic, diff-scoped, stdlib-or-repo-only checks.
+# Values use JSON scalars/lists within this stdlib-parsed YAML subset.
+# Add new checks here with both local and ci lanes; never hardcode them in workflow YAML.
+checks:
+  - id: check-manifest-contract
+    command: ["python3", ".github/scripts/test_run_checks.py"]
+    triggers: ["all"]
+    lanes: ["local", "ci"]
+    reason: "manifest validity and workflow drift guard"
+  - id: desktop-release-manifest-v1
+    command: ["python3", ".github/scripts/test_desktop_release_manifest.py"]
+    triggers: [".github/schemas/desktop-release-manifest-v1.schema.json", ".github/scripts/desktop_release_manifest.py", ".github/scripts/test_desktop_release_manifest.py", ".github/scripts/fixtures/desktop_release_manifest/**"]
+    lanes: ["local", "ci"]
+    reason: "immutable desktop app/backend release-unit contract"
+  - id: desktop-release-doctor-v1
+    command: ["python3", ".github/scripts/test_desktop_release_doctor.py"]
+    triggers: [".github/schemas/desktop-release-evidence-v1.schema.json", ".github/scripts/desktop_release_doctor.py", ".github/scripts/desktop_release_doctor_report.py", ".github/scripts/test_desktop_release_doctor.py", ".github/workflows/desktop_release_doctor.yml"]
+    lanes: ["local", "ci"]
+    reason: "advisory desktop release evidence and drift report"
+  - id: diff-hygiene
+    command: ["python3", ".github/scripts/check_diff_hygiene.py", "--changed-files", "{changed_files}", "--base", "{base}", "--head", "{head}"]
+    triggers: ["all"]
+    lanes: ["local", "ci"]
+    reason: "all changes must be free of whitespace errors and conflict markers"
+  - id: architecture-guardrails
+    command: ["python3", ".github/scripts/check_arch_guardrails.py", "--changed-files", "{changed_files}", "--base", "{base}"]
+    triggers: ["all"]
+    lanes: ["local", "ci"]
+    reason: "advisory size checks plus oversized package-map baseline ratchet"
+  - id: product-invariants
+    command: ["python3", ".github/scripts/check_product_invariants.py", "--changed-files", "{changed_files}", "--pr-body-file", "{pr_body_file}"]
+    triggers: ["all"]
+    lanes: ["local", "ci"]
+    reason: "changed paths determine required invariant citations"
+  - id: desktop-changelog-data
+    command: ["python3", ".github/scripts/desktop-changelog.py", "validate"]
+    triggers: ["all"]
+    lanes: ["local", "ci"]
+    reason: "repository-wide desktop changelog schema contract"
+  - id: desktop-changelog-entry
+    command: ["python3", ".github/scripts/check-desktop-changelog.py", "--base", "{base}", "--head", "{head}", "{skip_changelog}"]
+    triggers: ["desktop/macos/**"]
+    lanes: ["local", "ci"]
+    reason: "desktop files changed"
+  - id: desktop-e2e-flow-coverage
+    command: ["python3", "desktop/macos/scripts/check-e2e-flow-coverage.py", "--strict", "--base", "{base}"]
+    triggers: ["desktop/macos/Desktop/Sources/**/*.swift"]
+    lanes: ["local", "ci"]
+    reason: "desktop Swift sources changed"
+  - id: brand-ui
+    command: ["python3", ".github/scripts/check_brand_ui.py", "--changed-files", "{changed_files}", "--base", "{base}"]
+    triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "app/lib/**/*.dart", "web/**/*.ts", "web/**/*.tsx", "web/**/*.js", "web/**/*.jsx", "web/**/*.css"]
+    lanes: ["local", "ci"]
+    reason: "INV-UI-1 applies to changed UI sources"
+  - id: deferred-work-markers
+    command: ["python3", ".github/scripts/deferred-work-marker-count.py", "--changed-files", "{changed_files}", "--base", "{base}", "--check-new"]
+    triggers: ["all"]
+    lanes: ["local", "ci"]
+    reason: "new deferred-work markers must cite a tracking issue"
+  - id: deployment-secret-boundary
+    command: ["python3", ".github/scripts/check_deployment_secret_boundary.py", "--base", "{base}"]
+    triggers: [".github/workflows/**/*.yml", ".github/workflows/**/*.yaml", ".github/scripts/check_deployment_secret_boundary.py", ".github/scripts/test_check_deployment_secret_boundary.py", "backend/charts/*/*_values.yaml", "backend/deploy/runtime_env.yaml", "config/deployment-setting-classification.json"]
+    lanes: ["local", "ci"]
+    reason: "new or changed deployment bindings must use a checked-in secret, config, or public-build classification"
+  - id: deployment-secret-boundary-fixtures
+    command: ["python3", ".github/scripts/test_check_deployment_secret_boundary.py"]
+    triggers: [".github/scripts/check_deployment_secret_boundary.py", ".github/scripts/test_check_deployment_secret_boundary.py"]
+    lanes: ["local", "ci"]
+    reason: "deployment secret-boundary fake-name fixtures must remain executable"
+  - id: backend-async-blockers
+    command: ["python3", "backend/scripts/scan_async_blockers.py", "--dirs", "backend/routers", "backend/utils", "backend/agent-proxy", "backend/dependencies.py", "--diff-base", "{base}", "--fail-on", "high_network_io,async_helpers_with_blocking,time_sleep,mixed_await_sync_db,no_await_should_be_def,unmanaged_thread_offload"]
+    triggers: ["backend/**/*.py", "backend/agent-proxy/**", "backend/scripts/scan_async_blockers.py"]
+    lanes: ["local", "ci"]
+    reason: "backend Python changed"
+  - id: backend-route-policy-baseline
+    command: ["python3", "backend/scripts/check_route_policy_baseline.py", "--base-ref", "{base}"]
+    triggers: ["backend/**/*.py", "backend/route_policy_manifest.yaml", "backend/route_policy_legacy_missing_routes.txt", "backend/scripts/check_route_policy_baseline.py"]
+    lanes: ["local", "ci"]
+    reason: "new backend routes must declare reviewed policy instead of growing the legacy baseline"
+  - id: firestore-index-manifest
+    command: ["python3", "backend/scripts/generate_firestore_indexes.py"]
+    triggers: ["firestore.indexes.json", "backend/database/firestore_index_registry.py", "backend/scripts/generate_firestore_indexes.py"]
+    lanes: ["local", "ci"]
+    reason: "Firebase composite-index manifest must be generated from the registered requirements"
+  - id: firestore-query-coverage
+    command: ["python3", "backend/scripts/firestore_query_coverage.py", "--check-ratchet"]
+    triggers: ["backend/**/*.py", "backend/scripts/firestore_query_coverage_baseline.json", "backend/scripts/firestore_query_coverage_waivers.json"]
+    lanes: ["local", "ci"]
+    reason: "serving Firestore compound queries cannot add unregistered or unsupported debt"
+  - id: lifecycle-headers
+    command: ["python3", ".github/scripts/check_lifecycle_headers.py", "--changed-files", "{changed_files}"]
+    triggers: ["all"]
+    lanes: ["local", "ci"]
+    reason: "rollout scaffolding may require lifecycle headers"
+  - id: version-prefixed-filenames
+    command: ["python3", ".github/scripts/check_version_prefixed_filenames.py"]
+    triggers: ["all"]
+    lanes: ["local", "ci"]
+    reason: "repository-wide version-prefixed filename contract"
+  - id: backend-import-purity
+    command: ["python3", "backend/scripts/scan_import_time_side_effects.py", "--files", "{changed_files}", "--check-allowlist-monotonic", "{base}"]
+    triggers: ["backend/**/*.py", "backend/tests/.import_time_side_effects_legacy_allowlist"]
+    lanes: ["local", "ci"]
+    reason: "backend production Python or its allowlist changed"
+  - id: backend-module-isolation
+    command: ["python3", "backend/scripts/check_module_stub_pollution.py", "--files", "{changed_files}", "--check-allowlist-monotonic", "{base}"]
+    triggers: ["backend/tests/**/*.py", "backend/testing/**/*.py", "backend/tests/.module_stub_legacy_allowlist", "backend/scripts/check_module_stub_pollution.py"]
+    lanes: ["local", "ci"]
+    reason: "backend tests or their isolation allowlist changed"
+  - id: backend-workflow-contracts
+    command: ["python3", "backend/scripts/check_workflow_contracts.py", "--changed-files", "{changed_files}"]
+    triggers: ["backend/**/*.py", "backend/testing/workflow_contracts.json", ".github/workflows/**/*.yml", ".github/actions/detect-changes/**", "scripts/pre-push", "scripts/changed-files"]
+    lanes: ["local", "ci"]
+    reason: "workflow boundary sources changed"
+  - id: desktop-userdefaults-ratchet
+    command: ["python3", "desktop/macos/scripts/check-userdefaults-key-ratchet.py"]
+    triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/scripts/check-userdefaults-key-ratchet.py"]
+    lanes: ["local", "ci"]
+    reason: "desktop Swift defaults surfaces changed"
+  - id: desktop-async-after-ratchet
+    command: ["python3", "desktop/macos/scripts/check-async-after-ratchet.py"]
+    triggers: ["desktop/macos/Desktop/Sources/FloatingControlBar/**/*.swift", "desktop/macos/scripts/check-async-after-ratchet.py"]
+    lanes: ["local", "ci"]
+    reason: "floating control bar timing surfaces changed"
+  - id: desktop-auth-session-ratchet
+    command: ["python3", ".github/scripts/check_desktop_auth_session.py"]
+    triggers: ["desktop/macos/Desktop/Sources/APIClient.swift", "desktop/macos/Desktop/Sources/AuthService.swift", "desktop/macos/Desktop/Sources/AuthSessionCoordinator.swift", "desktop/macos/Desktop/Sources/DesktopKeychainStore.swift", "desktop/macos/Desktop/Sources/OmiApp.swift", "desktop/macos/Desktop/Sources/Auth/**/*.swift", ".github/scripts/check_desktop_auth_session.py"]
+    lanes: ["local", "ci"]
+    reason: "INV-AUTH-1 desktop session surfaces changed"
+  - id: desktop-test-quality
+    command: ["python3", "desktop/macos/scripts/check_desktop_test_quality.py"]
+    triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/scripts/check_desktop_test_quality.py", "desktop/macos/scripts/swift-test-suites.sh"]
+    lanes: ["local", "ci"]
+    reason: "desktop Swift production or test structure changed"
+
+exempt:
+  - path: ".github/scripts/check-desktop-auto-beta-candidate.py"
+    reason: "release pipeline check requires published candidate artifacts and workflow inputs"
+  - path: ".github/scripts/check-desktop-prod-promotion-policy.py"
+    reason: "release-policy full-tree check, not diff-scoped"
+  - path: ".github/scripts/check-desktop-release-promotion.py"
+    reason: "release pipeline check with workflow inputs"
+  - path: ".github/scripts/check-desktop-release-terminology.py"
+    reason: "release-policy full-tree check, not diff-scoped"
+  - path: ".github/scripts/check-release-process-guards.py"
+    reason: "release-policy full-tree check, not diff-scoped"
+  - path: ".github/scripts/check-deployment-concurrency.py"
+    reason: "deployment concurrency policy full-tree check, not diff-scoped"
+  - path: ".github/scripts/check_isinstance_return_ratchet.py"
+    reason: "typed error flow-control ratchet uses a committed baseline, not diff-scoped triggers"
+  - path: "backend/scripts/check_app_client_openapi_compatibility.py"
+    reason: "OpenAPI generation contract has component dependencies"

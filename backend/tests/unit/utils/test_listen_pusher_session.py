@@ -46,6 +46,11 @@ def response_201(conversation_id: str, success=True):
     return struct.pack("<I", 201) + payload
 
 
+def error_response_201(conversation_id: str):
+    payload = json.dumps({"conversation_id": conversation_id, "error": "processing_failed"}).encode("utf-8")
+    return struct.pack("<I", 201) + payload
+
+
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
@@ -150,6 +155,35 @@ async def test_frame_payloads_and_order():
 
 
 @pytest.mark.anyio
+async def test_finalization_job_identity_survives_pusher_reconnect():
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws)
+    await session.connect()
+
+    await session.request_conversation_processing('conv-1', 'job-1', 3)
+    session.pusher_connected = False
+    await session.connect()
+
+    finalization_frames = [frame_json(frame) for frame in ws.sent if frame_type(frame) == 104]
+    assert finalization_frames == [
+        {
+            'conversation_id': 'conv-1',
+            'language': 'en',
+            'byok_keys': {'openai': 'key'},
+            'finalization_job_id': 'job-1',
+            'dispatch_generation': 3,
+        },
+        {
+            'conversation_id': 'conv-1',
+            'language': 'en',
+            'byok_keys': {'openai': 'key'},
+            'finalization_job_id': 'job-1',
+            'dispatch_generation': 3,
+        },
+    ]
+
+
+@pytest.mark.anyio
 async def test_pending_conversation_and_speaker_sample_replay_uses_target_rate_for_multi_channel():
     ws = FakePusherWebSocket()
     connect_calls = []
@@ -216,6 +250,22 @@ async def test_incoming_201_invokes_callback_and_removes_pending_request():
 
     assert session.pending_conversation_requests == {}
     assert session.callbacks == ["conv-1"]
+
+
+@pytest.mark.anyio
+async def test_incoming_finalization_error_keeps_request_for_bounded_retry():
+    active_ref = {"active": True}
+    ws = FakePusherWebSocket(incoming=[error_response_201("conv-1")])
+    ws.on_recv = lambda: active_ref.update(active=False)
+    session = make_session(ws=ws, active_ref=active_ref)
+    await session.connect()
+    await session.request_conversation_processing("conv-1", "job-1", 2)
+
+    await session.pusher_receive()
+
+    finalization_frames = [frame for frame in ws.sent if frame_type(frame) == 104]
+    assert len(finalization_frames) == 2
+    assert session.pending_conversation_requests['conv-1']['retries'] == 1
 
 
 @pytest.mark.anyio

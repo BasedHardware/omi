@@ -34,16 +34,16 @@ struct OnboardingVoiceDemoView: View {
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 16)
+            .padding(.horizontal, OmiSpacing.xxl)
+            .padding(.vertical, OmiSpacing.lg)
 
             Divider()
                 .background(OmiColors.backgroundTertiary)
 
             Spacer()
 
-            VStack(spacing: 24) {
-                VStack(spacing: 12) {
+            VStack(spacing: OmiSpacing.xxl) {
+                VStack(spacing: OmiSpacing.md) {
                     Text("Hold \(shortcutSettings.pttShortcut.displayLabel) and Ask")
                         .font(.system(size: 24, weight: .bold))
                         .foregroundColor(OmiColors.textPrimary)
@@ -58,12 +58,12 @@ struct OnboardingVoiceDemoView: View {
                     volumeWarning
                         .transition(.opacity)
                 } else if !observedShortcutPress {
-                    VStack(spacing: 12) {
+                    VStack(spacing: OmiSpacing.md) {
                         Text("Hold the shortcut, speak, then release")
                             .font(.system(size: 13))
                             .foregroundColor(OmiColors.textTertiary)
 
-                        HStack(spacing: 6) {
+                        HStack(spacing: OmiSpacing.xs) {
                             ForEach(Array(shortcutSettings.pttShortcut.displayTokens.enumerated()), id: \.offset) { _, token in
                                 keyCap(token)
                             }
@@ -72,17 +72,17 @@ struct OnboardingVoiceDemoView: View {
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                     }
-                    .padding(.top, 4)
+                    .padding(.top, OmiSpacing.xxs)
                     .transition(.opacity)
                 } else if !showContinue {
                     Text(waitingForResponse ? "Waiting for omi to respond..." : "Listening... release when done")
                         .font(.system(size: 13))
                         .foregroundColor(OmiColors.textTertiary)
-                        .padding(.top, 4)
+                        .padding(.top, OmiSpacing.xxs)
                         .transition(.opacity)
                 }
             }
-            .padding(.horizontal, 40)
+            .padding(.horizontal, OmiSpacing.page)
 
             Spacer()
 
@@ -92,13 +92,13 @@ struct OnboardingVoiceDemoView: View {
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(.black)
                         .frame(maxWidth: 280)
-                        .padding(.vertical, 12)
+                        .padding(.vertical, OmiSpacing.md)
                         .background(Color.white)
-                        .cornerRadius(12)
+                        .cornerRadius(OmiChrome.smallControlRadius)
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(.defaultAction)
-                .padding(.bottom, 32)
+                .padding(.bottom, OmiSpacing.section)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
@@ -106,6 +106,7 @@ struct OnboardingVoiceDemoView: View {
         .background(OmiColors.backgroundPrimary)
         .onAppear {
             FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
+            FloatingControlBarManager.shared.barState?.switchAIDraft(to: .onboardingFloating)
             resetFloatingBarConversation()
             refreshOutputReadiness()
             if let barState = FloatingControlBarManager.shared.barState {
@@ -125,15 +126,15 @@ struct OnboardingVoiceDemoView: View {
         .task {
             await pollOutputReadiness()
         }
-        .onChange(of: pttManager.state) { _, newState in
+        .onChange(of: pttManager.phase) { _, newPhase in
             refreshOutputReadiness()
             guard !outputReadiness.shouldAskUserToTurnUpVolume else { return }
-            if newState != .idle {
+            if newPhase != nil, newPhase?.isTerminal != true {
                 observedShortcutPress = true
             }
             if OnboardingFlow.shouldUnlockVoiceShortcutContinue(
                 observedShortcutPress: observedShortcutPress,
-                pttState: newState
+                voiceTurnPhase: newPhase
             ), !waitingForResponse {
                 waitingForResponse = true
                 Task { await waitForResponse() }
@@ -142,7 +143,7 @@ struct OnboardingVoiceDemoView: View {
     }
 
     private var volumeWarning: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: OmiSpacing.md) {
             Text(volumeWarningTitle)
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundColor(OmiColors.textPrimary)
@@ -157,22 +158,22 @@ struct OnboardingVoiceDemoView: View {
                 Text("I turned it up")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(.black)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, OmiSpacing.lg)
+                    .padding(.vertical, OmiSpacing.sm)
                     .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
                             .fill(Color.white)
                     )
             }
             .buttonStyle(.plain)
         }
-        .padding(18)
+        .padding(OmiSpacing.lg)
         .frame(maxWidth: 420)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
                 .fill(OmiColors.backgroundSecondary)
         )
-        .padding(.top, 4)
+        .padding(.top, OmiSpacing.xxs)
     }
 
     private var volumeWarningTitle: String {
@@ -214,7 +215,7 @@ struct OnboardingVoiceDemoView: View {
     }
 
     private func showContinueNow() {
-        withAnimation(.easeInOut(duration: 0.3)) {
+        OmiMotion.withGated(.easeInOut(duration: 0.3)) {
             showContinue = true
         }
     }
@@ -225,8 +226,6 @@ struct OnboardingVoiceDemoView: View {
         barState.showingAIResponse = false
         barState.aiInputText = ""
         barState.clearViewport()
-        barState.isVoiceFollowUp = false
-        barState.voiceFollowUpTranscript = ""
     }
 
     private func refreshOutputReadiness() {
@@ -245,13 +244,13 @@ struct OnboardingVoiceDemoView: View {
         Text(label)
             .font(.system(size: 15, weight: .medium, design: .rounded))
             .foregroundColor(OmiColors.textPrimary)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.sm)
             .background(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                     .fill(OmiColors.backgroundTertiary)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 8)
+                        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                             .stroke(OmiColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
                     )
                     .shadow(color: .black.opacity(0.2), radius: 1, x: 0, y: 1)

@@ -4,6 +4,10 @@ tier: manual
 description: Connector import sheets keep progress and terminal status visible after close and reopen.
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/Automation/DesktopAutomationPresentationCoordinator.swift
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  - desktop/macos/Desktop/Sources/MemoryExportExecutor.swift
+  - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConnectorImportOperations.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConnectorImportRunner.swift
@@ -15,18 +19,24 @@ preconditions:
   - auth_ready
 steps:
   - id: S1
-    name: Open an import connector sheet
-    do: "Open Home, click a Connect data source, and verify the connector sheet appears with its primary action."
+    name: Open an import connector sheet through automation
+    do: "Start outside Apps, POST /open-import with a valid connector ID, and verify the response is not returned until Apps is selected and the matching connector sheet is visibly presented with its primary action."
     expect:
       interactive_count: { min: 3 }
 
   - id: S2
+    name: Open an export destination sheet through automation
+    do: "POST /open-export with a valid destination ID, and verify the response includes a new generation only after the matching destination sheet is visibly presented."
+    expect:
+      interactive_count: { min: 3 }
+
+  - id: S3
     name: Keep progress visible after dismiss
     do: "Start an import, close the sheet while it runs, reopen the same connector, and verify progress or terminal status is still visible."
     expect:
       interactive_count: { min: 3 }
 
-  - id: S3
+  - id: S4
     name: Prevent duplicate starts
     do: "While an import is running, verify the primary import action is disabled and reopening the sheet does not start a second run."
     expect:

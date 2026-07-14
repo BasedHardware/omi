@@ -218,7 +218,8 @@ def inspect_static_routes(router_source_path: Path | None = None) -> list[dict[s
 
 def _probe_code() -> str:
     pin_stub_block = legacy_pin_stub_source()
-    template = textwrap.dedent(r'''
+    template = textwrap.dedent(
+        r'''
         import hashlib
         import importlib
         import json
@@ -272,7 +273,7 @@ def _probe_code() -> str:
         memory_pkg.__path__ = ["utils/memory"]
         sys.modules["utils.memory"] = memory_pkg
         setattr(utils_pkg, "memory", memory_pkg)
-        production_runtime = types.ModuleType("utils.memory.v3_production_runtime")
+        production_runtime = types.ModuleType("utils.memory.v3.production_runtime")
         class ProductionV3GetRuntime:
             def __init__(self, enabled=False, source_decision="disabled", service=None, adapters=None, **kwargs):
                 self.enabled = enabled
@@ -285,10 +286,10 @@ def _probe_code() -> str:
             return ProductionV3GetRuntime(enabled=False, source_decision="disabled")
         production_runtime.V3GetRuntime = ProductionV3GetRuntime
         production_runtime.build_v3_production_runtime = build_v3_production_runtime
-        sys.modules["utils.memory.v3_production_runtime"] = production_runtime
+        sys.modules["utils.memory.v3.production_runtime"] = production_runtime
         setattr(memory_pkg, "v3_production_runtime", production_runtime)
 
-        composed = types.ModuleType("utils.memory.v3_composed_get_service")
+        composed = types.ModuleType("utils.memory.v3.composed_get_service")
         class V3ComposedRequestParams:
             def __init__(self, limit=None, offset=None, cursor=None, include_archive=False, include_historical=False):
                 self.limit = limit
@@ -306,7 +307,7 @@ def _probe_code() -> str:
                 self.decision = decision
         composed.V3ComposedRequestParams = V3ComposedRequestParams
         composed.V3ComposedResponse = V3ComposedResponse
-        sys.modules["utils.memory.v3_composed_get_service"] = composed
+        sys.modules["utils.memory.v3.composed_get_service"] = composed
         setattr(memory_pkg, "v3_composed_get_service", composed)
 
         memory_system_mod = types.ModuleType("utils.memory.memory_system")
@@ -380,7 +381,8 @@ __PIN_STUB_BLOCK__        surface_routing.pin_memory_system = pin_memory_system
                         "response_model": str(response_model).replace("typing.", "") if response_model is not None else None,
                     })
         print(json.dumps({"import_ok": True, "pinned_routes": sorted(pinned, key=lambda item: item["route"])}))
-        ''')
+        '''
+    )
     return template.replace("__PIN_STUB_BLOCK__", pin_stub_block)
 
 

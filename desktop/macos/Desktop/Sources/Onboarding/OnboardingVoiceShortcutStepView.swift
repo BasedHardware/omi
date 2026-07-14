@@ -34,21 +34,21 @@ struct OnboardingVoiceShortcutStepView: View {
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 16)
+            .padding(.horizontal, OmiSpacing.xxl)
+            .padding(.vertical, OmiSpacing.lg)
 
             Divider()
                 .background(OmiColors.backgroundTertiary)
 
             Spacer()
 
-            VStack(spacing: 24) {
+            VStack(spacing: OmiSpacing.xxl) {
                 Text("Let's set \"Audio ask a question\" shortcut.\nPress and hold to test. Does the button light up?")
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundColor(OmiColors.textPrimary)
                     .multilineTextAlignment(.center)
 
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
                     .fill(OmiColors.backgroundSecondary)
                     .frame(height: 128)
                     .frame(maxWidth: 420)
@@ -56,12 +56,12 @@ struct OnboardingVoiceShortcutStepView: View {
                         shortcutKeyPreview
                     }
 
-                VStack(spacing: 12) {
+                VStack(spacing: OmiSpacing.md) {
                     Text("Try another shortcut if it doesn't react:")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(OmiColors.textSecondary)
 
-                    HStack(spacing: 10) {
+                    HStack(spacing: OmiSpacing.sm) {
                         ForEach(ShortcutSettings.pttPresets, id: \.self) { shortcut in
                             shortcutChoiceButton(shortcut)
                         }
@@ -78,10 +78,10 @@ struct OnboardingVoiceShortcutStepView: View {
                         Text("Continue")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundColor(.black)
-                            .padding(.horizontal, 28)
-                            .padding(.vertical, 12)
+                            .padding(.horizontal, OmiSpacing.xxl)
+                            .padding(.vertical, OmiSpacing.md)
                             .background(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
                                     .fill(Color.white)
                             )
                     }
@@ -97,6 +97,7 @@ struct OnboardingVoiceShortcutStepView: View {
         .background(OmiColors.backgroundPrimary)
         .onAppear {
             FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
+            FloatingControlBarManager.shared.barState?.switchAIDraft(to: .onboardingFloating)
             resetFloatingBarConversation()
             FloatingControlBarManager.shared.hide()
             PushToTalkManager.shared.cleanup()
@@ -113,13 +114,11 @@ struct OnboardingVoiceShortcutStepView: View {
         barState.showingAIResponse = false
         barState.aiInputText = ""
         barState.clearViewport()
-        barState.isVoiceFollowUp = false
-        barState.voiceFollowUpTranscript = ""
     }
 
     private var shortcutKeyPreview: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 8) {
+        VStack(spacing: OmiSpacing.md) {
+            HStack(spacing: OmiSpacing.sm) {
                 ForEach(Array(shortcutSettings.pttShortcut.displayTokens.enumerated()), id: \.offset) { _, token in
                     keyCap(token)
                 }
@@ -137,10 +136,10 @@ struct OnboardingVoiceShortcutStepView: View {
             Text("Custom")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(isSelected ? .black : OmiColors.textSecondary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
+                .padding(.horizontal, OmiSpacing.md)
+                .padding(.vertical, OmiSpacing.sm)
                 .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
                         .fill(isSelected ? Color.white : OmiColors.backgroundSecondary)
                 )
         }
@@ -148,13 +147,13 @@ struct OnboardingVoiceShortcutStepView: View {
     }
 
     private var customShortcutRecorder: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             Text(isRecordingCustomShortcut ? "Press and hold your custom shortcut now" : "Custom shortcut")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(OmiColors.textPrimary)
 
-            HStack(spacing: 10) {
-                HStack(spacing: 6) {
+            HStack(spacing: OmiSpacing.sm) {
+                HStack(spacing: OmiSpacing.xs) {
                     ForEach(Array(shortcutSettings.pttShortcut.displayTokens.enumerated()), id: \.offset) { _, token in
                         smallKeyCap(token, active: true)
                     }
@@ -166,10 +165,10 @@ struct OnboardingVoiceShortcutStepView: View {
                     Text(isRecordingCustomShortcut ? "Listening..." : "Save")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(OmiColors.textPrimary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, OmiSpacing.md)
+                        .padding(.vertical, OmiSpacing.sm)
                         .background(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
                                 .fill(OmiColors.backgroundPrimary)
                         )
                 }
@@ -187,20 +186,20 @@ struct OnboardingVoiceShortcutStepView: View {
                     .foregroundColor(.red.opacity(0.9))
             }
         }
-        .padding(14)
+        .padding(OmiSpacing.md)
         .frame(maxWidth: 420)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
                 .fill(OmiColors.backgroundSecondary)
         )
     }
 
     private func keyCap(_ label: String) -> some View {
-        RoundedRectangle(cornerRadius: 10, style: .continuous)
+        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
             .fill(shortcutDetected ? Color.white : OmiColors.backgroundTertiary)
             .frame(minWidth: 48, minHeight: 48)
             .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
                     .stroke(
                         shortcutDetected ? Color.white : OmiColors.textTertiary.opacity(0.3),
                         lineWidth: 2
@@ -216,7 +215,7 @@ struct OnboardingVoiceShortcutStepView: View {
     }
 
     private func smallKeyCap(_ label: String, active: Bool) -> some View {
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
+        RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
             .fill(active ? Color.white : OmiColors.backgroundTertiary)
             .frame(minWidth: 36, minHeight: 32)
             .overlay {
@@ -236,17 +235,17 @@ struct OnboardingVoiceShortcutStepView: View {
             captureError = nil
             resetDetectionState()
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: OmiSpacing.xs) {
                 ForEach(Array(shortcut.displayTokens.enumerated()), id: \.offset) { _, token in
                     Text(token)
                         .font(.system(size: 13, weight: .medium))
                 }
             }
             .foregroundColor(isSelected ? .black : OmiColors.textSecondary)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.sm)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
                     .fill(isSelected ? Color.white : OmiColors.backgroundSecondary)
             )
         }
@@ -275,7 +274,7 @@ struct OnboardingVoiceShortcutStepView: View {
     private func confirmShortcutAndContinue() {
         captureError = nil
         shortcutDetected = true
-        withAnimation(.easeInOut(duration: 0.3)) {
+        OmiMotion.withGated(.easeInOut(duration: 0.3)) {
             showContinue = true
         }
     }

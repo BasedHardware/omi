@@ -9,6 +9,9 @@ class AppLocalizationsKn extends AppLocalizations {
   AppLocalizationsKn([String locale = 'kn']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'ಸೆಷನ್ ಅವಧಿ ಮುಗಿದಿದೆ — ಮತ್ತೆ ಸೈನ್ ಇನ್ ಮಾಡಿ.';
+
+  @override
   String get appTitle => 'ಓಮಿ';
 
   @override

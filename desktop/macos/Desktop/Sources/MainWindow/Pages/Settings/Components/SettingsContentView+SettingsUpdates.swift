@@ -120,18 +120,17 @@ extension SettingsContentView {
         await MainActor.run {
           appState.stopTranscription()
           ProactiveAssistantsPlugin.shared.stopMonitoring()
-          do {
-            try AuthService.shared.signOut()
-            isDeletingAccount = false
-          } catch {
-            deleteAccountError =
-              "Account deleted, but sign out failed: \(error.localizedDescription)"
-            isDeletingAccount = false
-          }
+        }
+        do {
+          try await AuthService.shared.signOut()
+          isDeletingAccount = false
+        } catch {
+          deleteAccountError = "Your account was deleted, but Omi couldn't sign you out. Quit and reopen Omi."
+          isDeletingAccount = false
         }
       } catch {
         await MainActor.run {
-          deleteAccountError = "Failed to delete account: \(error.localizedDescription)"
+          deleteAccountError = UserFacingErrorPresentation.message(for: error, while: .accountDeletion)
           isDeletingAccount = false
         }
       }

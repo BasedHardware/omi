@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
-from llm_gateway.gateway.credentials import CredentialContext, is_byok_failure_class
+from llm_gateway.gateway.credentials import CredentialContext, CredentialSource, is_byok_failure_class
 from llm_gateway.gateway.errors import (
     GatewayCapabilityMismatchError,
     GatewayCredentialFailureError,
@@ -200,7 +200,7 @@ async def _execute_route(
         provider = provider_registry.provider_for(provider_ref.provider)
         if provider is None:
             error = _unsupported_provider_error(provider_ref, credential_context)
-        elif route.credential_policy.mode == CredentialMode.BYOK and not credential_context.has_provider_key(
+        elif credential_context.mode == CredentialMode.BYOK and not credential_context.has_provider_key(
             provider_ref.provider
         ):
             error = GatewayCredentialFailureError(
@@ -355,6 +355,15 @@ def _executor_result(
 
 
 def _validate_credential_mode(route: RouteArtifact, credential_context: CredentialContext) -> None:
+    if (
+        credential_context.mode == CredentialMode.BYOK
+        and credential_context.source == CredentialSource.SERVICE_FORWARDED_BYOK
+    ):
+        if route.credential_policy.allow_byok_to_omi_paid_fallback:
+            raise GatewayInvalidRouteConfigError(
+                f'route {route.route_artifact_id} must not allow BYOK to Omi-paid fallback'
+            )
+        return
     if route.credential_policy.mode != credential_context.mode:
         raise GatewayInvalidRouteConfigError(
             f'route {route.route_artifact_id} credential mode does not match request context'

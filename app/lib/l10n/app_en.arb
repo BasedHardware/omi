@@ -1,5 +1,9 @@
 {
     "@@locale": "en",
+    "sessionExpiredSignInAgain": "Session expired — sign in again.",
+    "@sessionExpiredSignInAgain": {
+        "description": "Message shown after an expired authenticated session returns the user to sign-in"
+    },
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {

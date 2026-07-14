@@ -52,8 +52,8 @@ from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_res
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
 from utils.llm.byok_errors import handle_llm_error_async
 from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL
-from utils.llm.gateway_client import raise_if_gateway_feature_mode_blocks_direct_model_surface
 from utils.llm.chat import _get_agentic_qa_prompt, get_current_datetime_block, get_user_timezone
+from utils.executors import run_blocking, db_executor
 from utils.other.endpoints import timeit
 from utils.observability.langsmith import is_langsmith_enabled
 import logging
@@ -560,10 +560,14 @@ async def execute_agentic_chat_stream(
     """
     # Resolve the user's timezone once and reuse it for both the system prompt and the
     # injected datetime block, avoiding a duplicate notification_db lookup per request.
-    tz = get_user_timezone(uid)
+    # These setup helpers do blocking Firestore reads (and a LangSmith prompt fetch inside
+    # _get_agentic_qa_prompt); offload them so they don't block the event loop while this
+    # async generator is driven on the loop by StreamingResponse. (get_current_datetime_block
+    # below stays inline — with tz passed it's pure formatting, no I/O.)
+    tz = await run_blocking(db_executor, get_user_timezone, uid)
 
     # Build system prompt
-    system_prompt = _get_agentic_qa_prompt(uid, app, messages, context=context, tz=tz)
+    system_prompt = await run_blocking(db_executor, _get_agentic_qa_prompt, uid, app, messages, context=context, tz=tz)
 
     # Get prompt metadata for tracing/versioning
     prompt_name, prompt_commit, prompt_source = None, None, None
@@ -580,7 +584,7 @@ async def execute_agentic_chat_stream(
     # Dynamic app tools — deferred, discovered on-demand via tool search
     app_tools = []
     try:
-        app_tools = load_app_tools(uid)
+        app_tools = await run_blocking(db_executor, load_app_tools, uid)
         if app_tools:
             logger.info(f"Loaded {len(app_tools)} app tools (deferred via tool search)")
     except Exception as e:
@@ -618,8 +622,6 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     # turn (not the system prompt) so the cache_control system prefix stays byte-stable.
     anthropic_messages = _messages_to_anthropic(messages)
     anthropic_messages = _inject_current_datetime(anthropic_messages, get_current_datetime_block(uid, tz=tz))
-
-    raise_if_gateway_feature_mode_blocks_direct_model_surface('chat_agent.anthropic_stream')
 
     callback = AsyncStreamingCallback()
 

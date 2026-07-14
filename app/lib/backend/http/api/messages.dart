@@ -88,6 +88,34 @@ ServerMessageChunk? parseMessageChunk(String line, String messageId) {
   return null;
 }
 
+/// Decodes voice-message-specific terminal SSE errors.
+///
+/// The voice endpoint emits typed transcription failures as
+/// `error: {"message":"..."}` while quota failures keep their legacy
+/// `error:402:<body>` shape. Never surface a malformed server frame directly:
+/// return the established generic error chunk instead.
+ServerMessageChunk? parseVoiceMessageStreamChunk(String line, String messageId) {
+  if (line.startsWith('error:402:')) {
+    return ServerMessageChunk(messageId, line.substring('error:402:'.length), MessageChunkType.error);
+  }
+
+  if (line.startsWith('error: ')) {
+    try {
+      final payload = jsonDecode(line.substring('error: '.length));
+      if (payload is! Map) return ServerMessageChunk.failedMessage();
+
+      final message = payload['message'];
+      if (message is! String || message.trim().isEmpty) return ServerMessageChunk.failedMessage();
+
+      return ServerMessageChunk(messageId, message, MessageChunkType.error);
+    } on FormatException {
+      return ServerMessageChunk.failedMessage();
+    }
+  }
+
+  return parseMessageChunk(line, messageId);
+}
+
 Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId, List<String>? filesId}) async* {
   var url = '${Env.apiBaseUrl}v2/messages?app_id=$appId';
   if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
@@ -135,13 +163,10 @@ Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files, {Strin
     files: files,
     fields: language != null ? {'language': language} : {},
   )) {
-    if (line.startsWith('error:402:')) {
-      yield ServerMessageChunk(messageId, line.substring('error:402:'.length), MessageChunkType.error);
-      return;
-    }
-    var messageChunk = parseMessageChunk(line, messageId);
+    var messageChunk = parseVoiceMessageStreamChunk(line, messageId);
     if (messageChunk != null) {
       yield messageChunk;
+      if (messageChunk.type == MessageChunkType.error) return;
     } else {
       yield ServerMessageChunk.failedMessage();
       return;

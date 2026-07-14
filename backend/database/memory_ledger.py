@@ -2,11 +2,13 @@ import copy
 import hashlib
 import json
 from datetime import datetime, timezone
+from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 
 from google.cloud.firestore_v1 import transactional  # type: ignore[reportUnknownMemberType]  # firestore SDK stub gap
 
 from database import projection_repair
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from models.memories import confidence_fields_for_evidence
 from ._client import db
 
@@ -14,13 +16,19 @@ T = TypeVar("T")
 
 
 def _typed_transactional(func: Callable[..., T]) -> Callable[..., T]:
-    """Wrap @transactional preserving the wrapped function's typed signature.
+    """Create an isolated SDK transaction wrapper for every invocation.
 
-    google-cloud-firestore's @transactional decorator surfaces as partially
-    unknown under strict Pyright (no stubs); this thin wrapper keeps the typed
-    call site while delegating runtime behavior to the SDK decorator.
+    Firestore's ``_Transactional`` wrapper stores mutable retry IDs. Reusing one
+    module-level instance across request threads can cross-contaminate retries,
+    so defer constructing it until each call while preserving the typed surface.
     """
-    return transactional(func)
+
+    @wraps(func)
+    def invoke(transaction: Any, *args: Any, **kwargs: Any) -> T:
+        wrapped = cast(Callable[..., T], transactional(func))
+        return wrapped(transaction, *args, **kwargs)
+
+    return invoke
 
 
 def _typed_doc(doc: Any) -> Dict[str, Any]:
@@ -195,17 +203,20 @@ def append_commit(
     firestore_client: Any = None,
 ) -> Dict[str, Any]:
     database: Any = firestore_client or db
-    transaction: Any = database.transaction()
-    result = _append_commit_transaction(
-        transaction,
-        database,
-        uid,
-        parent_commit_id,
-        mutations,
-        run_id,
-        commit_time,
-        projection_writer,
-        use_current_head,
+    result = run_with_transaction_contention_retry(
+        database.transaction,
+        lambda transaction: _append_commit_transaction(
+            transaction,
+            database,
+            uid,
+            parent_commit_id,
+            mutations,
+            run_id,
+            commit_time,
+            projection_writer,
+            use_current_head,
+        ),
+        operation_name="memory_ledger_append",
     )
     if result.get('applied'):
         projection_repair.enqueue_projection_repairs(uid, result.get('commit'), firestore_client=database)
@@ -223,16 +234,19 @@ def append_commit_with_builder(
     firestore_client: Any = None,
 ) -> Dict[str, Any]:
     database: Any = firestore_client or db
-    transaction: Any = database.transaction()
-    result = _append_commit_with_builder_transaction(
-        transaction,
-        database,
-        uid,
-        parent_commit_id,
-        mutation_builder,
-        run_id,
-        commit_time,
-        use_current_head,
+    result = run_with_transaction_contention_retry(
+        database.transaction,
+        lambda transaction: _append_commit_with_builder_transaction(
+            transaction,
+            database,
+            uid,
+            parent_commit_id,
+            mutation_builder,
+            run_id,
+            commit_time,
+            use_current_head,
+        ),
+        operation_name="memory_ledger_append_with_builder",
     )
     if result.get('applied'):
         projection_repair.enqueue_projection_repairs(uid, result.get('commit'), firestore_client=database)

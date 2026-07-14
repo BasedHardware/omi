@@ -8,7 +8,7 @@ from typing import Any, TypeAlias, cast
 import yaml
 from pydantic import BaseModel, ConfigDict
 
-from llm_gateway.gateway.schemas import FeatureBundle, LaneConfig, RouteArtifact
+from llm_gateway.gateway.schemas import FeatureBundle, GeneratedRouteOverride, LaneConfig, RouteArtifact
 from utils.llm.gateway_client import feature_auto_lane_id
 from utils.llm.model_config import (
     get_all_configured_features,
@@ -20,6 +20,7 @@ from utils.llm.model_config import (
 
 DEFAULT_CONFIG_DIR = Path(__file__).resolve().parents[1] / 'config'
 PROD_ENV_VAR = 'OMI_LLM_GATEWAY_PROD'
+GENERATED_ROUTE_OVERRIDES_FILE = 'generated_route_overrides.yaml'
 ConfigItem: TypeAlias = dict[str, Any]
 
 
@@ -43,7 +44,10 @@ def load_gateway_config(config_dir: str | Path | None = None, *, prod_mode: bool
     artifact_items = _load_config_list(resolved_config_dir / 'route_artifacts.yaml', 'route_artifacts')
     bundle_items = _load_config_list(resolved_config_dir / 'feature_bundles.yaml', 'feature_bundles')
 
-    generated_lane_items, generated_artifact_items, generated_bundle_items = _generated_feature_route_items()
+    generated_route_overrides = load_generated_route_overrides(resolved_config_dir)
+    generated_lane_items, generated_artifact_items, generated_bundle_items = _generated_feature_route_items(
+        generated_route_overrides
+    )
 
     lanes = _parse_lanes([*generated_lane_items, *lane_items])
     route_artifacts = _parse_route_artifacts([*generated_artifact_items, *artifact_items], prod_mode=resolved_prod_mode)
@@ -53,6 +57,26 @@ def load_gateway_config(config_dir: str | Path | None = None, *, prod_mode: bool
     _validate_feature_bundles(feature_bundles, lanes)
 
     return GatewayConfig(lanes=lanes, route_artifacts=route_artifacts, feature_bundles=feature_bundles)
+
+
+def load_generated_route_overrides(
+    config_dir: str | Path | None = None,
+) -> dict[str, GeneratedRouteOverride]:
+    resolved_config_dir = Path(config_dir) if config_dir is not None else DEFAULT_CONFIG_DIR
+    items = _load_optional_config_list(
+        resolved_config_dir / GENERATED_ROUTE_OVERRIDES_FILE,
+        'generated_route_overrides',
+    )
+    configured_features = get_all_configured_features()
+    overrides: dict[str, GeneratedRouteOverride] = {}
+    for item in items:
+        override = GeneratedRouteOverride.model_validate(item)
+        if override.feature not in configured_features:
+            raise ConfigValidationError(f'gateway route override references unknown feature: {override.feature}')
+        if override.feature in overrides:
+            raise ConfigValidationError(f'duplicate gateway route override: {override.feature}')
+        overrides[override.feature] = override
+    return overrides
 
 
 def _resolve_prod_mode(prod_mode: bool | None) -> bool:
@@ -86,6 +110,12 @@ def _load_config_list(path: Path, top_level_key: str) -> list[ConfigItem]:
         if not isinstance(item, Mapping):
             raise ConfigValidationError(f'{path} {top_level_key} entries must be mappings')
     return [dict(cast(Mapping[str, Any], item)) for item in items]
+
+
+def _load_optional_config_list(path: Path, top_level_key: str) -> list[ConfigItem]:
+    if not path.exists():
+        return []
+    return _load_config_list(path, top_level_key)
 
 
 def _parse_lanes(items: list[ConfigItem]) -> dict[str, LaneConfig]:
@@ -169,22 +199,28 @@ def feature_lane_id(feature: str) -> str:
     return feature_auto_lane_id(feature)
 
 
-def _generated_feature_route_items() -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+def _generated_feature_route_items(
+    route_overrides: Mapping[str, GeneratedRouteOverride],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     lanes: list[dict[str, Any]] = []
     artifacts: list[dict[str, Any]] = []
     bundles: list[dict[str, Any]] = []
     for feature in sorted(get_all_configured_features()):
-        model = get_model(feature)
-        provider = get_provider(feature)
+        legacy_model = get_model(feature)
+        legacy_provider = get_provider(feature)
+        override = route_overrides.get(feature)
+        model = override.primary.model if override is not None else legacy_model
+        provider = override.primary.provider if override is not None else legacy_provider
         lane_id = feature_lane_id(feature)
         route_id = f"route.{feature}.model_config.001"
-        capabilities = _capabilities_for_feature(feature)
+        surface = _surface_for_feature(feature, provider)
+        capabilities = _capabilities_for_feature(feature, provider=provider, surface=surface)
         credential_policy = _credential_policy()
 
         lanes.append(
             {
                 'lane_id': lane_id,
-                'surface': 'openai.chat_completions',
+                'surface': surface,
                 'capabilities': capabilities,
                 'objective': {'quality': 0.6, 'latency': 0.2, 'cost': 0.2},
                 'credential_policy': credential_policy,
@@ -194,11 +230,13 @@ def _generated_feature_route_items() -> tuple[list[dict[str, Any]], list[dict[st
         )
         primary = {'provider': provider, 'model': _provider_model_name(provider, model)}
         provider_options = get_route_options(feature, model, provider)
+        if override is not None:
+            provider_options.update(override.provider_options)
         artifacts.append(
             {
                 'route_artifact_id': route_id,
                 'lane_id': lane_id,
-                'surface': 'openai.chat_completions',
+                'surface': surface,
                 'primary': primary,
                 'fallbacks': [],
                 'provider_options': provider_options,
@@ -240,14 +278,20 @@ def _generated_feature_route_items() -> tuple[list[dict[str, Any]], list[dict[st
     return lanes, artifacts, bundles
 
 
-def _capabilities_for_feature(feature: str) -> dict[str, Any]:
+def _surface_for_feature(feature: str, provider: str) -> str:
+    if feature == 'chat_agent' and provider == 'anthropic':
+        return 'anthropic.messages'
+    return 'openai.chat_completions'
+
+
+def _capabilities_for_feature(feature: str, *, provider: str, surface: str) -> dict[str, Any]:
     structured_output = 'json_schema' if is_structured_output_feature(feature) else 'none'
-    provider = get_provider(feature)
+    anthropic_messages = surface == 'anthropic.messages'
     return {
         'text_input': True,
-        'streaming': provider in {'openai', 'openrouter', 'perplexity', 'gemini'},
+        'streaming': anthropic_messages or provider in {'openai', 'openrouter', 'perplexity', 'gemini'},
         'structured_output': structured_output,
-        'tools': feature == 'memory_l2',
+        'tools': anthropic_messages or feature == 'memory_l2',
     }
 
 

@@ -16,7 +16,7 @@ struct ScreenshotThumbnailView: View {
 
     var body: some View {
         Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
                 // Thumbnail image
                 ZStack {
                     if let image = thumbnailImage {
@@ -53,9 +53,9 @@ struct ScreenshotThumbnailView: View {
                             HStack {
                                 // App icon badge
                                 AppIconView(appName: screenshot.appName, size: 20)
-                                    .padding(4)
+                                    .padding(OmiSpacing.xxs)
                                     .background(Color.black.opacity(0.5))
-                                    .cornerRadius(6)
+                                    .cornerRadius(OmiChrome.badgeRadius)
 
                                 Spacer()
 
@@ -63,9 +63,9 @@ struct ScreenshotThumbnailView: View {
                                     onDelete()
                                 } label: {
                                     Image(systemName: "trash")
-                                        .scaledFont(size: 12)
+                                        .scaledFont(size: OmiType.caption)
                                         .foregroundColor(.white)
-                                        .padding(6)
+                                        .padding(OmiSpacing.xs)
                                         .background(Color.red.opacity(0.8))
                                         .clipShape(Circle())
                                 }
@@ -77,15 +77,15 @@ struct ScreenshotThumbnailView: View {
                             HStack {
                                 Spacer()
                                 Text(screenshot.formattedTime)
-                                    .scaledFont(size: 11, weight: .medium, design: .monospaced)
+                                    .scaledFont(size: OmiType.caption, weight: .medium, design: .monospaced)
                                     .foregroundColor(.white)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
+                                    .padding(.horizontal, OmiSpacing.sm)
+                                    .padding(.vertical, OmiSpacing.xxs)
                                     .background(Color.black.opacity(0.6))
-                                    .cornerRadius(4)
+                                    .cornerRadius(OmiChrome.stripRadius)
                             }
                         }
-                        .padding(6)
+                        .padding(OmiSpacing.xs)
                     }
 
                     // Search match indicator
@@ -94,39 +94,39 @@ struct ScreenshotThumbnailView: View {
                             HStack {
                                 Spacer()
                                 Image(systemName: "text.magnifyingglass")
-                                    .scaledFont(size: 10)
-                                    .foregroundColor(.white)
-                                    .padding(4)
-                                    .background(OmiColors.purplePrimary)
+                                    .scaledFont(size: OmiType.micro)
+                                    .foregroundColor(OmiColors.backgroundPrimary)
+                                    .padding(OmiSpacing.xxs)
+                                    .background(OmiColors.accent)
                                     .clipShape(Circle())
                             }
                             Spacer()
                         }
-                        .padding(6)
+                        .padding(OmiSpacing.xs)
                     }
                 }
                 .frame(height: 120)
-                .cornerRadius(8)
+                .cornerRadius(OmiChrome.elementRadius)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(isSelected ? OmiColors.purplePrimary : Color.clear, lineWidth: 2)
+                    RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+                        .stroke(isSelected ? OmiColors.accent : Color.clear, lineWidth: 2)
                 )
 
                 // Info section
-                HStack(spacing: 8) {
+                HStack(spacing: OmiSpacing.sm) {
                     // App icon
                     AppIconView(appName: screenshot.appName, size: 16)
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                         // App name
                         Text(screenshot.appName)
-                            .scaledFont(size: 11, weight: .medium)
+                            .scaledFont(size: OmiType.caption, weight: .medium)
                             .foregroundColor(OmiColors.textSecondary)
                             .lineLimit(1)
 
                         // Time
                         Text(screenshot.formattedTime)
-                            .scaledFont(size: 10, design: .monospaced)
+                            .scaledFont(size: OmiType.micro, design: .monospaced)
                             .foregroundColor(OmiColors.textTertiary)
                     }
 
@@ -135,8 +135,8 @@ struct ScreenshotThumbnailView: View {
                     // OCR indicator
                     if screenshot.isIndexed && screenshot.ocrText != nil && !screenshot.ocrText!.isEmpty {
                         Image(systemName: "doc.text.fill")
-                            .scaledFont(size: 10)
-                            .foregroundColor(OmiColors.purplePrimary.opacity(0.6))
+                            .scaledFont(size: OmiType.micro)
+                            .foregroundColor(OmiColors.accent.opacity(0.6))
                             .help("Text extracted")
                     }
                 }
@@ -150,17 +150,17 @@ struct ScreenshotThumbnailView: View {
                 // Window title (if available and no search context)
                 else if let title = screenshot.windowTitle, !title.isEmpty {
                     Text(title)
-                        .scaledFont(size: 10)
+                        .scaledFont(size: OmiType.micro)
                         .foregroundColor(OmiColors.textQuaternary)
                         .lineLimit(1)
                 }
             }
-            .padding(8)
-            .background(isSelected ? OmiColors.purplePrimary.opacity(0.1) : OmiColors.backgroundTertiary.opacity(0.5))
-            .cornerRadius(10)
+            .padding(OmiSpacing.sm)
+            .background(isSelected ? OmiColors.accent.opacity(0.1) : OmiColors.backgroundTertiary.opacity(0.5))
+            .cornerRadius(OmiChrome.smallControlRadius)
             .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(isSelected ? OmiColors.purplePrimary.opacity(0.3) : Color.clear, lineWidth: 1)
+                RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+                    .stroke(isSelected ? OmiColors.accent.opacity(0.3) : Color.clear, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -211,12 +211,12 @@ struct SearchContextSnippet: View {
 
     var body: some View {
         Text(attributedSnippet)
-            .scaledFont(size: 10)
+            .scaledFont(size: OmiType.micro)
             .lineLimit(2)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 4)
-            .background(OmiColors.purplePrimary.opacity(0.1))
-            .cornerRadius(4)
+            .padding(.horizontal, OmiSpacing.xs)
+            .padding(.vertical, OmiSpacing.xxs)
+            .background(OmiColors.accent.opacity(0.1))
+            .cornerRadius(OmiChrome.stripRadius)
     }
 
     private var attributedSnippet: AttributedString {
@@ -230,7 +230,7 @@ struct SearchContextSnippet: View {
         var searchStart = lowercasedSnippet.startIndex
         while let range = lowercasedSnippet.range(of: lowercasedQuery, range: searchStart..<lowercasedSnippet.endIndex) {
             if let attrRange = Range(range, in: result) {
-                result[attrRange].foregroundColor = OmiColors.purplePrimary
+                result[attrRange].foregroundColor = OmiColors.accent
                 result[attrRange].font = .system(size: 10, weight: .semibold)
             }
             searchStart = range.upperBound
@@ -251,7 +251,7 @@ struct ScreenshotGridView: View {
     @State private var groupByApp = false
 
     private let columns = [
-        GridItem(.adaptive(minimum: 180, maximum: 250), spacing: 12)
+        GridItem(.adaptive(minimum: 180, maximum: 250), spacing: OmiSpacing.md)
     ]
 
     var body: some View {
@@ -259,31 +259,31 @@ struct ScreenshotGridView: View {
             // View controls
             HStack {
                 Text("\(screenshots.count) screenshots")
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textTertiary)
 
                 if let query = searchQuery {
                     Text("matching \"\(query)\"")
-                        .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .scaledFont(size: OmiType.caption)
+                        .foregroundColor(OmiColors.accent)
                 }
 
                 Spacer()
 
                 // Group toggle
                 Toggle(isOn: $groupByApp) {
-                    HStack(spacing: 4) {
+                    HStack(spacing: OmiSpacing.xxs) {
                         Image(systemName: groupByApp ? "square.grid.3x3.fill" : "square.grid.3x3")
                         Text("Group by app")
                     }
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textSecondary)
                 }
                 .toggleStyle(.button)
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 12)
+            .padding(.horizontal, OmiSpacing.xxl)
+            .padding(.bottom, OmiSpacing.md)
 
             // Grid
             ScrollView {
@@ -297,7 +297,7 @@ struct ScreenshotGridView: View {
     }
 
     private var standardGridContent: some View {
-        LazyVGrid(columns: columns, spacing: 12) {
+        LazyVGrid(columns: columns, spacing: OmiSpacing.md) {
             ForEach(screenshots) { screenshot in
                 ScreenshotThumbnailView(
                     screenshot: screenshot,
@@ -308,35 +308,35 @@ struct ScreenshotGridView: View {
                 )
             }
         }
-        .padding(.horizontal, 24)
-        .padding(.bottom, 24)
+        .padding(.horizontal, OmiSpacing.xxl)
+        .padding(.bottom, OmiSpacing.xxl)
     }
 
     private var groupedGridContent: some View {
         let grouped = Dictionary(grouping: screenshots) { $0.appName }
         let sortedKeys = grouped.keys.sorted()
 
-        return LazyVStack(alignment: .leading, spacing: 24) {
+        return LazyVStack(alignment: .leading, spacing: OmiSpacing.xxl) {
             ForEach(sortedKeys, id: \.self) { appName in
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: OmiSpacing.md) {
                     // App header
-                    HStack(spacing: 8) {
+                    HStack(spacing: OmiSpacing.sm) {
                         AppIconView(appName: appName, size: 20)
 
                         Text(appName)
-                            .scaledFont(size: 14, weight: .semibold)
+                            .scaledFont(size: OmiType.body, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Text("(\(grouped[appName]?.count ?? 0))")
-                            .scaledFont(size: 12)
+                            .scaledFont(size: OmiType.caption)
                             .foregroundColor(OmiColors.textTertiary)
 
                         Spacer()
                     }
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, OmiSpacing.xxl)
 
                     // Screenshots for this app
-                    LazyVGrid(columns: columns, spacing: 12) {
+                    LazyVGrid(columns: columns, spacing: OmiSpacing.md) {
                         ForEach(grouped[appName] ?? []) { screenshot in
                             ScreenshotThumbnailView(
                                 screenshot: screenshot,
@@ -347,11 +347,11 @@ struct ScreenshotGridView: View {
                             )
                         }
                     }
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, OmiSpacing.xxl)
                 }
             }
         }
-        .padding(.bottom, 24)
+        .padding(.bottom, OmiSpacing.xxl)
     }
 }
 

@@ -7,8 +7,37 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/TaskChatPanel.swift
   - desktop/macos/Desktop/Sources/Stores/TasksStore.swift
+  - desktop/macos/Desktop/Sources/Services/RecurringTaskScheduler.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/GeminiClient.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeStatusStore.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/ProactiveTaskExecute.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Tasks/SuggestedTasksSection.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Tasks/SuggestedTasksStore.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskAgentSettings.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskAgentManager.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatCoordinator.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatRuntime.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskThreadProjection.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskWorkstreamContinuity.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenCandidateAdapter.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Insight/InsightAssistant.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/EmbeddingService.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistantSettings.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskDeduplicationService.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskModels.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskPrioritizationService.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskPromotionService.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/AssistantCoordinator.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/NotificationService.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/TaskContextualResurfacingService.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/ActionItemModels.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/StagedTaskStorage.swift
+  - desktop/macos/Desktop/Sources/TaskActionItem.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/TaskDetailViews.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/DailyTaskCreationSheet.swift
 preconditions:
   - automation_bridge_ready
 

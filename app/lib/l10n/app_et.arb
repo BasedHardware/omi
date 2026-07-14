@@ -1,5 +1,6 @@
 {
     "@@locale": "et",
+    "sessionExpiredSignInAgain": "Seanss aegus — logige uuesti sisse.",
     "appTitle": "Omi",
     "conversationTab": "Vestlus",
     "transcriptTab": "Transkriptsioon",

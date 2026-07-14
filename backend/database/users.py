@@ -29,11 +29,13 @@ _USER_AI_PROFILE_CACHE = CachePolicy(namespace='user_ai_profile', version=1, ttl
 #
 # We normalize the raw header into a coarse `desktop | mobile` bucket, matching
 # the profitability dashboard splits, and preserve the granular value
-# (`ios`/`android`/`macos`) in `last_active_os` for finer drill-down.
+# (`ios`/`android`/`macos`/`windows`) in `last_active_os` for finer drill-down.
 _PLATFORM_ALIASES = {
     'macos': 'desktop',
     'mac': 'desktop',
     'mac os x': 'desktop',
+    'windows': 'desktop',
+    'win32': 'desktop',
     'desktop': 'desktop',
     'ios': 'mobile',
     'iphone os': 'mobile',

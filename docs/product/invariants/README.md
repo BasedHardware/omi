@@ -17,9 +17,13 @@ rules stay in [`AGENTS.md`](../../../AGENTS.md). Product north star:
 |----|-------|--------|-----|
 | INV-CHAT-1 | One shared transcript across surfaces | locked | [chat-continuity.md](./chat-continuity.md) |
 | INV-MEM-1 | Exactly three product memory tiers | locked | [memory-tiers.md](./memory-tiers.md) |
+| INV-MEM-2 | Vector hydration fail-closed | locked | [memory-vector-hydration.md](./memory-vector-hydration.md) |
+| INV-MEM-3 | No legacy fallback after canonical selection | locked | [memory-canonical-fail-closed.md](./memory-canonical-fail-closed.md) |
 | INV-AGENT-* | Agent control-plane contracts | locked | [agent-control-plane.md](./agent-control-plane.md) |
 | INV-INT-1 | Integrations harness over heuristics | locked | [integrations.md](./integrations.md) |
 | INV-UI-1 | No purple; neutral accents | locked | [brand-ui.md](./brand-ui.md) |
+| INV-AUTH-1 | Desktop Firebase session truth | locked | [auth-session.md](./auth-session.md) |
+| INV-VOICE-1 | One desktop voice-turn lifecycle owner | locked | [desktop-voice-turns.md](./desktop-voice-turns.md) |
 
 ## File template
 

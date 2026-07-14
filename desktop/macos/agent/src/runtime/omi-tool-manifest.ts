@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import {
   agentControlCapabilityManifest,
   agentControlInputSchema,
@@ -9,6 +11,7 @@ export type OmiToolCondition =
   | "always"
   | "onboardingOnly"
   | "nonOnboarding"
+  | "coordinatorOnly"
   | "screenContext"
   | "screenContextOrOnboarding";
 export type OmiToolExecutorKind = "swiftTool" | "runtimeControl" | "nodeTool" | "localApiOnly";
@@ -97,10 +100,12 @@ interface OmiToolSurfacePatch {
 export interface OmiToolProjectionContext {
   onboarding?: boolean;
   screenContext?: boolean;
+  executionRole?: "coordinator" | "leaf";
 }
 
 export interface OmiToolAvailabilitySnapshot {
   manifestVersion: number;
+  manifestDigest: string;
   adapterId: OmiToolAdapterId;
   context: OmiToolProjectionContext;
   advertisedToolCount: number;
@@ -108,6 +113,9 @@ export interface OmiToolAvailabilitySnapshot {
   aliases: Record<string, string>;
   disabled: Array<{ name: string; reason: string }>;
 }
+
+/** Single generated-policy revision consumed by capability registration. */
+export const OMI_TOOL_MANIFEST_VERSION = 1 as const;
 
 const readOnlyLocal: OmiToolAnnotations = {
   readOnlyHint: true,
@@ -166,13 +174,6 @@ function piLocalApiAndScreenContextStdio(): Partial<Record<OmiToolAdapterId, Omi
     "pi-mono": { advertised: true },
     "omi-tools-stdio": { advertised: true, condition: "screenContext" },
     "local-agent-api": { advertised: true },
-  };
-}
-
-function piAndScreenContextOrOnboardingStdio(): Partial<Record<OmiToolAdapterId, OmiToolAdapterAvailability>> {
-  return {
-    "pi-mono": { advertised: true },
-    "omi-tools-stdio": { advertised: true, condition: "screenContextOrOnboarding" },
   };
 }
 
@@ -451,13 +452,13 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       [
         "Use when the user asks to add, create, schedule, or put a specific event on their calendar.",
         "Pass title, start_time, and end_time as ISO-8601 strings with timezone; include location, description, and attendees when provided.",
-        "Use spawn_agent for multi-step calendar work such as finding availability or coordinating with people.",
+        "This capability creates one specified event; it does not find availability, reschedule, delete, or coordinate with people.",
       ],
     ),
     executor: { kind: "swiftTool" },
     voice: {
       realtimeDescription:
-        "Create a Google Calendar event for the user. Use for simple calendar requests like 'put this on my calendar', 'schedule lunch tomorrow', or 'create an event'. Requires start_time and end_time as ISO-8601 strings with timezone. Use spawn_agent instead for multi-step scheduling, finding availability, rescheduling, deleting, or coordinating with people.",
+        "Create one specified Google Calendar event. Requires start_time and end_time as ISO-8601 strings with timezone. This capability does not find availability, reschedule, delete, or coordinate with people.",
       schemaOverride: schema(
         {
           title: { type: "string", description: "Event title." },
@@ -488,23 +489,33 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       [
         "For screen-awareness questions, call get_work_context first.",
         "Use capture_screen only when raw pixels are necessary; it requires explicit approval before image bytes are shared.",
-        "After capture_screen returns a file path, use Read to view the image.",
+        "The result lists the full-screen image path plus native-resolution detail tiles on large screens; use Read to view them.",
       ],
     ),
   },
   check_permission_status: {
-    surfaces: ["desktop_chat", "onboarding"],
+    surfaces: ["desktop_chat", "realtime_voice", "onboarding"],
     capabilityDoc: doc("Check Permission Status", "Check whether a required macOS permission has been granted.", [
       "Use before requesting a permission or after request_permission returns pending.",
       "Omit type to check all supported permissions.",
     ]),
+    voice: {
+      realtimeDescription:
+        "Check whether Omi has the requested macOS permission through the kernel-authorized native executor.",
+    },
   },
   request_permission: {
-    surfaces: ["desktop_chat", "onboarding"],
-    capabilityDoc: doc("Request Permission", "Open or guide the user through granting a required macOS permission.", [
-      "Use when a tool reports permission_required or the user asks Omi to grant/check a permission.",
-      "Use strict permission types only.",
+    surfaces: ["desktop_chat", "realtime_voice", "onboarding"],
+    capabilityDoc: doc("Request Permission", "Open or guide the user through granting a required macOS permission. Screen sharing is the macOS Screen Recording permission.", [
+      "Call only when the current user message names one permission, clearly affirms your immediately preceding one-permission request, or directly says to request it/that permission.",
+      "Treat screen share, screen sharing, and screen-share as the screen_recording permission type.",
+      "Ask the user to choose when their request is generic or names multiple permissions.",
+      "The user must still complete the native macOS prompt or Settings toggle.",
     ]),
+    voice: {
+      realtimeDescription:
+        "Request Omi's macOS permission through the kernel-authorized native executor by opening the native prompt or relevant System Settings pane. Screen share, screen sharing, and screen-share mean Screen Recording. Supports Screen Recording, microphone, notifications, Accessibility, Automation, and Full Disk Access.",
+    },
   },
   scan_files: {
     surfaces: ["onboarding"],
@@ -1006,12 +1017,14 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     name: "capture_screen",
     label: "Capture Screen",
     description:
-      "Capture raw screenshot pixels only when get_work_context is insufficient. Returns the file path to the saved JPEG image after approval. Use the Read tool to view the image after capturing.",
+      "Capture raw screenshot pixels only when get_work_context is insufficient. Returns the saved full-screen image path plus native-resolution detail tiles on large screens, after approval. Use the Read tool to view the images after capturing.",
     promptSnippet: "capture_screen - Take a screenshot of the user's current screen",
     promptGuidelines: [
       "Call get_work_context first when the user asks about what's on their screen or what they're looking at.",
       "Use capture_screen only when raw pixels are necessary; it requires explicit approval before image bytes are shared.",
-      "After capture_screen returns a file path, use Read to view the image.",
+      "After capture_screen returns, use Read to view the full-screen image.",
+      "The full screenshot is downscaled before you see it — before quoting small on-screen text (titles, prices, sizes, labels) or choosing between similar-looking items, Read the detail tile covering that item and take the exact text from the tile.",
+      "Keep every detail you cite (title, price, badge, position) bound to one on-screen item; if text is not legible even in a tile, say so instead of inferring.",
       "Do NOT use bash screencapture - always use this tool instead.",
     ],
     latency: "fast local",
@@ -1041,16 +1054,18 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     executor: { kind: "swiftTool" },
     intendedForAgents: true,
     runtimePreconditions: ["Requires local desktop app."],
-    adapters: piAndScreenContextOrOnboardingStdio(),
+    adapters: piAndStdio(),
   },
   {
     name: "request_permission",
     label: "Request Permission",
     description:
-      "Request a specific macOS permission from the user by opening the appropriate system prompt or Settings pane. Use when a tool reports permission_required or when the user asks Omi to get a permission.",
+      "Open the native macOS permission prompt or Settings pane for one required permission after the user explicitly asks for it. Screen share, screen sharing, and screen-share mean screen_recording.",
     promptSnippet: "request_permission - Request a macOS permission",
     promptGuidelines: [
-      "For screen-related requests, if Screen Recording is missing, tell the user Omi cannot see the current screen yet and call request_permission with type=screen_recording.",
+      "Call only when the current user message explicitly requests one named permission, clearly affirms your immediately preceding one-permission request, or directly says to request it/that permission.",
+      "Treat screen share, screen sharing, and screen-share as the screen_recording permission type.",
+      "For generic or multi-permission requests, ask the user which permission they want to grant.",
       "Use strict permission types only. Do not invent permission names.",
       "After requesting, explain any returned requires_restart or pending status.",
     ],
@@ -1070,8 +1085,8 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     timeoutClass: "normal",
     executor: { kind: "swiftTool" },
     intendedForAgents: true,
-    runtimePreconditions: ["Requires local desktop app; some macOS permissions require the user to toggle Settings manually."],
-    adapters: piAndScreenContextOrOnboardingStdio(),
+    runtimePreconditions: ["Requires explicit current-turn user consent; some macOS permissions require the user to toggle Settings manually."],
+    adapters: piAndStdio(),
   },
   {
     name: "scan_files",
@@ -1323,14 +1338,14 @@ const controlVoicePatches: Partial<Record<AgentControlManifestTool["name"], OmiT
   },
   list_agent_sessions: {
     realtimeDescription:
-      "List canonical Omi-managed agent sessions/runs across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. Use when the user asks what canonical agents or subagents are active, recent, failed, or manageable.",
+      "List canonical Omi-managed agents and subagents, including their sessions/runs, across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. For a prior child agent's final answer, do not infer run completion from session status or restrict discovery to status='open'. List recent sessions, then inspect the returned run with get_agent_run. Keep internal ids out of the user-visible response.",
     schemaOverride: schema(
       {
         status: { type: "string", enum: ["open", "archived", "closed"], description: "Optional session status filter." },
         surfaceKind: {
           type: "string",
           enum: ["main_chat", "task_chat", "realtime", "delegated_agent", "background_agent", "floating_bar", "floating_pill"],
-          description: "Optional canonical surface filter.",
+          description: "Optional surface hint. background_agent and delegated_agent discover recent child sessions across concrete surfaces.",
         },
         limit: { type: "number", description: "Maximum sessions to return. Default 50." },
       },
@@ -1338,7 +1353,7 @@ const controlVoicePatches: Partial<Record<AgentControlManifestTool["name"], OmiT
     ),
   },
   get_agent_run: {
-    realtimeDescription: "Inspect one canonical Omi-managed agent run. Prefer an agentRef from list_agent_sessions.",
+    realtimeDescription: "Inspect one canonical Omi-managed agent run. Prefer an agentRef or runId from list_agent_sessions. For a completed child, answer from run.finalText and do not expose the internal id.",
     schemaOverride: schema(
       {
         agentRef: { type: "string", description: "Opaque agent handle from list_agent_sessions." },
@@ -1404,10 +1419,16 @@ const controlVoicePatches: Partial<Record<AgentControlManifestTool["name"], OmiT
 };
 
 function controlEntry(tool: AgentControlManifestTool): OmiToolManifestEntry {
+  const coordinatorOnly = new Set([
+    "send_agent_message",
+    "spawn_background_agent",
+    "spawn_agent",
+    "run_agent_and_wait",
+  ]);
   const adapters =
     tool.name === "resolve_desktop_dispatch" || tool.name === "spawn_background_agent"
       ? trustedDirectControlOnly()
-      : piAndStdio();
+      : piAndStdio(coordinatorOnly.has(tool.name) ? "coordinatorOnly" : "always");
   return {
     name: tool.name,
     label: tool.label,
@@ -1441,6 +1462,22 @@ export const omiToolManifest: OmiToolManifestEntry[] = [
   ...swiftToolManifest.slice(4),
 ] satisfies OmiToolManifestEntry[];
 
+function canonicalManifestJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalManifestJson).join(",")}]`;
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .filter((key) => record[key] !== undefined)
+    .map((key) => `${JSON.stringify(key)}:${canonicalManifestJson(record[key])}`)
+    .join(",")}}`;
+}
+
+/** Content identity paired with the schema version on every physical command. */
+export const OMI_TOOL_MANIFEST_DIGEST = `sha256:${createHash("sha256")
+  .update(canonicalManifestJson(omiToolManifest))
+  .digest("hex")}` as const;
+
 export function isToolAvailableForContext(
   availability: OmiToolAdapterAvailability | undefined,
   context: OmiToolProjectionContext = {},
@@ -1448,6 +1485,7 @@ export function isToolAvailableForContext(
   if (!availability?.advertised) return false;
   if (availability.condition === "onboardingOnly") return context.onboarding === true;
   if (availability.condition === "nonOnboarding") return context.onboarding !== true;
+  if (availability.condition === "coordinatorOnly") return context.executionRole !== "leaf";
   if (availability.condition === "screenContext") return context.screenContext === true;
   if (availability.condition === "screenContextOrOnboarding") return context.screenContext === true || context.onboarding === true;
   return true;
@@ -1530,7 +1568,8 @@ export function buildToolAvailabilitySnapshot(
   }
 
   return {
-    manifestVersion: 1,
+    manifestVersion: OMI_TOOL_MANIFEST_VERSION,
+    manifestDigest: OMI_TOOL_MANIFEST_DIGEST,
     adapterId,
     context,
     advertisedToolCount: advertised.length,

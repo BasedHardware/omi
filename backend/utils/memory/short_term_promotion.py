@@ -50,10 +50,17 @@ from models.memory_evidence import SourceState
 from models.memory_apply import ApplyStatus, MemoryControlState
 from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
 from models.memory_operations import MemoryOperation, MemoryOperationType
+from models.memory_admission import valid_required_processing_receipt
 from models.product_memory import MemoryItemStatus, MemoryLayer, ProcessingState, MemoryItem
 from utils.memory.atom_keyword_index import sync_atom_keyword_index_for_item
 from utils.memory.canonical_consolidation import ConsolidationReport, run_canonical_consolidation
+from utils.memory.canonical_required_processing import (
+    RequiredMemoryProcessingReport,
+    RequiredMemoryProcessor,
+    run_required_memory_processing,
+)
 from utils.memory.required_promotion import (
+    REQUIRED_PROCESSING_STATUS_PROCESSED,
     REQUIRED_PROMOTION_STATUS_PROMOTED,
     REQUIRED_PROMOTION_STATUSES,
 )
@@ -115,6 +122,18 @@ def is_promotable_short_term_item(item: MemoryItem, *, now: datetime) -> bool:
         return False
     if item.expires_at is not None and item.expires_at <= current_time:
         return False
+    promotion = item.promotion or {}
+    if promotion.get("user_review") is False:
+        return False
+    if promotion.get("required"):
+        if promotion.get("processing_status") != REQUIRED_PROCESSING_STATUS_PROCESSED:
+            return False
+        if not valid_required_processing_receipt(
+            content=item.content or "",
+            item_revision=item.item_revision,
+            promotion=promotion,
+        ):
+            return False
     return True
 
 
@@ -138,7 +157,17 @@ def is_fast_track_promotable(item: MemoryItem) -> bool:
 
 def is_required_promotion_item(item: MemoryItem) -> bool:
     promotion = item.promotion or {}
-    return bool(promotion.get("required")) and promotion.get("status") in REQUIRED_PROMOTION_STATUSES
+    return (
+        bool(promotion.get("required"))
+        and promotion.get("user_review") is not False
+        and promotion.get("status") in REQUIRED_PROMOTION_STATUSES
+        and promotion.get("processing_status") == REQUIRED_PROCESSING_STATUS_PROCESSED
+        and valid_required_processing_receipt(
+            content=item.content or "",
+            item_revision=item.item_revision,
+            promotion=promotion,
+        )
+    )
 
 
 def list_required_promotion_items(items: List[MemoryItem]) -> List[MemoryItem]:
@@ -391,8 +420,20 @@ def _read_control_state(uid: str, *, db_client: Any) -> MemoryControlState:
 
 
 def _persist_control_state(control: MemoryControlState, *, db_client: Any) -> None:
+    # Write only the two fields promotion owns, with merge=True. A full-document
+    # .set() overwrote the entire control doc from a non-transactional read snapshot,
+    # so a concurrent apply_long_term_patch_firestore transaction landing between that
+    # read and this write had its head_commit_id / commit_sequence / projection &
+    # vector watermarks silently reverted (lost update). Mirrors the consolidation
+    # writer (canonical_consolidation._persist_control_state).
     db_client.document(MemoryCollections(uid=control.uid).memory_apply_control_state).set(
-        control.model_dump(mode="json")
+        {
+            "last_promotion_run_at": (
+                control.last_promotion_run_at.isoformat() if control.last_promotion_run_at is not None else None
+            ),
+            "updated_at": control.updated_at.isoformat(),
+        },
+        merge=True,
     )
 
 
@@ -503,6 +544,8 @@ def promote_short_term_item_via_apply(
         "target_tier": MemoryLayer.long_term.value,
         "evidence_ids": [evidence.evidence_id for evidence in item.evidence],
         "promotion_audit": promotion_audit,
+        "expected_item_revision": item.item_revision,
+        "expected_content_hash": item.content_hash,
     }
 
     result = apply_long_term_patch_firestore(
@@ -591,6 +634,7 @@ class CanonicalShortTermLifecycleReport:
 class CanonicalShortTermMaintenanceReport:
     uid: str
     skipped_reason: Optional[str] = None
+    required_processing: Optional[RequiredMemoryProcessingReport] = None
     consolidation: Optional[ConsolidationReport] = None
     promotion: Optional[ShortTermPromotionReport] = None
     lifecycle: Optional[CanonicalShortTermLifecycleReport] = None
@@ -750,13 +794,21 @@ def run_canonical_short_term_maintenance(
     now: Optional[datetime] = None,
     run_id: str,
     llm_invoke: Optional[Callable[[str], str]] = None,
+    recurrence_signal_sink: Optional[Callable[..., int]] = None,
+    required_processor: Optional[RequiredMemoryProcessor] = None,
 ) -> CanonicalShortTermMaintenanceReport:
-    """Canonical-only wrapper: TTL audit → consolidation → batch-or-daily promotion."""
+    """Canonical-only wrapper: required processing → TTL → consolidation → promotion."""
     client: Any = db_client if db_client is not None else default_db_client
     if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
         return CanonicalShortTermMaintenanceReport(uid=uid, skipped_reason="not_canonical_cohort")
 
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
+    required_processing = run_required_memory_processing(
+        uid,
+        db_client=client,
+        processor=required_processor,
+        now=current_time,
+    )
     lifecycle = run_canonical_short_term_ttl_lifecycle(uid, db_client=client, now=current_time, run_id=run_id)
     consolidation = run_canonical_consolidation(
         uid,
@@ -764,6 +816,7 @@ def run_canonical_short_term_maintenance(
         now=current_time,
         run_id=run_id,
         llm_invoke=llm_invoke,
+        recurrence_signal_sink=recurrence_signal_sink,
     )
     # Promotion gate: None = consolidation did not fire; empty set = fired but blocked (defer all);
     # non-empty set = fired cleanly — only items batched this pass may promote.
@@ -783,6 +836,7 @@ def run_canonical_short_term_maintenance(
     )
     return CanonicalShortTermMaintenanceReport(
         uid=uid,
+        required_processing=required_processing,
         consolidation=consolidation,
         promotion=promotion,
         lifecycle=lifecycle,

@@ -9,6 +9,16 @@ import {
 } from "../src/runtime/omi-tool-manifest.js";
 
 describe("omi tool manifest", () => {
+  it("projects agent-management tools out of leaf worker contexts", () => {
+    for (const adapterId of ["pi-mono", "omi-tools-stdio"] as const) {
+      const names = toolNamesForAdapter(adapterId, { executionRole: "leaf", screenContext: true });
+      expect(names).not.toContain("spawn_agent");
+      expect(names).not.toContain("spawn_background_agent");
+      expect(names).not.toContain("run_agent_and_wait");
+      expect(names).not.toContain("send_agent_message");
+    }
+  });
+
   it("has unique canonical names", () => {
     const names = omiToolManifest.map((tool) => tool.name);
     expect(new Set(names).size).toBe(names.length);
@@ -64,7 +74,7 @@ describe("omi tool manifest", () => {
     expect(workContext?.promptGuidelines?.join("\n")).toContain("Call get_work_context first");
     expect(captureScreen?.promptGuidelines?.join("\n")).toContain("Call get_work_context first");
     expect(captureScreen?.promptGuidelines?.join("\n")).toContain("requires explicit approval");
-    expect(requestPermission?.promptGuidelines?.join("\n")).toContain("Screen Recording is missing");
+    expect(requestPermission?.promptGuidelines?.join("\n")).toContain("current user message explicitly requests one named permission");
   });
 
   it("keeps spawn_background_agent internal to coordinator RPC only", () => {
@@ -75,6 +85,8 @@ describe("omi tool manifest", () => {
   it("keeps directed provider routing on the canonical spawn_agent schema", () => {
     const spawnAgent = toolsForAdapter("pi-mono").find((tool) => tool.name === "spawn_agent");
 
+    expect(spawnAgent?.inputSchema.required).toEqual(["objective"]);
+    expect(spawnAgent?.inputSchema.properties).not.toHaveProperty("originSurfaceKind");
     expect(spawnAgent?.inputSchema.properties.provider).toMatchObject({
       enum: ["openclaw", "hermes"],
     });
@@ -82,13 +94,24 @@ describe("omi tool manifest", () => {
     expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("provider='hermes'");
   });
 
-  it("projects permission tools only for screen-context stdio and keeps onboarding-only tools scoped", () => {
+  it("guides realtime child-result retrieval without exposing internal ids", () => {
+    const list = omiToolManifest.find((tool) => tool.name === "list_agent_sessions");
+    const run = omiToolManifest.find((tool) => tool.name === "get_agent_run");
+
+    expect(list?.promptGuidelines?.join("\n")).toContain("do not infer run completion from session status");
+    expect(list?.voice?.realtimeDescription).toContain("restrict discovery to status='open'");
+    expect(run?.promptGuidelines?.join("\n")).toContain("run.finalText");
+    expect(run?.voice?.realtimeDescription).toContain("run.finalText");
+    expect(run?.voice?.realtimeDescription).toContain("do not expose the internal id");
+  });
+
+  it("keeps permission tools available to main stdio while onboarding-only tools remain scoped", () => {
     const regular = new Set(toolNamesForAdapter("omi-tools-stdio"));
     const onboarding = new Set(toolNamesForAdapter("omi-tools-stdio", { onboarding: true }));
     const screenContext = new Set(toolNamesForAdapter("omi-tools-stdio", { screenContext: true }));
 
-    expect(regular.has("request_permission")).toBe(false);
-    expect(regular.has("check_permission_status")).toBe(false);
+    expect(regular.has("request_permission")).toBe(true);
+    expect(regular.has("check_permission_status")).toBe(true);
     expect(regular.has("get_email_insights")).toBe(false);
     expect(regular.has("capture_screen")).toBe(false);
     expect(regular.has("get_work_context")).toBe(false);
