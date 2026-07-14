@@ -402,20 +402,7 @@ def _mark_finalization_fenced_txn(
         return False
     if job.get('fanout_status') not in (None, 'pending'):
         return False
-    transaction.update(
-        job_ref,
-        {
-            'status': 'completed',
-            'completed_at': now,
-            'updated_at': now,
-            'lease_expires_at': now,
-            'reconcile_after_at': firestore.DELETE_FIELD,
-            'last_failure_code': None,
-            'finalization_outcome': 'fenced',
-            'fanout_status': 'fenced',
-            'fanout_fenced_at': now,
-        },
-    )
+    transaction.update(job_ref, _fenced_finalization_update(now))
     return True
 
 
@@ -437,8 +424,35 @@ def _fanout_key(job: dict[str, Any]) -> str:
     return f"conversation:{job.get('conversation_id', '')}:finalization:{int(job.get('finalization_revision') or 1)}"
 
 
+def _fenced_finalization_update(now: datetime) -> dict[str, Any]:
+    """Return the terminal no-fanout state shared by every fencing boundary."""
+    return {
+        'status': 'completed',
+        'completed_at': now,
+        'updated_at': now,
+        'lease_expires_at': now,
+        'reconcile_after_at': firestore.DELETE_FIELD,
+        'last_failure_code': None,
+        'finalization_outcome': 'fenced',
+        'fanout_status': 'fenced',
+        'fanout_fenced_at': now,
+    }
+
+
 def _fanout_claim(status: str, fanout_key: str | None) -> FinalizationFanoutClaim:
     return {'status': status, 'fanout_key': fanout_key}
+
+
+def _conversation_admits_fanout(conversation: Mapping[str, Any], job: Mapping[str, Any], job_id: str) -> bool:
+    """Require the immutable job binding to still name a completed conversation."""
+    if conversation.get('discarded') or conversation.get('status') != 'completed':
+        return False
+    if conversation.get('finalization_job_id') != job_id:
+        return False
+    try:
+        return int(conversation.get('finalization_revision') or 0) == int(job.get('finalization_revision') or 0)
+    except (TypeError, ValueError):
+        return False
 
 
 def _claim_finalization_fanout_txn(
@@ -447,7 +461,15 @@ def _claim_finalization_fanout_txn(
     dispatch_generation: int,
     lease_epoch: int,
     now: datetime,
+    conversation_ref_for_job: Callable[[str, str], Any],
 ) -> FinalizationFanoutClaim:
+    """Claim fanout only if this job still owns the completed conversation.
+
+    Reading the conversation in this Firestore transaction makes a concurrent
+    discard or newer finalization revision retry the transaction before the
+    fanout lease can commit.  The losing state is terminally fenced here,
+    rather than leaving a retryable leased job for either worker to replay.
+    """
     snapshot = job_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
         return _fanout_claim('missing', None)
@@ -457,6 +479,20 @@ def _claim_finalization_fanout_txn(
         return _fanout_claim('completed', fanout_key)
     if not _is_current_lease(job, dispatch_generation, lease_epoch):
         return _fanout_claim('lease_conflict', fanout_key)
+
+    uid = job.get('uid')
+    conversation_id = job.get('conversation_id')
+    if not isinstance(uid, str) or not uid or not isinstance(conversation_id, str) or not conversation_id:
+        transaction.update(job_ref, _fenced_finalization_update(now))
+        return _fanout_claim('fenced', fanout_key)
+
+    conversation_ref = conversation_ref_for_job(uid, conversation_id)
+    conversation_snapshot = conversation_ref.get(transaction=transaction)
+    conversation = conversation_snapshot.to_dict() if getattr(conversation_snapshot, 'exists', False) else None
+    if not isinstance(conversation, Mapping) or not _conversation_admits_fanout(conversation, job, job_ref.id):
+        transaction.update(job_ref, _fenced_finalization_update(now))
+        return _fanout_claim('fenced', fanout_key)
+
     transaction.update(
         job_ref,
         {
@@ -480,7 +516,14 @@ def claim_finalization_fanout(
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(_claim_finalization_fanout_txn)
-    return transactional(transaction, _job_ref(client, job_id), dispatch_generation, lease_epoch, _now())
+    return transactional(
+        transaction,
+        _job_ref(client, job_id),
+        dispatch_generation,
+        lease_epoch,
+        _now(),
+        lambda uid, conversation_id: _conversation_ref(client, uid, conversation_id),
+    )
 
 
 def _mark_finalization_fanout_completed_txn(

@@ -292,7 +292,11 @@ async def test_worker_closes_a_fenced_finalization_without_fanout(monkeypatch):
     )
     normal_completion = MagicMock()
     fenced_completion = MagicMock(return_value=True)
+    retryable = MagicMock()
+    dead_letter = MagicMock()
     monkeypatch.setattr(jobs_db, 'mark_finalization_completed', normal_completion)
+    monkeypatch.setattr(jobs_db, 'mark_finalization_retryable', retryable)
+    monkeypatch.setattr(finalization_router, 'final_attempt_failed', dead_letter)
     monkeypatch.setattr(finalization_router.lifecycle_service, 'complete_fenced_finalization', fenced_completion)
 
     response = await finalization_router.run_listen_finalization_job(
@@ -303,6 +307,8 @@ async def test_worker_closes_a_fenced_finalization_without_fanout(monkeypatch):
     assert json.loads(response.body) == {'status': 'done'}
     normal_completion.assert_not_called()
     fenced_completion.assert_called_once_with('job-1', 1, 1)
+    retryable.assert_not_called()
+    dead_letter.assert_not_called()
 
 
 @pytest.mark.anyio
@@ -570,24 +576,24 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(m
 
 
 @pytest.mark.anyio
-async def test_finalizer_skips_fanout_when_processing_result_is_fenced(monkeypatch):
+async def test_finalizer_skips_fanout_when_atomic_claim_is_fenced(monkeypatch):
     async def inline_run_blocking(_executor, func, *args, **kwargs):
         return func(*args, **kwargs)
 
     conversation = SimpleNamespace(id='conversation-1', status=ConversationStatus.processing, language='en')
     integrations = AsyncMock()
-    durable_rows = iter(
-        (
-            {'id': 'conversation-1', 'status': ConversationStatus.processing.value, 'discarded': False},
-            {'id': 'conversation-1', 'status': ConversationStatus.processing.value, 'discarded': True},
-        )
-    )
     monkeypatch.setattr(persisted_finalizer, 'run_blocking', inline_run_blocking)
-    monkeypatch.setattr(persisted_finalizer.conversations_db, 'get_conversation', lambda *args: next(durable_rows))
+    monkeypatch.setattr(
+        persisted_finalizer.conversations_db,
+        'get_conversation',
+        lambda *args: {'id': 'conversation-1', 'status': ConversationStatus.processing.value, 'discarded': False},
+    )
     monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
     monkeypatch.setattr(persisted_finalizer, 'get_cached_user_geolocation', lambda uid: None)
     monkeypatch.setattr(persisted_finalizer, 'process_conversation', lambda *args: conversation)
-    claim_fanout = MagicMock()
+    claim_fanout = MagicMock(
+        return_value={'status': 'fenced', 'fanout_key': 'conversation:conversation-1:finalization'}
+    )
     monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'claim_finalization_fanout', claim_fanout)
     monkeypatch.setattr(persisted_finalizer, 'trigger_external_integrations', integrations)
 
@@ -600,5 +606,5 @@ async def test_finalizer_skips_fanout_when_processing_result_is_fenced(monkeypat
     )
 
     assert disposition == ConversationFinalizationDisposition.fenced
-    claim_fanout.assert_not_called()
+    claim_fanout.assert_called_once_with('job-1', 2, 3)
     integrations.assert_not_awaited()

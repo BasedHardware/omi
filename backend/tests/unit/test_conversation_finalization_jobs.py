@@ -56,6 +56,18 @@ def _conversation(data: dict | None = None) -> _Ref:
     )
 
 
+def _completed_finalization_conversation(job_id: str = 'job-1', revision: int = 1, data: dict | None = None) -> _Ref:
+    return _conversation(
+        {
+            'status': 'completed',
+            'discarded': False,
+            'finalization_job_id': job_id,
+            'finalization_revision': revision,
+            **(data or {}),
+        }
+    )
+
+
 def _admit_finalization(_conversation_data: dict) -> jobs.FinalizationAdmission:
     return {
         'accepted': True,
@@ -275,7 +287,9 @@ def test_finalization_completion_requires_durable_fanout_completion():
             'dispatch_generation': 1,
             'lease_epoch': 4,
             'fanout_status': 'pending',
+            'uid': 'uid-1',
             'conversation_id': 'conversation-1',
+            'finalization_revision': 1,
         },
     )
 
@@ -284,7 +298,8 @@ def test_finalization_completion_requires_durable_fanout_completion():
     assert blocked.updates == []
 
     fanout = _Transaction()
-    claim = jobs._claim_finalization_fanout_txn(fanout, ref, 1, 4, now)
+    conversation_ref = _completed_finalization_conversation()
+    claim = jobs._claim_finalization_fanout_txn(fanout, ref, 1, 4, now, lambda *_: conversation_ref)
     assert claim == {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization:1'}
     ref.data = ref.data | fanout.updates[0][1]
 
@@ -294,6 +309,73 @@ def test_finalization_completion_requires_durable_fanout_completion():
 
     completed = _Transaction()
     assert jobs._mark_finalization_completed_txn(completed, ref, 1, 4, now) is True
+
+
+def test_fanout_claim_terminally_fences_a_discard_that_wins_before_its_transaction():
+    """A processor may finish while a disconnect discard wins the fanout race.
+
+    Firestore retries this transaction if the conversation changes after its
+    read. This fixture represents the retried transaction snapshot after that
+    discard, which must both reject integrations and close the job rather than
+    make it retryable or eligible for a dead letter.
+    """
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 1,
+            'lease_epoch': 4,
+            'fanout_status': 'pending',
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+            'finalization_revision': 1,
+        },
+    )
+    discarded_conversation = _completed_finalization_conversation(data={'discarded': True})
+    transaction = _Transaction()
+
+    claim = jobs._claim_finalization_fanout_txn(
+        transaction,
+        ref,
+        1,
+        4,
+        now,
+        lambda *_: discarded_conversation,
+    )
+
+    assert claim == {'status': 'fenced', 'fanout_key': 'conversation:conversation-1:finalization:1'}
+    assert transaction.updates == [(ref, jobs._fenced_finalization_update(now))]
+
+
+def test_fanout_claim_terminally_fences_a_superseded_finalization_binding():
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 1,
+            'lease_epoch': 4,
+            'fanout_status': 'pending',
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+            'finalization_revision': 1,
+        },
+    )
+    newer_conversation = _completed_finalization_conversation(job_id='job-2', revision=2)
+    transaction = _Transaction()
+
+    claim = jobs._claim_finalization_fanout_txn(
+        transaction,
+        ref,
+        1,
+        4,
+        now,
+        lambda *_: newer_conversation,
+    )
+
+    assert claim == {'status': 'fenced', 'fanout_key': 'conversation:conversation-1:finalization:1'}
+    assert transaction.updates == [(ref, jobs._fenced_finalization_update(now))]
 
 
 def test_fenced_finalization_is_a_terminal_no_fanout_outcome():
