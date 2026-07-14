@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
+from google.api_core.exceptions import AlreadyExists
 
 import database.conversations as conversations_db
 from models.conversation_enums import ConversationStatus
@@ -41,7 +42,7 @@ class _DocumentRef:
 
     def create(self, data: dict[str, Any]) -> None:
         if self.path in self.firestore.documents:
-            raise RuntimeError('already exists')
+            raise AlreadyExists('already exists')
         self.firestore.documents[self.path] = copy.deepcopy(data)
         self.firestore.write_log.append((self.path, copy.deepcopy(data)))
 
@@ -200,6 +201,36 @@ def test_missing_conversation_fences_processing_result_without_resurrection(life
     assert persisted is False
     assert ('users', 'uid', 'conversations', 'deleted-conversation') not in lifecycle_store.documents
     assert lifecycle_store.write_log == []
+
+
+def test_completed_conversation_creation_is_explicit_and_idempotent(lifecycle_store):
+    created = lifecycle_service.create_completed_conversation(
+        'uid',
+        {
+            'id': 'new-conversation',
+            'status': ConversationStatus.completed,
+            'title': 'created by an initial request',
+            'data_protection_level': 'standard',
+        },
+        idempotent=True,
+    )
+
+    assert created is True
+    assert lifecycle_store.conversation('uid', 'new-conversation')['status'] == ConversationStatus.completed
+    assert (
+        lifecycle_service.create_completed_conversation(
+            'uid',
+            {
+                'id': 'new-conversation',
+                'status': ConversationStatus.completed,
+                'title': 'stale duplicate request',
+                'data_protection_level': 'standard',
+            },
+            idempotent=True,
+        )
+        is False
+    )
+    assert lifecycle_store.conversation('uid', 'new-conversation')['title'] == 'created by an initial request'
 
 
 def test_import_persists_through_the_lifecycle_owner(lifecycle_store):

@@ -319,7 +319,11 @@ def _persist_processing_result_with_lifecycle(
 
 
 @set_data_protection_level(data_arg_name='conversation_data')
-@prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
+@prepare_for_write(
+    data_arg_name='conversation_data',
+    prepare_func=_prepare_conversation_for_write,
+    preserve_result=True,
+)
 def _create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: dict) -> bool:
     """Atomically create a conversation document if it does not already exist."""
     conversation_data.pop('updated_at', None)

@@ -964,6 +964,7 @@ def _store_deferred_conversation(
     all enrichment. Mirrors the tail of process_conversation's persistence (cheap structured →
     `_get_conversation_obj` → upsert) without any LLM / Pinecone / app work. The enrichment runs
     later via the lazy trigger in `get_conversation_by_id`."""
+    is_initial_creation = isinstance(conversation, (CreateConversation, ExternalIntegrationCreateConversation))
     structured = _build_deferred_structured(conversation)
     conversation = _get_conversation_obj(uid, structured, conversation)
     conversation.deferred = True
@@ -972,7 +973,13 @@ def _store_deferred_conversation(
     # processing indicator and re-fetches on open to trigger enrichment. The lazy enrich sets it
     # back to `completed`.
     conversation.status = ConversationStatus.processing
-    lifecycle_service.persist_processed_conversation(uid, conversation.dict())
+    if is_initial_creation:
+        persisted = lifecycle_service.create_processing_conversation(uid, conversation.dict(), idempotent=True)
+    else:
+        persisted = lifecycle_service.persist_processed_conversation(uid, conversation.dict())
+    if not persisted:
+        logger.info('lazy: deferred conversation creation fenced uid=%s conv=%s', uid, conversation.id)
+        return conversation
     logger.info("lazy: stored deferred desktop conversation uid=%s conv=%s", uid, conversation.id)
     return conversation
 
@@ -985,6 +992,7 @@ def process_conversation(
     is_reprocess: bool = False,
     app_id: Optional[str] = None,
 ) -> Conversation:
+    is_initial_creation = isinstance(conversation, (CreateConversation, ExternalIntegrationCreateConversation))
     # Trial paywall: skip ALL post-processing (summaries, memories, action
     # items, embeddings, app integrations) for paywalled desktop users.
     # Without this, any segments that did get through before the trial gate
@@ -1060,7 +1068,10 @@ def process_conversation(
     # integrations, vectors, memories, action items, audio artifacts, folders,
     # calendar links, usage, or webhooks from a stale in-memory snapshot.
     conversation.status = ConversationStatus.completed
-    persisted = lifecycle_service.persist_processed_conversation(uid, conversation.dict())
+    if is_initial_creation:
+        persisted = lifecycle_service.create_completed_conversation(uid, conversation.dict(), idempotent=True)
+    else:
+        persisted = lifecycle_service.persist_processed_conversation(uid, conversation.dict())
     if not persisted:
         logger.info(
             'processing result fenced before completion side effects uid=%s conversation=%s', uid, conversation.id

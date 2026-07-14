@@ -16,12 +16,16 @@ inside the ``with`` block is evicted on teardown so no stub-fed module leaks to 
 import re
 import threading
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from models.conversation import Conversation, CreateConversation
+from models.conversation_enums import ConversationSource, ConversationStatus
+from models.structured import Structured
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
@@ -240,6 +244,8 @@ def _build_fakes() -> dict[str, ModuleType]:
     add("utils.conversations.factory", AutoMockModule("utils.conversations.factory"))
     lifecycle_service = add("utils.conversations.lifecycle", AutoMockModule("utils.conversations.lifecycle"))
     lifecycle_service.persist_processed_conversation = MagicMock(return_value=True)
+    lifecycle_service.create_completed_conversation = MagicMock(return_value=True)
+    lifecycle_service.create_processing_conversation = MagicMock(return_value=True)
     subjects = add("utils.conversations.subjects", AutoMockModule("utils.conversations.subjects"))
     subjects.infer_subject_from_segments = lambda segments: (None, None)
 
@@ -413,6 +419,63 @@ def test_fenced_completion_submits_no_derived_work(monkeypatch):
     trigger_apps.assert_not_called()
     create_audio_files.assert_not_called()
     update_conversation.assert_not_called()
+
+
+def test_fresh_creation_uses_the_explicit_completed_lifecycle_owner(monkeypatch):
+    new_request = CreateConversation(
+        started_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 7, 14, 0, 1, tzinfo=timezone.utc),
+        transcript_segments=[],
+        source=ConversationSource.omi,
+    )
+    completed_conversation = Conversation(
+        id='fresh-conversation',
+        created_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
+        started_at=new_request.started_at,
+        finished_at=new_request.finished_at,
+        source=ConversationSource.omi,
+        structured=Structured(title=''),
+        transcript_segments=[],
+        status=ConversationStatus.completed,
+        discarded=True,
+    )
+    created = MagicMock(return_value=True)
+    persisted = MagicMock()
+    monkeypatch.setattr(process_conversation, '_get_structured', lambda *args, **kwargs: (MagicMock(), True))
+    monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *args, **kwargs: completed_conversation)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_completed_conversation', created)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', persisted)
+
+    result = process_conversation.process_conversation('uid', 'en', new_request)
+
+    assert result is completed_conversation
+    created.assert_called_once_with('uid', completed_conversation.dict(), idempotent=True)
+    persisted.assert_not_called()
+
+
+def test_deferred_fresh_creation_uses_the_explicit_processing_lifecycle_owner(monkeypatch):
+    new_request = CreateConversation(
+        started_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 7, 14, 0, 1, tzinfo=timezone.utc),
+        transcript_segments=[],
+        source=ConversationSource.desktop,
+    )
+    deferred_conversation = MagicMock()
+    deferred_conversation.id = 'deferred-conversation'
+    deferred_conversation.dict.return_value = {'id': 'deferred-conversation', 'status': 'processing'}
+    created = MagicMock(return_value=True)
+    persisted = MagicMock()
+    monkeypatch.setattr(process_conversation, '_build_deferred_structured', lambda *args: MagicMock())
+    monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *args, **kwargs: deferred_conversation)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_processing_conversation', created)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', persisted)
+
+    result = process_conversation._store_deferred_conversation('uid', new_request)
+
+    assert result is deferred_conversation
+    assert deferred_conversation.deferred is True
+    created.assert_called_once_with('uid', deferred_conversation.dict(), idempotent=True)
+    persisted.assert_not_called()
 
 
 def test_discard_call_uses_discard_feature_tracking():

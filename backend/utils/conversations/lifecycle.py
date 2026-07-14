@@ -86,6 +86,15 @@ def create_processing_conversation(uid: str, conversation_data: dict[str, Any], 
     return True
 
 
+def create_completed_conversation(uid: str, conversation_data: dict[str, Any], *, idempotent: bool = False) -> bool:
+    """Create a fully processed conversation without granting processors recreate authority."""
+    _require_status(conversation_data, ConversationStatus.completed)
+    if idempotent:
+        return conversations_db._create_conversation_if_absent_with_lifecycle(uid, conversation_data)
+    conversations_db._upsert_conversation_with_lifecycle(uid, conversation_data)
+    return True
+
+
 def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) -> bool:
     """Persist a processing result and report whether its generation was still current.
 
