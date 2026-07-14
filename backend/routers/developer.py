@@ -57,7 +57,7 @@ from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations import lifecycle as lifecycle_service
-from utils.conversations.location import get_google_maps_location, resolve_geolocation
+from utils.conversations.location import resolve_geolocation
 from utils.executors import postprocess_executor
 from utils.request_validation import HistoryDays
 from utils.llm.memories import identify_category_for_memory
