@@ -95,6 +95,35 @@ describe('createChatQuotaGate', () => {
     expect(fetchQuota).toHaveBeenCalledTimes(1)
   })
 
+  it('TIME-BOXES the cold-start sync — a stalled probe cannot hold the send (or a voice turn)', async () => {
+    vi.useFakeTimers()
+    try {
+      let land!: (q: ChatUsageQuota) => void
+      const fetchQuota = vi.fn(
+        () =>
+          new Promise<ChatUsageQuota>((resolve) => {
+            land = resolve
+          })
+      )
+      const gate = createChatQuotaGate(fetchQuota, 5_000)
+
+      // First send, no snapshot yet, and the probe never comes back (apiClient
+      // retries 429/503 with backoff — an unbounded await stalls the send ~30s).
+      const verdict = gate.check()
+      await vi.advanceTimersByTimeAsync(5_000)
+      expect(await verdict).toEqual({ blocked: false })
+
+      // The probe still lands in the background, so the NEXT send is gated on the
+      // real verdict rather than fetching again.
+      land(quota({ allowed: false }))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(await gate.check()).toMatchObject({ blocked: true })
+      expect(fetchQuota).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('fails OPEN when the quota fetch errors — the server stays the real enforcer', async () => {
     const gate = createChatQuotaGate(async () => {
       throw new Error('offline')

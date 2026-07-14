@@ -27,6 +27,24 @@ import { fetchChatQuota } from './billing'
 // on every bar reveal. A send only awaits the network in the cold-start case
 // where no snapshot exists yet (Mac's lazy pre-query sync,
 // FloatingControlBarWindow.swift:4239-4256), and concurrent syncs are deduped.
+// That ONE await is time-boxed: apiClient retries 429/503 with backoff (5 tries,
+// up to 16s apart), so an unbounded await would let a flaky backend stall a send
+// — and a voice turn — for ~30s with no feedback. On timeout we fail open (the
+// server still enforces) and the sync lands in the background for the next send.
+
+/** Longest a cold-start send may wait on the first quota sync before failing open. */
+export const COLD_START_SYNC_TIMEOUT_MS = 5_000
+
+/** Resolve when `p` settles or the bound elapses, whichever comes first. */
+function withTimeout(p: Promise<void>, ms: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, ms)
+    void p.finally(() => {
+      clearTimeout(timer)
+      resolve()
+    })
+  })
+}
 
 export type ChatQuotaGate = {
   /** Refresh the snapshot from the server (resets the optimistic delta). Never
@@ -69,7 +87,8 @@ export function isLimitReached(quota: ChatUsageQuota | null, optimisticDelta: nu
 }
 
 export function createChatQuotaGate(
-  fetchQuota: () => Promise<ChatUsageQuota> = fetchChatQuota
+  fetchQuota: () => Promise<ChatUsageQuota> = fetchChatQuota,
+  coldStartTimeoutMs: number = COLD_START_SYNC_TIMEOUT_MS
 ): ChatQuotaGate {
   let quota: ChatUsageQuota | null = null
   let optimisticDelta = 0
@@ -105,8 +124,9 @@ export function createChatQuotaGate(
     check: async () => {
       // Cold start only: force one sync so a user already over the cap can't get
       // a free send in before the first snapshot lands. Warm sends never hit the
-      // network here.
-      if (!quota) await sync()
+      // network here. Time-boxed — a stalled probe fails open rather than holding
+      // the send (see withTimeout above).
+      if (!quota) await withTimeout(sync(), coldStartTimeoutMs)
       if (!isLimitReached(quota, optimisticDelta)) return { blocked: false }
       return { blocked: true, message: limitMessage(quota) }
     }
