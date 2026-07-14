@@ -18,10 +18,23 @@ import type { HomeStageEvent, HomeStageMode } from './hubStage'
 // two responsive ones; everything else is fixed, because on Mac these are elements
 // on a stage that grows around them, not elements that stretch with it.
 const SIDE_INSET = 'min(96px, max(30px, 6vw))'
+// Mac's homeStageBottomPadding is a flat 26px, and the cluster docks right onto it.
+// Ported literally, the cluster read as stuck to the bottom edge on Windows — Mac's
+// window has no sidebar and a taller floor (680 vs our 600), so the same 26px does not
+// land the same way. This is a DELIBERATE deviation from Mac, on Chris's call: lift the
+// cluster off the floor, scaling with the window so it doesn't crowd a short one.
+const STAGE_BOTTOM_INSET = 'clamp(26px, 8vh, 80px)'
 const STAGE_MAX = 1360
 const ASK_MAX_HUB = 980
 const ASK_MAX_PANEL = 1280
-const PANEL_HEIGHT = 'clamp(440px, 100vh - 132px, 640px)'
+// The panel's CEILING, not its height. It used to be a fixed
+// `clamp(440px, 100vh - 132px, 640px)`, which is computed off the VIEWPORT and so knew
+// nothing about the stage's own top padding — at the default 1280x800 that made the
+// panel 640px tall inside 676px of stage that already spent 56px on its lead-in, and
+// the stage scrolled. The panel now FLEXES to fill whatever the stage actually has and
+// merely refuses to grow past this; the message list inside it does the scrolling, as
+// it should.
+const PANEL_MAX_HEIGHT = 640
 // Mac's layout constant for the wordmark's occupied height (DashboardPage.swift:669) —
 // its 58px glyphs plus the glow's optical room. Used to place the wordmark at the
 // stage's true vertical centre, exactly as Mac does.
@@ -98,7 +111,7 @@ export function HomeHub(): React.JSX.Element {
           maxWidth: STAGE_MAX,
           paddingLeft: SIDE_INSET,
           paddingRight: SIDE_INSET,
-          paddingBottom: 26
+          paddingBottom: STAGE_BOTTOM_INSET
         }}
       >
         <div className="flex shrink-0 justify-end pt-[26px]">
@@ -110,12 +123,14 @@ export function HomeHub(): React.JSX.Element {
             window eats the empty space above the wordmark and never the controls —
             which is Mac's topInset clamp, reproduced without measuring anything.
 
-            `overflow-y-auto` is a FAIL-SAFE, not the mechanism: at every legal window
-            size (minHeight 600 → ~438px of stage content, vs ~384px needed) it never
-            triggers, and Mac has no scroll view here. It exists so that if someone
-            later adds a 4th suggestion or a taller ask bar and busts the arithmetic,
-            the ask bar becomes reachable-by-scroll instead of silently clipped off
-            the bottom of the screen — which is exactly what the previous version did. */}
+            `overflow-y-auto` is a FAIL-SAFE, not the mechanism. Mac has no scroll view
+            here, and in the resting hub this never fires (minHeight 600 → ~438px of
+            stage content, vs ~384px needed — measured, not assumed). It exists so that
+            if someone later adds a 4th suggestion or a taller ask bar and busts that
+            arithmetic, the ask bar becomes reachable-by-scroll instead of silently
+            clipped off the bottom of the screen, which is what the first version did.
+            It earned its keep immediately: a fixed-height chat panel overflowed the
+            stage at the DEFAULT window size and this is what made it visible. */}
         <div
           ref={stageRef}
           className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto pt-[clamp(20px,7vh,74px)]"
@@ -206,13 +221,13 @@ function StagePanel({ children }: { children: React.ReactNode }): React.JSX.Elem
   return (
     <div
       className={cn(
-        'w-full shrink-0 origin-top transition-[transform,opacity] duration-[460ms]',
+        'w-full min-h-0 flex-1 origin-top transition-[transform,opacity] duration-[460ms]',
         'ease-[cubic-bezier(0.22,1,0.36,1)]',
         entered
           ? 'translate-y-0 scale-100 opacity-100'
           : '-translate-y-[46px] scale-[0.97] opacity-0 motion-reduce:translate-y-0 motion-reduce:scale-100'
       )}
-      style={{ maxWidth: ASK_MAX_PANEL, height: PANEL_HEIGHT }}
+      style={{ maxWidth: ASK_MAX_PANEL, maxHeight: PANEL_MAX_HEIGHT }}
     >
       {children}
     </div>
