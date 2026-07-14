@@ -11,10 +11,7 @@
 // `agentControlToolDefinitionsFor()` returns for it.
 
 import { ipcMain } from 'electron'
-import {
-  agentControlToolDefinitionsFor,
-  isAgentControlToolName
-} from '../agentKernel/controlTools'
+import { agentControlToolDefinitionsFor, isAgentControlToolName } from '../agentKernel/controlTools'
 import { callAgentControlTool, setControlPlaneOwner } from '../agentKernel/controlPlane'
 
 export function registerAgentControlIpc(): void {

@@ -100,7 +100,11 @@ const agentControlManagePolicy = {
   allowedSurfaces: ['desktopChat', 'realtimeHub']
 } as const
 
-function controlDoc(label: string, summary: string, bullets: string[]) {
+function controlDoc(
+  label: string,
+  summary: string,
+  bullets: string[]
+): { title: string; summary: string; bullets: string[] } {
   return { title: label, summary, bullets }
 }
 
@@ -433,9 +437,7 @@ Use a runId returned by list_agent_sessions or a correlated Omi response. Return
     latency: 'fast local',
     surfaces: ['desktopChat', 'realtimeHub'],
     ...agentControlManagePolicy,
-    runtimePreconditions: [
-      'Defaults ownerId to active owner. Source refs must match owner scope.'
-    ],
+    runtimePreconditions: ['Defaults ownerId to active owner. Source refs must match owner scope.'],
     timeoutClass: 'normal',
     properties: {
       ownerId: { type: 'string', description: 'Owner id. Defaults to active owner.' },
@@ -715,7 +717,10 @@ Creates a new run in that session through the runtime kernel.`,
         type: 'string',
         description: 'Optional caller-provided request correlation id.'
       },
-      clientId: { type: 'string', description: 'Logical caller id. Defaults to omi-control-tools.' },
+      clientId: {
+        type: 'string',
+        description: 'Logical caller id. Defaults to omi-control-tools.'
+      },
       metadata: {
         type: 'object',
         description: 'Small structured metadata for this run.',
@@ -774,7 +779,10 @@ Not exposed to agent-facing surfaces.`,
         type: 'string',
         description: 'Optional caller-provided request correlation id.'
       },
-      clientId: { type: 'string', description: 'Logical caller id. Defaults to omi-control-tools.' },
+      clientId: {
+        type: 'string',
+        description: 'Logical caller id. Defaults to omi-control-tools.'
+      },
       metadata: {
         type: 'object',
         description: 'Small structured metadata for this run.',
@@ -836,7 +844,10 @@ Pass parentRunId to link the new run to a parent.`,
         type: 'string',
         description: 'Optional caller-provided request correlation id.'
       },
-      clientId: { type: 'string', description: 'Logical caller id. Defaults to omi-control-tools.' },
+      clientId: {
+        type: 'string',
+        description: 'Logical caller id. Defaults to omi-control-tools.'
+      },
       metadata: {
         type: 'object',
         description: 'Small structured metadata for this run.',
@@ -877,12 +888,19 @@ Pass parentRunId to link the new run to a parent.`,
       adapterId: { type: 'string', description: 'Optional adapter override.' },
       cwd: { type: 'string', description: 'Optional working directory.' },
       model: { type: 'string', description: 'Optional model override.' },
-      runMode: { type: 'string', enum: ['ask', 'act'], description: 'Child run mode. Default ask.' },
+      runMode: {
+        type: 'string',
+        enum: ['ask', 'act'],
+        description: 'Child run mode. Default ask.'
+      },
       requestId: {
         type: 'string',
         description: 'Optional caller-provided request correlation id.'
       },
-      clientId: { type: 'string', description: 'Logical caller id. Defaults to omi-control-tools.' },
+      clientId: {
+        type: 'string',
+        description: 'Logical caller id. Defaults to omi-control-tools.'
+      },
       maxDepth: {
         type: 'number',
         description: 'Maximum delegation depth for this call. Default 3, hard max 5.'

@@ -70,7 +70,7 @@ const desktopCoordinatorBundleSchema = z.enum([
   'external.write_prepare',
   'external.write_send'
 ])
-const strictObject = <T extends z.ZodRawShape>(shape: T) => z.object(shape).strict()
+const strictObject = <T extends z.ZodRawShape>(shape: T): z.ZodObject<T> => z.object(shape).strict()
 
 const listAgentSessionsSchema = strictObject({
   ownerId: z.string().min(1).optional(),
@@ -422,7 +422,9 @@ export interface AgentControlToolContext {
   canSpawnAgents?: boolean
   trustedUserControl?: boolean
   getOwnerId?: () => string
-  recoverRunInput?: (adapterId: string) => Pick<ExecuteAgentRunInput, 'maxAttempts' | 'recoverAfterError'>
+  recoverRunInput?: (
+    adapterId: string
+  ) => Pick<ExecuteAgentRunInput, 'maxAttempts' | 'recoverAfterError'>
 }
 
 function controlRunRecovery(
@@ -758,7 +760,11 @@ export async function handleAgentControlToolCall(
         }
         const adapterId =
           parsed.adapterId ??
-          (parsed.provider === 'openclaw' ? 'openclaw' : parsed.provider === 'hermes' ? 'hermes' : undefined) ??
+          (parsed.provider === 'openclaw'
+            ? 'openclaw'
+            : parsed.provider === 'hermes'
+              ? 'hermes'
+              : undefined) ??
           (parsed.parentRunId
             ? context.kernel.defaultAdapterIdForRun(parsed.parentRunId)
             : defaultControlAdapterId(context))
@@ -834,7 +840,8 @@ export async function handleAgentControlToolCall(
         const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId)
         const requestId =
           parsed.requestId ?? `run-and-wait-${Date.now()}-${Math.random().toString(16).slice(2)}`
-        const adapterId = parsed.adapterId ?? context.kernel.defaultAdapterIdForRun(parsed.parentRunId)
+        const adapterId =
+          parsed.adapterId ?? context.kernel.defaultAdapterIdForRun(parsed.parentRunId)
         assertAdapterAllowedForControlRun(context, adapterId)
         const result = await context.kernel.delegateAgent({
           ...controlRunRecovery(context, adapterId),
@@ -1015,7 +1022,8 @@ function serializeFloatingPillSnapshot(summary: Record<string, unknown>): Record
   const input = (run?.input as Record<string, unknown> | undefined) ?? {}
   const metadata = (session.metadata as Record<string, unknown> | undefined) ?? {}
   const runId = typeof run?.runId === 'string' && run.runId ? run.runId : null
-  const sessionId = typeof session.sessionId === 'string' && session.sessionId ? session.sessionId : null
+  const sessionId =
+    typeof session.sessionId === 'string' && session.sessionId ? session.sessionId : null
   const errorMessage =
     typeof run?.errorMessage === 'string' && run.errorMessage ? run.errorMessage : null
   const errorCode = typeof run?.errorCode === 'string' && run.errorCode ? run.errorCode : null

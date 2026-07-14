@@ -326,7 +326,10 @@ export function evaluateDesktopToolPolicy(
         reason: 'Scoped allow grant covers the request.'
       }
     }
-    if (requiredBundles.includes('desktop.tasks.readwrite') && request.userExplicitMutation === true) {
+    if (
+      requiredBundles.includes('desktop.tasks.readwrite') &&
+      request.userExplicitMutation === true
+    ) {
       return {
         decision: 'dispatch_required',
         descriptor,
