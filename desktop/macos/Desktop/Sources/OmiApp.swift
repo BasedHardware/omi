@@ -131,7 +131,7 @@ struct OMIApp: App {
           log("OmiApp: Main window content appeared (mode: \(Self.launchMode.rawValue))")
         }
     }
-    .windowStyle(.titleBar)
+    .windowStyle(.hiddenTitleBar)
     .defaultSize(width: defaultWindowSize.width, height: defaultWindowSize.height)
     .commands {
       CommandGroup(after: .textFormatting) {

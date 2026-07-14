@@ -13,7 +13,7 @@ struct OmiWindowChromeBar: View {
         material: .hudWindow,
         blendingMode: .behindWindow,
         fallback: OmiColors.backgroundPrimary,
-        materialOverlay: OmiColors.backgroundPrimary.opacity(0.40)
+        materialOverlay: OmiColors.backgroundPrimary.opacity(0.24)
       )
 
       MainWindowDragRegion()
