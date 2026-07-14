@@ -20,7 +20,7 @@ import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { _electron as electron } from 'playwright'
 import { fileURLToPath } from 'node:url'
-import { mkdtempSync, rmSync, mkdirSync, readFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, mkdirSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -126,7 +126,7 @@ async function launch(glArgs) {
       /* best-effort */
     }
   }
-  return { app, cleanup }
+  return { app, cleanup, dir }
 }
 
 async function mainPage(app) {
@@ -173,7 +173,10 @@ async function gotoPopulatedMapStep(page) {
   await page.reload()
   await page.waitForSelector('[data-testid="onboarding-content-pane"]', { timeout: 15000 })
   await page.locator('input[placeholder="Your name"]').fill('E2E User')
-  await page.getByRole('button', { name: 'Continue' }).click()
+  // force: the onboarding step card animates, and Playwright's actionability check
+  // can wait forever for an element that is never "stable". We only need the click
+  // to land; visibility/enabled are already guaranteed by the waits above.
+  await page.getByRole('button', { name: 'Continue' }).click({ force: true })
   await page
     .locator('input[placeholder="Your name"]')
     .waitFor({ state: 'detached', timeout: 10000 })
@@ -231,6 +234,37 @@ describe('BrainGraph GPU resilience', () => {
     )
   })
 
+  // Regression: a CLEAN QUIT must not be recorded as a GPU crash.
+  //
+  // On Windows, quitting terminates the GPU process with TerminateProcess, which
+  // Chromium reports as `type=GPU reason=killed exitCode=1` — identical in every
+  // field to a real GPU kill. The handler only filtered `clean-exit`, so every
+  // ordinary quit appended a fatal GPU line to crash.log. Five quits then read as
+  // a five-crash "GPU crash loop", which is exactly the phantom that sent us
+  // chasing this in the first place — and it would have poisoned any fleet
+  // telemetry keyed off this handler.
+  test('a clean quit writes no GPU crash to crash.log', async () => {
+    const { app, cleanup, dir } = await launch(SWIFTSHADER_ARGS)
+    await mainPage(app) // fully booted, GPU process alive
+    await app.close() // the real quit path (before-quit → isQuitting())
+    // Give the crash handler a beat to have written anything it was going to.
+    await new Promise((r) => setTimeout(r, 1500))
+
+    const logPath = path.join(dir, 'crash.log')
+    const log = existsSync(logPath) ? readFileSync(logPath, 'utf8') : ''
+    console.log(`[clean-quit] crash.log: ${log ? JSON.stringify(log) : '(absent/empty)'}`)
+
+    const gpuFatals = log
+      .split('\n')
+      .filter((l) => l.includes('[child-process-gone]') && l.includes('type=GPU'))
+    assert.equal(
+      gpuFatals.length,
+      0,
+      `a clean quit must not log a GPU crash, but crash.log has:\n${gpuFatals.join('\n')}`
+    )
+    await cleanup()
+  })
+
   test('WebGL unavailable → static fallback, not a black void or a crashed screen', async (t) => {
     mkdirSync(shotsDir, { recursive: true })
     const { app, cleanup } = await launch(NO_GL_ARGS)
@@ -258,15 +292,21 @@ describe('BrainGraph GPU resilience', () => {
     }
   })
 
-  // Scope note, so this is not read as more than it is: this asserts the WebGL
-  // canvas still MOUNTS and the new fallback/boundary stays out of the way. It does
-  // NOT assert pixels. The captured healthy screenshot shows a dark map pane — and
-  // the identical pane is dark in .playwright-mcp/onboarding-step1-1280.png, which
-  // onboarding-layout.spec.mjs captured on the SAME step with the SAME SwiftShader
-  // args BEFORE this change. So that blank is a pre-existing paint issue (under
-  // separate investigation), not a regression from the probe/fallback — and this
-  // fallback deliberately does NOT fire for it, since WebGL is available there.
-  test('healthy (software GL) → the WebGL canvas still mounts, no fallback, no throw', async (t) => {
+  // NON-REGRESSION PROOF, and the honest limits of it.
+  //
+  // This asserts STRUCTURALLY that with WebGL available the REAL BrainGraph mounts
+  // (a <canvas> is present) and the fallback/boundary stay out of the way. It does
+  // NOT assert pixels — and right now it CANNOT, because BrainGraph paints zero
+  // pixels even on a healthy, non-lost context (separately proven: canvas 756x756,
+  // rAF at 66fps, real data, GL buffer reads back all-zero; owned by the BrainGraph
+  // render fix). The healthy screenshot is therefore black for a reason that has
+  // nothing to do with this change, and no screenshot can discriminate until that
+  // lands. A pixel-level healthy-path check must be re-run afterwards.
+  //
+  // What this DOES prove is the thing that matters here: the probe does not steal
+  // the graph. The fallback fires only on a null context / a throwing renderer — it
+  // has no notion of "the canvas looks empty" — so it cannot mask the render bug.
+  test('healthy (software GL) → the REAL graph mounts; the fallback does NOT steal it', async (t) => {
     mkdirSync(shotsDir, { recursive: true })
     const { app, cleanup } = await launch(SWIFTSHADER_ARGS)
     t.after(cleanup)
