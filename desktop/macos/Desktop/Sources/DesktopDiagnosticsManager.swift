@@ -750,6 +750,7 @@ final class DesktopDiagnosticsManager {
     "ble_audio",
     "automation_bridge",
     "transcription_retry",
+    "task_reconcile",
     "other",
   ]
 

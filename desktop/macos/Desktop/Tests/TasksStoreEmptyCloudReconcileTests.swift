@@ -58,6 +58,11 @@ final class TasksStoreEmptyCloudReconcileTests: XCTestCase {
     XCTAssertEqual(store.incompleteTasks, [], "stale local tasks must converge to the empty cloud state")
     XCTAssertEqual(probe.dashboardRefreshes, 1, "dashboard slices must refresh after the wipe")
     XCTAssertNil(store.error)
+
+    let fallback = try? latestFallbackSnapshot()
+    XCTAssertEqual(fallback?["area"] as? String, "task_reconcile", "census heal must emit fallback telemetry")
+    XCTAssertEqual(fallback?["outcome"] as? String, "recovered")
+    XCTAssertEqual(fallback?["to"] as? String, "id_census")
   }
 
   @MainActor
@@ -192,6 +197,11 @@ final class TasksStoreEmptyCloudReconcileTests: XCTestCase {
     XCTAssertEqual(probe.hardDeleteCalls, [], "a failed census fetch must never wipe local rows")
     XCTAssertEqual(store.incompleteTasks.map(\.id), [staleTask.id], "stale rows stay until the census confirms")
     XCTAssertNil(store.error)
+
+    let fallback = try? latestFallbackSnapshot()
+    XCTAssertEqual(fallback?["area"] as? String, "task_reconcile", "fail-open skip must emit degraded telemetry")
+    XCTAssertEqual(fallback?["outcome"] as? String, "degraded")
+    XCTAssertEqual(fallback?["to"] as? String, "none")
   }
 
   @MainActor
@@ -366,6 +376,17 @@ final class TasksStoreEmptyCloudReconcileTests: XCTestCase {
   }
 
   // MARK: - Helpers
+
+  /// Latest fallback_triggered snapshot from the shared diagnostics manager
+  /// (same attachment-read pattern as DesktopDiagnosticsManagerTests).
+  private func latestFallbackSnapshot() throws -> [String: Any] {
+    let url = try XCTUnwrap(DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment())
+    defer { try? FileManager.default.removeItem(at: url) }
+    let data = try Data(contentsOf: url)
+    let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
+    return try XCTUnwrap(snapshots.last(where: { ($0["event"] as? String) == "fallback_triggered" }))
+  }
 
   @MainActor
   private func task(id: String, completed: Bool = false) -> TaskActionItem {

@@ -1019,11 +1019,26 @@ class TasksStore: ObservableObject {
             lastReconciliationDate = Date()
             if changed > 0 {
                 log("TasksStore: Reconciled empty cloud to-do state: \(changed) stale local tasks resolved")
+                DesktopDiagnosticsManager.shared.recordFallback(
+                    area: "task_reconcile",
+                    from: "incomplete_page",
+                    to: "id_census",
+                    reason: "local_heal",
+                    outcome: .recovered,
+                    extra: ["resolved_rows": changed]
+                )
             }
             return changed
         } catch {
             if isCurrent(lease) {
                 log("TasksStore: Empty-cloud reconciliation skipped — census fetch failed: \(error.localizedDescription)")
+                DesktopDiagnosticsManager.shared.recordFallback(
+                    area: "task_reconcile",
+                    from: "incomplete_page",
+                    to: "none",
+                    reason: "other",
+                    outcome: .degraded
+                )
             }
             return nil
         }
@@ -1043,8 +1058,21 @@ class TasksStore: ObservableObject {
         operations: OwnerBoundOperations
     ) async -> Int {
         var flippedTotal = 0
+        var unresolvedRows = 0
         var attempted = Set<String>()
         var readLimit = pageSize
+        defer {
+            if unresolvedRows > 0 {
+                DesktopDiagnosticsManager.shared.recordFallback(
+                    area: "task_reconcile",
+                    from: "id_census",
+                    to: "none",
+                    reason: "other",
+                    outcome: .degraded,
+                    extra: ["unresolved_rows": unresolvedRows]
+                )
+            }
+        }
         do {
             while true {
                 guard isCurrent(lease) else { return flippedTotal }
@@ -1084,6 +1112,7 @@ class TasksStore: ObservableObject {
                     } catch {
                         // One unreadable document must not abort the rest; it stays
                         // visible and is retried on the next reconcile pass.
+                        unresolvedRows += 1
                         log("TasksStore: Skipping stale-row resolution for one task: \(error.localizedDescription)")
                     }
                 }
@@ -1103,6 +1132,7 @@ class TasksStore: ObservableObject {
             return flippedTotal
         } catch {
             if isCurrent(lease) {
+                unresolvedRows += 1
                 log("TasksStore: Stale-row resolution skipped: \(error.localizedDescription)")
             }
             return flippedTotal
