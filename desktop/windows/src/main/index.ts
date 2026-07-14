@@ -90,6 +90,7 @@ import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
 import { startRewindOcr } from './rewind/ocrService'
 import { startRewindRetention } from './rewind/retentionRunner'
+import { startOrphanSweep } from './rewind/orphanSweep'
 import { prewarmPrimarySourceId } from './rewind/sourceId'
 import { perfMark, flushPerfMarks } from '../shared/perf'
 // Dev-only benchmarking / sandbox machinery. Every call below is behind
@@ -769,6 +770,9 @@ app.whenReady().then(async () => {
     startRewindCapture()
     startRewindOcr()
     startRewindRetention()
+    // Delete JPEGs orphaned by a crash between the file write and the DB insert
+    // (Windows-specific — frames are per-file). Startup pass + every 6h.
+    startOrphanSweep()
     // Warm the (slow) screen-source-id cache a few seconds later, off the critical
     // path, so enabling capture later is an instant cache hit.
     setTimeout(() => prewarmPrimarySourceId(), 4000)
