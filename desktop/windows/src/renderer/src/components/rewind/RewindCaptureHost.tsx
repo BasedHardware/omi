@@ -33,10 +33,20 @@ export function RewindCaptureHost(): React.JSX.Element {
     return window.omi.onRewindSettings(setSettings)
   }, [])
 
-  // Fetch the current capture directive on mount, then react to pushes.
+  // Fetch the current capture directive on mount, then react to pushes. Subscribe
+  // BEFORE the fetch and drop the fetched value once any push has landed, so a
+  // push that arrives mid-fetch (e.g. a lock's paused:true) can't be clobbered by
+  // the now-stale getter result.
   useEffect(() => {
-    void window.omi.rewindGetCaptureDirective().then(setDirective)
-    return window.omi.onRewindCaptureDirective(setDirective)
+    const pushed = { current: false }
+    const unsub = window.omi.onRewindCaptureDirective((d) => {
+      pushed.current = true
+      setDirective(d)
+    })
+    void window.omi.rewindGetCaptureDirective().then((d) => {
+      if (!pushed.current) setDirective(d)
+    })
+    return unsub
   }, [])
 
   // Effective cadence prefers the directive (base × battery); pause tears the

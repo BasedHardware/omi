@@ -4,6 +4,8 @@
  * runner lives in orphanSweep.ts.
  */
 
+const DAY_MS = 24 * 60 * 60 * 1000
+
 /** Never delete a file younger than this — it could be an in-flight insert. */
 export const ORPHAN_GRACE_MS = 60_000
 
@@ -15,6 +17,27 @@ export function parseFrameTs(filename: string): number | null {
   if (!m) return null
   const n = Number(m[1])
   return Number.isFinite(n) ? n : null
+}
+
+/**
+ * The DB-query window whose rows form the keep-set for a day dir. Derived from the
+ * ACTUAL file timestamps present (min−1d … max+1d), NOT the dir's local-midnight
+ * name: on a UTC-offset change between capture and sweep (DST fall-back's 25-hour
+ * day, or westward TZ travel) a frame's ts can land past local-midnight+24h yet
+ * still live in that day-dir, so a name-derived window would miss its row and the
+ * sweep would false-delete a VALID file. Padding a full day each side provably
+ * covers every file in the dir; over-covering only adds paths to the keep-set
+ * (harmless), under-covering deletes (data loss). Returns null when no file has a
+ * parseable ts (nothing to bound → skip the query).
+ */
+export function deriveKeepSetWindow(
+  fileTsValues: number[]
+): { fromMs: number; toMs: number } | null {
+  if (fileTsValues.length === 0) return null
+  return {
+    fromMs: Math.min(...fileTsValues) - DAY_MS,
+    toMs: Math.max(...fileTsValues) + DAY_MS
+  }
 }
 
 /**
