@@ -3,29 +3,39 @@
 // (multi-size, wired to electron-builder `win.icon` for the packaged app,
 // taskbar, installer, and shortcuts).
 //
-// WHY THIS EXISTS: the previous icon.png was macOS-style art — a near-full-bleed
-// white ROUNDED-SQUARE (squircle) backing with the black 8-dot ring on top.
-// macOS masks that shape to its own superellipse; Windows renders the art as-is,
-// so the taskbar/Alt-Tab icon looked like a white square. Windows never masks,
-// so the icon must supply its OWN shape: a TRUE CIRCLE white disc on full
-// transparency, with the black 8-dot Omi ring centered on it.
+// WHY THIS EXISTS: the shipped macOS-style art (resources/icon-source.png) is a
+// near-full-bleed white ROUNDED-SQUARE (squircle) backing with the small black
+// 8-dot Omi ring centered on it. macOS masks that shape to its own superellipse;
+// Windows renders the art as-is, so the taskbar/Alt-Tab icon looked like a white
+// square. Windows never masks, so the icon must supply its OWN circular shape.
 //
-// Every frame is DRAWN AT ITS NATIVE SIZE (supersampled 4x for anti-aliasing)
-// rather than downscaled — a naive downscale fuses the 8 dots into blobs at
-// small sizes (the same lesson gen-tray-icons.mjs records). The disc/ring/ico
-// helpers are shared with gen-tray-icons.mjs via ./lib/icon-raster.mjs (that
-// geometry passed a skeptical icon review); the only new piece is two-color
-// compositing (white disc + black dots), which the single-color tray
-// downsampler can't express.
+// This does NOT redraw the mark — an earlier procedural redraw changed the ring
+// proportions and read wrong. Instead it CROPS the original art into a circle:
+// flatten the source over white (its transparent squircle corners become white),
+// zoom a hair around center so the dots read a touch larger, then apply an
+// anti-aliased circular alpha mask. The dot pixels are the ORIGINAL art's, at
+// their original size/position (× the slight zoom below).
 //
-// BRAND RULE: never purple — white disc, black mark, nothing else.
+// The circle is deliberately smaller than the canvas (real transparent margin),
+// matching Spotify's Windows taskbar icon: its green disc measures 94.5% of the
+// canvas at 256px (93.8% at 32px), extracted via PrivateExtractIcons and
+// measured. A near-full-bleed circle read "too big", so CIRCLE_RATIO tracks
+// Spotify. Because only the white BACKING is clipped to the smaller circle while
+// the dots stay mapped 1:1 from the source, shrinking the circle does NOT shrink
+// the dots — they keep the original art's absolute size (× ZOOM).
+//
+// Every output size is resampled directly from the flattened source at a
+// supersampled grid (area-averaged 4x), so both the circle edge and the dots
+// stay anti-aliased at 16px without a naive one-image downscale.
+//
+// BRAND RULE: never purple — white backing, black mark, nothing else.
 //
 // Run: pnpm gen:app-icon  (writes resources/icon.png + resources/icon.ico)
-import { writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { PNG } from 'pngjs'
-import { SS, disc, ring, packIco } from './lib/icon-raster.mjs'
+import { packIco } from './lib/icon-raster.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const resDir = join(here, '..', 'resources')
@@ -34,70 +44,95 @@ const resDir = join(here, '..', 'resources')
 // electron-builder; the smaller sizes keep the taskbar/Alt-Tab crisp.
 const ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
 const PNG_SIZE = 256
+const SSG = 4 // supersample factor for anti-aliasing every rendered size
 
-// Mark geometry. At >= 24px: dot centers on a ring of radius 0.34*size, dot
-// radius 0.095*size (the 32px look that passed the tray review). The mark's
-// bounding box spans (0.34+0.095)*2 = 0.87 of the canvas — a bold ~87% glyph —
-// and its outer edge (0.435*size) stays inside the disc at every size, so no
-// dot clips the disc edge. At <= 20px the same trick gen-tray-icons.mjs uses:
-// slightly wider ring + thinner dots so the 8 dots keep clear white gaps
-// instead of fusing into a blob.
-function geometry(size) {
-  if (size <= 20) return { ringR: 0.36, dotR: 0.082 }
-  return { ringR: 0.34, dotR: 0.095 }
+// The user asked for "dots the same as the square but a bit bigger." ZOOM grows
+// the mark around center relative to the original art: 1.0 keeps the exact
+// original dots, 1.05 makes them ~5% larger (dots and spacing scale together, so
+// composition is unchanged).
+const ZOOM = 1.05
+
+// Circle diameter as a fraction of the canvas, tracking Spotify's taskbar icon
+// (measured 94.5% at 256px). The remaining ~5.5% is real transparent margin so
+// the disc reads as a circle, not a near-square full-bleed blob.
+const CIRCLE_RATIO = 0.945
+
+// Load the original art once and flatten it over white: the squircle body is
+// white and its transparent corners become white, leaving an opaque grayscale
+// image (white backing + black/greys for the anti-aliased dots). One channel
+// suffices since the art is grayscale.
+const SRC = PNG.sync.read(readFileSync(join(resDir, 'icon-source.png')))
+const SRC_N = SRC.width // 256
+const flatLuma = new Float32Array(SRC_N * SRC_N)
+for (let i = 0; i < SRC_N * SRC_N; i++) {
+  const o = i << 2
+  const a = SRC.data[o + 3] / 255
+  flatLuma[i] = SRC.data[o] * a + 255 * (1 - a)
+}
+
+/** Bilinear sample of the flattened source luma at (u,v) in source-pixel space. */
+function sampleFlat(u, v) {
+  // center-zoom: sample a smaller region around center to magnify content
+  const cc = (SRC_N - 1) / 2
+  const su = cc + (u - cc) / ZOOM
+  const sv = cc + (v - cc) / ZOOM
+  const x = Math.min(SRC_N - 1, Math.max(0, su))
+  const y = Math.min(SRC_N - 1, Math.max(0, sv))
+  const x0 = Math.floor(x)
+  const y0 = Math.floor(y)
+  const x1 = Math.min(SRC_N - 1, x0 + 1)
+  const y1 = Math.min(SRC_N - 1, y0 + 1)
+  const fx = x - x0
+  const fy = y - y0
+  const a = flatLuma[y0 * SRC_N + x0]
+  const b = flatLuma[y0 * SRC_N + x1]
+  const d = flatLuma[y1 * SRC_N + x0]
+  const e = flatLuma[y1 * SRC_N + x1]
+  return a * (1 - fx) * (1 - fy) + b * fx * (1 - fy) + d * (1 - fx) * fy + e * fx * fy
 }
 
 /**
- * Composite the white disc grid and black dot grid into an RGBA PNG.
- * Per output pixel we count subpixels that are white (disc, no dot), black
- * (dot), or transparent (outside disc), then average in PREMULTIPLIED-alpha
- * space so a dot's edge blends against white and the disc's edge fades to
- * transparent without the grey halo that averaging straight-alpha would give.
+ * Render one size: for each output pixel, average an SSG×SSG grid of subpixels.
+ * A subpixel inside the inscribed circle contributes the flattened source luma
+ * (opaque); outside contributes transparent. Averaging luma over the covered
+ * subpixels and alpha over all subpixels gives premultiplied-correct edges for
+ * both the circle boundary and the dots.
  */
-function compositeToPng(discGrid, dotGrid, size) {
+function drawFrame(size) {
   const png = new PNG({ width: size, height: size })
-  const n = SS * SS
-  const g = size * SS
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      let white = 0
-      let black = 0
-      for (let sy = 0; sy < SS; sy++) {
-        for (let sx = 0; sx < SS; sx++) {
-          const idx = (y * SS + sy) * g + (x * SS + sx)
-          if (dotGrid[idx]) black++
-          else if (discGrid[idx]) white++
+  const n = SSG * SSG
+  const cx = size / 2
+  const cy = size / 2
+  const r = (CIRCLE_RATIO * size) / 2 // smaller than the canvas → transparent margin
+  const r2 = r * r
+  for (let py = 0; py < size; py++) {
+    for (let px = 0; px < size; px++) {
+      let cov = 0
+      let sumL = 0
+      for (let sy = 0; sy < SSG; sy++) {
+        for (let sx = 0; sx < SSG; sx++) {
+          const ox = px + (sx + 0.5) / SSG // output-pixel-space coord
+          const oy = py + (sy + 0.5) / SSG
+          const dx = ox - cx
+          const dy = oy - cy
+          if (dx * dx + dy * dy <= r2) {
+            // map output coord -> source-pixel space and sample the art
+            const u = (ox / size) * SRC_N
+            const v = (oy / size) * SRC_N
+            sumL += sampleFlat(u, v)
+            cov++
+          }
         }
       }
-      const opaque = white + black
-      const o = (y * size + x) << 2
-      // rgb = 255 weighted by the white fraction of covered subpixels (black = 0)
-      const rgb = opaque > 0 ? Math.round((255 * white) / opaque) : 0
+      const o = (py * size + px) << 2
+      const rgb = cov > 0 ? Math.round(sumL / cov) : 0
       png.data[o] = rgb
       png.data[o + 1] = rgb
       png.data[o + 2] = rgb
-      png.data[o + 3] = Math.round((opaque / n) * 255)
+      png.data[o + 3] = Math.round((cov / n) * 255)
     }
   }
   return png
-}
-
-function drawFrame(size) {
-  const g = size * SS
-  const discGrid = new Uint8Array(g * g)
-  const dotGrid = new Uint8Array(g * g)
-  const c = (size / 2) * SS
-
-  // True circle disc: radius = half the canvas minus a ~1px anti-alias margin
-  // so the edge is a clean feathered circle, not a hard-cut chord at the
-  // outermost pixel row.
-  const margin = Math.max(0.5, size * 0.004)
-  disc(discGrid, g, c, c, (size / 2 - margin) * SS)
-
-  const { ringR, dotR } = geometry(size)
-  ring(dotGrid, g, c, c, ringR * size * SS, dotR * size * SS)
-
-  return compositeToPng(discGrid, dotGrid, size)
 }
 
 const pngPath = join(resDir, 'icon.png')
