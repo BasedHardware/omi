@@ -16,10 +16,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-# NOTE: desktop/windows/ is intentionally NOT scanned. Per ruling B (INV-UI-1
-# Windows carve-out, 2026-07-14) the Windows app faithfully ports macOS's purple
-# palette; a no-increase ratchet there would fail every intentional purple port.
-# Do not add desktop/windows to UI_ROOTS without re-baselining that decision.
 UI_ROOTS = (
     "desktop/macos/Desktop/Sources/",
     "app/lib/",
