@@ -23,8 +23,7 @@ class CachedTranslation:
 
 
 class PersistentTranslationStore(Protocol):
-    def get(self, fingerprint: str, target_language: str) -> CachedTranslation | None:
-        ...
+    def get(self, fingerprint: str, target_language: str) -> CachedTranslation | None: ...
 
     def put(
         self,
@@ -32,14 +31,11 @@ class PersistentTranslationStore(Protocol):
         target_language: str,
         value: CachedTranslation,
         ttl_seconds: int,
-    ) -> None:
-        ...
+    ) -> None: ...
 
-    def is_negative(self, fingerprint: str, target_language: str) -> bool:
-        ...
+    def is_negative(self, fingerprint: str, target_language: str) -> bool: ...
 
-    def put_negative(self, fingerprint: str, target_language: str, ttl_seconds: int) -> None:
-        ...
+    def put_negative(self, fingerprint: str, target_language: str, ttl_seconds: int) -> None: ...
 
 
 class RedisTranslationStore:

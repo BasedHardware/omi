@@ -218,8 +218,7 @@ def inspect_static_routes(router_source_path: Path | None = None) -> list[dict[s
 
 def _probe_code() -> str:
     pin_stub_block = legacy_pin_stub_source()
-    template = textwrap.dedent(
-        r'''
+    template = textwrap.dedent(r'''
         import hashlib
         import importlib
         import json
@@ -381,8 +380,7 @@ __PIN_STUB_BLOCK__        surface_routing.pin_memory_system = pin_memory_system
                         "response_model": str(response_model).replace("typing.", "") if response_model is not None else None,
                     })
         print(json.dumps({"import_ok": True, "pinned_routes": sorted(pinned, key=lambda item: item["route"])}))
-        '''
-    )
+        ''')
     return template.replace("__PIN_STUB_BLOCK__", pin_stub_block)
 
 

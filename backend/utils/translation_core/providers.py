@@ -45,8 +45,7 @@ class TranslationProviderPort(Protocol):
         target_language: str,
         source_language: str,
         profile: TranslationProfile,
-    ) -> list[ProviderTranslation]:
-        ...
+    ) -> list[ProviderTranslation]: ...
 
 
 class TranslationProviderError(RuntimeError):

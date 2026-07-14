@@ -15,8 +15,7 @@ GetLlm = Callable[[str], object]
 
 
 class LlmInvoker(Protocol):
-    def invoke(self, messages: Sequence[BaseMessage]) -> object:
-        ...
+    def invoke(self, messages: Sequence[BaseMessage]) -> object: ...
 
 
 try:

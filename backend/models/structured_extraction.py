@@ -10,9 +10,9 @@ from models.structured import ActionItem, Event, Structured
 class ExtractedActionItem(BaseModel):
     description: str = Field(description="The action item to be completed")
     due_at: Optional[datetime] = Field(default=None, description="When the action item is due")
-    capture_kind: Optional[
-        Literal['explicit_command', 'clear_commitment', 'direct_request', 'inferred_next_step']
-    ] = None
+    capture_kind: Optional[Literal['explicit_command', 'clear_commitment', 'direct_request', 'inferred_next_step']] = (
+        None
+    )
     capture_confidence: Optional[float] = Field(default=None, ge=0, le=1)
     ownership_confidence: Optional[float] = Field(default=None, ge=0, le=1)
     capture_owner: Optional[Literal['user', 'other', 'unknown']] = None

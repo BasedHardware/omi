@@ -65,8 +65,7 @@ class DefaultVectorSearchService(Protocol):
         limit: int,
         required_projection_commit_id: str,
         required_account_generation: int,
-    ) -> Payload:
-        ...
+    ) -> Payload: ...
 
 
 def _default_vector_search_service() -> DefaultVectorSearchService | None:

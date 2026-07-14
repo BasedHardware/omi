@@ -31,8 +31,7 @@ class ChatCompletionProvider(Protocol):
         provider_ref: ProviderRef,
         credentials: CredentialContext,
         timeout_ms: int,
-    ) -> Mapping[str, Any]:
-        ...
+    ) -> Mapping[str, Any]: ...
 
 
 @dataclass

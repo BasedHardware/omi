@@ -490,12 +490,10 @@ def test_unrelated_to_thread_import_is_not_reported_as_an_asyncio_offload(scanne
 def test_explicit_python_file_path_is_scanned(scanner, tmp_path):
     source_path = tmp_path / "dependencies.py"
     source_path.write_text(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             async def auth_dependency():
                 creds.refresh(request)
-            """
-        ),
+            """),
         encoding="utf-8",
     )
 
@@ -508,12 +506,10 @@ def test_explicit_python_file_path_is_scanned(scanner, tmp_path):
 def test_dependency_module_async_without_await_is_structural_finding(scanner, tmp_path):
     source_path = tmp_path / "dependencies.py"
     source_path.write_text(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             async def pure_dependency():
                 return "uid"
-            """
-        ),
+            """),
         encoding="utf-8",
     )
 

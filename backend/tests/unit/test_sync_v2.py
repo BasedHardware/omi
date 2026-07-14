@@ -2141,10 +2141,8 @@ class TestAsyncCoordinatorBehavioral:
             stubs['pipeline'].get_prerecorded_service = MagicMock(return_value=('deepgram', 'multi', 'nova-3'))
             stubs['pipeline'].prerecorded = MagicMock(return_value=([], 'en'))
             terminal_events = []
-            stubs[
-                'pipeline'
-            ].release_sync_content_claim_after_job_retired.side_effect = lambda *_args: terminal_events.append(
-                'claim_released'
+            stubs['pipeline'].release_sync_content_claim_after_job_retired.side_effect = (
+                lambda *_args: terminal_events.append('claim_released')
             )
             stubs['sync_jobs'].finalize_sync_job.side_effect = lambda *_args: (
                 terminal_events.append('job_finalized') or {'status': 'partial_failure'}

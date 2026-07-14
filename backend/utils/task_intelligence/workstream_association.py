@@ -55,8 +55,7 @@ logger = logging.getLogger(__name__)
 
 
 class AssociationAdjudicator(Protocol):
-    def __call__(self, request: AssociationAdjudicationInput) -> AssociationJudgment:
-        ...
+    def __call__(self, request: AssociationAdjudicationInput) -> AssociationJudgment: ...
 
 
 ASSOCIATION_PROMPT_V1 = """You associate one minimized canonical-memory evidence summary with an existing workstream.

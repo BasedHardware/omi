@@ -94,8 +94,7 @@ class EvaluationSubject:
 class RecommendationJudgment(Protocol):
     model_version: str
 
-    def judge(self, subjects: list[EvaluationSubject]) -> list[JudgmentSelection]:
-        ...
+    def judge(self, subjects: list[EvaluationSubject]) -> list[JudgmentSelection]: ...
 
 
 def _stable_id(prefix: str, *parts: object) -> str:

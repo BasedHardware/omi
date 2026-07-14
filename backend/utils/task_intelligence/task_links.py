@@ -7,13 +7,11 @@ import database.workstreams as workstreams_db
 
 
 class WorkstreamGoalResolver(Protocol):
-    def __call__(self, uid: str, workstream_id: str) -> Optional[str]:
-        ...
+    def __call__(self, uid: str, workstream_id: str) -> Optional[str]: ...
 
 
 class GoalExistenceResolver(Protocol):
-    def __call__(self, uid: str, goal_id: str) -> bool:
-        ...
+    def __call__(self, uid: str, goal_id: str) -> bool: ...
 
 
 class TaskLinkValidationError(ValueError):

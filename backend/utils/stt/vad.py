@@ -135,13 +135,11 @@ def run_vad_window(
 
 
 @overload
-def vad_is_empty(file_path: str, return_segments: Literal[True], cache: bool = False) -> List[Dict[str, Any]]:
-    ...
+def vad_is_empty(file_path: str, return_segments: Literal[True], cache: bool = False) -> List[Dict[str, Any]]: ...
 
 
 @overload
-def vad_is_empty(file_path: str, return_segments: Literal[False] = False, cache: bool = False) -> bool:
-    ...
+def vad_is_empty(file_path: str, return_segments: Literal[False] = False, cache: bool = False) -> bool: ...
 
 
 def vad_is_empty(
@@ -296,13 +294,11 @@ def _read_file(path: str) -> bytes:
 @overload
 async def async_vad_is_empty(
     file_path: str, return_segments: Literal[True], cache: bool = False
-) -> List[Dict[str, Any]]:
-    ...
+) -> List[Dict[str, Any]]: ...
 
 
 @overload
-async def async_vad_is_empty(file_path: str, return_segments: Literal[False] = False, cache: bool = False) -> bool:
-    ...
+async def async_vad_is_empty(file_path: str, return_segments: Literal[False] = False, cache: bool = False) -> bool: ...
 
 
 async def async_vad_is_empty(

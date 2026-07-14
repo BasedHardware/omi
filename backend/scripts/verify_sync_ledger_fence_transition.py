@@ -40,8 +40,7 @@ class CommandResult:
 
 
 class CommandRunner(Protocol):
-    def run(self, command: Sequence[str], *, check: bool = True) -> CommandResult:
-        ...
+    def run(self, command: Sequence[str], *, check: bool = True) -> CommandResult: ...
 
 
 class SubprocessCommandRunner:

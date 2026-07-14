@@ -22,8 +22,7 @@ from utils.task_intelligence.workstream_index import refresh_workstream_associat
 
 
 class WorkstreamCandidateResolver(Protocol):
-    def __call__(self, uid: str, candidate: CandidateRecord, account_generation: int) -> CandidateResolutionReceipt:
-        ...
+    def __call__(self, uid: str, candidate: CandidateRecord, account_generation: int) -> CandidateResolutionReceipt: ...
 
 
 _workstream_resolver: Optional[WorkstreamCandidateResolver] = workstreams_db.resolve_workstream_candidate

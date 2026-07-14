@@ -37,11 +37,9 @@ class LiveSTTSession(Protocol):
 
 
 class LiveSTTClientSocket(Protocol):
-    async def send_json(self, data: Any) -> None:
-        ...
+    async def send_json(self, data: Any) -> None: ...
 
-    async def close(self, code: int = 1000, reason: str | None = None) -> None:
-        ...
+    async def close(self, code: int = 1000, reason: str | None = None) -> None: ...
 
 
 def live_stt_upstream_failure(provider: str | None) -> TranscriptionFailure:

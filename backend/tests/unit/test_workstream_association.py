@@ -85,9 +85,7 @@ def test_golden_association_fixtures_append_only_material_intent_match(enabled):
                 reason=(
                     AssociationReason.selected
                     if judgment['material']
-                    else AssociationReason.immaterial
-                    if judgment['workstream_id']
-                    else AssociationReason.no_match
+                    else AssociationReason.immaterial if judgment['workstream_id'] else AssociationReason.no_match
                 ),
             ),
             append_event=append,
