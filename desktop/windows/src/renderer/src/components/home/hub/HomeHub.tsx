@@ -18,17 +18,25 @@ import type { HomeStageEvent, HomeStageMode } from './hubStage'
 // two responsive ones; everything else is fixed, because on Mac these are elements
 // on a stage that grows around them, not elements that stretch with it.
 const SIDE_INSET = 'min(96px, max(30px, 6vw))'
-// Mac's homeStageBottomPadding, ported as-is (DashboardPage.swift:302).
+// DELIBERATE DEVIATION FROM MAC (Chris's call). Mac's homeStageBottomPadding is a flat
+// 26px (DashboardPage.swift:302) and its cluster docks right onto it, low on the stage.
 //
-// This briefly became clamp(26px, 8vh, 80px) because the cluster read as stuck to the
-// floor — but that was treating the symptom. The vertical numbers already match Mac to
-// the pixel (Mac's window is 1200x800 default / 1200x680 min; ours is 1280x820 / 600 —
-// Mac actually has LESS height than we do). What differs is the SIDEBAR: it takes ~120px
-// of width and shifts the stage right, which changes how the composition reads even
-// though every vertical value is identical. The rail is being deleted in the next PR, so
-// deviating here would be compensating for a defect that is about to disappear. Held at
-// Mac's number; revisit against pixels once the sidebar is gone.
-const STAGE_BOTTOM_INSET = 26
+// Everything else here is now Mac-exact — the header floats instead of eating 62px of
+// stage (see below), the sidebar is gone, and the wordmark lands on the stage's true
+// centre. With those bugs fixed the layout still read as bottom-heavy, so this is a real
+// design preference, not compensation for a defect: we are deviating from a CORRECT
+// baseline, which is the only honest place to deviate from.
+//
+// Scales with the window so it never crowds a short one; floors at Mac's 26px.
+const STAGE_BOTTOM_INSET = 'clamp(26px, 12vh, 128px)'
+
+// Also a deliberate deviation. Mac's Spacer(minLength: 24) (DashboardPage.swift:671) is
+// the floor on the wordmark→cluster gap, and it is where the layout actually settles:
+// once the wordmark is at the stage's true centre the flexible gap is squeezed to
+// exactly that minimum, so 24px IS the gap in practice, not just its floor. Chris wants
+// the wordmark to breathe, so raise the floor. Raising it also lifts the wordmark, since
+// the top spacer is the only shrinkable item and gives way first.
+const WORDMARK_GAP = 56
 const STAGE_MAX = 1360
 const ASK_MAX_HUB = 980
 const ASK_MAX_PANEL = 1280
@@ -110,6 +118,29 @@ export function HomeHub(): React.JSX.Element {
     <div className="relative h-full overflow-hidden">
       <HomeCanvasBackground />
 
+      {/* The header FLOATS over the stage; it does not sit in the column.
+          Mac stacks it (DashboardPage.swift:584-611):
+
+              ZStack(alignment: .topTrailing) {
+                homeStage(...).frame(width: proxy.size.width, height: proxy.size.height)
+                homeHeader.padding(.top, 26)
+              }
+
+          so the stage gets the window's FULL height and the header consumes none of it.
+          It was a sibling row in this flex column, which quietly ate ~62px (26px pad +
+          36px tall) off the top of the stage — pushing the wordmark's centre point AND
+          the docked cluster down by that much. That is what made the Hub read as
+          bottom-heavy, and it is why lifting the bottom inset "fixed" it: I was padding
+          the floor to compensate for space being stolen from the ceiling. */}
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 z-10 mx-auto flex justify-end"
+        style={{ maxWidth: STAGE_MAX, paddingLeft: SIDE_INSET, paddingRight: SIDE_INSET, paddingTop: 26 }}
+      >
+        <div className="pointer-events-auto">
+          <HubHeader />
+        </div>
+      </div>
+
       <div
         className="mx-auto flex h-full flex-col"
         style={{
@@ -119,9 +150,6 @@ export function HomeHub(): React.JSX.Element {
           paddingBottom: STAGE_BOTTOM_INSET
         }}
       >
-        <div className="flex shrink-0 justify-end pt-[26px]">
-          <HubHeader />
-        </div>
 
         {/* The stage's height budget. The cluster (ribbon + ask bar + suggestions) is
             shrink-0 and the lead-in spacer is the ONLY shrinkable item, so a shorter
@@ -138,7 +166,7 @@ export function HomeHub(): React.JSX.Element {
             stage at the DEFAULT window size and this is what made it visible. */}
         <div
           ref={stageRef}
-          className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto pt-[clamp(20px,7vh,74px)]"
+          className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto pt-[74px]"
           data-testid="hub-stage"
           data-mode={mode}
         >
@@ -184,8 +212,14 @@ export function HomeHub(): React.JSX.Element {
                 omi.
               </h1>
 
-              {/* Mac: Spacer(minLength: 24) — absorbs the slack, docking the cluster. */}
-              <div className="min-h-[24px] w-full shrink-0 grow" aria-hidden />
+              {/* Mac: Spacer(minLength: 24) — absorbs slack, docking the cluster. The
+                  min-height (WORDMARK_GAP) is raised above Mac's 24 on Chris's call; see
+                  the constant. It grows to fill any extra height, so this is the FLOOR. */}
+              <div
+                className="w-full shrink-0 grow"
+                style={{ minHeight: WORDMARK_GAP }}
+                aria-hidden
+              />
 
               <div
                 className="flex w-full shrink-0 flex-col items-center"
