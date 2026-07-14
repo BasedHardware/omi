@@ -312,6 +312,8 @@ const omi: OmiBridgeApi = {
   },
   getRecordHotkey: () => ipcRenderer.invoke('shortcuts:get-record'),
   setRecordHotkey: (accelerator: string) => ipcRenderer.invoke('shortcuts:set-record', accelerator),
+  setRecordHotkeyEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke('shortcuts:set-record-enabled', enabled),
   getSummonHotkey: () => ipcRenderer.invoke('shortcuts:get-summon'),
   setSummonHotkey: (accelerator: string) => ipcRenderer.invoke('shortcuts:set-summon', accelerator),
   getAppVersion: () => ipcRenderer.invoke('app:get-version'),

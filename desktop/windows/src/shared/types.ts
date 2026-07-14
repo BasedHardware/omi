@@ -458,8 +458,13 @@ export type OmiBarApi = {
  *  Mirrors the main-process TrayState in main/trayState.ts. */
 export type TrayListeningState = 'idle' | 'listening' | 'paused'
 
-/** The mic record chord and whether the OS accepted its registration. */
-export type RecordHotkeyState = { accelerator: string; registered: boolean }
+/** The mic record chord and whether the OS accepted its registration. `enabled`
+ *  is whether the chord is registered at all: the Record card (only) lets the user
+ *  turn it fully off (default Ctrl+Space collides with the Windows IME switch), and
+ *  main leaves it unregistered while off. The summon path reuses this shape and
+ *  does not populate `enabled` (its card has no Off affordance) — hence optional;
+ *  consumers must treat `undefined` as enabled (`enabled !== false`). */
+export type RecordHotkeyState = { accelerator: string; registered: boolean; enabled?: boolean }
 
 /** Outcome of a manual "check for updates" from Settings → About.
  *  - `unsupported`: the updater is inert (unpackaged dev build) — updates install
@@ -780,6 +785,10 @@ export type OmiBridgeApi = {
   /** Rebind the record chord (persisted). Never throws on a conflict — returns
    *  registered=false when the chord is owned by another app. */
   setRecordHotkey: (accelerator: string) => Promise<{ ok: boolean; registered: boolean }>
+  /** Turn the record chord fully on/off (Record card's "Off" chip). Off leaves it
+   *  unregistered so the OS releases Ctrl+Space; on re-registers the stored chord
+   *  (returns registered=false if now held by another app). Returns the fresh state. */
+  setRecordHotkeyEnabled: (enabled: boolean) => Promise<RecordHotkeyState>
   /** The current floating-bar summon chord and whether the OS accepted it. Same
    *  shape as the record chord; the summon accelerator is persisted in renderer
    *  preferences (overlayShortcut) and re-applied to main on startup. */

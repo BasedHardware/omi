@@ -102,7 +102,7 @@ import { createTray, updateTrayState, destroyTray, isTrayCreated } from './tray'
 import { initAutoUpdater, getPendingUpdate, checkForUpdatesNow } from './updater'
 import {
   registerRecordShortcut,
-  setRecordAccelerator,
+  setRecordAcceleratorForced,
   getRecordShortcut,
   suspendRecordShortcut,
   resumeRecordShortcut
@@ -121,6 +121,12 @@ const DEFAULT_WINDOW_HEIGHT = 820
 // activate) reads through this variable so a re-created window can never leave
 // a consumer bound to a destroyed instance.
 let mainWindow: BrowserWindow | null = null
+
+// Whether the mic record chord is currently registered at all (Settings →
+// Shortcuts "Off"). Seeded from persisted appSettings at startup; the ONLY thing
+// that keeps a disabled chord from being resurrected by the rebind capture's
+// resume path (shortcuts:resume-capture). Persisted mirror: recordHotkeyEnabled.
+let recordShortcutEnabled = true
 
 function withMainWindow(fn: (win: BrowserWindow) => void): void {
   if (mainWindow && !mainWindow.isDestroyed()) fn(mainWindow)
@@ -827,11 +833,21 @@ app.whenReady().then(async () => {
   // 'recorder:hotkey' at the renderer (receiver already exists) and surfaces the
   // window if it was hidden, so a global hotkey both starts capture AND brings Omi
   // to the front.
-  const recordState = registerRecordShortcut(getAppSettings().recordHotkey, () => {
-    surfaceMainWindow()
-    withMainWindow((w) => w.webContents.send('recorder:hotkey', 'mic'))
-  })
-  if (!recordState.registered) {
+  // Always create the slot (so getRecordShortcut + a later enable work); when the
+  // user has turned the chord off, `claim: false` attaches the handler WITHOUT
+  // registering — the OS never claims Ctrl+Space, not even for an instant (the
+  // whole point of Off is to free it for the IME). A later enable resumes the slot,
+  // whose handler is already attached.
+  recordShortcutEnabled = getAppSettings().recordHotkeyEnabled !== false
+  const recordState = registerRecordShortcut(
+    getAppSettings().recordHotkey,
+    () => {
+      surfaceMainWindow()
+      withMainWindow((w) => w.webContents.send('recorder:hotkey', 'mic'))
+    },
+    { claim: recordShortcutEnabled }
+  )
+  if (recordShortcutEnabled && !recordState.registered) {
     console.warn(`[shortcut] record chord "${recordState.accelerator}" is unavailable (in use?)`)
   }
 
@@ -867,7 +883,10 @@ app.whenReady().then(async () => {
 
   // Record-chord get/rebind. Rebinds persist and never throw on a conflict — a
   // taken chord returns registered=false so the UI can prompt for another.
-  ipcMain.handle('shortcuts:get-record', () => getRecordShortcut())
+  ipcMain.handle('shortcuts:get-record', () => ({
+    ...getRecordShortcut(),
+    enabled: recordShortcutEnabled
+  }))
   // Summon (floating-bar) chord: current binding + whether the OS claimed it, so
   // Settings → Shortcuts can show a conflict instead of a silently-dead shortcut.
   ipcMain.handle('shortcuts:get-summon', () => getOverlaySummonState())
@@ -887,7 +906,8 @@ app.whenReady().then(async () => {
     suspendOverlayShortcut()
   })
   ipcMain.on('shortcuts:resume-capture', () => {
-    resumeRecordShortcut()
+    // Don't resurrect a chord the user has turned off — resume only when enabled.
+    if (recordShortcutEnabled) resumeRecordShortcut()
     resumeOverlayShortcut()
   })
 
@@ -895,9 +915,31 @@ app.whenReady().then(async () => {
     if (typeof accelerator !== 'string' || !accelerator.trim()) {
       return { ok: false, registered: getRecordShortcut().registered }
     }
-    const next = setRecordAccelerator(accelerator.trim())
-    if (next.registered) setAppSettings({ recordHotkey: next.accelerator })
+    // Forced (no rollback): the user's exact choice becomes the current chord even
+    // when the OS can't claim it, so what we persist and show always matches what
+    // they picked (a rollback would leave the old chord live under a new label).
+    const next = setRecordAcceleratorForced(accelerator.trim())
+    // Selecting a binding (Default/Custom) is an explicit intent to enable the
+    // chord, independent of whether the OS could claim it right now — a conflict
+    // (registered=false) surfaces as the card's "held by another app" warning, it
+    // must NOT refuse to enable. So always persist the accelerator + enable intent.
+    recordShortcutEnabled = true
+    setAppSettings({ recordHotkey: next.accelerator, recordHotkeyEnabled: true })
     return { ok: next.registered, registered: next.registered }
+  })
+
+  // Turn the record chord fully on/off (Settings → Shortcuts "Off" chip). Off
+  // releases the OS chord (frees Ctrl+Space for the IME); on re-registers the
+  // stored accelerator, surfacing registered=false when now held by another app.
+  ipcMain.handle('shortcuts:set-record-enabled', (_e, enabled: boolean) => {
+    recordShortcutEnabled = enabled === true
+    setAppSettings({ recordHotkeyEnabled: recordShortcutEnabled })
+    if (recordShortcutEnabled) {
+      resumeRecordShortcut()
+    } else {
+      suspendRecordShortcut()
+    }
+    return { ...getRecordShortcut(), enabled: recordShortcutEnabled }
   })
 
   // Rebind the summon chord (mirrors overlay:setAccelerator used by onboarding):
