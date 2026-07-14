@@ -205,6 +205,22 @@ def complete(uid: str, conversation_id: str) -> bool:
     )
 
 
+def fail_and_discard_processing(uid: str, conversation_id: str) -> bool:
+    """Atomically close a still-current failed finalization generation.
+
+    A worker can exhaust its durable delivery budget while its conversation is
+    processing. The compare-and-swap fences a stale worker from hiding a newer
+    or already-completed generation.
+    """
+    return conversations_db.claim_conversation_status(
+        uid,
+        conversation_id,
+        ConversationStatus.processing,
+        ConversationStatus.failed,
+        extra_updates={'discarded': True},
+    )
+
+
 def begin_merge(uid: str, conversation_id: str) -> bool:
     return transition(uid, conversation_id, ConversationStatus.merging)
 

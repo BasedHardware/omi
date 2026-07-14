@@ -12,7 +12,6 @@ from starlette.websockets import WebSocketState
 import database.conversations as conversations_db
 from database import conversation_finalization_jobs as finalization_jobs_db
 from database import users as users_db
-from models.conversation_enums import ConversationStatus
 from services.conversation_finalization import final_attempt_failed
 from utils.apps import is_audio_bytes_app_enabled
 from utils.app_integrations import (
@@ -149,7 +148,7 @@ async def _process_conversation_task(
         terminal = attempt_count >= get_listen_finalization_tasks_max_attempts()
         try:
             if terminal:
-                await run_blocking(
+                marked_dead_letter = await run_blocking(
                     db_executor,
                     final_attempt_failed,
                     job_id,
@@ -157,16 +156,11 @@ async def _process_conversation_task(
                     lease_epoch,
                     attempt_count,
                 )
-                await run_blocking(
-                    db_executor,
-                    lifecycle_service.transition,
-                    uid,
-                    conversation_id,
-                    ConversationStatus.failed,
-                    expected=ConversationStatus.processing,
+                if not marked_dead_letter:
+                    return False
+                return await run_blocking(
+                    db_executor, lifecycle_service.fail_and_discard_processing, uid, conversation_id
                 )
-                await run_blocking(db_executor, lifecycle_service.discard, uid, conversation_id)
-                return True
             await run_blocking(
                 db_executor,
                 finalization_jobs_db.mark_finalization_retryable,

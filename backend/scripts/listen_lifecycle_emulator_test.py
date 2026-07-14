@@ -345,6 +345,34 @@ def _assert_photo_only_finalization_is_admitted(client: Any, uid: str) -> None:
         raise AssertionError(f'photo-only conversation was not admitted to durable finalization: {intent}')
 
 
+def _assert_legacy_photo_only_finalization_is_admitted(client: Any, uid: str) -> None:
+    """Pre-marker photo children must still admit a durable finalization job."""
+    conversation_id = f'legacy-photo-finalization-{uuid.uuid4().hex}'
+    conversation_ref = _conversation_ref(client, uid, conversation_id)
+    conversation_ref.set(
+        {
+            'id': conversation_id,
+            'status': 'in_progress',
+            'discarded': False,
+            'transcript_segments': [],
+            'has_content': False,
+            'data_protection_level': 'standard',
+        }
+    )
+    conversation_ref.collection('photos').document('legacy-only-photo').set(
+        {'id': 'legacy-only-photo', 'description': 'pre-marker photo-only listen conversation'}
+    )
+
+    intent = lifecycle_service.request_finalization(
+        uid,
+        conversation_id,
+        has_byok_keys=False,
+        firestore_client=client,
+    )
+    if intent['status'] != 'queued' or not intent['job_id']:
+        raise AssertionError(f'legacy photo-only conversation was not admitted to durable finalization: {intent}')
+
+
 def main() -> int:
     if not os.environ.get('FIRESTORE_EMULATOR_HOST'):
         raise RuntimeError('FIRESTORE_EMULATOR_HOST is required; run through Firebase emulators:exec')
@@ -354,6 +382,7 @@ def main() -> int:
     _assert_segment_content_contract(client, uid)
     _assert_photo_content_contract(client, uid)
     _assert_photo_only_finalization_is_admitted(client, uid)
+    _assert_legacy_photo_only_finalization_is_admitted(client, uid)
     print('PASS: Firestore emulator fenced cleanup races and preserved listen content through fresh-generation replay')
     return 0
 

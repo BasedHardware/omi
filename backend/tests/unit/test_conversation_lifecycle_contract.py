@@ -158,6 +158,17 @@ def test_discarded_conversation_cannot_be_readmitted(lifecycle_store):
     assert lifecycle_store.conversation('uid', 'conversation')['discarded'] is False
 
 
+def test_terminal_failed_finalization_closes_only_the_current_processing_generation(lifecycle_store):
+    lifecycle_store.put_conversation('uid', 'conversation', status=ConversationStatus.processing.value, discarded=False)
+
+    assert lifecycle_service.fail_and_discard_processing('uid', 'conversation') is True
+    assert lifecycle_store.conversation('uid', 'conversation') == {
+        'status': ConversationStatus.failed,
+        'discarded': True,
+    }
+    assert lifecycle_service.fail_and_discard_processing('uid', 'conversation') is False
+
+
 def test_discard_fences_a_stale_processing_result_and_completion(lifecycle_store):
     lifecycle_store.put_conversation(
         'uid',

@@ -238,8 +238,10 @@ async def test_worker_dead_letters_the_final_failed_attempt(monkeypatch):
         AsyncMock(side_effect=ConversationFinalizationError('processing_failed')),
     )
     dead_letter = MagicMock(return_value=True)
+    terminalize = MagicMock(return_value=True)
     monkeypatch.setattr(finalization_router, 'final_attempt_failed', dead_letter)
     monkeypatch.setattr(finalization_router, 'get_listen_finalization_tasks_max_attempts_for_worker', lambda: 3)
+    monkeypatch.setattr(finalization_router.lifecycle_service, 'fail_and_discard_processing', terminalize)
 
     response = await finalization_router.run_listen_finalization_job(
         _Request({'job_id': 'job-1', 'dispatch_generation': 1}), task_retry_count=2
@@ -248,6 +250,7 @@ async def test_worker_dead_letters_the_final_failed_attempt(monkeypatch):
     assert response.status_code == 200
     assert json.loads(response.body) == {'status': 'dead_letter'}
     dead_letter.assert_called_once_with('job-1', 1, 1, 3)
+    terminalize.assert_called_once_with('uid-1', 'conversation-1')
 
 
 @pytest.mark.anyio
@@ -468,8 +471,7 @@ async def test_pusher_dead_letters_a_job_that_exhausted_its_attempt_budget(monke
     websocket = _PusherWebSocket()
     retryable = MagicMock(return_value=True)
     dead_letter = MagicMock(return_value=True)
-    fail_transition = MagicMock()
-    discard = MagicMock()
+    terminalize = MagicMock(return_value=True)
     monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(
         jobs_db,
@@ -479,8 +481,7 @@ async def test_pusher_dead_letters_a_job_that_exhausted_its_attempt_budget(monke
     monkeypatch.setattr(jobs_db, 'mark_finalization_retryable', retryable)
     monkeypatch.setattr(jobs_db, 'mark_finalization_dead_letter', dead_letter)
     monkeypatch.setattr(pusher_router, 'get_listen_finalization_tasks_max_attempts', lambda: 5)
-    monkeypatch.setattr(pusher_router.lifecycle_service, 'transition', fail_transition)
-    monkeypatch.setattr(pusher_router.lifecycle_service, 'discard', discard)
+    monkeypatch.setattr(pusher_router.lifecycle_service, 'fail_and_discard_processing', terminalize)
     monkeypatch.setattr(
         pusher_router,
         'finalize_persisted_conversation',
@@ -493,14 +494,44 @@ async def test_pusher_dead_letters_a_job_that_exhausted_its_attempt_budget(monke
 
     dead_letter.assert_called_once_with('job-1', 3, 4, 5, firestore_client=None)
     retryable.assert_not_called()
-    fail_transition.assert_called_once_with(
-        'uid-1', 'conversation-1', ConversationStatus.failed, expected=ConversationStatus.processing
-    )
-    discard.assert_called_once_with('uid-1', 'conversation-1')
+    terminalize.assert_called_once_with('uid-1', 'conversation-1')
     assert json.loads(websocket.sent[0][4:]) == {
         'conversation_id': 'conversation-1',
         'error': 'processing_failed',
         'terminal': True,
+    }
+
+
+@pytest.mark.anyio
+async def test_pusher_lease_loss_never_terminalizes_a_newer_finalization_owner(monkeypatch):
+    websocket = _PusherWebSocket()
+    dead_letter = MagicMock(return_value=False)
+    terminalize = MagicMock()
+    monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(
+        jobs_db,
+        'claim_finalization_job',
+        lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 4, 'attempt_count': 5},
+    )
+    monkeypatch.setattr(pusher_router, 'final_attempt_failed', dead_letter)
+    monkeypatch.setattr(pusher_router, 'get_listen_finalization_tasks_max_attempts', lambda: 5)
+    monkeypatch.setattr(pusher_router.lifecycle_service, 'fail_and_discard_processing', terminalize)
+    monkeypatch.setattr(
+        pusher_router,
+        'finalize_persisted_conversation',
+        AsyncMock(side_effect=ConversationFinalizationError('processing_failed')),
+    )
+
+    await pusher_router._process_conversation_task(
+        'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
+    )
+
+    dead_letter.assert_called_once_with('job-1', 3, 4, 5)
+    terminalize.assert_not_called()
+    assert json.loads(websocket.sent[0][4:]) == {
+        'conversation_id': 'conversation-1',
+        'error': 'processing_failed',
+        'terminal': False,
     }
 
 

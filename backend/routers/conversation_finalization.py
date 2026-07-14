@@ -44,12 +44,19 @@ def _parse_task_payload(payload: Any) -> tuple[str, int] | None:
 
 
 async def _retry_or_dead_letter(
-    job_id: str, dispatch_generation: int, lease_epoch: int, task_retry_count: int, reason: str
+    job_id: str,
+    dispatch_generation: int,
+    lease_epoch: int,
+    task_retry_count: int,
+    reason: str,
+    *,
+    uid: str | None = None,
+    conversation_id: str | None = None,
 ) -> bool:
     """Record a task failure; return whether this was the terminal delivery."""
     max_attempts = get_listen_finalization_tasks_max_attempts_for_worker()
     if task_retry_count >= max_attempts - 1:
-        await run_blocking(
+        marked_dead_letter = await run_blocking(
             db_executor,
             final_attempt_failed,
             job_id,
@@ -57,6 +64,15 @@ async def _retry_or_dead_letter(
             lease_epoch,
             task_retry_count + 1,
         )
+        if not marked_dead_letter:
+            return False
+        if uid is not None and conversation_id is not None:
+            await run_blocking(
+                db_executor,
+                lifecycle_service.fail_and_discard_processing,
+                uid,
+                conversation_id,
+            )
         return True
 
     await run_blocking(
@@ -92,6 +108,7 @@ async def run_listen_finalization_job(
 
     release_lock = True
     claimed_lease_epoch: int | None = None
+    job: dict[str, Any] | None = None
     try:
         claim = await run_blocking(
             db_executor,
@@ -131,7 +148,13 @@ async def run_listen_finalization_job(
             )
         except ConversationFinalizationError:
             terminal = await _retry_or_dead_letter(
-                job_id, dispatch_generation, claimed_lease_epoch, task_retry_count, 'processing_failed'
+                job_id,
+                dispatch_generation,
+                claimed_lease_epoch,
+                task_retry_count,
+                'processing_failed',
+                uid=job['uid'],
+                conversation_id=job['conversation_id'],
             )
             if terminal:
                 logger.error('listen finalization final attempt failed job=%s failure=processing_failed', job_id)
@@ -165,7 +188,13 @@ async def run_listen_finalization_job(
         if claimed_lease_epoch is not None:
             try:
                 terminal = await _retry_or_dead_letter(
-                    job_id, dispatch_generation, claimed_lease_epoch, task_retry_count, 'worker_failed'
+                    job_id,
+                    dispatch_generation,
+                    claimed_lease_epoch,
+                    task_retry_count,
+                    'worker_failed',
+                    uid=job.get('uid') if job else None,
+                    conversation_id=job.get('conversation_id') if job else None,
                 )
             except Exception:
                 logger.error('listen finalization recovery update failed job=%s failure=worker_failed', job_id)
