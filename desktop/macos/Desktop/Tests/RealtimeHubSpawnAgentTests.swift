@@ -261,9 +261,10 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
 
   func testSpawnAgentUsesKernelRuntimeControlAuthority() throws {
     let source = try realtimeHubControllerSource()
+    let toolAuthoritySource = try realtimeToolAuthoritySource()
 
     XCTAssertTrue(source.contains("toolName: name"))
-    XCTAssertTrue(source.contains("command.surfaceKind == \"realtime_voice\""))
+    XCTAssertTrue(toolAuthoritySource.contains("command.surfaceKind == \"realtime_voice\""))
     XCTAssertFalse(source.contains("pendingVoiceAgentHandoff"))
     XCTAssertFalse(source.contains("Starting a background agent."))
   }
@@ -369,20 +370,22 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
   func testRealtimeToolUsesAuthorizedFallbackWhenProviderTranscriptIsUnavailable() throws {
     // omi-test-quality: source-inspection -- static contract: the realtime tool path must not reintroduce a transcript/tool circular wait.
     let source = try realtimeHubControllerSource()
+    let toolAuthoritySource = try realtimeToolAuthoritySource()
 
     XCTAssertTrue(source.contains("RealtimeExternalRunPromptPolicy.promptForAuthorizedTool("))
     XCTAssertTrue(source.contains("authorizedToolFallback"))
     XCTAssertFalse(source.contains("deferredRealtimeToolInvocations.enqueue("))
     XCTAssertFalse(source.contains("resumeDeferredRealtimeToolsIfReady()"))
     XCTAssertTrue(source.contains("prompt: normalizedPrompt"))
-    XCTAssertTrue(source.contains("Execute only that separately authorized invocation"))
+    XCTAssertTrue(toolAuthoritySource.contains("Execute only that separately authorized invocation"))
     XCTAssertFalse(source.contains("I couldn't confirm the spoken request"))
   }
 
   func testBargeInReplacementCommitIsDeferredInsteadOfRejected() throws {
     let source = try realtimeHubControllerSource()
+    let sessionPoliciesSource = try realtimeHubSessionPoliciesSource()
 
-    XCTAssertTrue(source.contains("case deferredForReplacement"))
+    XCTAssertTrue(sessionPoliciesSource.contains("case deferredForReplacement"))
     XCTAssertTrue(source.contains("VoiceTurnCoordinator.shared.send(.hubCommitDeferredForReplacement"))
     XCTAssertTrue(source.contains("VoiceTurnCoordinator.shared.activeTurn?.hubCommitPending == true"))
     XCTAssertTrue(source.contains("barge-in replacement not ready at commit"))
@@ -437,6 +440,22 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func realtimeToolAuthoritySource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar/RealtimeToolAuthority.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func realtimeHubSessionPoliciesSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 

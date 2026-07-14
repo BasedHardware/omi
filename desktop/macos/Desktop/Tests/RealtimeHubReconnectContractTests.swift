@@ -135,13 +135,18 @@ final class RealtimeHubReconnectContractTests: XCTestCase {
   }
 
   func testHubWiresSessionCallbackAdmissionThroughReconnectIdentityPolicy() throws {
-    let sourceURL = URL(fileURLWithPath: #filePath)
+    let hubURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift")
-    let source = try String(contentsOf: sourceURL, encoding: .utf8)
-    XCTAssertTrue(source.contains("RealtimeHubReconnectIdentityPolicy.admitsSessionCallback("))
-    XCTAssertTrue(source.contains("admitsReconnectedSessionID("))
+    let policiesURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift")
+    let hubSource = try String(contentsOf: hubURL, encoding: .utf8)
+    let policiesSource = try String(contentsOf: policiesURL, encoding: .utf8)
+    XCTAssertTrue(hubSource.contains("RealtimeHubReconnectIdentityPolicy.admitsSessionCallback("))
+    XCTAssertTrue(policiesSource.contains("admitsReconnectedSessionID("))
   }
 
   private func reduce(_ model: VoiceTurnModel, _ event: VoiceTurnEvent) -> VoiceTurnReduction {

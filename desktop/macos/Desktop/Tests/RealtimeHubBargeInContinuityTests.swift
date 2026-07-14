@@ -834,7 +834,8 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertTrue(source.contains("observedTurnEpoch == turnEpoch"))
     XCTAssertTrue(source.contains("observedPersistenceGeneration == turnPersistenceLedger.generation"))
     XCTAssertTrue(source.contains("RealtimeTurnPersistenceLedger"))
-    XCTAssertTrue(source.contains("self.obligations[continuityKey]?.id == obligationID"))
+    let persistenceSource = try realtimeTurnPersistenceSource()
+    XCTAssertTrue(persistenceSource.contains("self.obligations[continuityKey]?.id == obligationID"))
     XCTAssertFalse(source.contains("turnPersistenceTask"))
     XCTAssertFalse(source.contains("turnPersistenceGeneration"))
     XCTAssertTrue(source.contains("enqueueTurnPersistence(idempotencyKey:"))
@@ -1434,6 +1435,14 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func realtimeTurnPersistenceSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar/RealtimeTurnPersistence.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
