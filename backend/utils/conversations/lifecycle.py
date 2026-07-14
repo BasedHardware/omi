@@ -9,10 +9,12 @@ lifecycle fields directly.
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any, Mapping
 
 from database import conversation_finalization_jobs as jobs_db
 from database import conversations as conversations_db
+from database import recording_sessions as recording_sessions_db
 from models.conversation_enums import ConversationStatus
 from utils.cloud_tasks import enqueue_listen_finalization_job, is_listen_finalization_dispatch_enabled
 from utils.observability.fallback import record_fallback
@@ -35,6 +37,15 @@ _STATUS_TRANSITIONS = {
 
 class LifecycleTransitionError(ValueError):
     """Raised when an intent would reopen or otherwise violate a terminal lifecycle."""
+
+
+RECORDING_SESSION_MODES = frozenset({'shadow', 'enforce'})
+
+
+def recording_session_mode() -> str:
+    """Return the bounded recording-session rollout mode, defaulting to enforcement."""
+    configured = os.getenv('RECORDING_SESSION_MODE', 'enforce').strip().lower()
+    return configured if configured in RECORDING_SESSION_MODES else 'enforce'
 
 
 def _status_value(status: ConversationStatus | str | None) -> str:
@@ -163,7 +174,139 @@ def discard(uid: str, conversation_id: str) -> None:
 
 def restore_discarded(uid: str, conversation_id: str) -> None:
     """An explicit user intent may restore visibility without changing status."""
-    conversations_db.update_conversation(uid, conversation_id, {'discarded': False})
+    conversations_db._restore_conversation_from_discarded(uid, conversation_id)
+
+
+def open_recording_session(
+    uid: str,
+    recording_session_id: str,
+    proposed_conversation_id: str,
+    *,
+    firestore_client: Any = None,
+) -> dict[str, Any]:
+    """Open or resume a durable session through the single lifecycle owner.
+
+    Shadow mode observes binding conflicts while preserving the legacy proposed
+    route. Enforce mode fails closed to the canonical durable conversation.
+    """
+    try:
+        binding = recording_sessions_db.create_or_get_recording_session(
+            uid,
+            recording_session_id,
+            proposed_conversation_id,
+            firestore_client=firestore_client,
+        )
+    except Exception:
+        if recording_session_mode() != 'shadow':
+            raise
+        record_fallback(
+            component='other',
+            from_mode='recording_session',
+            to_mode='legacy_pointer',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+        logger.exception(
+            'recording session persistence failed; retaining shadow legacy route uid=%s session=%s',
+            uid,
+            recording_session_id,
+        )
+        return {
+            'recording_session_id': recording_session_id,
+            'conversation_id': proposed_conversation_id,
+            'lifecycle_version': None,
+            'lifecycle_phase': None,
+            'lifecycle_sequence': None,
+            'mapping_conflict': False,
+        }
+    if binding['mapping_conflict']:
+        record_fallback(
+            component='other',
+            from_mode='legacy_pointer',
+            to_mode='recording_session',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+        logger.warning(
+            'recording session binding conflict uid=%s session=%s proposed=%s canonical=%s',
+            uid,
+            recording_session_id,
+            proposed_conversation_id,
+            binding['conversation_id'],
+        )
+        if recording_session_mode() == 'shadow':
+            return dict(binding) | {'conversation_id': proposed_conversation_id}
+    return dict(binding)
+
+
+def record_recording_session_event(
+    uid: str,
+    recording_session_id: str,
+    conversation_id: str,
+    phase: recording_sessions_db.RecordingPhase,
+    *,
+    firestore_client: Any = None,
+) -> dict[str, Any] | None:
+    """Persist and return an ordered client envelope, discarding stale callbacks."""
+    try:
+        event = recording_sessions_db.record_lifecycle_event(
+            uid,
+            recording_session_id,
+            conversation_id,
+            phase,
+            firestore_client=firestore_client,
+        )
+    except Exception:
+        if recording_session_mode() != 'shadow':
+            raise
+        record_fallback(
+            component='other',
+            from_mode='recording_session',
+            to_mode='legacy_pointer',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+        logger.exception(
+            'recording session event persistence failed; emitting shadow legacy event uid=%s session=%s',
+            uid,
+            recording_session_id,
+        )
+        return {
+            'recording_session_id': recording_session_id,
+            'conversation_id': conversation_id,
+            'lifecycle_version': None,
+            'lifecycle_phase': None,
+            'lifecycle_sequence': None,
+        }
+    if event['accepted']:
+        return dict(event)
+    record_fallback(
+        component='other',
+        from_mode='recording_session',
+        to_mode='event_discarded',
+        reason='other',
+        outcome='degraded',
+        log=logger,
+    )
+    logger.warning(
+        'recording session event discarded uid=%s session=%s conversation=%s reason=%s',
+        uid,
+        recording_session_id,
+        conversation_id,
+        event['discard_reason'],
+    )
+    if recording_session_mode() == 'shadow':
+        return {
+            'recording_session_id': recording_session_id,
+            'conversation_id': conversation_id,
+            'lifecycle_version': None,
+            'lifecycle_phase': None,
+            'lifecycle_sequence': None,
+        }
+    return None
 
 
 def request_finalization(

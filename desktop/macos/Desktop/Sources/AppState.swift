@@ -125,6 +125,34 @@ enum DesktopConversationMatchPolicy {
     return recordingSessionId == nil || recordingSessionId == expectedBackendId
   }
 
+  /// Versioned lifecycle envelopes are an ordered protocol. A client only
+  /// accepts a newer event for its own durable recording-session binding;
+  /// omitted fields use the legacy compatibility path above.
+  static func acceptsLifecycleEnvelope(
+    recordingSessionId: String?,
+    conversationId: String,
+    lifecycleVersion: Int?,
+    lifecyclePhase: String?,
+    lifecycleSequence: Int?,
+    expectedLifecyclePhase: String,
+    expectedBackendId: String?,
+    lastAcceptedSequence: Int?
+  ) -> Bool {
+    guard lifecycleVersion != nil || lifecycleSequence != nil else { return true }
+    guard lifecycleVersion == 1,
+          let recordingSessionId,
+          !recordingSessionId.isEmpty,
+          lifecyclePhase == expectedLifecyclePhase,
+          let lifecycleSequence,
+          lifecycleSequence >= 0
+    else { return false }
+    if let expectedBackendId, !expectedBackendId.isEmpty {
+      guard recordingSessionId == expectedBackendId, conversationId == expectedBackendId else { return false }
+    }
+    guard let lastAcceptedSequence else { return true }
+    return lifecycleSequence > lastAcceptedSequence
+  }
+
   static func canCompleteBoundBackendConversation(
     id conversationId: String,
     boundBackendId: String,
@@ -377,6 +405,9 @@ class AppState: ObservableObject {
   /// In the current compatible protocol it is also the backend conversation id.
   var currentClientConversationId: String?
   var pendingBackendConversationId: String?
+  /// Last accepted server event sequence per durable recording session. This
+  /// is display state only; Firestore remains the authoritative sequence owner.
+  var lifecycleSequenceByRecordingSession: [String: Int] = [:]
   var ignoredRotatedBackendConversationIds: Set<String> = []
   var finishedSessionId: Int64?
   var finishedClientConversationId: String?

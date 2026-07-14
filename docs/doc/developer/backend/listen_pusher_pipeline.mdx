@@ -6,7 +6,7 @@ description: "Sequence diagrams for the /v4/listen WebSocket and Pusher processi
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-07-13 (durable listen finalization outbox and terminal live-STT failure signaling)
+> Last updated: 2026-07-14 (durable recording-session bindings and ordered lifecycle envelopes)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -26,11 +26,12 @@ before processing — this corrects non-deterministic WebSocket arrival order
 from providers like Modulate whose internal parallelism can deliver shorter
 utterances before longer ones.
 
-When `/v4/listen` receives a client-generated `client_conversation_id`, that
-UUID is the authoritative identity for the recording. The backend creates or
-resumes that exact conversation and **does not** fall back to the legacy
-user-global in-progress pointer. This prevents a stale Redis or Firestore row
-from being rebound to a new desktop recording.
+Every `/v4/listen` stream receives a durable, user-scoped `recording_session`
+resource before it creates or resumes a conversation. A client-generated
+`client_conversation_id` remains that resource's ID when present; legacy
+clients receive a server-generated UUID. The resource atomically binds the
+recording to exactly one conversation, so reconnects return the original
+canonical mapping rather than falling back to a user-global Redis pointer.
 
 The backend emits a `conversation_session` event carrying that recording
 identity:
@@ -40,15 +41,27 @@ identity:
   "type": "conversation_session",
   "conversation_id": "<uuid>",
   "recording_session_id": "<client_conversation_id>",
-  "status": "in_progress"
+  "status": "in_progress",
+  "lifecycle_version": 1,
+  "lifecycle_phase": "in_progress",
+  "lifecycle_sequence": 0
 }
 ```
 
-Clients that persist local recording sessions must bind only when the returned
-`conversation_id` and `recording_session_id` match their persisted client UUID.
-For an identified session, lifecycle/finalization uses that exact identity; it
-must not timestamp-match or force-process a nearby user-global conversation.
-Timestamp/source matching is legacy-only compatibility behavior.
+`conversation_session`, `memory_processing_started`, and `memory_created`
+carry the same versioned envelope. Clients must accept an envelope only when
+the recording and conversation IDs match their local session and the sequence
+is higher than the last accepted sequence. The phase is part of the contract:
+`in_progress`, then `processing`, then a terminal `completed`/`failed`/
+`discarded`. Older events without the envelope retain the legacy identity and
+timestamp compatibility path only.
+
+`RECORDING_SESSION_MODE=enforce` (the default) makes the durable binding
+authoritative. `shadow` records and reports mapping conflicts through the shared
+fallback telemetry while preserving the old proposed route during a bounded
+rollout. The resource contains only IDs, phase, sequence, schema version, and
+timestamps; it never stores transcript content, credentials, or raw WebSocket
+payloads.
 
 ## Capture-device provenance
 
@@ -72,8 +85,8 @@ sequenceDiagram
     Client->>Backend: WS connect (uid, language, sample_rate, codec, client_conversation_id, device headers)
     Backend->>Backend: Auth check (dev-token or Firebase)
     Backend->>Backend: Select STT provider (STT_SERVICE_MODELS + language)
-    Backend->>Firestore: Create/resume exact client conversation (status=in_progress)
-    Backend-->>Client: {type: "conversation_session", conversation_id, recording_session_id, status: "in_progress"}
+    Backend->>Firestore: Create/resume recording session → canonical conversation (status=in_progress)
+    Backend-->>Client: {type: "conversation_session", conversation_id, recording_session_id, lifecycle_version, lifecycle_phase, lifecycle_sequence}
     Backend->>STT: Open STT WebSocket
     Backend->>Pusher: Open Pusher WebSocket
     Backend-->>Client: {type: "service_status", status: "ready"}
@@ -170,8 +183,8 @@ sequenceDiagram
         Pusher->>OpenAI: Extract memories
         Pusher->>Firestore: Save embedding vector
         Pusher-->>Backend: Opcode 201 (conversation processed callback)
-        Backend-->>Client: {type: "memory_processing_started", recording_session_id, memory: {...}}
-        Backend-->>Client: {type: "memory_created", recording_session_id, memory: {...}}
+        Backend-->>Client: {type: "memory_processing_started", recording_session_id, conversation_id, lifecycle_version, lifecycle_phase, lifecycle_sequence, memory: {...}}
+        Backend-->>Client: {type: "memory_created", recording_session_id, conversation_id, lifecycle_version, lifecycle_phase, lifecycle_sequence, memory: {...}}
     else Pusher disconnected (RECONNECT_BACKOFF / DEGRADED)
         Note over Backend: Live request buffered in pending_conversation_requests;<br/>durable job remains recoverable by the reconciler
     end

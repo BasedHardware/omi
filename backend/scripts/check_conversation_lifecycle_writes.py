@@ -25,6 +25,7 @@ LIFECYCLE_METHODS = {
     '_transition_conversation_status',
     '_claim_conversation_status',
     '_set_conversation_as_discarded',
+    '_restore_conversation_from_discarded',
 }
 FINALIZATION_ADMISSION_METHODS = {
     'create_or_get_finalization_intent',

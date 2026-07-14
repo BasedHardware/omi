@@ -932,6 +932,12 @@ def _set_conversation_as_discarded(uid: str, conversation_id: str):
     conversation_ref.update({'discarded': True})
 
 
+def _restore_conversation_from_discarded(uid: str, conversation_id: str):
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    conversation_ref.update({'discarded': False})
+
+
 # *********************************
 # ********** CALENDAR *************
 # *********************************

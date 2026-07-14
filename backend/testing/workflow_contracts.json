@@ -357,6 +357,7 @@
       "sources": [
         "backend/database/conversations.py",
         "backend/database/conversation_finalization_jobs.py",
+        "backend/database/recording_sessions.py",
         "backend/services/conversation_finalization.py",
         "backend/utils/conversations/finalization_decision.py",
         "backend/utils/conversations/lifecycle.py",
@@ -377,6 +378,7 @@
         "tests/unit/test_finalization_decision.py",
         "tests/unit/test_check_conversation_lifecycle_writes.py",
         "tests/unit/test_conversation_finalization_jobs.py",
+        "tests/unit/test_recording_sessions.py",
         "tests/unit/test_listen_finalization_cloud_tasks.py"
       ],
       "checks": ["conversation-lifecycle-write-guard"],
@@ -384,6 +386,7 @@
         "only one finalizer claim succeeds for an in-progress conversation",
         "finalization outbox reconnects reuse one durable job and lease fences stale workers before any fanout",
         "only utils.conversations.lifecycle may invoke lifecycle persistence primitives",
+        "a recording session binds exactly one user-scoped conversation and emits only monotonic lifecycle envelopes",
         "merge rejects sources that are still processing",
         "discard and generic status-write escape hatches remain characterized until the lifecycle service replaces them"
       ]

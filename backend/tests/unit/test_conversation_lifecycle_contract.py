@@ -153,6 +153,8 @@ def test_discarded_conversation_cannot_be_readmitted(lifecycle_store):
     lifecycle_service.discard('uid', 'conversation')
     assert lifecycle_store.conversation('uid', 'conversation')['discarded'] is True
     assert lifecycle_service.admit_processing('uid', 'conversation') is False
+    lifecycle_service.restore_discarded('uid', 'conversation')
+    assert lifecycle_store.conversation('uid', 'conversation')['discarded'] is False
 
 
 def test_import_persists_through_the_lifecycle_owner(lifecycle_store):
