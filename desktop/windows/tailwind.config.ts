@@ -29,7 +29,40 @@ export default {
         success: '#10b981',
         warning: '#f59e0b',
         error: '#ef4444',
-        info: '#3b82f6'
+        info: '#3b82f6',
+        // Mac-parity palette (INV-UI-1 Windows carve-out, ruling B 2026-07-14).
+        // Purple ports as-is from macOS OmiColors; NEW named tokens for
+        // Hub/chat/brain-graph surfaces — not consumed yet, --accent stays white.
+        purple: {
+          primary: '#8b5cf6',
+          secondary: '#a855f7',
+          accent: '#7c3aed',
+          light: '#d946ef'
+        },
+        userBubble: '#43389f',
+        // Transcript speaker-bubble backgrounds (6-color dark set).
+        speaker: {
+          1: '#2d3748',
+          2: '#1e3a5f',
+          3: '#2d4a3e',
+          4: '#4a3728',
+          5: '#3d2e4a',
+          6: '#4a3a2d'
+        },
+        // HomePalette — redesigned-Home (Hub) surface tokens (macOS DashboardPage).
+        home: {
+          paper: '#050506',
+          panel: '#0c0c0d',
+          tile: '#141416',
+          tileHover: '#1d1a24',
+          ink: '#f0ebe3',
+          secondary: '#c7c3b9',
+          muted: '#7d786e',
+          faint: '#5c5954',
+          hairline: '#27272c',
+          green: '#2bc761',
+          stageGlow: '#7a4df2'
+        }
       },
       // Radius scale — macOS OmiChrome (window/card/section/control/chip).
       borderRadius: {
@@ -51,8 +84,7 @@ export default {
       },
       boxShadow: {
         glass: '0 8px 32px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
-        'glass-hover':
-          '0 12px 40px rgba(0, 0, 0, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.14)'
+        'glass-hover': '0 12px 40px rgba(0, 0, 0, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.14)'
       },
       keyframes: {
         fadeIn: {

@@ -105,6 +105,34 @@
     --font-app:
       'Inter Variable', 'Segoe UI Variable Text', 'Segoe UI Variable', 'Segoe UI', system-ui,
       sans-serif;
+
+    /* ── Mac-parity palette (INV-UI-1 Windows carve-out, ruling B 2026-07-14).
+       Purple ports as-is from macOS OmiColors; these are NEW named tokens for
+       Hub/chat/brain-graph surfaces. --accent stays neutral white (above). ── */
+    --purple-primary: #8b5cf6;
+    --purple-secondary: #a855f7;
+    --purple-accent: #7c3aed;
+    --purple-light: #d946ef;
+    --user-bubble: #43389f;
+    /* Transcript speaker-bubble backgrounds (6-color dark set) */
+    --speaker-1: #2d3748;
+    --speaker-2: #1e3a5f;
+    --speaker-3: #2d4a3e;
+    --speaker-4: #4a3728;
+    --speaker-5: #3d2e4a;
+    --speaker-6: #4a3a2d;
+    /* HomePalette — redesigned-Home (Hub) surface tokens (macOS DashboardPage) */
+    --home-paper: #050506;
+    --home-panel: #0c0c0d;
+    --home-tile: #141416;
+    --home-tile-hover: #1d1a24; /* intentionally leans violet (R/G/B not equal) */
+    --home-ink: #f0ebe3;        /* warm off-white primary text */
+    --home-secondary: #c7c3b9;
+    --home-muted: #7d786e;
+    --home-faint: #5c5954;
+    --home-hairline: #27272c;
+    --home-green: #2bc761;
+    --home-stage-glow: #7a4df2; /* ambient violet glow (ruling B); rgb(0.48,0.30,0.95) */
   }
 
   /* A/B hook used by the Phase 8 typography comparison harness (and an easy

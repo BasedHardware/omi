@@ -14,6 +14,24 @@ white/neutral treatments, not purple hues, glows, or gradients.
 - Desktop SwiftUI (`OmiTheme` and views)
 - Flutter app UI
 - Web marketing / admin UI that ships under the Omi brand
+- Windows desktop app (`desktop/windows/**`) — **carved out** (see below); not ratchet-scanned.
+
+## Windows carve-out (ruling B, 2026-07-14)
+
+The Windows desktop app faithfully ports macOS's palette, and macOS's beta ships
+purple. Per **ruling B (Chris, 2026-07-14)**, purple in `desktop/windows/**` is
+intentional and correct — Windows adds the same purple/HomePalette tokens macOS
+defines, for Hub/chat/brain-graph surfaces.
+
+Windows is therefore **intentionally excluded** from the no-purple ratchet: it is
+deliberately absent from the guard's `UI_ROOTS`, not an oversight. A no-increase
+ratchet there would fail every faithful purple port. Do not add `desktop/windows`
+to `UI_ROOTS` without re-baselining this decision.
+
+The rule still holds within Windows **in spirit**: do not introduce purple where
+macOS renders neutral — only port the purple macOS itself ships. This is a
+review/verification concern, not CI-enforced. macOS, Flutter app, and web remain
+fully guarded by the ratchet.
 
 ## Guard tests
 
@@ -25,9 +43,15 @@ white/neutral treatments, not purple hues, glows, or gradients.
 
 ## Path globs
 
+Enforced (scanned by the ratchet):
+
 - `desktop/macos/Desktop/Sources/**`
 - `app/lib/**`
 - `web/**`
+
+Carved out (intentionally **not** in the enforced globs):
+
+- `desktop/windows/**` — faithful macOS palette port; see Windows carve-out above.
 
 ## PR rule
 

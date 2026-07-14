@@ -60,7 +60,7 @@ Improve the code you touch — within your blast radius:
 
 ### UI / Design (all platforms)
 
-- **Never use purple.** Purple is off-brand — do not use it anywhere in the UI (icons, accents, glows, hover states, gradients). Use white/neutral for accent icons and primary actions. Enforced as a no-increase ratchet (`INV-UI-1`); see `docs/product/invariants/brand-ui.md`.
+- **Never use purple.** Purple is off-brand — do not use it anywhere in the UI (icons, accents, glows, hover states, gradients). Use white/neutral for accent icons and primary actions. Enforced as a no-increase ratchet (`INV-UI-1`); see `docs/product/invariants/brand-ui.md`. Exception: the Windows desktop app (`desktop/windows/**`) faithfully ports macOS's purple palette per ruling B (INV-UI-1 Windows carve-out); purple there is intentional — but never introduce purple where macOS renders neutral.
 
 ### Deferred Work Markers
 
