@@ -84,7 +84,12 @@ jobs:
 
       - name: Run deterministic check manifest on main pushes
         if: github.event_name != 'pull_request'
-        run: python3 .github/scripts/run_checks.py --lane ci --base "${{ needs.changes.outputs.diff_base }}"
+        run: |
+          git show -s --format=%B HEAD > /tmp/main-push-body.md
+          python3 .github/scripts/run_checks.py \
+            --lane ci \
+            --base "${{ needs.changes.outputs.diff_base }}" \
+            --pr-body-file /tmp/main-push-body.md
 
       - name: Test brand UI ratchet helper
         run: python3 .github/scripts/test_check_brand_ui.py
