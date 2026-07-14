@@ -44,11 +44,15 @@ struct OnboardingWelcomeStepView: View {
             .multilineTextAlignment(.center)
         }
 
-        Button("Continue") {
-          confirmName()
+        HStack(spacing: OmiSpacing.md) {
+          OnboardingBackButton()
+
+          Button("Continue") {
+            confirmName()
+          }
+          .buttonStyle(OmiButtonStyle(.primary))
+          .keyboardShortcut(.defaultAction)
         }
-        .buttonStyle(OmiButtonStyle(.primary))
-        .keyboardShortcut(.defaultAction)
 
         // Dev-only shortcut to skip the whole onboarding flow — same as the
         // hidden logo long-press. Never shown on production builds.
