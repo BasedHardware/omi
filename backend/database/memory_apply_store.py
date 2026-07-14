@@ -26,10 +26,7 @@ from models.memory_apply import (
 )
 from models.memory_operations import MemoryOperation
 from models.product_memory import MemoryItemStatus, MemoryItem
-from utils.memory.v3.account_generation_source import (
-    V3_TRUSTED_ACCOUNT_GENERATION_SCHEMA_VERSION,
-    V3_TRUSTED_ACCOUNT_GENERATION_SOURCE,
-)
+from models.memory_state_head import trusted_memory_state_head_fields
 
 
 class MemoryFirestoreApplyError(Exception):
@@ -452,16 +449,15 @@ def _write_apply_result(
 
 
 def _memory_state_head_from_control(control_state: MemoryControlState) -> MemoryApplyDoc:
-    state_head: MemoryApplyDoc = {
-        "schema_version": V3_TRUSTED_ACCOUNT_GENERATION_SCHEMA_VERSION,
-        "uid": control_state.uid,
-        "source": V3_TRUSTED_ACCOUNT_GENERATION_SOURCE,
-        "account_generation": control_state.account_generation,
-        "head_commit_id": control_state.head_commit_id,
-        "commit_sequence": control_state.commit_sequence,
-        "updated_at": control_state.updated_at,
-    }
-    return state_head
+    trusted_fields = trusted_memory_state_head_fields(
+        uid=control_state.uid,
+        account_generation=control_state.account_generation,
+        head_commit_id=control_state.head_commit_id,
+        commit_sequence=control_state.commit_sequence,
+    )
+    if trusted_fields is None:  # MemoryControlState has already validated this input.
+        raise MemoryFirestoreApplyError("invalid memory state-head control fields")
+    return cast(MemoryApplyDoc, {**trusted_fields, "updated_at": control_state.updated_at})
 
 
 def _required_model(*, ref: Any, transaction: Any, model: type[M], label: str) -> M:
