@@ -18,6 +18,10 @@ const IDLE_THRESHOLD_SECONDS = 60
 
 let locked = false
 let lastHash: string | null = null
+// Wall-clock ms the last frame was actually STORED, used by the keyframe anchor
+// (a still-identical screen is force-captured once it's older than
+// KEYFRAME_ANCHOR_MS so long-running static screens still appear in the timeline).
+let lastCapturedAtMs: number | null = null
 let powerListenersBound = false
 // In-memory mirror of the persisted settings. startRewindCapture() loads the
 // saved value (defaulting to capture-on) at startup; updateRewindSettings()
@@ -120,6 +124,7 @@ export async function ingestRewindFrame(jpeg: Buffer): Promise<IngestResult> {
   const small = image.resize({ width: HASH_W, height: HASH_H })
   const hash = averageHash(small.toBitmap(), HASH_W * HASH_H)
 
+  const nowMs = Date.now()
   const decision = shouldCaptureFrame({
     locked,
     idleSeconds: powerMonitor.getSystemIdleTime(),
@@ -130,12 +135,14 @@ export async function ingestRewindFrame(jpeg: Buffer): Promise<IngestResult> {
     windowTitle: win.title,
     excludedApps: [...BUILT_IN_EXCLUDED_APPS, ...settings.excludedApps],
     hash,
-    lastHash
+    lastHash,
+    nowMs,
+    lastCapturedAtMs
   })
   if (!decision.capture) return { captured: false, reason: decision.reason }
 
   try {
-    const ts = Date.now()
+    const ts = nowMs
     const path = rewindFramePath(ts)
     writeFileSync(path, jpeg)
     const { width, height } = image.getSize()
@@ -151,6 +158,7 @@ export async function ingestRewindFrame(jpeg: Buffer): Promise<IngestResult> {
       indexed: 0
     })
     lastHash = hash
+    lastCapturedAtMs = ts
     // Update the chat's hot "current screen" cache from this fresh frame, in the
     // background (single-flight). Not awaited: capture cadence must not wait on OCR.
     void refreshCurrentScreen(id, jpeg)
