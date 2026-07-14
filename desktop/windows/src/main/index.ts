@@ -97,7 +97,9 @@ import { perfMark, flushPerfMarks } from '../shared/perf'
 // `import.meta.env.DEV`, so this module is tree-shaken out of packaged main.
 import * as devBench from './dev/bench'
 import { initSentry } from './sentry'
+import { registerMicPermissionHandlers } from './ipc/micPermission'
 import { isQuitting, quitApp } from './lifecycle'
+import { classifyChildProcessGone } from './childProcessGone'
 import { createTray, updateTrayState, destroyTray, isTrayCreated } from './tray'
 import { initAutoUpdater, getPendingUpdate, checkForUpdatesNow } from './updater'
 import {
@@ -236,20 +238,28 @@ app.on('render-process-gone', (_e, wc, details) => {
 app.on('child-process-gone', (_e, details) => {
   // Include the utility's name/service (e.g. "Audio Service", "Video Capture")
   // so a Utility crash points at the actual subsystem rather than just "Utility".
-  logFatal(
-    'child-process-gone',
+  const summary =
     `type=${details.type}` +
-      (details.name ? ` name=${details.name}` : '') +
-      (details.serviceName ? ` service=${details.serviceName}` : '') +
-      ` reason=${details.reason} exitCode=${details.exitCode}`
-  )
+    (details.name ? ` name=${details.name}` : '') +
+    (details.serviceName ? ` service=${details.serviceName}` : '') +
+    ` reason=${details.reason} exitCode=${details.exitCode}`
+  // On Windows a normal quit kills children via TerminateProcess, which Chromium
+  // reports as `type=GPU reason=killed exitCode=1` — identical in every field to a
+  // real GPU kill. Without the isQuitting() check every clean quit wrote a fatal
+  // "GPU crash" to crash.log (five quits read as a five-crash loop) and broadcast
+  // context-loss at windows already being destroyed. See childProcessGone.ts.
+  const { fatal, broadcastGpuLoss } = classifyChildProcessGone(details, isQuitting())
+  if (!fatal) {
+    console.log(`[shutdown] child process gone during teardown: ${summary}`)
+    return
+  }
+  logFatal('child-process-gone', summary)
   // A GPU-process crash loses every live WebGL context, but the RENDERERS stay
   // alive — so render-process-gone (which reloads) never fires, and a WebGL
   // <canvas> (the brain map) is left painted as Chromium's broken-image
   // placeholder with nothing to recover it. Chromium restarts the GPU process on
   // its own; broadcast so WebGL surfaces remount and brand images re-decode.
-  // Clean exits are intentional teardown — skip.
-  if (details.type === 'GPU' && details.reason !== 'clean-exit') {
+  if (broadcastGpuLoss) {
     for (const w of BrowserWindow.getAllWindows()) {
       if (!w.isDestroyed()) w.webContents.send(GPU_CONTEXT_LOST_CHANNEL)
     }

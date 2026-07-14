@@ -10,8 +10,6 @@ import { syncLanguage, setDisplayName } from '../lib/userProfile'
 import { resolveLanguageCode, languageLabel } from '../lib/languages'
 import { trackHowDidYouHear } from '../lib/analytics'
 import { toast } from '../lib/toast'
-import omiLogo from '../assets/omilogo.png'
-import { BrandImage } from '../components/ui/BrandImage'
 import { NameStep } from '../components/onboarding/NameStep'
 import { LanguageStep } from '../components/onboarding/LanguageStep'
 import { HowDidYouHearStep } from '../components/onboarding/HowDidYouHearStep'
@@ -272,7 +270,6 @@ export function Onboarding(): React.JSX.Element {
 
   return (
     <div className="app-canvas relative flex h-full">
-      <BrandImage src={omiLogo} alt="omi" className="absolute left-6 top-6 z-20 h-6 w-auto" />
       <div className="flex flex-1 items-center justify-center p-8">{renderStep()}</div>
       <div
         className={
