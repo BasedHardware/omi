@@ -126,6 +126,45 @@ const FRESH_PUBLIC_PHRASES: &[&str] = &[
     "news today",
 ];
 
+/// Weather lookups commonly place the location between "weather" and the
+/// freshness qualifier (for example, "what's the weather in NYC right now?").
+/// Keep those public-current requests on the same forced-search path as the
+/// fixed phrases above instead of leaving their tool choice to the model.
+const CURRENT_WEATHER_PREFIXES: &[&str] = &[
+    "what's the weather",
+    "what is the weather",
+    "whats the weather",
+    "how's the weather",
+    "how is the weather",
+    "hows the weather",
+    "weather in ",
+    "weather for ",
+    "weather at ",
+];
+
+/// A broad temporal qualifier is only a public-web signal when paired with a
+/// public lookup subject. This covers current sports fixtures and schedules
+/// without turning ordinary urgency ("help me with this right now") into a
+/// web search. Explicit private-context requests still take precedence.
+const FRESH_PUBLIC_TEMPORAL_QUALIFIERS: &[&str] = &["right now", "currently", "today", "this week"];
+const FRESH_PUBLIC_LOOKUP_TERMS: &[&str] = &[
+    "world cup",
+    "schedule",
+    "fixture",
+    "standings",
+    "match",
+    "game",
+    "playing",
+    "score",
+    "weather",
+    "price",
+    "news",
+    "release",
+    "released",
+    "election",
+    "market",
+];
+
 const ANAPHORIC_LOOKUP_PHRASES: &[&str] = &[
     "look it up",
     "look this up",
@@ -141,6 +180,17 @@ const ANAPHORIC_LOOKUP_PHRASES: &[&str] = &[
 
 fn contains_any(text: &str, phrases: &[&str]) -> bool {
     phrases.iter().any(|phrase| text.contains(phrase))
+}
+
+fn is_current_weather_lookup(text: &str) -> bool {
+    contains_any(text, CURRENT_WEATHER_PREFIXES)
+}
+
+fn is_fresh_public_lookup(text: &str) -> bool {
+    contains_any(text, FRESH_PUBLIC_PHRASES)
+        || is_current_weather_lookup(text)
+        || (contains_any(text, FRESH_PUBLIC_TEMPORAL_QUALIFIERS)
+            && contains_any(text, FRESH_PUBLIC_LOOKUP_TERMS))
 }
 
 pub(crate) fn caller_disabled_tools(req: &ChatCompletionRequest) -> bool {
@@ -215,7 +265,7 @@ pub(crate) fn retrieval_policy(messages: &[ChatMessage]) -> RetrievalPolicy {
             reason: RetrievalReason::ExplicitPrivate,
         };
     }
-    if contains_any(&latest, FRESH_PUBLIC_PHRASES) {
+    if is_fresh_public_lookup(&latest) {
         return RetrievalPolicy {
             required_sources: vec![RetrievalSource::PublicWeb],
             prohibited_sources: Vec::new(),
@@ -317,6 +367,34 @@ mod tests {
             retrieval_policy(&[message("user", "What's the latest news about Anthropic?")]);
         assert!(policy.requires(RetrievalSource::PublicWeb));
         assert_eq!(policy.reason, RetrievalReason::Freshness);
+    }
+
+    #[test]
+    fn requires_web_for_weather_with_a_location_and_current_time() {
+        let policy = retrieval_policy(&[message("user", "What's the weather in NYC right now?")]);
+        assert!(policy.requires(RetrievalSource::PublicWeb));
+        assert!(!policy.prohibits(RetrievalSource::PublicWeb));
+        assert_eq!(policy.reason, RetrievalReason::Freshness);
+    }
+
+    #[test]
+    fn requires_web_for_current_public_sports_schedule() {
+        let policy =
+            retrieval_policy(&[message("user", "Who's playing in the World Cup right now?")]);
+        assert!(policy.requires(RetrievalSource::PublicWeb));
+        assert!(!policy.prohibits(RetrievalSource::PublicWeb));
+        assert_eq!(policy.reason, RetrievalReason::Freshness);
+    }
+
+    #[test]
+    fn keeps_private_weather_history_queries_off_the_public_web() {
+        let policy = retrieval_policy(&[message(
+            "user",
+            "Search my conversations for weather in NYC",
+        )]);
+        assert!(!policy.requires(RetrievalSource::PublicWeb));
+        assert!(policy.prohibits(RetrievalSource::PublicWeb));
+        assert_eq!(policy.reason, RetrievalReason::ExplicitPrivate);
     }
 
     #[test]

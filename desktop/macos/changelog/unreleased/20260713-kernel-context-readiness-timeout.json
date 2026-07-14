@@ -1,0 +1,3 @@
+{
+  "change": "Made agent kernel-context setup tolerate runtime startup latency without misreporting it as a model-query timeout."
+}

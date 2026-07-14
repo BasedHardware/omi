@@ -2,8 +2,125 @@ import XCTest
 
 @testable import Omi_Computer
 
+private actor SuspendedTurnPersistenceGate {
+  private var suspendedKeys = Set<String>()
+  private var suspensionWaiters: [String: [CheckedContinuation<Void, Never>]] = [:]
+  private var resultContinuations: [String: CheckedContinuation<Bool, Never>] = [:]
+
+  func persist(continuityKey: String) async -> Bool {
+    await withCheckedContinuation { continuation in
+      resultContinuations[continuityKey] = continuation
+      suspendedKeys.insert(continuityKey)
+      let waiters = suspensionWaiters.removeValue(forKey: continuityKey) ?? []
+      for waiter in waiters { waiter.resume() }
+    }
+  }
+
+  func waitUntilSuspended(continuityKey: String) async {
+    guard !suspendedKeys.contains(continuityKey) else { return }
+    await withCheckedContinuation { continuation in
+      suspensionWaiters[continuityKey, default: []].append(continuation)
+    }
+  }
+
+  func accept(continuityKey: String) -> Bool {
+    guard let continuation = resultContinuations.removeValue(forKey: continuityKey) else {
+      return false
+    }
+    continuation.resume(returning: true)
+    return true
+  }
+}
+
 @MainActor
 final class RealtimeHubBargeInContinuityTests: XCTestCase {
+  func testProviderFailureRegistersContinuityFenceBeforeTranscriptResolution() async {
+    let ledger = RealtimeTurnPersistenceLedger()
+    let gate = SuspendedTurnPersistenceGate()
+    let payload = InterruptedTurnPayload(
+      ownerID: "owner-a",
+      userText: "request screen recording permission",
+      assistantText: "I can help with that",
+      idempotencyKey: "voice:failure-fence")
+    let capturedTurnTask = Task<InterruptedTurnPayload?, Never> { payload }
+
+    let persistence = RealtimeProviderFailureContinuity.registerCapturedTurn(
+      in: ledger,
+      continuityKey: payload.idempotencyKey,
+      capturedTurnTask: capturedTurnTask
+    ) { captured in
+      await gate.persist(continuityKey: captured.idempotencyKey)
+    }
+
+    XCTAssertEqual(
+      ledger.pendingContinuityKeys,
+      [payload.idempotencyKey],
+      "the next PTT context refresh must see the obligation before async resolution starts")
+
+    await gate.waitUntilSuspended(continuityKey: payload.idempotencyKey)
+    let accepted = await gate.accept(continuityKey: payload.idempotencyKey)
+    let persisted = await persistence.value
+    XCTAssertTrue(accepted)
+    XCTAssertTrue(persisted)
+    XCTAssertTrue(ledger.pendingContinuityKeys.isEmpty)
+  }
+
+  func testProviderFailurePersistsCapturedTurnBeforeTerminalCleanup() async {
+    let payload = InterruptedTurnPayload(
+      ownerID: "owner-a",
+      userText: "request screen recording permission",
+      assistantText: "I can help with that",
+      idempotencyKey: "voice:failure-a")
+    var events: [String] = []
+
+    let accepted = await RealtimeProviderFailureContinuity.persistCapturedTurn(
+      resolve: {
+        events.append("resolved-before-cleanup")
+        return payload
+      },
+      record: { captured in
+        events.append("recorded:\(captured.idempotencyKey)")
+        return true
+      })
+
+    XCTAssertTrue(accepted)
+    XCTAssertEqual(events, ["resolved-before-cleanup", "recorded:voice:failure-a"])
+  }
+
+  func testTurnPersistenceLedgerKeepsConcurrentContinuityObligationsIndependent() async {
+    let ledger = RealtimeTurnPersistenceLedger()
+    let gate = SuspendedTurnPersistenceGate()
+
+    let first = ledger.enqueue(continuityKey: "voice:a", retainingReceipt: true) {
+      await gate.persist(continuityKey: "voice:a")
+    }
+    await gate.waitUntilSuspended(continuityKey: "voice:a")
+
+    let second = ledger.enqueue(continuityKey: "voice:b", retainingReceipt: true) {
+      await gate.persist(continuityKey: "voice:b")
+    }
+    XCTAssertEqual(ledger.pendingContinuityKeys, ["voice:a", "voice:b"])
+
+    let acceptedA = await gate.accept(continuityKey: "voice:a")
+    let firstResult = await first.value
+    XCTAssertTrue(acceptedA)
+    XCTAssertTrue(firstResult, "B must not invalidate A's successful kernel receipt")
+    XCTAssertEqual(ledger.pendingContinuityKeys, ["voice:b"])
+    XCTAssertEqual(
+      ledger.receipt(for: "voice:a"),
+      .init(continuityKey: "voice:a", accepted: true))
+
+    await gate.waitUntilSuspended(continuityKey: "voice:b")
+    let acceptedB = await gate.accept(continuityKey: "voice:b")
+    let secondResult = await second.value
+    XCTAssertTrue(acceptedB)
+    XCTAssertTrue(secondResult)
+    XCTAssertTrue(ledger.pendingContinuityKeys.isEmpty)
+    XCTAssertEqual(
+      ledger.receipt(for: "voice:b"),
+      .init(continuityKey: "voice:b", accepted: true))
+  }
+
   func testAcceptedSpawnOwnsJournalAndProviderCompletionMakesNoSecondMutation() async {
     var refreshCount = 0
     var mutationCount = 0
@@ -43,23 +160,42 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertEqual(mutationCount, 1)
   }
 
-  func testConnectReplayGateNeverBeginsInputTwice() {
-    XCTAssertTrue(
-      RealtimeHubConnectReplayGate.shouldBeginGenericInput(
-        replayedReconnectTurn: false,
-        replayedReplacementTurn: false))
-    XCTAssertFalse(
-      RealtimeHubConnectReplayGate.shouldBeginGenericInput(
-        replayedReconnectTurn: true,
-        replayedReplacementTurn: false))
-    XCTAssertFalse(
-      RealtimeHubConnectReplayGate.shouldBeginGenericInput(
-        replayedReconnectTurn: false,
-        replayedReplacementTurn: true))
-    XCTAssertFalse(
-      RealtimeHubConnectReplayGate.shouldBeginGenericInput(
-        replayedReconnectTurn: true,
-        replayedReplacementTurn: true))
+  func testTransportReadyCannotAdmitInputWithoutExactContextBinding() {
+    let turnID = VoiceTurnID()
+    let responseID = VoiceResponseID("response-a")
+    let identity = VoiceEffectIdentity(turnID: turnID, effectID: 1)
+    var pending = RealtimeReconnectAudioBuffer(
+      turnID: turnID,
+      responseID: responseID,
+      identity: identity,
+      interrupting: false)
+
+    XCTAssertEqual(
+      RealtimeInputAdmissionPolicy.decide(
+        pending: pending,
+        activeTurnID: turnID,
+        sessionContextFreshnessIdentity: "seed-a"),
+      .rejectMissingContextIdentity)
+
+    XCTAssertTrue(pending.bindRequiredContextFreshnessIdentity("seed-a"))
+    XCTAssertEqual(
+      RealtimeInputAdmissionPolicy.decide(
+        pending: pending,
+        activeTurnID: VoiceTurnID(),
+        sessionContextFreshnessIdentity: "seed-a"),
+      .rejectSupersededTurn)
+    XCTAssertEqual(
+      RealtimeInputAdmissionPolicy.decide(
+        pending: pending,
+        activeTurnID: turnID,
+        sessionContextFreshnessIdentity: "seed-b"),
+      .rejectStaleProviderContext)
+    XCTAssertEqual(
+      RealtimeInputAdmissionPolicy.decide(
+        pending: pending,
+        activeTurnID: turnID,
+        sessionContextFreshnessIdentity: "seed-a"),
+      .admit)
   }
 
   func testProviderCycleWithToolsCannotFinalizeLogicalTurn() {
@@ -81,49 +217,92 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
       .finalizeLogicalTurn)
   }
 
-  func testExternalRunWaitsForFinalProviderTranscriptAndPreservesPrompt() {
-    XCTAssertNil(
-      RealtimeExternalRunPromptPolicy.finalizedPrompt(
+  func testSecondBargeInTurnExecutesAuthorizedToolWithoutFinalTranscriptAndFencesOldTurn() throws {
+    let fallback = try XCTUnwrap(
+      RealtimeExternalRunPromptPolicy.promptForAuthorizedTool(
         transcript: "",
         isFinal: false))
-    XCTAssertNil(
-      RealtimeExternalRunPromptPolicy.finalizedPrompt(
-        transcript: "partial words",
-        isFinal: false))
-    XCTAssertNil(
-      RealtimeExternalRunPromptPolicy.finalizedPrompt(
-        transcript: "   ",
+    XCTAssertEqual(fallback.source, .authorizedToolFallback)
+    XCTAssertTrue(fallback.prompt.contains("already authorized one tool invocation"))
+    XCTAssertTrue(fallback.prompt.contains("Do not infer, expand"))
+
+    let finalTranscript = try XCTUnwrap(
+      RealtimeExternalRunPromptPolicy.promptForAuthorizedTool(
+        transcript: "  ask a subagent to check the latest models  ",
         isFinal: true))
+    XCTAssertEqual(finalTranscript.source, .finalizedTranscript)
+    XCTAssertEqual(finalTranscript.prompt, "ask a subagent to check the latest models")
+
+    let partialPermissionTranscript = RealtimeExternalRunPromptPolicy.promptForAuthorizedTool(
+      transcript: "Can you check Slack's screen share permission?",
+      isFinal: false,
+      toolName: "check_permission_status",
+      arguments: ["type": "screen_share"])
+    XCTAssertEqual(partialPermissionTranscript?.source, .partialTranscript)
     XCTAssertEqual(
-      RealtimeExternalRunPromptPolicy.finalizedPrompt(
-        transcript: "  please open settings  ",
-        isFinal: true),
-      "please open settings")
-  }
+      partialPermissionTranscript?.prompt,
+      "Can you check Slack's screen share permission?",
+      "A pre-final permission tool must retain the spoken target for the shared policy to reject external apps.")
 
-  func testPreTranscriptToolQueueDefersThenDrainsInArrivalOrder() {
-    var queue = RealtimeDeferredToolQueue<String>()
+    XCTAssertNil(
+      RealtimeExternalRunPromptPolicy.promptForAuthorizedTool(
+        transcript: "",
+        isFinal: false,
+        toolName: "request_permission",
+        arguments: ["type": "screen_recording"]),
+      "Permission tools must fail closed rather than deriving authority from type-only provider arguments.")
 
-    queue.enqueue("memory-call")
-    queue.enqueue("task-call")
-
-    XCTAssertEqual(queue.count, 2)
-    XCTAssertEqual(queue.takeAll(), ["memory-call", "task-call"])
-    XCTAssertEqual(queue.count, 0)
-  }
-
-  func testBargeInRevokesDeferredToolsAndOldFenceCannotResume() {
-    var queue = RealtimeDeferredToolQueue<String>()
-    queue.enqueue("old-turn-call")
-    queue.revokeAll()
-    XCTAssertTrue(queue.takeAll().isEmpty)
+    let requestStartedAt = Date(timeIntervalSinceReferenceDate: 100)
+    XCTAssertEqual(
+      RealtimePermissionTranscriptSettlementPolicy.decision(
+        toolName: "request_permission",
+        transcriptIsFinal: false,
+        hasTranscript: false,
+        lastTranscriptUpdate: nil,
+        requestStartedAt: requestStartedAt,
+        now: requestStartedAt),
+      .wait(RealtimePermissionTranscriptSettlementPolicy.maximumWait))
+    XCTAssertEqual(
+      RealtimePermissionTranscriptSettlementPolicy.decision(
+        toolName: "request_permission",
+        transcriptIsFinal: false,
+        hasTranscript: true,
+        lastTranscriptUpdate: requestStartedAt,
+        requestStartedAt: requestStartedAt,
+        now: requestStartedAt.addingTimeInterval(
+          RealtimePermissionTranscriptSettlementPolicy.maximumWait)),
+      .execute,
+      "Gemini's settled live transcript remains usable after the bounded collection window.")
+    XCTAssertEqual(
+      RealtimePermissionTranscriptSettlementPolicy.decision(
+        toolName: "request_permission",
+        transcriptIsFinal: false,
+        hasTranscript: false,
+        lastTranscriptUpdate: nil,
+        requestStartedAt: requestStartedAt,
+        now: requestStartedAt.addingTimeInterval(
+          RealtimePermissionTranscriptSettlementPolicy.maximumWait)),
+      .reject,
+      "A missing transcript must never be turned into a type-only permission request.")
+    XCTAssertEqual(
+      RealtimePermissionTranscriptSettlementPolicy.decision(
+        toolName: "request_permission",
+        transcriptIsFinal: false,
+        hasTranscript: true,
+        lastTranscriptUpdate: requestStartedAt.addingTimeInterval(
+          RealtimePermissionTranscriptSettlementPolicy.maximumWait - 0.1),
+        requestStartedAt: requestStartedAt,
+        now: requestStartedAt.addingTimeInterval(
+          RealtimePermissionTranscriptSettlementPolicy.maximumWait)),
+      .reject,
+      "A transcript that is still changing at the deadline must not lose a late external-app target.")
 
     let oldTurnID = VoiceTurnID()
     let newTurnID = VoiceTurnID()
     let identity = VoiceEffectIdentity(turnID: oldTurnID, effectID: 7)
     let source = NSObject()
     XCTAssertTrue(
-      RealtimeDeferredToolOwnership.accepts(
+      RealtimeToolTurnOwnership.accepts(
         turnID: oldTurnID,
         identity: identity,
         sourceObjectID: ObjectIdentifier(source),
@@ -133,7 +312,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
         activeSourceObjectID: ObjectIdentifier(source),
         currentTurnEpoch: 3))
     XCTAssertFalse(
-      RealtimeDeferredToolOwnership.accepts(
+      RealtimeToolTurnOwnership.accepts(
         turnID: oldTurnID,
         identity: identity,
         sourceObjectID: ObjectIdentifier(source),
@@ -142,6 +321,28 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
         activeToolIdentity: nil,
         activeSourceObjectID: ObjectIdentifier(source),
         currentTurnEpoch: 4))
+  }
+
+  func testHeadlessPTTAuthorizationUsesExactInjectedTranscriptOverProviderArtifact() {
+    let selection = RealtimeAutomationTranscriptOverridePolicy.select(
+      providerText: "¿Qué es el número de serie?",
+      providerIsFinal: true,
+      forcedText: "Request it now.")
+
+    XCTAssertEqual(selection.text, "Request it now.")
+    XCTAssertTrue(selection.isFinal)
+    XCTAssertTrue(selection.usedOverride)
+
+    let productionSelection = RealtimeAutomationTranscriptOverridePolicy.select(
+      providerText: "Request Omi's Screen Recording permission.",
+      providerIsFinal: true,
+      forcedText: nil)
+    XCTAssertEqual(
+      productionSelection,
+      .init(
+        text: "Request Omi's Screen Recording permission.",
+        isFinal: true,
+        usedOverride: false))
   }
 
   func testCompletedProviderCallReplayCannotExecutePhysicalToolTwice() {
@@ -195,6 +396,40 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertFalse(
       RealtimeHubEventOwnership.accepts(
         nil, activeTurnID: turnA, activeResponseID: responseA))
+  }
+
+  func testContextFreshReconnectKeepsBufferedResponseIdentityForFreshSocket() {
+    let turnID = VoiceTurnID()
+    let responseID = VoiceResponseID("context-reconnect-response")
+    let pendingReconnect = RealtimeReconnectAudioBuffer(
+      turnID: turnID,
+      responseID: responseID,
+      identity: VoiceEffectIdentity(turnID: turnID, effectID: 1),
+      interrupting: false)
+
+    let retainedResponseID = RealtimeHubReconnectIdentityPolicy.responseIDAfterSessionDetach(
+      preservingReconnectAudio: true,
+      pendingReconnect: pendingReconnect)
+    XCTAssertEqual(retainedResponseID, responseID)
+    XCTAssertTrue(
+      RealtimeHubEventOwnership.accepts(
+        RealtimeHubEventIdentity(turnID: turnID, responseID: responseID),
+        activeTurnID: turnID,
+        activeResponseID: retainedResponseID))
+    XCTAssertFalse(
+      RealtimeHubEventOwnership.accepts(
+        RealtimeHubEventIdentity(turnID: turnID, responseID: VoiceResponseID("stale-response")),
+        activeTurnID: turnID,
+        activeResponseID: retainedResponseID))
+
+    XCTAssertNil(
+      RealtimeHubReconnectIdentityPolicy.responseIDAfterSessionDetach(
+        preservingReconnectAudio: false,
+        pendingReconnect: pendingReconnect))
+    XCTAssertNil(
+      RealtimeHubReconnectIdentityPolicy.responseIDAfterSessionDetach(
+        preservingReconnectAudio: true,
+        pendingReconnect: nil))
   }
 
   func testGeminiInputTranscriptCannotCrossCompletedTurnBoundary() {
@@ -342,25 +577,28 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
 
   func testStaticCommitAndKernelJournalBoundariesStayOrdered() throws {
     let source = try realtimeHubControllerSource()
-    let commit = try XCTUnwrap(source.range(of: "func commitTurn() -> RealtimeHubCommitResult"))
-    let tail = source[commit.lowerBound...]
+    let physicalCommit = try XCTUnwrap(source.range(of: "func commitClaimedHubInput(turnID: VoiceTurnID)"))
+    let tail = source[physicalCommit.lowerBound...]
     let cancel = try XCTUnwrap(tail.range(of: "turnPreparationTask?.cancel()"))
     let close = try XCTUnwrap(tail.range(of: "s.commitInputTurn()"))
 
     XCTAssertLessThan(cancel.lowerBound, close.lowerBound)
-    XCTAssertTrue(source.contains("self.reducerCapturingInput,"))
+    XCTAssertTrue(source.contains("contextFreshInputPreparationIsCurrent("))
     XCTAssertTrue(source.contains("pendingSessionRefreshReason = \"voice_context_changed\""))
-    XCTAssertTrue(
-      source.contains("deferring voice-context session refresh until the active turn terminates"))
-    XCTAssertTrue(source.contains("await persistence.value"))
+    XCTAssertTrue(source.contains("beginContextFreshInputPreparation("))
+    XCTAssertTrue(source.contains("finishContextFreshInputOnCurrentSession()"))
+    XCTAssertTrue(source.contains("preservingReconnectAudio: true"))
+    XCTAssertTrue(source.contains("await turnPersistenceLedger.awaitPendingObligations()"))
     XCTAssertTrue(source.contains("await self.refreshVoiceContextSnapshot()"))
     XCTAssertTrue(source.contains("applying deferred voice context refresh after turn persistence"))
     XCTAssertTrue(source.contains("let observedTurnEpoch = turnEpoch"))
-    XCTAssertTrue(source.contains("let observedPersistenceGeneration = turnPersistenceGeneration"))
+    XCTAssertTrue(source.contains("let observedPersistenceGeneration = turnPersistenceLedger.generation"))
     XCTAssertTrue(source.contains("observedTurnEpoch == turnEpoch"))
-    XCTAssertTrue(source.contains("observedPersistenceGeneration == turnPersistenceGeneration"))
-    XCTAssertTrue(source.contains("let previous = turnPersistenceTask"))
-    XCTAssertTrue(source.contains("if let previous { _ = await previous.value }"))
+    XCTAssertTrue(source.contains("observedPersistenceGeneration == turnPersistenceLedger.generation"))
+    XCTAssertTrue(source.contains("RealtimeTurnPersistenceLedger"))
+    XCTAssertTrue(source.contains("self.obligations[continuityKey]?.id == obligationID"))
+    XCTAssertFalse(source.contains("turnPersistenceTask"))
+    XCTAssertFalse(source.contains("turnPersistenceGeneration"))
     XCTAssertTrue(source.contains("enqueueTurnPersistence(idempotencyKey:"))
     XCTAssertTrue(source.contains("persistTurnDirectlyToKernel"))
     XCTAssertTrue(source.contains("try? await Task.sleep(nanoseconds: 250_000_000)"))
@@ -401,7 +639,8 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
       source.range(
         of: "private func refreshVoiceContextAfterPersistenceFence(reason: String) async -> Bool"))
     let helperTail = source[helper.lowerBound...]
-    let ordinaryPersistenceWait = try XCTUnwrap(helperTail.range(of: "await persistence.value"))
+    let ordinaryPersistenceWait = try XCTUnwrap(
+      helperTail.range(of: "await turnPersistenceLedger.awaitPendingObligations()"))
     let contextRefresh = try XCTUnwrap(helperTail.range(of: "await refreshVoiceContextSnapshot()"))
     XCTAssertLessThan(ordinaryPersistenceWait.lowerBound, contextRefresh.lowerBound)
 
@@ -409,9 +648,13 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertTrue(source.contains("voiceContextRefreshGeneration == refreshGeneration"))
     XCTAssertTrue(
       source.contains(
-        "let resolvedSnapshot = await FloatingControlBarManager.shared.kernelVoiceContextSnapshot()"))
+        "resolvedSnapshot = try await FloatingControlBarManager.shared.kernelVoiceContextSnapshot()"))
     XCTAssertTrue(source.contains("prefetchedVoiceContext = resolvedSnapshot.context"))
     XCTAssertTrue(source.contains("prefetchedVoiceContextFreshnessIdentity = resolvedSnapshot.freshnessIdentity"))
+    XCTAssertTrue(source.contains("guard resolvedSnapshot.isResolved else"))
+    XCTAssertTrue(source.contains("retaining the last voice context after an unresolved kernel snapshot"))
+    XCTAssertTrue(source.contains("failContextFreshInputPreparation("))
+    XCTAssertTrue(source.contains("Voice context is temporarily unavailable"))
     XCTAssertFalse(source.contains("prefetchedFloatingAgentStatus"))
     XCTAssertFalse(source.contains("floatingAgentStatusContext"))
   }
@@ -496,8 +739,8 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
 
   func testFastCommitQueuesBeginBeforeProviderCommit() throws {
     let source = try realtimeHubControllerSource()
-    let commit = try XCTUnwrap(source.range(of: "func commitTurn() -> RealtimeHubCommitResult"))
-    let tail = source[commit.lowerBound...]
+    let physicalCommit = try XCTUnwrap(source.range(of: "func commitClaimedHubInput(turnID: VoiceTurnID)"))
+    let tail = source[physicalCommit.lowerBound...]
     let begin = try XCTUnwrap(tail.range(of: "s.beginInputTurn("))
     let providerCommit = try XCTUnwrap(tail.range(of: "s.commitInputTurn()"))
 
@@ -510,7 +753,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
       source.range(of: "private func runHeadlessPTTTurn("))
     let tail = source[harness.lowerBound...]
     let begin = try XCTUnwrap(
-      tail.range(of: "let turnID = VoiceTurnCoordinator.shared.begin(intent: .hold)"))
+      tail.range(of: "let turnID = RealtimeAutomationTurnHarness.begin(on: VoiceTurnCoordinator.shared)"))
     let route = try XCTUnwrap(
       tail.range(of: ".selectRoute(turnID: turnID, route: .hub(sessionID: nil))"))
     let controllerBegin = try XCTUnwrap(tail.range(of: "beginTurn(turnID: turnID)"))
@@ -530,7 +773,8 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
       source.range(of: "private func runHeadlessRapidPTTBurst("))
     let tail = source[harness.lowerBound...]
     let loop = try XCTUnwrap(tail.range(of: "for clip in clips"))
-    let begin = try XCTUnwrap(tail.range(of: "VoiceTurnCoordinator.shared.begin(intent: .hold)"))
+    let begin = try XCTUnwrap(
+      tail.range(of: "RealtimeAutomationTurnHarness.begin(on: VoiceTurnCoordinator.shared)"))
     let finalize = try XCTUnwrap(tail.range(of: ".finalize(turnID: turnID)"))
     let commit = try XCTUnwrap(tail.range(of: "_ = commitTurn()"))
     let wait = try XCTUnwrap(tail.range(of: "while Date() < deadline"))
@@ -630,40 +874,44 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
       idempotencyKey: "turn-interrupted"
     )
 
-    await RealtimeHubBargeInContinuity.prepareReplacementSession(
+    let outcome = await RealtimeHubBargeInContinuity.prepareReplacementSession(
       resolveInterruptedTurn: { interrupted },
       recordInterruptedTurn: { turn in
         steps.append("record:\(turn.idempotencyKey)")
+        return true
       },
       refreshVoiceContext: {
         steps.append("seed")
-        return true
+        return KernelTurnProjection.stableTurnIDs(continuityKey: "turn-interrupted")
       },
       startReplacementSession: {
         steps.append("session")
       }
     )
 
+    XCTAssertEqual(outcome, .started)
     XCTAssertEqual(steps, ["record:turn-interrupted", "seed", "session"])
   }
 
   func testPrepareReplacementSessionSkipsRecordWhenNoInterruptedTurn() async {
     var steps: [String] = []
 
-    await RealtimeHubBargeInContinuity.prepareReplacementSession(
+    let outcome = await RealtimeHubBargeInContinuity.prepareReplacementSession(
       resolveInterruptedTurn: { nil },
       recordInterruptedTurn: { _ in
         steps.append("record")
+        return true
       },
       refreshVoiceContext: {
         steps.append("seed")
-        return true
+        return []
       },
       startReplacementSession: {
         steps.append("session")
       }
     )
 
+    XCTAssertEqual(outcome, .started)
     XCTAssertEqual(steps, ["seed", "session"])
   }
 
@@ -671,27 +919,29 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     var steps: [String] = []
     var refreshAttempts = 0
 
-    await RealtimeHubBargeInContinuity.prepareReplacementSession(
+    let outcome = await RealtimeHubBargeInContinuity.prepareReplacementSession(
       resolveInterruptedTurn: { nil },
       recordInterruptedTurn: { _ in
         XCTFail("no interrupted turn should be recorded")
+        return false
       },
       refreshVoiceContext: {
         refreshAttempts += 1
         steps.append("seed:\(refreshAttempts)")
-        return refreshAttempts == 3
+        return refreshAttempts == 3 ? [] : nil
       },
       startReplacementSession: {
         steps.append("session")
       })
 
+    XCTAssertEqual(outcome, .started)
     XCTAssertEqual(steps, ["seed:1", "seed:2", "seed:3", "session"])
   }
 
   func testReplacementWaitsForLateTranscriptBeforePersistenceSeedAndSession() async {
     var steps: [String] = []
 
-    await RealtimeHubBargeInContinuity.prepareReplacementSession(
+    let outcome = await RealtimeHubBargeInContinuity.prepareReplacementSession(
       resolveInterruptedTurn: {
         steps.append("resolve:start")
         await Task.yield()
@@ -702,14 +952,86 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
           assistantText: "partial",
           idempotencyKey: "late-turn")
       },
-      recordInterruptedTurn: { _ in steps.append("record") },
+      recordInterruptedTurn: { _ in
+        steps.append("record")
+        return true
+      },
       refreshVoiceContext: {
         steps.append("seed")
-        return true
+        return KernelTurnProjection.stableTurnIDs(continuityKey: "late-turn")
       },
       startReplacementSession: { steps.append("session") })
 
+    XCTAssertEqual(outcome, .started)
     XCTAssertEqual(steps, ["resolve:start", "resolve:done", "record", "seed", "session"])
+  }
+
+  func testReplacementRejectsResolvedButStaleSnapshotUntilInterruptedTurnsAreVisible() async {
+    var steps: [String] = []
+    var refreshAttempts = 0
+    let continuityKey = "stale-then-fresh"
+    let expectedIDs = KernelTurnProjection.stableTurnIDs(continuityKey: continuityKey)
+
+    let outcome = await RealtimeHubBargeInContinuity.prepareReplacementSession(
+      resolveInterruptedTurn: {
+        InterruptedTurnPayload(
+          ownerID: "owner-a",
+          userText: "request screen permission",
+          assistantText: "requesting it now",
+          idempotencyKey: continuityKey)
+      },
+      recordInterruptedTurn: { _ in
+        steps.append("record")
+        return true
+      },
+      refreshVoiceContext: {
+        refreshAttempts += 1
+        steps.append("seed:\(refreshAttempts)")
+        return refreshAttempts == 1 ? [] : expectedIDs
+      },
+      startReplacementSession: { steps.append("session") })
+
+    XCTAssertEqual(outcome, .started)
+    XCTAssertEqual(steps, ["record", "seed:1", "seed:2", "session"])
+  }
+
+  func testReplacementFailsClosedWhenInterruptedTurnPersistenceFails() async {
+    var steps: [String] = []
+    let outcome = await RealtimeHubBargeInContinuity.prepareReplacementSession(
+      resolveInterruptedTurn: {
+        InterruptedTurnPayload(
+          ownerID: "owner-a",
+          userText: "request it",
+          assistantText: "partial",
+          idempotencyKey: "failed-persistence")
+      },
+      recordInterruptedTurn: { _ in
+        steps.append("record")
+        return false
+      },
+      refreshVoiceContext: {
+        steps.append("seed")
+        return []
+      },
+      startReplacementSession: { steps.append("session") })
+
+    XCTAssertEqual(outcome, .interruptedTurnPersistenceFailed)
+    XCTAssertEqual(steps, ["record"])
+  }
+
+  func testReplacementStopsAfterBoundedContextRefreshFailures() async {
+    var refreshAttempts = 0
+    let outcome = await RealtimeHubBargeInContinuity.prepareReplacementSession(
+      resolveInterruptedTurn: { nil },
+      recordInterruptedTurn: { _ in true },
+      refreshVoiceContext: {
+        refreshAttempts += 1
+        return nil
+      },
+      startReplacementSession: { XCTFail("replacement must not start without context") })
+
+    XCTAssertEqual(outcome, .contextUnavailable)
+    XCTAssertEqual(refreshAttempts, RealtimeHubBargeInContinuity.maximumContextRefreshAttempts)
   }
 
   func testTranscriptPolicyUsesLocalDecodeWhenProviderTranscriptIsLate() {
@@ -803,7 +1125,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertTrue(
       source.contains("await self.refreshVoiceContextSnapshot()")
         || source.contains("await refreshVoiceContextSnapshot()"))
-    XCTAssertTrue(source.contains("reconnectWarmSessionIfContextStale()"))
+    XCTAssertTrue(source.contains("beginContextFreshInputPreparation("))
     XCTAssertTrue(source.contains("sessionVoiceContextFreshnessIdentity"))
     XCTAssertTrue(source.contains("persistTurnDirectlyToKernel("))
     XCTAssertTrue(source.contains("RealtimeHubBargeInContinuity.prepareReplacementSession("))
@@ -831,19 +1153,26 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
   func testBeginTurnWaitsForActiveSessionBeforeActivityStart() throws {
     let source = try realtimeHubControllerSource()
 
-    XCTAssertTrue(source.contains("self.reducerCapturingInput,"))
+    XCTAssertTrue(source.contains("self.contextFreshInputPreparationIsCurrent("))
     XCTAssertTrue(source.contains("await self.waitUntilActive(timeout: 15)"))
     XCTAssertTrue(source.contains("inputTurnActivityStartPending = true"))
   }
 
-  func testHubDidConnectRetriesActivityStartDuringOpenTurn() throws {
+  func testHubDidConnectCannotOpenInputFromTransportReadiness() throws {
     let source = try realtimeHubControllerSource()
+    let connectStart = try XCTUnwrap(
+      source.range(of: "func hubDidConnect(source: RealtimeHubSession)"))
+    let receiveStart = try XCTUnwrap(
+      source.range(
+        of: "func hubDidReceiveInputTranscript(",
+        range: connectStart.upperBound..<source.endIndex))
+    let body = String(source[connectStart.lowerBound..<receiveStart.lowerBound])
 
-    XCTAssertTrue(source.contains("if reducerCapturingInput"))
-    XCTAssertTrue(
-      source.contains("inputTurnActivityStartPending || sessionProvider == .gemini"))
-    XCTAssertTrue(source.contains("responseID: voiceResponseID"))
-    XCTAssertTrue(source.contains("interrupting: reducerInterruptsPreviousTurn"))
+    // omi-test-quality: source-inspection -- forbidden-path ratchet paired with
+    // `testTransportReadyCannotAdmitInputWithoutExactContextBinding`'s
+    // behavioral admission-policy coverage.
+    XCTAssertFalse(body.contains("beginInputTurn("))
+    XCTAssertTrue(body.contains("Transport readiness has no authority to open provider input"))
   }
 
   func testPTTArmsVoiceContextPrefetchBeforeMicCapture() throws {

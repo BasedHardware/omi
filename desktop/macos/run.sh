@@ -43,7 +43,7 @@ Options (via environment variables):
   OMI_SKIP_AUTH_SEED=1     Do not copy auth/onboarding from Omi Dev into named bundles
   OMI_SKIP_SETTINGS_SEED=1  Do not copy shortcuts/settings from Omi Dev into named bundles
   OMI_DEV_EAGER_PERMISSIONS=1  Preserve eager mic/screen/file startup behavior in named bundles
-  OMI_PYTHON_API_URL="..."  Python backend URL (subscriptions, payments, etc; default: https://api.omi.me)
+  OMI_PYTHON_API_URL="..."  Python backend URL (explicit override; named bundles default to dev)
   OMI_SIGN_IDENTITY="..."  Code signing identity (auto-detected if not set)
   OMI_FORCE_FULL_BUNDLE=1  Rebuild the complete app bundle on this launch
   OMI_SCAN_STALE_BUNDLES=1  Remove stale same-named app bundles under $HOME (recovery only)
@@ -169,6 +169,35 @@ source "$SCRIPT_DIR/scripts/app-config.sh"
 derive_omi_app_config "${OMI_APP_NAME:-Omi Dev}" || exit 1
 LOCAL_PROFILE=false
 [ "${OMI_DESKTOP_LOCAL_PROFILE:-0}" = "1" ] && LOCAL_PROFILE=true
+
+# A named QA bundle should exercise the shared development service unless its
+# launcher deliberately selects another profile.  Check variable *presence*,
+# not values: `OMI_SKIP_BACKEND=0` is an explicit local-launch request and
+# must never be overwritten by the remote-dev defaults.
+should_default_named_bundle_to_dev_backend() {
+    [ "${IS_NAMED_BUNDLE:-false}" = true ] \
+        && [ "${LOCAL_PROFILE:-false}" = false ] \
+        && [ "${YOLO_MODE:-0}" != "1" ] \
+        && [ -z "${OMI_SKIP_BACKEND+x}" ] \
+        && [ -z "${OMI_SKIP_TUNNEL+x}" ] \
+        && [ -z "${OMI_DESKTOP_API_URL+x}" ] \
+        && [ -z "${OMI_PYTHON_API_URL+x}" ]
+}
+
+NAMED_BUNDLE_DEFAULT_DEV_BACKEND=false
+if should_default_named_bundle_to_dev_backend; then
+    NAMED_BUNDLE_DEFAULT_DEV_BACKEND=true
+fi
+
+# Named QA bundles are remote-dev by default. Apply this before any launch
+# preparation so they do not start a local backend or tunnel, and reapply it
+# after sourcing Backend-Rust/.env below so repository-local defaults cannot
+# silently retarget a QA bundle. Explicit launch environment values above opt
+# out and remain authoritative.
+if [ "$NAMED_BUNDLE_DEFAULT_DEV_BACKEND" = true ]; then
+    substep "Named bundle default: using development backend"
+    apply_yolo_env
+fi
 
 BUILD_DIR="build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
@@ -366,10 +395,12 @@ sign_app_bundle() {
 
 update_app_desktop_api_url() {
     local env_file="$1"
-    if [ -n "$TUNNEL_URL" ]; then
-        EFFECTIVE_API_URL="$TUNNEL_URL"
-    elif [ -n "$OMI_DESKTOP_API_URL" ]; then
+    # An explicit environment or .env endpoint is authoritative over a tunnel.
+    # Tunnels are a local-dev fallback only.
+    if [ -n "${OMI_DESKTOP_API_URL:-}" ]; then
         EFFECTIVE_API_URL="$OMI_DESKTOP_API_URL"
+    elif [ -n "$TUNNEL_URL" ]; then
+        EFFECTIVE_API_URL="$TUNNEL_URL"
     else
         EFFECTIVE_API_URL="http://localhost:$BACKEND_PORT"
     fi
@@ -438,7 +469,9 @@ else
     substep "Skipping stale clone scan (set OMI_SCAN_STALE_BUNDLES=1 to enable)"
 fi
 
-if [ "${OMI_SKIP_TUNNEL:-0}" != "1" ]; then
+if [ -n "${OMI_DESKTOP_API_URL:-}" ]; then
+    substep "Skipping tunnel (explicit OMI_DESKTOP_API_URL)"
+elif [ "${OMI_SKIP_TUNNEL:-0}" != "1" ]; then
     step "Starting Cloudflare quick tunnel..."
     if command -v cloudflared >/dev/null 2>&1; then
         TUNNEL_LOG=$(mktemp /tmp/cloudflared-XXXXXX.log)
@@ -474,7 +507,7 @@ if [ ! -f ".env" ] && [ -f "../../backend/.env" ]; then
 elif [ ! -f ".env" ] && [ -f "../Backend/.env" ]; then
     cp "../Backend/.env" ".env"
 fi
-if [ ! -f ".env" ] && [ "$YOLO_MODE" != "1" ]; then
+if [ ! -f ".env" ] && [ "$YOLO_MODE" != "1" ] && [ "$NAMED_BUNDLE_DEFAULT_DEV_BACKEND" != true ]; then
     echo ""
     echo "=== First-time setup ==="
     echo "No .env file found at $BACKEND_DIR/.env"
@@ -512,7 +545,7 @@ fi
 if [ -f "$BACKEND_DIR/.env" ]; then
     set -a; source "$BACKEND_DIR/.env"; set +a
 fi
-if [ "$YOLO_MODE" = "1" ]; then
+if [ "$YOLO_MODE" = "1" ] || [ "$NAMED_BUNDLE_DEFAULT_DEV_BACKEND" = true ]; then
     apply_yolo_env
 fi
 

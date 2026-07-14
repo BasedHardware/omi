@@ -251,6 +251,16 @@ This creates `/Applications/omi-fix-rewind.app` with bundle ID `com.omi.omi-fix-
 - To connect agent-swift: `agent-swift connect --bundle-id com.omi.omi-fix-rewind`
 - **Skip the web login:** sign into "Omi Dev" once; named bundles launched by `./run.sh` clone that session before launch.
 - **Jump to a screen without clicking:** the automation bridge auto-enables on non-prod bundles — `./scripts/omi-ctl navigate <screen>` (e.g. `rewind`, `memories`, `settings rewind`). See "Fast-Path for Local Iteration" in `e2e/SKILL.md`.
+- Named/dev bundles default to the development Python and Rust backends unless
+  an explicit launch URL overrides them. Before QA, run
+  `./scripts/omi-ctl health`; its unauthenticated identity payload reports the
+  resolved backend environment/URLs plus the agent-runtime handshake state,
+  negotiated protocol version, packaged runtime version, and expected protocol.
+  A protocol-compatible runtime that omits a required capability is rejected at
+  startup; health never reports the expected protocol as if it were negotiated.
+- Run `./scripts/agent-logic-harness.sh --cross-surface-smoke` before building a
+  QA bundle. This is the compact Swift/Node/Rust contract gate; reserve full
+  component suites and the live continuity gauntlet for PR readiness.
 
 ### After Implementing Changes
 - `xcrun swift build` is for **compile checks only** — it does NOT start the backend
@@ -375,9 +385,12 @@ timeline identity/open, or pill projection is incomplete until:
 
 - **CI:** `agent-continuity-gauntlet.sh --self-check` only (via desktop-core /
   agent-logic harness). Never require live LLM in PR CI.
-- **Continuity PRs / RC:** `--suite continuity` (typed + PTT + blind recall) on
-  a named `omi-*` bundle after auth seed; `--suite all` for RC. Evidence under
-  `.harness/agent-continuity-gauntlet/*/manifest.json` with matching git SHA.
+- **Prompt / gateway changes:** `--suite prompts` on a named `omi-*` bundle;
+  P4 requires a completed public-web lookup with a source URL and fails on
+  provider tool-choice incompatibilities. **Continuity PRs / RC:** `--suite
+  continuity` (typed + PTT + blind recall) after auth seed; `--suite all` for
+  RC. Evidence under `.harness/agent-continuity-gauntlet/*/manifest.json` with
+  matching git SHA.
 - **Anti-flake:** clear owner/kernel surface before probes; per-run nonces;
   hard-fail on blind-recall / structural snapshot only; zero automatic retries
   on model wrongness.

@@ -94,6 +94,17 @@ describe("omi tool manifest", () => {
     expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("provider='hermes'");
   });
 
+  it("guides realtime child-result retrieval without exposing internal ids", () => {
+    const list = omiToolManifest.find((tool) => tool.name === "list_agent_sessions");
+    const run = omiToolManifest.find((tool) => tool.name === "get_agent_run");
+
+    expect(list?.promptGuidelines?.join("\n")).toContain("do not infer run completion from session status");
+    expect(list?.voice?.realtimeDescription).toContain("restrict discovery to status='open'");
+    expect(run?.promptGuidelines?.join("\n")).toContain("run.finalText");
+    expect(run?.voice?.realtimeDescription).toContain("run.finalText");
+    expect(run?.voice?.realtimeDescription).toContain("do not expose the internal id");
+  });
+
   it("keeps permission tools available to main stdio while onboarding-only tools remain scoped", () => {
     const regular = new Set(toolNamesForAdapter("omi-tools-stdio"));
     const onboarding = new Set(toolNamesForAdapter("omi-tools-stdio", { onboarding: true }));

@@ -25,6 +25,17 @@ struct AgentSurfaceReference: Hashable, Sendable {
     )
   }
 
+  /// Keeps PTT on the same external chat identity as the visible main chat while
+  /// preserving its own realtime renderer and tool surface. The kernel uses the
+  /// external reference to bind the shared canonical conversation.
+  func realtimeVoiceCompanion() -> AgentSurfaceReference {
+    AgentSurfaceReference(
+      surfaceKind: "realtime_voice",
+      externalRefKind: externalRefKind,
+      externalRefId: externalRefId
+    )
+  }
+
   static func taskChat(taskId: String) -> AgentSurfaceReference {
     AgentSurfaceReference(surfaceKind: "task_chat", externalRefKind: "task", externalRefId: taskId)
   }

@@ -316,3 +316,43 @@ final class AgentControlServiceTests: XCTestCase {
     XCTAssertTrue(artifactError!.contains("couldn't resolve"))
   }
 }
+
+final class RealtimeProviderToolResultPolicyTests: XCTestCase {
+  func testSmallToolResultPassesThroughUnchanged() {
+    let result = RealtimeProviderToolResultPolicy.prepare(
+      name: HubTool.listAgentSessions.rawValue,
+      output: #"{"ok":true,"sessions":[]}"#)
+
+    XCTAssertFalse(result.wasOversized)
+    XCTAssertEqual(result.output, #"{"ok":true,"sessions":[]}"#)
+  }
+
+  func testSpawnSendsOnlyCompactSemanticChildToProvider() throws {
+    let envelope = #"{"schemaVersion":1,"ok":true,"journalReceipt":{"accepted":true},"child":{"sessionId":"session-a"},"semanticDigest":"digest-a","providerResult":{"schemaVersion":1,"ok":true,"code":"spawn_started","message":"The background agent has started.","child":{"sessionId":"session-a","runId":"run-a","attemptId":"attempt-a","state":"running","attemptState":"running","revision":2,"adapterId":"hermes","updatedAtMs":2},"semanticDigest":"digest-a"}}"#
+
+    let result = RealtimeProviderToolResultPolicy.prepare(
+      name: HubTool.spawnAgent.rawValue,
+      output: envelope)
+    let object = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: Data(result.output.utf8)) as? [String: Any])
+
+    XCTAssertEqual(object["code"] as? String, "spawn_started")
+    XCTAssertNotNil(object["child"])
+    XCTAssertNil(object["journalReceipt"])
+    XCTAssertLessThan(result.output.utf8.count, envelope.utf8.count)
+  }
+
+  func testOversizedToolResultBecomesSmallStructuredRetryError() throws {
+    let result = RealtimeProviderToolResultPolicy.prepare(
+      name: HubTool.listAgentSessions.rawValue,
+      output: String(repeating: "x", count: RealtimeProviderToolResultPolicy.maximumByteCount + 1))
+
+    XCTAssertTrue(result.wasOversized)
+    XCTAssertLessThan(result.output.utf8.count, RealtimeProviderToolResultPolicy.maximumByteCount)
+    let object = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: Data(result.output.utf8)) as? [String: Any])
+    let error = try XCTUnwrap(object["error"] as? [String: Any])
+    XCTAssertEqual(error["code"] as? String, "tool_result_too_large")
+    XCTAssertEqual(error["tool"] as? String, HubTool.listAgentSessions.rawValue)
+  }
+}

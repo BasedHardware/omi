@@ -102,6 +102,8 @@ jobs:
             FIREBASE_PROJECT_ID=based-hardware
             GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
             BASE_API_URL=${{ steps.desktop-base-api-url.outputs.base_api_url }}
+            OMI_DESKTOP_RELEASE_SHA=${{ github.sha }}
+            OMI_DESKTOP_RELEASE_CHANNEL=development
           secrets: |
             GEMINI_API_KEY=GEMINI_API_KEY:latest
             OPENAI_API_KEY=OPENAI_API_KEY:latest
@@ -154,6 +156,52 @@ jobs:
             echo "desktop-backend traffic is serving $SERVING_REVISION, expected $REVISION" >&2
             exit 1
           fi
+
+      - name: Verify development backend release identity
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          SERVICE_URL=$(gcloud run services describe "$SERVICE" \
+            --region "$REGION" \
+            --project "$PROJECT_ID" \
+            --format='value(status.url)')
+
+          for attempt in $(seq 1 30); do
+            HEALTH_JSON=$(curl -fsS --max-time 15 "${SERVICE_URL%/}/health" || true)
+            if [ -n "$HEALTH_JSON" ]; then
+              if HEALTH_JSON="$HEALTH_JSON" EXPECTED_SHA="$EXPECTED_SHA" python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          health = json.loads(os.environ["HEALTH_JSON"])
+          expected = {
+              "release_sha": os.environ["EXPECTED_SHA"],
+              "release_channel": "development",
+          }
+          mismatches = {
+              key: {"expected": value, "actual": health.get(key)}
+              for key, value in expected.items()
+              if health.get(key) != value
+          }
+          if mismatches:
+              print(json.dumps({"health": health, "mismatches": mismatches}, indent=2))
+              sys.exit(1)
+          print(json.dumps(health, indent=2))
+          PY
+              then
+                echo "Verified development desktop-backend identity at $SERVICE_URL/health" >> "$GITHUB_STEP_SUMMARY"
+                exit 0
+              fi
+            fi
+            echo "Waiting for development backend identity ($attempt/30)..."
+            sleep 10
+          done
+
+          echo "Development desktop-backend did not report the deployed release identity." >&2
+          exit 1
 
       - name: Show Output
         run: echo "Desktop backend deployed to development environment"

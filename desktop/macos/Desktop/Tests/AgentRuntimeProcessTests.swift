@@ -100,6 +100,25 @@ private actor GatedRuntimeStartupHarness {
 }
 
 final class AgentRuntimeProcessTests: XCTestCase {
+  func testRuntimeHandshakeRejectsStaleV2RuntimeWithoutRequiredCapability() throws {
+    let valid = try XCTUnwrap(AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn"]}"#
+    ))
+    let handshake = try AgentRuntimeProcess.validateRuntimeHandshake(valid)
+    XCTAssertEqual(handshake.protocolVersion, AgentRuntimeProcess.expectedProtocolVersion)
+    XCTAssertTrue(handshake.capabilities.contains("journal_import_remote_turn"))
+
+    let stale = try XCTUnwrap(AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":[]}"#
+    ))
+    XCTAssertThrowsError(try AgentRuntimeProcess.validateRuntimeHandshake(stale))
+
+    let wrongProtocol = try XCTUnwrap(AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"init","protocolVersion":1,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn"]}"#
+    ))
+    XCTAssertThrowsError(try AgentRuntimeProcess.validateRuntimeHandshake(wrongProtocol))
+  }
+
   func testJournalDeadlineAcceptsResultAfterSQLiteBusyWindowWithoutWallClockDelay() {
     let simulatedArrivalNanoseconds: UInt64 = 6_170_000_000
     XCTAssertEqual(
@@ -864,6 +883,24 @@ final class AgentRuntimeProcessTests: XCTestCase {
     let command = AgentRuntimeProcess.openClawAdapterCommand(openClawPath: openClawPath)
 
     XCTAssertEqual(command, "'\(openClawPath)' acp")
+  }
+
+  func testOpenClawDiscoveryFindsXDGFnmInstall() throws {
+    let home = FileManager.default.temporaryDirectory
+      .appendingPathComponent("openclaw-fnm-home-\(UUID().uuidString)", isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: home) }
+
+    let bin = home
+      .appendingPathComponent(".local/share/fnm/node-versions/v24.12.0/installation/bin", isDirectory: true)
+    try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+    let openClaw = bin.appendingPathComponent("openclaw")
+    FileManager.default.createFile(atPath: openClaw.path, contents: Data("#!/bin/sh\n".utf8))
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: openClaw.path)
+
+    let directories = AgentRuntimeProcess.localAdapterSearchDirectories(home: home.path)
+    let discovered = AgentRuntimeProcess.firstExecutable(named: "openclaw", in: directories)
+
+    XCTAssertEqual(discovered, openClaw.path)
   }
 
   func testStdoutReaderIsEventDrivenInsteadOfDetachedAvailableDataLoop() throws {

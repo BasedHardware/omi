@@ -41,6 +41,35 @@ private final class StubPresentationCoordinator: DesktopAutomationPresentationCo
 
 @MainActor
 final class DesktopAutomationBridgeRouteTests: XCTestCase {
+  func testUnauthenticatedHealthReportsBackendAndRuntimeProtocolIdentity() async throws {
+    let response = await DesktopAutomationBridge.shared.response(
+      for: DesktopAutomationHTTPRequest(
+        method: "GET",
+        path: "/health",
+        headers: ["host": "127.0.0.1:\(DesktopAutomationLaunchOptions.port)"],
+        body: Data()
+      )
+    )
+
+    XCTAssertEqual(response.statusCode, 200)
+    let object = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: response.body) as? [String: Any]
+    )
+    XCTAssertEqual(object["requiresAuth"] as? Bool, true)
+    XCTAssertNotNil(object["backendEnvironment"] as? String)
+    XCTAssertNotNil(object["pythonBackendURL"] as? String)
+    XCTAssertNotNil(object["rustBackendURL"] as? String)
+    XCTAssertNotNil(object["agentRuntimeRunning"] as? Bool)
+    XCTAssertEqual(
+      object["agentRuntimeExpectedProtocolVersion"] as? Int,
+      AgentRuntimeProcess.expectedProtocolVersion
+    )
+    if object["agentRuntimeRunning"] as? Bool == true {
+      XCTAssertNotNil(object["agentRuntimeProtocolVersion"] as? Int)
+      XCTAssertNotNil(object["agentRuntimeVersion"] as? String)
+    }
+  }
+
   func testPresentationReadinessDefersAndPreservesTheExactActiveCommand() {
     var readiness = DesktopAutomationPresentationReadinessGate()
     let command = DesktopAutomationPresentationCommand(

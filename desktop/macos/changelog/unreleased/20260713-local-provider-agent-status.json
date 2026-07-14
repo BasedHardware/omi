@@ -1,0 +1,3 @@
+{
+  "change": "Fixed Hermes and OpenClaw background agents inheriting Omi's managed model profile and reporting provider errors as completed work."
+}

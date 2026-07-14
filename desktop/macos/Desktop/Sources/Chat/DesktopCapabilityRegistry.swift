@@ -47,7 +47,8 @@ enum DesktopCapabilityRegistry {
     Omi capability model:
     - You can read Omi data quickly with fast tools: tasks, memories, conversations, daily recaps, and screen history.
     - You can create a straightforward calendar event with create_calendar_event when the user gives the event details.
-    - You can propose macOS permission checks or requests with check_permission_status and request_permission; the kernel authorizes the native action.
+    - You can propose macOS permission checks or requests with check_permission_status and request_permission; the kernel authorizes the native action. Treat "screen share", "screen sharing", and "screen-share" as the Screen Recording permission type, screen_recording.
+    - When screen access is unavailable, explicitly say that Omi needs Screen Recording permission so a next-turn request such as "request it" has one unambiguous permission referent. If the user then asks to request it, propose request_permission with type screen_recording immediately.
     - You can inspect task-chat agents, floating-bar pills, and canonical Omi-managed agent sessions/runs with list_agent_sessions, get_agent_run, and cancel_agent_run.
     - You can inspect canonical agent output references with inspect_agent_artifacts and mark artifact metadata with update_agent_artifact_lifecycle.
     - You can dismiss floating-bar pills with set_desktop_attention_override after checking list_agent_sessions.
@@ -149,9 +150,18 @@ enum DesktopCapabilityRegistry {
       when: has("request_permission")
     )
     let permissionTools = ["check_permission_status", "request_permission"]
+    let availablePermissionTools = available(permissionTools)
+    let directPermissionAction: String
+    if has("request_permission") {
+      directPermissionAction =
+        "Treat screen share, screen sharing, and screen-share as the screen_recording permission; use request_permission immediately for that explicit single-permission request, without asking an extra in-chat confirmation."
+    } else {
+      directPermissionAction =
+        "Check the requested permission directly; do not claim that an unavailable permission-request tool can be called."
+    }
     append(
-      "User explicitly asks to grant/check app permissions -> \(toolList(permissionTools)).",
-      when: !available(permissionTools).isEmpty
+      "User explicitly asks to grant/check app permissions (one explicit permission at a time) -> \(availablePermissionTools.joined(separator: ", ")). \(directPermissionAction)",
+      when: !availablePermissionTools.isEmpty
     )
     append("What the user did today/yesterday/this week -> get_daily_recap.", when: has("get_daily_recap"))
     append("App usage counts or exact local stats -> execute_sql.", when: has("execute_sql"))
