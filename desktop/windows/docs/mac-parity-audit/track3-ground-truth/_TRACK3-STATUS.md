@@ -117,6 +117,34 @@ shared/types.ts records + tests. Assistant *settings* → use existing Windows s
   recognized backend-side, no connector gating. 3 entry points mount one capability module (interface
   in doc): listDestinations/runImport/getExportStatus/executeExport/ensureMcpKey/getRunState.
 
+- **gt-pages-ui.md ✓** — Memories: header (search + layer Default/ST/LT/Archive [gated on server tiers]
+  + "This device" toggle + category Manual/About-You/Insights/Workflow + Add + bulk menu). List =
+  MemoryGraphInlineCard first, then cards (content, NewBadge <60s, tier badge only if server-tiered,
+  device/source, info tooltip). Detail sheet 450×600 (public toggle, delete, click-to-edit, context/
+  metadata, View Source Conversation). Undo toast = bottom capsule w/ countdown. BrainGraph: mount via
+  props; assemble anim = 800 off-main physics ticks + 3s settle, SKIPPED on unchanged graph signature
+  (preserve). Windows nodeColor.ts already de-purples thing→pink #ff375f (Track-4 owned; I inherit via
+  props). Tasks: Mac = 4 buckets Today(folds overdue)/Tomorrow/Later/No-Deadline — Windows has 5 (sep
+  Overdue) → align to 4. Suggested-tasks strip on top; inline-create purple-accent; gated G-D =
+  saved/multi-tag filters, drag, multi-select, per-task chat, swipe. Goals: **Mac has NO routed Goals
+  page** — dashboard GoalsWidget (max 4) + GoalsHistoryPage + celebration → informs G-C. Emoji ~28-cat
+  table default 🎯; progress = 5 discrete threshold colors; celebration 4-phase ~3.3s on reaching target.
+  Home widgets WhatMattersNowSection + FocusedGoalsSection specified (deps: recommendations, focusedGoals/
+  readiness gate); DELETE QuickTaskWidget/QuickGoalsWidget. Purple = primary-CTA + New/AI badges only.
+- **CROSS-TRACK FLAG (Track 5):** pages-UI agent reported a possibly-live `--accent: #5b02e0` purple
+  leak, contradicting the plan's "fixed to #ffffff". Track 5 owns design tokens/INV-UI-1 — flag to them
+  to verify; I do not touch globals.css.
+
+## P0 schema PR — Opus impl DONE, audit running (aaa3be8)
+Opus impl: 3 tables + 14 CRUD + taskEmbeddingVector.ts + dbTrack3.test.ts (9 tests). typecheck clean,
+full suite 1445 pass/15 skip, eslint clean. Independent Opus audit in flight before commit/PR/merge.
+
+## Gate notes (Mac ground-truth answers to inform Chris's decisions)
+- **G-C (Goals nav):** Mac ships NO dedicated Goals nav — goals = Home dashboard widget (max 4) +
+  a Goals History page + completion celebration. Recommend matching: FocusedGoalsSection on Home
+  (Track 5 mounts) + a lightweight Goals history/detail surface, no top-level nav item. (Park final call.)
+- **G-D (Tasks rich filters):** skip per plan; DO align Tasks grouping 5→4 buckets (that's IA, not filters).
+
 ## Parked questions for Chris (batch — do not block)
 
 - **Q1 (a4c50bcb4 full cherry-pick):** Should the full conversation-provenance commit (backend +
