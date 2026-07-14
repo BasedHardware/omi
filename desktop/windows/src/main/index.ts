@@ -292,8 +292,6 @@ import {
   replaceConversationFolders,
   upsertConversationFolder,
   deleteConversationFolder,
-  setLocalConversationStarred,
-  setLocalConversationFolder,
   insertVoiceTurn,
   listPendingVoiceTurns,
   markVoiceTurnAcked,
@@ -581,13 +579,6 @@ app.whenReady().then(async () => {
   )
   ipcMain.handle('db:deleteConversationFolder', async (_e, id: string) =>
     deleteConversationFolder(id)
-  )
-  ipcMain.handle('db:setLocalConversationStarred', async (_e, id: string, starred: boolean) =>
-    setLocalConversationStarred(id, starred)
-  )
-  ipcMain.handle(
-    'db:setLocalConversationFolder',
-    async (_e, id: string, folderId: string | null) => setLocalConversationFolder(id, folderId)
   )
   ipcMain.handle(
     'db:claimConversationForPosting',

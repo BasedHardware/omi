@@ -531,6 +531,9 @@ export function Conversations(): React.JSX.Element {
     setFolderDialog(null)
     if (folderFilter.kind === 'folder' && folderFilter.id === id) setFolderFilter({ kind: 'all' })
     void fetchFolders().then(setFolders)
+    // Conversations that were in the deleted folder now carry a dangling folderId —
+    // re-fetch so their (server-reconciled) folder assignment is refreshed.
+    refreshCloudConversations()
   }
 
   const clearAllFilters = (): void => {
@@ -722,7 +725,7 @@ export function Conversations(): React.JSX.Element {
             setSelected(allVisibleSelected ? new Set() : new Set(visible.map((r) => r.id)))
           }
           onMerge={() => setMergeOpen(true)}
-          onDelete={() => scheduleDelete(Array.from(selected))}
+          onDelete={() => scheduleDelete(selectedRows.map((r) => r.id))}
           deleting={deleting}
         />
       )}

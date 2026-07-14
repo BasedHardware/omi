@@ -509,10 +509,6 @@ export type OmiBridgeApi = {
   upsertConversationFolder: (folder: ConversationFolder) => Promise<void>
   /** Drop a folder from the cache (optimistic delete). */
   deleteConversationFolder: (id: string) => Promise<void>
-  /** Mirror a conversation's starred flag locally (backend stays authoritative). */
-  setLocalConversationStarred: (id: string, starred: boolean) => Promise<void>
-  /** Mirror a conversation's folder assignment locally (null = unfiled). */
-  setLocalConversationFolder: (id: string, folderId: string | null) => Promise<void>
   // --- Track 2: Voice & PTT depth (voice turn outbox) ---
   /** Enqueue (idempotent UPSERT on idempotencyKey) a voice turn for durable
    *  delivery. A re-enqueue for the same key updates the assistant text /

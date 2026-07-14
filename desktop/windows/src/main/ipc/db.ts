@@ -19,8 +19,6 @@ import {
   replaceConversationFoldersOn,
   upsertConversationFolderOn,
   deleteConversationFolderOn,
-  setLocalConversationStarredOn,
-  setLocalConversationFolderOn,
   type ConversationFoldersDb
 } from './conversationFolders'
 import type {
@@ -537,14 +535,6 @@ export function upsertConversationFolder(folder: ConversationFolder): void {
 
 export function deleteConversationFolder(id: string): void {
   deleteConversationFolderOn(foldersDb(), id)
-}
-
-export function setLocalConversationStarred(id: string, starred: boolean): void {
-  setLocalConversationStarredOn(foldersDb(), id, starred)
-}
-
-export function setLocalConversationFolder(id: string, folderId: string | null): void {
-  setLocalConversationFolderOn(foldersDb(), id, folderId)
 }
 
 export function updateLocalConversationTitle(id: string, title: string): void {
