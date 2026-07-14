@@ -96,6 +96,23 @@ class WalSyncs implements IWalSync {
     return wals;
   }
 
+  /// Enumerate offline recordings from the connected device WITHOUT downloading
+  /// them, so they can be listed (e.g. on the Auto Sync page) even when the user
+  /// has turned auto-sync off. Mirrors the per-firmware device discovery that
+  /// [syncAll] runs in Phase 0/1b, minus the download. SD-card WALs are already
+  /// enumerated on connect via [sdcard.setDevice], so they're not repeated here.
+  /// Safe no-op when no device is set; each sub-sync guards against running
+  /// while a sync is in progress.
+  Future<void> refreshWalsFromDevice() async {
+    if (_device == null) return;
+    if (isRingBufferFirmware(_device?.firmwareRevision)) {
+      await _ringSync.refreshWalsFromDevice();
+    } else {
+      await _storageSync.refreshWalsFromDevice();
+    }
+    await _flashPageSync.refreshWalsFromDevice();
+  }
+
   Future<WalStats> getWalStats() async {
     final allWals = await getAllWals();
     int phoneFiles = 0;
