@@ -16,6 +16,7 @@ class LifecyclePhase(str, Enum):
     PROCESSING = 'processing'
     MERGING = 'merging'
     COMPLETED = 'completed'
+    FAILED = 'failed'
     DISCARDED = 'discarded'
 
 
@@ -30,7 +31,7 @@ class FinalizationEvent(str, Enum):
     RESTART = 'restart'
 
 
-TERMINAL_PHASES = frozenset({LifecyclePhase.COMPLETED, LifecyclePhase.DISCARDED})
+TERMINAL_PHASES = frozenset({LifecyclePhase.COMPLETED, LifecyclePhase.FAILED, LifecyclePhase.DISCARDED})
 
 
 @dataclass(frozen=True)

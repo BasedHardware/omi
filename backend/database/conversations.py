@@ -259,6 +259,61 @@ def _upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
 
 @set_data_protection_level(data_arg_name='conversation_data')
 @prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
+def _persist_processing_result_with_lifecycle(
+    uid: str,
+    conversation_data: dict,
+    *,
+    expected_statuses: set[str],
+) -> bool:
+    """Persist a processor result only while its lifecycle generation remains current.
+
+    A processor works from an in-memory snapshot.  This transaction fences that
+    snapshot against a concurrent discard or terminal transition before merging
+    generated content back into the conversation document.
+    """
+    conversation_data.pop('updated_at', None)
+    if 'audio_base64_url' in conversation_data:
+        del conversation_data['audio_base64_url']
+    if 'photos' in conversation_data:
+        del conversation_data['photos']
+
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
+    transaction = db.transaction()
+
+    @firestore.transactional
+    def _persist(transaction) -> bool:
+        write_data = copy.deepcopy(conversation_data)
+        existing_snapshot = conversation_ref.get(transaction=transaction)
+        if not getattr(existing_snapshot, 'exists', False):
+            transaction.set(conversation_ref, write_data)
+            return True
+
+        existing = existing_snapshot.to_dict() or {}
+        if existing.get('discarded') or existing.get('status') not in expected_statuses:
+            return False
+
+        # Generated processing content never owns user-managed fields.
+        for field in ('starred', 'folder_id', 'visibility', 'user_title'):
+            if field in existing:
+                write_data[field] = existing[field]
+
+        user_title = existing.get('user_title')
+        if isinstance(user_title, str):
+            structured = write_data.get('structured')
+            if not isinstance(structured, dict):
+                structured = {}
+                write_data['structured'] = structured
+            structured['title'] = user_title
+
+        transaction.set(conversation_ref, write_data, merge=True)
+        return True
+
+    return _persist(transaction)
+
+
+@set_data_protection_level(data_arg_name='conversation_data')
+@prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
 def _create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: dict) -> bool:
     """Atomically create a conversation document if it does not already exist."""
     conversation_data.pop('updated_at', None)
@@ -914,7 +969,7 @@ def _claim_conversation_status(
         if not snapshot.exists:
             raise NotFound(f'Conversation {conversation_id} not found')
         current = snapshot.to_dict() or {}
-        if current.get('status') != expected_status.value:
+        if current.get('discarded') or current.get('status') != expected_status.value:
             return False
         updates = {'status': claimed_status.value}
         if extra_updates:

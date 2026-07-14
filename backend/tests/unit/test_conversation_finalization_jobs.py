@@ -56,6 +56,15 @@ def _conversation(data: dict | None = None) -> _Ref:
     )
 
 
+def _admit_finalization(_conversation_data: dict) -> jobs.FinalizationAdmission:
+    return {
+        'accepted': True,
+        'terminal': False,
+        'reason': 'accepted',
+        'fanout_key': 'fanout-key',
+    }
+
+
 def test_intent_persists_outbox_before_any_live_handoff_and_omits_byok_material():
     transaction = _Transaction()
     conversation_ref = _conversation()
@@ -68,7 +77,7 @@ def test_intent_persists_outbox_before_any_live_handoff_and_omits_byok_material(
         'uid-1',
         'conversation-1',
         False,
-        'fanout-key',
+        _admit_finalization,
         _now(),
     )
 
@@ -110,7 +119,7 @@ def test_duplicate_reconnect_reuses_the_same_outbox_job():
         'uid-1',
         'conversation-1',
         False,
-        'fanout-key',
+        _admit_finalization,
         _now(),
     )
 
@@ -162,7 +171,7 @@ def test_duplicate_finalization_intent_keeps_the_same_processing_admission():
         'uid-1',
         'conversation-1',
         False,
-        'fanout-key',
+        _admit_finalization,
         _now(),
     )
 
@@ -183,7 +192,7 @@ def test_byok_job_is_explicitly_blocked_without_persisting_a_key():
         'uid-1',
         'conversation-1',
         True,
-        'fanout-key',
+        _admit_finalization,
         _now(),
     )
 
@@ -191,6 +200,30 @@ def test_byok_job_is_explicitly_blocked_without_persisting_a_key():
     persisted = transaction.sets[0][1]
     assert persisted['requires_byok'] is True
     assert set(persisted).isdisjoint({'byok_keys', 'openai', 'anthropic', 'gemini', 'deepgram'})
+
+
+def test_atomic_admission_rejects_terminal_snapshot_before_any_outbox_write():
+    transaction = _Transaction()
+    conversation_ref = _conversation({'status': 'failed'})
+    collection = _Collection({})
+
+    def terminal(_conversation_data: dict) -> jobs.FinalizationAdmission:
+        return {'accepted': False, 'terminal': True, 'reason': 'terminal', 'fanout_key': None}
+
+    intent = jobs._create_or_get_finalization_intent_txn(
+        transaction,
+        conversation_ref,
+        collection,
+        'uid-1',
+        'conversation-1',
+        False,
+        terminal,
+        _now(),
+    )
+
+    assert intent['status'] == 'terminal'
+    assert transaction.sets == []
+    assert transaction.updates == []
 
 
 def test_duplicate_task_delivery_claims_only_once_until_lease_expires():

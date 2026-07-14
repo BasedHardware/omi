@@ -56,10 +56,12 @@ is higher than the last accepted sequence. The phase is part of the contract:
 `discarded`. Older events without the envelope retain the legacy identity and
 timestamp compatibility path only.
 
-`RECORDING_SESSION_MODE=dual_write` is the safe default: the durable binding
-is returned while the legacy pointer continues to be maintained. `shadow`
-records and reports mapping conflicts through shared fallback telemetry while
-preserving the old proposed route; `enforce` rejects durable-store failures.
+`RECORDING_SESSION_MODE=dual_write` is the safe default: it persists and
+compares the durable binding while preserving the legacy proposed route on a
+mismatch. `shadow` has the same routing behavior for validation-only rollout;
+`enforce` promotes the canonical durable binding and rejects durable-store
+failures. Mapping conflicts, stale-event discards, and legacy fallback paths
+use shared fallback telemetry for the cutover gate.
 The resource contains only IDs, phase, sequence, schema version, and
 timestamps; it never stores transcript content, credentials, or raw WebSocket
 payloads.

@@ -13,6 +13,7 @@ from utils.transcribe_decisions import (
     normalize_codec_frame,
     normalize_language,
     person_id_for_client,
+    recording_session_id_for_lifecycle_event,
     select_recording_session_id,
     select_translation_language,
     should_enable_speaker_identification,
@@ -179,37 +180,6 @@ def test_conversation_lifecycle_actions():
         decide_existing_conversation_action(seconds_since_last_segment=119.9, conversation_creation_timeout=120)
         == ConversationLifecycleAction.continue_current
     )
-
-
-def test_recording_session_identity_retries_and_rollovers_are_distinct():
-    client_id = 'client-recording'
-    assert (
-        select_recording_session_id(
-            client_conversation_id=client_id,
-            current_recording_session_id=None,
-            rollover=False,
-            generated_id='initial-server-id',
-        )
-        == client_id
-    )
-    assert (
-        select_recording_session_id(
-            client_conversation_id=client_id,
-            current_recording_session_id=client_id,
-            rollover=False,
-            generated_id='retry-server-id',
-        )
-        == client_id
-    )
-    assert (
-        select_recording_session_id(
-            client_conversation_id=client_id,
-            current_recording_session_id=client_id,
-            rollover=True,
-            generated_id='rollover-server-id',
-        )
-        == 'rollover-server-id'
-    )
     assert (
         decide_existing_conversation_action(seconds_since_last_segment=120, conversation_creation_timeout=120)
         == ConversationLifecycleAction.process_and_create_new
@@ -245,6 +215,48 @@ def test_recording_session_identity_retries_and_rollovers_are_distinct():
         )
         == ConversationLifecycleAction.process_and_create_new
     )
+
+
+def test_recording_session_identity_retries_and_rollovers_are_distinct():
+    client_id = 'client-recording'
+    assert (
+        select_recording_session_id(
+            client_conversation_id=client_id,
+            current_recording_session_id=None,
+            rollover=False,
+            generated_id='initial-server-id',
+        )
+        == client_id
+    )
+    assert (
+        select_recording_session_id(
+            client_conversation_id=client_id,
+            current_recording_session_id=client_id,
+            rollover=False,
+            generated_id='retry-server-id',
+        )
+        == client_id
+    )
+    assert (
+        select_recording_session_id(
+            client_conversation_id=client_id,
+            current_recording_session_id=client_id,
+            rollover=True,
+            generated_id='rollover-server-id',
+        )
+        == 'rollover-server-id'
+    )
+
+
+def test_delayed_finalizer_keeps_the_pre_rollover_recording_binding():
+    bindings = {
+        'finished-before-rollover': 'recording-one',
+        'current-after-rollover': 'recording-two',
+    }
+
+    assert recording_session_id_for_lifecycle_event(bindings, 'finished-before-rollover') == 'recording-one'
+    assert recording_session_id_for_lifecycle_event(bindings, 'current-after-rollover') == 'recording-two'
+    assert recording_session_id_for_lifecycle_event(bindings, 'unknown') is None
 
 
 def test_disconnect_processing_only_targets_single_channel_in_progress_with_content():

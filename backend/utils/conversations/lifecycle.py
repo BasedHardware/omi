@@ -94,7 +94,17 @@ def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) 
         ConversationStatus.completed,
         ConversationStatus.failed,
     )
-    conversations_db._upsert_conversation_with_lifecycle(uid, conversation_data)
+    status = _status_value(conversation_data['status'])
+    expected = (
+        {ConversationStatus.in_progress.value, ConversationStatus.processing.value}
+        if status == ConversationStatus.processing.value
+        else {ConversationStatus.processing.value, ConversationStatus.merging.value}
+    )
+    conversations_db._persist_processing_result_with_lifecycle(
+        uid,
+        conversation_data,
+        expected_statuses=expected,
+    )
 
 
 def persist_imported_conversation(uid: str, conversation_data: dict[str, Any]) -> None:
@@ -160,13 +170,19 @@ def ensure_processing(uid: str, conversation_id: str) -> bool:
 
 def complete(uid: str, conversation_id: str) -> bool:
     """Close an admitted processing or merge generation exactly once."""
-    conversation = conversations_db.get_conversation(uid, conversation_id)
-    if not conversation:
-        raise LifecycleTransitionError(f'conversation {conversation_id} does not exist')
-    status = _status_value(conversation.get('status'))
-    if status == ConversationStatus.completed.value:
-        return False
-    return transition(uid, conversation_id, ConversationStatus.completed)
+    if conversations_db._claim_conversation_status(
+        uid,
+        conversation_id,
+        ConversationStatus.processing,
+        ConversationStatus.completed,
+    ):
+        return True
+    return conversations_db._claim_conversation_status(
+        uid,
+        conversation_id,
+        ConversationStatus.merging,
+        ConversationStatus.completed,
+    )
 
 
 def begin_merge(uid: str, conversation_id: str) -> bool:
@@ -242,7 +258,7 @@ def open_recording_session(
             proposed_conversation_id,
             binding['conversation_id'],
         )
-        if recording_session_mode() == 'shadow':
+        if recording_session_mode() in {'shadow', 'dual_write'}:
             return dict(binding) | {'conversation_id': proposed_conversation_id}
     return dict(binding)
 
@@ -316,19 +332,42 @@ def record_recording_session_event(
 
 
 def _finalization_decision_state(conversation: Mapping[str, Any], conversation_id: str) -> FinalizationDecisionState:
+    if conversation.get('discarded'):
+        return FinalizationDecisionState(phase=LifecyclePhase.DISCARDED, terminal_outcome=LifecyclePhase.DISCARDED)
     status = str(conversation.get('status') or ConversationStatus.in_progress.value)
     revision = int(conversation.get('finalization_revision') or 0) + 1
     fanout_key = f'conversation:{conversation_id}:finalization:{revision}'
     if status == ConversationStatus.completed.value:
         return FinalizationDecisionState(phase=LifecyclePhase.COMPLETED, terminal_outcome=LifecyclePhase.COMPLETED)
+    if status == ConversationStatus.failed.value:
+        return FinalizationDecisionState(phase=LifecyclePhase.FAILED, terminal_outcome=LifecyclePhase.FAILED)
     if status == ConversationStatus.processing.value:
         return FinalizationDecisionState(
             phase=LifecyclePhase.PROCESSING,
             emitted_fanout_keys=frozenset({fanout_key}),
         )
-    if conversation.get('discarded'):
-        return FinalizationDecisionState(phase=LifecyclePhase.DISCARDED, terminal_outcome=LifecyclePhase.DISCARDED)
     return FinalizationDecisionState()
+
+
+def _finalization_admission(
+    conversation: Mapping[str, Any],
+    conversation_id: str,
+) -> jobs_db.FinalizationAdmission:
+    """Run the pure reducer against the transaction's authoritative snapshot."""
+    revision = int(conversation.get('finalization_revision') or 0) + 1
+    fanout_key = f'conversation:{conversation_id}:finalization:{revision}'
+    decision = decide_finalization(
+        _finalization_decision_state(conversation, conversation_id),
+        FinalizationEvent.FINALIZE,
+        conversation_id=conversation_id,
+        fanout_key=fanout_key,
+    )
+    return {
+        'accepted': decision.fanout_key is not None,
+        'terminal': decision.reason == 'terminal',
+        'reason': decision.reason,
+        'fanout_key': decision.fanout_key,
+    }
 
 
 def claim_finalization_fanout(job_id: str, dispatch_generation: int, lease_epoch: int) -> dict[str, Any]:
@@ -349,30 +388,11 @@ def request_finalization(
     firestore_client: Any = None,
 ) -> dict[str, Any]:
     """Atomically admit finalization and choose its sole durable handoff route."""
-    conversation = conversations_db.get_conversation(uid, conversation_id)
-    if not conversation:
-        return {
-            'job_id': None,
-            'status': 'missing',
-            'dispatch_generation': None,
-            'requires_byok': False,
-            'fanout_key': None,
-            'route': 'noop',
-        }
-    revision = int(conversation.get('finalization_revision') or 0) + 1
-    fanout_key = f'conversation:{conversation_id}:finalization:{revision}'
-    decision = decide_finalization(
-        _finalization_decision_state(conversation, conversation_id),
-        FinalizationEvent.FINALIZE,
-        conversation_id=conversation_id,
-        fanout_key=fanout_key,
-    )
-    fanout_key = decision.fanout_key or fanout_key
     intent = jobs_db.create_or_get_finalization_intent(
         uid,
         conversation_id,
         requires_byok=has_byok_keys,
-        fanout_key=fanout_key,
+        finalization_admission=lambda conversation: _finalization_admission(conversation, conversation_id),
         firestore_client=firestore_client,
     )
     status = intent['status']

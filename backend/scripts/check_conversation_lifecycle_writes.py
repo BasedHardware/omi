@@ -21,12 +21,14 @@ RAW_STORAGE_ALLOWLIST = {
 }
 LIFECYCLE_METHODS = {
     '_upsert_conversation_with_lifecycle',
+    '_persist_processing_result_with_lifecycle',
     '_create_conversation_if_absent_with_lifecycle',
     '_transition_conversation_status',
     '_claim_conversation_status',
     '_set_conversation_as_discarded',
     '_restore_conversation_from_discarded',
 }
+GENERIC_LIFECYCLE_MUTATION_METHODS = {'update_conversation'}
 FINALIZATION_ADMISSION_METHODS = {
     'create_or_get_finalization_intent',
     'resume_blocked_byok_job_for_live_session',
@@ -50,10 +52,28 @@ def _literal_lifecycle_fields(node: ast.AST) -> set[str]:
     return fields
 
 
+def _is_conversation_reference_expression(node: ast.AST) -> bool:
+    """Recognize Firestore conversation refs without trusting local names."""
+    for descendant in ast.walk(node):
+        if isinstance(descendant, ast.Constant) and descendant.value == 'conversations':
+            return True
+        if isinstance(descendant, ast.Name) and descendant.id == 'conversations_collection':
+            return True
+    return False
+
+
 class _LifecycleWriteVisitor(ast.NodeVisitor):
     def __init__(self, relative_path: str) -> None:
         self.relative_path = relative_path
         self.errors: list[str] = []
+        self.conversation_refs: set[str] = set()
+
+    def visit_Assign(self, node: ast.Assign) -> None:  # noqa: N802 - AST visitor name
+        if _is_conversation_reference_expression(node.value):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    self.conversation_refs.add(target.id)
+        self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:  # noqa: N802 - AST visitor name
         function = node.func
@@ -71,21 +91,41 @@ class _LifecycleWriteVisitor(ast.NodeVisitor):
                     f'use utils.conversations.lifecycle instead'
                 )
 
+        if isinstance(function, ast.Attribute) and function.attr in GENERIC_LIFECYCLE_MUTATION_METHODS:
+            fields = set()
+            for argument in node.args:
+                fields.update(_literal_lifecycle_fields(argument))
+            for keyword in node.keywords:
+                fields.update(_literal_lifecycle_fields(keyword.value))
+            if fields:
+                self.errors.append(
+                    f'{self.relative_path}:{node.lineno}: generic conversation lifecycle write {sorted(fields)}; '
+                    f'use utils.conversations.lifecycle instead'
+                )
+
         if isinstance(function, ast.Attribute) and function.attr in {'update', 'set'}:
             fields = set()
             for argument in node.args:
                 fields.update(_literal_lifecycle_fields(argument))
             for keyword in node.keywords:
                 fields.update(_literal_lifecycle_fields(keyword.value))
-            receiver = ''
-            if isinstance(function.value, ast.Name):
-                receiver = function.value.id
-            elif isinstance(function.value, ast.Attribute):
-                receiver = function.value.attr
-            raw_conversation_write = 'conversation' in receiver or any(
-                isinstance(argument, ast.Name) and 'conversation' in argument.id for argument in node.args[:1]
+            receiver_name = function.value.id if isinstance(function.value, ast.Name) else None
+            first_argument_name = node.args[0].id if node.args and isinstance(node.args[0], ast.Name) else None
+            is_transaction_write = receiver_name in {'transaction', 'txn'} and not self.relative_path.startswith(
+                'backend/database/'
             )
-            if fields and raw_conversation_write and self.relative_path not in RAW_STORAGE_ALLOWLIST:
+            writes_conversation_ref = (
+                receiver_name in self.conversation_refs or first_argument_name in self.conversation_refs
+            )
+            # A transaction-level lifecycle write outside the storage primitive
+            # is a second authority even when the pasted-back ref is named
+            # simply ``ref``. Direct document writes are flagged when their
+            # Firestore construction structurally targets conversations.
+            if (
+                fields
+                and self.relative_path not in RAW_STORAGE_ALLOWLIST
+                and (is_transaction_write or writes_conversation_ref)
+            ):
                 self.errors.append(
                     f'{self.relative_path}:{node.lineno}: raw lifecycle fields {sorted(fields)}; '
                     f'only the lifecycle service may own the transition'

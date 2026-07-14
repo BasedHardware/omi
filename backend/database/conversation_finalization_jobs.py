@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Any, Literal, TypedDict
+from typing import Any, Callable, Literal, Mapping, TypedDict
 
 from google.cloud import firestore
 
@@ -30,6 +30,15 @@ class FinalizationIntent(TypedDict):
     status: str
     dispatch_generation: int | None
     requires_byok: bool
+    fanout_key: str | None
+
+
+class FinalizationAdmission(TypedDict):
+    """Pure lifecycle-service decision evaluated inside the outbox transaction."""
+
+    accepted: bool
+    terminal: bool
+    reason: str
     fanout_key: str | None
 
 
@@ -99,6 +108,16 @@ def _intent_from_job(job_id: str, data: dict[str, Any]) -> FinalizationIntent:
     }
 
 
+def _no_finalization_intent(status: str) -> FinalizationIntent:
+    return {
+        'job_id': None,
+        'status': status,
+        'dispatch_generation': None,
+        'requires_byok': False,
+        'fanout_key': None,
+    }
+
+
 def _create_or_get_finalization_intent_txn(
     transaction: Any,
     conversation_ref: Any,
@@ -106,45 +125,27 @@ def _create_or_get_finalization_intent_txn(
     uid: str,
     conversation_id: str,
     requires_byok: bool,
-    fanout_key: str,
+    finalization_admission: Callable[[Mapping[str, Any]], FinalizationAdmission],
     now: datetime,
 ) -> FinalizationIntent:
     """Persist finalization ownership before any pusher or task handoff."""
     conversation_snapshot = conversation_ref.get(transaction=transaction)
     if not getattr(conversation_snapshot, 'exists', False):
-        return {
-            'job_id': None,
-            'status': 'missing',
-            'dispatch_generation': None,
-            'requires_byok': False,
-            'fanout_key': None,
-        }
+        return _no_finalization_intent('missing')
 
     conversation = conversation_snapshot.to_dict() or {}
     if conversation.get('deferred'):
-        return {
-            'job_id': None,
-            'status': 'deferred',
-            'dispatch_generation': None,
-            'requires_byok': False,
-            'fanout_key': None,
-        }
+        return _no_finalization_intent('deferred')
     if not (conversation.get('transcript_segments') or conversation.get('photos')):
-        return {
-            'job_id': None,
-            'status': 'no_content',
-            'dispatch_generation': None,
-            'requires_byok': False,
-            'fanout_key': None,
-        }
-    if conversation.get('status') == 'completed':
-        return {
-            'job_id': None,
-            'status': 'completed',
-            'dispatch_generation': None,
-            'requires_byok': False,
-            'fanout_key': None,
-        }
+        return _no_finalization_intent('no_content')
+
+    # The lifecycle service owns this pure decision, but it is evaluated while
+    # Firestore holds the conversation transaction snapshot. A late disconnect
+    # therefore cannot reopen a failed/discarded terminal row after a stale
+    # pre-transaction read.
+    admission = finalization_admission(conversation)
+    if admission['terminal']:
+        return _no_finalization_intent(admission['reason'])
 
     existing_job_id = conversation.get('finalization_job_id')
     if isinstance(existing_job_id, str) and existing_job_id:
@@ -152,6 +153,9 @@ def _create_or_get_finalization_intent_txn(
         existing_snapshot = existing_ref.get(transaction=transaction)
         if getattr(existing_snapshot, 'exists', False):
             return _intent_from_job(existing_job_id, existing_snapshot.to_dict() or {})
+
+    if not admission['accepted'] or not admission['fanout_key']:
+        return _no_finalization_intent(admission['reason'])
 
     revision = int(conversation.get('finalization_revision') or 0) + 1
     job_id = _job_id(uid, conversation_id, revision)
@@ -178,7 +182,7 @@ def _create_or_get_finalization_intent_txn(
         'finalization_revision': revision,
         'status': status,
         'requires_byok': requires_byok,
-        'fanout_key': fanout_key,
+        'fanout_key': admission['fanout_key'],
         'fanout_status': 'pending',
         'dispatch_generation': 1,
         'attempt_count': 0,
@@ -207,7 +211,7 @@ def create_or_get_finalization_intent(
     conversation_id: str,
     *,
     requires_byok: bool,
-    fanout_key: str,
+    finalization_admission: Callable[[Mapping[str, Any]], FinalizationAdmission],
     firestore_client: Any = None,
 ) -> FinalizationIntent:
     client = _client(firestore_client)
@@ -221,7 +225,7 @@ def create_or_get_finalization_intent(
         uid,
         conversation_id,
         requires_byok,
-        fanout_key,
+        finalization_admission,
         _now(),
     )
 

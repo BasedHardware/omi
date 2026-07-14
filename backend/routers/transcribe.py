@@ -148,6 +148,7 @@ from utils.transcribe_decisions import (  # async-blockers: no-import-scope; asy
     effective_conversation_timeout,
     is_user_self_match,
     normalize_codec_frame,
+    recording_session_id_for_lifecycle_event,
     select_recording_session_id,
     normalize_language,
     person_id_for_client,
@@ -890,15 +891,10 @@ async def _stream_handler(
         )
 
     async def _emit_recording_lifecycle_event(conversation_id: str, phase: str) -> None:
-        if conversation_id != session.current_conversation_id:
-            logger.warning(
-                "Suppressing lifecycle event for non-current conversation %s on listen session %s %s",
-                conversation_id,
-                session_id,
-                uid,
-            )
-            return
-        event_recording_session_id = recording_session_ids_by_conversation.get(conversation_id)
+        event_recording_session_id = recording_session_id_for_lifecycle_event(
+            recording_session_ids_by_conversation,
+            conversation_id,
+        )
         if not event_recording_session_id:
             logger.warning(
                 'Suppressing lifecycle event without durable recording binding conversation=%s listen=%s uid=%s',

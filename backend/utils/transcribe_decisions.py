@@ -200,6 +200,19 @@ def select_recording_session_id(
     return current_recording_session_id or client_conversation_id or generated_id
 
 
+def recording_session_id_for_lifecycle_event(
+    recording_session_ids_by_conversation: Mapping[str, str],
+    conversation_id: str,
+) -> Optional[str]:
+    """Return the durable binding for a delayed lifecycle callback.
+
+    The current live conversation can roll over before pusher finishes the
+    prior one. Completion must still advance and emit the prior recording's
+    terminal envelope; client-side identity filtering decides presentation.
+    """
+    return recording_session_ids_by_conversation.get(conversation_id)
+
+
 def should_process_on_disconnect(
     *,
     is_multi_channel: bool,

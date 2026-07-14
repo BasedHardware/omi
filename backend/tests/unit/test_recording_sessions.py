@@ -239,6 +239,18 @@ def test_shadow_mode_keeps_legacy_route_but_reports_the_mismatch(recording_store
     assert result['mapping_conflict'] is True
 
 
+def test_dual_write_mode_keeps_legacy_route_while_reporting_the_mismatch(recording_store, monkeypatch):
+    monkeypatch.setattr(lifecycle_service, 'recording_session_mode', lambda: 'dual_write')
+    lifecycle_service.open_recording_session('uid', 'session', 'first-conversation', firestore_client=recording_store)
+
+    result = lifecycle_service.open_recording_session(
+        'uid', 'session', 'second-conversation', firestore_client=recording_store
+    )
+
+    assert result['conversation_id'] == 'second-conversation'
+    assert result['mapping_conflict'] is True
+
+
 def test_shadow_mode_emits_legacy_envelope_when_durable_event_write_fails(monkeypatch):
     fallbacks: list[dict[str, Any]] = []
 

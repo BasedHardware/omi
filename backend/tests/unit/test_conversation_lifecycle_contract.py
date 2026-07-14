@@ -157,6 +157,34 @@ def test_discarded_conversation_cannot_be_readmitted(lifecycle_store):
     assert lifecycle_store.conversation('uid', 'conversation')['discarded'] is False
 
 
+def test_discard_fences_a_stale_processing_result_and_completion(lifecycle_store):
+    lifecycle_store.put_conversation(
+        'uid',
+        'conversation',
+        status=ConversationStatus.processing.value,
+        discarded=True,
+        title='user-kept terminal state',
+    )
+
+    lifecycle_service.persist_processed_conversation(
+        'uid',
+        {
+            'id': 'conversation',
+            'status': ConversationStatus.completed,
+            'discarded': False,
+            'title': 'stale processor output',
+            'data_protection_level': 'standard',
+        },
+    )
+
+    assert lifecycle_service.complete('uid', 'conversation') is False
+    assert lifecycle_store.conversation('uid', 'conversation') == {
+        'status': ConversationStatus.processing.value,
+        'discarded': True,
+        'title': 'user-kept terminal state',
+    }
+
+
 def test_import_persists_through_the_lifecycle_owner(lifecycle_store):
     lifecycle_service.persist_imported_conversation(
         'uid',

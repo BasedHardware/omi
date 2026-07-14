@@ -41,7 +41,7 @@ def _run_sequence(events: list[FinalizationEvent]) -> FinalizationDecisionState:
 
     assert len(terminal_outcomes) <= 1
     assert len(emitted_keys) <= 1
-    assert state.terminal_outcome in {None, LifecyclePhase.COMPLETED, LifecyclePhase.DISCARDED}
+    assert state.terminal_outcome in {None, LifecyclePhase.COMPLETED, LifecyclePhase.FAILED, LifecyclePhase.DISCARDED}
     return state
 
 

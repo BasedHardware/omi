@@ -111,7 +111,6 @@ def test_byok_job_without_current_keys_remains_explicitly_blocked(monkeypatch):
 
 
 def test_lifecycle_runtime_persists_the_fuzzer_decisions_fanout_key(monkeypatch):
-    _mock_lifecycle_conversation(monkeypatch)
     original_decider = lifecycle_service.decide_finalization
     decider = MagicMock(side_effect=original_decider)
     intent = {
@@ -129,8 +128,48 @@ def test_lifecycle_runtime_persists_the_fuzzer_decisions_fanout_key(monkeypatch)
     result = lifecycle_service.request_finalization('uid-1', 'conversation-1', has_byok_keys=False)
 
     assert result['route'] == 'pusher'
+    admission = create_intent.call_args.kwargs['finalization_admission'](
+        {'id': 'conversation-1', 'status': ConversationStatus.in_progress.value}
+    )
     decider.assert_called_once()
-    assert create_intent.call_args.kwargs['fanout_key'] == 'conversation:conversation-1:finalization:1'
+    assert admission['fanout_key'] == 'conversation:conversation-1:finalization:1'
+
+
+@pytest.mark.parametrize(
+    ('status', 'discarded'),
+    [
+        (ConversationStatus.failed.value, False),
+        (ConversationStatus.in_progress.value, True),
+    ],
+    ids=['failed', 'discarded'],
+)
+def test_lifecycle_runtime_rejects_late_terminal_finalization(monkeypatch, status, discarded):
+    observed = {}
+
+    def create_intent(_uid, _conversation_id, **kwargs):
+        admission = kwargs['finalization_admission'](
+            {
+                'id': 'conversation-1',
+                'status': status,
+                'discarded': discarded,
+                'transcript_segments': [{'text': 'persisted'}],
+            }
+        )
+        observed.update(admission)
+        return {
+            'job_id': None,
+            'status': admission['reason'],
+            'dispatch_generation': None,
+            'requires_byok': False,
+            'fanout_key': None,
+        }
+
+    monkeypatch.setattr(lifecycle_service.jobs_db, 'create_or_get_finalization_intent', create_intent)
+
+    result = lifecycle_service.request_finalization('uid-1', 'conversation-1', has_byok_keys=False)
+
+    assert result['route'] == 'noop'
+    assert observed == {'accepted': False, 'terminal': True, 'reason': 'terminal', 'fanout_key': None}
 
 
 class _Request:
