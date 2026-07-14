@@ -3,6 +3,8 @@ import json
 import re
 from pathlib import Path
 
+import pytest
+
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
@@ -15,10 +17,15 @@ def _load_script(name: str):
     return module
 
 
-def test_memory_policy_core_change_selects_inv_mem_guard():
-    """Narrow memory policy PRs always pull INV-MEM guard tests."""
+@pytest.fixture(scope="module")
+def selector_and_all_tests():
     selector = _load_script("select_backend_unit_tests")
-    all_tests = selector.discover_all_tests()
+    return selector, selector.discover_all_tests()
+
+
+def test_memory_policy_core_change_selects_inv_mem_guard(selector_and_all_tests):
+    """Narrow memory policy PRs always pull INV-MEM guard tests."""
+    selector, all_tests = selector_and_all_tests
 
     selected, reason = selector.tests_for_changed_paths(
         ["backend/utils/memory/chat_memory_adapter.py"],
@@ -28,9 +35,8 @@ def test_memory_policy_core_change_selects_inv_mem_guard():
     assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
 
-def test_workflow_contract_sources_select_adjacent_tests():
-    selector = _load_script("select_backend_unit_tests")
-    all_tests = selector.discover_all_tests()
+def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
 
     full_run_cases = {
         "backend/database/memory_vector_repair_outbox_worker.py": "tests/unit/test_vector_repair_outbox_worker.py",
@@ -68,9 +74,8 @@ def test_workflow_contract_sources_select_adjacent_tests():
         assert selected == all_tests
 
 
-def test_workflow_contract_directory_glob_selects_nested_chart_test():
-    selector = _load_script("select_backend_unit_tests")
-    all_tests = selector.discover_all_tests()
+def test_workflow_contract_directory_glob_selects_nested_chart_test(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
 
     selected, reason = selector.tests_for_changed_paths(
         ["backend/charts/pusher/templates/deployment.yaml"],
@@ -81,10 +86,9 @@ def test_workflow_contract_directory_glob_selects_nested_chart_test():
     assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
 
-def test_selector_docs_and_flat_utils_do_not_force_full_suite_via_globs():
+def test_selector_docs_and_flat_utils_do_not_force_full_suite_via_globs(selector_and_all_tests):
     """Docs/AGENTS skip selection; metrics is not a FULL_RUN_GLOBS hit."""
-    selector = _load_script("select_backend_unit_tests")
-    all_tests = selector.discover_all_tests()
+    selector, all_tests = selector_and_all_tests
 
     for path in (
         "backend/AGENTS.md",
@@ -111,9 +115,8 @@ def test_selector_docs_and_flat_utils_do_not_force_full_suite_via_globs():
         assert reason == f"{path} requires the full backend unit suite"
 
 
-def test_unmapped_source_forces_full_suite_even_when_direct_test_changed():
-    selector = _load_script("select_backend_unit_tests")
-    all_tests = selector.discover_all_tests()
+def test_unmapped_source_forces_full_suite_even_when_direct_test_changed(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
 
     selected, reason = selector.tests_for_changed_paths(
         [
@@ -127,9 +130,8 @@ def test_unmapped_source_forces_full_suite_even_when_direct_test_changed():
     assert reason == "backend/new_unmapped_runtime.py did not match a backend test-selection contract"
 
 
-def test_mapped_source_with_direct_test_remains_narrow():
-    selector = _load_script("select_backend_unit_tests")
-    all_tests = selector.discover_all_tests()
+def test_mapped_source_with_direct_test_remains_narrow(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
 
     selected, reason = selector.tests_for_changed_paths(
         [
@@ -144,9 +146,8 @@ def test_mapped_source_with_direct_test_remains_narrow():
     assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
 
-def test_removed_test_forces_full_discovered_suite():
-    selector = _load_script("select_backend_unit_tests")
-    all_tests = selector.discover_all_tests()
+def test_removed_test_forces_full_discovered_suite(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
 
     selected, reason = selector.tests_for_changed_paths(
         ["backend/tests/unit/test_removed_contract.py"],
