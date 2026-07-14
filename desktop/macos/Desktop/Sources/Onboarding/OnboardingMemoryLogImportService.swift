@@ -47,7 +47,7 @@ enum OnboardingMemoryLogSource: String, CaseIterable, Sendable {
 
   var prompt: String {
     """
-    Return everything you know about me inside one fenced code block. Include long-term memory, bio details, and any model-set context you have with dates when available. I want a thorough memory export of what you've learned about me. Skip tool details and include only information that is actually about me. Be exhaustive and careful.
+    Return everything you know about me inside one fenced code block. Include long-term memory, bio details, and any model-set context you have. Prefix every item with the date/timestamp it was learned or set (use the format [YYYY-MM-DD] when you know it, or [date unknown] when you don't). I want a thorough memory export of what you've learned about me. Skip tool details and include only information that is actually about me. Be exhaustive and careful.
     """
   }
 }
@@ -97,6 +97,7 @@ actor OnboardingMemoryLogImportService {
       - Deduplicate overlapping memories
       - Exclude tool details, implementation notes, and meta-instructions
       - Each memory should be one concise factual statement
+      - Preserve any leading date/timestamp (e.g. "[2024-05-01]") when the log provides one
       """
 
     let extracted: ExtractedMemoryLog
