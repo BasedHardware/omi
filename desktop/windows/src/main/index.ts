@@ -1031,6 +1031,11 @@ app.on('will-quit', () => {
   // outlives the app on every quit, so orphaned omi-*-ocr-helper.exe processes
   // pile up across launches (no production dispose() call site before this).
   helperProcess.dispose()
+  // Same for the PTT audio-mute helper — and here it's not just hygiene: quitting
+  // mid-hold would otherwise orphan a helper still holding the system-audio mute,
+  // leaving the user's speakers muted with Omi gone. dispose() closes its stdin,
+  // which is its cue to unmute and exit.
+  systemAudioMuteBridge.dispose()
 })
 
 // In this file you can include the rest of your app's specific main process

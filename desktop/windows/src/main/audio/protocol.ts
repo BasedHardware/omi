@@ -14,4 +14,8 @@ export const OP_HELLO = 3
 //     test samples a window instead of a single instant (a single MasterPeakValue
 //     read is 0 between the render client's buffer fills, so v1 silently refused
 //     to mute while audio WAS playing).
-export const PROTOCOL_VERSION = 2
+// v3: MUTE returns the {deviceId} it muted and RESTORE accepts an optional
+//     {deviceId} hint, so a mute stranded by a killed helper (the endpoint mute is
+//     persistent OS state — it outlives the process) can still be undone by its
+//     replacement. The helper also unmutes on stdin EOF / exit.
+export const PROTOCOL_VERSION = 3

@@ -8,14 +8,14 @@ using NAudio.CoreAudioApi;
 //
 // Request  frame: [uint32 LE length][1 byte opcode][UTF-8 JSON payload]
 //   opcode 1 = MUTE     payload = {} (ignored)
-//   opcode 2 = RESTORE  payload = {} (ignored)
+//   opcode 2 = RESTORE  payload = {"deviceId":"..."} (optional stranded-mute hint)
 //   opcode 3 = HELLO    payload = {} (ignored)
 // Response frame: [uint32 LE length][UTF-8 JSON]
-//   MUTE:    {"ok":true,"muted":true}
+//   MUTE:    {"ok":true,"muted":true,"deviceId":"..."}
 //            {"ok":true,"muted":false,"reason":"not_playing|user_muted|no_device","peak":0.0}
 //            {"ok":false,"message":"..."}
 //   RESTORE: {"ok":true,"muted":false}  | {"ok":false,"message":"..."}
-//   HELLO:   {"ok":true,"protocolVersion":2}
+//   HELLO:   {"ok":true,"protocolVersion":3}
 //
 // Mute contract (idempotent, exactly like the macOS controller):
 //   * mute only when audio is ACTUALLY playing (MasterPeakValue > ~0), and
@@ -23,6 +23,17 @@ using NAudio.CoreAudioApi;
 //   * remember the device we muted so RESTORE unmutes exactly that device and
 //     a second MUTE while already holding one is a no-op.
 // RESTORE is unconditional + idempotent: a no-op when we hold no mute.
+//
+// NEVER LEAVE THE USER MUTED. The endpoint mute we set is PERSISTENT OS state —
+// it survives this process, so a helper that dies holding one strands the user's
+// speakers muted with the app gone. Three layers guard that:
+//   1. the request loop restores in a `finally`, so stdin EOF (the parent quit or
+//      crashed — the pipe closes) and any unhandled exception both unmute first;
+//   2. a ProcessExit hook covers the remaining managed-shutdown paths;
+//   3. TerminateProcess can't be intercepted at all, so if we are hard-killed the
+//      BRIDGE re-spawns us and replays RESTORE with the {"deviceId"} of the mute
+//      it saw us take — see the hint path in Restore(). That only ever undoes a
+//      mute WE set, never one the user set.
 internal static class Program
 {
     private const byte OpMute = 1;
@@ -31,7 +42,7 @@ internal static class Program
 
     // Must match PROTOCOL_VERSION in src/main/audio/protocol.ts. The bridge
     // asserts a match on spawn and logs loudly on drift (a stale helper build).
-    private const int ProtocolVersion = 2;
+    private const int ProtocolVersion = 3;
 
     // MasterPeakValue is exactly 0 when nothing is rendering; a tiny epsilon
     // guards against float denormal noise. This is the point-in-time "is the
@@ -61,34 +72,48 @@ internal static class Program
     {
         if (args.Contains("--selftest")) return SelfTest();
 
+        // Layer 2: covers managed shutdowns that bypass the `finally` below.
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => RestoreHeldMute();
+
         var stdin = Console.OpenStandardInput();
         var stdout = Console.OpenStandardOutput();
-        while (true)
+        try
         {
-            var header = await ReadExactly(stdin, 4);
-            if (header is null) return 0;
-            var len = BitConverter.ToUInt32(header, 0);
-            if (len == 0) continue;
-            var body = await ReadExactly(stdin, (int)len);
-            if (body is null) return 0;
+            while (true)
+            {
+                var header = await ReadExactly(stdin, 4);
+                if (header is null) return 0; // stdin EOF — the parent is gone
+                var len = BitConverter.ToUInt32(header, 0);
+                if (len == 0) continue;
+                var body = await ReadExactly(stdin, (int)len);
+                if (body is null) return 0;
 
-            var opcode = body[0];
-            string json;
-            try
-            {
-                json = opcode switch
+                var opcode = body[0];
+                var payload = Encoding.UTF8.GetString(body, 1, body.Length - 1);
+                string json;
+                try
                 {
-                    OpHello => Hello(),
-                    OpMute => Mute(),
-                    OpRestore => Restore(),
-                    _ => Err($"unknown opcode {opcode}")
-                };
+                    json = opcode switch
+                    {
+                        OpHello => Hello(),
+                        OpMute => Mute(),
+                        OpRestore => Restore(payload),
+                        _ => Err($"unknown opcode {opcode}")
+                    };
+                }
+                catch (Exception e)
+                {
+                    json = Err(e.Message);
+                }
+                await WriteFrame(stdout, json);
             }
-            catch (Exception e)
-            {
-                json = Err(e.Message);
-            }
-            await WriteFrame(stdout, json);
+        }
+        finally
+        {
+            // Layer 1. Reached on stdin EOF (parent quit/crashed → the pipe
+            // closed), on a broken stdout pipe, and on any unhandled exception.
+            // Whatever happens, we do not exit holding the user's speakers muted.
+            RestoreHeldMute();
         }
     }
 
@@ -97,7 +122,9 @@ internal static class Program
     {
         lock (Gate)
         {
-            if (_mutedDevice != null) return Ok(true); // already holding a mute — no-op
+            // Already holding a mute — no-op. Still echo the id so a bridge that
+            // lost track (respawned helper) re-learns what we hold.
+            if (_mutedDevice != null) return Muted(_mutedDevice.ID);
 
             MMDevice device;
             try
@@ -137,7 +164,9 @@ internal static class Program
                 }
                 device.AudioEndpointVolume.Mute = true;
                 _mutedDevice = device; // keep alive; RESTORE unmutes THIS device
-                return Ok(true);
+                // The bridge remembers this id so it can heal the mute even if we
+                // are hard-killed before RESTORE lands (see the hint path below).
+                return Muted(device.ID);
             }
             catch (Exception e)
             {
@@ -147,12 +176,48 @@ internal static class Program
         }
     }
 
-    private static string Restore()
+    private static string Restore(string payloadJson)
+    {
+        lock (Gate)
+        {
+            if (_mutedDevice != null)
+            {
+                RestoreHeldMute();
+                return Ok(false);
+            }
+
+            // We hold no mute. A deviceId hint means a PREVIOUS helper process
+            // muted that endpoint and was killed before it could restore (layer 3):
+            // the OS mute outlived it, so heal it here. Safe by construction — the
+            // bridge only ever sends an id it watched US mute, so this can only
+            // undo our own mute, never one the user set.
+            var hint = DeviceIdHint(payloadJson);
+            if (hint is null) return Ok(false); // genuine no-op
+
+            try
+            {
+                using var enumerator = new MMDeviceEnumerator();
+                using var device = enumerator.GetDevice(hint);
+                device.AudioEndpointVolume.Mute = false;
+                Console.Error.WriteLine($"[restore] healed a stranded mute on {hint}");
+                return Ok(false);
+            }
+            catch (Exception e)
+            {
+                // Device is gone (unplugged) — its mute went with it.
+                return Err(e.Message);
+            }
+        }
+    }
+
+    // Unmute the endpoint WE muted, if any. Idempotent; never throws. The single
+    // primitive behind RESTORE, the exit `finally`, and the ProcessExit hook.
+    private static void RestoreHeldMute()
     {
         lock (Gate)
         {
             var device = _mutedDevice;
-            if (device == null) return Ok(false); // we hold no mute — no-op
+            if (device == null) return;
             _mutedDevice = null;
             try
             {
@@ -163,7 +228,24 @@ internal static class Program
                 // Device unplugged/vanished between mute and restore — nothing to do.
             }
             TryDispose(device);
-            return Ok(false);
+        }
+    }
+
+    // The optional {"deviceId":"…"} stranded-mute hint on a RESTORE payload.
+    private static string? DeviceIdHint(string payloadJson)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(payloadJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return null;
+            if (!doc.RootElement.TryGetProperty("deviceId", out var el)) return null;
+            if (el.ValueKind != JsonValueKind.String) return null;
+            var id = el.GetString();
+            return string.IsNullOrWhiteSpace(id) ? null : id;
+        }
+        catch
+        {
+            return null; // malformed/empty payload — treat as no hint
         }
     }
 
@@ -218,6 +300,11 @@ internal static class Program
 
     private static string Ok(bool muted) =>
         JsonSerializer.Serialize(new { ok = true, muted }, JsonOpts);
+
+    // A successful (or already-held) mute, carrying the endpoint id. The bridge
+    // stores it so it can heal the mute if we're killed before RESTORE lands.
+    private static string Muted(string deviceId) =>
+        JsonSerializer.Serialize(new { ok = true, muted = true, deviceId }, JsonOpts);
 
     // A deliberate no-op, with the reason it happened. Muting silently declining
     // to act is a support nightmare ("PTT doesn't mute my music") — the bridge
