@@ -7,6 +7,7 @@ import { HubAskBar } from './HubAskBar'
 import { HubSuggestions } from './HubSuggestions'
 import { HubStatRibbon } from './HubStatRibbon'
 import { HubChatPanel } from './HubChatPanel'
+import { HubConnectPanel } from './HubConnectPanel'
 import { useHubStats } from './useHubStats'
 import { nextStage, isPanelMode } from './hubStage'
 import type { HomeStageEvent, HomeStageMode } from './hubStage'
@@ -177,7 +178,7 @@ export function HomeHub(): React.JSX.Element {
                   {askBar}
                 </HubChatPanel>
               ) : (
-                <ConnectPanelPlaceholder />
+                <HubConnectPanel onDismiss={() => dispatch({ type: 'dismissed' })} />
               )}
             </StagePanel>
           ) : (
@@ -273,20 +274,3 @@ function StagePanel({ children }: { children: React.ReactNode }): React.JSX.Elem
   )
 }
 
-// Connect is a follow-up PR (the integrations tray). This is the panel chrome it
-// will fill — built, but deliberately empty rather than half-built.
-function ConnectPanelPlaceholder(): React.JSX.Element {
-  return (
-    <div
-      className="flex h-full w-full items-center justify-center rounded-[26px] border"
-      style={{
-        borderColor: 'rgb(var(--home-stage-glow-rgb) / 0.14)',
-        backgroundImage:
-          'linear-gradient(to bottom, rgb(255 255 255 / 0.03), rgb(var(--home-stage-glow-rgb) / 0.05))',
-        boxShadow: '0 18px 44px rgb(0 0 0 / 0.42)'
-      }}
-    >
-      <p className="text-[13px] font-medium text-home-muted">Connections are coming soon.</p>
-    </div>
-  )
-}
