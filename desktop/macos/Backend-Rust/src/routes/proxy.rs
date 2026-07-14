@@ -1317,6 +1317,10 @@ mod tests {
     use tokio::net::{TcpListener, TcpStream};
     use tokio::sync::oneshot;
 
+    fn local_test_client() -> reqwest::Client {
+        reqwest::Client::builder().no_proxy().build().unwrap()
+    }
+
     async fn spawn_hanging_upstream() -> (
         String,
         oneshot::Receiver<()>,
@@ -1457,7 +1461,7 @@ mod tests {
     #[tokio::test]
     async fn hanging_upstream_is_cancelled_at_injected_deadline() {
         let (url, request_seen, disconnected, server) = spawn_hanging_upstream().await;
-        let client = reqwest::Client::new();
+        let client = local_test_client();
         let (deadline_tx, deadline_rx) = oneshot::channel();
         let work = tokio::spawn(async move {
             race_gemini_deadline(
@@ -1489,7 +1493,7 @@ mod tests {
     #[tokio::test]
     async fn dropping_proxy_work_cancels_the_upstream_socket() {
         let (url, request_seen, disconnected, server) = spawn_hanging_upstream().await;
-        let client = reqwest::Client::new();
+        let client = local_test_client();
         let proxy_work = tokio::spawn(async move {
             within_gemini_deadline(
                 Duration::from_secs(30),
@@ -1515,7 +1519,7 @@ mod tests {
     async fn downstream_http_disconnect_cancels_upstream_work() {
         let (upstream_url, request_seen, disconnected, upstream_server) =
             spawn_hanging_upstream().await;
-        let client = reqwest::Client::new();
+        let client = local_test_client();
         let app = Router::new().route(
             "/",
             post(move || {
@@ -1560,7 +1564,7 @@ mod tests {
     #[tokio::test]
     async fn one_budget_includes_pre_dispatch_work_and_upstream_wait() {
         let (url, request_seen, disconnected, server) = spawn_hanging_upstream().await;
-        let client = reqwest::Client::new();
+        let client = local_test_client();
         let (dispatch_tx, dispatch_rx) = oneshot::channel();
         let (deadline_tx, deadline_rx) = oneshot::channel();
         let work = tokio::spawn(async move {
