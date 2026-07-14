@@ -89,7 +89,9 @@ from utils.client_device import (
 )
 from utils.pusher import PusherCircuitBreakerOpen
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.live_content import retry_fenced_live_content_once
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
+from utils.observability.fallback import record_fallback
 from utils.request_validation import ImageChunkEnvelope
 from utils.speaker_identification import detect_speaker_from_text
 from utils.stt.streaming import (
@@ -1259,6 +1261,7 @@ async def _stream_handler(
         segments: List[TranscriptSegment],
         photos: List[ConversationPhoto],
         finished_at: datetime,
+        started_at: Optional[datetime] = None,
     ):
         updated_segments: List[TranscriptSegment] = []
         removed_ids: List[str] = []
@@ -1284,7 +1287,11 @@ async def _stream_handler(
                 )
             segments_dicts = [segment.model_dump() for segment in conversation.transcript_segments]
             segments_persisted = conversations_db.update_conversation_segments(
-                uid, conversation.id, segments_dicts, data_protection_level=_cached_protection_level
+                uid,
+                conversation.id,
+                segments_dicts,
+                started_at=started_at,
+                data_protection_level=_cached_protection_level,
             )
             if not segments_persisted:
                 return None
@@ -1305,6 +1312,24 @@ async def _stream_handler(
 
         conversations_db.update_conversation_finished_at(uid, conversation.id, finished_at)
         return conversation, updated_segments, removed_ids
+
+    def _retry_fenced_content_write(
+        segments: List[TranscriptSegment],
+        photos: List[ConversationPhoto],
+        finished_at: datetime,
+        started_at: Optional[datetime],
+    ):
+        """Replay buffered content only after its prior generation was fenced."""
+        fresh_conversation_data = _get_cached_conversation(force_refresh=True)
+        if not fresh_conversation_data:
+            return None
+        return _update_in_progress_conversation(
+            deserialize_conversation(fresh_conversation_data),
+            segments,
+            photos,
+            finished_at,
+            started_at,
+        )
 
     # STT
     # Validate session.active before initiating STT
@@ -1997,18 +2022,16 @@ async def _stream_handler(
                 continue
 
             transcript_segments = []
+            first_segment_started_at: Optional[datetime] = None
             time_offset: float = 0.0
             if segments_to_process:
                 session.last_transcript_time = time.time()
 
                 # If conversation has no segments yet, set started_at based on when first speech occurred
                 if not conversation_data.get('transcript_segments'):
-                    first_speech_timestamp = session.first_audio_byte_timestamp + segments_to_process[0]["start"]
-                    new_started_at = datetime.fromtimestamp(first_speech_timestamp, tz=timezone.utc)
-                    conversations_db.update_conversation(
-                        uid, cast(str, session.current_conversation_id), {'started_at': new_started_at}
-                    )
-                    conversation_data['started_at'] = new_started_at
+                    first_speech_timestamp = session.first_audio_byte_timestamp + segments_to_process[0]['start']
+                    first_segment_started_at = datetime.fromtimestamp(first_speech_timestamp, tz=timezone.utc)
+                    conversation_data['started_at'] = first_segment_started_at
 
                 # Calculate unified time offset: audio stream start relative to conversation start
                 conversation_started_at = conversation_data['started_at']
@@ -2039,7 +2062,36 @@ async def _stream_handler(
 
             # Update transcript segments
             conversation = deserialize_conversation(conversation_data)
-            result = _update_in_progress_conversation(conversation, transcript_segments, photos_to_process, finished_at)
+            result, rolled_over = await retry_fenced_live_content_once(
+                write_current=lambda: _update_in_progress_conversation(
+                    conversation,
+                    transcript_segments,
+                    photos_to_process,
+                    finished_at,
+                    first_segment_started_at,
+                ),
+                rollover=lambda: _create_new_in_progress_conversation(rollover=True),
+                write_fresh=lambda: _retry_fenced_content_write(
+                    transcript_segments,
+                    photos_to_process,
+                    finished_at,
+                    first_segment_started_at,
+                ),
+            )
+            if rolled_over:
+                record_fallback(
+                    component='other',
+                    from_mode='fenced_generation',
+                    to_mode='fresh_generation',
+                    reason='local_heal',
+                    outcome='recovered' if result else 'exhausted',
+                    log=logger,
+                )
+                logger.warning(
+                    'Late listen content was fenced by cleanup; rolled over generation uid=%s listen=%s',
+                    uid,
+                    session_id,
+                )
             if not result or not result[0]:
                 continue
             conversation, updated_segments, removed_ids = result

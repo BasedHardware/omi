@@ -17,7 +17,7 @@ from models.conversation_enums import ConversationStatus, PostProcessingModel, P
 from models.conversation_photo import ConversationPhoto
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
-from ._client import db
+from ._client import db, get_firestore_client
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from utils.other.storage import list_audio_chunks
 
@@ -1143,9 +1143,13 @@ def update_conversation_segments(
     segments: List[dict],
     finished_at: datetime = None,
     data_protection_level: str = None,
+    *,
+    started_at: datetime = None,
+    firestore_client: Any = None,
 ):
-    doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
-    transaction = db.transaction()
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    doc_ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    transaction = client.transaction()
 
     @firestore.transactional
     def _write_segments(transaction) -> bool:
@@ -1162,6 +1166,8 @@ def update_conversation_segments(
         }
         if finished_at:
             update_payload['finished_at'] = finished_at
+        if started_at:
+            update_payload['started_at'] = started_at
         prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
         transaction.update(doc_ref, prepared_payload)
         return True
@@ -1296,11 +1302,18 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
 # ***********************************
 
 
-def store_conversation_photos(uid: str, conversation_id: str, photos: List[ConversationPhoto]) -> bool:
-    user_ref = db.collection('users').document(uid)
+def store_conversation_photos(
+    uid: str,
+    conversation_id: str,
+    photos: List[ConversationPhoto],
+    *,
+    firestore_client: Any = None,
+) -> bool:
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    user_ref = client.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     photos_ref = conversation_ref.collection('photos')
-    transaction = db.transaction()
+    transaction = client.transaction()
 
     @firestore.transactional
     def _store(transaction) -> bool:

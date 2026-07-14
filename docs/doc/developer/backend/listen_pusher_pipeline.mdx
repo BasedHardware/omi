@@ -6,7 +6,7 @@ description: "Sequence diagrams for the /v4/listen WebSocket and Pusher processi
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-07-14 (durable recording-session bindings and ordered lifecycle envelopes)
+> Last updated: 2026-07-15 (durable recording-session bindings, fenced late-content recovery, and ordered lifecycle envelopes)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -70,7 +70,12 @@ The same recording ID is always a retry of its original generation: after a
 terminal result the backend returns that canonical binding and its terminal
 envelope instead of rebinding it. A silence or status rollover on a live
 WebSocket receives a fresh server-generated recording ID and can therefore
-bind a new conversation without mutating the terminal generation.
+bind a new conversation without mutating the terminal generation. If an
+empty-generation cleanup wins the Firestore transaction race against buffered
+STT segments or photos, the late write is fenced rather than recreating the
+terminal parent; the listen handler opens one fresh generation and replays that
+buffer once. The first-segment `started_at` value commits in that same content
+transaction, so this recovery cannot leave a timestamp-only write behind.
 
 ## Capture-device provenance
 
