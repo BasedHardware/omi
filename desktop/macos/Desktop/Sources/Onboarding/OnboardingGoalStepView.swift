@@ -69,13 +69,17 @@ struct OnboardingGoalStepView: View {
             .foregroundColor(OmiColors.warning)
         }
 
-        if shouldShowContinue {
-          Button(coordinator.isSavingGoal ? "Saving…" : "Continue") {
-            saveGoalAndContinue()
+        HStack(spacing: OmiSpacing.md) {
+          OnboardingBackButton()
+
+          if shouldShowContinue {
+            Button(coordinator.isSavingGoal ? "Saving…" : "Continue") {
+              saveGoalAndContinue()
+            }
+            .buttonStyle(OmiButtonStyle(.primary))
+            .keyboardShortcut(.defaultAction)
+            .disabled(coordinator.isSavingGoal)
           }
-          .buttonStyle(OmiButtonStyle(.primary))
-          .keyboardShortcut(.defaultAction)
-          .disabled(coordinator.isSavingGoal)
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
