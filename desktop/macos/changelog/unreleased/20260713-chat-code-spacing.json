@@ -1,0 +1,3 @@
+{
+  "change": "Fixed chat answers inserting a stray space into code like <code>pd.DataFrame</code> when normalizing sentence spacing"
+}

@@ -100,19 +100,21 @@ class SystemAudioCaptureService: @unchecked Sendable {
             return
         }
 
-        self.onAudioChunk = onAudioChunk
-        self.onAudioLevel = onAudioLevel
-
         // All CoreAudio HAL calls (CreateTap, CreateAggregateDevice, AudioDeviceStart) are
         // synchronous IPC to coreaudiod via mach_msg. After wake from sleep the daemon can
         // take seconds to respond, blocking the caller. Dispatch the entire setup to audioQueue,
         // mirroring the pattern already used in stopCapture().
+        // The callback assignments live on audioQueue too: the serial queue is the single
+        // owner of all state the HAL IO thread reads (callbacks, converter, formats), so a
+        // stop's deferred clear and a restart's fresh assignment can never interleave.
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             audioQueue.async { [weak self] in
                 guard let self else {
                     continuation.resume()
                     return
                 }
+                self.onAudioChunk = onAudioChunk
+                self.onAudioLevel = onAudioLevel
                 do {
                     try self.startCaptureOnQueue()
                     continuation.resume()
@@ -229,8 +231,6 @@ class SystemAudioCaptureService: @unchecked Sendable {
     func stopCapture() {
         guard isCapturing else { return }
         isCapturing = false
-        onAudioChunk = nil
-        onAudioLevel = nil
 
         // Capture values for background cleanup to avoid blocking main thread
         let procID = self.ioProcID
@@ -240,13 +240,17 @@ class SystemAudioCaptureService: @unchecked Sendable {
         self.ioProcID = nil
         self.aggregateDeviceID = kAudioObjectUnknown
         self.tapID = kAudioObjectUnknown
-        self.audioConverter = nil
-        self.inputFormat = nil
-        self.targetFormat = nil
-        self.sourceSampleRate = 0.0
 
-        // AudioDeviceStop can block — run off main thread
-        audioQueue.async {
+        // Do NOT release the state handleAudioInput reads (callbacks, converter,
+        // formats, sourceSampleRate) here: the CoreAudio HAL IO thread can still be
+        // inside handleAudioInput until AudioDeviceStop below returns, and nil-ing
+        // ARC references from the main thread races its reads (torn retain/release →
+        // intermittent crash on stop; sourceSampleRate=0 would divide-by-zero the
+        // resample math). The serial audioQueue quiesces the IOProc first and then
+        // clears; startCapture assigns this state on the same queue, so a stop's
+        // clear and a restart's fresh assignment can never interleave.
+        // AudioDeviceStop can block — run off main thread.
+        audioQueue.async { [weak self] in
             if let procID = procID, aggDevID != kAudioObjectUnknown {
                 AudioDeviceStop(aggDevID, procID)
                 AudioDeviceDestroyIOProcID(aggDevID, procID)
@@ -257,6 +261,13 @@ class SystemAudioCaptureService: @unchecked Sendable {
             if tID != kAudioObjectUnknown {
                 AudioHardwareDestroyProcessTap(tID)
             }
+            guard let self else { return }
+            self.onAudioChunk = nil
+            self.onAudioLevel = nil
+            self.audioConverter = nil
+            self.inputFormat = nil
+            self.targetFormat = nil
+            self.sourceSampleRate = 0.0
         }
 
         log("SystemAudioCapture: Stopped capturing")
