@@ -14,6 +14,7 @@ enum DesktopHealthEventName: String {
   case pttCommitted = "ptt_committed"
   case realtimeTokenMintFailed = "realtime_token_mint_failed"
   case realtimeProviderExpectedIdleTeardown = "realtime_provider_expected_idle_teardown"
+  case realtimeProviderExpectedSessionRotation = "realtime_provider_expected_session_rotation"
   case realtimeProviderPolicyClose = "realtime_provider_policy_close"
   case realtimeProviderSessionError = "realtime_provider_session_error"
   case fallbackTriggered = "fallback_triggered"
@@ -447,6 +448,8 @@ final class DesktopDiagnosticsManager {
     switch normalizedCategory {
     case RealtimeHubCloseCategory.expectedIdleTeardown.rawValue:
       event = .realtimeProviderExpectedIdleTeardown
+    case RealtimeHubCloseCategory.expectedSessionRotation.rawValue:
+      event = .realtimeProviderExpectedSessionRotation
     case RealtimeHubCloseCategory.providerPolicyCloseFast.rawValue,
       CredentialFailureClass.providerPolicyClose(provider: .openai).logValue:
       event = .realtimeProviderPolicyClose
@@ -459,6 +462,10 @@ final class DesktopDiagnosticsManager {
       "alive_for_seconds": Int(aliveFor),
       "active_turn": activeTurn,
     ]
+    if normalizedCategory == RealtimeHubCloseCategory.expectedSessionRotation.rawValue {
+      properties["recovery_action"] = "rotate_realtime_session"
+      properties["recovery_result"] = activeTurn ? "turn_terminated_and_rewarm_started" : "rewarm_started"
+    }
     if let authMode {
       properties["auth_mode"] = authMode.rawValue
     }

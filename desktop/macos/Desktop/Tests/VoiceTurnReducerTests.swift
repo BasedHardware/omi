@@ -85,6 +85,32 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertFalse(duplicate.effects.contains(where: \.isTerminal))
   }
 
+  func testOpenAISessionRotationTerminatesActiveHubTurnOnce() {
+    let turnID = VoiceTurnID()
+    let sessionID = VoiceSessionID()
+    let category = RealtimeHubCloseClassifier.category(
+      message: "Your session hit the maximum duration of 60 minutes.",
+      aliveFor: 60 * 60,
+      hasActiveTurn: true,
+      provider: .openai)
+    XCTAssertEqual(
+      RealtimeHubCloseClassifier.sessionRotationPlan(
+        for: category,
+        hasActiveTurn: true),
+      .terminateActiveTurnAndRewarm)
+
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .selectRoute(turnID: turnID, route: .hub(sessionID: sessionID))).model
+
+    let terminal = reduce(model, .finish(turnID: turnID, reason: .providerFailed))
+    XCTAssertEqual(terminal.model.turn?.phase, .terminal(.providerFailed))
+    XCTAssertEqual(terminal.effects.filter(\.isTerminal).count, 1)
+
+    let duplicate = reduce(terminal.model, .finish(turnID: turnID, reason: .providerFailed))
+    XCTAssertEqual(duplicate.model.duplicateTerminalCount, 1)
+    XCTAssertFalse(duplicate.effects.contains(where: \.isTerminal))
+  }
+
   func testQuickTapLockWindowCanBecomeLockedRecording() {
     let turnID = VoiceTurnID()
     var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model

@@ -139,6 +139,24 @@ final class DesktopDiagnosticsManagerTests: XCTestCase {
     XCTAssertEqual(snapshot["active_turn"] as? Bool, false)
   }
 
+  func testExpectedSessionRotationUsesNonErrorHealthEvent() throws {
+    DesktopDiagnosticsManager.shared.recordRealtimeProviderClose(
+      provider: "openai",
+      category: RealtimeHubCloseCategory.expectedSessionRotation.rawValue,
+      aliveFor: 3_600,
+      activeTurn: true,
+      authMode: .managed,
+      failureClass: nil)
+
+    let snapshot = try latestSnapshot()
+
+    XCTAssertEqual(snapshot["event"] as? String, "realtime_provider_expected_session_rotation")
+    XCTAssertEqual(snapshot["provider"] as? String, "openai")
+    XCTAssertEqual(snapshot["category"] as? String, "expected_session_rotation")
+    XCTAssertEqual(snapshot["recovery_action"] as? String, "rotate_realtime_session")
+    XCTAssertEqual(snapshot["recovery_result"] as? String, "turn_terminated_and_rewarm_started")
+  }
+
   func testProviderCloseFallsBackToFailureClassInsteadOfUnclassified() throws {
     DesktopDiagnosticsManager.shared.recordRealtimeProviderClose(
       provider: "openai",
