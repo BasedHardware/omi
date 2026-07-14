@@ -712,12 +712,21 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
     }
 
     private func decodeVarint(_ data: [UInt8], _ startPos: Int) -> (Int, Int) {
+        // A base-128 varint for a 64-bit value is at most 10 bytes. Cap the read
+        // so a malformed packet that is all continuation bytes (high bit set)
+        // can't scan the entire buffer as one varint; the decoded value is still
+        // range-clamped by `boundedFieldLength` before it indexes anything.
+        // (Swift's `<<` is a non-trapping smart shift, so the shift itself is
+        // safe regardless — this cap is bounded-read hygiene, not a crash guard.)
+        let maxVarintBytes = 10
         var result = 0
         var shift = 0
         var pos = startPos
-        while pos < data.count {
+        var bytesRead = 0
+        while pos < data.count && bytesRead < maxVarintBytes {
             let byte = data[pos]
             pos += 1
+            bytesRead += 1
             result |= Int(byte & 0x7f) << shift
             if (byte & 0x80) == 0 { break }
             shift += 7

@@ -78,6 +78,26 @@ final class LimitlessDeviceParsingTests: XCTestCase {
         XCTAssertEqual(result?.payload ?? [], [0xAA, 0xBB, 0xCC])
     }
 
+    /// A length varint that is all continuation bytes (high bit set) with no
+    /// terminator. The 10-byte varint cap bounds the read so the parser can't
+    /// scan the whole buffer as one varint, and the clamped length keeps the
+    /// slice empty — no trap, no hang.
+    func testParseBlePacketSurvivesOverlongContinuationVarint() {
+        let connection = makeConnection()
+
+        var packet: [UInt8] = []
+        packet += [0x08, 0x01]                        // field 1 (index) = 1
+        packet += [0x18, 0x01]                        // field 3 (numFrags) = 1
+        packet += [0x22]                              // field 4 (payload), wireType 2
+        packet += Array(repeating: 0xFF, count: 20)   // 20 continuation bytes, no terminator
+
+        let result = connection.parseBlePacket(packet)
+
+        XCTAssertNotNil(result)
+        XCTAssertEqual(result?.index, 1)
+        XCTAssertEqual(result?.payload.count, 0)
+    }
+
     // MARK: - Helpers
 
     private func makeConnection() -> LimitlessDeviceConnection {
