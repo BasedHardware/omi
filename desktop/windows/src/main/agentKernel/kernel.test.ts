@@ -7,6 +7,12 @@
 // structural KernelDatabase interface, so this exercises the production path.
 //
 // Hermetic: no network, no sleeps, no ordering dependence between tests.
+//
+// SCOPE: the run / attempt / binding / delegation state machine and its guards.
+// The coordinator surface — the context-packet security gates, the action-queue
+// projection, and the intent-router decision order — lives in
+// desktopCoordinator.test.ts. Do not read this file alone and conclude the
+// context-packet gate is untested.
 
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
@@ -35,6 +41,9 @@ const openStores: SqliteAgentStore[] = []
 const OWNER = 'owner-1'
 
 afterEach(() => {
+  // Reset so native session ids are per-test deterministic (native-1, native-2, …)
+  // rather than depending on how many tests ran before.
+  nativeSessionCounter = 0
   // Windows holds the SQLite file open until the handle is closed; rmSync would
   // otherwise fail with EPERM.
   for (const store of openStores.splice(0)) {
@@ -185,15 +194,29 @@ function fakeAdapter(options: FakeAdapterOptions = {}): FakeAdapter {
 
 // === Harness =================================================================
 
-function newStore(): SqliteAgentStore {
+/** A fresh temp dir; reopen the same dir to simulate a process restart. */
+function newStoreDir(): string {
   const dir = mkdtempSync(join(tmpdir(), 'omi-kernel-'))
   createdDirs.push(dir)
+  return dir
+}
+
+/**
+ * Open (or REOPEN) the store at a given dir. Reopening runs reconcileStartup —
+ * that is what makes a restart test a real restart rather than a fresh kernel
+ * over a live store object.
+ */
+function openStoreAt(dir: string): SqliteAgentStore {
   const store = new SqliteAgentStore({
     databaseFactory: nodeSqliteFactory,
     databasePath: join(dir, 'omi-agentd.sqlite3')
   })
   openStores.push(store)
   return store
+}
+
+function newStore(): SqliteAgentStore {
+  return openStoreAt(newStoreDir())
 }
 
 function newKernel(
@@ -373,16 +396,18 @@ describe('AgentRuntimeKernel — bindings', () => {
     expect(adapter.calls.resumeBinding[0].adapterNativeSessionId).toMatch(/^native-/)
   })
 
-  it('resumes a binding persisted by a previous process (restart recovery)', async () => {
-    // First "process": run a turn, then drop the kernel but keep the database.
+  // NOTE: this is a fresh-kernel test, NOT a restart test. It shares the SAME
+  // store object, so reconcileStartup() never runs. It proves the kernel keeps no
+  // in-memory binding cache — the binding row alone is enough to resume. The real
+  // restart (store closed and reopened, reconcileStartup fired) is the next test;
+  // do not let this one stand in for it.
+  it('resumes from the binding row alone, with no in-memory carryover', async () => {
     const store = newStore()
     const firstAdapter = fakeAdapter()
     const first = newKernel(firstAdapter, store)
     const seeded = await first.kernel.executeRun(runInput())
     const nativeId = firstAdapter.calls.executeAttempt[0].binding.adapterNativeSessionId
 
-    // Second "process": a brand new kernel + adapter over the same store. The
-    // binding row is all it has — this is the seam nothing had ever exercised.
     const secondAdapter = fakeAdapter()
     const second = newKernel(secondAdapter, store)
     const resumed = await second.kernel.executeRun(runInput({ requestId: 'r2' }))
@@ -392,6 +417,77 @@ describe('AgentRuntimeKernel — bindings', () => {
     expect(secondAdapter.calls.resumeBinding).toHaveLength(1)
     expect(secondAdapter.calls.resumeBinding[0].adapterNativeSessionId).toBe(nativeId)
     expect(resumed.terminalStatus).toBe('succeeded')
+  })
+
+  it('resumes a natively-resumable binding across a real process restart', async () => {
+    // First process: run a turn, then CLOSE the store.
+    const dir = newStoreDir()
+    const firstAdapter = fakeAdapter({ supportsNativeResume: true })
+    const firstStore = openStoreAt(dir)
+    const seeded = await newKernel(firstAdapter, firstStore).kernel.executeRun(runInput())
+    const nativeId = firstAdapter.calls.executeAttempt[0].binding.adapterNativeSessionId
+    firstStore.close()
+
+    // Second process: reopen the SAME file. reconcileStartup() runs on open and
+    // NULLs adapter_instance_id on every binding — a native binding must still
+    // resume, because its native session id outlives the process.
+    const secondStore = openStoreAt(dir)
+    const secondAdapter = fakeAdapter({ supportsNativeResume: true })
+    const resumed = await newKernel(secondAdapter, secondStore).kernel.executeRun(
+      runInput({ requestId: 'r2' })
+    )
+
+    expect(resumed.session.sessionId).toBe(seeded.session.sessionId)
+    expect(secondAdapter.calls.resumeBinding).toHaveLength(1)
+    expect(secondAdapter.calls.resumeBinding[0].adapterNativeSessionId).toBe(nativeId)
+    expect(secondAdapter.calls.openBinding).toHaveLength(0)
+    expect(resumed.terminalStatus).toBe('succeeded')
+  })
+
+  it('never reuses a process-local binding across a real process restart', async () => {
+    // The dangerous case: a pinned-worker adapter whose session lives only inside
+    // the dead process. Its handle is worthless after a restart, and reusing it
+    // would hand the model a dead worker. reconcileStartup marks every
+    // resume_fidelity='none' binding stale precisely to stop that; without it,
+    // canUseProcessLocalBinding (which keys on adapterInstanceId === runtimeNodeId)
+    // would happily reuse the row.
+    const dir = newStoreDir()
+    const firstAdapter = fakeAdapter({ supportsNativeResume: false, requiresPinnedWorker: true })
+    const firstStore = openStoreAt(dir)
+    await newKernel(firstAdapter, firstStore).kernel.executeRun(runInput())
+
+    const beforeRestart = firstStore.getRow(
+      'SELECT status, resume_fidelity, adapter_instance_id FROM adapter_bindings'
+    )
+    expect(String(beforeRestart.status)).toBe('active')
+    expect(String(beforeRestart.resume_fidelity)).toBe('none')
+    expect(String(beforeRestart.adapter_instance_id)).toBe('node-a')
+    firstStore.close()
+
+    // Restart: reopening the file runs reconcileStartup.
+    const secondStore = openStoreAt(dir)
+    const staleAfterRestart = secondStore.getRow(
+      "SELECT status, adapter_instance_id FROM adapter_bindings WHERE resume_fidelity = 'none'"
+    )
+    expect(String(staleAfterRestart.status)).toBe('stale')
+    expect(staleAfterRestart.adapter_instance_id).toBeNull()
+
+    const secondAdapter = fakeAdapter({ supportsNativeResume: false, requiresPinnedWorker: true })
+    const result = await newKernel(secondAdapter, secondStore).kernel.executeRun(
+      runInput({ requestId: 'r2' })
+    )
+
+    // A brand new binding, never the dead process-local one.
+    expect(secondAdapter.calls.resumeBinding).toHaveLength(0)
+    expect(secondAdapter.calls.openBinding).toHaveLength(1)
+    expect(result.terminalStatus).toBe('succeeded')
+    expect(
+      Number(
+        secondStore.getRow('SELECT COUNT(*) AS c FROM adapter_bindings WHERE status = ?', [
+          'active'
+        ]).c
+      )
+    ).toBe(1)
   })
 
   it('marks the binding stale and opens a fresh one when resume fails', async () => {
@@ -426,17 +522,35 @@ describe('AgentRuntimeKernel — bindings', () => {
   })
 
   it('invalidates the active bindings of an owner', async () => {
-    const { kernel } = newKernel(fakeAdapter())
+    const adapter = fakeAdapter()
+    const { kernel, store } = newKernel(adapter)
     await kernel.executeRun(runInput())
 
     const invalidated = kernel.invalidateBindings({ ownerId: OWNER, surfaceKind: 'main_chat' })
-
     expect(invalidated.invalidatedBindingIds).toHaveLength(1)
+
+    // Assert the STATE CHANGE, not the returned array — that array is built by
+    // the SELECT that runs before the UPDATE, so it would still be populated if
+    // the UPDATE were deleted.
+    const binding = store.getRow('SELECT status FROM adapter_bindings WHERE binding_id = ?', [
+      invalidated.invalidatedBindingIds[0]
+    ])
+    expect(String(binding.status)).toBe('invalid')
+
+    // And the next run must open a fresh binding rather than resume the dead one.
+    await kernel.executeRun(runInput({ requestId: 'r2' }))
+    expect(adapter.calls.openBinding).toHaveLength(2)
+    expect(adapter.calls.resumeBinding).toHaveLength(0)
   })
 })
 
 describe('AgentRuntimeKernel — single-active-run enforcement (INV-AGENT)', () => {
-  it('refuses a second concurrent attempt on the same run', async () => {
+  // STORE-LEVEL guard, exercised while the kernel holds a live attempt: this
+  // calls store.insertAttempt directly, so it proves the DB authority index — not
+  // a kernel code path. The kernel-level equivalent is the binding-lock test
+  // below (two concurrent runs on one session). Duplicates store.test.ts's index
+  // coverage on purpose, under a live run.
+  it('store authority index refuses a second active attempt while a run is in flight', async () => {
     let release!: () => void
     const gate = {
       promise: new Promise<void>((resolve) => {
@@ -521,7 +635,7 @@ describe('AgentRuntimeKernel — leaf-role guards (INV-AGENT)', () => {
     })
 
     expect(spawned.session.executionRole).toBe('leaf')
-    expect(spawned.run.status).toBeTruthy()
+    expect(spawned.run.status).toBe('queued')
   })
 
   it('refuses an agent-originated spawn with no caller session', async () => {
@@ -604,17 +718,27 @@ describe('AgentRuntimeKernel — surface sessions and transcript', () => {
   })
 
   it('clears owner state and invalidates its bindings', async () => {
-    const { kernel } = newKernel(fakeAdapter())
+    const { kernel, store } = newKernel(fakeAdapter())
     await kernel.executeRun(runInput())
 
     const cleared = kernel.clearOwnerState(OWNER)
-
     expect(cleared.invalidatedBindingIds.length).toBeGreaterThan(0)
+
+    // Assert the state change, not the returned array (which the pre-UPDATE
+    // SELECT populates). No binding of this owner may remain usable.
+    expect(
+      Number(
+        store.getRow('SELECT COUNT(*) AS c FROM adapter_bindings WHERE status = ?', ['active']).c
+      )
+    ).toBe(0)
   })
 })
 
 describe('AgentRuntimeKernel — startup reconciliation', () => {
-  it('orphans runs and attempts interrupted by a crash', async () => {
+  // STORE-LEVEL: calls store.reconcileStartup() directly against rows the kernel
+  // wrote. The kernel-level consequences of a restart (bindings resumed vs. never
+  // reused) are the two "real process restart" tests above.
+  it('store reconcileStartup orphans a run and attempt left in flight by a crash', async () => {
     let release!: () => void
     const gate = {
       promise: new Promise<void>((resolve) => {
@@ -796,6 +920,231 @@ describe('AgentRuntimeKernel — desktop action queue and intent routing', () =>
 
     const queue = kernel.listDesktopActionQueue({ ownerId: OWNER })
     expect(queue.some((item) => item.subjectId === failed.run.runId)).toBe(false)
+  })
+})
+
+describe('AgentRuntimeKernel — delegateAgent', () => {
+  /** Run a coordinator turn and return its run id, to delegate from. */
+  async function parentRun(kernel: AgentRuntimeKernel): Promise<string> {
+    const parent = await kernel.executeRun(runInput())
+    return parent.run.runId
+  }
+
+  function delegation(parentRunId: string, overrides: Record<string, unknown> = {}) {
+    return {
+      mode: 'call' as const,
+      parentRunId,
+      objective: 'summarize the release notes',
+      ownerId: OWNER,
+      clientId: 'client-1',
+      requestId: 'request-delegate',
+      adapterId: 'test-adapter',
+      defaultAdapterId: 'test-adapter',
+      ...overrides
+    } as Parameters<AgentRuntimeKernel['delegateAgent']>[0]
+  }
+
+  it('call mode awaits the child and returns its result', async () => {
+    const adapter = fakeAdapter({ reply: 'child answer' })
+    const { kernel, store } = newKernel(adapter)
+    const parentRunId = await parentRun(kernel)
+
+    const result = await kernel.delegateAgent(delegation(parentRunId))
+
+    expect(result.delegation.status).toBe('succeeded')
+    expect(result.terminalStatus).toBe('succeeded')
+    expect(result.result?.summary).toBe('child answer')
+    // The child is a distinct leaf session, not the parent.
+    expect(result.childSession.sessionId).not.toBe(
+      store.getRow('SELECT session_id FROM runs WHERE run_id = ?', [parentRunId]).session_id
+    )
+    expect(result.childSession.executionRole).toBe('leaf')
+    // The objective reached the child as its prompt.
+    const childPrompt = adapter.calls.executeAttempt.at(-1)!.prompt
+    expect(JSON.stringify(childPrompt)).toContain('summarize the release notes')
+  })
+
+  it('call mode carries the caller-supplied context into the child prompt', async () => {
+    const adapter = fakeAdapter()
+    const { kernel } = newKernel(adapter)
+    const parentRunId = await parentRun(kernel)
+
+    await kernel.delegateAgent(delegation(parentRunId, { context: 'the repo is at v2' }))
+
+    const childPrompt = JSON.stringify(adapter.calls.executeAttempt.at(-1)!.prompt)
+    expect(childPrompt).toContain('Objective:')
+    expect(childPrompt).toContain('Context:')
+    expect(childPrompt).toContain('the repo is at v2')
+  })
+
+  it('spawn mode returns immediately with a running delegation', async () => {
+    const adapter = fakeAdapter()
+    const { kernel, store } = newKernel(adapter)
+    const parentRunId = await parentRun(kernel)
+
+    const spawned = await kernel.delegateAgent(delegation(parentRunId, { mode: 'spawn' }))
+
+    // Returns without awaiting the child: status is still running and there is no
+    // result payload (call mode would have both).
+    expect(spawned.delegation.status).toBe('running')
+    expect(spawned.result).toBeUndefined()
+
+    await waitFor(
+      () =>
+        String(
+          store.getRow('SELECT status FROM delegations WHERE delegation_id = ?', [
+            spawned.delegation.delegationId
+          ]).status
+        ) === 'succeeded'
+    )
+  })
+
+  it('spawn mode records the failure instead of swallowing it', async () => {
+    // The fire-and-forget path: nothing awaits the child, so a thrown error must
+    // still land on the delegation row or it is lost entirely.
+    const adapter = fakeAdapter({ executeError: new Error('child exploded') })
+    const { kernel, store } = newKernel(adapter)
+    const parentRunId = await parentRun(kernel)
+
+    const spawned = await kernel.delegateAgent(
+      delegation(parentRunId, { mode: 'spawn', maxAttempts: 1 })
+    )
+
+    await waitFor(
+      () =>
+        String(
+          store.getRow('SELECT status FROM delegations WHERE delegation_id = ?', [
+            spawned.delegation.delegationId
+          ]).status
+        ) === 'failed'
+    )
+
+    const childRun = store.getRow('SELECT status, error_code FROM runs WHERE run_id = ?', [
+      spawned.childRun.runId
+    ])
+    expect(String(childRun.status)).toBe('failed')
+    expect(String(childRun.error_code)).toBe('adapter_execution_failed')
+    // The parent is told, via a delegation.completed event carrying the failure.
+    const events = store.allRows(
+      "SELECT payload_json FROM events WHERE type = 'delegation.completed'"
+    )
+    expect(events).toHaveLength(1)
+    expect(String(events[0].payload_json)).toContain('failed')
+  })
+
+  it('refuses a leaf worker delegating further (INV-AGENT)', async () => {
+    const { kernel } = newKernel(fakeAdapter())
+    const parentRunId = await parentRun(kernel)
+
+    // Delegate once to obtain a leaf child, then try to delegate FROM the leaf.
+    const child = await kernel.delegateAgent(delegation(parentRunId))
+    expect(child.childSession.executionRole).toBe('leaf')
+
+    await expect(
+      kernel.delegateAgent(delegation(child.childRun.runId, { requestId: 'request-delegate-2' }))
+    ).rejects.toThrow(/Leaf workers cannot create delegated agents/)
+  })
+
+  it('enforces the delegation depth bound', async () => {
+    const { kernel } = newKernel(fakeAdapter())
+    const parentRunId = await parentRun(kernel)
+
+    await expect(kernel.delegateAgent(delegation(parentRunId, { maxDepth: 0 }))).rejects.toThrow(
+      /maxDepth must be between 1 and 5/
+    )
+    await expect(kernel.delegateAgent(delegation(parentRunId, { maxDepth: 6 }))).rejects.toThrow(
+      /maxDepth must be between 1 and 5/
+    )
+  })
+
+  it('enforces the delegation budget bound', async () => {
+    const { kernel } = newKernel(fakeAdapter())
+    const parentRunId = await parentRun(kernel)
+
+    await expect(
+      kernel.delegateAgent(delegation(parentRunId, { maxBudgetUsd: 0 }))
+    ).rejects.toThrow(/maxBudgetUsd must be greater than 0 and at most 10/)
+    await expect(
+      kernel.delegateAgent(delegation(parentRunId, { maxBudgetUsd: 11 }))
+    ).rejects.toThrow(/maxBudgetUsd must be greater than 0 and at most 10/)
+  })
+
+  it('refuses to delegate from another owner’s run', async () => {
+    const { kernel } = newKernel(fakeAdapter())
+    const parentRunId = await parentRun(kernel)
+
+    await expect(
+      kernel.delegateAgent(delegation(parentRunId, { ownerId: 'intruder' }))
+    ).rejects.toThrow(/does not belong to owner/)
+  })
+})
+
+describe('AgentRuntimeKernel — provider boundary enforced through executeRun (INV-AGENT)', () => {
+  // executionPolicy.test.ts tests resolveAdapterWithinBoundary in isolation. These
+  // prove executeRun actually CALLS it — that a session pinned to one credential
+  // scope cannot be rerouted to another, and that no run row survives the attempt.
+  it('refuses to reroute a local-credential session to a different local adapter', async () => {
+    const { kernel, store } = newKernel(fakeAdapter())
+    const session = store.insertSession({
+      ownerId: OWNER,
+      surfaceKind: 'main_chat',
+      defaultAdapterId: 'acp' // -> providerBoundary local_user:acp
+    })
+    expect(session.providerBoundary).toBe('local_user:acp')
+
+    await expect(
+      kernel.executeRun(
+        runInput({
+          sessionId: session.sessionId,
+          externalRefKind: undefined,
+          externalRefId: undefined,
+          adapterId: 'hermes',
+          defaultAdapterId: 'acp'
+        })
+      )
+    ).rejects.toThrow(/Local provider mode is pinned to acp/)
+
+    // The run was refused at admission — nothing persisted.
+    expect(
+      Number(
+        store.getRow('SELECT COUNT(*) AS c FROM runs WHERE session_id = ?', [session.sessionId]).c
+      )
+    ).toBe(0)
+  })
+
+  it('refuses to route a managed-cloud session to a local-credential adapter', async () => {
+    const { kernel, store } = newKernel(fakeAdapter())
+    const session = store.insertSession({
+      ownerId: OWNER,
+      surfaceKind: 'main_chat',
+      defaultAdapterId: 'pi-mono' // -> providerBoundary managed_cloud
+    })
+    expect(session.providerBoundary).toBe('managed_cloud')
+
+    // NOTE the error text. Windows registers no managed-cloud adapter yet, so
+    // 'pi-mono' is not in ADAPTER_CAPABILITY_MATRIX and resolveAdapterWithinBoundary
+    // takes its non-production branch — which refuses any adapter other than the
+    // session's own. The run is still refused (that is what matters here), just via
+    // that branch rather than the managed_cloud one. When a real pi-mono adapter
+    // lands, this becomes 'Local Claude is available only when the User Claude mode
+    // is selected.' and this expectation should be updated with it.
+    await expect(
+      kernel.executeRun(
+        runInput({
+          sessionId: session.sessionId,
+          externalRefKind: undefined,
+          externalRefId: undefined,
+          adapterId: 'acp',
+          defaultAdapterId: 'pi-mono'
+        })
+      )
+    ).rejects.toThrow(/Adapter acp is outside the owning execution boundary/)
+
+    expect(
+      Number(
+        store.getRow('SELECT COUNT(*) AS c FROM runs WHERE session_id = ?', [session.sessionId]).c
+      )
+    ).toBe(0)
   })
 })
 
