@@ -31,7 +31,7 @@ def test_check_rendered_secrets_reports_missing(monkeypatch: pytest.MonkeyPatch)
 
     secret_names = {item.secret_name for item in missing}
     assert 'ENCRYPTION_SECRET' in secret_names
-    assert 'GOOGLE_CLIENT_ID' in secret_names
+    assert 'GOOGLE_CLIENT_ID' not in secret_names
 
 
 def test_check_rendered_secrets_passes_when_secrets_exist(monkeypatch: pytest.MonkeyPatch) -> None:

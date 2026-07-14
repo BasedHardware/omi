@@ -21,9 +21,77 @@ environments:
             value: dev
             category: runtime_identity
           STT_PRERECORDED_MODEL:
-            secret:
-              name: dev-omi-backend-secrets
+            config_map:
+              name: dev-omi-backend-config
               key: STT_PRERECORDED_MODEL
+          GOOGLE_CLIENT_ID:
+            config_map:
+              name: dev-omi-backend-config
+              key: GOOGLE_CLIENT_ID
+          REDIS_DB_HOST:
+            config_map:
+              name: dev-omi-backend-config
+              key: REDIS_DB_HOST
+          STT_SERVICE_MODELS:
+            config_map:
+              name: dev-omi-backend-config
+              key: STT_SERVICE_MODELS
+          TYPESENSE_HOST:
+            config_map:
+              name: dev-omi-backend-config
+              key: TYPESENSE_HOST
+          TWILIO_ACCOUNT_SID:
+            config_map:
+              name: dev-omi-backend-config
+              key: TWILIO_ACCOUNT_SID
+          TWILIO_API_KEY_SID:
+            config_map:
+              name: dev-omi-backend-config
+              key: TWILIO_API_KEY_SID
+          TWILIO_TWIML_APP_SID:
+            config_map:
+              name: dev-omi-backend-config
+              key: TWILIO_TWIML_APP_SID
+          RAPID_API_HOST:
+            config_map:
+              name: dev-omi-backend-config
+              key: RAPID_API_HOST
+          CONVERSATION_SUMMARIZED_APP_IDS:
+            config_map:
+              name: dev-omi-backend-config
+              key: CONVERSATION_SUMMARIZED_APP_IDS
+          X_OAUTH_CLIENT_ID:
+            config_map:
+              name: dev-omi-backend-config
+              key: X_OAUTH_CLIENT_ID
+          X_OAUTH_REDIRECT_URI:
+            config_map:
+              name: dev-omi-backend-config
+              key: X_OAUTH_REDIRECT_URI
+          MCP_AUTHORIZATION_SERVER_URL:
+            config_map:
+              name: dev-omi-backend-config
+              key: MCP_AUTHORIZATION_SERVER_URL
+          MCP_RESOURCE_URL:
+            config_map:
+              name: dev-omi-backend-config
+              key: MCP_RESOURCE_URL
+          MCP_OAUTH_CHATGPT_CLIENT_ID:
+            config_map:
+              name: dev-omi-backend-config
+              key: MCP_OAUTH_CHATGPT_CLIENT_ID
+          MCP_OAUTH_CHATGPT_REDIRECT_URIS:
+            config_map:
+              name: dev-omi-backend-config
+              key: MCP_OAUTH_CHATGPT_REDIRECT_URIS
+          MCP_OAUTH_PUBLIC_CLIENT_ID:
+            config_map:
+              name: dev-omi-backend-config
+              key: MCP_OAUTH_PUBLIC_CLIENT_ID
+          MCP_OAUTH_PUBLIC_REDIRECT_URIS:
+            config_map:
+              name: dev-omi-backend-config
+              key: MCP_OAUTH_PUBLIC_REDIRECT_URIS
           DEEPGRAM_API_KEY:
             secret:
               name: dev-omi-backend-secrets
@@ -115,6 +183,12 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            GOOGLE_CLIENT_ID:
+              env_var: GOOGLE_CLIENT_ID
+              category: oauth_metadata
+            STT_PRERECORDED_MODEL:
+              env_var: STT_PRERECORDED_MODEL
+              category: stt_policy
             # Dev Cloud Run must stay within the dev Parakeet topology; never point this at
             # the production-only parakeet.omi.me endpoint.
             HOSTED_PARAKEET_API_URL:
@@ -176,9 +250,6 @@ environments:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
-            GOOGLE_CLIENT_ID:
-              secret: GOOGLE_CLIENT_ID
-              version: latest
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
               version: latest
@@ -187,9 +258,6 @@ environments:
               version: latest
             POSTHOG_PROJECT_API_KEY:
               secret: POSTHOG_PROJECT_API_KEY
-              version: latest
-            STT_PRERECORDED_MODEL:
-              secret: STT_PRERECORDED_MODEL
               version: latest
             DEEPGRAM_API_KEY:
               secret: DEEPGRAM_API_KEY
@@ -228,6 +296,12 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            GOOGLE_CLIENT_ID:
+              env_var: GOOGLE_CLIENT_ID
+              category: oauth_metadata
+            STT_PRERECORDED_MODEL:
+              env_var: STT_PRERECORDED_MODEL
+              category: stt_policy
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omiapi.com
               category: service_discovery
@@ -291,9 +365,6 @@ environments:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
-            GOOGLE_CLIENT_ID:
-              secret: GOOGLE_CLIENT_ID
-              version: latest
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
               version: latest
@@ -302,9 +373,6 @@ environments:
               version: latest
             POSTHOG_PROJECT_API_KEY:
               secret: POSTHOG_PROJECT_API_KEY
-              version: latest
-            STT_PRERECORDED_MODEL:
-              secret: STT_PRERECORDED_MODEL
               version: latest
             DEEPGRAM_API_KEY:
               secret: DEEPGRAM_API_KEY
@@ -322,6 +390,12 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            GOOGLE_CLIENT_ID:
+              env_var: GOOGLE_CLIENT_ID
+              category: oauth_metadata
+            STT_PRERECORDED_MODEL:
+              env_var: STT_PRERECORDED_MODEL
+              category: stt_policy
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omiapi.com
               category: service_discovery
@@ -381,9 +455,6 @@ environments:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
-            GOOGLE_CLIENT_ID:
-              secret: GOOGLE_CLIENT_ID
-              version: latest
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
               version: latest
@@ -392,9 +463,6 @@ environments:
               version: latest
             POSTHOG_PROJECT_API_KEY:
               secret: POSTHOG_PROJECT_API_KEY
-              version: latest
-            STT_PRERECORDED_MODEL:
-              secret: STT_PRERECORDED_MODEL
               version: latest
             DEEPGRAM_API_KEY:
               secret: DEEPGRAM_API_KEY
@@ -505,9 +573,89 @@ environments:
             value: prod
             category: runtime_identity
           STT_PRERECORDED_MODEL:
-            secret:
-              name: prod-omi-backend-secrets
+            config_map:
+              name: prod-omi-backend-config
               key: STT_PRERECORDED_MODEL
+          GOOGLE_CLIENT_ID:
+            config_map:
+              name: prod-omi-backend-config
+              key: GOOGLE_CLIENT_ID
+          REDIS_DB_HOST:
+            config_map:
+              name: prod-omi-backend-config
+              key: REDIS_DB_HOST
+          STT_SERVICE_MODELS:
+            config_map:
+              name: prod-omi-backend-config
+              key: STT_SERVICE_MODELS
+          TYPESENSE_HOST:
+            config_map:
+              name: prod-omi-backend-config
+              key: TYPESENSE_HOST
+          TWILIO_ACCOUNT_SID:
+            config_map:
+              name: prod-omi-backend-config
+              key: TWILIO_ACCOUNT_SID
+          TWILIO_API_KEY_SID:
+            config_map:
+              name: prod-omi-backend-config
+              key: TWILIO_API_KEY_SID
+          TWILIO_TWIML_APP_SID:
+            config_map:
+              name: prod-omi-backend-config
+              key: TWILIO_TWIML_APP_SID
+          RAPID_API_HOST:
+            config_map:
+              name: prod-omi-backend-config
+              key: RAPID_API_HOST
+          CONVERSATION_SUMMARIZED_APP_IDS:
+            config_map:
+              name: prod-omi-backend-config
+              key: CONVERSATION_SUMMARIZED_APP_IDS
+          X_OAUTH_CLIENT_ID:
+            config_map:
+              name: prod-omi-backend-config
+              key: X_OAUTH_CLIENT_ID
+          X_OAUTH_REDIRECT_URI:
+            config_map:
+              name: prod-omi-backend-config
+              key: X_OAUTH_REDIRECT_URI
+          MCP_AUTHORIZATION_SERVER_URL:
+            config_map:
+              name: prod-omi-backend-config
+              key: MCP_AUTHORIZATION_SERVER_URL
+          MCP_RESOURCE_URL:
+            config_map:
+              name: prod-omi-backend-config
+              key: MCP_RESOURCE_URL
+          MCP_OAUTH_CHATGPT_CLIENT_ID:
+            config_map:
+              name: prod-omi-backend-config
+              key: MCP_OAUTH_CHATGPT_CLIENT_ID
+          MCP_OAUTH_CHATGPT_REDIRECT_URIS:
+            config_map:
+              name: prod-omi-backend-config
+              key: MCP_OAUTH_CHATGPT_REDIRECT_URIS
+          MCP_OAUTH_PUBLIC_CLIENT_ID:
+            config_map:
+              name: prod-omi-backend-config
+              key: MCP_OAUTH_PUBLIC_CLIENT_ID
+          MCP_OAUTH_PUBLIC_REDIRECT_URIS:
+            config_map:
+              name: prod-omi-backend-config
+              key: MCP_OAUTH_PUBLIC_REDIRECT_URIS
+          MCP_OAUTH_CLAUDE_CLIENT_ID:
+            config_map:
+              name: prod-omi-backend-config
+              key: MCP_OAUTH_CLAUDE_CLIENT_ID
+          MCP_OAUTH_CLAUDE_CLIENT_NAME:
+            config_map:
+              name: prod-omi-backend-config
+              key: MCP_OAUTH_CLAUDE_CLIENT_NAME
+          MCP_OAUTH_CLAUDE_REDIRECT_URIS:
+            config_map:
+              name: prod-omi-backend-config
+              key: MCP_OAUTH_CLAUDE_REDIRECT_URIS
           DEEPGRAM_API_KEY:
             secret:
               name: prod-omi-backend-secrets
@@ -560,18 +708,6 @@ environments:
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
-          MCP_OAUTH_CLAUDE_CLIENT_ID:
-            secret:
-              name: prod-omi-backend-secrets
-              key: MCP_OAUTH_CLAUDE_CLIENT_ID
-          MCP_OAUTH_CLAUDE_CLIENT_NAME:
-            secret:
-              name: prod-omi-backend-secrets
-              key: MCP_OAUTH_CLAUDE_CLIENT_NAME
-          MCP_OAUTH_CLAUDE_REDIRECT_URIS:
-            secret:
-              name: prod-omi-backend-secrets
-              key: MCP_OAUTH_CLAUDE_REDIRECT_URIS
           MCP_OAUTH_CLIENTS_JSON:
             secret:
               name: prod-omi-backend-secrets
@@ -604,6 +740,12 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            GOOGLE_CLIENT_ID:
+              env_var: GOOGLE_CLIENT_ID
+              category: oauth_metadata
+            STT_PRERECORDED_MODEL:
+              env_var: STT_PRERECORDED_MODEL
+              category: stt_policy
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omi.me
               category: service_discovery
@@ -640,30 +782,24 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
-          secrets:
             MCP_OAUTH_CLAUDE_CLIENT_ID:
-              secret: MCP_OAUTH_CLAUDE_CLIENT_ID
-              version: latest
+              env_var: MCP_OAUTH_CLAUDE_CLIENT_ID
+              category: oauth_metadata
             MCP_OAUTH_CLAUDE_CLIENT_NAME:
-              secret: MCP_OAUTH_CLAUDE_CLIENT_NAME
-              version: latest
+              env_var: MCP_OAUTH_CLAUDE_CLIENT_NAME
+              category: oauth_metadata
             MCP_OAUTH_CLAUDE_REDIRECT_URIS:
-              secret: MCP_OAUTH_CLAUDE_REDIRECT_URIS
-              version: latest
+              env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
+              category: oauth_metadata
+          secrets:
             MCP_OAUTH_CLIENTS_JSON:
               secret: MCP_OAUTH_CLIENTS_JSON
               version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
-            GOOGLE_CLIENT_ID:
-              secret: GOOGLE_CLIENT_ID
-              version: latest
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
-              version: latest
-            STT_PRERECORDED_MODEL:
-              secret: STT_PRERECORDED_MODEL
               version: latest
             DEEPGRAM_API_KEY:
               secret: DEEPGRAM_API_KEY
@@ -703,6 +839,12 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            GOOGLE_CLIENT_ID:
+              env_var: GOOGLE_CLIENT_ID
+              category: oauth_metadata
+            STT_PRERECORDED_MODEL:
+              env_var: STT_PRERECORDED_MODEL
+              category: stt_policy
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omi.me
               category: service_discovery
@@ -747,14 +889,8 @@ environments:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
-            GOOGLE_CLIENT_ID:
-              secret: GOOGLE_CLIENT_ID
-              version: latest
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
-              version: latest
-            STT_PRERECORDED_MODEL:
-              secret: STT_PRERECORDED_MODEL
               version: latest
             DEEPGRAM_API_KEY:
               secret: DEEPGRAM_API_KEY
@@ -773,6 +909,12 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            GOOGLE_CLIENT_ID:
+              env_var: GOOGLE_CLIENT_ID
+              category: oauth_metadata
+            STT_PRERECORDED_MODEL:
+              env_var: STT_PRERECORDED_MODEL
+              category: stt_policy
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omi.me
               category: service_discovery
@@ -813,14 +955,8 @@ environments:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
-            GOOGLE_CLIENT_ID:
-              secret: GOOGLE_CLIENT_ID
-              version: latest
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
-              version: latest
-            STT_PRERECORDED_MODEL:
-              secret: STT_PRERECORDED_MODEL
               version: latest
             DEEPGRAM_API_KEY:
               secret: DEEPGRAM_API_KEY

@@ -82,6 +82,10 @@ ingress:
   #    hosts:
   #      - chart-example.local
 
+envFrom:
+  - configMapRef:
+      name: prod-omi-backend-config
+
 env:
   - name: BUCKET_SPEECH_PROFILES
     value: "profiles"
@@ -116,11 +120,6 @@ env:
         key: PINECONE_API_KEY
   - name: PINECONE_INDEX_NAME
     value: "memories-backend"
-  - name: REDIS_DB_HOST
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: REDIS_DB_HOST
   - name: REDIS_DB_PORT
     value: "13151"
   - name: REDIS_DB_PASSWORD
@@ -143,11 +142,6 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: GOOGLE_MAPS_API_KEY
-  - name: GOOGLE_CLIENT_ID
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: GOOGLE_CLIENT_ID
   - name: GOOGLE_CLIENT_SECRET
     valueFrom:
       secretKeyRef:
@@ -218,11 +212,6 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: MARKETPLACE_APP_REVIEWERS
-  - name: TYPESENSE_HOST
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: TYPESENSE_HOST
   - name: TYPESENSE_HOST_PORT
     value: "443"
   - name: TYPESENSE_API_KEY
@@ -234,11 +223,6 @@ env:
     value: "true"
   - name: DEEPGRAM_SELF_HOSTED_URL
     value: "https://dg.omi.me"
-  - name: RAPID_API_HOST
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: RAPID_API_HOST
   - name: RAPID_API_KEY
     valueFrom:
       secretKeyRef:
@@ -251,16 +235,6 @@ env:
         key: OPENROUTER_API_KEY
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware"
-  - name: CONVERSATION_SUMMARIZED_APP_IDS
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: CONVERSATION_SUMMARIZED_APP_IDS
-  - name: STT_SERVICE_MODELS
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: STT_SERVICE_MODELS
   - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
     value: "600"
   - name: BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH

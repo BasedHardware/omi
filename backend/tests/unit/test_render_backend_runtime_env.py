@@ -57,6 +57,11 @@ def test_network_flags_still_required(monkeypatch):
 def test_render_dev_emits_memory_maintenance_job_outputs(capsys, monkeypatch):
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-dev-vpc-1')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-us-central1-dev-vpc-1-subnet-1')
+    monkeypatch.setenv('GOOGLE_CLIENT_ID', 'fake-google-client-id')
+    monkeypatch.setenv('STT_PRERECORDED_MODEL', 'dg-nova-3')
+    monkeypatch.setenv('MCP_OAUTH_CLAUDE_CLIENT_ID', 'fake-claude-client-id')
+    monkeypatch.setenv('MCP_OAUTH_CLAUDE_CLIENT_NAME', 'Claude')
+    monkeypatch.setenv('MCP_OAUTH_CLAUDE_REDIRECT_URIS', 'https://claude.example/callback')
     monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'http://172.16.63.232')
     monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'dev'])
     rc = _MODULE['main']()
@@ -118,6 +123,11 @@ def test_render_dev_emits_memory_maintenance_job_outputs(capsys, monkeypatch):
 def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypatch):
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-prod-vpc')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-prod-subnet')
+    monkeypatch.setenv('GOOGLE_CLIENT_ID', 'fake-google-client-id')
+    monkeypatch.setenv('STT_PRERECORDED_MODEL', 'dg-nova-3')
+    monkeypatch.setenv('MCP_OAUTH_CLAUDE_CLIENT_ID', 'fake-claude-client-id')
+    monkeypatch.setenv('MCP_OAUTH_CLAUDE_CLIENT_NAME', 'Claude')
+    monkeypatch.setenv('MCP_OAUTH_CLAUDE_REDIRECT_URIS', 'https://claude.example/callback')
     monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'prod'])
     rc = _MODULE['main']()
     assert rc == 0
