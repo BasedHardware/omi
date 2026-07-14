@@ -24,9 +24,12 @@ final class AgentRuntimeContractFixtureTests: XCTestCase {
     XCTAssertEqual((contract["toolInvocation"] as? [String: Any])?["invocationId"] as? String,
       ((envelope["provenance"] as? [String: Any])?["invocationId"] as? String))
     XCTAssertEqual((contract["lifecycle"] as? [String: [String]])?["run"]?.contains("succeeded"), true)
-    XCTAssertEqual((contract["adapterConformance"] as? [[String: Any]])?.count, 6)
+    XCTAssertEqual((contract["adapterConformance"] as? [[String: Any]])?.count, 7)
     XCTAssertTrue((contract["adapterConformance"] as? [[String: Any]] ?? []).contains {
       $0["adapterId"] as? String == "openai-realtime" && $0["transport"] as? String == "swift_realtime"
+    })
+    XCTAssertTrue((contract["adapterConformance"] as? [[String: Any]] ?? []).contains {
+      $0["adapterId"] as? String == "codex" && $0["transport"] as? String == "node_runtime"
     })
   }
 

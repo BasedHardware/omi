@@ -267,7 +267,7 @@ final class PiMonoWiringTests: XCTestCase {
   }
 
   func testAIProviderAllContainsSupportedProviders() {
-    XCTAssertEqual(AIProvider.all.map(\.id), ["piMono", "claude", "hermes", "openclaw"])
+    XCTAssertEqual(AIProvider.all.map(\.id), ["piMono", "claude", "hermes", "openclaw", "codex"])
   }
 
   func testAIProviderFromBridgeModeReturnsCorrectProvider() {
