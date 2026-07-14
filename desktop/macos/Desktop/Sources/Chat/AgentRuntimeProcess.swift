@@ -594,7 +594,7 @@ actor AgentRuntimeProcess {
   /// The Node registry is the authority for adapter activation. Swift must not
   /// re-run local executable detection before advertising a realtime provider.
   func registeredDirectedProviderIDs() -> [String] {
-    runtimeAdapterIDs.intersection(["hermes", "openclaw"]).sorted()
+    runtimeAdapterIDs.intersection(["hermes", "openclaw", "codex"]).sorted()
   }
 
   static func adapterId(forHarnessMode harnessMode: String) -> String? {
@@ -2627,6 +2627,17 @@ actor AgentRuntimeProcess {
         homeDirectory: home).status
     {
       env["OMI_OPENCLAW_ADAPTER_COMMAND"] = Self.openClawAdapterCommand(openClawPath: openClaw)
+    }
+
+    // Codex is bridged by the standalone `codex-acp` binary, which speaks ACP
+    // directly on stdio (no `acp` subcommand).
+    if env["OMI_CODEX_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+      case let .available(command: codexAcp) = LocalAgentProviderDetector.availability(
+        for: .codex,
+        environment: env,
+        homeDirectory: home).status
+    {
+      env["OMI_CODEX_ADAPTER_COMMAND"] = Self.shellQuote(codexAcp)
     }
   }
 

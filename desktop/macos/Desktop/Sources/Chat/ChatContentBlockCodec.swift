@@ -88,7 +88,7 @@ enum ChatContentBlockCodec {
         let objective = dict["objective"] as? String ?? ""
         let provider = (dict["provider"] as? String)
           .flatMap(AgentRuntimeRouting.harnessMode(from:))
-          .flatMap { $0 == .hermes || $0 == .openclaw ? $0 : nil }
+          .flatMap { $0 == .hermes || $0 == .openclaw || $0 == .codex ? $0 : nil }
         blocks.append(
           .agentSpawn(
             id: id,

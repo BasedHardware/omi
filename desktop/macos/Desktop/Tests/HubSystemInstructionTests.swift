@@ -67,23 +67,34 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertEqual(toolNames, Set(DesktopCapabilityRegistry.realtimeToolNames))
     }
 
-    func testRealtimeSpawnAgentProviderEnumOnlyAdvertisesAvailableProviders() {
+    func testRealtimeSpawnAgentProviderEnumAdvertisesEveryKnownAgentWithInstalledSplit() {
         let tools = RealtimeHubTools.openAITools(availableDirectedProviders: ["openclaw"])
         let spawnAgent = tools.first { ($0["name"] as? String) == HubTool.spawnAgent.rawValue }
         let parameters = spawnAgent?["parameters"] as? [String: Any]
         let properties = parameters?["properties"] as? [String: Any]
         let provider = properties?["provider"] as? [String: Any]
 
-        XCTAssertEqual(provider?["enum"] as? [String], ["openclaw"])
+        // Every known agent stays selectable so an explicit "ask codex …"
+        // routes through spawn_agent and returns setup instructions instead
+        // of dead-ending; the description carries the installed/missing split.
+        XCTAssertEqual(provider?["enum"] as? [String], RealtimeHubTools.knownDirectedProviders)
+        let description = provider?["description"] as? String ?? ""
+        XCTAssertTrue(description.contains("Installed and ready: openclaw"))
+        XCTAssertTrue(description.contains("Not installed: codex, hermes"))
+        XCTAssertTrue(description.contains("setup instructions"))
     }
 
-    func testRealtimeSpawnAgentOmitsProviderWhenNoLocalProvidersAreAvailable() {
+    func testRealtimeSpawnAgentKeepsProviderSelectableWhenNoLocalProvidersAreInstalled() {
         let tools = RealtimeHubTools.openAITools(availableDirectedProviders: [])
         let spawnAgent = tools.first { ($0["name"] as? String) == HubTool.spawnAgent.rawValue }
         let parameters = spawnAgent?["parameters"] as? [String: Any]
         let properties = parameters?["properties"] as? [String: Any]
+        let provider = properties?["provider"] as? [String: Any]
 
-        XCTAssertNil(properties?["provider"])
+        XCTAssertEqual(provider?["enum"] as? [String], ["codex", "hermes", "openclaw"])
+        let description = provider?["description"] as? String ?? ""
+        XCTAssertFalse(description.contains("Installed and ready"))
+        XCTAssertTrue(description.contains("Not installed: codex, hermes, openclaw"))
         XCTAssertNotNil(properties?["brief"])
     }
 

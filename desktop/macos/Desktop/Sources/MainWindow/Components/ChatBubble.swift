@@ -1586,12 +1586,12 @@ extension ChatContentBlock {
       ?? string(metadata?["pillId"])
       ?? string(root["pillId"])
     let defaultAdapterId = string(session?["defaultAdapterId"])
-    let authoritativeProvider = ["hermes", "openclaw"].contains(defaultAdapterId ?? "")
+    let authoritativeProvider = ["hermes", "openclaw", "codex"].contains(defaultAdapterId ?? "")
       ? defaultAdapterId
       : nil
     let legacyProvider = string(metadata?["provider"])
     let provider = authoritativeProvider
-      ?? (["hermes", "openclaw"].contains(legacyProvider ?? "") ? legacyProvider : nil)
+      ?? (["hermes", "openclaw", "codex"].contains(legacyProvider ?? "") ? legacyProvider : nil)
     return (
       pillId: pillRaw.flatMap(UUID.init(uuidString:)),
       sessionId: string(session?["sessionId"]),

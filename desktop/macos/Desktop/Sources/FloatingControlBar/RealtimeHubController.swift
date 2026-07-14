@@ -219,6 +219,27 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var acceptedSpawnJournalReceiptByContinuityKey: [
     String: AcceptedSpawnJournalReceipt
   ] = [:]
+  /// One bounded same-turn recovery per voice turn: a failed spawn_agent for a
+  /// directed provider returns its guidance to the model (which may retry with
+  /// a different agent) instead of terminating the turn. The second failure in
+  /// the same turn terminates as before, so a looping model cannot spin.
+  private var spawnFailureContinuedTurnIDs: Set<UUID> = []
+  /// Provider of the most recent same-turn spawn failure, for fallback telemetry
+  /// when a retry lands on a different provider.
+  private var lastSpawnFailedProviderByTurnID: [UUID: String] = [:]
+
+  /// Grants at most one open-turn continuation after a failed spawn_agent so
+  /// the model can relay guidance or retry with a different agent. Later
+  /// failures in the same turn terminate it, keeping retry loops impossible.
+  private func beginSpawnFailureContinuationIfAllowed(turnID: VoiceTurnID) -> Bool {
+    if spawnFailureContinuedTurnIDs.count > 16 {
+      spawnFailureContinuedTurnIDs.removeAll()
+      lastSpawnFailedProviderByTurnID.removeAll()
+    }
+    guard !spawnFailureContinuedTurnIDs.contains(turnID.rawValue) else { return false }
+    spawnFailureContinuedTurnIDs.insert(turnID.rawValue)
+    return true
+  }
   private let legacyVoiceJournalImportStore = LegacyVoiceJournalImportStore.shared
   private var legacyVoiceJournalImportTask: Task<Void, Never>?
   private var legacyVoiceJournalImportedOwners = Set<String>()
@@ -1997,7 +2018,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   private func updateRegisteredDirectedProviders(_ providers: [String]) {
-    let normalized = providers.filter { ["hermes", "openclaw"].contains($0) }.sorted()
+    let normalized = providers.filter { ["hermes", "openclaw", "codex"].contains($0) }.sorted()
     guard registeredDirectedProviderIDs != normalized else { return }
     registeredDirectedProviderIDs = normalized
     // A realtime provider's tool schema is immutable for the physical session.
@@ -3740,12 +3761,28 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
             output: output,
             expectedContinuityKey: self.turnIdempotencyKey)
           let expectedContinuityKey = "voice:\(turnID.rawValue.uuidString.lowercased())"
+          let requestedProvider = (arguments["provider"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
           switch spawnOutcome {
           case .accepted(let receipt) where receipt.continuityKey == expectedContinuityKey:
             self.acceptedSpawnJournalReceiptByContinuityKey[receipt.continuityKey] =
               AcceptedSpawnJournalReceipt(ownerID: binding.ownerID, receipt: receipt)
             self.turnPersistenceLedger.recordAcceptedReceipt(for: receipt.continuityKey)
             self.assistantText = receipt.assistantText
+            if let failedProvider = self.lastSpawnFailedProviderByTurnID.removeValue(
+              forKey: turnID.rawValue)
+            {
+              // A same-turn retry after a failed directed spawn landed on a
+              // different provider: a provider change the user still hears
+              // about, but ops must see it too.
+              DesktopDiagnosticsManager.shared.recordFallback(
+                area: "realtime_hub",
+                from: failedProvider,
+                to: receipt.pillProjection?.provider ?? requestedProvider ?? "default",
+                reason: "spawn_failed",
+                outcome: .recovered)
+            }
             if let pill = receipt.pillProjection {
               AgentPillsManager.shared.upsertSpawnedPill(
                 id: pill.pillID,
@@ -3759,29 +3796,48 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
             }
           case .setupNeeded(let provider):
             self.lastExternalToolErrorCode = "provider_setup_needed"
+            let continueTurn = self.beginSpawnFailureContinuationIfAllowed(turnID: turnID)
             self.sendToolResultIfCurrent(
               source: source,
               callId: callId,
               name: name,
               output: RealtimeProviderToolResultPolicy.rejectedOutput(
                 code: "provider_setup_needed",
-                message: provider.setupNeededStatus,
+                message: LocalAgentProviderAvailability(provider: provider, status: .missing)
+                  .setupPrompt,
                 preservingCanonicalEnvelopeFrom: output),
               expectedTurnEpoch: expectedTurnEpoch)
-            VoiceTurnCoordinator.shared.send(.finish(turnID: turnID, reason: .providerFailed))
+            guard continueTurn else {
+              VoiceTurnCoordinator.shared.send(.finish(turnID: turnID, reason: .providerFailed))
+              return
+            }
+            // The turn stays open so the model can relay the setup
+            // instructions aloud (and, for a provider it picked itself,
+            // retry once with a different installed agent).
+            self.lastSpawnFailedProviderByTurnID[turnID.rawValue] = provider.rawValue
             return
           case .accepted, .rejected:
             log("RealtimeHub[\(self.providerTag)]: spawn_agent rejected without a canonical child receipt")
+            let continueTurn = requestedProvider != nil
+              && self.beginSpawnFailureContinuationIfAllowed(turnID: turnID)
             self.sendToolResultIfCurrent(
               source: source,
               callId: callId,
               name: name,
               output: RealtimeProviderToolResultPolicy.rejectedOutput(
                 code: "realtime_spawn_rejected",
-                message: "The background agent could not start. Please try again.",
+                message: continueTurn
+                  ? "The \(requestedProvider ?? "requested") agent could not start. You may retry once with a different installed agent, or without a provider for Omi's default agent — or tell the user it failed."
+                  : "The background agent could not start. Please try again.",
                 preservingCanonicalEnvelopeFrom: output),
               expectedTurnEpoch: expectedTurnEpoch)
-            VoiceTurnCoordinator.shared.send(.finish(turnID: turnID, reason: .providerFailed))
+            guard continueTurn else {
+              VoiceTurnCoordinator.shared.send(.finish(turnID: turnID, reason: .providerFailed))
+              return
+            }
+            if let requestedProvider {
+              self.lastSpawnFailedProviderByTurnID[turnID.rawValue] = requestedProvider
+            }
             return
           }
         }

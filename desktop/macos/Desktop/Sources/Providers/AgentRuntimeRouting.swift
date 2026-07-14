@@ -5,6 +5,7 @@ enum AgentHarnessMode: String {
     case acp = "acp"
     case hermes = "hermes"
     case openclaw = "openclaw"
+    case codex = "codex"
 }
 
 extension Optional where Wrapped == AgentHarnessMode {
@@ -19,6 +20,7 @@ enum AgentAdapterId: String {
     case acp = "acp"
     case hermes = "hermes"
     case openclaw = "openclaw"
+    case codex = "codex"
 }
 
 enum AgentRuntimeRouting {
@@ -32,6 +34,8 @@ enum AgentRuntimeRouting {
             return .hermes
         case .openClaw:
             return .openclaw
+        case .codex:
+            return .codex
         }
     }
 
@@ -45,6 +49,8 @@ enum AgentRuntimeRouting {
             return .hermes
         case AgentHarnessMode.openclaw.rawValue, "openClaw":
             return .openclaw
+        case AgentHarnessMode.codex.rawValue:
+            return .codex
         default:
             return nil
         }
@@ -60,6 +66,8 @@ enum AgentRuntimeRouting {
             return .hermes
         case .openclaw:
             return .openclaw
+        case .codex:
+            return .codex
         }
     }
 }
@@ -81,9 +89,11 @@ struct LocalAgentProviderAvailability: Equatable {
     var setupPrompt: String {
         switch provider {
         case .hermes:
-            return "I don't see Hermes installed. Make sure Hermes is installed first, then try again."
+            return "I don't see Hermes installed. Install it by running: curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash — then try again."
         case .openclaw:
-            return "I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again."
+            return "I don't see OpenClaw installed. Install it by running: curl -fsSL https://openclaw.ai/install.sh | bash — then try again."
+        case .codex:
+            return "I don't see Codex set up for Omi. Install it by running: npm install -g @openai/codex @zed-industries/codex-acp — then sign in with codex login and try again."
         }
     }
 
@@ -167,6 +177,7 @@ enum LocalAgentProviderDetector {
             "\(homeDirectory)/.hermes/hermes-agent/venv/bin",
             "\(homeDirectory)/.hermes/node/bin",
             "\(homeDirectory)/.hermes/hermes-agent",
+            "\(homeDirectory)/.codex/bin",
             "\(homeDirectory)/.local/bin",
         ]
         return candidates.reduce(into: [String]()) { result, directory in

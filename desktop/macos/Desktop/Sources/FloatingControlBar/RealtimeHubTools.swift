@@ -41,6 +41,12 @@ enum RealtimeHubTools {
       + "was misheard; interpret it as \(primary). "
   }
 
+  /// Every directed local agent Omi can hand a task to, whether or not it is
+  /// installed on this Mac. Advertising the full set lets an explicit "ask
+  /// codex …" utterance route through spawn_agent even when the agent is
+  /// missing, so setup instructions reach the user instead of a dead end.
+  static let knownDirectedProviders = ["codex", "hermes", "openclaw"]
+
   static func systemInstruction(
     kernelContext: String = "",
     kernelSemanticGuidance: String = "",
@@ -104,10 +110,23 @@ enum RealtimeHubTools {
   }
 
   static func openAITools(availableDirectedProviders: [String]) -> [[String: Any]] {
-    let providerProperty: [String: Any]? = availableDirectedProviders.isEmpty ? nil : [
+    // The enum always advertises every known directed agent so an explicit
+    // "ask codex …" routes through spawn_agent even when the agent is not
+    // installed; the description carries the installed/missing split.
+    let connected = knownDirectedProviders.filter { availableDirectedProviders.contains($0) }
+    let missing = knownDirectedProviders.filter { !connected.contains($0) }
+    var description = "Optional local agent to run this background task through."
+    if !connected.isEmpty {
+      description += " Installed and ready: \(connected.joined(separator: ", "))."
+    }
+    if !missing.isEmpty {
+      description +=
+        " Not installed: \(missing.joined(separator: ", ")) — selecting one returns setup instructions to relay to the user."
+    }
+    let providerProperty: [String: Any] = [
       "type": "string",
-      "enum": availableDirectedProviders,
-      "description": "Optional available local provider to run this background agent through.",
+      "enum": knownDirectedProviders,
+      "description": description,
     ]
     return GeneratedRealtimeTools.baseOpenAITools(providerProperty: providerProperty)
   }

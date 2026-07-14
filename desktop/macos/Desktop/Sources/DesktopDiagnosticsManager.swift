@@ -789,6 +789,7 @@ final class DesktopDiagnosticsManager {
     "ble_decode_failed",
     "bind_failed",
     "db_backoff",
+    "spawn_failed",
   ]
 
   private func bucketFallbackArea(_ area: String) -> String {

@@ -1179,6 +1179,7 @@ private var activeBridgeSendGeneration: Int?
         case piMono = "piMono"
         case hermes = "hermes"
         case openClaw = "openclaw"
+        case codex = "codex"
     }
     @AppStorage("chatBridgeMode") var bridgeMode: String = BridgeMode.piMono.rawValue
 
@@ -1315,7 +1316,7 @@ private var activeBridgeSendGeneration: Int?
                 do {
                     _ = try await self.resolvedAgentClient().configureDefaultExecutionProfile(
                         adapterId: adapterId,
-                        modelProfile: self.activeBridgeHarness == "hermes" || self.activeBridgeHarness == "openclaw"
+                        modelProfile: self.activeBridgeHarness == "hermes" || self.activeBridgeHarness == "openclaw" || self.activeBridgeHarness == "codex"
                             ? nil : ModelQoS.Claude.chat,
                         workingDirectory: directory
                     )
@@ -1600,7 +1601,7 @@ private var activeBridgeSendGeneration: Int?
         // Preferences are kernel-owned defaults for future sessions. Existing
         // sessions keep their immutable execution profile and the shared
         // daemon stays alive when this preference changes.
-        let usesNativeModelChoice = activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw"
+        let usesNativeModelChoice = activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw" || activeBridgeHarness == "codex"
         guard let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: activeBridgeHarness) else {
             throw BridgeError.agentError("Unknown AI runtime mode: \(activeBridgeHarness)")
         }
@@ -1715,7 +1716,7 @@ private var activeBridgeSendGeneration: Int?
         guard let requestedAdapter = AgentRuntimeProcess.adapterId(forHarnessMode: requestedHarness) else {
             throw BridgeError.agentError("Unknown AI runtime mode: \(requestedHarness)")
         }
-        let usesNativeModelChoice = requestedHarness == "hermes" || requestedHarness == "openclaw"
+        let usesNativeModelChoice = requestedHarness == "hermes" || requestedHarness == "openclaw" || requestedHarness == "codex"
         return try await resolvedAgentClient().resolveSurfaceSession(
             surface,
             creationProfile: AgentSessionCreationProfile(
@@ -1903,7 +1904,7 @@ private var activeBridgeSendGeneration: Int?
             guard let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: newHarness) else {
                 throw BridgeError.agentError("Unknown AI runtime mode: \(newHarness)")
             }
-            let usesNativeModelChoice = newHarness == "hermes" || newHarness == "openclaw"
+            let usesNativeModelChoice = newHarness == "hermes" || newHarness == "openclaw" || newHarness == "codex"
             let configured = try await resolvedAgentClient().configureDefaultExecutionProfile(
                 adapterId: adapterId,
                 modelProfile: usesNativeModelChoice ? nil : ModelQoS.Claude.chat,
@@ -5204,7 +5205,7 @@ private var activeBridgeSendGeneration: Int?
             objective: objective,
             provider: spawnSource.spawnedAgentProvider
                 .flatMap(AgentRuntimeRouting.harnessMode(from:))
-                .flatMap { $0 == .hermes || $0 == .openclaw ? $0 : nil }
+                .flatMap { $0 == .hermes || $0 == .openclaw || $0 == .codex ? $0 : nil }
         )
         // Keep the tool block for in-session progress; insert structured spawn
         // immediately after it so reload/metadata durability has a first-class card.
