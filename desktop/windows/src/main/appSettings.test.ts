@@ -59,7 +59,8 @@ describe('appSettings', () => {
       summonHotkey: 'Shift+Space',
       hudContentProtection: true,
       meeting: { mode: 'ask', endGraceMinutes: 2, perApp: {}, firstRunToastShown: false },
-      lastShownChangelogVersion: null
+      lastShownChangelogVersion: null,
+      aiProfileEnabled: true
     })
     expect(sanitizeAppSettings({ summonHotkey: '  ' } as never).summonHotkey).toBe('Shift+Space')
     expect(sanitizeAppSettings({ summonHotkey: 'Alt+K' } as never).summonHotkey).toBe('Alt+K')

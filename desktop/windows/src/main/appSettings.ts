@@ -27,6 +27,9 @@ export type AppSettings = {
   /** App version whose "what's new" changelog was last shown post-update. null =
    *  never shown (fresh install / pre-feature) → baseline silently, no toast. */
   lastShownChangelogVersion: string | null
+  /** Track 3 (AI user profile): whether the once-daily synthesized "about the
+   *  user" doc auto-generates in the background. Default on (Mac parity). */
+  aiProfileEnabled: boolean
 }
 
 const MEETING_MODES: MeetingMode[] = ['off', 'ask', 'auto']
@@ -74,7 +77,8 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
     hudContentProtection: r.hudContentProtection !== false,
     meeting: sanitizeMeeting(r.meeting),
     lastShownChangelogVersion:
-      typeof r.lastShownChangelogVersion === 'string' ? r.lastShownChangelogVersion : null
+      typeof r.lastShownChangelogVersion === 'string' ? r.lastShownChangelogVersion : null,
+    aiProfileEnabled: r.aiProfileEnabled !== false
   }
 }
 
