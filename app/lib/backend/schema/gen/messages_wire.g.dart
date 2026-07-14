@@ -452,12 +452,14 @@ class GeneratedMessageReportResponse {
 
 class GeneratedVoiceMessageTranscriptionResponse {
   final String? language;
+  final String? outcome;
   final String? sttModel;
   final String? sttProvider;
   final String transcript;
 
   const GeneratedVoiceMessageTranscriptionResponse({
     this.language,
+    this.outcome,
     this.sttModel,
     this.sttProvider,
     required this.transcript,
@@ -466,6 +468,7 @@ class GeneratedVoiceMessageTranscriptionResponse {
   factory GeneratedVoiceMessageTranscriptionResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedVoiceMessageTranscriptionResponse(
       language: _readFieldValue<String>(_readField(json, const ["language"]), "language", _readString, requiredField: false, nullable: true),
+      outcome: _readFieldValue<String>(_readField(json, const ["outcome"]), "outcome", _readString, requiredField: false, nullable: true),
       sttModel: _readFieldValue<String>(_readField(json, const ["stt_model"]), "stt_model", _readString, requiredField: false, nullable: true),
       sttProvider: _readFieldValue<String>(_readField(json, const ["stt_provider"]), "stt_provider", _readString, requiredField: false, nullable: true),
       transcript: _required(_readFieldValue<String>(_readField(json, const ["transcript"]), "transcript", _readString, requiredField: true, nullable: false), "transcript"),
@@ -475,6 +478,7 @@ class GeneratedVoiceMessageTranscriptionResponse {
   Map<String, dynamic> toJson() {
     return {
       'language': language,
+      'outcome': outcome,
       'stt_model': sttModel,
       'stt_provider': sttProvider,
       'transcript': transcript,

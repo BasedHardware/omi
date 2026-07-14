@@ -489,7 +489,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       [
         "For screen-awareness questions, call get_work_context first.",
         "Use capture_screen only when raw pixels are necessary; it requires explicit approval before image bytes are shared.",
-        "After capture_screen returns a file path, use Read to view the image.",
+        "The result lists the full-screen image path plus native-resolution detail tiles on large screens; use Read to view them.",
       ],
     ),
   },
@@ -506,14 +506,15 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
   },
   request_permission: {
     surfaces: ["desktop_chat", "realtime_voice", "onboarding"],
-    capabilityDoc: doc("Request Permission", "Open or guide the user through granting a required macOS permission.", [
-      "Call only when the current user message names one permission or clearly affirms your immediately preceding permission request.",
+    capabilityDoc: doc("Request Permission", "Open or guide the user through granting a required macOS permission. Screen sharing is the macOS Screen Recording permission.", [
+      "Call only when the current user message names one permission, clearly affirms your immediately preceding one-permission request, or directly says to request it/that permission.",
+      "Treat screen share, screen sharing, and screen-share as the screen_recording permission type.",
       "Ask the user to choose when their request is generic or names multiple permissions.",
       "The user must still complete the native macOS prompt or Settings toggle.",
     ]),
     voice: {
       realtimeDescription:
-        "Request Omi's macOS permission through the kernel-authorized native executor by opening the native prompt or relevant System Settings pane. Supports Screen Recording, microphone, notifications, Accessibility, Automation, and Full Disk Access.",
+        "Request Omi's macOS permission through the kernel-authorized native executor by opening the native prompt or relevant System Settings pane. Screen share, screen sharing, and screen-share mean Screen Recording. Supports Screen Recording, microphone, notifications, Accessibility, Automation, and Full Disk Access.",
     },
   },
   scan_files: {
@@ -1016,12 +1017,14 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     name: "capture_screen",
     label: "Capture Screen",
     description:
-      "Capture raw screenshot pixels only when get_work_context is insufficient. Returns the file path to the saved JPEG image after approval. Use the Read tool to view the image after capturing.",
+      "Capture raw screenshot pixels only when get_work_context is insufficient. Returns the saved full-screen image path plus native-resolution detail tiles on large screens, after approval. Use the Read tool to view the images after capturing.",
     promptSnippet: "capture_screen - Take a screenshot of the user's current screen",
     promptGuidelines: [
       "Call get_work_context first when the user asks about what's on their screen or what they're looking at.",
       "Use capture_screen only when raw pixels are necessary; it requires explicit approval before image bytes are shared.",
-      "After capture_screen returns a file path, use Read to view the image.",
+      "After capture_screen returns, use Read to view the full-screen image.",
+      "The full screenshot is downscaled before you see it — before quoting small on-screen text (titles, prices, sizes, labels) or choosing between similar-looking items, Read the detail tile covering that item and take the exact text from the tile.",
+      "Keep every detail you cite (title, price, badge, position) bound to one on-screen item; if text is not legible even in a tile, say so instead of inferring.",
       "Do NOT use bash screencapture - always use this tool instead.",
     ],
     latency: "fast local",
@@ -1057,10 +1060,11 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     name: "request_permission",
     label: "Request Permission",
     description:
-      "Open the native macOS permission prompt or Settings pane for one required permission after the user explicitly asks for it.",
+      "Open the native macOS permission prompt or Settings pane for one required permission after the user explicitly asks for it. Screen share, screen sharing, and screen-share mean screen_recording.",
     promptSnippet: "request_permission - Request a macOS permission",
     promptGuidelines: [
-      "Call only when the current user message explicitly requests one named permission, or clearly affirms your immediately preceding missing-permission request.",
+      "Call only when the current user message explicitly requests one named permission, clearly affirms your immediately preceding one-permission request, or directly says to request it/that permission.",
+      "Treat screen share, screen sharing, and screen-share as the screen_recording permission type.",
       "For generic or multi-permission requests, ask the user which permission they want to grant.",
       "Use strict permission types only. Do not invent permission names.",
       "After requesting, explain any returned requires_restart or pending status.",
@@ -1334,14 +1338,14 @@ const controlVoicePatches: Partial<Record<AgentControlManifestTool["name"], OmiT
   },
   list_agent_sessions: {
     realtimeDescription:
-      "List canonical Omi-managed agent sessions/runs across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. Use when the user asks what canonical agents or subagents are active, recent, failed, or manageable.",
+      "List canonical Omi-managed agents and subagents, including their sessions/runs, across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. For a prior child agent's final answer, do not infer run completion from session status or restrict discovery to status='open'. List recent sessions, then inspect the returned run with get_agent_run. Keep internal ids out of the user-visible response.",
     schemaOverride: schema(
       {
         status: { type: "string", enum: ["open", "archived", "closed"], description: "Optional session status filter." },
         surfaceKind: {
           type: "string",
           enum: ["main_chat", "task_chat", "realtime", "delegated_agent", "background_agent", "floating_bar", "floating_pill"],
-          description: "Optional canonical surface filter.",
+          description: "Optional surface hint. background_agent and delegated_agent discover recent child sessions across concrete surfaces.",
         },
         limit: { type: "number", description: "Maximum sessions to return. Default 50." },
       },
@@ -1349,7 +1353,7 @@ const controlVoicePatches: Partial<Record<AgentControlManifestTool["name"], OmiT
     ),
   },
   get_agent_run: {
-    realtimeDescription: "Inspect one canonical Omi-managed agent run. Prefer an agentRef from list_agent_sessions.",
+    realtimeDescription: "Inspect one canonical Omi-managed agent run. Prefer an agentRef or runId from list_agent_sessions. For a completed child, answer from run.finalText and do not expose the internal id.",
     schemaOverride: schema(
       {
         agentRef: { type: "string", description: "Opaque agent handle from list_agent_sessions." },

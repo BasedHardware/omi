@@ -44,6 +44,8 @@ def main() -> int:
 
     _require('OPENAI_API_KEY', gateway_env, errors, 'gateway')
     _require('ANTHROPIC_API_KEY', gateway_env, errors, 'gateway')
+    _require('GEMINI_API_KEY', gateway_env, errors, 'gateway')
+    _require('OPENROUTER_API_KEY', gateway_env, errors, 'gateway')
     _require('METRICS_SECRET', gateway_env, errors, 'gateway')
 
     readiness = gateway_values.get('readinessProbe')

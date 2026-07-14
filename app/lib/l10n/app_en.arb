@@ -11296,5 +11296,43 @@
                 "type": "String"
             }
         }
+    },
+    "deviceStorageTitle": "Device Storage",
+    "@deviceStorageTitle": {
+        "description": "Title of the on-device storage usage card on the Auto Sync page"
+    },
+    "deviceStoragePercentFull": "{percent}% full",
+    "@deviceStoragePercentFull": {
+        "description": "Percentage of on-device storage used",
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            }
+        }
+    },
+    "deviceStorageUsedOfTotal": "{used} of {total} used",
+    "@deviceStorageUsedOfTotal": {
+        "description": "Used vs total on-device storage, e.g. 338 MB of 469 MB used",
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "total": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageFree": "{free} free",
+    "@deviceStorageFree": {
+        "description": "Amount of free on-device storage, e.g. 131 MB free",
+        "placeholders": {
+            "free": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageNearlyFull": "Device nearly full — sync to free space.",
+    "@deviceStorageNearlyFull": {
+        "description": "Warning shown when on-device storage is 95% or more full"
     }
 }

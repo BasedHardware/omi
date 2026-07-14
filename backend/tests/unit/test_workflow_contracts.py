@@ -48,9 +48,10 @@ def test_workflow_contract_sources_select_adjacent_tests():
         "backend/routers/transcribe.py": "tests/unit/test_listen_pipeline.py",
         "backend/config/prerecorded_stt.py": "tests/unit/test_parakeet_prerecorded.py",
         "backend/scripts/validate-backend-runtime-env.py": "tests/unit/test_backend_runtime_env_validator.py",
+        "backend/scripts/firebase_release_probe_token.py": "tests/unit/test_firebase_release_probe_token.py",
         "backend/charts/pusher/templates/deployment.yaml": "tests/unit/test_rendered_deployment_contract.py",
         "backend/scripts/validate_rendered_deployment_contract.py": "tests/unit/test_rendered_deployment_contract.py",
-        ".github/workflows/dev_backend_deployment_acceptance.yml": "tests/unit/test_verify_dev_backend_deployment.py",
+        ".github/workflows/gcp_backend_auto_dev.yml": "tests/unit/test_verify_dev_backend_deployment.py",
         "backend/jobs/short_term_lifecycle_worker.py": "tests/unit/test_ws_b_short_term_lifecycle.py",
         "backend/utils/memory_ingestion/export_runner.py": "tests/unit/test_memory_ingestion_pipeline.py",
     }
@@ -157,8 +158,8 @@ def test_removed_test_forces_full_discovered_suite():
 
 
 def test_every_external_workflow_contract_source_triggers_backend_unit_workflow():
-    contracts = json.loads((BACKEND_DIR / "testing/workflow_contracts.json").read_text())
-    workflow_text = (BACKEND_DIR.parent / ".github/workflows/backend-unit-tests.yml").read_text()
+    contracts = json.loads((BACKEND_DIR / "testing/workflow_contracts.json").read_text(encoding="utf-8"))
+    workflow_text = (BACKEND_DIR.parent / ".github/workflows/backend-unit-tests.yml").read_text(encoding="utf-8")
 
     external_sources = {
         source
@@ -175,8 +176,24 @@ def test_every_external_workflow_contract_source_triggers_backend_unit_workflow(
     assert missing == set()
 
 
+def test_static_backend_unit_workflow_uses_ci_duration_sanity_ceiling():
+    """Static tripwire: local pre-push is strict; PR CI only blocks pathological CPU cost."""
+    workflow_text = (BACKEND_DIR.parent / ".github/workflows/backend-unit-tests.yml").read_text(encoding="utf-8")
+
+    assert 'BACKEND_FAST_UNIT_WARN_SECONDS: "0.1"' in workflow_text
+    assert 'BACKEND_FAST_UNIT_FAIL_SECONDS: "1.0"' in workflow_text
+
+
+def test_backend_test_runner_defaults_python_to_utf8():
+    runner = (BACKEND_DIR / "test.sh").read_text(encoding="utf-8")
+    utf8_export = 'export PYTHONUTF8="${PYTHONUTF8:-1}"'
+
+    assert utf8_export in runner
+    assert runner.index(utf8_export) < runner.index('PYTHON_BIN="${PYTHON:-}"')
+
+
 def test_pre_push_requires_backend_python_lazily():
-    pre_push = (BACKEND_DIR.parent / "scripts/pre-push").read_text()
+    pre_push = (BACKEND_DIR.parent / "scripts/pre-push").read_text(encoding="utf-8")
     setup_prefix = pre_push[: pre_push.index("run_step()")]
 
     assert "require_backend_python()" in setup_prefix
@@ -193,7 +210,7 @@ def test_pre_push_requires_backend_python_lazily():
 
 
 def test_pre_push_runs_each_named_check_phase_once():
-    pre_push = (BACKEND_DIR.parent / "scripts/pre-push").read_text()
+    pre_push = (BACKEND_DIR.parent / "scripts/pre-push").read_text(encoding="utf-8")
     check_calls = re.findall(r"^run_step (check_[A-Za-z0-9_]+)$", pre_push, flags=re.MULTILINE)
     duplicates = sorted({name for name in check_calls if check_calls.count(name) > 1})
 
@@ -202,14 +219,16 @@ def test_pre_push_runs_each_named_check_phase_once():
 
 def test_shared_change_detection_and_backend_isolation_are_ci_wired():
     repo = BACKEND_DIR.parent
-    detect_changes = (repo / ".github/actions/detect-changes/action.yml").read_text()
-    manifest = (repo / ".github/checks-manifest.yaml").read_text()
-    backend_checks = (repo / ".github/workflows/backend-checks.yml").read_text()
-    repo_checks = (repo / ".github/workflows/repo-checks.yml").read_text()
-    desktop_checks = (repo / ".github/workflows/desktop-checks.yml").read_text()
-    agent_proxy_auto_deploy = (repo / ".github/workflows/gcp_backend_agent_proxy_auto_deploy.yml").read_text()
-    swift_test_suites = (repo / "desktop/macos/scripts/swift-test-suites.sh").read_text()
-    pre_push = (repo / "scripts/pre-push").read_text()
+    detect_changes = (repo / ".github/actions/detect-changes/action.yml").read_text(encoding="utf-8")
+    manifest = (repo / ".github/checks-manifest.yaml").read_text(encoding="utf-8")
+    backend_checks = (repo / ".github/workflows/backend-checks.yml").read_text(encoding="utf-8")
+    repo_checks = (repo / ".github/workflows/repo-checks.yml").read_text(encoding="utf-8")
+    desktop_checks = (repo / ".github/workflows/desktop-checks.yml").read_text(encoding="utf-8")
+    agent_proxy_auto_deploy = (repo / ".github/workflows/gcp_backend_agent_proxy_auto_deploy.yml").read_text(
+        encoding="utf-8"
+    )
+    swift_test_suites = (repo / "desktop/macos/scripts/swift-test-suites.sh").read_text(encoding="utf-8")
+    pre_push = (repo / "scripts/pre-push").read_text(encoding="utf-8")
 
     assert 'FILES=$(scripts/changed-files "$DIFF_BASE"...HEAD)' in detect_changes
     assert "has_backend_isolation_gate" in detect_changes
@@ -237,7 +256,7 @@ def test_shared_change_detection_and_backend_isolation_are_ci_wired():
 
 
 def test_installed_pre_push_hook_falls_back_for_older_worktrees():
-    installer = (BACKEND_DIR.parent / "scripts/install-git-hooks.sh").read_text()
+    installer = (BACKEND_DIR.parent / "scripts/install-git-hooks.sh").read_text(encoding="utf-8")
 
     assert 'if [ -x "$ROOT/scripts/pre-push-singleflight" ]' in installer
     assert 'exec "$ROOT/scripts/pre-push" "$@"' in installer

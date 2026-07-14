@@ -1334,7 +1334,9 @@ struct DashboardPage: View {
     }
 
     private var homeHeader: some View {
-        HStack {
+        let transcriptionUnavailable = appState.transcriptionServiceError != nil
+
+        return HStack {
             Spacer()
             HStack(spacing: OmiSpacing.sm) {
                 HomeStatusButton(
@@ -1346,9 +1348,11 @@ struct DashboardPage: View {
                 )
 
                 HomeListeningStatusButton(
-                    title: "Listening",
-                    systemImage: appState.isTranscribing ? "waveform.circle.fill" : "mic.circle",
-                    status: appState.isTranscribing ? .active : .inactive,
+                    title: transcriptionUnavailable ? "Transcription unavailable" : "Listening",
+                    systemImage: transcriptionUnavailable
+                        ? "exclamationmark.triangle.fill"
+                        : (appState.isTranscribing ? "waveform.circle.fill" : "mic.circle"),
+                    status: transcriptionUnavailable ? .blocked : (appState.isTranscribing ? .active : .inactive),
                     modeTitle: listeningModeTitle,
                     isMeetingsOnly: listeningCaptureMode == .onlyDuringMeetings,
                     isToggling: isTogglingListening,
@@ -1422,7 +1426,7 @@ struct DashboardPage: View {
                 openExportDestination(.claudeCode)
             }
             HomeAIChoiceButton(title: "ChatGPT / Codex", brand: .chatgpt, isConnected: isMCPDestinationConnected(.chatgpt)) {
-                openExportDestination(.codex)
+                openExportDestination(.chatgpt)
             }
             HomeAIChoiceButton(title: "OpenClaw", brand: .openclaw, isConnected: isMCPDestinationConnected(.openclaw)) {
                 openExportDestination(.openclaw)

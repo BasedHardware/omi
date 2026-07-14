@@ -32,6 +32,10 @@ extension AppState {
               log("  Skipped \(key) (fetched from backend via APIKeyService)")
               continue
             }
+            guard BundleEnvironment.shouldApplyBundledValue(for: key) else {
+              log("  Skipped \(key) (explicit launch environment override)")
+              continue
+            }
             let value = String(parts[1]).trimmingCharacters(in: .whitespaces)
               .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
             setenv(key, value, 1)

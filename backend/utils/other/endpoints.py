@@ -13,6 +13,7 @@ import redis as redis_pkg
 
 from database.redis_db import check_rate_limit, try_acquire_listen_lock
 from database.users import record_client_device, record_user_platform
+from utils.api_key_families import FIREBASE_FAMILY, wrong_key_family_detail
 from utils.client_device import resolve_client_device
 from utils.byok import extract_byok_from_websocket, set_byok_keys, validate_byok_request, validate_byok_websocket
 from utils.executors import critical_executor, run_blocking
@@ -76,8 +77,12 @@ def get_current_user_uid(
     elif len(str(authorization).split(' ')) != 2:
         raise HTTPException(status_code=401, detail="Invalid authorization token")
 
+    token = authorization.split(' ')[1]
+    key_family_mismatch = wrong_key_family_detail(token, FIREBASE_FAMILY)
+    if key_family_mismatch:
+        raise HTTPException(status_code=401, detail=key_family_mismatch)
+
     try:
-        token = authorization.split(' ')[1]
         uid = verify_token(token)
     except InvalidIdTokenError as e:
         logger.error(e)
@@ -129,8 +134,12 @@ def get_current_user_uid_no_byok_validation(
     elif len(str(authorization).split(' ')) != 2:
         raise HTTPException(status_code=401, detail="Invalid authorization token")
 
+    token = authorization.split(' ')[1]
+    key_family_mismatch = wrong_key_family_detail(token, FIREBASE_FAMILY)
+    if key_family_mismatch:
+        raise HTTPException(status_code=401, detail=key_family_mismatch)
+
     try:
-        token = authorization.split(' ')[1]
         uid = verify_token(token)
     except InvalidIdTokenError as e:
         logger.error(e)

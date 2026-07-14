@@ -3165,5 +3165,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "设备存储",
+    "deviceStoragePercentFull": "已用 {percent}%",
+    "deviceStorageUsedOfTotal": "{total} 中已使用 {used}",
+    "deviceStorageFree": "剩余 {free}",
+    "deviceStorageNearlyFull": "设备快满了 — 请同步以释放空间。"
 }

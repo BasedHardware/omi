@@ -29,6 +29,64 @@ struct PTTSilentMicRecoveryPolicy {
   }
 }
 
+/// Modifier-only shortcuts (Option, Fn, etc.) overlap with normal text editing:
+/// Option-arrow navigation and dead-key entry first emit `flagsChanged`, then a
+/// normal key-down. Do not let that first modifier event barge into an active
+/// spoken reply before the accompanying editing key arrives.
+///
+/// The gate deliberately has no timing policy. `PushToTalkManager` supplies the
+/// short hold delay, while this model makes the admission/cancellation contract
+/// deterministic and independently testable.
+struct ModifierOnlyPTTActivationGate {
+  enum Action: Equatable {
+    case scheduleStart
+    case cancelPendingStart
+    case releaseStartedTurn
+    case none
+  }
+
+  private(set) var hasPendingStart = false
+  private(set) var hasStartedTurn = false
+
+  mutating func modifierStateChanged(isShortcutActive: Bool) -> Action {
+    if isShortcutActive {
+      guard !hasPendingStart, !hasStartedTurn else { return .none }
+      hasPendingStart = true
+      return .scheduleStart
+    }
+
+    if hasPendingStart {
+      hasPendingStart = false
+      return .cancelPendingStart
+    }
+    guard hasStartedTurn else { return .none }
+    hasStartedTurn = false
+    return .releaseStartedTurn
+  }
+
+  mutating func nonModifierKeyPressed() -> Action {
+    guard hasPendingStart else { return .none }
+    hasPendingStart = false
+    return .cancelPendingStart
+  }
+
+  mutating func consumePendingStart() -> Bool {
+    guard hasPendingStart else { return false }
+    hasPendingStart = false
+    hasStartedTurn = true
+    return true
+  }
+
+  mutating func cancelPendingStart() {
+    hasPendingStart = false
+  }
+
+  mutating func reset() {
+    hasPendingStart = false
+    hasStartedTurn = false
+  }
+}
+
 extension Notification.Name {
   static let coreAudioCaptureRecoveryRequested = Notification.Name("coreAudioCaptureRecoveryRequested")
 }
@@ -79,14 +137,31 @@ private final class VoiceTurnOmniDelegateProxy: RealtimeOmniServiceDelegate {
 class PushToTalkManager: ObservableObject {
   static let shared = PushToTalkManager()
 
-  /// A local-profile automation turn drives provider/reducer boundaries itself;
+  /// An automation turn drives provider/reducer boundaries itself;
   /// it has no physical capture buffer for this manager to silence-gate. Let the
   /// reducer reach `.finalizing`, then leave the exact commit to the harness.
   nonisolated static func shouldFinalizeCapturedInputPhysically(
-    turnIntent: VoiceTurnIntent?,
-    localProfileEnabled: Bool
+    turnIntent: VoiceTurnIntent?
   ) -> Bool {
-    !(localProfileEnabled && turnIntent == .automation)
+    turnIntent != .automation
+  }
+
+  /// Whether a shortcut-down may begin a fresh capture generation. The reducer
+  /// owns supersession: response phases are deliberately admitted here so its
+  /// `.start` event can atomically interrupt the old turn before mic capture
+  /// for the new turn begins. Recording/finalizing phases remain exclusive to
+  /// their existing physical capture lifecycle.
+  nonisolated static func admitsListeningStart(
+    activeTurnID: VoiceTurnID?,
+    phase: VoiceTurnPhase?
+  ) -> Bool {
+    guard activeTurnID != nil else { return true }
+    switch phase {
+    case .pendingLockDecision, .awaitingResponse, .awaitingTools, .awaitingJournal, .playing:
+      return true
+    case .idle, .recording, .lockedRecording, .finalizing, .terminal, .none:
+      return false
+    }
   }
 
   private let voiceTurnCoordinator = VoiceTurnCoordinator.shared
@@ -102,6 +177,12 @@ class PushToTalkManager: ObservableObject {
 
   private var globalMonitor: Any?
   private var localMonitor: Any?
+  private var modifierOnlyActivationGate = ModifierOnlyPTTActivationGate()
+  private var modifierOnlyShortcutStartWorkItem: DispatchWorkItem?
+  /// Give text-editing chords (Fn-arrow, Option-letter, etc.) enough time to
+  /// deliver their accompanying key-down before treating a modifier-only press
+  /// as an intentional PTT barge-in. This is below perceptual PTT latency.
+  private static let modifierOnlyShortcutActivationDelay: TimeInterval = 0.08
   private var barState: FloatingControlBarState?
   private var automationBarState: FloatingControlBarState?
   private var automationCaptureBypass = false
@@ -120,10 +201,6 @@ class PushToTalkManager: ObservableObject {
   // Realtime-as-hub (Phase 1): when active, the realtime model is THE hub — it does
   // in-session STT + reasoning + routing (tool choice) + speaks the reply. Mic PCM is
   // streamed to RealtimeHubController; there is no transcript→router→ChatProvider hop.
-  /// When set, the next finalized PTT turn is a voice follow-up to this agent pill:
-  /// it uses the realtime omni STT and routes the transcript into the pill's agent
-  /// session (RealtimeHub pipeline), NOT the floating bar or the hub model.
-  private var followUpPill: AgentPill?
   // Mic chunks captured before the relay finishes connecting (raw 16k PCM),
   // flushed once the service exists so the user's first words aren't clipped.
   private var omniPreconnectBuffer: [Data] = []
@@ -209,6 +286,7 @@ class PushToTalkManager: ObservableObject {
     stopListening()
     voiceTurnCoordinator.reset()
     audioCaptureService = nil
+    resetModifierOnlyShortcutActivation()
     removeEventMonitors()
     log("PushToTalkManager: cleanup complete")
   }
@@ -241,6 +319,7 @@ class PushToTalkManager: ObservableObject {
   }
 
   private func removeEventMonitors() {
+    resetModifierOnlyShortcutActivation()
     if let monitor = globalMonitor {
       NSEvent.removeMonitor(monitor)
       globalMonitor = nil
@@ -259,14 +338,15 @@ class PushToTalkManager: ObservableObject {
     case .finalizeCapturedInput(let turnID):
       guard voiceTurnCoordinator.activeTurnID == turnID else { return }
       guard Self.shouldFinalizeCapturedInputPhysically(
-        turnIntent: voiceTurnCoordinator.activeTurn?.intent,
-        localProfileEnabled: DesktopLocalProfile.isEnabled)
+        turnIntent: voiceTurnCoordinator.activeTurn?.intent)
       else {
         log("PushToTalkManager: local automation turn owns synthetic captured-input finalization")
         return
       }
       continueFinalization()
-    case .activateHub(let turnID, _):
+    case .commitClaimedHubInput(let turnID):
+      RealtimeHubController.shared.commitClaimedHubInput(turnID: turnID)
+    case .prepareHubInput(let turnID, _):
       guard voiceTurnCoordinator.activeTurnID == turnID else { return }
       resolveRealtimeHubWarmWait(ready: true)
     case .transcriptionFinalizationTimedOut(let turnID, let mode):
@@ -312,7 +392,7 @@ class PushToTalkManager: ObservableObject {
     switch route {
     case .hub, .hubWarmWait:
       return true
-    case .undecided, .omniSTT, .deepgramBatch, .deepgramLive, .agentFollowUp:
+    case .undecided, .omniSTT, .deepgramBatch, .deepgramLive:
       return false
     }
   }
@@ -323,39 +403,81 @@ class PushToTalkManager: ObservableObject {
     guard ShortcutSettings.shared.pttEnabled else { return }
     let shortcut = ShortcutSettings.shared.pttShortcut
 
-    let pttActive: Bool
     switch event.type {
     case .flagsChanged:
       guard shortcut.modifierOnly else { return }
-      pttActive = shortcut.matchesFlagsChanged(event)
+      handleModifierOnlyShortcutStateChanged(
+        isShortcutActive: shortcut.matchesFlagsChanged(event))
+      return
     case .keyDown:
-      guard !shortcut.modifierOnly, !event.isARepeat else { return }
-      pttActive = shortcut.matchesKeyDown(event)
+      if shortcut.modifierOnly {
+        if modifierOnlyActivationGate.nonModifierKeyPressed() == .cancelPendingStart {
+          cancelPendingModifierOnlyShortcutStart()
+        }
+        return
+      }
+      guard !event.isARepeat else { return }
+      handleKeyShortcutDown(isShortcutActive: shortcut.matchesKeyDown(event))
     case .keyUp:
       guard !shortcut.modifierOnly else { return }
-      pttActive = false
       if shortcut.matchesKeyUp(event) {
         handleShortcutUp()
       }
-      return
     default:
       return
     }
+  }
+
+  private func handleModifierOnlyShortcutStateChanged(isShortcutActive: Bool) {
+    switch modifierOnlyActivationGate.modifierStateChanged(isShortcutActive: isShortcutActive) {
+    case .scheduleStart:
+      scheduleModifierOnlyShortcutStart()
+    case .cancelPendingStart:
+      cancelPendingModifierOnlyShortcutStart()
+    case .releaseStartedTurn:
+      handleShortcutUp()
+    case .none:
+      break
+    }
+  }
+
+  private func scheduleModifierOnlyShortcutStart() {
+    guard modifierOnlyShortcutStartWorkItem == nil else { return }
+    let workItem = DispatchWorkItem { [weak self] in
+      guard let self, self.modifierOnlyActivationGate.consumePendingStart() else { return }
+      self.modifierOnlyShortcutStartWorkItem = nil
+      self.handleKeyShortcutDown(isShortcutActive: true)
+    }
+    modifierOnlyShortcutStartWorkItem = workItem
+    DispatchQueue.main.asyncAfter(
+      deadline: .now() + Self.modifierOnlyShortcutActivationDelay,
+      execute: workItem)
+  }
+
+  private func cancelPendingModifierOnlyShortcutStart() {
+    modifierOnlyShortcutStartWorkItem?.cancel()
+    modifierOnlyShortcutStartWorkItem = nil
+    modifierOnlyActivationGate.cancelPendingStart()
+  }
+
+  private func resetModifierOnlyShortcutActivation() {
+    modifierOnlyShortcutStartWorkItem?.cancel()
+    modifierOnlyShortcutStartWorkItem = nil
+    modifierOnlyActivationGate.reset()
+  }
+
+  private func handleKeyShortcutDown(isShortcutActive: Bool) {
+    guard isShortcutActive else { return }
 
     // Let the first shortcut press reveal the compact bar instead of requiring it
     // to already be visible. This keeps onboarding step 3 quiet on entry while
     // still allowing the user to trigger the bar by pressing the key.
-    if pttActive, !FloatingControlBarManager.shared.isVisible {
+    if !FloatingControlBarManager.shared.isVisible {
       FloatingControlBarManager.shared.show()
     }
 
     guard FloatingControlBarManager.shared.isVisible else { return }
-
-    if pttActive {
-      handleShortcutDown()
-    } else if shortcut.modifierOnly {
-      handleShortcutUp()
-    }
+    handleShortcutDown()
   }
 
   private func handleShortcutDown() {
@@ -434,12 +556,12 @@ class PushToTalkManager: ObservableObject {
   }
 
   private func startListening() {
-    guard isIdle || phase == .pendingLockDecision else {
+    guard Self.admitsListeningStart(activeTurnID: currentVoiceTurnID, phase: phase) else {
       log("PushToTalkManager: startListening ignored — phase=\(String(describing: phase))")
       return
     }
     if isBlockedByUsageLimit() { return }
-    _ = voiceTurnCoordinator.begin(intent: followUpPill == nil ? .hold : .agentFollowUp)
+    _ = voiceTurnCoordinator.begin(intent: .hold)
     RealtimeHubController.shared.prefetchVoiceContextSnapshotIfNeeded()
     // Reset the overflow flag under the buffer lock so it's atomic w.r.t. the
     // audio thread's appendBatchAudioBounded (fresh turn → allow the warning again).
@@ -468,7 +590,7 @@ class PushToTalkManager: ObservableObject {
     AnalyticsManager.shared.floatingBarPTTStarted(mode: mode)
     DesktopDiagnosticsManager.shared.recordPTTStarted(
       mode: mode,
-      hubActive: RealtimeHubController.shared.isActive,
+      hubActive: RealtimeHubController.shared.isTransportReady,
       micPermissionGranted: refreshedMicPermission())
     let preOverlayImage = ScreenCaptureManager.captureScreenImage()
     updateBarState()
@@ -504,7 +626,7 @@ class PushToTalkManager: ObservableObject {
     AnalyticsManager.shared.floatingBarPTTStarted(mode: mode)
     DesktopDiagnosticsManager.shared.recordPTTStarted(
       mode: mode,
-      hubActive: RealtimeHubController.shared.isActive,
+      hubActive: RealtimeHubController.shared.isTransportReady,
       micPermissionGranted: refreshedMicPermission())
 
     // If we were already listening from the first tap, keep going.
@@ -547,10 +669,6 @@ class PushToTalkManager: ObservableObject {
     contextCaptureTask?.cancel()
     contextCaptureTask = nil
     micCaptureStartInFlight = false
-    if followUpPill != nil {
-      followUpPill = nil
-      AgentPillsManager.shared.recordingPillID = nil
-    }
     stopAudioTranscription(discardBufferedAudio: discardBufferedAudio)
     transcriptSegments = []
     seenFinalSegmentIDs.removeAll()
@@ -611,36 +729,6 @@ class PushToTalkManager: ObservableObject {
   func cancelListening() {
     guard !isIdle else { return }
     log("PushToTalkManager: cancelling listening")
-    stopListening()
-  }
-
-  // MARK: - Agent voice follow-up
-
-  /// Begin a voice follow-up to a specific agent pill (the pill's mic button). Reuses
-  /// the realtime omni STT capture; the transcript routes to the agent's session via
-  /// AgentPillsManager.continueAgent (not the floating bar / hub model).
-  func startPillFollowUp(for pill: AgentPill) {
-    guard isIdle else {
-      log("PushToTalkManager: follow-up ignored — PTT busy (phase=\(String(describing: phase)))")
-      AgentPillsManager.shared.recordingPillID = nil
-      return
-    }
-    log("PushToTalkManager: voice follow-up START for agent \(pill.title)")
-    followUpPill = pill
-    startListening()
-  }
-
-  /// End the in-progress voice follow-up (second mic tap) and send it to the agent.
-  func endPillFollowUp() {
-    guard followUpPill != nil, !isIdle else { return }
-    log("PushToTalkManager: voice follow-up END — finalizing")
-    finalize()
-  }
-
-  /// Cancel an in-progress voice follow-up for a pill that was dismissed.
-  func cancelPillFollowUp(for pillID: UUID) {
-    guard followUpPill?.id == pillID else { return }
-    log("PushToTalkManager: voice follow-up CANCEL for dismissed agent")
     stopListening()
   }
 
@@ -957,6 +1045,10 @@ class PushToTalkManager: ObservableObject {
         transcribeBufferedWarmWaitAudio()
         return
       }
+      if commitResult == .alreadyOwned {
+        log("PushToTalkManager: realtime hub already owns this pending commit — skipping duplicate fallback")
+        return
+      }
       silentMicRecoveryPolicy.recordSuccessfulTurn()
       DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: true)
       AnalyticsManager.shared.floatingBarPTTEnded(
@@ -1140,16 +1232,36 @@ class PushToTalkManager: ObservableObject {
     // Append while under the cap (the chunk that reaches it is kept, so the warning
     // fires exactly at the crossing). Set the once-flag atomically under the lock so
     // the warning is enqueued exactly once, not on every subsequent chunk.
-    var justHitCap = false
-    if batchAudioBuffer.count < Self.maxBatchAudioBytes {
-      batchAudioBuffer.append(audioData)
-      if batchAudioBuffer.count >= Self.maxBatchAudioBytes && !batchAudioOverflowSignaled {
-        batchAudioOverflowSignaled = true
-        justHitCap = true
-      }
-    }
+    let decision = Self.batchAudioCapDecision(
+      bufferedBytes: batchAudioBuffer.count,
+      chunkBytes: audioData.count,
+      alreadySignaled: batchAudioOverflowSignaled
+    )
+    if decision.append { batchAudioBuffer.append(audioData) }
+    if decision.warn { batchAudioOverflowSignaled = true }
     batchAudioLock.unlock()
-    if justHitCap { showBatchAudioOverflowWarning(turn: turn) }
+    if decision.warn { showBatchAudioOverflowWarning(turn: turn) }
+  }
+
+  /// Pure cap decision behind `appendBatchAudioBounded` (MIC-04): should this mic
+  /// chunk be appended, and does it cross the cap (warn exactly once)?
+  ///
+  /// Extracted so the bounding guarantee — RSS stays bounded past ~4.5 min and the
+  /// user is warned once, not per chunk — is unit-testable without driving the audio
+  /// thread. The live-mic path can't reach this cap from the automation bridge (the
+  /// PTT actions drive the realtime hub, not the batch buffer), so this is the
+  /// criterion's real test seam. Keep in lockstep with `appendBatchAudioBounded`.
+  nonisolated static func batchAudioCapDecision(
+    bufferedBytes: Int,
+    chunkBytes: Int,
+    cap: Int = maxBatchAudioBytes,
+    alreadySignaled: Bool
+  ) -> (append: Bool, warn: Bool) {
+    // At or over the cap the buffer stops growing entirely — bounded RSS.
+    guard bufferedBytes < cap else { return (append: false, warn: false) }
+    // Under the cap: keep the chunk. If it crosses the cap, warn once.
+    let crosses = (bufferedBytes + chunkBytes) >= cap
+    return (append: true, warn: crosses && !alreadySignaled)
   }
 
   /// Surface the one-time "recording too long" warning when the turn buffer is
@@ -1236,34 +1348,6 @@ class PushToTalkManager: ObservableObject {
   private func sendQuery(_ query: String, wasFollowUp: Bool, turnID: VoiceTurnID) {
     guard voiceTurnCoordinator.requireCurrentOwner(for: turnID) != nil else {
       log("PushToTalkManager: refusing provider dispatch after authenticated owner changed")
-      return
-    }
-    // Voice follow-up to an agent pill: route the transcript into THAT agent's session
-    // (RealtimeHub pipeline) instead of the floating bar.
-    if let pill = followUpPill {
-      followUpPill = nil
-      AgentPillsManager.shared.recordingPillID = nil
-      activeTracer = nil
-      let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
-      if q.isEmpty {
-        log("PushToTalkManager: voice follow-up empty — not sending")
-      } else {
-        guard voiceTurnCoordinator.requireCurrentOwner(for: turnID) != nil else { return }
-        log("PushToTalkManager: routing voice follow-up → agent (\(q.count) chars)")
-        let completionToken = currentVoiceTurnID.flatMap {
-          voiceTurnCoordinator.nonHubCompletionToken(for: $0)
-        }
-        AgentPillsManager.shared.continueAgent(from: pill, text: q) { outcome in
-          guard let completionToken else { return }
-          VoiceTurnCoordinator.shared.completeNonHubProvider(
-            completionToken,
-            outcome: outcome)
-        }
-        if completionToken == nil, let turnID = currentVoiceTurnID {
-          log("PushToTalkManager: agent follow-up missing provider completion identity")
-          voiceTurnCoordinator.send(.finish(turnID: turnID, reason: .providerFailed))
-        }
-      }
       return
     }
     // QueryTracer: hand the PTT tracer to the floating-bar query via TaskLocal so
@@ -1365,21 +1449,11 @@ class PushToTalkManager: ObservableObject {
     // + spoken reply). Stream mic PCM to the hub and skip both the omni/Deepgram
     // STT path AND the transcript→router→ChatProvider hop. The Haiku classify()
     // router is bypassed — routing is the model's tool choice.
-    // Voice follow-up to an agent: always use the omni STT (we need a transcript to
-    // route to the agent), never the hub model — the hub would answer it itself.
-    if followUpPill != nil {
-      if let turnID = currentVoiceTurnID {
-        voiceTurnCoordinator.send(.selectRoute(turnID: turnID, route: .agentFollowUp))
-      }
-      _ = startOmniTranscription()
-      return
-    }
-
-    if RealtimeHubController.shared.isActive {
+    if RealtimeHubController.shared.isTransportReady {
       if let turnID = currentVoiceTurnID {
         voiceTurnCoordinator.send(.selectRoute(turnID: turnID, route: .hub(sessionID: nil)))
       }
-      startRealtimeHubCapture(bufferWhileWarming: false)
+      _ = startRealtimeHubCapture(bufferWhileWarming: false)
       return
     }
 
@@ -1387,11 +1461,26 @@ class PushToTalkManager: ObservableObject {
     return
   }
 
-  private func startRealtimeHubCapture(bufferWhileWarming: Bool) {
+  @discardableResult
+  private func startRealtimeHubCapture(bufferWhileWarming: Bool) -> Bool {
     if !bufferWhileWarming {
       batchAudioLock.lock(); batchAudioBuffer = Data(); batchAudioLock.unlock()
     }
-    RealtimeHubController.shared.beginTurn(turnID: currentVoiceTurnID)
+    let preparation = RealtimeHubController.shared.beginTurn(turnID: currentVoiceTurnID)
+    guard preparation == .accepted else {
+      log("PushToTalkManager: realtime transport was ready but context admission was rejected")
+      if bufferWhileWarming {
+        // `hubReady` already cancelled the warm deadline. Route the rejection
+        // through the reducer so a released turn cannot remain parked forever in
+        // finalizing + hubWarmWait while the socket idles out.
+        if let turnID = currentVoiceTurnID {
+          voiceTurnCoordinator.send(.hubAdmissionRejected(turnID: turnID))
+        }
+      } else {
+        _ = startOmniTranscription(captureAlreadyRunning: false)
+      }
+      return false
+    }
     if bufferWhileWarming {
       batchAudioLock.lock()
       let bufferedAudio = batchAudioBuffer
@@ -1415,6 +1504,7 @@ class PushToTalkManager: ObservableObject {
       }
     }
     log("PushToTalkManager: realtime hub active — model is the voice hub")
+    return true
   }
 
   private func startRealtimeHubWarmWait() {
@@ -1439,8 +1529,8 @@ class PushToTalkManager: ObservableObject {
       return
     }
     if ready {
-      startRealtimeHubCapture(bufferWhileWarming: true)
-      if phase == .finalizing {
+      let accepted = startRealtimeHubCapture(bufferWhileWarming: true)
+      if accepted, phase == .finalizing {
         commitBufferedRealtimeHubTurn()
       }
       return
@@ -1508,6 +1598,10 @@ class PushToTalkManager: ObservableObject {
       batchAudioBuffer = turnAudio
       batchAudioLock.unlock()
       transcribeBufferedWarmWaitAudio()
+      return
+    }
+    if commitResult == .alreadyOwned {
+      log("PushToTalkManager: buffered hub commit is already owned — skipping duplicate fallback")
       return
     }
     silentMicRecoveryPolicy.recordSuccessfulTurn()
@@ -1861,9 +1955,7 @@ extension PushToTalkManager {
     let delegateProxy = VoiceTurnOmniDelegateProxy(owner: self, identity: identity)
     omniDelegateProxy = delegateProxy
     let provider = RealtimeOmniSettings.shared.effectiveProvider
-    if let turnID = currentVoiceTurnID,
-      voiceTurnCoordinator.activeTurn?.route != .agentFollowUp
-    {
+    if let turnID = currentVoiceTurnID {
       voiceTurnCoordinator.send(.selectRoute(turnID: turnID, route: .omniSTT))
     }
     if captureAlreadyRunning {

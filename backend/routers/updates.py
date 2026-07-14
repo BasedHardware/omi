@@ -10,7 +10,7 @@ from fastapi.responses import RedirectResponse, Response, HTMLResponse
 from pydantic import BaseModel, Field
 
 from database.desktop_update_channels import promote_channel, register_release_manifest
-from database.desktop_update_policy import get_desktop_update_policy
+from database.desktop_update_policy import default_desktop_update_policy, get_desktop_update_policy
 from database.redis_db import delete_generic_cache
 from utils.desktop_update_resolver import live_cache_key, resolve_pointer_release
 from utils.executors import db_executor, run_blocking
@@ -663,7 +663,21 @@ def get_desktop_update_policy_endpoint(
     ``desktop_update_policy/current`` to show a dismissible banner or a required
     manual-update prompt to future desktop clients.
     """
-    return get_desktop_update_policy(current_build=current_build, platform=platform)
+    try:
+        return get_desktop_update_policy(current_build=current_build, platform=platform)
+    except Exception as exc:
+        # The policy only accelerates manual recovery; clients still have the
+        # Sparkle appcast and stable manual download path when Firestore is unavailable.
+        logger.warning("desktop_update_policy_unavailable error_type=%s", type(exc).__name__)
+        record_fallback(
+            component="other",
+            from_mode="desktop_update_policy",
+            to_mode="desktop_update_appcast",
+            reason="other",
+            outcome="recovered",
+            log=logger,
+        )
+        return default_desktop_update_policy()
 
 
 @router.post("/v2/desktop/clear-cache", response_model=ClearCacheResponse)

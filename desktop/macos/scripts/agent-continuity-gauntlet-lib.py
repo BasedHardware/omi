@@ -2056,10 +2056,13 @@ class GauntletRunner:
             "typed turn",
         )
 
-        # Step 2 — PTT turn (real hub controller path; transcript forced for determinism)
+        # Step 2 — PTT turn (real hub controller path; transcript forced for determinism).
+        # Its request deliberately omits the typed marker, so the PTT provider can
+        # satisfy the first clause only from the canonical kernel context.
         ptt_user = (
-            f"In our push-to-talk exchange, remember this marker exactly: {self.markers['ptt']}. "
-            "Reply briefly acknowledging it."
+            "First reply with the exact continuity marker I gave you in typed chat; "
+            "it starts with GAUNTLET- and ends in -TYPED. Then remember this new "
+            f"push-to-talk marker exactly: {self.markers['ptt']}."
         )
         trace_start = capture_trace_cursor()
         ptt = self.bridge_act(
@@ -2105,6 +2108,11 @@ class GauntletRunner:
             self.fail("PTT turn marker not visible in main chat transcript after voice turn")
 
         assistant_reply = str(ptt_detail.get("assistant_reply") or "")
+        if self.markers["typed"] not in assistant_reply:
+            self.fail(
+                "PTT step 02 failed blind recall of the prior typed marker "
+                f"{self.markers['typed']} (reply={assistant_reply[:160]!r})"
+            )
         if self.markers["ptt"] not in assistant_reply:
             self.warn(
                 f"PTT step 02: assistant reply did not acknowledge marker {self.markers['ptt']} "
@@ -2117,6 +2125,44 @@ class GauntletRunner:
                 "PTT step 02: local_transcript empty while provider_transcript populated "
                 "(expected when force_transcript bypasses local STT fallback)"
             )
+
+        # Step 2b — second PTT turn: the marker is absent from the probe, so this
+        # proves that the previous PTT input reached the next PTT provider session.
+        ptt_recall_query = (
+            "In the earlier push-to-talk voice turn I gave you a continuity marker "
+            "starting with GAUNTLET- and ending in -PTT. Reply with only that exact marker."
+        )
+        trace_start = capture_trace_cursor()
+        ptt_recall = self.bridge_act(
+            "ptt_test_turn",
+            {
+                "pcm": str(self.pcm_path),
+                "timeout": str(max(30, self.args.turn_timeout_ms // 1000)),
+                "force_transcript": ptt_recall_query,
+                "text_only": "1",
+            },
+        )
+        ptt_recall_detail = ptt_recall.get("result", {}).get("detail", {})
+        if ptt_recall.get("ok") is False or ptt_recall_detail.get("error"):
+            self.fail(
+                "PTT-to-PTT blind recall failed: "
+                f"{ptt_recall_detail.get('error', ptt_recall.get('error', ptt_recall))}"
+            )
+        ptt_recall_reply = str(ptt_recall_detail.get("assistant_reply") or "")
+        if self.markers["ptt"] not in ptt_recall_reply:
+            self.fail(
+                "PTT step 02b failed blind recall of the prior PTT marker "
+                f"{self.markers['ptt']} (reply={ptt_recall_reply[:160]!r})"
+            )
+        self.record_step(
+            "02b-ptt-followup",
+            "PTT blind recall after PTT",
+            user_text=ptt_recall_query,
+            action_response=ptt_recall,
+            snapshot_detail={},
+            traces=read_new_traces(trace_start),
+            extra={"assistant_reply": ptt_recall_reply},
+        )
 
         # Step 3 — typed follow-up: blind recall of the PTT marker (R8).
         # The probe must NOT contain the marker; the assistant can only answer
@@ -2938,6 +2984,65 @@ class GauntletRunner:
             self.fail(f"P3 register: robotic phrasing in reply: {robotic}")
         if len(assistant) > 450:
             self.warn(f"P3 register: unknown-person reply too long ({len(assistant)} chars)")
+
+        # P4 — public web: this is deliberately a live contract probe. The
+        # Anthropic server-side tool is invisible to the desktop query trace,
+        # so require the terminal product outcome (a source URL) and fail on
+        # the provider's direct-tool-choice error. This catches a deployed
+        # gateway that has an incompatible web_search payload even when the
+        # local Rust translation unit test is green.
+        p4_query = (
+            "Search the public web for the current National Weather Service forecast page "
+            "for New York City. Use public web search before answering, then reply with "
+            "exactly one full https source URL."
+        )
+        send, snapshot, traces = self.send_and_wait(
+            p4_query,
+            min(self.args.turn_timeout_ms, 90_000),
+        )
+        assistant = current_turn_assistant_text(snapshot, p4_query)
+        p4_evidence = "\n".join(
+            (
+                assistant,
+                current_turn_snapshot_text(snapshot, p4_query),
+                json.dumps(send, sort_keys=True, default=str),
+                "\n".join(flatten_trace_text(trace) for trace in traces_for_query(traces, p4_query)),
+            )
+        ).lower()
+        provider_errors = (
+            "tool_choice.name",
+            "invalid_request_error",
+            "this tool only allows calls from",
+            "required public web search is unavailable",
+        )
+        has_source_url = re.search(r"https://[^\s)]+", assistant, flags=re.IGNORECASE) is not None
+        self.record_step(
+            "p4-public-web",
+            "prompt probe: public-web lookup completes with source evidence",
+            user_text=p4_query,
+            action_response=send,
+            snapshot_detail=snapshot,
+            traces=traces,
+            extra={
+                "provider_error_markers": [
+                    marker for marker in provider_errors if marker in p4_evidence
+                ],
+                "has_source_url": has_source_url,
+            },
+        )
+        matched_errors = [marker for marker in provider_errors if marker in p4_evidence]
+        if matched_errors:
+            self.fail(
+                "P4 public web: gateway rejected the server-side lookup contract "
+                f"({matched_errors})"
+            )
+        elif not assistant:
+            self.fail("P4 public web: lookup produced no terminal assistant response")
+        elif not has_source_url:
+            self.fail(
+                "P4 public web: lookup completed without the requested https source URL "
+                f"(assistant={assistant[:160]!r})"
+            )
 
     def run_resilience_r3_race_policy(self) -> None:
         """Probe concurrent main-chat send rejection via no-wait + busy-state actions."""

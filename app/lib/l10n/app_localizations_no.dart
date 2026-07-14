@@ -9572,4 +9572,25 @@ class AppLocalizationsNo extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Feil ved tilkobling til Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Enhetslagring';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% fullt';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used av $total brukt';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free ledig';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Enheten er nesten full — synkroniser for å frigjøre plass.';
 }

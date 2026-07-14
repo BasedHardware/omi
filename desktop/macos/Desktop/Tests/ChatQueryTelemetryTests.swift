@@ -13,6 +13,11 @@ private final class ChatTestGenerationBox {
 }
 
 final class ChatQueryTelemetryTests: XCTestCase {
+  func testKernelContextTimeoutDoesNotInterruptAnUnstartedAgentQuery() {
+    XCTAssertFalse(ChatProvider.shouldInterruptTimedOutAgentQuery(queryStarted: false))
+    XCTAssertTrue(ChatProvider.shouldInterruptTimedOutAgentQuery(queryStarted: true))
+  }
+
   func testAnalyticsPayloadUsesTypedAllowlist() {
     let event = ChatQueryTelemetryEvent.failed(
       ChatQueryTelemetryContext(

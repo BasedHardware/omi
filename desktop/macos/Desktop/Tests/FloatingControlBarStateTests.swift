@@ -4,6 +4,27 @@ import XCTest
 
 @MainActor
 final class FloatingControlBarStateTests: XCTestCase {
+    func testChatPTTOverlayShowsReducerOwnedRecordingAndHintState() {
+        XCTAssertTrue(
+            FloatingChatPTTOverlayPolicy.shouldShow(
+                showingAIConversation: true,
+                isVoiceListening: true
+            )
+        )
+        XCTAssertFalse(
+            FloatingChatPTTOverlayPolicy.shouldShow(
+                showingAIConversation: false,
+                isVoiceListening: true
+            )
+        )
+        XCTAssertFalse(
+            FloatingChatPTTOverlayPolicy.shouldShow(
+                showingAIConversation: true,
+                isVoiceListening: false
+            )
+        )
+    }
+
     func testNotchHoverMenuVisibilityIsSingleGatedState() {
         let state = FloatingControlBarState()
         state.usesNotchIsland = true
@@ -123,11 +144,12 @@ final class FloatingControlBarStateTests: XCTestCase {
             "@Published var isVoiceLocked",
             "@Published var pttHintText",
             "@Published var isThinking",
-            "@Published var isVoiceFollowUp",
             "presentVoiceResponseActive",
             "beginVoiceResponseWaiting",
             "clearVoiceResponseState",
             "debugSetVoiceResponseActive",
+            "var isVoiceFollowUp",
+            "var voiceFollowUpTranscript",
         ] {
             XCTAssertFalse(source.contains(forbidden), "legacy voice mutation surface: \(forbidden)")
         }
@@ -224,6 +246,72 @@ final class FloatingControlBarStateTests: XCTestCase {
         // Mutating provider message text is reflected without copying into state.
         provider.messages[3].text = "Sure — updated."
         XCTAssertEqual(state.currentAIMessage(from: provider)?.text, "Sure — updated.")
+    }
+
+    func testViewportProjectsOneTerminalSubagentRowForCurrentAndArchivedChat() throws {
+        let state = FloatingControlBarState()
+        let provider = ChatProvider()
+        let pillID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000123"))
+        let answer = ChatMessage(
+            id: "subagent-answer",
+            clientTurnId: "turn-1",
+            text: "",
+            sender: .ai,
+            contentBlocks: [
+                .toolCall(
+                    id: "spawn-tool",
+                    name: "spawn_agent",
+                    status: .completed,
+                    output: "id: \(pillID.uuidString)\nrunId: run-1"
+                ),
+                .agentSpawn(
+                    id: "spawn-block",
+                    pillId: pillID,
+                    sessionId: "session-1",
+                    runId: "run-1",
+                    title: "Sleep agent",
+                    objective: "Sleep for five seconds"
+                ),
+                .agentCompletion(
+                    id: "completion-block",
+                    pillId: pillID,
+                    sessionId: "session-1",
+                    runId: "run-1",
+                    title: "Sleep agent",
+                    promptSnippet: "Sleep for five seconds",
+                    output: "Done.",
+                    status: "completed"
+                ),
+            ]
+        )
+        provider.messages = [answer]
+
+        state.bindAnswerMessage(answer)
+        let current = try XCTUnwrap(state.currentAIMessage(from: provider))
+        let currentGroups = ContentBlockGroup.visibleChatGroups(
+            current.contentBlocks,
+            isStreaming: current.isStreaming
+        )
+        XCTAssertEqual(currentGroups.count, 1)
+        guard case .agentCompletion(_, let currentPillID, _, let currentRunID, _, _, _, _) = currentGroups[0] else {
+            return XCTFail("current floating response must contain one terminal subagent row")
+        }
+        XCTAssertEqual(currentPillID, pillID)
+        XCTAssertEqual(currentRunID, "run-1")
+
+        state.archiveCurrentExchange(using: provider)
+        let history = state.derivedChatHistory(from: provider)
+        let historyMessage = try XCTUnwrap(history.first?.aiMessage)
+        let historyGroups = ContentBlockGroup.visibleChatGroups(
+            historyMessage.contentBlocks,
+            isStreaming: historyMessage.isStreaming
+        )
+        XCTAssertEqual(historyGroups.count, 1)
+        guard case .agentCompletion(_, let historyPillID, _, let historyRunID, _, _, _, _) = historyGroups[0] else {
+            return XCTFail("archived floating response must contain one terminal subagent row")
+        }
+        XCTAssertEqual(historyPillID, pillID)
+        XCTAssertEqual(historyRunID, "run-1")
     }
 
     /// Close/restore uses activity + viewport anchors, not copied transcript text.
@@ -469,14 +557,14 @@ final class FloatingControlBarStateTests: XCTestCase {
         XCTAssertTrue(state.isAgentSwitcherExpanded)
     }
 
-    func testHideConversationSurfaceCannotClearReducerOwnedFollowUpProjection() {
+    func testHideConversationSurfaceDoesNotMutateReducerProjectionDirectly() {
         let state = FloatingControlBarState()
         let coordinator = VoiceTurnCoordinator()
         coordinator.configure(barState: state)
         let agentID = UUID()
         state.present(.agent(agentID))
         state.isAILoading = true
-        let turnID = coordinator.begin(intent: .agentFollowUp)
+        let turnID = coordinator.begin(intent: .hold)
         coordinator.send(.transcriptChanged(turnID: turnID, text: "partial transcript"))
 
         state.hideConversationSurface()
@@ -486,14 +574,16 @@ final class FloatingControlBarStateTests: XCTestCase {
         XCTAssertFalse(state.showingAIConversation)
         XCTAssertFalse(state.showingAIResponse)
         XCTAssertFalse(state.isAILoading)
-        XCTAssertTrue(state.isVoiceFollowUp)
-        XCTAssertEqual(state.voiceFollowUpTranscript, "partial transcript")
+        // cancelListening is a no-op when PushToTalkManager is idle; projection stays
+        // reducer-owned until the coordinator cancels the turn.
         XCTAssertEqual(state.voiceProjection, coordinator.projection)
+        XCTAssertTrue(state.isVoiceListening)
+        XCTAssertEqual(state.voiceProjection.transcript, "partial transcript")
         XCTAssertFalse(state.hasVisibleConversation)
 
         coordinator.send(.cancel(turnID: turnID, reason: .cancelled))
-        XCTAssertFalse(state.isVoiceFollowUp)
-        XCTAssertEqual(state.voiceFollowUpTranscript, "")
+        XCTAssertFalse(state.isVoiceListening)
+        XCTAssertEqual(state.voiceProjection.transcript, "")
     }
 
     private func makeResponseActive(

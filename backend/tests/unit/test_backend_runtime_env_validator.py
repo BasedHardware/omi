@@ -44,7 +44,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omiapi.com"},
         {"name": "DEEPGRAM_API_KEY", "valueFrom": {"secretKeyRef": {"name": "DEEPGRAM_API_KEY", "key": "latest"}}},
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},
-        {"name": "GOOGLE_CLIENT_ID", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_ID", "key": "latest"}}},
+        {"name": "GOOGLE_CLIENT_ID", "value": "fake-public-client-id"},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET", "key": "latest"}}},
         {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "latest"}}},
         {"name": "MEMORY_MODE", "value": "read"},
@@ -58,21 +58,40 @@ def with_memory_env(payload: str) -> str:
     )
 
 
+def with_sync_ledger_fence_mode(payload: str) -> str:
+    """Keep offline Cloud Run state fixtures aligned with the protected rollout default."""
+    return payload.replace(
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
+        '        {"name": "SYNC_LEDGER_FENCE_MODE", "value": "legacy"},',
+    )
+
+
 GOOGLE_OAUTH_SECRETS = '''\
-        {"name": "GOOGLE_CLIENT_ID", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_ID"}}},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET"}}},
-        {"name": "STT_PRERECORDED_MODEL", "valueFrom": {"secretKeyRef": {"name": "STT_PRERECORDED_MODEL", "key": "latest"}}},
         {"name": "DEEPGRAM_API_KEY", "valueFrom": {"secretKeyRef": {"name": "DEEPGRAM_API_KEY", "key": "latest"}}},
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},'''
 
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
-    payload = with_memory_env(payload)
+    payload = with_memory_env(with_sync_ledger_fence_mode(payload))
     return re.sub(
         r'^(\s*\{"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN".*\}\s*\})\s*,?\s*$',
         r'\1,\n' + GOOGLE_OAUTH_SECRETS.rstrip(','),
         payload,
         flags=re.MULTILINE,
+    )
+
+
+def validate_cloud_run_workflows_only(validator, *, env: str, manifest_path: Path):
+    """Exercise a workflow fixture without unrelated full-manifest rollout contracts."""
+    manifest = validator._load_yaml(manifest_path)
+    return validator._validate_cloud_run_workflows(
+        env,
+        validator._get_env_config(manifest, env),
+        strict_provisional=False,
+        manifest_path=manifest_path,
+        manifest=manifest,
     )
 
 
@@ -123,6 +142,44 @@ def test_repo_prod_gke_values_match_manifest():
     errors = validator.validate_runtime_env(env='prod')
 
     assert errors == []
+
+
+def test_gke_config_map_contract_rejects_missing_config_map(tmp_path):
+    validator = load_validator()
+    values_path = tmp_path / 'values.yaml'
+    write_yaml(
+        values_path,
+        {
+            'envFrom': [{'configMapRef': {'name': 'test-omi-backend-config'}}],
+            'env': [],
+        },
+    )
+    env_config = {
+        'gke': {
+            'backend-listen': {
+                'values_file': str(values_path),
+                'env': {
+                    'FAKE_RUNTIME_CONFIG': {
+                        'config_map': {
+                            'name': 'test-omi-backend-config',
+                            'key': 'FAKE_RUNTIME_CONFIG',
+                        }
+                    }
+                },
+            }
+        }
+    }
+
+    assert validator._validate_gke(env_config, strict_provisional=False) == []
+
+    write_yaml(values_path, {'envFrom': [], 'env': []})
+
+    assert validator._validate_gke(env_config, strict_provisional=False) == [
+        validator.ValidationError(
+            'gke/backend-listen',
+            "env FAKE_RUNTIME_CONFIG must come from ConfigMap 'test-omi-backend-config'",
+        )
+    ]
 
 
 def test_repo_cloud_run_workflows_match_manifest():
@@ -498,7 +555,7 @@ def test_cloud_run_workflow_reports_missing_gateway_url(tmp_path):
         },
     )
 
-    errors = validator.validate_runtime_env(env='dev', manifest_path=manifest_path, check_workflows=True)
+    errors = validate_cloud_run_workflows_only(validator, env='dev', manifest_path=manifest_path)
 
     assert any(error.message == 'missing env OMI_LLM_GATEWAY_URL' for error in errors)
     assert any(error.scope == 'cloud_run_workflow/backend' for error in errors)
@@ -617,7 +674,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         },
     )
 
-    errors = validator.validate_runtime_env(env='dev', manifest_path=manifest_path, check_workflows=True)
+    errors = validate_cloud_run_workflows_only(validator, env='dev', manifest_path=manifest_path)
 
     assert errors == []
 
@@ -844,10 +901,11 @@ def test_provisional_prod_endpoint_requires_presence_but_not_exact_value(tmp_pat
         encoding='utf-8',
     )
 
-    errors = validator.validate_runtime_env(
-        env='prod',
-        manifest_path=manifest_path,
-        cloud_run_state_path=state_path,
+    manifest = validator._load_yaml(manifest_path)
+    errors = validator._validate_cloud_run(
+        validator._get_env_config(manifest, 'prod'),
+        validator._load_json(state_path),
+        strict_provisional=False,
     )
 
     assert errors == []
@@ -966,6 +1024,49 @@ def test_memory_maintenance_job_contract_passes_for_repo_manifest():
     assert validator.validate_runtime_env(env='prod') == []
 
 
+def test_memory_maintenance_job_contract_rejects_missing_dev_capacity_flag():
+    validator = load_validator()
+    job = memory_maintenance_job_block()
+    job['flags'] = {
+        '--task-timeout': '3600s',
+        '--cpu': '2',
+        '--memory': '2Gi',
+    }
+    del job['flags']['--memory']
+
+    errors = validator._validate_memory_maintenance_job_contract(
+        'dev',
+        {'cloud_run': {'jobs': {'memory-maintenance-job': job}}},
+    )
+
+    assert (
+        validator.ValidationError(
+            'dev/cloud_run/jobs/memory-maintenance-job',
+            'missing required dev Cloud Run flag --memory',
+        )
+        in errors
+    )
+
+
+def test_memory_maintenance_job_contract_rejects_wrong_dev_capacity_value(tmp_path):
+    validator = load_validator()
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    job = manifest['environments']['dev']['cloud_run']['jobs']['memory-maintenance-job']
+    job['flags']['--cpu'] = '1'
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+
+    errors = validator.validate_runtime_env(env='dev', manifest_path=path)
+
+    assert (
+        validator.ValidationError(
+            'dev/cloud_run/jobs/memory-maintenance-job',
+            "dev Cloud Run flag --cpu must be '2'",
+        )
+        in errors
+    )
+
+
 def test_memory_maintenance_job_contract_rejects_notifications_job_maintenance_config(tmp_path):
     validator = load_validator()
     manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
@@ -1081,7 +1182,10 @@ def test_memory_maintenance_auto_dev_workflow_is_listed_and_targets_job():
     assert "backend/**" in text
     assert 'Dockerfile.memory_maintenance_job' in text
     assert "id-token: 'write'" not in text
-    assert 'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }}' in text
+    assert (
+        'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} '
+        '${{ steps.runtime-env.outputs.memory_maintenance_job_flags }}'
+    ) in text
     manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'))
     assert (
         '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml'
@@ -1169,7 +1273,7 @@ def test_sync_backfill_co_deploy_is_required_per_workflow(tmp_path):
         },
     )
 
-    errors = validator.validate_runtime_env(env='dev', manifest_path=manifest_path, check_workflows=True)
+    errors = validate_cloud_run_workflows_only(validator, env='dev', manifest_path=manifest_path)
 
     assert any(
         error.message == 'deploys backend-sync without backend-sync-backfill' and str(incomplete) in error.scope

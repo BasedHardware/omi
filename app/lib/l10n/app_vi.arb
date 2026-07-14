@@ -3148,5 +3148,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Bộ nhớ thiết bị",
+    "deviceStoragePercentFull": "Đã đầy {percent}%",
+    "deviceStorageUsedOfTotal": "Đã dùng {used} trong {total}",
+    "deviceStorageFree": "Còn trống {free}",
+    "deviceStorageNearlyFull": "Thiết bị gần đầy — đồng bộ để giải phóng dung lượng."
 }

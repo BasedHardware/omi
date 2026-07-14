@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { AgentRuntimeKernel } from "../src/runtime/kernel.js";
 import { AdapterRegistry } from "../src/runtime/adapter-registry.js";
+import { compactRealtimeSpawnToolResult } from "../src/runtime/agent-spawn-journal.js";
 import { handleAgentControlToolCall } from "../src/runtime/control-tools.js";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 import { resolveSurfaceSession } from "../src/runtime/surface-session.js";
@@ -15,6 +16,127 @@ const roots: string[] = [];
 
 afterEach(() => {
   while (roots.length) rmSync(roots.pop()!, { recursive: true, force: true });
+});
+
+describe("realtime spawn semantic receipt", () => {
+  it("rejects a parent journal acknowledgement without a durable child receipt", () => {
+    const compact = JSON.parse(compactRealtimeSpawnToolResult(JSON.stringify({
+      ok: true,
+      journalReceipt: { accepted: true, continuityKey: "forged-parent-only" },
+    }), producerDescriptor("10000000-0000-0000-0000-000000000001")));
+
+    expect(compact).toMatchObject({
+      schemaVersion: 1,
+      ok: false,
+      error: { code: "realtime_spawn_child_receipt_missing", retryable: true },
+      providerResult: { ok: false, code: "realtime_spawn_child_receipt_missing" },
+    });
+    expect(compact.child).toBeUndefined();
+    expect(compact.journalReceipt).toBeUndefined();
+  });
+
+  it("preserves queued versus started child lifecycle truth in the provider result", () => {
+    const descriptor = producerDescriptor("10000000-0000-0000-0000-000000000002");
+    const queued = JSON.parse(compactRealtimeSpawnToolResult(
+      realtimeSpawnResult({ state: "queued", attemptState: "queued", updatedAtMs: 100 }),
+      descriptor,
+    ));
+    const started = JSON.parse(compactRealtimeSpawnToolResult(
+      realtimeSpawnResult({ state: "running", attemptState: "running", updatedAtMs: 200 }),
+      descriptor,
+    ));
+
+    expect(queued).toMatchObject({
+      ok: true,
+      child: {
+        sessionId: "session-child",
+        runId: "run-child",
+        attemptId: "attempt-child",
+        lifecycle: {
+          state: "queued",
+          attemptState: "queued",
+          revision: 100,
+          adapterId: "hermes",
+          updatedAtMs: 100,
+        },
+      },
+      providerResult: {
+        ok: true,
+        code: "spawn_queued",
+        child: { state: "queued", revision: 100 },
+      },
+    });
+    expect(started).toMatchObject({
+      ok: true,
+      child: { lifecycle: { state: "running", attemptState: "running", revision: 200 } },
+      providerResult: {
+        ok: true,
+        code: "spawn_started",
+        child: { state: "running", revision: 200 },
+      },
+    });
+    expect(queued.providerResult.semanticDigest).toBe(queued.semanticDigest);
+    expect(started.providerResult.semanticDigest).toBe(started.semanticDigest);
+  });
+
+  it("returns a durable admitted child receipt when the first attempt fails immediately", () => {
+    const compact = JSON.parse(compactRealtimeSpawnToolResult(realtimeSpawnResult({
+      state: "failed",
+      attemptState: "failed",
+      updatedAtMs: 300,
+      errorCode: "adapter_not_registered",
+      errorMessage: "Hermes is not configured for this profile",
+    }), producerDescriptor("10000000-0000-0000-0000-000000000003")));
+
+    expect(compact).toMatchObject({
+      ok: true,
+      child: {
+        sessionId: "session-child",
+        runId: "run-child",
+        attemptId: "attempt-child",
+        lifecycle: {
+          state: "failed",
+          error: {
+            code: "adapter_not_registered",
+            message: "Hermes is not configured for this profile",
+          },
+        },
+      },
+      providerResult: {
+        ok: false,
+        code: "spawn_child_failed",
+        child: { state: "failed", error: { code: "adapter_not_registered" } },
+      },
+    });
+  });
+
+  it("bounds oversized child detail before either Swift or the provider sees it", () => {
+    const oversized = "x".repeat(174_321);
+    const compactText = compactRealtimeSpawnToolResult(realtimeSpawnResult({
+      state: "failed",
+      attemptState: "failed",
+      updatedAtMs: 400,
+      title: oversized,
+      prompt: oversized,
+      errorCode: "adapter_failed",
+      errorMessage: oversized,
+    }), producerDescriptor("10000000-0000-0000-0000-000000000004"));
+    const compact = JSON.parse(compactText);
+
+    expect(Buffer.byteLength(compactText, "utf8")).toBeLessThanOrEqual(12 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(compact.providerResult), "utf8")).toBeLessThanOrEqual(4 * 1024);
+    expect(compactText).not.toContain(oversized);
+    expect(compact).toMatchObject({
+      ok: true,
+      child: {
+        lifecycle: { error: { code: "adapter_failed" } },
+      },
+      providerResult: { code: "spawn_child_failed" },
+    });
+    expect(Buffer.byteLength(compact.child.title, "utf8")).toBeLessThanOrEqual(160);
+    expect(Buffer.byteLength(compact.child.objective, "utf8")).toBeLessThanOrEqual(384);
+    expect(Buffer.byteLength(compact.child.lifecycle.error.message, "utf8")).toBeLessThanOrEqual(512);
+  });
 });
 
 describe("durable agent-spawn producer journal", () => {
@@ -41,6 +163,11 @@ describe("durable agent-spawn producer journal", () => {
       externalRefId: pillId,
       mode: "act",
       metadata: { pillId, producerJournal: descriptor },
+    });
+    expect(accepted.attempt).toMatchObject({
+      runId: accepted.run.runId,
+      adapterId: "acp",
+      status: expect.stringMatching(/^(queued|starting|running|succeeded)$/),
     });
     await waitUntil(() => String(store.getRow(
       "SELECT status FROM runs WHERE run_id = ?",
@@ -338,6 +465,49 @@ function durableJournalBytes(store: SqliteAgentStore): string {
               turn_json, payload_hash, created_at_ms
        FROM conversation_turn_revisions ORDER BY turn_seq ASC`,
     ),
+  });
+}
+
+function realtimeSpawnResult(input: {
+  state: string;
+  attemptState: string;
+  updatedAtMs: number;
+  title?: string;
+  prompt?: string;
+  errorCode?: string;
+  errorMessage?: string;
+}): string {
+  const error = input.errorCode || input.errorMessage
+    ? {
+        ...(input.errorCode ? { errorCode: input.errorCode } : {}),
+        ...(input.errorMessage ? { errorMessage: input.errorMessage } : {}),
+      }
+    : {};
+  return JSON.stringify({
+    ok: true,
+    agents: [{
+      session: {
+        sessionId: "session-child",
+        externalRefId: "10000000-0000-0000-0000-000000000005",
+        title: input.title ?? "Research models",
+      },
+      run: {
+        runId: "run-child",
+        sessionId: "session-child",
+        status: input.state,
+        input: { prompt: input.prompt ?? "Research the current model landscape" },
+        updatedAtMs: input.updatedAtMs,
+        ...error,
+      },
+      attempt: {
+        attemptId: "attempt-child",
+        runId: "run-child",
+        status: input.attemptState,
+        adapterId: "hermes",
+        updatedAtMs: input.updatedAtMs,
+        ...error,
+      },
+    }],
   });
 }
 

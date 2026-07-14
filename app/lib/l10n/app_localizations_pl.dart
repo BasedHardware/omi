@@ -9600,4 +9600,25 @@ class AppLocalizationsPl extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Błąd podczas łączenia z Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Pamięć urządzenia';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return 'zapełniono $percent%';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return 'wykorzystano $used z $total';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free wolne';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Urządzenie jest prawie pełne — zsynchronizuj, aby zwolnić miejsce.';
 }

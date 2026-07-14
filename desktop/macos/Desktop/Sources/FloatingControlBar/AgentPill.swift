@@ -61,6 +61,7 @@ final class AgentPill: ObservableObject, Identifiable {
     let model: String
     let ownerID: String
     let bridgeHarnessOverride: AgentHarnessMode?
+    @Published private(set) var providerIdentity: AgentHarnessMode?
     var canonicalSessionId: String?
     var canonicalRunId: String?
     var canonicalAttemptId: String?
@@ -96,8 +97,22 @@ final class AgentPill: ObservableObject, Identifiable {
         self.model = model
         self.ownerID = ownerID ?? RuntimeOwnerIdentity.currentOwnerId() ?? ""
         self.bridgeHarnessOverride = bridgeHarnessOverride
+        self.providerIdentity = bridgeHarnessOverride
         self.title = AgentPill.deriveTitle(from: query)
         self.createdAt = Date()
+    }
+
+    /// Provider provenance is kernel-authored and may arrive after the local
+    /// projection is created (snapshot hydration/restart). It is display truth,
+    /// never execution authority; `bridgeHarnessOverride` remains the immutable
+    /// launch request for locally-created pills.
+    func applyCanonicalProviderIdentity(_ rawValue: String?) {
+        guard let rawValue,
+              let provider = AgentRuntimeRouting.harnessMode(from: rawValue),
+              provider == .hermes || provider == .openclaw,
+              providerIdentity != provider
+        else { return }
+        providerIdentity = provider
     }
 
     func markContentChanged() {
@@ -151,10 +166,6 @@ final class AgentPillsManager: ObservableObject {
     private var pendingFollowUpsByPill: [UUID: [PendingAgentFollowUp]] = [:]
     private var producingJournalSurfaceByPill: [UUID: AgentSurfaceReference] = [:]
 
-    /// Which pill (if any) is currently capturing a voice follow-up — drives the
-    /// pill popover's mic button state.
-    @Published var recordingPillID: UUID?
-
     private let viewedFinishedTTL: TimeInterval = 10 * 60
 
     private var projectionSyncCancellable: AnyCancellable?
@@ -197,10 +208,6 @@ final class AgentPillsManager: ObservableObject {
         projectionRefreshTask = nil
         for task in runTasksByPill.values { task.cancel() }
         for item in viewedExpirationWorkItemsByPill.values { item.cancel() }
-        if let recordingPillID {
-            PushToTalkManager.shared.cancelPillFollowUp(for: recordingPillID)
-        }
-        recordingPillID = nil
         runTasksByPill.removeAll()
         runAttemptGenerationByPill.removeAll()
         viewedExpirationWorkItemsByPill.removeAll()
@@ -579,24 +586,6 @@ final class AgentPillsManager: ObservableObject {
         return pill
     }
 
-    // MARK: - Voice follow-up (continue THIS agent's session)
-
-    /// Tap the pill's mic button: start recording if idle, or stop + transcribe +
-    /// send if this pill is already recording.
-    func toggleFollowUpVoice(for pill: AgentPill) {
-        if recordingPillID == pill.id {
-            log("AgentPills: voice follow-up STOP tapped for \(pill.title)")
-            recordingPillID = nil
-            PushToTalkManager.shared.endPillFollowUp()
-        } else if recordingPillID == nil {
-            log("AgentPills: voice follow-up START tapped for \(pill.title)")
-            recordingPillID = pill.id
-            // Routes through the realtime omni STT (hub pipeline); the transcript comes
-            // back into continueAgent(from:text:) for THIS pill's session.
-            PushToTalkManager.shared.startPillFollowUp(for: pill)
-        }
-    }
-
     /// Send a follow-up to the same canonical background-agent session.
     func continueAgent(
         from pill: AgentPill,
@@ -807,10 +796,6 @@ final class AgentPillsManager: ObservableObject {
     func stop(pillID: UUID) {
         guard let pill = pills.first(where: { $0.id == pillID }), !pill.status.isFinished else { return }
         log("AgentPills: stopping pill \(pill.title)")
-        if recordingPillID == pillID {
-            recordingPillID = nil
-            PushToTalkManager.shared.cancelPillFollowUp(for: pillID)
-        }
         let runId = pill.canonicalRunId
         runTasksByPill[pillID]?.cancel()
         runTasksByPill[pillID] = nil
@@ -967,10 +952,6 @@ final class AgentPillsManager: ObservableObject {
     }
 
     private func cleanup(pillID: UUID) {
-        if recordingPillID == pillID {
-            recordingPillID = nil
-            PushToTalkManager.shared.cancelPillFollowUp(for: pillID)
-        }
         let pill = pills.first(where: { $0.id == pillID })
         let shouldCancelRun = pill?.status.isFinished == false
         let runId = pill?.canonicalRunId
@@ -990,10 +971,6 @@ final class AgentPillsManager: ObservableObject {
     }
 
     private func removeRenderedProjection(pillID: UUID) {
-        if recordingPillID == pillID {
-            recordingPillID = nil
-            PushToTalkManager.shared.cancelPillFollowUp(for: pillID)
-        }
         runTasksByPill[pillID]?.cancel()
         runTasksByPill[pillID] = nil
         runAttemptGenerationByPill[pillID] = nil
@@ -1140,7 +1117,8 @@ final class AgentPillsManager: ObservableObject {
                         runId: inspection.runId ?? runId,
                         attemptId: inspection.attemptId,
                         title: nil,
-                        query: nil
+                        query: nil,
+                        provider: inspection.provider
                     ) {
                         return true
                     }
@@ -1162,7 +1140,8 @@ final class AgentPillsManager: ObservableObject {
                             runId: session.runId,
                             attemptId: session.attemptId,
                             title: session.title,
-                            query: nil
+                            query: nil,
+                            provider: session.provider
                         ) {
                             return true
                         }
@@ -1193,7 +1172,8 @@ final class AgentPillsManager: ObservableObject {
                             runId: session.runId,
                             attemptId: session.attemptId,
                             title: session.title,
-                            query: nil
+                            query: nil,
+                            provider: session.provider
                         ) {
                             return true
                         }
@@ -1213,7 +1193,8 @@ final class AgentPillsManager: ObservableObject {
         runId: String?,
         attemptId: String?,
         title: String?,
-        query: String?
+        query: String?,
+        provider: String?
     ) -> Bool {
         guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return false }
         let trimmedSession = sessionId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -1259,6 +1240,7 @@ final class AgentPillsManager: ObservableObject {
         if let attemptId, !attemptId.isEmpty {
             pill.canonicalAttemptId = attemptId
         }
+        pill.applyCanonicalProviderIdentity(provider)
         Self.ensureStreamingAssistantMessage(for: pill)
         pill.markContentChanged()
         objectWillChange.send()
@@ -1273,6 +1255,7 @@ final class AgentPillsManager: ObservableObject {
         sessionId: String,
         runId: String,
         attemptId: String?,
+        provider: String? = nil,
         producingJournalSurface: AgentSurfaceReference? = nil
     ) {
         guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
@@ -1293,9 +1276,13 @@ final class AgentPillsManager: ObservableObject {
         pill.canonicalSessionId = sessionId
         pill.canonicalRunId = runId
         pill.canonicalAttemptId = attemptId
+        pill.applyCanonicalProviderIdentity(provider)
         if let producingJournalSurface {
             bindProducingJournalSurface(pillID: pill.id, surface: producingJournalSurface)
         }
+        // A delayed duplicate spawn receipt must not turn a terminal pill back
+        // into a running row after the completion was already projected.
+        guard !pill.status.isFinished else { return }
         pill.status = .running
         pill.completedAt = nil
         pill.latestActivity = "Working…"
@@ -1351,6 +1338,7 @@ final class AgentPillsManager: ObservableObject {
             pill.canonicalSessionId = sessionId
             pill.canonicalRunId = runId
             pill.canonicalAttemptId = canonicalString(entry["attemptId"])
+            pill.applyCanonicalProviderIdentity(canonicalString(entry["provider"]))
             let projectedStatus = (entry["status"] as? String) ?? "running"
             applyProjectedStatus(projectedStatus, to: pill)
             if let activity = entry["latestActivity"] as? String, !activity.isEmpty {
@@ -1360,20 +1348,31 @@ final class AgentPillsManager: ObservableObject {
             pill.markContentChanged()
         }
         let removable = pills.filter { pill in
-            if runTasksByPill[pill.id] != nil {
-                return false
-            }
-            guard let sessionId = pill.canonicalSessionId, !sessionId.isEmpty,
-                  let runId = pill.canonicalRunId, !runId.isEmpty
-            else {
-                return !hasLocalTransientState(pillID: pill.id)
-            }
-            return !seen.contains(pill.id)
+            Self.shouldRemoveRenderedProjection(
+                status: pill.status,
+                isPolling: runTasksByPill[pill.id] != nil,
+                isSeenInRuntimeSnapshot: seen.contains(pill.id),
+                hasLocalTransientState: hasLocalTransientState(pillID: pill.id)
+            )
         }
         for pill in removable {
             removeRenderedProjection(pillID: pill.id)
         }
         objectWillChange.send()
+    }
+
+    /// Runtime session lists are intentionally an active-work snapshot and can
+    /// omit a run immediately after it completes. A finished pill remains a
+    /// user-visible attention item until the normal viewed/dismissed retention
+    /// policy removes it; a refresh must not orphan it from the hover list.
+    nonisolated static func shouldRemoveRenderedProjection(
+        status: AgentPill.Status,
+        isPolling: Bool,
+        isSeenInRuntimeSnapshot: Bool,
+        hasLocalTransientState: Bool
+    ) -> Bool {
+        guard !isPolling, !status.isFinished else { return false }
+        return !isSeenInRuntimeSnapshot && !hasLocalTransientState
     }
 
     private func applyRuntimeProjections() {
@@ -1444,7 +1443,7 @@ final class AgentPillsManager: ObservableObject {
     }
 
     private func hasLocalTransientState(pillID: UUID) -> Bool {
-        recordingPillID == pillID || pendingFollowUpsByPill[pillID]?.isEmpty == false
+        pendingFollowUpsByPill[pillID]?.isEmpty == false
     }
 
     func snapshotJSON(limit: Int = 20) -> String {
@@ -1835,7 +1834,7 @@ final class AgentPillsManager: ObservableObject {
                 if !trimmed.isEmpty {
                     return String(trimmed.prefix(110))
                 }
-            case .agentSpawn(_, _, _, _, let title, let objective):
+            case .agentSpawn(_, _, _, _, let title, let objective, _):
                 let label = objective.isEmpty ? title : objective
                 let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {

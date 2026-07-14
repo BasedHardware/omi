@@ -99,7 +99,8 @@ enum GeneratedToolCapabilities {
       summary: "List Omi-managed agent sessions from the local runtime kernel.",
       bullets: [
       "Use for current or recent kernel-backed Omi agents/subagents across chat, PTT/realtime, task chat, and floating-bar pills.",
-      "Returns task_agents and floating_agent_pills alongside canonical session summaries."
+      "Returns task_agents and floating_agent_pills alongside canonical session summaries.",
+      "For a prior child agent's final answer, do not infer run completion from session status or restrict discovery to status='open'. List recent sessions, then call get_agent_run with the returned runId and answer from run.finalText without exposing the internal id."
     ]
     ),
     Capability(
@@ -110,7 +111,8 @@ enum GeneratedToolCapabilities {
       summary: "Inspect one canonical Omi agent run.",
       bullets: [
       "Use a runId from list_agent_sessions or a correlated Omi result.",
-      "Returns the run, attempts, adapter bindings, events, and artifact metadata."
+      "Returns the run, attempts, adapter bindings, events, and artifact metadata.",
+      "For a completed child, use run.finalText to answer the user and keep the internal runId out of the user-visible response."
     ]
     ),
     Capability(
@@ -428,8 +430,11 @@ enum GeneratedToolCapabilities {
       bullets: [
       "For screen-awareness questions, call get_work_context first.",
       "Use capture_screen only when raw pixels are necessary; it requires explicit approval before image bytes are shared.",
-      "After capture_screen returns a file path, use Read to view the image.",
+      "The result lists the full-screen image path plus native-resolution detail tiles on large screens; use Read to view them.",
       "Call get_work_context first when the user asks about what's on their screen or what they're looking at.",
+      "After capture_screen returns, use Read to view the full-screen image.",
+      "The full screenshot is downscaled before you see it — before quoting small on-screen text (titles, prices, sizes, labels) or choosing between similar-looking items, Read the detail tile covering that item and take the exact text from the tile.",
+      "Keep every detail you cite (title, price, badge, position) bound to one on-screen item; if text is not legible even in a tile, say so instead of inferring.",
       "Do NOT use bash screencapture - always use this tool instead."
     ]
     ),
@@ -449,12 +454,13 @@ enum GeneratedToolCapabilities {
       title: "Request Permission",
       latency: .fastLocal,
       surfaces: Set([.desktopChat, .realtimeHub, .onboarding]),
-      summary: "Open or guide the user through granting a required macOS permission.",
+      summary: "Open or guide the user through granting a required macOS permission. Screen sharing is the macOS Screen Recording permission.",
       bullets: [
-      "Call only when the current user message names one permission or clearly affirms your immediately preceding permission request.",
+      "Call only when the current user message names one permission, clearly affirms your immediately preceding one-permission request, or directly says to request it/that permission.",
+      "Treat screen share, screen sharing, and screen-share as the screen_recording permission type.",
       "Ask the user to choose when their request is generic or names multiple permissions.",
       "The user must still complete the native macOS prompt or Settings toggle.",
-      "Call only when the current user message explicitly requests one named permission, or clearly affirms your immediately preceding missing-permission request.",
+      "Call only when the current user message explicitly requests one named permission, clearly affirms your immediately preceding one-permission request, or directly says to request it/that permission.",
       "For generic or multi-permission requests, ask the user which permission they want to grant.",
       "Use strict permission types only. Do not invent permission names.",
       "After requesting, explain any returned requires_restart or pending status."

@@ -3111,5 +3111,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Gerätespeicher",
+    "deviceStoragePercentFull": "{percent}% belegt",
+    "deviceStorageUsedOfTotal": "{used} von {total} belegt",
+    "deviceStorageFree": "{free} frei",
+    "deviceStorageNearlyFull": "Gerät fast voll — synchronisieren, um Speicher freizugeben."
 }

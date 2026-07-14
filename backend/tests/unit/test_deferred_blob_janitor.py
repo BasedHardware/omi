@@ -130,17 +130,17 @@ class TestSleepPatternRemoved:
     def test_chat_cleanup_has_two_explicit_owners(self):
         source = _read_source('utils/chat.py')
 
-        # ``_prepare_voice_message_url`` owns cleanup for both transcription
-        # entry points that share it; the legacy message-processing path owns
-        # its cleanup directly. A third direct call would double-schedule one
-        # of the shared-helper paths.
-        assert source.count('schedule_syncing_temporal_file_deletion(path)') == 2
+        # ``_prepare_voice_message_url`` is the single cleanup owner for every
+        # voice-message entry point. A direct caller-side schedule would
+        # double-schedule the same temporary object.
+        assert source.count('schedule_syncing_temporal_file_deletion(path)') == 1
 
         helper_source = source.split('def _prepare_voice_message_url(', 1)[1].split('\ndef ', 1)[0]
         assert helper_source.count('schedule_syncing_temporal_file_deletion(path)') == 1
 
         processing_source = source.split('def process_voice_message_segment(', 1)[1].split('\nasync def ', 1)[0]
-        assert processing_source.count('schedule_syncing_temporal_file_deletion(path)') == 1
+        assert 'transcribe_voice_message_segment(path, uid, language)' in processing_source
+        assert 'schedule_syncing_temporal_file_deletion(path)' not in processing_source
 
     def test_storage_defines_scheduler_with_480_default(self):
         src = _read_source('utils/other/storage.py')

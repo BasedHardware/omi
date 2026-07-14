@@ -3143,5 +3143,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Ierīces krātuve",
+    "deviceStoragePercentFull": "{percent}% aizpildīts",
+    "deviceStorageUsedOfTotal": "izmantoti {used} no {total}",
+    "deviceStorageFree": "{free} brīvi",
+    "deviceStorageNearlyFull": "Ierīce ir gandrīz pilna — sinhronizējiet, lai atbrīvotu vietu."
 }

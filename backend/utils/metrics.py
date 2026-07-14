@@ -26,6 +26,27 @@ PUSHER_SESSION_DEGRADED = Gauge(
     'Number of sessions currently in degraded mode (pusher unavailable)',
 )
 
+LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS = Gauge(
+    'listen_finalization_oldest_nonterminal_age_seconds',
+    'Age of the oldest queued, leased, or blocked listen finalization job',
+)
+
+LISTEN_FINALIZATION_JOB_STATUS = Gauge(
+    'listen_finalization_jobs',
+    'Current durable listen finalization job count by non-success status',
+    ['status'],
+)
+
+LISTEN_FINALIZATION_RETRIES_TOTAL = Counter(
+    'listen_finalization_retries_total',
+    'Durable listen finalization jobs replayed by the reconciler',
+)
+
+LISTEN_FINALIZATION_DEAD_LETTER_TOTAL = Counter(
+    'listen_finalization_dead_letter_total',
+    'Listen finalization jobs terminalized after their final Cloud Tasks attempt',
+)
+
 LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS = Counter(
     'llm_gateway_chat_extraction_requests_total',
     'LLM gateway routing outcomes by feature (serving, fallback, direct_exception, shadow)',
@@ -115,6 +136,43 @@ OMI_SYNC_QUEUE_WAIT_SECONDS = Histogram(
 OMI_SYNC_BACKFILL_DAILY_USED_MS = Gauge(
     'omi_sync_backfill_daily_used_ms',
     'Current UTC-day processed speech milliseconds reserved by historical sync',
+)
+
+OMI_TRANSCRIPTION_ACCEPTED_TOTAL = Counter(
+    'omi_voice_transcription_accepted_total',
+    'Accepted prerecorded transcription journeys by bounded route and runtime identity',
+    ['route', 'provider', 'client_platform', 'deployment_version'],
+)
+
+OMI_TRANSCRIPTION_COMPLETED_TOTAL = Counter(
+    'omi_voice_transcription_completed_total',
+    'Terminal semantic outcomes for accepted prerecorded transcription journeys',
+    ['route', 'provider', 'outcome', 'client_platform', 'deployment_version'],
+)
+
+OMI_TRANSCRIPTION_LATENCY_SECONDS = Histogram(
+    'omi_voice_transcription_latency_seconds',
+    'End-to-end latency for accepted prerecorded transcription journeys',
+    ['route', 'provider', 'outcome', 'client_platform', 'deployment_version'],
+    buckets=(0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300),
+)
+
+OMI_SYNC_TRANSCRIPTION_SEGMENTS_TOTAL = Counter(
+    'omi_sync_transcription_segments_total',
+    'Terminal semantic outcomes for sync transcription segments',
+    ['provider', 'model', 'lane', 'outcome', 'deployment_version'],
+)
+
+OMI_SYNC_TRANSCRIPTION_JOBS_TOTAL = Counter(
+    'omi_sync_transcription_job_total',
+    'Terminal semantic outcomes for sync transcription jobs',
+    ['provider', 'model', 'lane', 'outcome', 'deployment_version'],
+)
+
+OMI_LIVE_STT_TERMINAL_FAILURES_TOTAL = Counter(
+    'omi_live_stt_terminal_failures_total',
+    'Terminal live-STT failures by bounded provider, outcome, client platform, revision, and phase',
+    ['provider', 'outcome', 'client_platform', 'deployment_version', 'phase'],
 )
 
 TASK_WORKSTREAM_ASSOCIATION_TOTAL = Counter(

@@ -17,7 +17,12 @@ import type {
   ResumeBindingInput,
   RuntimeAdapter,
 } from "./interface.js";
-import { AdapterRuntimeError, failureFromProcessError, failureFromProcessExit } from "../runtime/failures.js";
+import {
+  AdapterRuntimeError,
+  failureFromProcessError,
+  failureFromProcessExit,
+  type RuntimeFailure,
+} from "../runtime/failures.js";
 
 type ResponseHandler = {
   resolve: (result: unknown) => void;
@@ -145,6 +150,36 @@ export function isRecoverableAcpAuthError(error: unknown): boolean {
 }
 
 const MAX_RECENT_STDERR_CHARS = 2_000;
+
+const EXTERNAL_TERMINAL_HTTP_FAILURE = /^\s*HTTP\s+([45]\d{2})\s*:\s*(?:\{|\[)/i;
+
+/**
+ * Some external ACP servers emit an HTTP provider failure as their final text
+ * while still returning ACP `end_turn`.  Treat that exact terminal wire shape
+ * as a failure so the runtime never projects a green Done state for it.
+ *
+ * We keep this deliberately narrow: only local external adapters and only a
+ * leading 4xx/5xx JSON response are classified.  A normal agent discussion of
+ * an HTTP status therefore remains ordinary assistant text.
+ */
+function externalTerminalHttpFailure(
+  adapterId: ProductionAdapterId,
+  text: string,
+): RuntimeFailure | undefined {
+  if (adapterId !== "hermes" && adapterId !== "openclaw") return undefined;
+  const match = EXTERNAL_TERMINAL_HTTP_FAILURE.exec(text);
+  if (!match) return undefined;
+  const statusCode = Number(match[1]);
+  const label = adapterId === "hermes" ? "Hermes" : "OpenClaw";
+  return {
+    code: "adapter_terminal_http_failure",
+    source: "adapter_execution",
+    adapterId,
+    retryable: statusCode >= 500,
+    userMessage: `${label} could not complete the request. Try again.`,
+    technicalMessage: `${adapterId} ACP reported terminal HTTP ${statusCode}`,
+  };
+}
 
 function appendRecentStderr(current: string, next: string): string {
   const combined = `${current}${next}`;
@@ -492,10 +527,16 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         _meta?: { costUsd?: number };
       };
 
+      const failure = signal.aborted ? undefined : externalTerminalHttpFailure(this.adapterId, fullText);
       return {
-        text: fullText,
+        // Preserve only a bounded diagnostic in runtime/UI state when an
+        // external adapter has reported an HTTP failure as text.  The raw
+        // provider body stays in the adapter's local logs rather than being
+        // rendered as a successful agent answer.
+        text: failure?.userMessage ?? fullText,
         adapterSessionId,
-        terminalStatus: signal.aborted ? "cancelled" : "succeeded",
+        terminalStatus: signal.aborted ? "cancelled" : failure ? "failed" : "succeeded",
+        failure,
         costUsd: result._meta?.costUsd ?? 0,
         inputTokens: result.usage?.inputTokens ?? 0,
         outputTokens: result.usage?.outputTokens ?? 0,

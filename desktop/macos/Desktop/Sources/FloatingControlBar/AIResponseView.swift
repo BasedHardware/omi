@@ -15,8 +15,6 @@ struct AIResponseView: View {
 
     let userInput: String
     let chatHistory: [FloatingChatExchange]
-    let isVoiceFollowUp: Bool
-    let voiceFollowUpTranscript: String
     var canClearVisibleConversation: Bool = false
     var showsHeader: Bool = true
 
@@ -54,12 +52,6 @@ struct AIResponseView: View {
 
                 // Current response
                 currentContentView
-
-                // Voice follow-up indicator (shown inline when PTT is active during conversation)
-                if isVoiceFollowUp {
-                    voiceFollowUpView
-                        .id("voiceFollowUp")
-                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -69,12 +61,12 @@ struct AIResponseView: View {
                     .accessibilityLabel(shareFeedbackMessage)
             }
 
-            if !isLoading && !isVoiceFollowUp {
+            if !isLoading {
                 followUpInputView
             }
         }
         .padding(.horizontal, OmiSpacing.lg)
-        .padding(.top, state.usesNotchIsland ? 0 : OmiSpacing.lg)
+        .padding(.top, 0)
         .padding(.bottom, OmiSpacing.lg)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .omiAnimation(.spring(response: 0.28, dampingFraction: 0.85), value: showShareFeedback)
@@ -107,8 +99,6 @@ struct AIResponseView: View {
                 currentMessage?.id ?? "",
                 currentMessage?.text ?? "",
                 contentBlocksToken(currentMessage?.contentBlocks ?? []),
-                String(isVoiceFollowUp),
-                voiceFollowUpTranscript,
             ].joined(separator: "\u{1F}")
         )
     }
@@ -133,7 +123,9 @@ struct AIResponseView: View {
                 return ["thinking", id, text].joined(separator: "\u{1E}")
             case .discoveryCard(let id, let title, let summary, let fullText):
                 return ["discovery", id, title, summary, fullText].joined(separator: "\u{1E}")
-            case .agentSpawn(let id, let pillId, let sessionId, let runId, let title, let objective):
+            case .agentSpawn(
+                let id, let pillId, let sessionId, let runId, let title, let objective, let provider
+            ):
                 return [
                     "agentSpawn",
                     id,
@@ -142,6 +134,7 @@ struct AIResponseView: View {
                     runId,
                     title,
                     objective,
+                    provider?.rawValue ?? "",
                 ].joined(separator: "\u{1E}")
             case .agentCompletion(
                 let id, let pillId, let sessionId, let runId, let title, let promptSnippet, let output, let status
@@ -221,10 +214,13 @@ struct AIResponseView: View {
                 case .discoveryCard(_, let title, let summary, let fullText):
                     DiscoveryCard(title: title, summary: summary, fullText: fullText)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                case .agentSpawn(_, let pillId, let sessionId, let runId, let title, let objective):
+                case .agentSpawn(
+                    _, let pillId, let sessionId, let runId, let title, let objective, let provider
+                ):
                     AgentSpawnCard(
                         title: title,
                         objective: objective,
+                        provider: provider,
                         ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
                         onOpen: openAgentRef
                     )
@@ -275,19 +271,13 @@ struct AIResponseView: View {
     }
 
     private func groupedContentBlocks(for message: ChatMessage) -> [ContentBlockGroup] {
-        let grouped = ContentBlockGroup.group(message.contentBlocks)
+        let grouped = ContentBlockGroup.visibleChatGroups(
+            message.contentBlocks,
+            isStreaming: message.isStreaming
+        )
         guard !message.isStreaming else { return grouped }
 
-        return grouped.filter { group in
-            switch group {
-            case .text, .discoveryCard, .agentSpawn, .agentCompletion:
-                return true
-            case .toolCalls(_, let calls):
-                return calls.contains { $0.spawnedAgentID != nil }
-            case .thinking:
-                return false
-            }
-        }
+        return grouped
     }
 
     // MARK: - Per-Message Hover Action Overlay
@@ -439,37 +429,6 @@ struct AIResponseView: View {
                     .padding(.horizontal, OmiSpacing.xxs)
             }
         }
-    }
-
-    // MARK: - Voice Follow-Up
-
-    private var voiceFollowUpView: some View {
-        HStack(spacing: OmiSpacing.sm) {
-            // Playful realtime mic waveform (replaces the old pulsing red dot)
-            VoiceWaveformBars(isActive: isVoiceFollowUp)
-
-            Image(systemName: "mic.fill")
-                .scaledFont(size: OmiType.body, weight: .semibold)
-                .foregroundColor(.white)
-
-            if !voiceFollowUpTranscript.isEmpty {
-                Text(voiceFollowUpTranscript)
-                    .scaledFont(size: OmiType.body)
-                    .foregroundColor(.white.opacity(0.8))
-                    .lineLimit(2)
-                    .truncationMode(.head)
-            } else {
-                Text("Listening...")
-                    .scaledFont(size: OmiType.body)
-                    .foregroundColor(.white.opacity(0.5))
-            }
-
-            Spacer()
-        }
-        .padding(.horizontal, OmiSpacing.sm)
-        .padding(.vertical, OmiSpacing.sm)
-        .background(OmiColors.accent.opacity(0.12))
-        .cornerRadius(OmiChrome.elementRadius)
     }
 
     // MARK: - Follow-Up Input

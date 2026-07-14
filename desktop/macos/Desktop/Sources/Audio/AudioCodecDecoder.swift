@@ -178,8 +178,10 @@ final class OpusAudioDecoder: AudioCodecDecoder {
 
         guard !data.isEmpty else { return nil }
 
-        // Validate Opus TOC byte
-        let tocByte = data[0]
+        // Validate Opus TOC byte. Index off startIndex, not a literal 0: `Data` subscripting
+        // is startIndex-relative, so `data[0]` traps on a non-zero-based slice (the sibling
+        // AAC decoder was already hardened for this class via `adtsRawAACRange`).
+        let tocByte = data[data.startIndex]
         if !isValidOpusToc(tocByte) {
             logger.debug("Invalid Opus TOC byte: 0x\(String(format: "%02x", tocByte))")
             // Still try to decode - might be valid

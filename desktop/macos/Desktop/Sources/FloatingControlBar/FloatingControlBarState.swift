@@ -224,7 +224,6 @@ class FloatingControlBarState: NSObject, ObservableObject {
             let shouldExpandForVoice = barState.isVoiceListening
 
             if shouldExpandForVoice != wasExpandedForVoice,
-               !barState.isVoiceFollowUp,
                !barState.showingAIConversation,
                UserDefaults.standard.bool(forKey: .hasCompletedOnboarding)
             {
@@ -322,12 +321,6 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var usesNotchIsland: Bool = false
     @Published var notchRevealProgress: CGFloat = 1
 
-    // Voice follow-up state (PTT while AI conversation is active)
-    var isVoiceFollowUp: Bool { voiceProjection.isFollowUp && isVoiceListening }
-    var voiceFollowUpTranscript: String {
-        isVoiceFollowUp ? voiceProjection.transcript : ""
-    }
-
     private func applyVoiceProjection(_ projection: VoiceTurnUIProjection) {
         voiceProjection = projection
     }
@@ -379,7 +372,11 @@ class FloatingControlBarState: NSObject, ObservableObject {
     /// timeline remains source of truth once an answer id is anchored.
     func currentAIMessage(from provider: ChatProvider?) -> ChatMessage? {
         if let answerId = chatViewport.answerMessageId,
-           let message = provider?.messages.first(where: { $0.id == answerId })
+           let provider,
+           let message = AgentLifecycleDisplayProjection.projectedMessage(
+               id: answerId,
+               in: provider.messages
+           )
         {
             return message
         }
@@ -390,7 +387,10 @@ class FloatingControlBarState: NSObject, ObservableObject {
                $0.clientTurnId == turnId && $0.sender == .ai
            })
         {
-            return message
+            return AgentLifecycleDisplayProjection.projectedMessage(
+                id: message.id,
+                in: provider.messages
+            )
         }
         return nil
     }
@@ -450,7 +450,10 @@ class FloatingControlBarState: NSObject, ObservableObject {
         guard let provider else { return [] }
         return chatViewport.archivedExchanges.compactMap { pair in
             guard let answerId = pair.answerMessageId,
-                  let aiMessage = provider.messages.first(where: { $0.id == answerId })
+                  let aiMessage = AgentLifecycleDisplayProjection.projectedMessage(
+                      id: answerId,
+                      in: provider.messages
+                  )
             else { return nil }
             let question: String?
             if let questionId = pair.questionMessageId,
@@ -637,10 +640,7 @@ class FloatingControlBarState: NSObject, ObservableObject {
         // are cleared, and late-arriving chunks update a surface nobody sees.
         // (Cubic P2 — presentation/process desync.)
         FloatingControlBarManager.shared.cancelChat()
-        // Call cancelListening() directly instead of gating on isVoiceFollowUp:
-        // the derived UI flag is not the authoritative source of microphone
-        // state, and cancelListening() is already guarded by state != .idle.
-        // (Cubic P2 — stale PTT capture after surface hide.)
+        // cancelListening() is already guarded by state != .idle.
         PushToTalkManager.shared.cancelListening()
         activeAgentChatPillID = nil
         conversationSurface = .closed
@@ -713,7 +713,7 @@ private extension ChatContentBlock {
         case .toolCall(let id, let name, let status, _, _, _): return "c:\(id):\(name):\(status)"
         case .thinking(let id, _): return "h:\(id)"
         case .discoveryCard(let id, _, _, _): return "d:\(id)"
-        case .agentSpawn(let id, let pillId, _, _, _, _): return "s:\(id):\(pillId?.uuidString ?? "")"
+        case .agentSpawn(let id, let pillId, _, _, _, _, _): return "s:\(id):\(pillId?.uuidString ?? "")"
         case .agentCompletion(let id, let pillId, _, _, _, _, _, _): return "a:\(id):\(pillId?.uuidString ?? "")"
         }
     }

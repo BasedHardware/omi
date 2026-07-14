@@ -226,7 +226,7 @@ final class APIClientCandidateTests: XCTestCase {
     XCTAssertEqual(json["reason"] as? String, "already_handled")
   }
 
-  func testWhatMattersNowUsesCanonicalProjectionEndpoint() async throws {
+  func testWhatMattersNowUsesHeaderBoundProjectionEndpointWithoutDeviceQuery() async throws {
     let config = URLSessionConfiguration.ephemeral
     config.protocolClasses = [CandidateURLCapture.self]
     let client = APIClient(session: URLSession(configuration: config))
@@ -236,7 +236,7 @@ final class APIClientCandidateTests: XCTestCase {
 
     let request = try XCTUnwrap(CandidateURLCapture.captured())
     XCTAssertEqual(request.url.path, "/v1/what-matters-now")
-    XCTAssertEqual(URLComponents(url: request.url, resolvingAgainstBaseURL: false)?.queryItems?.first?.value, "device-hash")
+    XCTAssertTrue(URLComponents(url: request.url, resolvingAgainstBaseURL: false)?.queryItems?.isEmpty ?? true)
     XCTAssertEqual(request.method, "GET")
   }
 

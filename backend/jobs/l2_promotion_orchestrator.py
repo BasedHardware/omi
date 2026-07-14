@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Iterable, List, Optional, Protocol
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from jobs.l2_promotion_selector import (
     L1PromotionCandidate,
@@ -9,13 +9,6 @@ from jobs.l2_promotion_selector import (
     PromotionWorkItem,
     select_promotion_work_items,
 )
-
-
-class L1PromotionCandidateStore(Protocol):
-    def list_l1_promotion_candidates(
-        self, uid: str, *, mode: str, limit: Optional[int] = None
-    ) -> List[Dict[str, Any]]: ...
-
 
 CandidateFetcher = Callable[[str, str, Optional[int]], Iterable[L1PromotionCandidate | Dict[str, Any]]]
 
@@ -51,15 +44,6 @@ class L2PromotionOrchestratorConfig:
             raise ValueError('backfill mode requires enable_backfill=True')
 
 
-def _fetch_candidates_from_store(
-    store: L1PromotionCandidateStore,
-) -> CandidateFetcher:
-    def fetch(uid: str, mode: str, limit: Optional[int]) -> Iterable[L1PromotionCandidate | Dict[str, Any]]:
-        return store.list_l1_promotion_candidates(uid, mode=mode, limit=limit)
-
-    return fetch
-
-
 def build_l2_promotion_work_items(
     *,
     candidate_fetcher: CandidateFetcher,
@@ -84,11 +68,3 @@ def build_l2_promotion_work_items(
         work_items=work_items,
         skipped_uids=skipped_uids,
     )
-
-
-def build_l2_promotion_work_items_from_store(
-    *,
-    store: L1PromotionCandidateStore,
-    config: L2PromotionOrchestratorConfig,
-) -> L2PromotionOrchestratorReport:
-    return build_l2_promotion_work_items(candidate_fetcher=_fetch_candidates_from_store(store), config=config)

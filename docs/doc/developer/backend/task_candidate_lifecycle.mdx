@@ -62,6 +62,36 @@ async projection, feedback, and contextual-resurfacing work is owner-fenced acro
 events are discarded rather than attributed to the next owner. Merely opening a recommendation or accepting a
 Candidate never fabricates a downstream workstream-success outcome.
 
+## Firestore query and transaction deployment contract
+
+Serving compound Firestore queries are inventoried by shape (collection scope, filters, and ordering), not by a raw
+`.where()` count. The first migrated query is the active What Matters Now attention-override lookup. Its source of
+truth is `backend/database/firestore_index_registry.py`: the same registered query spec builds the production query
+and declares its required Firebase composite index. The remaining checked-in indexes are explicit index requirements
+until their serving callers migrate to query specs.
+
+Run these repository-local checks after changing a serving query or index requirement:
+
+```bash
+python3 backend/scripts/generate_firestore_indexes.py
+python3 backend/scripts/firestore_query_coverage.py
+python3 backend/scripts/firestore_query_coverage.py --check-ratchet
+```
+
+The report separates serving coverage from tests, migrations, and scripts. It reports registered, raw-unregistered,
+waived, and unsupported serving shapes. `zero_debt=yes` means every eligible serving query is registered and no raw,
+waived, or unsupported serving shape remains. The committed baseline permits only current legacy debt; the CI ratchet
+rejects a new or modified raw/unsupported serving shape, a coverage decrease, and any waiver without an owner and
+unexpired date. To intentionally update the generated Firebase manifest, edit the registry and run
+`python3 backend/scripts/generate_firestore_indexes.py --write`.
+
+The automatic and manual backend deployment paths install the lockfile-pinned Firebase CLI, reconcile only this
+generated manifest, and poll Firestore until every declared composite index is `READY` before a Cloud Run revision is
+deployed or receives traffic. The development verification job then calls `/v1/what-matters-now` as a configured
+synthetic user; it records only the HTTP status, never the user ID, credentials, or response body. It requires the
+development secret `OMI_TASK_INTELLIGENCE_SMOKE_UID`; provisioning or changing that secret is an operational action,
+not part of a code merge.
+
 Task acceptance uses a Firestore transaction and a deterministic task ID, so concurrent retries create or mutate
 one task and return the same receipt. Reusing an idempotency key with a different proposal is a conflict.
 When a Candidate mutates an existing task, the task's creation `source` remains authoritative and its provenance

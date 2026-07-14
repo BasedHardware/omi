@@ -4,6 +4,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"
 
+# Repository sources are UTF-8. Native Windows Python otherwise inherits the
+# system code page, which makes source-reading tests locale-dependent.
+export PYTHONUTF8="${PYTHONUTF8:-1}"
+
 # Git exports repository-local variables while invoking hooks. They must not
 # leak into pytest: tests that create temporary repositories would otherwise
 # keep operating on the outer worktree. The runner is already anchored at the
@@ -24,6 +28,8 @@ fi
 export ENCRYPTION_SECRET="omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv"
 export OPENAI_API_KEY="test-openai-key-not-real"
 export BACKEND_PYTEST_TIMING_SUMMARY="${BACKEND_PYTEST_TIMING_SUMMARY:-1}"
+# Keep the local pre-push path strict; CI deliberately overrides only the blocking
+# ceiling so cross-machine CPU differences do not make pull requests flaky.
 export BACKEND_FAST_UNIT_WARN_SECONDS="${BACKEND_FAST_UNIT_WARN_SECONDS:-0.1}"
 export BACKEND_FAST_UNIT_FAIL_SECONDS="${BACKEND_FAST_UNIT_FAIL_SECONDS:-0.12}"
 

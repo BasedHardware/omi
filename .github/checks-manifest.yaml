@@ -12,6 +12,11 @@ checks:
     triggers: [".github/schemas/desktop-release-manifest-v1.schema.json", ".github/scripts/desktop_release_manifest.py", ".github/scripts/test_desktop_release_manifest.py", ".github/scripts/fixtures/desktop_release_manifest/**"]
     lanes: ["local", "ci"]
     reason: "immutable desktop app/backend release-unit contract"
+  - id: desktop-release-doctor-v1
+    command: ["python3", ".github/scripts/test_desktop_release_doctor.py"]
+    triggers: [".github/schemas/desktop-release-evidence-v1.schema.json", ".github/scripts/desktop_release_doctor.py", ".github/scripts/desktop_release_doctor_report.py", ".github/scripts/test_desktop_release_doctor.py", ".github/workflows/desktop_release_doctor.yml"]
+    lanes: ["local", "ci"]
+    reason: "advisory desktop release evidence and drift report"
   - id: diff-hygiene
     command: ["python3", ".github/scripts/check_diff_hygiene.py", "--changed-files", "{changed_files}", "--base", "{base}", "--head", "{head}"]
     triggers: ["all"]
@@ -52,6 +57,16 @@ checks:
     triggers: ["all"]
     lanes: ["local", "ci"]
     reason: "new deferred-work markers must cite a tracking issue"
+  - id: deployment-secret-boundary
+    command: ["python3", ".github/scripts/check_deployment_secret_boundary.py", "--base", "{base}"]
+    triggers: [".github/workflows/**/*.yml", ".github/workflows/**/*.yaml", ".github/scripts/check_deployment_secret_boundary.py", ".github/scripts/test_check_deployment_secret_boundary.py", "backend/charts/*/*_values.yaml", "backend/deploy/runtime_env.yaml", "config/deployment-setting-classification.json"]
+    lanes: ["local", "ci"]
+    reason: "new or changed deployment bindings must use a checked-in secret, config, or public-build classification"
+  - id: deployment-secret-boundary-fixtures
+    command: ["python3", ".github/scripts/test_check_deployment_secret_boundary.py"]
+    triggers: [".github/scripts/check_deployment_secret_boundary.py", ".github/scripts/test_check_deployment_secret_boundary.py"]
+    lanes: ["local", "ci"]
+    reason: "deployment secret-boundary fake-name fixtures must remain executable"
   - id: backend-async-blockers
     command: ["python3", "backend/scripts/scan_async_blockers.py", "--dirs", "backend/routers", "backend/utils", "backend/agent-proxy", "backend/dependencies.py", "--diff-base", "{base}", "--fail-on", "high_network_io,async_helpers_with_blocking,time_sleep,mixed_await_sync_db,no_await_should_be_def,unmanaged_thread_offload"]
     triggers: ["backend/**/*.py", "backend/agent-proxy/**", "backend/scripts/scan_async_blockers.py"]
@@ -62,6 +77,16 @@ checks:
     triggers: ["backend/**/*.py", "backend/route_policy_manifest.yaml", "backend/route_policy_legacy_missing_routes.txt", "backend/scripts/check_route_policy_baseline.py"]
     lanes: ["local", "ci"]
     reason: "new backend routes must declare reviewed policy instead of growing the legacy baseline"
+  - id: firestore-index-manifest
+    command: ["python3", "backend/scripts/generate_firestore_indexes.py"]
+    triggers: ["firestore.indexes.json", "backend/database/firestore_index_registry.py", "backend/scripts/generate_firestore_indexes.py"]
+    lanes: ["local", "ci"]
+    reason: "Firebase composite-index manifest must be generated from the registered requirements"
+  - id: firestore-query-coverage
+    command: ["python3", "backend/scripts/firestore_query_coverage.py", "--check-ratchet"]
+    triggers: ["backend/**/*.py", "backend/scripts/firestore_query_coverage_baseline.json", "backend/scripts/firestore_query_coverage_waivers.json"]
+    lanes: ["local", "ci"]
+    reason: "serving Firestore compound queries cannot add unregistered or unsupported debt"
   - id: lifecycle-headers
     command: ["python3", ".github/scripts/check_lifecycle_headers.py", "--changed-files", "{changed_files}"]
     triggers: ["all"]

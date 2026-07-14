@@ -108,6 +108,32 @@ def test_translation_language_gating():
     )
 
 
+def test_translation_language_rejects_sentinel_preferences():
+    # Legacy Firestore users/{uid}.language rows hold the STT sentinel itself; sending it
+    # to NLLB as a target is always an unsupported_target 400 + a Google fallback (#9623).
+    for sentinel in ('multi', 'auto'):
+        assert (
+            select_translation_language(
+                single_language_mode=False,
+                stt_language='multi',
+                language='multi',
+                user_language_preference=sentinel,
+            )
+            is None
+        )
+
+    # An un-normalized 'auto' request language is a sentinel too, never a target.
+    assert (
+        select_translation_language(
+            single_language_mode=False,
+            stt_language='multi',
+            language='auto',
+            user_language_preference='fr',
+        )
+        is None
+    )
+
+
 def test_effective_conversation_timeout_pins_current_quirks():
     assert effective_conversation_timeout(30, is_multi_channel=False) == 120
     assert effective_conversation_timeout(120, is_multi_channel=False) == 120

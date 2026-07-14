@@ -9595,4 +9595,25 @@ class AppLocalizationsLv extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Kļūda, veidojot savienojumu ar Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Ierīces krātuve';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% aizpildīts';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return 'izmantoti $used no $total';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free brīvi';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Ierīce ir gandrīz pilna — sinhronizējiet, lai atbrīvotu vietu.';
 }

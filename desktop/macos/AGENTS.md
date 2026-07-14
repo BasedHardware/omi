@@ -219,6 +219,7 @@ See `.claude/settings.json` for connection details.
 - **No Xcode project** — this is a Swift Package Manager project
 - **Build command**: `xcrun swift build -c debug --package-path Desktop` (the `xcrun` prefix is required to match the SDK version)
 - **Full dev run**: `./run.sh` — builds Swift app, starts Rust backend, starts Cloudflare tunnel, launches app
+- **Fast default dev run**: after one successful full named-bundle launch, ordinary Swift-only `./run.sh` calls reuse the installed bundle. The fast lane runs incremental SwiftPM, atomically replaces the executable and current desktop API URL, re-signs the app, and relaunches without copying/re-signing static agent/framework assets or resetting LaunchServices/auth. Package metadata, resources, agent/runtime inputs, entitlements, persistent launch configuration, and local-profile launches automatically take the full path. Force that path with `./run.sh --full` or `OMI_FORCE_FULL_BUNDLE=1`. `OMI_SCAN_STALE_BUNDLES=1` is an explicit stale-LaunchServices recovery scan; do not enable it in the normal loop.
 - **Agent runtime preparation cache**: local `./run.sh` calls reuse validated agent packaging from the worktree-local `.harness/agent-runtime` cache when source, locks, preparation logic, pinned runtime, mode, OS/architecture, Node/npm versions, and every file copied from the prepared runtime are unchanged. Hits verify the complete agent `dist`, both packaged dependency trees, their symlinks, and staged Node; working `agent/node_modules` is not hashed. The script logs `Cache HIT`, `MISS`, or `BYPASS`; hits preserve output mtimes but spend roughly a second on a warm local filesystem hashing the packaged outputs for integrity (hardware/filesystem dependent). CI and `--skip-npm` always bypass the stamp. Set `OMI_AGENT_RUNTIME_FORCE_REBUILD=1` for an explicit local rebuild. Do not copy this cache between worktrees or treat it as a release artifact. The checksum-verified universal Node archives are separately shared at `~/Library/Caches/OmiDesktop/node-archives` (override with `OMI_AGENT_RUNTIME_ARCHIVE_CACHE_DIR`), so fresh linked worktrees reuse the download but still validate it before staging.
 - **Release builds**: Handled entirely by Codemagic CI (no local release script needed)
 - **DO NOT** use bare `swift build` — it will fail with SDK version mismatch
@@ -250,6 +251,16 @@ This creates `/Applications/omi-fix-rewind.app` with bundle ID `com.omi.omi-fix-
 - To connect agent-swift: `agent-swift connect --bundle-id com.omi.omi-fix-rewind`
 - **Skip the web login:** sign into "Omi Dev" once; named bundles launched by `./run.sh` clone that session before launch.
 - **Jump to a screen without clicking:** the automation bridge auto-enables on non-prod bundles — `./scripts/omi-ctl navigate <screen>` (e.g. `rewind`, `memories`, `settings rewind`). See "Fast-Path for Local Iteration" in `e2e/SKILL.md`.
+- Named/dev bundles default to the development Python and Rust backends unless
+  an explicit launch URL overrides them. Before QA, run
+  `./scripts/omi-ctl health`; its unauthenticated identity payload reports the
+  resolved backend environment/URLs plus the agent-runtime handshake state,
+  negotiated protocol version, packaged runtime version, and expected protocol.
+  A protocol-compatible runtime that omits a required capability is rejected at
+  startup; health never reports the expected protocol as if it were negotiated.
+- Run `./scripts/agent-logic-harness.sh --cross-surface-smoke` before building a
+  QA bundle. This is the compact Swift/Node/Rust contract gate; reserve full
+  component suites and the live continuity gauntlet for PR readiness.
 
 ### After Implementing Changes
 - `xcrun swift build` is for **compile checks only** — it does NOT start the backend
@@ -374,9 +385,12 @@ timeline identity/open, or pill projection is incomplete until:
 
 - **CI:** `agent-continuity-gauntlet.sh --self-check` only (via desktop-core /
   agent-logic harness). Never require live LLM in PR CI.
-- **Continuity PRs / RC:** `--suite continuity` (typed + PTT + blind recall) on
-  a named `omi-*` bundle after auth seed; `--suite all` for RC. Evidence under
-  `.harness/agent-continuity-gauntlet/*/manifest.json` with matching git SHA.
+- **Prompt / gateway changes:** `--suite prompts` on a named `omi-*` bundle;
+  P4 requires a completed public-web lookup with a source URL and fails on
+  provider tool-choice incompatibilities. **Continuity PRs / RC:** `--suite
+  continuity` (typed + PTT + blind recall) after auth seed; `--suite all` for
+  RC. Evidence under `.harness/agent-continuity-gauntlet/*/manifest.json` with
+  matching git SHA.
 - **Anti-flake:** clear owner/kernel surface before probes; per-run nonces;
   hard-fail on blind-recall / structural snapshot only; zero automatic retries
   on model wrongness.

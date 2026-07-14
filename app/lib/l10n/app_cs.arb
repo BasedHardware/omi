@@ -3112,5 +3112,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Úložiště zařízení",
+    "deviceStoragePercentFull": "{percent}% zaplněno",
+    "deviceStorageUsedOfTotal": "{used} z {total} využito",
+    "deviceStorageFree": "{free} volných",
+    "deviceStorageNearlyFull": "Zařízení je téměř plné — synchronizujte pro uvolnění místa."
 }

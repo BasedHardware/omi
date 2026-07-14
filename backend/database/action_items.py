@@ -1,12 +1,14 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
+import logging
 from typing import Any, Dict, Iterable, List, Optional, Protocol, cast
+
 from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from ._client import db
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -222,7 +224,6 @@ def create_action_item(
     if document_id is not None and not document_id:
         raise ValueError('document_id must not be empty')
     doc_ref = action_items_ref.document(document_id) if document_id is not None else action_items_ref.document()
-    transaction = db.transaction()
 
     @firestore.transactional
     def create_in_generation(write_transaction):
@@ -269,7 +270,14 @@ def create_action_item(
         write_transaction.set(doc_ref, payload)
         return doc_ref.id
 
-    return cast(str, create_in_generation(transaction))
+    return cast(
+        str,
+        run_with_transaction_contention_retry(
+            db.transaction,
+            create_in_generation,
+            operation_name="action_item_create",
+        ),
+    )
 
 
 def create_action_items_batch(
@@ -321,7 +329,6 @@ def create_action_items_batch(
 
     if len(prepared_items) > 400:
         raise ValueError('action-item batches are limited to 400 items')
-    transaction = db.transaction()
 
     @firestore.transactional
     def create_batch_in_generation(write_transaction):
@@ -346,7 +353,14 @@ def create_action_items_batch(
             write_transaction.set(doc_ref, {**item, 'account_generation': account_generation})
         return doc_refs
 
-    return cast(List[str], create_batch_in_generation(transaction))
+    return cast(
+        List[str],
+        run_with_transaction_contention_retry(
+            db.transaction,
+            create_batch_in_generation,
+            operation_name="action_item_batch_create",
+        ),
+    )
 
 
 # *****************************
@@ -603,7 +617,6 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
     action_item_ref = user_ref.collection(action_items_collection).document(action_item_id)
 
     if 'goal_id' in update_data or 'workstream_id' in update_data:
-        transaction = db.transaction()
         now = datetime.now(timezone.utc)
 
         @firestore.transactional
@@ -627,7 +640,13 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
             write_transaction.update(action_item_ref, {**update_data, 'updated_at': now})
             return True
 
-        return bool(update_linked(transaction))
+        return bool(
+            run_with_transaction_contention_retry(
+                db.transaction,
+                update_linked,
+                operation_name="action_item_linked_update",
+            )
+        )
 
     # Check if exists
     if not action_item_ref.get().exists:

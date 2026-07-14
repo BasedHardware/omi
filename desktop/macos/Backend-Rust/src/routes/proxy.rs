@@ -51,15 +51,27 @@ const MAX_OUTPUT_TOKENS_CAP: u64 = 8192;
 /// explicitly on all production paths.
 const DEFAULT_THINKING_BUDGET: u64 = 1024;
 
-/// One end-to-end budget for non-streaming Gemini work. This deliberately leaves
-/// headroom below the observed ~90 second infrastructure boundary and includes
-/// token acquisition, provider selection/fallback, request send, and body drain.
-const GEMINI_TOTAL_TIMEOUT: Duration = Duration::from_secs(75);
+/// Cloud Run's configured request timeout for `desktop-backend`.
+const CLOUD_RUN_REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
+
+/// Headroom reserved under the platform deadline so the proxy, rather than
+/// Cloud Run, owns timeout mapping and can return the typed, retryable
+/// `upstream_timeout` response.
+const GEMINI_PLATFORM_HEADROOM: Duration = Duration::from_secs(60);
+
+/// One end-to-end budget for non-streaming Gemini work. It derives from the
+/// Cloud Run request contract and includes token acquisition, provider
+/// selection/fallback, request send, and body drain. Long-context calls can
+/// legitimately spend more than 90 seconds thinking before their first byte.
+const GEMINI_TOTAL_TIMEOUT: Duration =
+    Duration::from_secs(CLOUD_RUN_REQUEST_TIMEOUT.as_secs() - GEMINI_PLATFORM_HEADROOM.as_secs());
 
 /// Per-attempt defense inside the logical budget. There are no post-dispatch
 /// retries: generateContent may have completed (and incurred cost) even when its
 /// response is lost, so replaying it is not known-safe.
-const GEMINI_ATTEMPT_TIMEOUT: Duration = Duration::from_secs(70);
+const GEMINI_ATTEMPT_HEADROOM: Duration = Duration::from_secs(5);
+const GEMINI_ATTEMPT_TIMEOUT: Duration =
+    Duration::from_secs(GEMINI_TOTAL_TIMEOUT.as_secs() - GEMINI_ATTEMPT_HEADROOM.as_secs());
 
 /// Bound TCP/TLS setup for all Gemini proxy calls. Streaming requests must not
 /// use a total response timeout because long SSE replies are expected.
@@ -1355,7 +1367,15 @@ mod tests {
     fn gemini_upstream_timeout_stays_below_cloud_run_deadline() {
         assert!(GEMINI_CONNECT_TIMEOUT < GEMINI_ATTEMPT_TIMEOUT);
         assert!(GEMINI_ATTEMPT_TIMEOUT < GEMINI_TOTAL_TIMEOUT);
-        assert!(GEMINI_TOTAL_TIMEOUT < Duration::from_secs(90));
+        assert!(GEMINI_TOTAL_TIMEOUT < CLOUD_RUN_REQUEST_TIMEOUT);
+        assert!(
+            CLOUD_RUN_REQUEST_TIMEOUT - GEMINI_TOTAL_TIMEOUT >= GEMINI_PLATFORM_HEADROOM,
+            "reserve enough time to flush the proxy-owned timeout response"
+        );
+        assert!(
+            GEMINI_TOTAL_TIMEOUT >= Duration::from_secs(180),
+            "long-context Gemini calls must not be cut off at the old 70-second deadline"
+        );
     }
 
     #[test]

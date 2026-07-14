@@ -82,6 +82,23 @@ struct AgentRuntimeJournalTimeoutPolicy {
   }
 }
 
+/// Kernel context needs a bounded but startup-tolerant readiness budget. These
+/// requests only establish the pinned session and rendered context; they never
+/// run the user's model query, which is tracked on its own request path.
+enum AgentRuntimeKernelContractTimeoutPolicy {
+  static let defaultDeadlineNanoseconds: UInt64 = 5_000_000_000
+  static let contextReadinessDeadlineNanoseconds: UInt64 = 15_000_000_000
+
+  static func deadlineNanoseconds(for operation: String) -> UInt64 {
+    switch operation {
+    case "resolve_surface_session", "context_source_update", "get_context_snapshot":
+      return contextReadinessDeadlineNanoseconds
+    default:
+      return defaultDeadlineNanoseconds
+    }
+  }
+}
+
 /// Actor-owned reorder and framing buffer for the runtime's JSONL stdout.
 /// Tasks created by a readability callback are not scheduling-ordered, so an
 /// N+1 chunk can reach the actor before N. Hold later chunks until every prior
@@ -195,7 +212,23 @@ final class DebugSuspendControl: @unchecked Sendable {
 
 actor AgentRuntimeProcess {
   static let shared = AgentRuntimeProcess()
+  nonisolated static let expectedProtocolVersion = 2
+  nonisolated static let requiredRuntimeCapabilities: Set<String> = [
+    "journal_import_remote_turn"
+  ]
   private static let ownerTransitionClientID = "runtime-owner-transition"
+
+  struct RuntimeHandshake: Equatable, Sendable {
+    let protocolVersion: Int
+    let runtimeVersion: String
+    let capabilities: Set<String>
+  }
+
+  struct DiagnosticsSnapshot: Equatable, Sendable {
+    let running: Bool
+    let protocolVersion: Int?
+    let runtimeVersion: String?
+  }
 
   struct RuntimeOwnerAuthorityStatus: Equatable, Sendable {
     let epoch: UInt64
@@ -215,6 +248,31 @@ actor AgentRuntimeProcess {
     targetHasExtension: Bool
   ) -> Bool {
     useExtension && !token.isEmpty && targetHasExtension
+  }
+
+  nonisolated static func validateRuntimeHandshake(
+    _ message: RuntimeMessage
+  ) throws -> RuntimeHandshake {
+    guard message.kind == .initMessage,
+      let protocolVersion = message.protocolVersion,
+      protocolVersion == expectedProtocolVersion
+    else {
+      throw BridgeError.agentError("Agent runtime protocol is incompatible")
+    }
+    let runtimeVersion = (message.payload["runtimeVersion"] as? String)?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard !runtimeVersion.isEmpty else {
+      throw BridgeError.agentError("Agent runtime did not identify its version")
+    }
+    let capabilities = Set(message.payload["runtimeCapabilities"] as? [String] ?? [])
+    guard requiredRuntimeCapabilities.isSubset(of: capabilities) else {
+      throw BridgeError.agentError("Agent runtime is missing required capabilities")
+    }
+    return RuntimeHandshake(
+      protocolVersion: protocolVersion,
+      runtimeVersion: runtimeVersion,
+      capabilities: capabilities
+    )
   }
 
   nonisolated static func isConfirmedOutOfMemoryDiagnostic(_ text: String) -> Bool {
@@ -397,9 +455,17 @@ actor AgentRuntimeProcess {
   private struct ActiveKernelContractRequest {
     let clientId: String
     let requestId: String
+    let operation: String
     let expectedKind: RuntimeMessage.Kind
     let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+    let sentAtUptime: TimeInterval
     let continuation: CheckedContinuation<[String: Any], Error>
+  }
+
+  private struct TimedOutKernelContractRequest {
+    let operation: String
+    let expectedKind: RuntimeMessage.Kind
+    let timedOutAtUptime: TimeInterval
   }
 
   struct JournalOperationResult: Sendable {
@@ -439,6 +505,7 @@ actor AgentRuntimeProcess {
   private var activeControlRequests: [RuntimeMessage.RequestKey: ActiveControlRequest] = [:]
   private var activeJournalRequests: [RuntimeMessage.RequestKey: ActiveJournalRequest] = [:]
   private var activeKernelContractRequests: [RuntimeMessage.RequestKey: ActiveKernelContractRequest] = [:]
+  private var timedOutKernelContractRequests: [RuntimeMessage.RequestKey: TimedOutKernelContractRequest] = [:]
   private var activeAuthorizedToolExecutionTasks: [UUID: Task<Void, Never>] = [:]
   private var journalTurnChangedHandler: JournalTurnChangedHandler?
   private var authorizedRealtimeToolHandler: AuthorizedRealtimeToolHandler?
@@ -446,6 +513,8 @@ actor AgentRuntimeProcess {
   private let oomDiagnosticLatch = AgentRuntimeOOMDiagnosticLatch()
   private var receivedInit = false
   private var advertisedAgentControlTools: Set<String> = []
+  private var negotiatedProtocolVersion: Int?
+  private var negotiatedRuntimeVersion: String?
   private var isRestarting = false
   private var isStopping = false
   private var stopFlight: StopFlight?
@@ -467,6 +536,14 @@ actor AgentRuntimeProcess {
       handleTermination(reason: .exit)
     }
     return isRunning && processRunning
+  }
+
+  func diagnosticsSnapshot() -> DiagnosticsSnapshot {
+    DiagnosticsSnapshot(
+      running: isRunning && process?.isRunning == true && receivedInit,
+      protocolVersion: negotiatedProtocolVersion,
+      runtimeVersion: negotiatedRuntimeVersion
+    )
   }
 
   func runtimeOwnerAuthorityStatus() -> RuntimeOwnerAuthorityStatus {
@@ -1440,7 +1517,7 @@ actor AgentRuntimeProcess {
     payload: [String: Any],
     expectedKind: RuntimeMessage.Kind,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?,
-    timeoutNanoseconds: UInt64 = 5_000_000_000
+    timeoutNanoseconds: UInt64? = nil
   ) async throws -> [String: Any] {
     guard isRunning else { throw BridgeError.stopped }
     if let authorizationSnapshot {
@@ -1452,26 +1529,58 @@ actor AgentRuntimeProcess {
     else {
       throw BridgeError.agentError("Kernel contract request is missing tracing identity")
     }
+    let operation = payload["type"] as? String ?? "unknown"
+    let deadlineNanoseconds = timeoutNanoseconds
+      ?? AgentRuntimeKernelContractTimeoutPolicy.deadlineNanoseconds(for: operation)
     let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
     return try await withCheckedThrowingContinuation { continuation in
       activeKernelContractRequests[requestKey] = ActiveKernelContractRequest(
         clientId: clientId,
         requestId: requestId,
+        operation: operation,
         expectedKind: expectedKind,
         authorizationSnapshot: authorizationSnapshot,
+        sentAtUptime: ProcessInfo.processInfo.systemUptime,
         continuation: continuation
       )
       guard sendJson(payload) else {
         activeKernelContractRequests.removeValue(forKey: requestKey)?.continuation.resume(
           throwing: BridgeError.processExited
         )
+        timedOutKernelContractRequests.removeValue(forKey: requestKey)
         return
       }
       Task {
-        try? await Task.sleep(nanoseconds: timeoutNanoseconds)
+        try? await Task.sleep(nanoseconds: deadlineNanoseconds)
         guard let request = self.activeKernelContractRequests.removeValue(forKey: requestKey) else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        self.timedOutKernelContractRequests[requestKey] = TimedOutKernelContractRequest(
+          operation: request.operation,
+          expectedKind: request.expectedKind,
+          timedOutAtUptime: now
+        )
+        self.trimTimedOutKernelContractRequests()
+        let elapsedMilliseconds = Int((now - request.sentAtUptime) * 1_000)
+        log(
+          "AgentRuntimeProcess: kernel contract timeout operation=\(request.operation) "
+            + "expected=\(String(describing: request.expectedKind)) elapsed_ms=\(elapsedMilliseconds)"
+        )
         request.continuation.resume(throwing: BridgeError.timeout)
       }
+    }
+  }
+
+  private func trimTimedOutKernelContractRequests() {
+    let cutoff = ProcessInfo.processInfo.systemUptime - 60
+    timedOutKernelContractRequests = timedOutKernelContractRequests.filter {
+      $0.value.timedOutAtUptime >= cutoff
+    }
+    if timedOutKernelContractRequests.count > 32,
+      let oldest = timedOutKernelContractRequests.min(by: {
+        $0.value.timedOutAtUptime < $1.value.timedOutAtUptime
+      })?.key
+    {
+      timedOutKernelContractRequests.removeValue(forKey: oldest)
     }
   }
 
@@ -2186,6 +2295,8 @@ actor AgentRuntimeProcess {
     lastExitWasOOM = false
     receivedInit = false
     advertisedAgentControlTools.removeAll()
+    negotiatedProtocolVersion = nil
+    negotiatedRuntimeVersion = nil
 
     guard let nodePath = findNodeBinary() else {
       throw BridgeError.nodeNotFound
@@ -2375,16 +2486,7 @@ actor AgentRuntimeProcess {
       env["HERMES_HOME"] = "\(home)/.hermes"
     }
 
-    let adapterPathDirs = [
-      "\(home)/.hermes/hermes-agent/venv/bin",
-      "\(home)/.hermes/node/bin",
-      "\(home)/.hermes/hermes-agent",
-    ]
-    let adapterSearchDirs = adapterPathDirs + [
-      "\(home)/.local/bin",
-      "/opt/homebrew/bin",
-      "/usr/local/bin",
-    ]
+    let adapterPathDirs = Self.localAdapterSearchDirectories(home: home)
     let trustedPathDirs = [
       "/opt/homebrew/bin",
       "/usr/local/bin",
@@ -2399,13 +2501,13 @@ actor AgentRuntimeProcess {
     env["PATH"] = pathElements.joined(separator: ":")
 
     if env["OMI_HERMES_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
-      let hermes = firstExecutable(named: "hermes", in: adapterSearchDirs)
+      let hermes = Self.firstExecutable(named: "hermes", in: adapterPathDirs)
     {
       env["OMI_HERMES_ADAPTER_COMMAND"] = "\(Self.shellQuote(hermes)) acp"
     }
 
     if env["OMI_OPENCLAW_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
-      let openClaw = firstExecutable(named: "openclaw", in: adapterSearchDirs)
+      let openClaw = Self.firstExecutable(named: "openclaw", in: adapterPathDirs)
     {
       env["OMI_OPENCLAW_ADAPTER_COMMAND"] = Self.openClawAdapterCommand(openClawPath: openClaw)
     }
@@ -2453,6 +2555,53 @@ actor AgentRuntimeProcess {
     return "\(shellQuote(openClawPath)) acp"
   }
 
+  /// Directly launched app bundles do not inherit the shell's FNM multishell
+  /// PATH entry. Search the stable Node-install roots as well, so a globally
+  /// installed OpenClaw CLI remains available to the shared agent bridge.
+  static func localAdapterSearchDirectories(
+    home: String,
+    fileManager: FileManager = .default
+  ) -> [String] {
+    let adapterPathDirs = [
+      "\(home)/.hermes/hermes-agent/venv/bin",
+      "\(home)/.hermes/node/bin",
+      "\(home)/.hermes/hermes-agent",
+      "\(home)/.local/bin",
+      "/opt/homebrew/bin",
+      "/usr/local/bin",
+    ]
+    let managedNodeRoots = [
+      "\(home)/.nvm/versions/node",
+      "\(home)/.fnm/node-versions",
+      "\(home)/.local/share/fnm/node-versions",
+      "\(home)/.nodenv/versions",
+      "\(home)/.asdf/installs/nodejs",
+    ]
+    return Self.uniquePaths(
+      adapterPathDirs + managedNodeRoots.flatMap {
+        Self.nodeInstallBinDirectories(root: $0, fileManager: fileManager)
+      })
+  }
+
+  private static func nodeInstallBinDirectories(root: String, fileManager: FileManager) -> [String] {
+    guard let versions = try? fileManager.contentsOfDirectory(atPath: root) else { return [] }
+    return versions.compactMap { version in
+      let versionDirectory = (root as NSString).appendingPathComponent(version)
+      let directBin = (versionDirectory as NSString).appendingPathComponent("bin")
+      if fileManager.fileExists(atPath: directBin) { return directBin }
+      let installationBin = (versionDirectory as NSString).appendingPathComponent("installation/bin")
+      if fileManager.fileExists(atPath: installationBin) { return installationBin }
+      return nil
+    }
+  }
+
+  private static func uniquePaths(_ paths: [String]) -> [String] {
+    paths.reduce(into: [String]()) { result, path in
+      guard !path.isEmpty, !result.contains(path) else { return }
+      result.append(path)
+    }
+  }
+
   private nonisolated static func bearerToken(from header: String) -> String? {
     let prefix = "Bearer "
     guard header.hasPrefix(prefix) else { return nil }
@@ -2465,8 +2614,11 @@ actor AgentRuntimeProcess {
     "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
   }
 
-  private func firstExecutable(named name: String, in directories: [String]) -> String? {
-    let fileManager = FileManager.default
+  static func firstExecutable(
+    named name: String,
+    in directories: [String],
+    fileManager: FileManager = .default
+  ) -> String? {
     for dir in directories {
       let path = (dir as NSString).appendingPathComponent(name)
       if fileManager.isExecutableFile(atPath: path) {
@@ -2500,6 +2652,8 @@ actor AgentRuntimeProcess {
     markRuntimeOwnerAuthorityDirty()
     receivedInit = false
     advertisedAgentControlTools.removeAll()
+    negotiatedProtocolVersion = nil
+    negotiatedRuntimeVersion = nil
     resumeAllRequests(throwing: BridgeError.stopped)
     resumeInitContinuations(throwing: BridgeError.stopped)
   }
@@ -2571,6 +2725,8 @@ actor AgentRuntimeProcess {
     isRunning = false
     receivedInit = false
     advertisedAgentControlTools.removeAll()
+    negotiatedProtocolVersion = nil
+    negotiatedRuntimeVersion = nil
     resumeAllRequests(throwing: error)
     resumeInitContinuations(throwing: error)
   }
@@ -2635,7 +2791,20 @@ actor AgentRuntimeProcess {
 
     switch message.kind {
     case .initMessage:
-      log("AgentRuntimeProcess: bridge ready (sessionId=\(message.payload["sessionId"] as? String ?? ""))")
+      let handshake: RuntimeHandshake
+      do {
+        handshake = try Self.validateRuntimeHandshake(message)
+      } catch {
+        log("AgentRuntimeProcess: rejecting incompatible runtime handshake")
+        resumeInitContinuations(throwing: error)
+        return
+      }
+      negotiatedProtocolVersion = handshake.protocolVersion
+      negotiatedRuntimeVersion = handshake.runtimeVersion
+      log(
+        "AgentRuntimeProcess: bridge ready "
+          + "(protocol=\(message.protocolVersion.map(String.init) ?? "unknown"), "
+          + "runtime=\(negotiatedRuntimeVersion ?? "unknown"))")
       let tools = message.payload["agentControlTools"] as? [String] ?? []
       advertisedAgentControlTools = Set(tools)
       receivedInit = true
@@ -2766,13 +2935,31 @@ actor AgentRuntimeProcess {
   }
 
   private func completeKernelContractRequest(_ message: RuntimeMessage) {
-    guard let requestKey = message.requestKey,
-      let request = activeKernelContractRequests.removeValue(forKey: requestKey)
-    else {
+    guard let requestKey = message.requestKey else {
       log("AgentRuntimeProcess: dropping unroutable kernel contract response")
       return
     }
+    guard let request = activeKernelContractRequests.removeValue(forKey: requestKey) else {
+      guard let timedOut = timedOutKernelContractRequests.removeValue(forKey: requestKey) else {
+        log("AgentRuntimeProcess: dropping unroutable kernel contract response")
+        return
+      }
+      let elapsedMilliseconds = Int(
+        (ProcessInfo.processInfo.systemUptime - timedOut.timedOutAtUptime) * 1_000
+      )
+      log(
+        "AgentRuntimeProcess: dropping late kernel contract response operation=\(timedOut.operation) "
+          + "expected=\(String(describing: timedOut.expectedKind)) "
+          + "received=\(String(describing: message.kind)) late_ms=\(elapsedMilliseconds)"
+      )
+      return
+    }
+    timedOutKernelContractRequests.removeValue(forKey: requestKey)
     guard request.expectedKind == message.kind else {
+      log(
+        "AgentRuntimeProcess: kernel contract response type mismatch operation=\(request.operation) "
+          + "expected=\(String(describing: request.expectedKind)) received=\(String(describing: message.kind))"
+      )
       request.continuation.resume(
         throwing: BridgeError.agentError("Kernel contract response type did not match its request")
       )
@@ -3508,6 +3695,8 @@ actor AgentRuntimeProcess {
     markRuntimeOwnerAuthorityDirty()
     receivedInit = false
     advertisedAgentControlTools.removeAll()
+    negotiatedProtocolVersion = nil
+    negotiatedRuntimeVersion = nil
     closePipes()
     resumeAllRequests(throwing: error)
     resumeInitContinuations(throwing: error)

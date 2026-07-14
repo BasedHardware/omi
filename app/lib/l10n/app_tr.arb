@@ -3178,5 +3178,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Cihaz depolama",
+    "deviceStoragePercentFull": "%{percent} dolu",
+    "deviceStorageUsedOfTotal": "{total} alanın {used} kısmı kullanıldı",
+    "deviceStorageFree": "{free} boş",
+    "deviceStorageNearlyFull": "Cihaz neredeyse dolu — yer açmak için eşitleyin."
 }

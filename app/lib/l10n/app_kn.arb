@@ -10721,5 +10721,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "ಸಾಧನ ಸಂಗ್ರಹಣೆ",
+    "deviceStoragePercentFull": "{percent}% ತುಂಬಿದೆ",
+    "deviceStorageUsedOfTotal": "{total} ರಲ್ಲಿ {used} ಬಳಸಲಾಗಿದೆ",
+    "deviceStorageFree": "{free} ಖಾಲಿ",
+    "deviceStorageNearlyFull": "ಸಾಧನ ಬಹುತೇಕ ತುಂಬಿದೆ — ಸ್ಥಳವನ್ನು ಮುಕ್ತಗೊಳಿಸಲು ಸಿಂಕ್ ಮಾಡಿ."
 }

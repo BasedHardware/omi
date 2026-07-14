@@ -40,11 +40,25 @@ private actor SuspendedJournalListGate {
 
 @MainActor
 final class KernelTurnRecordedProjectionTests: XCTestCase {
-  func testRealtimeVoiceUsesDedicatedKernelSessionSurface() {
-    let surface = AgentSurfaceReference.realtimeVoice()
+  func testRealtimeVoiceCompanionPreservesTheMainChatIdentity() {
+    let main = AgentSurfaceReference.mainChat(chatId: "conversation-42")
+    let surface = main.realtimeVoiceCompanion()
     XCTAssertEqual(surface.surfaceKind, "realtime_voice")
     XCTAssertEqual(surface.externalRefKind, "chat")
-    XCTAssertEqual(surface.externalRefId, "default")
+    XCTAssertEqual(surface.externalRefId, main.externalRefId)
+  }
+
+  func testVoiceContextSnapshotRejectsOnlyTheUnresolvedTransportSentinel() {
+    XCTAssertFalse(KernelVoiceContextSnapshot.empty.isResolved)
+
+    let blankNewConversation = KernelVoiceContextSnapshot(
+      sessionId: "session-new",
+      conversationId: "conversation-new",
+      context: "",
+      freshnessIdentity: "1:renderer:capabilities",
+      turnIDs: []
+    )
+    XCTAssertTrue(blankNewConversation.isResolved)
   }
 
   func testSpawnProjectionPinsItsProducingSurfaceAcrossLaterCompletion() throws {
@@ -195,6 +209,28 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     XCTAssertEqual(ChatLegacyCompatibilityMetadata.owner, "desktop-main-chat")
     XCTAssertFalse(ChatLegacyCompatibilityMetadata.removalCondition.isEmpty)
     XCTAssertEqual(ChatLegacyCompatibilityMetadata.removeBy, "2026-10-01")
+  }
+
+  func testLegacyBackendImportChronologyNormalizesCoarseTimestampPairs() {
+    struct Row: Equatable {
+      let id: String
+      let createdAt: Date
+      let sender: String
+    }
+    let timestamp = Date(timeIntervalSince1970: 100)
+    let rows = [
+      Row(id: "assistant", createdAt: timestamp, sender: "ai"),
+      Row(id: "user", createdAt: timestamp, sender: "human"),
+    ]
+
+    let plan = ChatLegacyImportChronology.plan(
+      rows,
+      createdAt: { $0.createdAt },
+      role: { $0.sender }
+    )
+
+    XCTAssertEqual(plan.map(\.row.id), ["user", "assistant"])
+    XCTAssertEqual(plan.map(\.createdAtMs), [100_000, 100_001])
   }
 
   func testJournalProjectionUpsertsMutationByCanonicalTurnID() throws {

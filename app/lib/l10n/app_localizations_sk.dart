@@ -9565,4 +9565,25 @@ class AppLocalizationsSk extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Chyba pri pripájaní k Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Úložisko zariadenia';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% zaplnené';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used z $total využité';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free voľných';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Zariadenie je takmer plné — synchronizujte, aby ste uvoľnili miesto.';
 }

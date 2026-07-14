@@ -6,8 +6,30 @@ set -e
 # a non-English locale (e.g. de_DE.UTF-8 expects a comma separator).
 export LC_NUMERIC=C
 
+# ─── Arguments ─────────────────────────────────────────────────────────
+YOLO_MODE=0
+FORCE_FULL_BUNDLE="${OMI_FORCE_FULL_BUNDLE:-0}"
+SHOW_HELP=0
+for arg in "$@"; do
+    case "$arg" in
+        --yolo)
+            YOLO_MODE=1
+            ;;
+        --full)
+            FORCE_FULL_BUNDLE=1
+            ;;
+        --help|-h)
+            SHOW_HELP=1
+            ;;
+        *)
+            echo "ERROR: unknown option: $arg" >&2
+            exit 2
+            ;;
+    esac
+done
+
 # ─── Help ──────────────────────────────────────────────────────────────
-if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+if [ "$SHOW_HELP" = "1" ]; then
     cat <<'USAGE'
 Usage: ./run.sh [options]
 
@@ -21,8 +43,10 @@ Options (via environment variables):
   OMI_SKIP_AUTH_SEED=1     Do not copy auth/onboarding from Omi Dev into named bundles
   OMI_SKIP_SETTINGS_SEED=1  Do not copy shortcuts/settings from Omi Dev into named bundles
   OMI_DEV_EAGER_PERMISSIONS=1  Preserve eager mic/screen/file startup behavior in named bundles
-  OMI_PYTHON_API_URL="..."  Python backend URL (subscriptions, payments, etc; default: https://api.omi.me)
+  OMI_PYTHON_API_URL="..."  Python backend URL (explicit override; named bundles default to dev)
   OMI_SIGN_IDENTITY="..."  Code signing identity (auto-detected if not set)
+  OMI_FORCE_FULL_BUNDLE=1  Rebuild the complete app bundle on this launch
+  OMI_SCAN_STALE_BUNDLES=1  Remove stale same-named app bundles under $HOME (recovery only)
   OMI_ENABLE_LOCAL_AUTOMATION=1   Force the automation bridge on (auto-on for non-prod bundles; see scripts/omi-ctl)
   OMI_DISABLE_LOCAL_AUTOMATION=1  Run a dev build "clean" with the bridge off
   OMI_AUTOMATION_PORT=47777       Bridge port (set per bundle when running several at once)
@@ -39,10 +63,11 @@ Port allocation (avoid 8080 to prevent port conflicts):
   Backend default: 10201
 
 Examples:
-  ./run.sh                                  # Full local dev (backend + tunnel + app)
+  ./run.sh                                  # Fast incremental launch after first run
   OMI_SKIP_BACKEND=1 ./run.sh               # App only (backend running elsewhere)
   OMI_SKIP_TUNNEL=1 ./run.sh                # No Cloudflare tunnel (use direct URL)
   ./run.sh --yolo                            # Quick start: use dev backend, no local services
+  ./run.sh --full                            # Rebuild every packaged dependency
 USAGE
     exit 0
 fi
@@ -59,7 +84,7 @@ apply_yolo_env() {
     export FIREBASE_API_KEY="AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
 }
 
-if [ "$1" = "--yolo" ]; then
+if [ "$YOLO_MODE" = "1" ]; then
     echo ""
     echo "=========================================="
     echo "  YOLO MODE — using development backend"
@@ -84,6 +109,9 @@ unset OPENAI_API_KEY
 unset TOOLCHAINS
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# shellcheck source=fast-dev-bundle.sh
+source "$SCRIPT_DIR/scripts/fast-dev-bundle.sh"
 
 # Timing utilities
 SCRIPT_START_TIME=$(date +%s.%N)
@@ -141,6 +169,35 @@ source "$SCRIPT_DIR/scripts/app-config.sh"
 derive_omi_app_config "${OMI_APP_NAME:-Omi Dev}" || exit 1
 LOCAL_PROFILE=false
 [ "${OMI_DESKTOP_LOCAL_PROFILE:-0}" = "1" ] && LOCAL_PROFILE=true
+
+# A named QA bundle should exercise the shared development service unless its
+# launcher deliberately selects another profile.  Check variable *presence*,
+# not values: `OMI_SKIP_BACKEND=0` is an explicit local-launch request and
+# must never be overwritten by the remote-dev defaults.
+should_default_named_bundle_to_dev_backend() {
+    [ "${IS_NAMED_BUNDLE:-false}" = true ] \
+        && [ "${LOCAL_PROFILE:-false}" = false ] \
+        && [ "${YOLO_MODE:-0}" != "1" ] \
+        && [ -z "${OMI_SKIP_BACKEND+x}" ] \
+        && [ -z "${OMI_SKIP_TUNNEL+x}" ] \
+        && [ -z "${OMI_DESKTOP_API_URL+x}" ] \
+        && [ -z "${OMI_PYTHON_API_URL+x}" ]
+}
+
+NAMED_BUNDLE_DEFAULT_DEV_BACKEND=false
+if should_default_named_bundle_to_dev_backend; then
+    NAMED_BUNDLE_DEFAULT_DEV_BACKEND=true
+fi
+
+# Named QA bundles are remote-dev by default. Apply this before any launch
+# preparation so they do not start a local backend or tunnel, and reapply it
+# after sourcing Backend-Rust/.env below so repository-local defaults cannot
+# silently retarget a QA bundle. Explicit launch environment values above opt
+# out and remain authoritative.
+if [ "$NAMED_BUNDLE_DEFAULT_DEV_BACKEND" = true ]; then
+    substep "Named bundle default: using development backend"
+    apply_yolo_env
+fi
 
 BUILD_DIR="build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
@@ -225,6 +282,137 @@ rm -f $AUTH_DEBUG_LOG
 auth_debug() { echo "[AUTH DEBUG][$(date +%H:%M:%S)] $1" >> $AUTH_DEBUG_LOG; }
 touch $AUTH_DEBUG_LOG
 
+resolve_signing_identity() {
+    if [ -n "$SIGN_IDENTITY" ]; then
+        return
+    fi
+    # Prefer the development identity so local permissions remain stable.
+    SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Apple Development" | head -1 | sed 's/.*"\(.*\)"/\1/')
+    if [ -z "$SIGN_IDENTITY" ]; then
+        SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/')
+    fi
+    if [ -z "$SIGN_IDENTITY" ] && [ "${OMI_ALLOW_ADHOC_SIGN:-0}" = "1" ] && [ "$IS_NAMED_BUNDLE" = true ]; then
+        SIGN_IDENTITY="-"
+        substep "Using ad-hoc signing for named test bundle ($BUNDLE_ID)"
+    fi
+}
+
+sign_app_bundle() {
+    local bundle="$1"
+    local sign_nested="$2"
+    local effective_entitlements="Desktop/Omi.entitlements"
+    local profile_path="$bundle/Contents/embedded.provisionprofile"
+    local use_fallback_entitlements=false
+
+    resolve_signing_identity
+    "$(dirname "$0")/scripts/prepare-local-dev-entitlements.sh" \
+        --validate-identity \
+        "$SIGN_IDENTITY" \
+        "$IS_NAMED_BUNDLE" \
+        "${OMI_ALLOW_ADHOC_SIGN:-0}"
+
+    if [ -z "$SIGN_IDENTITY" ]; then
+        echo ""
+        echo "ERROR: No signing identity found. Ad-hoc signing causes macOS to reset"
+        echo "       Screen Recording permissions for ALL Omi apps (including prod/beta)."
+        echo ""
+        echo "  Fix: Install an Apple Development certificate in Keychain Access,"
+        echo "       or set OMI_SIGN_IDENTITY to a valid identity:"
+        echo "       OMI_SIGN_IDENTITY=\"Apple Development: you@example.com\" ./run.sh"
+        echo ""
+        echo "       For named throwaway bundles only, tests may opt into ad-hoc signing:"
+        echo "       OMI_APP_NAME=\"omi-my-test\" OMI_ALLOW_ADHOC_SIGN=1 ./run.sh"
+        echo ""
+        exit 1
+    fi
+
+    substep "Using identity: $SIGN_IDENTITY"
+    if [ "$sign_nested" = true ]; then
+        if [ -d "$bundle/Contents/Frameworks/Sparkle.framework" ]; then
+            substep "Signing Sparkle framework"
+            codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/Sparkle.framework"
+        fi
+        if [ -d "$bundle/Contents/Frameworks/Sentry.framework" ]; then
+            substep "Signing Sentry framework"
+            codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/Sentry.framework"
+        fi
+        if [ -d "$bundle/Contents/Frameworks/onnxruntime.framework" ]; then
+            substep "Signing onnxruntime framework"
+            codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/onnxruntime.framework"
+        fi
+        if [ -f "$bundle/Contents/Frameworks/libsharpyuv.0.dylib" ]; then
+            substep "Signing libsharpyuv"
+            codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/libsharpyuv.0.dylib"
+        fi
+        if [ -f "$bundle/Contents/Frameworks/libwebp.7.dylib" ]; then
+            substep "Signing libwebp"
+            codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/libwebp.7.dylib"
+        fi
+        local node_bin="$bundle/Contents/Resources/Omi Computer_Omi Computer.bundle/node"
+        if [ -f "$node_bin" ]; then
+            substep "Signing bundled node binary"
+            codesign --force --options runtime --entitlements Desktop/Node.entitlements --sign "$SIGN_IDENTITY" "$node_bin"
+        fi
+    fi
+
+    # Named bundles deliberately omit Sign in with Apple because their bundle
+    # IDs are not covered by Omi Dev's provisioning profile.
+    if [ "$IS_NAMED_BUNDLE" = true ]; then
+        substep "Named bundle — stripping applesignin entitlement"
+        use_fallback_entitlements=true
+    elif [ -f "$profile_path" ]; then
+        local identity_team_id profile_team_id profile_plist
+        identity_team_id=$(echo "$SIGN_IDENTITY" | sed -n 's/.*(\([A-Z0-9]*\)).*/\1/p')
+        profile_plist=$(mktemp /tmp/omi-dev-profile.XXXXXX)
+        profile_team_id=$(security cms -D -i "$profile_path" > "$profile_plist" 2>/dev/null && \
+            /usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" "$profile_plist" 2>/dev/null || true)
+        rm -f "$profile_plist"
+        if [ -z "$profile_team_id" ]; then
+            substep "Could not extract profile team ID (security cms failed); using local entitlements fallback"
+            use_fallback_entitlements=true
+        elif [ "$profile_team_id" != "$identity_team_id" ]; then
+            substep "Profile team ($profile_team_id) != identity team ($identity_team_id); using local entitlements fallback"
+            use_fallback_entitlements=true
+        fi
+    fi
+
+    if [ "$use_fallback_entitlements" = true ]; then
+        local local_signing_mode="development"
+        if [ "$SIGN_IDENTITY" = "-" ]; then
+            local_signing_mode="adhoc"
+        fi
+        effective_entitlements="$("$(dirname "$0")/scripts/prepare-local-dev-entitlements.sh" \
+            Desktop/Omi.entitlements \
+            "$OMI_DEV_DIR" \
+            "$BUNDLE_ID" \
+            "$local_signing_mode")"
+        rm -f "$profile_path"
+    fi
+
+    substep "Signing app bundle"
+    codesign --force --options runtime --entitlements "$effective_entitlements" --sign "$SIGN_IDENTITY" "$bundle"
+}
+
+update_app_desktop_api_url() {
+    local env_file="$1"
+    # An explicit environment or .env endpoint is authoritative over a tunnel.
+    # Tunnels are a local-dev fallback only.
+    if [ -n "${OMI_DESKTOP_API_URL:-}" ]; then
+        EFFECTIVE_API_URL="$OMI_DESKTOP_API_URL"
+    elif [ -n "$TUNNEL_URL" ]; then
+        EFFECTIVE_API_URL="$TUNNEL_URL"
+    else
+        EFFECTIVE_API_URL="http://localhost:$BACKEND_PORT"
+    fi
+
+    if grep -q "^OMI_DESKTOP_API_URL=" "$env_file"; then
+        sed -i '' "s|^OMI_DESKTOP_API_URL=.*|OMI_DESKTOP_API_URL=$EFFECTIVE_API_URL|" "$env_file"
+    else
+        echo "OMI_DESKTOP_API_URL=$EFFECTIVE_API_URL" >> "$env_file"
+    fi
+    substep "OMI_DESKTOP_API_URL=$EFFECTIVE_API_URL"
+}
+
 step "Killing existing instances..."
 auth_debug "BEFORE pkill: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 auth_debug "BEFORE pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E 'auth_|hasCompleted|hasLaunched|currentTier|userShow' || true)"
@@ -255,7 +443,6 @@ step "Cleaning up conflicting app bundles..."
 rm -rf "$BUILD_DIR/Omi Computer.app" 2>/dev/null
 rm -rf "$APP_BUNDLE" 2>/dev/null
 CONFLICTING_APPS=(
-    "$APP_PATH"
     "$APP_DESKTOP_PATH"
     "$APP_DOWNLOADS_PATH"
     "$(dirname "$0")/../../app/build/macos/Build/Products/Debug/Omi.app"
@@ -269,19 +456,22 @@ for app in "${CONFLICTING_APPS[@]}"; do
 done
 # Also remove any stale dev app bundles nested inside Flutter builds.
 find "$(dirname "$0")/../../app/build" -name "$APP_NAME.app" -type d -exec rm -rf {} + 2>/dev/null || true
-# Kill stale app bundles from other repo clones (e.g. ~/omi-desktop/)
-# These confuse LaunchServices and get launched instead of the /Applications copy.
-# Set OMI_SKIP_STALE_BUNDLE_SCAN=1 to skip the $HOME walk (can take minutes on large home dirs).
-if [ "${OMI_SKIP_STALE_BUNDLE_SCAN:-0}" = "1" ]; then
-    substep "Skipping stale clone scan (OMI_SKIP_STALE_BUNDLE_SCAN=1)"
-else
+# A recursive $HOME scan can take minutes and is unnecessary when relaunching
+# the already-registered named dev bundle. Keep it as an explicit recovery tool
+# for a stale LaunchServices registration instead of charging every edit.
+if [ "${OMI_SCAN_STALE_BUNDLES:-0}" = "1" ] && [ "${OMI_SKIP_STALE_BUNDLE_SCAN:-0}" != "1" ]; then
+    substep "Scanning for stale clone bundles (OMI_SCAN_STALE_BUNDLES=1)"
     find "$HOME" -maxdepth 4 -name "$APP_NAME.app" -type d -not -path "$APP_BUNDLE" -not -path "$APP_PATH" 2>/dev/null | while read stale; do
         substep "Removing stale clone: $stale"
         rm -rf "$stale"
     done
+else
+    substep "Skipping stale clone scan (set OMI_SCAN_STALE_BUNDLES=1 to enable)"
 fi
 
-if [ "${OMI_SKIP_TUNNEL:-0}" != "1" ]; then
+if [ -n "${OMI_DESKTOP_API_URL:-}" ]; then
+    substep "Skipping tunnel (explicit OMI_DESKTOP_API_URL)"
+elif [ "${OMI_SKIP_TUNNEL:-0}" != "1" ]; then
     step "Starting Cloudflare quick tunnel..."
     if command -v cloudflared >/dev/null 2>&1; then
         TUNNEL_LOG=$(mktemp /tmp/cloudflared-XXXXXX.log)
@@ -317,7 +507,7 @@ if [ ! -f ".env" ] && [ -f "../../backend/.env" ]; then
 elif [ ! -f ".env" ] && [ -f "../Backend/.env" ]; then
     cp "../Backend/.env" ".env"
 fi
-if [ ! -f ".env" ] && [ "$1" != "--yolo" ]; then
+if [ ! -f ".env" ] && [ "$YOLO_MODE" != "1" ] && [ "$NAMED_BUNDLE_DEFAULT_DEV_BACKEND" != true ]; then
     echo ""
     echo "=== First-time setup ==="
     echo "No .env file found at $BACKEND_DIR/.env"
@@ -355,7 +545,7 @@ fi
 if [ -f "$BACKEND_DIR/.env" ]; then
     set -a; source "$BACKEND_DIR/.env"; set +a
 fi
-if [ "$1" = "--yolo" ]; then
+if [ "$YOLO_MODE" = "1" ] || [ "$NAMED_BUNDLE_DEFAULT_DEV_BACKEND" = true ]; then
     apply_yolo_env
 fi
 
@@ -459,6 +649,54 @@ while true; do
     sleep 2
 done
 
+FAST_BUNDLE=0
+FAST_BUNDLE_STAMP="$OMI_DEV_DIR/fast-dev-bundles/$BUNDLE_ID.stamp"
+fast_bundle_fingerprint() {
+    omi_fast_bundle_fingerprint \
+        "$SCRIPT_DIR" \
+        "bundle-id=$BUNDLE_ID" \
+        "signing-identity=$SIGN_IDENTITY" \
+        "yolo=$YOLO_MODE" \
+        "skip-backend=${OMI_SKIP_BACKEND:-0}" \
+        "skip-tunnel=${OMI_SKIP_TUNNEL:-0}" \
+        "desktop-api-url=${OMI_DESKTOP_API_URL:-}" \
+        "python-api-url=${OMI_PYTHON_API_URL:-}" \
+        "backend-port=$BACKEND_PORT"
+}
+
+step "Checking reusable development bundle..."
+resolve_signing_identity
+FAST_BUNDLE_FINGERPRINT="$(fast_bundle_fingerprint)"
+if [ "$FORCE_FULL_BUNDLE" = "1" ]; then
+    substep "Full bundle requested (--full or OMI_FORCE_FULL_BUNDLE=1)"
+elif [ "$LOCAL_PROFILE" = true ]; then
+    # The profile generates credential-bearing .env files. Keep that isolated
+    # harness lane conservative until its configuration has a secret-free stamp.
+    substep "Local profile requires a full bundle"
+elif [ ! -d "$APP_PATH/Contents" ]; then
+    substep "No installed bundle at $APP_PATH"
+elif ! omi_fast_bundle_stamp_matches "$FAST_BUNDLE_STAMP" "$FAST_BUNDLE_FINGERPRINT"; then
+    substep "Packaged inputs or launch configuration changed"
+else
+    FAST_BUNDLE=1
+    substep "Fast path: reusing installed bundle at $APP_PATH"
+fi
+
+if [ "$FAST_BUNDLE" = "1" ]; then
+    step "Building Swift app (swift build -c debug)..."
+    xcrun swift build -c debug --package-path Desktop
+
+    step "Patching installed app executable..."
+    PATCHED_BINARY="$(mktemp "$APP_PATH/Contents/MacOS/.omi-fast-executable.XXXXXX")"
+    cp -f "Desktop/.build/debug/$BINARY_NAME" "$PATCHED_BINARY"
+    chmod +x "$PATCHED_BINARY"
+    install_name_tool -add_rpath "@executable_path/../Frameworks" "$PATCHED_BINARY" 2>/dev/null || true
+    mv -f "$PATCHED_BINARY" "$APP_PATH/Contents/MacOS/$BINARY_NAME"
+    update_app_desktop_api_url "$APP_PATH/Contents/Resources/.env"
+
+    step "Signing updated app with hardened runtime..."
+    sign_app_bundle "$APP_PATH" false
+else
 step "Preparing agent runtime..."
 "$(dirname "$0")/scripts/prepare-agent-runtime.sh" --universal-node
 
@@ -641,20 +879,7 @@ elif [ -f ".env.app" ]; then
 else
     touch "$APP_BUNDLE/Contents/Resources/.env"
 fi
-# Set OMI_DESKTOP_API_URL: tunnel URL if available, otherwise from .env or local backend
-if [ -n "$TUNNEL_URL" ]; then
-    EFFECTIVE_API_URL="$TUNNEL_URL"
-elif [ -n "$OMI_DESKTOP_API_URL" ]; then
-    EFFECTIVE_API_URL="$OMI_DESKTOP_API_URL"
-else
-    EFFECTIVE_API_URL="http://localhost:$BACKEND_PORT"
-fi
-if grep -q "^OMI_DESKTOP_API_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
-    sed -i '' "s|^OMI_DESKTOP_API_URL=.*|OMI_DESKTOP_API_URL=$EFFECTIVE_API_URL|" "$APP_BUNDLE/Contents/Resources/.env"
-else
-    echo "OMI_DESKTOP_API_URL=$EFFECTIVE_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
-fi
-substep "OMI_DESKTOP_API_URL=$EFFECTIVE_API_URL"
+update_app_desktop_api_url "$APP_BUNDLE/Contents/Resources/.env"
 # Bootstrap FIREBASE_API_KEY — check env var first (yolo mode), then backend .env
 if ! grep -q "^FIREBASE_API_KEY=" "$APP_BUNDLE/Contents/Resources/.env"; then
     FIREBASE_KEY="${FIREBASE_API_KEY:-}"
@@ -718,114 +943,7 @@ chmod -R u+w "$APP_BUNDLE"
 xattr -cr "$APP_BUNDLE"
 
 step "Signing app with hardened runtime..."
-# Auto-detect a stable signing identity so TCC permissions persist across rebuilds.
-# Ad-hoc signing (--sign -) generates a new CDHash each build, causing macOS to
-# reset Screen Recording, Accessibility, and Notification permissions every time.
-if [ -z "$SIGN_IDENTITY" ]; then
-    # For dev builds: prefer Apple Development (matches Mac Development provisioning profile,
-    # required for native Sign In with Apple). Fall back to Developer ID if unavailable.
-    SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Apple Development" | head -1 | sed 's/.*"\(.*\)"/\1/')
-    if [ -z "$SIGN_IDENTITY" ]; then
-        SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/')
-    fi
-    if [ -z "$SIGN_IDENTITY" ] && [ "${OMI_ALLOW_ADHOC_SIGN:-0}" = "1" ] && [ "$IS_NAMED_BUNDLE" = true ]; then
-        SIGN_IDENTITY="-"
-        substep "Using ad-hoc signing for named test bundle ($BUNDLE_ID)"
-    fi
-fi
-
-"$(dirname "$0")/scripts/prepare-local-dev-entitlements.sh" \
-    --validate-identity \
-    "$SIGN_IDENTITY" \
-    "$IS_NAMED_BUNDLE" \
-    "${OMI_ALLOW_ADHOC_SIGN:-0}"
-
-if [ -n "$SIGN_IDENTITY" ]; then
-    substep "Using identity: $SIGN_IDENTITY"
-    if [ -d "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework" ]; then
-        substep "Signing Sparkle framework"
-        codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
-    fi
-    if [ -d "$APP_BUNDLE/Contents/Frameworks/Sentry.framework" ]; then
-        substep "Signing Sentry framework"
-        codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/Sentry.framework"
-    fi
-    if [ -d "$APP_BUNDLE/Contents/Frameworks/onnxruntime.framework" ]; then
-        substep "Signing onnxruntime framework"
-        codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/onnxruntime.framework"
-    fi
-    if [ -f "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib" ]; then
-        substep "Signing libsharpyuv"
-        codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib"
-    fi
-    if [ -f "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib" ]; then
-        substep "Signing libwebp"
-        codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib"
-    fi
-    # Sign the bundled node binary with developer identity + Node.entitlements
-    # (macOS requires executables inside app bundles to be properly signed)
-    NODE_BIN="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle/node"
-    if [ -f "$NODE_BIN" ]; then
-        substep "Signing bundled node binary"
-        codesign --force --options runtime --entitlements Desktop/Node.entitlements --sign "$SIGN_IDENTITY" "$NODE_BIN"
-    fi
-
-    # If local signing identity doesn't match embedded profile team, macOS rejects
-    # restricted entitlements (notably com.apple.developer.applesignin) and launch
-    # fails with RBS/launchd spawn errors. Fallback to a local dev entitlements set.
-    #
-    # Named bundles always use fallback — they have no provisioning profile, so
-    # com.apple.developer.applesignin would cause launchd to reject the launch.
-    EFFECTIVE_ENTITLEMENTS="Desktop/Omi.entitlements"
-    PROFILE_PATH="$APP_BUNDLE/Contents/embedded.provisionprofile"
-    USE_FALLBACK_ENTITLEMENTS=false
-
-    if [ "$IS_NAMED_BUNDLE" = true ]; then
-        substep "Named bundle — stripping applesignin entitlement"
-        USE_FALLBACK_ENTITLEMENTS=true
-    elif [ -f "$PROFILE_PATH" ]; then
-        IDENTITY_TEAM_ID=$(echo "$SIGN_IDENTITY" | sed -n 's/.*(\([A-Z0-9]*\)).*/\1/p')
-        PROFILE_TEAM_ID=""
-        PROFILE_TEAM_ID=$(security cms -D -i "$PROFILE_PATH" > /tmp/omi-dev-profile.plist 2>/dev/null && \
-            /usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" /tmp/omi-dev-profile.plist 2>/dev/null || true)
-        if [ -z "$PROFILE_TEAM_ID" ]; then
-            substep "Could not extract profile team ID (security cms failed); using local entitlements fallback"
-            USE_FALLBACK_ENTITLEMENTS=true
-        elif [ "$PROFILE_TEAM_ID" != "$IDENTITY_TEAM_ID" ]; then
-            substep "Profile team ($PROFILE_TEAM_ID) != identity team ($IDENTITY_TEAM_ID); using local entitlements fallback"
-            USE_FALLBACK_ENTITLEMENTS=true
-        fi
-    fi
-
-    if [ "$USE_FALLBACK_ENTITLEMENTS" = true ]; then
-        LOCAL_SIGNING_MODE="development"
-        if [ "$SIGN_IDENTITY" = "-" ]; then
-            LOCAL_SIGNING_MODE="adhoc"
-        fi
-        LOCAL_DEV_ENTITLEMENTS="$("$(dirname "$0")/scripts/prepare-local-dev-entitlements.sh" \
-            Desktop/Omi.entitlements \
-            "$OMI_DEV_DIR" \
-            "$BUNDLE_ID" \
-            "$LOCAL_SIGNING_MODE")"
-        rm -f "$PROFILE_PATH"
-        EFFECTIVE_ENTITLEMENTS="$LOCAL_DEV_ENTITLEMENTS"
-    fi
-    substep "Signing app bundle"
-    codesign --force --options runtime --entitlements "$EFFECTIVE_ENTITLEMENTS" --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
-else
-    echo ""
-    echo "ERROR: No signing identity found. Ad-hoc signing causes macOS to reset"
-    echo "       Screen Recording permissions for ALL Omi apps (including prod/beta)."
-    echo ""
-    echo "  Fix: Install an Apple Development certificate in Keychain Access,"
-    echo "       or set OMI_SIGN_IDENTITY to a valid identity:"
-    echo "       OMI_SIGN_IDENTITY=\"Apple Development: you@example.com\" ./run.sh"
-    echo ""
-    echo "       For named throwaway bundles only, tests may opt into ad-hoc signing:"
-    echo "       OMI_APP_NAME=\"omi-my-test\" OMI_ALLOW_ADHOC_SIGN=1 ./run.sh"
-    echo ""
-    exit 1
-fi
+sign_app_bundle "$APP_BUNDLE" true
 
 step "Removing quarantine attributes..."
 chmod -R u+w "$APP_BUNDLE"
@@ -837,6 +955,7 @@ step "Auditing app bundle dependencies..."
 step "Installing to /Applications/..."
 # Install to /Applications/ so "Quit & Reopen" (after granting screen recording
 # permission) launches the correct binary instead of a stale copy elsewhere.
+rm -rf "$APP_PATH"
 ditto "$APP_BUNDLE" "$APP_PATH"
 substep "Installed to $APP_PATH"
 
@@ -856,6 +975,12 @@ for stale in /private/tmp/omi-dmg-staging-*/Omi\ Beta.app; do
 done
 # Register the /Applications/ copy as the canonical bundle for this bundle ID
 $LSREGISTER -f "$APP_PATH" 2>/dev/null || true
+
+# Agent preparation may stage the universal Node executable after the initial
+# check. Stamp the completed packaged inputs, not the pre-bootstrap state.
+FAST_BUNDLE_FINGERPRINT="$(fast_bundle_fingerprint)"
+omi_fast_bundle_write_stamp "$FAST_BUNDLE_STAMP" "$FAST_BUNDLE_FINGERPRINT"
+substep "Recorded reusable bundle fingerprint"
 
 if [ "${OMI_DESKTOP_LOCAL_PROFILE:-0}" = "1" ]; then
     step "Resetting local-profile Keychain state..."
@@ -898,6 +1023,8 @@ if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_SETTINGS_SEED:-0}" != "1" ]; t
         echo "Warning: could not seed shortcuts/settings from Omi Dev. Continuing with bundle defaults."
     fi
 fi
+
+fi # full bundle path
 
 step "Starting app..."
 

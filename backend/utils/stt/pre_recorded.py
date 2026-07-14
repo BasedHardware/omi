@@ -293,7 +293,12 @@ def deepgram_prerecorded(
         List of word dicts with format: {'timestamp': [start, end], 'speaker': 'SPEAKER_XX', 'text': 'word'}
         Or tuple of (words, language) if return_language=True
     """
-    logger.info(f'deepgram_prerecorded {audio_url} {speakers_count} {attempts}')
+    logger.info(
+        'deepgram_prerecorded url_len=%s speakers_count=%s attempt=%s',
+        len(audio_url),
+        speakers_count,
+        attempts,
+    )
 
     try:
         # 'multi' language means auto-detection
@@ -363,7 +368,7 @@ def deepgram_prerecorded(
         return words
 
     except Exception as e:
-        logger.error(f'Deepgram prerecorded error: {e}')
+        logger.error('Deepgram prerecorded error exception_type=%s attempt=%s', type(e).__name__, attempts + 1)
         if attempts < 1:
             return deepgram_prerecorded(
                 audio_url,
@@ -375,7 +380,7 @@ def deepgram_prerecorded(
                 model,
                 keywords,
             )
-        raise RuntimeError(f'Deepgram transcription failed after {attempts + 1} attempts: {e}')
+        raise RuntimeError(f'Deepgram transcription failed after {attempts + 1} attempts') from e
 
 
 @timeit
@@ -494,7 +499,11 @@ def deepgram_prerecorded_from_bytes(
         return words
 
     except Exception as e:
-        logger.error(f'Deepgram prerecorded from bytes error: {e}')
+        logger.error(
+            'Deepgram prerecorded from bytes error exception_type=%s attempt=%s',
+            type(e).__name__,
+            attempts + 1,
+        )
         if attempts < 1:
             return deepgram_prerecorded_from_bytes(
                 audio_bytes,
@@ -508,7 +517,7 @@ def deepgram_prerecorded_from_bytes(
                 return_language,
                 keywords,
             )
-        raise RuntimeError(f'Deepgram transcription failed after {attempts + 1} attempts: {e}')
+        raise RuntimeError(f'Deepgram transcription failed after {attempts + 1} attempts') from e
 
 
 @timeit
@@ -615,10 +624,10 @@ def modulate_prerecorded_from_bytes(
         return words
 
     except Exception as e:
-        logger.error(f'Modulate prerecorded error: {e}')
+        logger.error('Modulate prerecorded error exception_type=%s attempt=%s', type(e).__name__, attempts + 1)
         if attempts < 2:
             return modulate_prerecorded_from_bytes(audio_bytes, sample_rate, diarize, attempts + 1, return_language)
-        raise RuntimeError(f'Modulate transcription failed after {attempts + 1} attempts: {e}')
+        raise RuntimeError(f'Modulate transcription failed after {attempts + 1} attempts') from e
 
 
 @timeit
@@ -630,7 +639,9 @@ def modulate_prerecorded(
     diarize: bool = True,
     language: Optional[str] = None,
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
-    logger.info(f'modulate_prerecorded {audio_url} {speakers_count} {attempts}')
+    logger.info(
+        'modulate_prerecorded url_len=%s speakers_count=%s attempt=%s', len(audio_url), speakers_count, attempts
+    )
     try:
         with httpx.Client(timeout=_MODULATE_TIMEOUT) as client:
             resp = client.get(audio_url)
@@ -640,10 +651,14 @@ def modulate_prerecorded(
             audio_bytes, diarize=diarize, attempts=attempts, return_language=return_language
         )
     except Exception as e:
-        logger.error(f'Modulate prerecorded (url) error: {e}')
+        logger.error(
+            'Modulate prerecorded (url) error exception_type=%s attempt=%s',
+            type(e).__name__,
+            attempts + 1,
+        )
         if attempts < 1:
             return modulate_prerecorded(audio_url, speakers_count, attempts + 1, return_language, diarize, language)
-        raise RuntimeError(f'Modulate transcription (url) failed after {attempts + 1} attempts: {e}')
+        raise RuntimeError(f'Modulate transcription (url) failed after {attempts + 1} attempts') from e
 
 
 # ---------------------------------------------------------------------------
@@ -852,12 +867,12 @@ def parakeet_prerecorded_from_bytes(
         return words
 
     except Exception as e:
-        logger.error(f'Parakeet prerecorded error: {e}')
+        logger.error('Parakeet prerecorded error exception_type=%s attempt=%s', type(e).__name__, attempts + 1)
         if attempts < 1:
             return parakeet_prerecorded_from_bytes(
                 audio_bytes, sample_rate, diarize, attempts + 1, None, channels, language, return_language
             )
-        raise RuntimeError(f'Parakeet transcription failed after {attempts + 1} attempts: {e}')
+        raise RuntimeError(f'Parakeet transcription failed after {attempts + 1} attempts') from e
 
 
 @timeit
@@ -892,10 +907,14 @@ def parakeet_prerecorded(
             audio_bytes, diarize=diarize, attempts=attempts, return_language=return_language, language=language
         )
     except Exception as e:
-        logger.error(f'Parakeet prerecorded (url) error: {e}')
+        logger.error(
+            'Parakeet prerecorded (url) error exception_type=%s attempt=%s',
+            type(e).__name__,
+            attempts + 1,
+        )
         if attempts < 1:
             return parakeet_prerecorded(audio_url, speakers_count, attempts + 1, return_language, diarize, language)
-        raise RuntimeError(f'Parakeet transcription (url) failed after {attempts + 1} attempts: {e}')
+        raise RuntimeError(f'Parakeet transcription (url) failed after {attempts + 1} attempts') from e
 
 
 def _parakeet_assign_speaker_sync(
@@ -1003,20 +1022,14 @@ class ParakeetPrerecordedProvider(PrerecordedSTTProvider):
         )
 
 
-def get_prerecorded_provider(language: str = 'en') -> PrerecordedSTTProvider:
-    """Factory: return the active provider based on STT_PRERECORDED_MODEL with language fallback."""
-    base_lang = language.split('-')[0].split('_')[0].lower() if language else 'en'
-    for m in get_prerecorded_models():
-        m = m.strip()
-        if m == 'modulate-velma-2':
-            return ModulatePrerecordedProvider()
-        if m == 'parakeet':
-            if base_lang in _parakeet_languages:
-                return ParakeetPrerecordedProvider()
-            continue
-        if m.startswith('dg-'):
-            return DeepgramPrerecordedProvider(model=m.replace('dg-', '', 1))
-    return DeepgramPrerecordedProvider(model='nova-3')
+def get_prerecorded_provider(language: Optional[str] = 'en') -> PrerecordedSTTProvider:
+    """Construct exactly the language-aware provider selected for telemetry."""
+    service, _provider_language, model = get_prerecorded_service(language)
+    if service == PrerecordedSTTService.MODULATE:
+        return ModulatePrerecordedProvider()
+    if service == PrerecordedSTTService.PARAKEET:
+        return ParakeetPrerecordedProvider()
+    return DeepgramPrerecordedProvider(model=model)
 
 
 # ---------------------------------------------------------------------------
@@ -1035,7 +1048,7 @@ def prerecorded(
     keywords: Optional[Sequence[str]] = None,
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     """Route pre-recorded URL transcription through STT_PRERECORDED_MODEL."""
-    provider = get_prerecorded_provider()
+    provider = get_prerecorded_provider(language)
     return provider.transcribe_url(
         audio_url,
         speakers_count=speakers_count,
@@ -1060,7 +1073,7 @@ def prerecorded_from_bytes(
     keywords: Optional[Sequence[str]] = None,
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     """Route pre-recorded bytes transcription through STT_PRERECORDED_MODEL."""
-    provider = get_prerecorded_provider()
+    provider = get_prerecorded_provider(language)
     return provider.transcribe_bytes(
         audio_bytes,
         sample_rate=sample_rate,

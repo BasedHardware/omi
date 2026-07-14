@@ -45,6 +45,9 @@ concurrency:
 env:
   SERVICE: backend
   REGION: us-central1
+  # A per-run Cloud Run tag exposes only the no-traffic production candidate
+  # to the known-audio gate. It is removed before normal traffic promotion.
+  TRANSCRIPTION_CANDIDATE_TAG: stt-gate-${{ github.run_id }}-${{ github.run_attempt }}
 
 jobs:
   repair-traffic:
@@ -134,6 +137,28 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Set up Node for Firebase index deployment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install locked Firebase tooling
+        run: npm ci --ignore-scripts
+
+      - name: Verify serving sync ledger fence mode before deploy
+        env:
+          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
+        run: |
+          python3 backend/scripts/verify_sync_ledger_fence_transition.py \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --desired-mode="$SYNC_LEDGER_FENCE_MODE"
+
+      - name: Reconcile generated Firestore indexes before backend deploy
+        run: |
+          python3 backend/scripts/reconcile_firestore_indexes.py \
+            --project "${{ vars.GCP_PROJECT_ID }}"
+
       - name: Login to GCR
         run: gcloud auth configure-docker
 
@@ -155,7 +180,13 @@ jobs:
         env:
           CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
           CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          MCP_OAUTH_CLAUDE_CLIENT_ID: ${{ vars.MCP_OAUTH_CLAUDE_CLIENT_ID }}
+          MCP_OAUTH_CLAUDE_CLIENT_NAME: ${{ vars.MCP_OAUTH_CLAUDE_CLIENT_NAME }}
+          MCP_OAUTH_CLAUDE_REDIRECT_URIS: ${{ vars.MCP_OAUTH_CLAUDE_REDIRECT_URIS }}
           OMI_LLM_GATEWAY_URL: ${{ vars.OMI_LLM_GATEWAY_URL }}
+          STT_PRERECORDED_MODEL: ${{ vars.STT_PRERECORDED_MODEL }}
+          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
         run: |
           python3 backend/scripts/render_backend_runtime_env.py --env ${{ vars.ENV }} >> "$GITHUB_OUTPUT"
 
@@ -174,6 +205,8 @@ jobs:
           python3 backend/scripts/preflight-cloud-run-deploy.py "${PREFLIGHT_ARGS[@]}"
 
       - name: Validate backend runtime env before deploy
+        env:
+          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
         run: |
           python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-workflows --check-rendered-cloud-run
 
@@ -200,6 +233,7 @@ jobs:
           no_traffic: true
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
+            ${{ format('--tag={0}', env.TRANSCRIPTION_CANDIDATE_TAG) }}
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: ${{ steps.runtime-env.outputs.backend_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.backend_secrets }}
@@ -268,6 +302,33 @@ jobs:
         if: ${{ github.event.inputs.deploy_targets == 'all' }}
         uses: azure/setup-helm@v3
 
+      - name: Apply non-secret backend runtime config
+        if: ${{ github.event.inputs.deploy_targets == 'all' }}
+        env:
+          ENVIRONMENT: ${{ vars.ENV }}
+          CONVERSATION_SUMMARIZED_APP_IDS: ${{ vars.CONVERSATION_SUMMARIZED_APP_IDS }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          MCP_AUTHORIZATION_SERVER_URL: ${{ vars.MCP_AUTHORIZATION_SERVER_URL }}
+          MCP_OAUTH_CHATGPT_CLIENT_ID: ${{ vars.MCP_OAUTH_CHATGPT_CLIENT_ID }}
+          MCP_OAUTH_CHATGPT_REDIRECT_URIS: ${{ vars.MCP_OAUTH_CHATGPT_REDIRECT_URIS }}
+          MCP_OAUTH_CLAUDE_CLIENT_ID: ${{ vars.MCP_OAUTH_CLAUDE_CLIENT_ID }}
+          MCP_OAUTH_CLAUDE_CLIENT_NAME: ${{ vars.MCP_OAUTH_CLAUDE_CLIENT_NAME }}
+          MCP_OAUTH_CLAUDE_REDIRECT_URIS: ${{ vars.MCP_OAUTH_CLAUDE_REDIRECT_URIS }}
+          MCP_OAUTH_PUBLIC_CLIENT_ID: ${{ vars.MCP_OAUTH_PUBLIC_CLIENT_ID }}
+          MCP_OAUTH_PUBLIC_REDIRECT_URIS: ${{ vars.MCP_OAUTH_PUBLIC_REDIRECT_URIS }}
+          MCP_RESOURCE_URL: ${{ vars.MCP_RESOURCE_URL }}
+          RAPID_API_HOST: ${{ vars.RAPID_API_HOST }}
+          REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
+          STT_PRERECORDED_MODEL: ${{ vars.STT_PRERECORDED_MODEL }}
+          STT_SERVICE_MODELS: ${{ vars.STT_SERVICE_MODELS }}
+          TYPESENSE_HOST: ${{ vars.TYPESENSE_HOST }}
+          TWILIO_ACCOUNT_SID: ${{ vars.TWILIO_ACCOUNT_SID }}
+          TWILIO_API_KEY_SID: ${{ vars.TWILIO_API_KEY_SID }}
+          TWILIO_TWIML_APP_SID: ${{ vars.TWILIO_TWIML_APP_SID }}
+          X_OAUTH_CLIENT_ID: ${{ vars.X_OAUTH_CLIENT_ID }}
+          X_OAUTH_REDIRECT_URI: ${{ vars.X_OAUTH_REDIRECT_URI }}
+        run: backend/scripts/deploy-backend-config.sh
+
       - name: Deploy backend-secrets to GKE using Helm
         if: ${{ github.event.inputs.deploy_targets == 'all' }}
         env:
@@ -325,8 +386,49 @@ jobs:
             --wait-revision-ready backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }}
 
       - name: Validate backend runtime env after deploy
+        env:
+          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
         run: |
           python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-workflows --check-live-cloud-run
+
+      # The manual development deployment runs this same no-traffic probe before
+      # promotion, making it the required auth and route dry run for production.
+      - name: Resolve transcription candidate URL
+        id: transcription-candidate
+        run: |
+          candidate_url="$(python3 backend/scripts/resolve_cloud_run_tagged_url.py \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --service=${{ env.SERVICE }} \
+            --revision=${{ steps.capture-backend-revision.outputs.revision }} \
+            --tag="$TRANSCRIPTION_CANDIDATE_TAG")"
+          printf 'url=%s\n' "$candidate_url" >> "$GITHUB_OUTPUT"
+
+      - name: Gate backend candidate on known audio
+        uses: ./.github/actions/transcription-release-candidate-probe
+        with:
+          candidate_api_url: ${{ steps.transcription-candidate.outputs.url }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Remove passed transcription candidate tag
+        if: ${{ success() }}
+        run: |
+          gcloud run services update-traffic ${{ env.SERVICE }} \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --remove-tags="$TRANSCRIPTION_CANDIDATE_TAG" \
+            --quiet
+
+      - name: Remove failed transcription candidate tag
+        # Tag is created at deploy-backend; clean it up on any later failure,
+        # not only after the candidate URL resolution step succeeds.
+        if: ${{ failure() && steps.deploy-backend.outcome == 'success' }}
+        run: |
+          gcloud run services update-traffic ${{ env.SERVICE }} \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --remove-tags="$TRANSCRIPTION_CANDIDATE_TAG" \
+            --quiet
 
       - name: Verify validated revisions are still current
         run: |
@@ -341,6 +443,18 @@ jobs:
           gcloud run services update-traffic backend-sync --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-sync-revision.outputs.revision }}=100 --quiet
           gcloud run services update-traffic backend-sync-backfill --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.sync-backfill.outputs.revision }}=100 --quiet
           gcloud run services update-traffic backend-integration --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-integration-revision.outputs.revision }}=100 --quiet
+
+      - name: Smoke What Matters Now datastore query
+        if: ${{ github.event.inputs.environment == 'development' }}
+        env:
+          OMI_TASK_INTELLIGENCE_SMOKE_UID: ${{ secrets.OMI_TASK_INTELLIGENCE_SMOKE_UID }}
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          ADMIN_KEY="$(gcloud secrets versions access latest --secret=ADMIN_KEY --project="$PROJECT_ID")"
+          export ADMIN_KEY
+          trap 'unset ADMIN_KEY' EXIT
+          python3 backend/scripts/smoke_what_matters_now.py --base-url https://api.omi.dev
 
       - name: Cloud Run deploy status report
         if: always()

@@ -188,8 +188,8 @@ def _enforce_fast_unit_duration_guard(session):
     # ``slow``/``integration`` markers, so CPU time is the right signal here. The advisory
     # timing summary in pytest_terminal_summary still reports wall-clock for visibility.
     # The warning threshold is the target for fast unit tests. The failure threshold is the
-    # blocking budget; CI keeps it higher than local pre-push so machine variance around the
-    # target does not block unrelated PRs.
+    # blocking budget; local pre-push stays strict, while CI uses a broad sanity ceiling so
+    # cross-machine CPU differences do not make unrelated pull requests flaky.
 
     allowlist = _read_duration_allowlist()
     unit_test_items = {

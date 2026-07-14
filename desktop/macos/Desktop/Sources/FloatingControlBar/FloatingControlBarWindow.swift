@@ -120,14 +120,15 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         pillSurfaceTopPadding + notchInputPanelMinimumContentHeight + notchInputPanelVerticalPadding
     }
     private static let voiceBarSize = NSSize(width: 224, height: 42)
+    /// Readable status strip under chrome/pill for too-short PTT / mic errors.
+    static let pttHintRowHeight: CGFloat = 30
     private static let maxBarSize = NSSize(width: 1200, height: 1000)
     static let notchExpandedWidth: CGFloat = 382
     private static let notificationWidth: CGFloat = 430
     private static let notificationHeight: CGFloat = 108
     private static let notificationSpacing: CGFloat = 8
-    /// Height of the transient PTT hint row shown below the notch chrome
-    /// (e.g. "Hold longer to record") after a too-short tap.
-    static let pttHintRowHeight: CGFloat = 30
+    /// Vertical room for the readable PTT status banner under chrome/pill.
+    static var pttStatusBannerBudget: CGFloat { notificationSpacing + pttHintRowHeight }
     private static let askOmiAnimationDuration: TimeInterval = 0.14
     private static let askOmiSettleDelay: TimeInterval = 0.16
     /// Hover-menu (agent switcher) motion.
@@ -168,10 +169,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private var suppressHoverResize = false
     private var inputHeightCancellable: AnyCancellable?
     private var responseHeightCancellable: AnyCancellable?
-    private var pttHintCancellable: AnyCancellable?
     private var agentPillsCancellable: AnyCancellable?
     private var voiceResponseGlowCancellable: AnyCancellable?
     private var draggableBarCancellable: AnyCancellable?
+    private var pttHintCancellable: AnyCancellable?
     private var previousVoiceResponseGlowActive = false
     private var resizeWorkItem: DispatchWorkItem?
     /// Saved center point from before chat opened, used to restore position on close.
@@ -357,14 +358,18 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private var collapsedBarSize: NSSize { notchModeEnabled ? notchCollapsedSize : Self.minBarSize }
     private var expandedContentWidth: CGFloat { Self.notchExpandedWidth }
     private var inputPanelHeight: CGFloat {
-        let base = notchModeEnabled ? notchInputPanelHeightForCurrentScreen : Self.pillInputPanelHeight
+        // Chat always mounts shared top chrome, so budget chrome height even off-notch.
+        let base = (notchModeEnabled || state.showingAIConversation)
+            ? notchInputPanelHeightForCurrentScreen
+            : Self.pillInputPanelHeight
+        let statusBanner = state.pttHintText.isEmpty ? 0 : Self.pttStatusBannerBudget
         // When notch mode renders the "Back / Omi Chat" header (agent pills
         // present), the input panel needs additional vertical room so the
         // header + editor + padding all fit. (Codex P2 — input/send clipping.)
         if !AgentPillsManager.shared.pills.isEmpty {
-            return base + Self.notchChatHeaderVerticalBudget
+            return base + statusBanner + Self.notchChatHeaderVerticalBudget
         }
-        return base
+        return base + statusBanner
     }
 
     var onPlayPause: (() -> Void)?
@@ -717,14 +722,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private func defaultFrameForCurrentState() -> NSRect {
         let size: NSSize
         if state.showingAIConversation {
-            size = NSSize(width: expandedContentWidth, height: max(inputPanelHeight, frame.height))
-        } else if notchModeEnabled && !state.pttHintText.isEmpty {
-            size = NSSize(
-                width: Self.notchExpandedWidth,
-                height: notchChromeHeightForCurrentScreen + Self.notificationSpacing + Self.pttHintRowHeight
-            )
+            let height = max(inputPanelHeight, frame.height)
+            size = NSSize(width: expandedContentWidth, height: height)
+        } else if !state.pttHintText.isEmpty {
+            size = pttHintSurfaceSize(usesNotchIsland: notchModeEnabled)
         } else if state.isVoiceListening {
-            size = notchSize(active: true)
+            size = notchModeEnabled ? notchSize(active: true) : Self.voiceBarSize
         } else if state.currentNotification != nil {
             size = NSSize(
                 width: Self.notificationWidth,
@@ -745,18 +748,18 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         if state.showingAIConversation {
             let defaultWidth = Self.notchExpandedWidth
             let width = max(defaultWidth, currentResponseSurfaceWidth(usesNotchIsland: usesNotchIsland))
-            let panelHeight = usesNotchIsland ? notchInputPanelHeightForCurrentScreen : Self.pillInputPanelHeight
+            // Chat always mounts shared top chrome, so budget chrome height even
+            // on non-notch displays (pillSurfaceTopPadding alone would clip).
+            let panelHeight = notchInputPanelHeightForCurrentScreen
+            let statusBanner = state.pttHintText.isEmpty ? 0 : Self.pttStatusBannerBudget
             let reservedGlowOutset = usesNotchIsland ? Self.notchGlowOutsetBottom : 0
-            let contentHeight = max(panelHeight, frame.height - reservedGlowOutset)
+            let contentHeight = max(panelHeight + statusBanner, frame.height - reservedGlowOutset)
             return NSSize(width: width, height: contentHeight)
         }
-        // Notch: grow just enough to fit the transient too-short PTT hint row.
+        // Grow just enough to fit the readable PTT status banner under chrome/pill.
         // (isVoiceListening is true during the hint, so this must precede it.)
-        if usesNotchIsland && !state.pttHintText.isEmpty {
-            return NSSize(
-                width: Self.notchExpandedWidth,
-                height: notchChromeHeightForCurrentScreen + Self.notificationSpacing + Self.pttHintRowHeight
-            )
+        if !state.pttHintText.isEmpty {
+            return pttHintSurfaceSize(usesNotchIsland: usesNotchIsland)
         }
         if state.isVoiceListening {
             return usesNotchIsland ? notchSize(active: true) : Self.voiceBarSize
@@ -784,14 +787,15 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         if state.showingAIConversation {
             let width = Self.notchExpandedWidth
             let chromeHeight = Self.notchChromeHeight(for: screen)
-            let panelHeight = usesNotchIsland ? Self.notchInputPanelHeight(for: screen) : Self.pillInputPanelHeight
-            size = NSSize(width: width, height: max(panelHeight, frame.height, chromeHeight))
-        } else if usesNotchIsland && !state.pttHintText.isEmpty {
-            let chromeHeight = Self.notchChromeHeight(for: screen)
+            // Chat always mounts shared top chrome.
+            let panelHeight = Self.notchInputPanelHeight(for: screen)
+            let statusBanner = state.pttHintText.isEmpty ? 0 : Self.pttStatusBannerBudget
             size = NSSize(
-                width: Self.notchExpandedWidth,
-                height: chromeHeight + Self.notificationSpacing + Self.pttHintRowHeight
+                width: width,
+                height: max(panelHeight + statusBanner, frame.height, chromeHeight + statusBanner)
             )
+        } else if !state.pttHintText.isEmpty {
+            size = pttHintSurfaceSize(usesNotchIsland: usesNotchIsland, screen: screen)
         } else if state.isVoiceListening {
             size = usesNotchIsland ? notchSize(sideWidth: Self.notchActiveSideWidth, for: screen) : Self.voiceBarSize
         } else if state.currentNotification != nil {
@@ -982,8 +986,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                     )
                     return
                 }
-                // Voice listening/thinking/glow and the PTT hint own their own
-                // frames (syncActiveIsland / observePttHint).
+                // Voice listening/thinking/glow own their own frames (syncActiveIsland).
                 guard !self.state.isVoiceListening,
                       !self.state.isThinking,
                       !self.state.isVoiceResponseGlowActive,
@@ -1022,25 +1025,40 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             }
     }
 
-    /// Resize the notch surface when the transient too-short PTT hint appears or
-    /// clears. `isVoiceListening` is already true when the hint fires (no size
-    /// transition fires on its own), so the hint needs its own resize. Notch only —
-    /// the pill layout renders the hint inside its existing voice size.
+    /// Resize when the transient PTT status banner appears or clears.
+    /// `isVoiceListening` is already true when the hint fires, so the banner
+    /// needs its own resize for chrome/pill and for open chat (which also mounts
+    /// the banner under the shared top chrome).
     private func observePttHint() {
         pttHintCancellable = state.$voiceProjection
             .map { $0.hint.isEmpty }
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                guard let self, self.notchModeEnabled else { return }
-                guard !self.state.showingAIConversation else { return }
+                guard let self else { return }
                 self.resizeAnchored(
                     to: self.currentSurfaceSizeForCurrentScreen(),
-                    makeResizable: false,
+                    makeResizable: self.state.showingAIConversation && self.state.showingAIResponse,
                     animated: true,
                     anchorTop: true
                 )
             }
+    }
+
+    private func pttHintSurfaceSize(usesNotchIsland: Bool, screen: NSScreen? = nil) -> NSSize {
+        let chromeHeight: CGFloat
+        let width: CGFloat
+        if usesNotchIsland {
+            chromeHeight = screen.map { Self.notchChromeHeight(for: $0) } ?? notchChromeHeightForCurrentScreen
+            width = Self.notchExpandedWidth
+        } else {
+            chromeHeight = Self.voiceBarSize.height
+            width = max(Self.voiceBarSize.width, Self.notchExpandedWidth * 0.72)
+        }
+        return NSSize(
+            width: width,
+            height: chromeHeight + Self.pttStatusBannerBudget
+        )
     }
 
     private var cursorTrackingTimer: DispatchSourceTimer?
@@ -1174,10 +1192,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         responseHeightCancellable = nil
         state.responseContentHeight = 0
 
-        // Cancel PTT if in follow-up mode
-        if state.isVoiceFollowUp {
-            PushToTalkManager.shared.cancelListening()
-        }
+        // Cancel PTT if listening while chat closes
+        PushToTalkManager.shared.cancelListening()
 
         OmiMotion.withGated(.easeOut(duration: 0.08)) {
             state.showingAIConversation = false
@@ -3954,11 +3970,16 @@ class FloatingControlBarManager {
             ?? .mainChat(chatId: "default")
     }
 
-    func kernelVoiceContextSnapshot() async -> KernelVoiceContextSnapshot {
+    func realtimeVoiceSurfaceReference() -> AgentSurfaceReference {
+        historyChatProvider?.realtimeVoiceSurfaceReference()
+            ?? .realtimeVoice(chatId: "default")
+    }
+
+    func kernelVoiceContextSnapshot() async throws -> KernelVoiceContextSnapshot {
         guard let provider = historyChatProvider else {
             return .empty
         }
-        return await provider.prepareRealtimeVoiceContextSnapshot()
+        return try await provider.prepareRealtimeVoiceContextSnapshot()
     }
 
     func recordExchange(
