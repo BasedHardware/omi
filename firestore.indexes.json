@@ -23,20 +23,6 @@
       ]
     },
     {
-      "collectionGroup": "v3_compatibility_projection_items",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "created_at",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "conversations",
       "queryScope": "COLLECTION",
       "fields": [

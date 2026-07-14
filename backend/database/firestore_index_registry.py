@@ -120,12 +120,6 @@ INDEX_ONLY_REQUIREMENTS = (
         (_asc('uid'), _asc('generation'), _desc('updated_at'), _asc('__name__')),
     ),
     FirestoreIndexRequirement(
-        'v3_compatibility_projection_created',
-        'v3_compatibility_projection_items',
-        'COLLECTION',
-        (_desc('created_at'), _desc('__name__')),
-    ),
-    FirestoreIndexRequirement(
         'conversations_category_created',
         'conversations',
         'COLLECTION',
