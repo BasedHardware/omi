@@ -223,23 +223,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// directed provider returns its guidance to the model (which may retry with
   /// a different agent) instead of terminating the turn. The second failure in
   /// the same turn terminates as before, so a looping model cannot spin.
-  private var spawnFailureContinuedTurnIDs: Set<UUID> = []
-  /// Provider of the most recent same-turn spawn failure, for fallback telemetry
-  /// when a retry lands on a different provider.
-  private var lastSpawnFailedProviderByTurnID: [UUID: String] = [:]
-
-  /// Grants at most one open-turn continuation after a failed spawn_agent so
-  /// the model can relay guidance or retry with a different agent. Later
-  /// failures in the same turn terminate it, keeping retry loops impossible.
-  private func beginSpawnFailureContinuationIfAllowed(turnID: VoiceTurnID) -> Bool {
-    if spawnFailureContinuedTurnIDs.count > 16 {
-      spawnFailureContinuedTurnIDs.removeAll()
-      lastSpawnFailedProviderByTurnID.removeAll()
-    }
-    guard !spawnFailureContinuedTurnIDs.contains(turnID.rawValue) else { return false }
-    spawnFailureContinuedTurnIDs.insert(turnID.rawValue)
-    return true
-  }
+  private var spawnFailureContinuationPolicy = RealtimeSpawnFailureContinuationPolicy()
   private let legacyVoiceJournalImportStore = LegacyVoiceJournalImportStore.shared
   private var legacyVoiceJournalImportTask: Task<Void, Never>?
   private var legacyVoiceJournalImportedOwners = Set<String>()
@@ -3770,8 +3754,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
               AcceptedSpawnJournalReceipt(ownerID: binding.ownerID, receipt: receipt)
             self.turnPersistenceLedger.recordAcceptedReceipt(for: receipt.continuityKey)
             self.assistantText = receipt.assistantText
-            if let failedProvider = self.lastSpawnFailedProviderByTurnID.removeValue(
-              forKey: turnID.rawValue)
+            if let failedProvider = self.spawnFailureContinuationPolicy.takeFailedProvider(
+              turnID: turnID.rawValue)
             {
               // A same-turn retry after a failed directed spawn landed on a
               // different provider: a provider change the user still hears
@@ -3796,7 +3780,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
             }
           case .setupNeeded(let provider):
             self.lastExternalToolErrorCode = "provider_setup_needed"
-            let continueTurn = self.beginSpawnFailureContinuationIfAllowed(turnID: turnID)
+            let continueTurn = self.spawnFailureContinuationPolicy.beginContinuationIfAllowed(
+              turnID: turnID.rawValue,
+              failedProvider: provider.rawValue)
             self.sendToolResultIfCurrent(
               source: source,
               callId: callId,
@@ -3814,12 +3800,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
             // The turn stays open so the model can relay the setup
             // instructions aloud (and, for a provider it picked itself,
             // retry once with a different installed agent).
-            self.lastSpawnFailedProviderByTurnID[turnID.rawValue] = provider.rawValue
             return
           case .accepted, .rejected:
             log("RealtimeHub[\(self.providerTag)]: spawn_agent rejected without a canonical child receipt")
             let continueTurn = requestedProvider != nil
-              && self.beginSpawnFailureContinuationIfAllowed(turnID: turnID)
+              && self.spawnFailureContinuationPolicy.beginContinuationIfAllowed(
+                turnID: turnID.rawValue,
+                failedProvider: requestedProvider)
             self.sendToolResultIfCurrent(
               source: source,
               callId: callId,
@@ -3834,9 +3821,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
             guard continueTurn else {
               VoiceTurnCoordinator.shared.send(.finish(turnID: turnID, reason: .providerFailed))
               return
-            }
-            if let requestedProvider {
-              self.lastSpawnFailedProviderByTurnID[turnID.rawValue] = requestedProvider
             }
             return
           }
