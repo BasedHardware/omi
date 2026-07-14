@@ -61,6 +61,20 @@ describe("spawn-receipt fixtures v1", () => {
           updatedAtMs: 1_720_000_000_000,
         },
       }],
+      toolResultEnvelope: {
+        version: 1,
+        status: "succeeded",
+        truncated: false,
+        originalBytes: 512,
+        projectedBytes: 512,
+        fullOutputRef: null,
+        provenance: {
+          invocationId: "invocation-spawn",
+          runId: "run-parent",
+          attemptId: "attempt-parent",
+          toolName: "spawn_agent",
+        },
+      },
     });
     const emitted = JSON.parse(compactRealtimeSpawnToolResult(raw, descriptor));
     expect(emitted).toMatchObject({
@@ -75,6 +89,11 @@ describe("spawn-receipt fixtures v1", () => {
         code: "spawn_started",
         child: (fixture.providerResult as { child: unknown }).child,
         semanticDigest: fixture.semanticDigest,
+      },
+      toolResultEnvelope: {
+        version: 1,
+        truncated: false,
+        fullOutputRef: null,
       },
     });
     // Digest must stay bound to journalReceipt+child (not providerResult mirror alone).
