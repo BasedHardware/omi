@@ -19,9 +19,14 @@
 // silent-failure fix: a persisted/conflicting chord previously failed with only a
 // console.warn at boot).
 //
+// Disabling a chord (macOS's per-shortcut Off): built for the RECORD card only —
+// its default Ctrl+Space collides with the Windows IME language-switch, so an
+// "Off" chip lets the user release it. Deliberately NOT offered for Summon: that
+// accelerator is also the push-to-talk hold trigger (main/bar gesture machine),
+// so disabling it would silently kill PTT.
+//
 // Deliberately NOT built — no Windows machinery for any of these (all macOS-only):
-// disabling a global chord, double-tap-to-lock, PTT sound cues, and mute-audio-
-// while-talking.
+// double-tap-to-lock, PTT sound cues, and mute-audio-while-talking.
 import { useEffect, useState } from 'react'
 import { Keyboard, MessageSquareText } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -57,6 +62,12 @@ export function ShortcutsTab(): React.JSX.Element {
         load={() => window.omi?.getRecordHotkey?.() ?? Promise.resolve(null)}
         commit={(next) =>
           window.omi?.setRecordHotkey?.(next) ?? Promise.resolve({ ok: false, registered: false })
+        }
+        // Record-only: the "Off" chip. Summon omits this (coupled to PTT), so its
+        // card renders no Off affordance.
+        onSetEnabled={(enabled) =>
+          window.omi?.setRecordHotkeyEnabled?.(enabled) ??
+          Promise.resolve({ accelerator: '', registered: false, enabled })
         }
       />
     </>
@@ -94,10 +105,15 @@ function ShortcutCard(props: {
   load: () => Promise<RecordHotkeyState | null>
   commit: (accelerator: string) => Promise<{ ok: boolean; registered: boolean }>
   onCommitted?: (accelerator: string) => void
+  /** When provided, the card renders an "Off" chip that fully disables the chord
+   *  (Record card only; Summon omits it — it's coupled to push-to-talk). */
+  onSetEnabled?: (enabled: boolean) => Promise<{ registered: boolean; enabled: boolean }>
 }): React.JSX.Element {
-  const { icon, title, subtitle, keywords, defaultAccel, load, commit, onCommitted } = props
+  const { icon, title, subtitle, keywords, defaultAccel, load, commit, onCommitted, onSetEnabled } =
+    props
   const [accel, setAccel] = useState<string | null>(null)
   const [registered, setRegistered] = useState(true)
+  const [enabled, setEnabled] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -105,6 +121,7 @@ function ShortcutCard(props: {
       if (!h) return
       setAccel(h.accelerator)
       setRegistered(h.registered)
+      setEnabled(h.enabled !== false)
     })
     // Mount-only: `load` is a stable inline closure per card.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -118,32 +135,64 @@ function ShortcutCard(props: {
     resume: () => window.omi?.resumeShortcutCapture?.(),
     commit: async (next) => {
       const res = await commit(next)
+      // Record card: recording a custom chord is an explicit intent to enable it,
+      // even on an OS conflict (registered=false). The hook only calls onCommitted
+      // on ok, so reflect the enable here so a conflict from the "Off" state still
+      // turns the card on (with the amber warning). Summon has no onSetEnabled →
+      // untouched.
+      if (onSetEnabled && !res?.ok) {
+        setAccel(next)
+        setRegistered(!!res?.registered)
+        setEnabled(true)
+      }
       return { ok: !!res?.ok, registered: !!res?.registered }
     },
     onCommitted: (next, result) => {
       setAccel(next)
       setRegistered(result.registered)
+      // Committing a binding implicitly re-enables the chord (main persists this).
+      setEnabled(true)
       onCommitted?.(next)
     },
     onError: setError
   })
 
-  // Clicking the default preset chip re-binds to the default (unless already there).
+  // Clicking the default preset chip re-binds to the default (unless already there
+  // AND enabled — a click while "Off" must still re-enable at the default).
   const selectDefault = async (): Promise<void> => {
-    if (accel === defaultAccel) return
+    if (enabled && accel === defaultAccel) return
     setError(null)
     const res = await commit(defaultAccel)
     if (res?.ok) {
       setAccel(defaultAccel)
-      setRegistered(!!res.registered)
+      setRegistered(true)
+      setEnabled(true)
       onCommitted?.(defaultAccel)
+    } else if (onSetEnabled) {
+      // Record card: selecting a preset is an enable intent even when the OS can't
+      // claim the chord (conflict) — reflect enabled; the !registered branch below
+      // surfaces the same "held by another app" note as a fresh load (consistent
+      // copy, rather than a second "try another" string for the identical state).
+      setAccel(defaultAccel)
+      setRegistered(false)
+      setEnabled(true)
     } else {
       setError('That shortcut is already in use — try another.')
     }
   }
 
-  const isDefault = accel === defaultAccel
-  const isCustom = accel != null && accel !== defaultAccel
+  // Clicking the "Off" chip fully disables the chord (Record card only).
+  const selectOff = async (): Promise<void> => {
+    if (!onSetEnabled || !enabled) return
+    setError(null)
+    const res = await onSetEnabled(false)
+    setEnabled(res.enabled === true)
+    setRegistered(!!res.registered)
+  }
+
+  // While off, neither preset appears selected — the "Off" chip owns selection.
+  const isDefault = enabled && accel === defaultAccel
+  const isCustom = enabled && accel != null && accel !== defaultAccel
 
   return (
     <SettingRow icon={icon} title={title} subtitle={subtitle} keywords={keywords}>
@@ -168,13 +217,23 @@ function ShortcutCard(props: {
               <span>Custom…</span>
             )}
           </Chip>
+
+          {/* Off chip — Record card only (onSetEnabled provided). Disables the
+              chord entirely; the presets stay visible so the user can re-pick. */}
+          {onSetEnabled && (
+            <Chip selected={!enabled} onClick={() => void selectOff()}>
+              <span>Off</span>
+            </Chip>
+          )}
         </div>
 
-        {(error || !registered) && (
+        {!enabled ? (
+          <p className="text-xs text-white/40">Recording shortcut is off.</p>
+        ) : error || !registered ? (
           <p className="text-xs text-amber-300">
             {error ?? 'This shortcut is held by another app — pick a different one.'}
           </p>
-        )}
+        ) : null}
       </div>
     </SettingRow>
   )

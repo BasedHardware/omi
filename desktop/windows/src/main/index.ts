@@ -122,6 +122,12 @@ const DEFAULT_WINDOW_HEIGHT = 820
 // a consumer bound to a destroyed instance.
 let mainWindow: BrowserWindow | null = null
 
+// Whether the mic record chord is currently registered at all (Settings →
+// Shortcuts "Off"). Seeded from persisted appSettings at startup; the ONLY thing
+// that keeps a disabled chord from being resurrected by the rebind capture's
+// resume path (shortcuts:resume-capture). Persisted mirror: recordHotkeyEnabled.
+let recordShortcutEnabled = true
+
 function withMainWindow(fn: (win: BrowserWindow) => void): void {
   if (mainWindow && !mainWindow.isDestroyed()) fn(mainWindow)
 }
@@ -827,11 +833,17 @@ app.whenReady().then(async () => {
   // 'recorder:hotkey' at the renderer (receiver already exists) and surfaces the
   // window if it was hidden, so a global hotkey both starts capture AND brings Omi
   // to the front.
+  // Always create the slot (so getRecordShortcut + a later enable work); when the
+  // user has turned the chord off, immediately release it so the OS never claims
+  // Ctrl+Space. register() sets the slot's handler, which a later resume re-uses.
+  recordShortcutEnabled = getAppSettings().recordHotkeyEnabled !== false
   const recordState = registerRecordShortcut(getAppSettings().recordHotkey, () => {
     surfaceMainWindow()
     withMainWindow((w) => w.webContents.send('recorder:hotkey', 'mic'))
   })
-  if (!recordState.registered) {
+  if (!recordShortcutEnabled) {
+    suspendRecordShortcut()
+  } else if (!recordState.registered) {
     console.warn(`[shortcut] record chord "${recordState.accelerator}" is unavailable (in use?)`)
   }
 
@@ -867,7 +879,10 @@ app.whenReady().then(async () => {
 
   // Record-chord get/rebind. Rebinds persist and never throw on a conflict — a
   // taken chord returns registered=false so the UI can prompt for another.
-  ipcMain.handle('shortcuts:get-record', () => getRecordShortcut())
+  ipcMain.handle('shortcuts:get-record', () => ({
+    ...getRecordShortcut(),
+    enabled: recordShortcutEnabled
+  }))
   // Summon (floating-bar) chord: current binding + whether the OS claimed it, so
   // Settings → Shortcuts can show a conflict instead of a silently-dead shortcut.
   ipcMain.handle('shortcuts:get-summon', () => getOverlaySummonState())
@@ -887,7 +902,8 @@ app.whenReady().then(async () => {
     suspendOverlayShortcut()
   })
   ipcMain.on('shortcuts:resume-capture', () => {
-    resumeRecordShortcut()
+    // Don't resurrect a chord the user has turned off — resume only when enabled.
+    if (recordShortcutEnabled) resumeRecordShortcut()
     resumeOverlayShortcut()
   })
 
@@ -896,8 +912,27 @@ app.whenReady().then(async () => {
       return { ok: false, registered: getRecordShortcut().registered }
     }
     const next = setRecordAccelerator(accelerator.trim())
-    if (next.registered) setAppSettings({ recordHotkey: next.accelerator })
+    // Selecting a binding (Default/Custom) is an explicit intent to enable the
+    // chord, independent of whether the OS could claim it right now — a conflict
+    // (registered=false) surfaces as the card's "held by another app" warning, it
+    // must NOT refuse to enable. So always persist the accelerator + enable intent.
+    recordShortcutEnabled = true
+    setAppSettings({ recordHotkey: next.accelerator, recordHotkeyEnabled: true })
     return { ok: next.registered, registered: next.registered }
+  })
+
+  // Turn the record chord fully on/off (Settings → Shortcuts "Off" chip). Off
+  // releases the OS chord (frees Ctrl+Space for the IME); on re-registers the
+  // stored accelerator, surfacing registered=false when now held by another app.
+  ipcMain.handle('shortcuts:set-record-enabled', (_e, enabled: boolean) => {
+    recordShortcutEnabled = enabled === true
+    setAppSettings({ recordHotkeyEnabled: recordShortcutEnabled })
+    if (recordShortcutEnabled) {
+      resumeRecordShortcut()
+    } else {
+      suspendRecordShortcut()
+    }
+    return { ...getRecordShortcut(), enabled: recordShortcutEnabled }
   })
 
   // Rebind the summon chord (mirrors overlay:setAccelerator used by onboarding):

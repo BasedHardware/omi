@@ -14,6 +14,11 @@ export type AppSettings = {
   closeToTrayNoticeShown: boolean
   /** Electron accelerator that toggles mic recording. */
   recordHotkey: string
+  /** Whether the mic record chord is registered at all. Default true; the user
+   *  can turn it fully off (Settings → Shortcuts) because the default Ctrl+Space
+   *  collides with the Windows IME language-switch. When false, main leaves the
+   *  chord unregistered so the OS never claims it. */
+  recordHotkeyEnabled: boolean
   /** Electron accelerator that summons the floating bar. Persisted so a rebind
    *  survives restarts and main can register it at launch (a taken chord then
    *  fails loudly in Settings instead of only a console.warn). Kept in step with
@@ -73,6 +78,9 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
   return {
     closeToTrayNoticeShown: r.closeToTrayNoticeShown === true,
     recordHotkey: hotkey,
+    // Default ON: only an explicit false turns the record chord off (matches the
+    // hudContentProtection convention above — non-boolean coerces to the default).
+    recordHotkeyEnabled: r.recordHotkeyEnabled !== false,
     summonHotkey: summon,
     hudContentProtection: r.hudContentProtection !== false,
     meeting: sanitizeMeeting(r.meeting),

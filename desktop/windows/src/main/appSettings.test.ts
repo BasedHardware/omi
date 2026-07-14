@@ -52,10 +52,18 @@ describe('appSettings', () => {
     expect(getAppSettings().recordHotkey).toBe('Ctrl+Shift+O')
   })
 
+  it('round-trips the record-hotkey enabled flag (default on)', () => {
+    expect(getAppSettings().recordHotkeyEnabled).toBe(true)
+    setAppSettings({ recordHotkeyEnabled: false })
+    _resetForTests()
+    expect(getAppSettings().recordHotkeyEnabled).toBe(false)
+  })
+
   it('sanitizes bad input back to safe defaults', () => {
     expect(sanitizeAppSettings({} as never)).toEqual({
       closeToTrayNoticeShown: false,
       recordHotkey: 'Ctrl+Space',
+      recordHotkeyEnabled: true,
       summonHotkey: 'Shift+Space',
       hudContentProtection: true,
       meeting: { mode: 'ask', endGraceMinutes: 2, perApp: {}, firstRunToastShown: false },
@@ -70,6 +78,12 @@ describe('appSettings', () => {
       sanitizeAppSettings({ closeToTrayNoticeShown: 'yes' } as never).closeToTrayNoticeShown
     ).toBe(false)
     expect(sanitizeAppSettings(null).recordHotkey).toBe('Ctrl+Space')
+    // recordHotkeyEnabled defaults ON; only an explicit false disables it.
+    expect(sanitizeAppSettings(null).recordHotkeyEnabled).toBe(true)
+    expect(sanitizeAppSettings({ recordHotkeyEnabled: false }).recordHotkeyEnabled).toBe(false)
+    expect(sanitizeAppSettings({ recordHotkeyEnabled: 'nope' } as never).recordHotkeyEnabled).toBe(
+      true
+    )
     // HUD capture-exclusion defaults ON and only an explicit false disables it.
     expect(sanitizeAppSettings(null).hudContentProtection).toBe(true)
     expect(sanitizeAppSettings({ hudContentProtection: false }).hudContentProtection).toBe(false)
