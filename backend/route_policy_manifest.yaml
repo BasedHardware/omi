@@ -7,6 +7,72 @@ schema_version: 1
 service: backend-main
 routes:
   - route_type: http
+    method: GET
+    path: /v2/desktop/previews/{slug}
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - public
+        placement: none
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: desktop_update
+      visibility: public_undocumented
+      data_domain: desktop_updates
+      deprecation:
+        state: active
+  - route_type: http
+    method: GET
+    path: /v2/desktop/previews/{slug}/{source_sha}
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - public
+        placement: none
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: desktop_update
+      visibility: public_undocumented
+      data_domain: desktop_updates
+      deprecation:
+        state: active
+  - route_type: http
+    method: POST
+    path: /v2/desktop/previews/publish
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - desktop_preview_publish_key
+        placement: inline
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: desktop_update
+      visibility: admin
+      data_domain: desktop_updates
+      deprecation:
+        state: active
+  - route_type: http
     method: POST
     path: /v2/desktop/releases
     policy:
