@@ -222,9 +222,10 @@ final class AICloneService: ObservableObject {
     guard event.type == "message.upserted", let chatID = event.chatID else { return }
     let mode = configuration.mode(for: chatID)
     guard mode != .off else { return }
-    guard let inbound = Self.latestActionableInbound(
-      entries: event.entries ?? [],
-      since: listeningSince)
+    guard
+      let inbound = Self.latestActionableInbound(
+        entries: event.entries ?? [],
+        since: listeningSince)
     else { return }
     guard !inFlightChatIDs.contains(chatID) else { return }
     inFlightChatIDs.insert(chatID)

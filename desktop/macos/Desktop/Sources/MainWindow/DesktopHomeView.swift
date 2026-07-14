@@ -791,6 +791,8 @@ struct DesktopHomeView: View {
       return .permissions
     case "help":
       return .help
+    case "ai_clone", "aiclone", "clone":
+      return .aiClone
     default:
       return nil
     }
@@ -1589,6 +1591,8 @@ private struct PageContentView: View {
         PermissionsPage(appState: appState)
       case 12:
         HelpPage()
+      case 13:
+        AIClonePage()
       default:
         DashboardPage(
           viewModel: viewModelContainer.dashboardViewModel,

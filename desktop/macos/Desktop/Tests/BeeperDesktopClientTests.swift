@@ -26,20 +26,23 @@ final class BeeperStubURLProtocol: URLProtocol {
   override func startLoading() {
     let method = request.httpMethod ?? "GET"
     let url = request.url!
-    let bodyData = request.httpBody ?? request.httpBodyStream.map { stream -> Data in
-      stream.open()
-      defer { stream.close() }
-      var data = Data()
-      var buffer = [UInt8](repeating: 0, count: 4096)
-      while stream.hasBytesAvailable {
-        let read = stream.read(&buffer, maxLength: buffer.count)
-        guard read > 0 else { break }
-        data.append(buffer, count: read)
+    let bodyData =
+      request.httpBody
+      ?? request.httpBodyStream.map { stream -> Data in
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        while stream.hasBytesAvailable {
+          let read = stream.read(&buffer, maxLength: buffer.count)
+          guard read > 0 else { break }
+          data.append(buffer, count: read)
+        }
+        return data
       }
-      return data
-    }
     Self.recordedRequests.append((method, url, bodyData))
-    let stub = Self.stubs[Self.key(method, url.path)]
+    let stub =
+      Self.stubs[Self.key(method, url.path)]
       ?? Stub(statusCode: 404, body: Data(#"{"error":{"code":"NOT_FOUND"}}"#.utf8))
     let response = HTTPURLResponse(
       url: url, statusCode: stub.statusCode, httpVersion: "HTTP/1.1", headerFields: nil)!
@@ -131,7 +134,8 @@ final class BeeperDesktopClientTests: XCTestCase {
     XCTAssertEqual(page.items.first?.senderName, "Alice")
 
     let event = BeeperDesktopClient.decodeLiveEvent(
-      #"{"type":"message.upserted","seq":4,"ts":1739320000000,"chatID":"c1","ids":["m1"],"entries":[{"id":"m1","text":"hello","type":"TEXT","isSender":false,"timestamp":"2026-07-15T01:00:00Z"}]}"#)
+      #"{"type":"message.upserted","seq":4,"ts":1739320000000,"chatID":"c1","ids":["m1"],"entries":[{"id":"m1","text":"hello","type":"TEXT","isSender":false,"timestamp":"2026-07-15T01:00:00Z"}]}"#
+    )
     XCTAssertEqual(event?.type, "message.upserted")
     XCTAssertEqual(event?.entries?.first?.text, "hello")
   }
