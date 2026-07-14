@@ -49,18 +49,7 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
 
   func testSpawnJournalReceiptAcceptsOnlyCanonicalTurnIdentity() throws {
     let continuityKey = "voice:00000000-0000-0000-0000-000000009515"
-    let payload: [String: Any] = [
-      "ok": true,
-      "journalReceipt": [
-        "accepted": true,
-        "continuityKey": continuityKey,
-        "userTurnId": KernelTurnProjection.stableTurnID(
-          continuityKey: continuityKey, role: "user"),
-        "assistantTurnId": KernelTurnProjection.stableTurnID(
-          continuityKey: continuityKey, role: "assistant"),
-        "assistantText": "I started a background agent for that.",
-      ],
-    ]
+    let payload = canonicalSpawnPayload(continuityKey: continuityKey)
     let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
     let output = try XCTUnwrap(String(data: data, encoding: .utf8))
 
@@ -84,33 +73,11 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
   func testSpawnJournalReceiptProjectsTheKernelAcceptedChildRun() throws {
     let continuityKey = "voice:00000000-0000-0000-0000-000000009516"
     let pillID = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
-    let payload: [String: Any] = [
-      "ok": true,
-      "agents": [[
-        "session": [
-          "sessionId": "session-child",
-          "externalRefId": pillID.uuidString,
-          "title": "Research models",
-          "defaultAdapterId": "hermes",
-          "metadata": [:],
-        ],
-        "run": [
-          "runId": "run-child",
-          "sessionId": "session-child",
-          "input": ["prompt": "Research the latest models"],
-        ],
-        "attempt": ["attemptId": "attempt-child"],
-      ]],
-      "journalReceipt": [
-        "accepted": true,
-        "continuityKey": continuityKey,
-        "userTurnId": KernelTurnProjection.stableTurnID(
-          continuityKey: continuityKey, role: "user"),
-        "assistantTurnId": KernelTurnProjection.stableTurnID(
-          continuityKey: continuityKey, role: "assistant"),
-        "assistantText": "I started a background agent for that.",
-      ],
-    ]
+    let payload = canonicalSpawnPayload(
+      continuityKey: continuityKey,
+      pillID: pillID,
+      title: "Research models",
+      objective: "Research the latest models")
     let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
     let output = try XCTUnwrap(String(data: data, encoding: .utf8))
 
@@ -130,22 +97,37 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
 
   func testSpawnJournalReceiptRejectsTamperedStableIdentity() throws {
     let continuityKey = "voice:00000000-0000-0000-0000-000000009515"
-    let payload: [String: Any] = [
-      "journalReceipt": [
-        "accepted": true,
-        "continuityKey": continuityKey,
-        "userTurnId": "turn_tampered",
-        "assistantTurnId": KernelTurnProjection.stableTurnID(
-          continuityKey: continuityKey, role: "assistant"),
-        "assistantText": "I started a background agent for that.",
-      ]
-    ]
+    var payload = canonicalSpawnPayload(continuityKey: continuityKey)
+    var receipt = try XCTUnwrap(payload["journalReceipt"] as? [String: Any])
+    receipt["userTurnId"] = "turn_tampered"
+    payload["journalReceipt"] = receipt
     let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
     let output = try XCTUnwrap(String(data: data, encoding: .utf8))
 
     XCTAssertNil(
       RealtimeSpawnJournalReceipt.parse(
         output: output, expectedContinuityKey: continuityKey))
+  }
+
+  func testSpawnJournalReceiptRejectsMissingOrMismatchedChildLifecycle() throws {
+    let continuityKey = "voice:00000000-0000-0000-0000-000000009518"
+    var missingChild = canonicalSpawnPayload(continuityKey: continuityKey)
+    missingChild.removeValue(forKey: "child")
+    let missingData = try JSONSerialization.data(withJSONObject: missingChild, options: [.sortedKeys])
+    XCTAssertNil(
+      RealtimeSpawnJournalReceipt.parse(
+        output: try XCTUnwrap(String(data: missingData, encoding: .utf8)),
+        expectedContinuityKey: continuityKey))
+
+    var mismatched = canonicalSpawnPayload(continuityKey: continuityKey)
+    var providerResult = try XCTUnwrap(mismatched["providerResult"] as? [String: Any])
+    providerResult["semanticDigest"] = "different-semantic-child"
+    mismatched["providerResult"] = providerResult
+    let mismatchData = try JSONSerialization.data(withJSONObject: mismatched, options: [.sortedKeys])
+    XCTAssertNil(
+      RealtimeSpawnJournalReceipt.parse(
+        output: try XCTUnwrap(String(data: mismatchData, encoding: .utf8)),
+        expectedContinuityKey: continuityKey))
   }
 
   func testRejectedSpawnResultCannotBeTreatedAsAnAcceptedVoiceTurn() {
@@ -157,6 +139,64 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
         output: rejected,
         expectedContinuityKey: continuityKey),
       .rejected)
+  }
+
+  private func canonicalSpawnPayload(
+    continuityKey: String,
+    pillID: UUID? = nil,
+    title: String = "Background agent",
+    objective: String = "Research the latest models"
+  ) -> [String: Any] {
+    let childLifecycle: [String: Any] = [
+      "state": "running",
+      "attemptState": "running",
+      "revision": 2,
+      "adapterId": "hermes",
+      "updatedAtMs": 1_720_000_000_000 as NSNumber,
+    ]
+    var child: [String: Any] = [
+      "sessionId": "session-child",
+      "runId": "run-child",
+      "attemptId": "attempt-child",
+      "title": title,
+      "objective": objective,
+      "provider": "hermes",
+      "lifecycle": childLifecycle,
+    ]
+    if let pillID { child["pillId"] = pillID.uuidString }
+    let semanticDigest = "semantic-child-digest"
+    return [
+      "schemaVersion": 1,
+      "ok": true,
+      "journalReceipt": [
+        "accepted": true,
+        "continuityKey": continuityKey,
+        "userTurnId": KernelTurnProjection.stableTurnID(
+          continuityKey: continuityKey, role: "user"),
+        "assistantTurnId": KernelTurnProjection.stableTurnID(
+          continuityKey: continuityKey, role: "assistant"),
+        "assistantText": "I started a background agent for that.",
+      ],
+      "child": child,
+      "semanticDigest": semanticDigest,
+      "providerResult": [
+        "schemaVersion": 1,
+        "ok": true,
+        "code": "spawn_started",
+        "message": "Background agent started.",
+        "child": [
+          "sessionId": "session-child",
+          "runId": "run-child",
+          "attemptId": "attempt-child",
+          "state": "running",
+          "attemptState": "running",
+          "revision": 2,
+          "adapterId": "hermes",
+          "updatedAtMs": 1_720_000_000_000 as NSNumber,
+        ],
+        "semanticDigest": semanticDigest,
+      ],
+    ]
   }
 
   func testRealtimeToolRequestHasNoLocalExecutionBranch() throws {

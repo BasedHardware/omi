@@ -327,6 +327,21 @@ final class RealtimeProviderToolResultPolicyTests: XCTestCase {
     XCTAssertEqual(result.output, #"{"ok":true,"sessions":[]}"#)
   }
 
+  func testSpawnSendsOnlyCompactSemanticChildToProvider() throws {
+    let envelope = #"{"schemaVersion":1,"ok":true,"journalReceipt":{"accepted":true},"child":{"sessionId":"session-a"},"semanticDigest":"digest-a","providerResult":{"schemaVersion":1,"ok":true,"code":"spawn_started","message":"The background agent has started.","child":{"sessionId":"session-a","runId":"run-a","attemptId":"attempt-a","state":"running","attemptState":"running","revision":2,"adapterId":"hermes","updatedAtMs":2},"semanticDigest":"digest-a"}}"#
+
+    let result = RealtimeProviderToolResultPolicy.prepare(
+      name: HubTool.spawnAgent.rawValue,
+      output: envelope)
+    let object = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: Data(result.output.utf8)) as? [String: Any])
+
+    XCTAssertEqual(object["code"] as? String, "spawn_started")
+    XCTAssertNotNil(object["child"])
+    XCTAssertNil(object["journalReceipt"])
+    XCTAssertLessThan(result.output.utf8.count, envelope.utf8.count)
+  }
+
   func testOversizedToolResultBecomesSmallStructuredRetryError() throws {
     let result = RealtimeProviderToolResultPolicy.prepare(
       name: HubTool.listAgentSessions.rawValue,

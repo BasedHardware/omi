@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { AdapterRegistry } from "../src/runtime/adapter-registry.js";
 import {
   agentSpawnJournalReceipt,
-  attachAgentSpawnJournalReceipt,
+  compactRealtimeSpawnToolResult,
   parseAgentSpawnProducerJournalDescriptor,
   stableAgentSpawnTurnId,
 } from "../src/runtime/agent-spawn-journal.js";
@@ -1015,7 +1015,9 @@ describe("external realtime surface authority", () => {
     expect(result).toMatchObject({
       ok: true,
       requestedAgentCount: 1,
-      run: { status: "queued", parentRunId: run.runId },
+      // The spawn return now snapshots the durable child lifecycle after its
+      // first attempt is admitted; this fixture has already crossed queued.
+      run: { status: "starting", parentRunId: run.runId },
     });
     await waitUntil(() => adapter.executed.length === 1);
     expect(adapter.executed).toHaveLength(1);
@@ -1057,9 +1059,10 @@ describe("external realtime surface authority", () => {
       assistantTurnId: stableAgentSpawnTurnId("voice:voice-turn-1", "assistant"),
       assistantText: "I started a background agent for that.",
     });
-    expect(JSON.parse(attachAgentSpawnJournalReceipt('{"ok":true}', descriptor))).toEqual({
-      ok: true,
-      journalReceipt: receipt,
+    expect(JSON.parse(compactRealtimeSpawnToolResult('{"ok":true}', descriptor))).toMatchObject({
+      ok: false,
+      error: { code: "realtime_spawn_child_receipt_missing" },
+      providerResult: { ok: false, code: "realtime_spawn_child_receipt_missing" },
     });
 
     // Once the spawn receipt commits the exchange, any late provider mutation

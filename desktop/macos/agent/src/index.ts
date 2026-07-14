@@ -108,7 +108,7 @@ import { providerBoundaryForAdapter } from "./runtime/execution-policy.js";
 import { executionRoleForSurface } from "./runtime/execution-policy.js";
 import type { AuthorizedRunToolInvocation, RunToolExecutionLease } from "./runtime/run-tool-capability.js";
 import {
-  attachAgentSpawnJournalReceipt,
+  compactRealtimeSpawnToolResult,
   parseAgentSpawnProducerJournalDescriptor,
 } from "./runtime/agent-spawn-journal.js";
 import { LEGACY_MAIN_CHAT_SESSION_COMPATIBILITY } from "./runtime/surface-session.js";
@@ -1792,7 +1792,12 @@ async function main(): Promise<void> {
             }
             executionLease?.release();
             if (outcome === "succeeded" && spawnDescriptor) {
-              result = attachAgentSpawnJournalReceipt(result, spawnDescriptor);
+              result = compactRealtimeSpawnToolResult(result, spawnDescriptor);
+              // A parent journal acknowledgement without a durable child
+              // receipt is an external-spawn failure, not a successful tool
+              // invocation. Keep the control ledger aligned with the exact
+              // compact semantic result we return to Swift/provider.
+              outcome = controlToolInvocationOutcome(result);
             }
             kernel.completeRunToolInvocation({
               invocationId: authorized.invocationId,

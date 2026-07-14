@@ -72,6 +72,10 @@ rollback window; this is migration input, not a second store.
   either half leaves neither a canonical row nor a visible orphan. Projection
   replay is fenced by immutable owner identity plus a local epoch, so suspended
   owner-A reads cannot mutate checkpoints or UI after owner B takes over.
+- Realtime background-agent admission returns one compact canonical child
+  session/run/attempt lifecycle plus a matching semantic digest for the provider.
+  A parent journal receipt without that child is failure; legacy raw
+  session/run/attempt payload aliases are never provider-visible.
 
 ## Surfaces
 

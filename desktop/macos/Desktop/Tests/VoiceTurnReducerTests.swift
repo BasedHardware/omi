@@ -238,7 +238,7 @@ final class VoiceTurnReducerTests: XCTestCase {
       timedOut.effects.contains(.fallbackToTranscription(turnID: turnID, reason: .hubWarmTimeout)))
   }
 
-  func testHubReadyCancelsWarmDeadlineAndPreservesRecording() {
+  func testTransportReadyPreparesContextWithoutAdmittingHubRoute() {
     let turnID = VoiceTurnID()
     let sessionID = VoiceSessionID()
     var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
@@ -246,10 +246,11 @@ final class VoiceTurnReducerTests: XCTestCase {
 
     let ready = reduce(model, .hubReady(turnID: turnID, sessionID: sessionID))
 
-    XCTAssertEqual(ready.model.turn?.route, .hub(sessionID: sessionID))
-    XCTAssertEqual(ready.model.turn?.sessionID, sessionID)
+    XCTAssertEqual(ready.model.turn?.route, .hubWarmWait)
+    XCTAssertNil(ready.model.turn?.sessionID)
     XCTAssertEqual(ready.model.turn?.phase, .recording)
     XCTAssertTrue(ready.effects.contains(.cancelDeadline(turnID: turnID, deadline: .hubWarm)))
+    XCTAssertTrue(ready.effects.contains(.prepareHubInput(turnID: turnID, sessionID: sessionID)))
   }
 
   func testDeferredCommitTimeoutTerminatesWithTypedReason() {

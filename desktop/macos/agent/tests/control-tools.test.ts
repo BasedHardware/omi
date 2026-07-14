@@ -1784,7 +1784,7 @@ describe("agent control tools", () => {
       sessionId: spawned.session.sessionId,
       parentRunId: null,
       mode: "act",
-      status: "queued",
+      status: "starting",
     });
     store.close();
   });
@@ -3099,7 +3099,7 @@ describe("agent control tools", () => {
     expect(spawned.ok).toBe(true);
     expect(spawned.result).toBeUndefined();
     expect(spawned.session.sessionId).not.toBe(parent.session.sessionId);
-    expect(spawned.run.status).toBe("queued");
+    expect(spawned.run.status).toBe("starting");
     expect(buildMcpServers).toHaveBeenCalledWith("act", undefined, undefined, {
       ownerId: "owner",
       requestId: "delegate-spawn-1",
