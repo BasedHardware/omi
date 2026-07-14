@@ -938,7 +938,8 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(sessionSource.contains("enum RealtimeHubBargeInStrategy"))
     XCTAssertTrue(sessionSource.contains("provider == .gemini ? .freshSession : .inSessionCancel"))
     XCTAssertTrue(hubSource.contains("private var sessionAuth: HubAuth?"))
-    XCTAssertTrue(hubSource.contains("struct RealtimeReplacementAudioBuffer"))
+    let inputAdmissionSource = try realtimeHubInputAdmissionSource()
+    XCTAssertTrue(inputAdmissionSource.contains("struct RealtimeReplacementAudioBuffer"))
     XCTAssertTrue(hubSource.contains("private var replacementAudioBuffer: RealtimeReplacementAudioBuffer?"))
     XCTAssertTrue(hubSource.contains("func commitTurn() -> RealtimeHubCommitResult"))
     XCTAssertTrue(hubSource.contains("private func restartSessionForBargeIn("))
@@ -1591,6 +1592,14 @@ final class AgentPillLifecycleTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func realtimeHubInputAdmissionSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubInputAdmission.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 

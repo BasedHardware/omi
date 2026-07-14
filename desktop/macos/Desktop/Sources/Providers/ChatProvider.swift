@@ -796,7 +796,11 @@ struct ChatMessage: Identifiable {
     /// every Omi turn in every full chat timeline.
     var turnOwner: ChatTurnOwner?
 
-    init(id: String = UUID().uuidString, clientTurnId: String? = nil, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = [], metadata: MessageMetadata? = nil, notificationContext: String? = nil, notificationScreenshot: Data? = nil, attachments: [ChatAttachment] = [], resources: [ChatResource] = [], turnOwner: ChatTurnOwner? = nil) {
+    /// Kernel journal lifecycle when this message was projected from a journal
+    /// row. Failed turns get a light visual treatment so they don't look completed.
+    var journalStatus: KernelJournalTurnStatus?
+
+    init(id: String = UUID().uuidString, clientTurnId: String? = nil, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = [], metadata: MessageMetadata? = nil, notificationContext: String? = nil, notificationScreenshot: Data? = nil, attachments: [ChatAttachment] = [], resources: [ChatResource] = [], turnOwner: ChatTurnOwner? = nil, journalStatus: KernelJournalTurnStatus? = nil) {
         self.id = id
         self.turnOwner = turnOwner
         self.clientTurnId = clientTurnId
@@ -813,6 +817,7 @@ struct ChatMessage: Identifiable {
         self.notificationScreenshot = notificationScreenshot
         self.attachments = attachments
         self.resources = resources
+        self.journalStatus = journalStatus
     }
 }
 
@@ -4766,13 +4771,18 @@ private var activeBridgeSendGeneration: Int?
                 // races this catch and bails once `isSending` is released here).
                 sendWatchdogFiredGeneration = nil
                 sendToolStallAbortGeneration = nil
-                currentError = nil
                 if let timeoutMessage = ChatProvider.stoppedTurnErrorMessage(
                     watchdogFired: watchdogFired,
                     toolStallAbortFired: toolStallAbortFired
                 ) {
+                    currentError = nil
                     errorMessage = timeoutMessage
+                } else if stopReason(for: sendGen) == .userStop, hadPartialResponse {
+                    currentError = .interrupted
+                    lastFailedPrompt = nil
+                    errorMessage = nil
                 } else {
+                    currentError = nil
                     lastFailedPrompt = nil
                     errorMessage = nil
                 }

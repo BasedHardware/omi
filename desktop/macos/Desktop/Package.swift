@@ -87,7 +87,10 @@ let package = Package(
         "OmiTheme",
         "OmiWAL",
       ],
-      path: "Tests"
+      path: "Tests",
+      exclude: [
+        "fixtures"
+      ]
     ),
   ]
 )
