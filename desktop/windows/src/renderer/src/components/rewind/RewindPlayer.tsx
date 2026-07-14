@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import type { RewindFrame } from '../../../../shared/types'
+import { useEffect, useRef, useState } from 'react'
+import type { OcrLine, RewindFrame } from '../../../../shared/types'
 import {
   frameIndexAtCursor,
   REWIND_ACTIVITY_GAP_MS,
@@ -7,16 +7,36 @@ import {
 } from '../../../../shared/timelineGeometry'
 import { relativeTime, isSameDay } from '../../../../shared/relativeTime'
 import { parseWindowTitle } from '../../lib/windowTitle'
+import {
+  containedImageRect,
+  highlightTerms,
+  lineTextMatches,
+  normalizedBoxToRect
+} from '../../lib/rewindOverlay'
+
+// Purple search-highlight per the Track 4 UI ruling (Mac ports its purple as-is
+// for the Rewind bounding-box overlay — a deliberate exception to the
+// otherwise de-purpled Rewind surface).
+const HIGHLIGHT_STROKE = '#8B5CF6'
+const HIGHLIGHT_FILL = 'rgba(139, 92, 246, 0.2)'
 
 export function RewindPlayer({
   frames,
-  cursorTs
+  cursorTs,
+  highlightQuery = ''
 }: {
   frames: RewindFrame[]
   cursorTs: number
+  /** Active search query — when set, matching OCR lines are boxed on the frame. */
+  highlightQuery?: string
 }): React.JSX.Element {
   const [src, setSrc] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(false)
+  const [ocrLines, setOcrLines] = useState<OcrLine[]>([])
+  const [natural, setNatural] = useState<{ w: number; h: number } | null>(null)
+  const [box, setBox] = useState<{ w: number; h: number }>({ w: 0, h: 0 })
+  const containerRef = useRef<HTMLDivElement | null>(null)
+
   const idx = frameIndexAtCursor(
     frames.map((f) => f.ts),
     cursorTs,
@@ -40,15 +60,60 @@ export function RewindPlayer({
     }
   }, [frame?.imagePath])
 
+  // Load per-line OCR boxes for the current frame only while a search is active.
+  const terms = highlightTerms(highlightQuery)
+  const wantHighlight = terms.length > 0
+  const frameId = frame?.id
+  useEffect(() => {
+    let alive = true
+    if (!wantHighlight || frameId == null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset when highlight disabled / frame changes; not a self-retriggering loop
+      setOcrLines([])
+      return
+    }
+    void window.omi.rewindFrameOcrLines(frameId).then((lines) => {
+      if (alive) setOcrLines(lines)
+    })
+    return () => {
+      alive = false
+    }
+  }, [frameId, wantHighlight])
+
+  // Track the container size so the normalized boxes map onto the letterboxed image.
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const update = (): void => setBox({ w: el.clientWidth, h: el.clientHeight })
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  const contained = natural ? containedImageRect(box.w, box.h, natural.w, natural.h) : null
+  const matches =
+    wantHighlight && contained && contained.width > 0
+      ? ocrLines.filter((l) => lineTextMatches(l.text, terms))
+      : []
+
   return (
     <div className="flex flex-1 flex-col min-h-0">
-      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-lg bg-black/40">
+      <div
+        ref={containerRef}
+        className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-lg bg-black/40"
+      >
         {frame ? (
           src ? (
             <img
               src={src}
               alt="screen frame"
               onClick={() => setExpanded(true)}
+              onLoad={(e) =>
+                setNatural({
+                  w: e.currentTarget.naturalWidth,
+                  h: e.currentTarget.naturalHeight
+                })
+              }
               className="max-h-full max-w-full cursor-pointer object-contain"
             />
           ) : (
@@ -61,6 +126,24 @@ export function RewindPlayer({
               : 'No screenshot at this moment.'}
           </div>
         )}
+        {contained &&
+          matches.map((line, i) => {
+            const r = normalizedBoxToRect(line, contained)
+            return (
+              <div
+                key={i}
+                className="pointer-events-none absolute rounded-[2px]"
+                style={{
+                  left: r.left,
+                  top: r.top,
+                  width: r.width,
+                  height: r.height,
+                  border: `2px solid ${HIGHLIGHT_STROKE}`,
+                  backgroundColor: HIGHLIGHT_FILL
+                }}
+              />
+            )
+          })}
       </div>
       {frame && <FrameMeta frame={frame} />}
       {expanded && src && (

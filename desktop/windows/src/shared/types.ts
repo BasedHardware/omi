@@ -635,6 +635,9 @@ export type OmiBridgeApi = {
   rewindDayBounds: () => Promise<{ min: number; max: number } | null>
   rewindSearch: (query: string) => Promise<RewindSearchGroup[]>
   rewindFrameImage: (imagePath: string) => Promise<string>
+  // --- Track 4 --- per-line OCR bounding boxes (normalized 0..1) for the
+  // on-image search highlight overlay in the Rewind frame viewer.
+  rewindFrameOcrLines: (frameId: number) => Promise<OcrLine[]>
   rewindGetSettings: () => Promise<RewindSettings>
   rewindSetSettings: (next: RewindSettings) => Promise<RewindSettings>
   rewindPruneNow: () => Promise<number>
