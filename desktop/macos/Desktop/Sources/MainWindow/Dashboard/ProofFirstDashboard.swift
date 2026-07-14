@@ -332,6 +332,7 @@ struct ProofFirstDashboardView<ConnectDataContent: View>: View {
               .id(ProofFirstDashboardPage.home)
 
             connectDataContent
+              .padding(.top, 82)
               .frame(width: proxy.size.width, height: proxy.size.height)
               .id(ProofFirstDashboardPage.connectData)
 
