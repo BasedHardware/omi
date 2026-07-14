@@ -51,6 +51,9 @@ struct OnboardingHowDidYouHearStepView: View {
             }
           }
         }
+
+        OnboardingBackButton()
+          .padding(.top, OmiSpacing.sm)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .onAppear {
