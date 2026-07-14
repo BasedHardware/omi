@@ -13,6 +13,7 @@ on:
       - '.github/workflows/backend-unit-tests.yml'
       - '.github/workflows/desktop-checks.yml'
       - '.github/workflows/desktop-swift-ci.yml'
+      - '.github/workflows/desktop_backend_auto_dev.yml'
       - '.github/workflows/repo-checks.yml'
       - '.github/workflows/desktop_promote_beta.yml'
       - '.github/workflows/desktop_promote_prod.yml'
@@ -26,6 +27,7 @@ on:
       - 'scripts/install-git-hooks.sh'
       - 'scripts/pre-push'
       - 'scripts/pre-push-singleflight'
+      - 'scripts/voice-provider-probe.sh'
   pull_request:
     paths:
       - '.gitignore'
@@ -36,6 +38,7 @@ on:
       - '.github/workflows/backend-unit-tests.yml'
       - '.github/workflows/desktop-checks.yml'
       - '.github/workflows/desktop-swift-ci.yml'
+      - '.github/workflows/desktop_backend_auto_dev.yml'
       - '.github/workflows/repo-checks.yml'
       - '.github/workflows/desktop_promote_beta.yml'
       - '.github/workflows/desktop_promote_prod.yml'
@@ -49,6 +52,7 @@ on:
       - 'scripts/install-git-hooks.sh'
       - 'scripts/pre-push'
       - 'scripts/pre-push-singleflight'
+      - 'scripts/voice-provider-probe.sh'
   workflow_dispatch:
 
 permissions:
