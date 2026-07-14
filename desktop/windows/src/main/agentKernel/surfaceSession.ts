@@ -8,7 +8,7 @@
 // transcript merge and owner-state teardown.
 
 import { generateAgentId } from './store'
-import { providerBoundaryForAdapter } from './executionPolicy'
+import { executionRoleForSurface, providerBoundaryForAdapter } from './executionPolicy'
 import type { AgentExecutionRole, AgentStore, ProviderBoundary } from './types'
 
 export interface SurfaceRef {
@@ -222,7 +222,13 @@ export function resolveSurfaceSession(
         externalRefId: input.surfaceRef.externalRefId,
         title: input.title ?? null,
         defaultAdapterId: input.defaultAdapterId ?? 'acp',
-        executionRole: input.executionRole,
+        // Derive the role from the surface when the caller does not pin one, for
+        // the same reason KernelCore.resolveSession does: an unset role must never
+        // fall back to 'coordinator' on a leaf surface. This is the OTHER door into
+        // session creation — kernel.resolveSurfaceSession() and
+        // getVoiceSeedContextForSurface() reach the store through here without
+        // going through KernelCore.resolveSession, so the guard has to live at both.
+        executionRole: input.executionRole ?? executionRoleForSurface(input.surfaceRef),
         providerBoundary: input.providerBoundary
       })
       return createSurfaceConversationMapping(store, input, session.sessionId, now)
@@ -260,7 +266,10 @@ function resolveLegacyAgentSessionId(
       surfaceKind: input.surfaceRef.surfaceKind,
       externalRefKind: input.surfaceRef.externalRefKind,
       externalRefId: input.surfaceRef.externalRefId,
-      defaultAdapterId: input.defaultAdapterId ?? 'acp'
+      defaultAdapterId: input.defaultAdapterId ?? 'acp',
+      // Same guard: never let an adopted session default to 'coordinator' on a
+      // leaf surface just because this path did not name a role.
+      executionRole: executionRoleForSurface(input.surfaceRef)
     }).sessionId
   } catch (error) {
     if (!isSqliteUniqueConstraintError(error)) throw error

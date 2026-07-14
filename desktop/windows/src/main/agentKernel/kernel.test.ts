@@ -974,6 +974,46 @@ describe('AgentRuntimeKernel — execution role derived from the surface (INV-AG
     expect(result.session.executionRole).toBe('leaf')
   })
 
+  it('derives leaf through resolveSurfaceSession too, not just executeRun', async () => {
+    // The OTHER door: kernel.resolveSurfaceSession() (and getVoiceSeedContextForSurface)
+    // reach store.insertSession via surfaceSession.ts WITHOUT passing through
+    // KernelCore.resolveSession. Deriving the role in only one of the two leaves
+    // this one escaping.
+    const { kernel, store } = newKernel(fakeAdapter())
+
+    const leaf = kernel.resolveSurfaceSession({
+      ownerId: OWNER,
+      surfaceRef: {
+        surfaceKind: 'floating_bar',
+        externalRefKind: 'pill',
+        externalRefId: 'pill-1'
+      }
+    })
+    expect(
+      String(
+        store.getRow('SELECT execution_role FROM sessions WHERE session_id = ?', [
+          leaf.agentSessionId
+        ]).execution_role
+      )
+    ).toBe('leaf')
+
+    const coordinator = kernel.resolveSurfaceSession({
+      ownerId: OWNER,
+      surfaceRef: {
+        surfaceKind: 'main_chat',
+        externalRefKind: 'chat',
+        externalRefId: 'default'
+      }
+    })
+    expect(
+      String(
+        store.getRow('SELECT execution_role FROM sessions WHERE session_id = ?', [
+          coordinator.agentSessionId
+        ]).execution_role
+      )
+    ).toBe('coordinator')
+  })
+
   it('closes the escape: a session created on a leaf surface cannot spawn or delegate', async () => {
     const { kernel } = newKernel(fakeAdapter())
 
