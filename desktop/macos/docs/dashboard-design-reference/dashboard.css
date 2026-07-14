@@ -1,0 +1,249 @@
+/* Omi desktop dashboard — HTML mock styles.
+   Tokens transcribed from Desktop/Sources/Theme/OmiColors.swift,
+   Desktop/Sources/Theme/OmiType.swift, and cornerRadius/spacing values
+   read directly from MainWindow/Pages/DashboardPage.swift.
+   These are throwaway reference mocks — edit freely. Not part of the real UI. */
+
+:root {
+  /* --- OmiColors.swift, verified 1:1 --- */
+  --bg-primary: #0f0f0f;
+  --bg-secondary: #1a1a1a;
+  --bg-tertiary: #252525;
+  --bg-quaternary: #35343b;
+  --bg-raised: #1f1f25;
+  --border: #3a3940;
+  --accent: #ffffff;
+  --text-primary: #ffffff;
+  --text-secondary: #e5e5e5;
+  --text-tertiary: #b0b0b0;
+  --text-quaternary: #888888;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --info: #3b82f6;
+  --hairline: rgba(255, 255, 255, 0.08);
+
+  /* --- OmiType.swift size registers --- */
+  --type-hero: 40px;
+  --type-title: 28px;
+  --type-heading: 20px;
+  --type-subheading: 15px;
+  --type-body: 13px;
+  --type-caption: 11px;
+  --type-micro: 10px;
+
+  /* --- Corner radii, read directly from DashboardPage.swift diffs ---
+     WhatMattersNow card: 14 / 10 · panel: 28 · ask bar: 29
+     suggestion row: 21 · stat ribbon (OmiChrome.controlRadius): 18
+     destination capsule: 15 */
+  --radius-panel: 28px;
+  --radius-askbar: 29px;
+  --radius-suggestion: 21px;
+  --radius-ribbon: 18px;
+  --radius-card: 14px;
+
+  /* --- Glass recipe — LOCKED as of this finalization pass ---
+     Settled in 03-glass-lab.html, matches the shipped recipe on
+     design/dashboard-glass (a0cb872c35 + bfabf8f4c0):
+     .regularMaterial + black overlay 0.14. This is the reference
+     value Codex's Swift implementation should match — not a
+     placeholder pending further tuning. */
+  --glass-blur: 30px;
+  --glass-saturate: 150%;
+  --glass-overlay: rgba(0, 0, 0, 0.14);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  /* Geist is the shipped typeface as of 3f6f1edeff — bundled .ttf isn't
+     available to a browser mock, so we point at the same-shaped system
+     fallback OmiType.font() itself falls back to when Geist fails to
+     register. Swap in @font-face + a copy of Geist.ttf if you want a
+     pixel-accurate local preview. */
+  font-family: "Geist", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+.window { display: flex; flex-direction: column; height: 100vh; position: relative; }
+
+/* ---------- Canvas background (HomeCanvasBackground) ----------
+   .canvas-solid = today's fallback / Reduce Transparency state
+   .canvas-glass = material recipe, tunable via the --glass-* variables */
+.canvas-solid { position: absolute; inset: 0; background: var(--bg-primary); z-index: 0; }
+.canvas-glass {
+  position: absolute; inset: 0; z-index: 0;
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  background: var(--glass-overlay);
+}
+/* Neutral warm-white aura behind the wordmark, replacing the old purple stageGlow */
+.canvas-aura {
+  position: absolute; top: 8%; left: 50%; transform: translateX(-50%);
+  width: 640px; height: 420px; z-index: 0; pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0) 70%);
+}
+
+/* ---------- Top bar ---------- */
+.topbar { position: relative; z-index: 2; display: flex; justify-content: flex-end; align-items: center; gap: 10px; padding: 18px 24px; }
+.pill-status {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--type-caption); font-weight: 600;
+  padding: 7px 12px; border-radius: 999px;
+  background: var(--bg-secondary); border: 1px solid var(--hairline); color: var(--text-secondary);
+}
+.pill-status.capture { color: var(--error); border-color: rgba(239, 68, 68, 0.4); }
+.icon-btn {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--bg-secondary); border: 1px solid var(--hairline);
+  display: flex; align-items: center; justify-content: center; color: var(--text-secondary);
+}
+
+/* ---------- Hub stage ---------- */
+.hub-stage { position: relative; z-index: 1; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; padding: 0 24px 40px; }
+.wordmark { font-size: 64px; font-weight: 700; letter-spacing: -1px; color: var(--text-primary); text-shadow: 0 0 40px rgba(255, 255, 255, 0.25); }
+
+.stage-col { display: flex; flex-direction: column; align-items: stretch; gap: 14px; width: 100%; max-width: 620px; }
+
+/* ---------- DEPRECATED — pre-cascade components ----------
+   WhatMattersNow card / goals row / stat ribbon used to render as up to
+   4 separate stacked sections, all equal visual weight, alongside a
+   fixed 3-item suggestion list. That's the "too many sections, no clear
+   hero" problem the hero cascade below replaces. Kept here only because
+   03-glass-lab.html still references .ask-bar/.suggestion-row directly;
+   nothing in 01/02/02b uses these anymore. */
+.wmn-card {
+  border-radius: var(--radius-card); background: var(--bg-secondary);
+  border: 1px solid var(--hairline); padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 4px; text-align: left;
+}
+.wmn-eyebrow { font-size: var(--type-micro); font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-tertiary); }
+.wmn-title { font-size: var(--type-subheading); font-weight: 600; color: var(--text-primary); }
+.wmn-sub { font-size: var(--type-caption); color: var(--text-tertiary); }
+.goals-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.goal-chip { font-size: var(--type-caption); font-weight: 600; color: var(--text-secondary); background: var(--bg-secondary); border-radius: 999px; padding: 8px 14px; }
+.goals-empty { font-size: var(--type-caption); color: var(--text-tertiary); text-align: center; }
+.stat-ribbon {
+  display: flex; height: 76px; border-radius: var(--radius-ribbon);
+  background: var(--bg-secondary); border: 1px solid var(--hairline); overflow: hidden;
+}
+.stat-cell { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+.stat-cell + .stat-cell { border-left: 1px solid var(--hairline); }
+.stat-cell .n { font-size: var(--type-heading); font-weight: 700; color: var(--text-primary); display: inline-flex; align-items: center; gap: 6px; }
+.stat-cell .n.zero { color: var(--text-quaternary); font-weight: 600; }
+.stat-cell .label { font-size: var(--type-caption); color: var(--text-tertiary); }
+.stat-ribbon.hidden-on-zero { display: none; }
+
+/* ---------- Hero cascade (info-architecture redesign) ----------
+   Replaces WhatMattersNow + Goals + StatRibbon + always-3-suggestions
+   with exactly ONE hero slot per screen. Which tier renders is a
+   fallback cascade, not a stack:
+     tier 1 = real WhatMattersNow-style recommendation  (02-populated.html)
+     tier 2 = most recent activity, "continue where you left off" (02b)
+     tier 3 = generic value line, true day zero, no card chrome (01)
+   Everything else that used to be its own section — raw stat counts,
+   goals, the other suggestion prompts — collapses into one slim
+   secondary row + an optional "More" disclosure below the ask bar. */
+.hero-card {
+  border-radius: var(--radius-panel); background: var(--bg-secondary);
+  border: 1px solid var(--hairline); padding: 22px 24px;
+  display: flex; flex-direction: column; gap: 8px; text-align: left; width: 100%;
+}
+.hero-eyebrow {
+  font-size: var(--type-caption); font-weight: 600; letter-spacing: 0.6px;
+  text-transform: uppercase; color: var(--text-tertiary);
+  display: flex; align-items: center; gap: 6px;
+}
+.hero-eyebrow svg { width: 12px; height: 12px; }
+.hero-title { font-size: var(--type-heading); font-weight: 700; color: var(--text-primary); line-height: 1.35; }
+.hero-sub { font-size: var(--type-body); color: var(--text-tertiary); line-height: 1.5; }
+.hero-evidence { font-size: var(--type-caption); color: var(--text-quaternary); }
+.hero-cta {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--type-caption); font-weight: 600; color: var(--text-secondary); margin-top: 6px;
+}
+.hero-cta svg { width: 13px; height: 13px; }
+
+.secondary-row { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px 0; }
+.secondary-stats { display: flex; align-items: center; gap: 14px; font-size: var(--type-caption); color: var(--text-tertiary); }
+.secondary-stats b { color: var(--text-secondary); font-weight: 600; }
+.more-toggle {
+  font-size: var(--type-caption); font-weight: 600; color: var(--text-tertiary);
+  background: none; border: none; cursor: pointer; display: flex; align-items: center; gap: 4px;
+  font-family: inherit; padding: 0;
+}
+.more-toggle:hover { color: var(--text-primary); }
+.more-toggle svg { width: 12px; height: 12px; transition: transform 0.15s ease; }
+.more-toggle.open svg { transform: rotate(180deg); }
+
+.more-panel { display: none; flex-direction: column; gap: 8px; padding-top: 10px; }
+.more-panel.open { display: flex; }
+.more-goals { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Ask bar */
+.ask-bar {
+  display: flex; align-items: center; gap: 10px;
+  border-radius: var(--radius-askbar); background: var(--bg-secondary);
+  border: 1px solid var(--hairline); padding: 14px 10px 14px 18px;
+}
+.ask-bar .placeholder { flex: 1; font-size: var(--type-subheading); color: var(--text-tertiary); }
+.ask-bar .icon { color: var(--text-tertiary); flex: none; }
+.connect-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--type-caption); font-weight: 600; color: var(--text-secondary);
+  background: var(--bg-tertiary); border-radius: 999px; padding: 8px 14px; flex: none;
+}
+
+/* Suggestions */
+.suggestion-list { display: flex; flex-direction: column; gap: 8px; }
+.suggestion-row {
+  display: flex; align-items: center; gap: 10px;
+  border-radius: var(--radius-suggestion); background: var(--bg-secondary);
+  border: 1px solid var(--hairline); padding: 13px 16px;
+}
+.suggestion-row .icon { color: var(--text-tertiary); flex: none; }
+.suggestion-row .txt { flex: 1; font-size: var(--type-body); font-weight: 600; color: var(--text-primary); text-align: left; }
+.suggestion-row .txt small { display: block; font-size: var(--type-caption); font-weight: 500; color: var(--text-tertiary); margin-top: 2px; }
+.suggestion-row .arrow { color: var(--text-tertiary); flex: none; }
+
+/* Value line — proposed day-zero addition near the wordmark */
+.value-line { font-size: var(--type-subheading); color: var(--text-secondary); max-width: 440px; text-align: center; line-height: 1.5; }
+
+/* Simple inline SVG icon sizing */
+.icon svg, .stat-cell svg, .connect-pill svg, .ask-bar svg { width: 16px; height: 16px; }
+
+/* ---------- Mock-only navigation (not part of the real UI) ---------- */
+.mock-nav {
+  position: fixed; bottom: 14px; right: 14px; z-index: 99;
+  display: flex; gap: 10px; align-items: center;
+  background: rgba(26, 26, 26, 0.92); border: 1px solid var(--hairline);
+  border-radius: 10px; padding: 6px 12px; font-size: 12px;
+}
+.mock-nav a { color: var(--text-tertiary); text-decoration: none; }
+.mock-nav a:hover { color: #fff; }
+.mock-nav .step-name { color: var(--text-quaternary); }
+
+/* ---------- Tier switcher (04-cascade-demo.html only) ----------
+   Lets one page flip between all 3 cascade tiers live, instead of
+   navigating between 3 separate files — quicker to iterate/review. */
+.tier-switcher {
+  position: fixed; top: 14px; left: 14px; z-index: 99;
+  display: flex; gap: 4px; align-items: center;
+  background: rgba(26, 26, 26, 0.92); border: 1px solid var(--hairline);
+  border-radius: 10px; padding: 4px; font-size: 12px;
+}
+.tier-switcher button {
+  font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+  border: none; border-radius: 7px; padding: 6px 12px;
+  background: transparent; color: var(--text-tertiary);
+}
+.tier-switcher button:hover { color: #fff; }
+.tier-switcher button.active { background: #fff; color: #000; }
+/* Mirrors .hub-stage's own centering so wrapping content in a tier-block
+   for the JS switcher doesn't change how it lays out vs. the standalone
+   per-tier mock files. */
+.tier-block { display: flex; flex-direction: column; align-items: center; gap: 22px; }
+.tier-block[hidden] { display: none; }
