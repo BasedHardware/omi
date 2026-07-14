@@ -8,6 +8,7 @@ import json
 import subprocess
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
@@ -33,6 +34,15 @@ _GCLOUD_FIELD_CONFIGS = {
     'DESCENDING': 'order=descending',
     'CONTAINS': 'array-config=contains',
 }
+
+
+@dataclass(frozen=True)
+class LiveIndex:
+    """One Firestore Admin API resource, retained without response-shape aliases."""
+
+    resource_name: str
+    signature: IndexSignature
+    state: str
 
 
 def _collection_group_from_resource_name(index: Mapping[str, Any]) -> str:
@@ -134,13 +144,8 @@ def gcloud_create_index_command(*, project: str, database: str, signature: Index
     return [*command, '--quiet']
 
 
-def list_live_indexes(
-    *,
-    project: str,
-    database: str,
-    include_implicit_document_id_alias: bool = True,
-    runner: CommandRunner = subprocess.run,
-) -> dict[IndexSignature, str]:
+def list_live_indexes(*, project: str, database: str, runner: CommandRunner = subprocess.run) -> list[LiveIndex]:
+    """Read live Admin API resources without normalizing distinct index shapes."""
     command = [
         'gcloud',
         'firestore',
@@ -160,7 +165,7 @@ def list_live_indexes(
         raise RuntimeError('Firestore composite-index listing did not return JSON') from exc
     if not isinstance(payload, list):
         raise RuntimeError('Firestore composite-index listing did not return a list')
-    states: dict[IndexSignature, str] = {}
+    live_indexes: list[LiveIndex] = []
     for index in payload:
         if not isinstance(index, Mapping):
             continue
@@ -168,20 +173,70 @@ def list_live_indexes(
             signature = _index_signature(index)
         except ValueError:
             continue
+        resource_name = index.get('name')
+        if not isinstance(resource_name, str) or not resource_name:
+            continue
         state = index.get('state')
-        states[signature] = state if isinstance(state, str) else 'UNKNOWN'
-        # Firestore Admin API output includes the implicit terminal document-ID
-        # order for ordinary indexes. Preserve the historic compatibility alias
-        # outside dev provisioning, but never let it prove an exact manifest
-        # signature before a create-and-wait reconciliation.
-        if (
-            include_implicit_document_id_alias
-            and len(signature[2]) > 1
-            and signature[2][-1][0] == '__name__'
-            and signature[2][-1][1] == signature[2][-2][1]
-            and signature[2][-1][1] in {'ASCENDING', 'DESCENDING'}
-        ):
-            states[(signature[0], signature[1], signature[2][:-1])] = states[signature]
+        live_indexes.append(LiveIndex(resource_name=resource_name, signature=signature, state=state or 'UNKNOWN'))
+    return live_indexes
+
+
+def expected_index_resource_prefix(*, project: str, database: str, signature: IndexSignature) -> str:
+    collection_group = signature[0]
+    return f'projects/{project}/databases/{database}/collectionGroups/{collection_group}/indexes/'
+
+
+def _matches_expected_resource_identity(
+    live_index: LiveIndex, *, project: str, database: str, signature: IndexSignature
+) -> bool:
+    prefix = expected_index_resource_prefix(project=project, database=database, signature=signature)
+    identifier = live_index.resource_name.removeprefix(prefix)
+    return live_index.resource_name.startswith(prefix) and bool(identifier) and '/' not in identifier
+
+
+def _implicit_terminal_document_id_alias(signature: IndexSignature) -> IndexSignature | None:
+    """Return the historic Firebase-manifest shape for an Admin API implicit terminal order."""
+    fields = signature[2]
+    if (
+        len(fields) > 1
+        and fields[-1][0] == '__name__'
+        and fields[-1][1] == fields[-2][1]
+        and fields[-1][1] in {'ASCENDING', 'DESCENDING'}
+    ):
+        return (signature[0], signature[1], fields[:-1])
+    return None
+
+
+def expected_index_states(
+    *,
+    expected: Iterable[IndexSignature],
+    live_indexes: Iterable[LiveIndex],
+    project: str,
+    database: str,
+    allow_implicit_terminal_document_id_alias: bool = False,
+) -> dict[IndexSignature, str]:
+    """Return exact Admin API readiness states, failing closed on any ambiguity."""
+    states: dict[IndexSignature, str] = {}
+    inventory = list(live_indexes)
+    for signature in set(expected):
+        matches = [
+            index
+            for index in inventory
+            if (
+                index.signature == signature
+                or (
+                    allow_implicit_terminal_document_id_alias
+                    and _implicit_terminal_document_id_alias(index.signature) == signature
+                )
+            )
+            and _matches_expected_resource_identity(index, project=project, database=database, signature=signature)
+        ]
+        if not matches:
+            states[signature] = 'MISSING'
+        elif len(matches) != 1:
+            states[signature] = 'AMBIGUOUS'
+        else:
+            states[signature] = matches[0].state
     return states
 
 
@@ -194,11 +249,20 @@ def format_signature(signature: IndexSignature) -> str:
 def missing_index_signatures(
     *,
     expected: Iterable[IndexSignature],
-    states: Mapping[IndexSignature, str],
+    live_indexes: Iterable[LiveIndex],
+    project: str,
+    database: str,
+    allow_implicit_terminal_document_id_alias: bool = False,
 ) -> set[IndexSignature]:
     """Return manifest requirements absent from the Firestore Admin API inventory."""
-
-    return set(expected).difference(states)
+    states = expected_index_states(
+        expected=expected,
+        live_indexes=live_indexes,
+        project=project,
+        database=database,
+        allow_implicit_terminal_document_id_alias=allow_implicit_terminal_document_id_alias,
+    )
+    return {signature for signature, state in states.items() if state == 'MISSING'}
 
 
 def provision_missing_indexes(
@@ -212,12 +276,13 @@ def provision_missing_indexes(
 
     missing = missing_index_signatures(
         expected=expected,
-        states=list_live_indexes(
+        live_indexes=list_live_indexes(
             project=project,
             database=database,
-            include_implicit_document_id_alias=False,
             runner=runner,
         ),
+        project=project,
+        database=database,
     )
     for signature in sorted(missing):
         result = runner(
@@ -239,7 +304,7 @@ def wait_for_indexes(
     database: str,
     timeout_seconds: float,
     poll_interval_seconds: float,
-    include_implicit_document_id_alias: bool = True,
+    allow_implicit_terminal_document_id_alias: bool = False,
     runner: CommandRunner = subprocess.run,
     sleep: Callable[[float], None] = time.sleep,
     monotonic: Callable[[], float] = time.monotonic,
@@ -251,11 +316,16 @@ def wait_for_indexes(
     expected_set = set(expected)
     deadline = monotonic() + timeout_seconds
     while True:
-        states = list_live_indexes(
+        states = expected_index_states(
+            expected=expected_set,
+            live_indexes=list_live_indexes(
+                project=project,
+                database=database,
+                runner=runner,
+            ),
             project=project,
             database=database,
-            include_implicit_document_id_alias=include_implicit_document_id_alias,
-            runner=runner,
+            allow_implicit_terminal_document_id_alias=allow_implicit_terminal_document_id_alias,
         )
         pending = {
             signature: states.get(signature, 'MISSING')
@@ -289,13 +359,18 @@ def reconcile(
     manifest = verify_manifest_source(manifest_path)
     expected = expected_index_signatures(manifest)
     if dry_run:
-        states = list_live_indexes(
+        live_indexes = list_live_indexes(
             project=project,
             database=database,
-            include_implicit_document_id_alias=not provision_missing,
             runner=runner,
         )
-        missing = missing_index_signatures(expected=expected, states=states)
+        missing = missing_index_signatures(
+            expected=expected,
+            live_indexes=live_indexes,
+            project=project,
+            database=database,
+            allow_implicit_terminal_document_id_alias=not provision_missing,
+        )
         if provision_missing:
             for signature in sorted(missing):
                 print(f'Firestore index provisioning dry run: would create {format_signature(signature)}')
@@ -312,7 +387,7 @@ def reconcile(
         database=database,
         timeout_seconds=timeout_seconds,
         poll_interval_seconds=poll_interval_seconds,
-        include_implicit_document_id_alias=not provision_missing,
+        allow_implicit_terminal_document_id_alias=not provision_missing,
         runner=runner,
         sleep=sleep,
         monotonic=monotonic,

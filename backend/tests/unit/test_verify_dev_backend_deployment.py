@@ -356,6 +356,16 @@ def test_evaluate_fails_closed_when_a_stale_revision_is_serving() -> None:
     assert 'gke/deployment: desired replicas are not all updated' in errors
 
 
+def test_candidate_evaluation_accepts_ready_revision_before_traffic_promotion() -> None:
+    expectation = _expectation()
+    documents = _documents(expectation)
+    documents['cloud_run/backend']['status']['traffic'] = [{'revisionName': 'backend-old', 'percent': 100}]
+
+    errors = verifier.evaluate(expectation, documents, require_serving_traffic=False)
+
+    assert errors == []
+
+
 def test_evaluate_fails_closed_when_available_replicas_are_not_the_updated_template() -> None:
     expectation = _expectation()
     documents = _documents(expectation)

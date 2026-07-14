@@ -9,7 +9,7 @@ from scripts import reconcile_firestore_indexes
 
 
 def _ready_indexes():
-    return [{**index, 'state': 'READY'} for index in firebase_index_manifest()['indexes']]
+    return [_gcloud_live_index(index) for index in firebase_index_manifest()['indexes']]
 
 
 def _gcloud_live_index(index, *, state='READY'):
@@ -120,7 +120,9 @@ def test_live_gcloud_indexes_derive_collection_group_with_explicit_document_id()
     def runner(_command, **_kwargs):
         return SimpleNamespace(returncode=0, stdout=json.dumps([live_index]))
 
-    states = reconcile_firestore_indexes.list_live_indexes(project='dev-project', database='(default)', runner=runner)
+    live_indexes = reconcile_firestore_indexes.list_live_indexes(
+        project='dev-project', database='(default)', runner=runner
+    )
 
     attention_override_signature = (
         'task_attention_overrides',
@@ -134,10 +136,15 @@ def test_live_gcloud_indexes_derive_collection_group_with_explicit_document_id()
     assert attention_override_signature in reconcile_firestore_indexes.expected_index_signatures(
         firebase_index_manifest()
     )
-    assert states[attention_override_signature] == 'READY'
+    assert reconcile_firestore_indexes.expected_index_states(
+        expected={attention_override_signature},
+        live_indexes=live_indexes,
+        project='dev-project',
+        database='(default)',
+    ) == {attention_override_signature: 'READY'}
 
 
-def test_live_gcloud_indexes_alias_implicit_terminal_document_id_by_default():
+def test_live_gcloud_indexes_do_not_alias_implicit_terminal_document_id():
     live_index = {
         'name': 'projects/dev-project/databases/(default)/collectionGroups/task_attention_overrides/indexes/index-id',
         'queryScope': 'COLLECTION',
@@ -152,18 +159,28 @@ def test_live_gcloud_indexes_alias_implicit_terminal_document_id_by_default():
     def runner(_command, **_kwargs):
         return SimpleNamespace(returncode=0, stdout=json.dumps([live_index]))
 
-    states = reconcile_firestore_indexes.list_live_indexes(project='dev-project', database='(default)', runner=runner)
-
-    assert (
-        states[
-            (
-                'task_attention_overrides',
-                'COLLECTION',
-                (('account_generation', 'ASCENDING'), ('expires_at', 'ASCENDING')),
-            )
-        ]
-        == 'READY'
+    live_indexes = reconcile_firestore_indexes.list_live_indexes(
+        project='dev-project', database='(default)', runner=runner
     )
+
+    implicit_signature = (
+        'task_attention_overrides',
+        'COLLECTION',
+        (('account_generation', 'ASCENDING'), ('expires_at', 'ASCENDING')),
+    )
+    assert reconcile_firestore_indexes.expected_index_states(
+        expected={implicit_signature},
+        live_indexes=live_indexes,
+        project='dev-project',
+        database='(default)',
+    ) == {implicit_signature: 'MISSING'}
+    assert reconcile_firestore_indexes.expected_index_states(
+        expected={implicit_signature},
+        live_indexes=live_indexes,
+        project='dev-project',
+        database='(default)',
+        allow_implicit_terminal_document_id_alias=True,
+    ) == {implicit_signature: 'READY'}
 
 
 def test_dev_provisioning_does_not_accept_an_implicit_document_id_alias():
@@ -201,6 +218,37 @@ def test_dev_provisioning_does_not_accept_an_implicit_document_id_alias():
 
     assert missing == expected
     assert commands[1][:5] == ['gcloud', 'firestore', 'indexes', 'composite', 'create']
+
+
+def test_live_index_from_another_resource_identity_does_not_satisfy_the_manifest():
+    signature = (
+        'task_attention_overrides',
+        'COLLECTION',
+        (('account_generation', 'ASCENDING'), ('expires_at', 'ASCENDING')),
+    )
+    live_index = {
+        'name': 'projects/other-project/databases/(default)/collectionGroups/task_attention_overrides/indexes/index-id',
+        'queryScope': 'COLLECTION',
+        'fields': [
+            {'fieldPath': 'account_generation', 'order': 'ASCENDING'},
+            {'fieldPath': 'expires_at', 'order': 'ASCENDING'},
+        ],
+        'state': 'READY',
+    }
+
+    def runner(_command, **_kwargs):
+        return SimpleNamespace(returncode=0, stdout=json.dumps([live_index]))
+
+    live_indexes = reconcile_firestore_indexes.list_live_indexes(
+        project='dev-project', database='(default)', runner=runner
+    )
+
+    assert reconcile_firestore_indexes.expected_index_states(
+        expected={signature},
+        live_indexes=live_indexes,
+        project='dev-project',
+        database='(default)',
+    ) == {signature: 'MISSING'}
 
 
 def test_provisioning_dry_run_only_lists_indexes_and_does_not_write(capsys):

@@ -247,6 +247,28 @@ The Cloud Run candidate itself makes the private VPC hop to Parakeet. After a
 passing or failed candidate gate, the workflow removes its temporary tag; a
 failed gate never shifts traffic.
 
+## Automatic development candidate acceptance
+
+`gcp_backend_auto_dev.yml` keeps the development backend mutation lock while
+it deploys the four Cloud Run services (`backend`, `backend-sync`,
+`backend-sync-backfill`, and `backend-integration`) with the service-scoped
+`candidate` tag. It resolves each exact tag URL from Cloud Run status, runs the
+source-owned `backend/deploy/dev_candidate_acceptance.json` manifest, and only
+then permits the one traffic-promotion step. The backend uses the authenticated
+What Matters Now contract; the worker services use bounded `/v1/health` checks.
+The evidence artifact records only service, bounded contract category, and
+outcome — never URLs, tokens, user data, or response bodies.
+
+Candidate requests carry an OIDC token in `X-Serverless-Authorization` while
+the application keeps its own `Authorization` header. The token audience is
+the canonical Cloud Run service URL as required by Cloud Run; the HTTP target
+remains the exact no-traffic tagged candidate URL.
+
+Development pusher is deliberately **GKE-only** (`pusher.omiapi.com`). A
+legacy Cloud Run `pusher` service is not a deploy, candidate, or health-report
+surface; do not publish an image merely to make that retired surface appear
+ready.
+
 ## Deepgram Configuration
 
 When using Deepgram, the following options are configured:
