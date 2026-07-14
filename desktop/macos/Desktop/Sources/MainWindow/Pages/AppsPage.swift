@@ -125,6 +125,7 @@ struct AppsPage: View {
     var onDismiss: (() -> Void)? = nil
     var onSelectApp: ((OmiApp) -> Void)? = nil
     var onSelectConnector: ((ImportConnector) -> Void)? = nil
+    var onConnectorStateChanged: (() -> Void)? = nil
     var onSelectDestination: ((MemoryExportDestination) -> Void)? = nil
     @State private var searchText = ""
     @State private var selectedApp: OmiApp?
@@ -312,8 +313,10 @@ struct AppsPage: View {
                 appState: appState,
                 statusStore: connectorStatusStore,
                 onDismiss: {
-                selectedConnector = nil
-            })
+                    selectedConnector = nil
+                    onConnectorStateChanged?()
+                }
+            )
             .frame(width: 520, height: 620)
             .onAppear {
                 automationPresentationDidAppear(.importConnector(connector.id))

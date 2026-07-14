@@ -3,6 +3,16 @@ import XCTest
 @testable import Omi_Computer
 
 final class ProofFirstDashboardPolicyTests: XCTestCase {
+  func testPrimaryPagesStayFlatOrderedAndAutomationAddressable() {
+    XCTAssertEqual(ProofFirstDashboardPage.allCases.map(\.title), ["Home", "Connect data", "Features"])
+    XCTAssertEqual(
+      ProofFirstDashboardPage.allCases.map(\.automationLabel),
+      ["home", "connectData", "features"]
+    )
+    XCTAssertEqual(ProofFirstDashboardPage(automationLabel: "connectData"), .connectData)
+    XCTAssertNil(ProofFirstDashboardPage(automationLabel: "settings"))
+  }
+
   func testLoadingGuardWinsBeforeAnyFallbackTier() {
     XCTAssertEqual(
       DashboardHeroCascadePolicy.resolve(
@@ -64,6 +74,34 @@ final class ProofFirstDashboardPolicyTests: XCTestCase {
     XCTAssertEqual(DashboardDayZeroSourcePolicy.presentation(sourceCount: 0), .setup)
     XCTAssertEqual(DashboardDayZeroSourcePolicy.presentation(sourceCount: 1), .staticCard)
     XCTAssertEqual(DashboardDayZeroSourcePolicy.presentation(sourceCount: 2), .rotating)
+    XCTAssertEqual(
+      DashboardDayZeroSourcePolicy.automationLabel(for: .rotating),
+      "rotating"
+    )
+  }
+
+  func testPostOnboardingPromptIsStrictlyLegacyOnly() {
+    XCTAssertTrue(
+      DashboardPostOnboardingPromptPolicy.shouldPresent(
+        useLegacyHomeDesign: true,
+        postOnboardingShouldShowPopup: true,
+        hasSuggestions: true
+      )
+    )
+    XCTAssertFalse(
+      DashboardPostOnboardingPromptPolicy.shouldPresent(
+        useLegacyHomeDesign: false,
+        postOnboardingShouldShowPopup: true,
+        hasSuggestions: true
+      )
+    )
+    XCTAssertFalse(
+      DashboardPostOnboardingPromptPolicy.shouldPresent(
+        useLegacyHomeDesign: true,
+        postOnboardingShouldShowPopup: false,
+        hasSuggestions: true
+      )
+    )
   }
 }
 

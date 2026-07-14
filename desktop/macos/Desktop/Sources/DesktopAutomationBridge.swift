@@ -109,6 +109,11 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   var usesLegacyHomeDesign: Bool
   /// Redesigned Home stage mode: `hub`, `chat`, or `connect`. Nil when legacy home or not on Dashboard.
   var homeMode: String?
+  var proofFirstDashboardPage: String?
+  var proofFirstHeroTier: String?
+  var proofFirstDayZeroPresentation: String?
+  var proofFirstDayZeroCardIndex: Int?
+  var dashboardBackgroundStyle: String
   var showsPrimarySidebar: Bool
   var isSidebarCollapsed: Bool
   var hasCompletedOnboarding: Bool
@@ -413,6 +418,12 @@ final class DesktopAutomationStateStore {
     highlightedSettingId: nil,
     usesLegacyHomeDesign: false,
     homeMode: nil,
+    proofFirstDashboardPage: nil,
+    proofFirstHeroTier: nil,
+    proofFirstDayZeroPresentation: nil,
+    proofFirstDayZeroCardIndex: nil,
+    dashboardBackgroundStyle: UserDefaults.standard.bool(forKey: "shortcut_solidBackground")
+      ? "solidDark" : "transparent",
     showsPrimarySidebar: false,
     isSidebarCollapsed: true,
     hasCompletedOnboarding: false,
@@ -1400,6 +1411,83 @@ final class DesktopAutomationActionRegistry {
     ) { params in
       let wait = boolParam(params["wait"], default: true)
       return await FloatingControlBarManager.shared.closeAskOmiForAutomation(wait: wait)
+    }
+
+    register(
+      name: "dashboard_snapshot",
+      summary: "Return proof-first Dashboard paging, cascade, and background state"
+    ) { _ in
+      let snapshot = DesktopAutomationStateStore.shared.current()
+      let validPages = Set(ProofFirstDashboardPage.allCases.map(\.automationLabel))
+      let validTiers = Set(["loading", "recommendation", "recentConversation", "recentTask", "dayZero"])
+      let validDayZeroPresentations = Set(["setup", "staticCard", "rotating"])
+      let page = snapshot.proofFirstDashboardPage ?? "unavailable"
+      let tier = snapshot.proofFirstHeroTier ?? "unavailable"
+      let dayZeroPresentation = snapshot.proofFirstDayZeroPresentation ?? "notApplicable"
+      let cascadeResolved = validTiers.contains(tier)
+        && (tier != "dayZero" || validDayZeroPresentations.contains(dayZeroPresentation))
+      return [
+        "page": page,
+        "page_valid": validPages.contains(page) ? "true" : "false",
+        "hero_tier": tier,
+        "cascade_resolved": cascadeResolved ? "true" : "false",
+        "day_zero_presentation": dayZeroPresentation,
+        "day_zero_card_index": snapshot.proofFirstDayZeroCardIndex.map(String.init) ?? "notApplicable",
+        "background_style": snapshot.dashboardBackgroundStyle,
+      ]
+    }
+
+    register(
+      name: "dashboard_select_page",
+      summary: "Select Home, Connect data, or Features through the real paged Dashboard container",
+      params: ["page"]
+    ) { params in
+      guard
+        let rawPage = params["page"],
+        let page = ProofFirstDashboardPage(automationLabel: rawPage)
+      else {
+        return ["error": "page must be home, connectData, or features"]
+      }
+      NotificationCenter.default.post(
+        name: .proofFirstDashboardSelectPage,
+        object: nil,
+        userInfo: ["page": page.automationLabel]
+      )
+      return ["selected": page.automationLabel]
+    }
+
+    register(
+      name: "dashboard_select_day_zero_card",
+      summary: "Select a grounded day-zero source card by zero-based index",
+      params: ["index"]
+    ) { params in
+      guard let rawIndex = params["index"], let index = Int(rawIndex), index >= 0 else {
+        return ["error": "index must be a non-negative integer"]
+      }
+      NotificationCenter.default.post(
+        name: .proofFirstDashboardSelectDayZeroCard,
+        object: nil,
+        userInfo: ["index": index]
+      )
+      return ["selected_index": "\(index)"]
+    }
+
+    register(
+      name: "dashboard_set_background_style",
+      summary: "Set the real Dashboard/Floating Bar background preference",
+      params: ["style"]
+    ) { params in
+      guard let style = params["style"], ["transparent", "solidDark"].contains(style) else {
+        return ["error": "style must be transparent or solidDark"]
+      }
+      await MainActor.run {
+        ShortcutSettings.shared.solidBackground = style == "solidDark"
+      }
+      _ = DesktopAutomationStateStore.shared.updateLiveFields { snapshot in
+        snapshot.dashboardBackgroundStyle = style
+        snapshot.updatedAt = ISO8601DateFormatter().string(from: Date())
+      }
+      return ["style": style]
     }
 
     // Drive the redesigned Home stage (inline chat / connect tray) without the

@@ -230,7 +230,6 @@ struct DashboardPage: View {
     @State private var isTogglingListening = false
     @State private var showingAllGoals = false
     @State private var showingGoalDetail = false
-    @State private var selectedImportConnector: ImportConnector?
     @State private var proofDataHasSettled = false
     @AppStorage("dashboardWidgetsCollapsed") private var widgetsCollapsed = false
     @AppStorage("screenAnalysisEnabled") private var screenAnalysisEnabled = true
@@ -342,21 +341,6 @@ struct DashboardPage: View {
                 ProgressView().frame(width: 300, height: 180)
             }
         }
-        .sheet(item: $selectedImportConnector) { connector in
-            ImportConnectorSheet(
-                connector: connector,
-                appState: appState,
-                statusStore: homeStatusStore.connectorStatusStore,
-                onDismiss: {
-                    selectedImportConnector = nil
-                    Task {
-                        await homeStatusStore.refreshIfNeeded(force: true)
-                        await refreshDayZeroSources()
-                    }
-                }
-            )
-            .frame(minWidth: 600, minHeight: 560)
-        }
         .overlay {
             if isLoadingCitation {
                 ZStack {
@@ -378,9 +362,11 @@ struct DashboardPage: View {
     private func applyHomeLifecycle<Content: View>(to content: Content) -> some View {
         content
         .onAppear {
-            if !isProofFirstHomeActive,
-               PostOnboardingPromptSuggestions.shouldShowPopup,
-               !postOnboardingSuggestions.isEmpty {
+            if DashboardPostOnboardingPromptPolicy.shouldPresent(
+                useLegacyHomeDesign: useLegacyHomeDesign,
+                postOnboardingShouldShowPopup: PostOnboardingPromptSuggestions.shouldShowPopup,
+                hasSuggestions: !postOnboardingSuggestions.isEmpty
+            ) {
                 NotificationCenter.default.post(name: .showTryAskingPopup, object: nil)
             }
             syncCaptureState()
@@ -603,7 +589,19 @@ struct DashboardPage: View {
                     dayZeroCards: dayZeroSourceStore.cards,
                     upNextTasks: proofFirstUpNextTasks,
                     recentConversations: proofFirstRecentConversations,
-                    connectorStatusStore: homeStatusStore.connectorStatusStore,
+                    connectDataContent: AppsPage(
+                        appProvider: appProvider,
+                        appState: appState,
+                        connectorStatusStore: homeStatusStore.connectorStatusStore,
+                        initialSection: .imports,
+                        handlesAutomationPresentations: true,
+                        onConnectorStateChanged: {
+                            Task {
+                                await homeStatusStore.refreshIfNeeded(force: true)
+                                await refreshDayZeroSources()
+                            }
+                        }
+                    ),
                     onHeroAction: handOffToFloatingBar,
                     onConnectSetup: {},
                     onToggleTask: { task in
@@ -611,9 +609,6 @@ struct DashboardPage: View {
                     },
                     onViewTasks: { navigate(to: .tasks) },
                     onViewConversations: { navigate(to: .conversations) },
-                    onSelectConnector: { connector in
-                        selectedImportConnector = connector
-                    },
                     onOpenShortcutSettings: {
                         navigate(to: .settings)
                         DispatchQueue.main.async {

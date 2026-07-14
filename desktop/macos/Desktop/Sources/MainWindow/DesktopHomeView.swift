@@ -628,7 +628,7 @@ struct DesktopHomeView: View {
       $0.title.lowercased().hasPrefix("omi") && $0.isVisible
     })
     let onDashboard = selectedIndex == SidebarNavItem.dashboard.rawValue
-    let priorHomeMode = DesktopAutomationStateStore.shared.current().homeMode
+    let priorDashboardState = DesktopAutomationStateStore.shared.current()
     let snapshot = DesktopAutomationSnapshot(
       bridgeEnabled: true,
       bridgePort: DesktopAutomationLaunchOptions.port,
@@ -639,7 +639,12 @@ struct DesktopHomeView: View {
       selectedSettingsSection: isInSettings ? selectedSettingsSection.rawValue : nil,
       highlightedSettingId: highlightedSettingId,
       usesLegacyHomeDesign: useLegacyHomeDesign,
-      homeMode: onDashboard && !useLegacyHomeDesign ? (priorHomeMode ?? "hub") : nil,
+      homeMode: onDashboard && !useLegacyHomeDesign ? (priorDashboardState.homeMode ?? "hub") : nil,
+      proofFirstDashboardPage: onDashboard ? priorDashboardState.proofFirstDashboardPage : nil,
+      proofFirstHeroTier: onDashboard ? priorDashboardState.proofFirstHeroTier : nil,
+      proofFirstDayZeroPresentation: onDashboard ? priorDashboardState.proofFirstDayZeroPresentation : nil,
+      proofFirstDayZeroCardIndex: onDashboard ? priorDashboardState.proofFirstDayZeroCardIndex : nil,
+      dashboardBackgroundStyle: ShortcutSettings.shared.solidBackground ? "solidDark" : "transparent",
       showsPrimarySidebar: showsPrimarySidebar,
       isSidebarCollapsed: isSidebarCollapsed,
       hasCompletedOnboarding: appState.hasCompletedOnboarding,
@@ -1001,7 +1006,7 @@ struct DesktopHomeView: View {
       GoalCelebrationView()
     }
     .overlay {
-      if showTryAskingPopup {
+      if useLegacyHomeDesign && showTryAskingPopup {
         let suggestions = PostOnboardingPromptSuggestions.suggestions()
         if !suggestions.isEmpty {
           TryAskingPopupView(
@@ -1021,7 +1026,13 @@ struct DesktopHomeView: View {
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .showTryAskingPopup)) { _ in
+      guard useLegacyHomeDesign else { return }
       showTryAskingPopup = true
+    }
+    .onChange(of: useLegacyHomeDesign) { _, usesLegacyHome in
+      if !usesLegacyHome {
+        showTryAskingPopup = false
+      }
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToRewindSettings)) { _ in
       // Set the section directly and navigate to settings

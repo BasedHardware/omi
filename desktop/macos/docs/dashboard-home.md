@@ -19,6 +19,7 @@ finishes its rollout.
 
 ## Connector navigation
 
-Apps is the canonical connector-management destination. Dashboard affordances
-such as the inline **Connect** button are navigation shortcuts to Apps, not
-separate connector browsers or setup flows.
+Apps is the canonical connector-management destination. The proof-first
+dashboard's **Connect data** page is a paged entry point into the existing Apps
+catalog and import setup flow. It must reuse that surface rather than introduce
+a second connector browser, connector state model, or setup sheet.

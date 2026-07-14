@@ -24,6 +24,21 @@ enum ProofFirstDashboardPage: Int, CaseIterable, Identifiable {
     case .features: return .sliders
     }
   }
+
+  var automationLabel: String {
+    switch self {
+    case .home: return "home"
+    case .connectData: return "connectData"
+    case .features: return "features"
+    }
+  }
+
+  init?(automationLabel: String) {
+    guard let page = Self.allCases.first(where: { $0.automationLabel == automationLabel }) else {
+      return nil
+    }
+    self = page
+  }
 }
 
 enum DashboardHeroTier: Equatable {
@@ -32,6 +47,18 @@ enum DashboardHeroTier: Equatable {
   case recentConversation
   case recentTask
   case dayZero
+}
+
+extension DashboardHeroTier {
+  var automationLabel: String {
+    switch self {
+    case .loading: return "loading"
+    case .recommendation: return "recommendation"
+    case .recentConversation: return "recentConversation"
+    case .recentTask: return "recentTask"
+    case .dayZero: return "dayZero"
+    }
+  }
 }
 
 enum DashboardHeroCascadePolicy {
@@ -94,12 +121,30 @@ enum DashboardDayZeroSourcePolicy {
     case rotating
   }
 
+  static func automationLabel(for presentation: Presentation) -> String {
+    switch presentation {
+    case .setup: return "setup"
+    case .staticCard: return "staticCard"
+    case .rotating: return "rotating"
+    }
+  }
+
   static func presentation(sourceCount: Int) -> Presentation {
     switch sourceCount {
     case 0: return .setup
     case 1: return .staticCard
     default: return .rotating
     }
+  }
+}
+
+enum DashboardPostOnboardingPromptPolicy {
+  static func shouldPresent(
+    useLegacyHomeDesign: Bool,
+    postOnboardingShouldShowPopup: Bool,
+    hasSuggestions: Bool
+  ) -> Bool {
+    useLegacyHomeDesign && postOnboardingShouldShowPopup && hasSuggestions
   }
 }
 
@@ -260,22 +305,22 @@ final class DashboardDayZeroSourceStore: ObservableObject {
   }
 }
 
-struct ProofFirstDashboardView: View {
+struct ProofFirstDashboardView<ConnectDataContent: View>: View {
   let heroTier: DashboardHeroTier
   let heroContent: DashboardHeroContent?
   let dayZeroCards: [DashboardDayZeroCard]
   let upNextTasks: [TaskActionItem]
   let recentConversations: [DashboardRecentConversation]
-  let connectorStatusStore: ImportConnectorStatusStore
+  let connectDataContent: ConnectDataContent
   let onHeroAction: (String) -> Void
   let onConnectSetup: () -> Void
   let onToggleTask: (TaskActionItem) -> Void
   let onViewTasks: () -> Void
   let onViewConversations: () -> Void
-  let onSelectConnector: (ImportConnector) -> Void
   let onOpenShortcutSettings: () -> Void
 
   @State private var selectedPage: ProofFirstDashboardPage? = .home
+  @State private var selectedDayZeroCardIndex = 0
 
   var body: some View {
     GeometryReader { proxy in
@@ -286,12 +331,9 @@ struct ProofFirstDashboardView: View {
               .frame(width: proxy.size.width, height: proxy.size.height)
               .id(ProofFirstDashboardPage.home)
 
-            ConnectDataDashboardPage(
-              connectorStatusStore: connectorStatusStore,
-              onSelectConnector: onSelectConnector
-            )
-            .frame(width: proxy.size.width, height: proxy.size.height)
-            .id(ProofFirstDashboardPage.connectData)
+            connectDataContent
+              .frame(width: proxy.size.width, height: proxy.size.height)
+              .id(ProofFirstDashboardPage.connectData)
 
             FeaturesDashboardPage(onOpenShortcutSettings: onOpenShortcutSettings)
               .frame(width: proxy.size.width, height: proxy.size.height)
@@ -313,6 +355,25 @@ struct ProofFirstDashboardView: View {
           }
         }
       }
+    }
+    .onAppear(perform: reportAutomationState)
+    .onChange(of: selectedPage) { _, _ in reportAutomationState() }
+    .onChange(of: heroTier) { _, _ in reportAutomationState() }
+    .onChange(of: dayZeroCards.count) { _, _ in reportAutomationState() }
+    .onChange(of: selectedDayZeroCardIndex) { _, _ in reportAutomationState() }
+    .onReceive(NotificationCenter.default.publisher(for: .proofFirstDashboardSelectPage)) { note in
+      guard
+        let label = note.userInfo?["page"] as? String,
+        let page = ProofFirstDashboardPage(automationLabel: label)
+      else { return }
+      selectPage(page)
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .proofFirstDashboardSelectDayZeroCard)) { note in
+      guard
+        let index = note.userInfo?["index"] as? Int,
+        dayZeroCards.indices.contains(index)
+      else { return }
+      selectedDayZeroCardIndex = index
     }
   }
 
@@ -345,6 +406,7 @@ struct ProofFirstDashboardView: View {
           case .dayZero:
             DashboardDayZeroHero(
               cards: dayZeroCards,
+              selectedIndex: $selectedDayZeroCardIndex,
               onAction: onHeroAction,
               onConnectSetup: {
                 selectPage(.connectData)
@@ -376,6 +438,23 @@ struct ProofFirstDashboardView: View {
       .padding(.bottom, 88)
     }
     .scrollIndicators(.hidden)
+  }
+
+  private func reportAutomationState() {
+    guard DesktopAutomationLaunchOptions.isEnabled else { return }
+    let presentation = DashboardDayZeroSourcePolicy.presentation(sourceCount: dayZeroCards.count)
+    _ = DesktopAutomationStateStore.shared.updateLiveFields { snapshot in
+      snapshot.proofFirstDashboardPage = (selectedPage ?? .home).automationLabel
+      snapshot.proofFirstHeroTier = heroTier.automationLabel
+      snapshot.proofFirstDayZeroPresentation = heroTier == .dayZero
+        ? DashboardDayZeroSourcePolicy.automationLabel(for: presentation)
+        : nil
+      snapshot.proofFirstDayZeroCardIndex = heroTier == .dayZero && !dayZeroCards.isEmpty
+        ? selectedDayZeroCardIndex
+        : nil
+      snapshot.dashboardBackgroundStyle = ShortcutSettings.shared.solidBackground ? "solidDark" : "transparent"
+      snapshot.updatedAt = ISO8601DateFormatter().string(from: Date())
+    }
   }
 
   private func selectPage(_ page: ProofFirstDashboardPage) {
@@ -475,10 +554,10 @@ private struct DashboardHeroCard: View {
 
 private struct DashboardDayZeroHero: View {
   let cards: [DashboardDayZeroCard]
+  @Binding var selectedIndex: Int
   let onAction: (String) -> Void
   let onConnectSetup: () -> Void
 
-  @State private var selectedIndex = 0
   @State private var isPaused = false
 
   private var presentation: DashboardDayZeroSourcePolicy.Presentation {
@@ -767,55 +846,6 @@ private struct DashboardRecentConversationsSection: View {
         .fill(OmiColors.border.opacity(0.45))
         .frame(height: 1)
     }
-  }
-}
-
-private struct ConnectDataDashboardPage: View {
-  @ObservedObject var connectorStatusStore: ImportConnectorStatusStore
-  let onSelectConnector: (ImportConnector) -> Void
-
-  private let connectors = ImportConnector.all.filter {
-    ["calendar", "email", "local-files", "apple-notes"].contains($0.id)
-  }
-
-  var body: some View {
-    ScrollView(.vertical) {
-      VStack(alignment: .leading, spacing: 0) {
-        Text("Connect data")
-          .scaledFont(size: OmiType.caption, weight: .semibold)
-          .foregroundStyle(OmiColors.textTertiary)
-        Text("Bring your context into Omi.")
-          .scaledFont(size: OmiType.title, weight: .bold)
-          .foregroundStyle(OmiColors.textPrimary)
-          .tracking(-0.8)
-          .padding(.top, OmiSpacing.sm)
-        Text("Connect the places where you work so Omi can ground memories, tasks, and answers in your real information.")
-          .scaledFont(size: OmiType.body)
-          .foregroundStyle(OmiColors.textTertiary)
-          .lineSpacing(3)
-          .padding(.top, OmiSpacing.md)
-
-        VStack(spacing: 0) {
-          ForEach(connectors) { connector in
-            ImportConnectorRow(
-              connector: connector,
-              snapshot: connectorStatusStore.snapshot(for: connector),
-              action: { onSelectConnector(connector) }
-            )
-            Divider().overlay(OmiColors.border.opacity(0.45))
-          }
-        }
-        .padding(.top, OmiSpacing.lg)
-      }
-      .padding(28)
-      .dashboardProofCard()
-      .frame(maxWidth: 860)
-      .frame(maxWidth: .infinity)
-      .padding(.horizontal, 28)
-      .padding(.top, 86)
-      .padding(.bottom, 88)
-    }
-    .scrollIndicators(.hidden)
   }
 }
 
