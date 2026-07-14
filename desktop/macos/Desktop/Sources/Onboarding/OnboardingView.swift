@@ -32,6 +32,8 @@ struct OnboardingView: View {
   @AppStorage("onboardingBYOKStepRemoved") private var hasRemovedBYOKStep = false
   @StateObject private var introCoordinator = OnboardingPagedIntroCoordinator()
   @StateObject private var graphViewModel = MemoryGraphViewModel()
+  @FocusState private var contentFocused: Bool
+  @State private var keyNavMonitor: Any?
 
   let steps = OnboardingFlow.steps
 
@@ -103,6 +105,10 @@ struct OnboardingView: View {
       hasInsertedBYOKStep = true
       hasRemovedBYOKStep = true
       introCoordinator.prepare(appState: appState)
+      installKeyNavigationMonitor()
+    }
+    .onDisappear {
+      removeKeyNavigationMonitor()
     }
     .task {
       guard !isExportPreview else { return }
@@ -455,6 +461,85 @@ struct OnboardingView: View {
         )
       }
     }
+    .environment(\.onboardingBack, canGoBack ? goBack : nil)
+    .focusable()
+    .focusEffectDisabled()
+    .focused($contentFocused)
+    .onAppear { contentFocused = true }
+    .onChange(of: currentStep) { _, _ in contentFocused = true }
+  }
+
+  /// Back is available on every step past the first, except in the export preview
+  /// where the step is pinned by `exportStepOverride`.
+  private var canGoBack: Bool {
+    currentStep > 0 && !isExportPreview
+  }
+
+  private func goBack() {
+    guard canGoBack else { return }
+    currentStep -= 1
+  }
+
+  /// Arrow-key navigation runs off a local `NSEvent` monitor rather than SwiftUI
+  /// `.onKeyPress`, because the "Ask a question" steps take key focus away from the
+  /// onboarding window (shortcut steps null the app menu + install their own key
+  /// monitor; demo steps hand focus to the floating Ask Omi panel). A monitor sees
+  /// the keystroke regardless of which of the app's windows is key.
+  private func installKeyNavigationMonitor() {
+    guard keyNavMonitor == nil, !isExportPreview else { return }
+    keyNavMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+      handleArrowNavigation(event) ? nil : event
+    }
+  }
+
+  private func removeKeyNavigationMonitor() {
+    if let monitor = keyNavMonitor {
+      NSEvent.removeMonitor(monitor)
+      keyNavMonitor = nil
+    }
+  }
+
+  /// Returns true when the event was consumed as a back/forward navigation.
+  /// Skips plain arrows while the user is typing (any text field, including the
+  /// floating Ask Omi bar) so the caret keeps moving instead of navigating.
+  private func handleArrowNavigation(_ event: NSEvent) -> Bool {
+    guard !isExportPreview else { return false }
+    // Only bare arrows navigate — leave shortcut chords (⌘/⌥/⌃/⇧) to their owners.
+    let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+    guard mods.subtracting([.function, .numericPad]).isEmpty else { return false }
+    // Typing in the floating bar or any text field owns the arrows.
+    if NSApp.keyWindow is FloatingControlBarWindow { return false }
+    if NSApp.keyWindow?.firstResponder is NSText { return false }
+
+    switch event.keyCode {
+    case 123, 126:  // left, up
+      guard canGoBack else { return false }
+      goBack()
+      return true
+    case 124, 125:  // right, down
+      return handleForwardKey() == .handled
+    default:
+      return false
+    }
+  }
+
+  /// Forward arrow == pressing the step's visible Continue button. Re-issuing the
+  /// default-action key (Return) reuses each step's own gating (name/goal required,
+  /// demo completion) instead of blindly advancing `currentStep`.
+  private func handleForwardKey() -> KeyPress.Result {
+    guard let window = NSApp.keyWindow else { return .ignored }
+    for phase in [NSEvent.EventType.keyDown, .keyUp] {
+      guard
+        let event = NSEvent.keyEvent(
+          with: phase, location: .zero, modifierFlags: [],
+          timestamp: ProcessInfo.processInfo.systemUptime,
+          windowNumber: window.windowNumber, context: nil,
+          characters: "\r", charactersIgnoringModifiers: "\r",
+          isARepeat: false, keyCode: 36)
+      else { continue }
+      window.postEvent(event, atStart: false)
+    }
+    return .handled
   }
 
   /// Complete onboarding — start all services and transition to the app
