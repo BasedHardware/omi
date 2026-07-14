@@ -607,7 +607,7 @@ def get_app_money_made(app_id: str) -> dict[str, int | float]:
 
 
 def upsert_app_payment_link(
-    app_id: str, is_paid_app: bool, price: float, payment_plan: str, uid: str, previous_price: float | None = None
+    app_id: str, is_paid_app: bool, price: Any, payment_plan: str, uid: str, previous_price: float | None = None
 ):
     if not is_paid_app:
         logger.info(f"App is not a paid app, app_id: {app_id}")
@@ -628,8 +628,12 @@ def upsert_app_payment_link(
         logger.info(f"App price is existing, app_id: {app_id}")
         return app
 
-    if price == 0:
-        logger.error(f"App price is not invalid, app_id: {app_id}")
+    # A paid app needs a positive numeric price before we can build a Stripe link. update_app passes the
+    # raw request price straight through, so a null price (is_paid toggled on without a price) or a
+    # non-numeric value would reach int(price * 100) below and raise, 500ing the update. Treat any
+    # non-positive or non-numeric price like the existing price==0 case: skip link creation, no crash.
+    if not isinstance(price, (int, float)) or isinstance(price, bool) or price <= 0:
+        logger.error(f"App price is missing or not a positive number, app_id: {app_id}")
         return app
 
     # create recurring payment link
