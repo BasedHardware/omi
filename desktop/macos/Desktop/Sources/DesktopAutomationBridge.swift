@@ -2983,6 +2983,7 @@ final class DesktopAutomationActionRegistry {
       case "5", "rewind": item = .rewind
       case "6", "apps": item = .apps
       case ",", "comma", "settings": item = .settings
+      case "clone", "ai_clone", "aiclone": item = .aiClone
       default: item = nil
       }
       guard let item else {
@@ -2997,6 +2998,39 @@ final class DesktopAutomationActionRegistry {
         "navigated": item.title,
         "selected_tab_index": "\(item.rawValue)",
       ]
+    }
+
+    register(
+      name: "ai_clone_snapshot",
+      summary: "Safe AI Clone state: connection, enabled flag, per-mode chat counts, activity counts (no message content, no token)",
+      params: []
+    ) { _ in
+      await MainActor.run {
+        let service = AICloneService.shared
+        let config = service.configuration
+        var modeCounts: [String: Int] = [:]
+        for mode in config.chatModes.values {
+          modeCounts[mode.rawValue, default: 0] += 1
+        }
+        let state: String
+        switch service.connectionState {
+        case .connected: state = "connected"
+        case .connecting: state = "connecting"
+        case .failed: state = "failed"
+        case .disconnected: state = "disconnected"
+        }
+        return [
+          "connection_state": state,
+          "enabled": config.enabled ? "true" : "false",
+          "has_access_token": service.hasAccessToken ? "true" : "false",
+          "listening": service.isListening ? "true" : "false",
+          "chat_count": "\(service.chats.count)",
+          "mode_counts": modeCounts.map { "\($0.key)=\($0.value)" }.sorted().joined(separator: ","),
+          "pending_approvals": "\(service.pendingApprovals.count)",
+          "activity_count": "\(config.activityLog.count)",
+          "benchmarked_chats": "\(config.benchmarkResults.count)",
+        ]
+      }
     }
 
     register(
