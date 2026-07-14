@@ -3746,12 +3746,51 @@ class FloatingControlBarManager {
         log("FloatingControlBarManager: refusing unjournaled visible response")
         chatCancellable?.cancel()
         chatCancellable = nil
-        barWindow.state.setLocalAnswerOverride(
-            ChatMessage(text: "⚠️ I couldn't save that response. Please try again.", sender: .ai)
-        )
+        appendJournalSaveWarning(in: barWindow, provider: activeFloatingProvider())
         barWindow.state.isAILoading = false
         barWindow.state.present(.mainResponse)
         barWindow.resizeToResponseHeightPublic(animated: true)
+    }
+
+    /// Keep any visible partial/override and append a save warning (do not replace content).
+    private func appendJournalSaveWarning(
+        in barWindow: FloatingControlBarWindow,
+        provider: ChatProvider?
+    ) {
+        let warning = "⚠️ I couldn't save that response. Please try again."
+        if let existing = barWindow.state.currentAIMessage(from: provider),
+           FloatingControlBarState.messageHasAnswerContent(existing)
+        {
+            if let provider,
+               let index = provider.messages.firstIndex(where: { $0.id == existing.id })
+            {
+                let existingText = provider.messages[index].text
+                if !existingText.contains("couldn't save that response") {
+                    provider.messages[index].text = existingText.isEmpty
+                        ? warning
+                        : existingText + "\n\n" + warning
+                }
+                provider.messages[index].isStreaming = false
+                if provider.messages[index].journalStatus != .failed {
+                    provider.messages[index].journalStatus = .failed
+                }
+                barWindow.state.bindAnswerMessage(provider.messages[index])
+                return
+            }
+            let existingText = existing.text
+            let combined = existingText.isEmpty || existingText.contains("couldn't save that response")
+                ? (existingText.isEmpty ? warning : existingText)
+                : existingText + "\n\n" + warning
+            var override = existing
+            override.text = combined
+            override.isStreaming = false
+            override.journalStatus = .failed
+            barWindow.state.setLocalAnswerOverride(override)
+            return
+        }
+        barWindow.state.setLocalAnswerOverride(
+            ChatMessage(text: warning, sender: .ai, journalStatus: .failed)
+        )
     }
 
     private func dispatchPendingQueryIfNeeded(
@@ -4455,7 +4494,9 @@ class FloatingControlBarManager {
         // Handle errors after sendMessage completes
         barWindow.state.isAILoading = false
 
-        if let errorText = provider.displayErrorMessage {
+        if journalAccepted == false, providerResponse != nil {
+            appendJournalSaveWarning(in: barWindow, provider: provider)
+        } else if let errorText = provider.displayErrorMessage {
             // Provider reported an error (timeout, bridge crash, etc.).
             // Prefer mutating the provider-backed answer in place; only use
             // localAnswerOverride when there is no provider message to update.
@@ -4604,6 +4645,9 @@ class FloatingControlBarManager {
             $0.clientTurnId == clientTurnId && $0.sender == .ai
         }) {
             FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(finalAIMessage, isFinal: true)
+            if journalAccepted == false {
+                appendJournalSaveWarning(in: barWindow, provider: provider)
+            }
         } else if let errorText = provider.displayErrorMessage, !errorText.isEmpty {
             FloatingBarVoicePlaybackService.shared.speakOneShot(errorText)
         } else {

@@ -246,6 +246,52 @@ struct VoiceTurnUIProjection: Equatable, Sendable {
   static let idle = VoiceTurnUIProjection()
 }
 
+/// Pure copy / status-banner projections over reducer state and terminal reasons.
+/// Every string here is derived from existing `VoiceTurnUIProjection` / `VoiceTurnTerminalReason`
+/// — not a second lifecycle enum.
+enum VoiceTurnUICopy {
+  static let transcribingProgress = "Transcribing…"
+  static let backupTranscription = "Using backup transcription…"
+  static let bargeInInterrupted = "New question — previous reply stopped"
+  static let bargeInHintVisibility: TimeInterval = 1
+
+  /// Banner text for the floating bar: explicit hint wins; otherwise surface the
+  /// in-progress transcription placeholder already written to `transcript`.
+  static func statusBannerText(for projection: VoiceTurnUIProjection) -> String {
+    if !projection.hint.isEmpty { return projection.hint }
+    if projection.transcript == transcribingProgress { return projection.transcript }
+    return ""
+  }
+
+  /// User-facing terminal hint. Branches on typed reason only.
+  static func terminalHint(for reason: VoiceTurnTerminalReason) -> String? {
+    switch reason {
+    case .tooShort:
+      return "Hold longer to record"
+    case .captureFailed:
+      return "Microphone unavailable — try again"
+    case .transcriptionFailed:
+      return "Couldn't transcribe that — try again"
+    case .journalFailed:
+      return "Couldn't save that reply — try again"
+    case .providerFailed, .providerNoResponse, .deferredCommitTimeout:
+      return "Couldn't get a voice reply — try again"
+    case .bargeInReplacementTimeout:
+      return "Previous reply was interrupted — try again"
+    case .toolTimeout:
+      return "A tool took too long — try again"
+    case .playbackFailed:
+      return "Audio playback failed"
+    case .interruptedByBargeIn:
+      // Applied on the replacement turn in `.start` (this turn is replaced immediately).
+      return nil
+    case .success, .silentRejected, .cancelled, .ownerChanged, .explicitInterrupt,
+      .permissionDenied, .hubWarmTimeout, .cleanup:
+      return nil
+    }
+  }
+}
+
 enum VoiceTurnDebugPresentationState: String, Equatable, Sendable {
   case idle
   case listening
@@ -609,14 +655,18 @@ struct VoiceTurnReducer {
 
     if case .start(let turnID, let ownerID, let intent) = event {
       let supersededTurnID: VoiceTurnID?
+      let interruptedByBargeIn: Bool
       if let active = model.turn, !active.phase.isTerminal {
         supersededTurnID = active.id
+        interruptedByBargeIn = true
         terminate(&model, reason: .interruptedByBargeIn, effects: &effects)
       } else if let terminal = model.turn, !terminal.deadlines.isEmpty {
         supersededTurnID = nil
+        interruptedByBargeIn = false
         effects.append(.cancelAllDeadlines(turnID: terminal.id))
       } else {
         supersededTurnID = nil
+        interruptedByBargeIn = false
       }
       model.turn = VoiceTurn(
         id: turnID,
@@ -626,6 +676,14 @@ struct VoiceTurnReducer {
       model.staleEventCount = 0
       model.invalidTransitionCount = 0
       model.duplicateTerminalCount = 0
+      if interruptedByBargeIn {
+        model.turn?.projection.hint = VoiceTurnUICopy.bargeInInterrupted
+        schedule(
+          .hintVisibility,
+          after: VoiceTurnUICopy.bargeInHintVisibility,
+          in: &model,
+          effects: &effects)
+      }
       schedule(.captureStart, after: deadlines.captureStart, in: &model, effects: &effects)
       return VoiceTurnReduction(model: model, effects: effects)
     }
@@ -977,7 +1035,7 @@ struct VoiceTurnReducer {
         return VoiceTurnReduction(model: model, effects: effects)
       }
       model.turn?.projection.isThinking = true
-      model.turn?.projection.transcript = "Transcribing…"
+      model.turn?.projection.transcript = VoiceTurnUICopy.transcribingProgress
       schedule(.transcription, after: deadlines.transcription, in: &model, effects: &effects)
 
     case .transcriptionFinal(_, let text):
@@ -1454,24 +1512,7 @@ struct VoiceTurnReducer {
     turn.terminalReason = reason
     turn.phase = .terminal(reason)
     turn.projection = .idle
-    let terminalHint: String?
-    switch reason {
-    case .tooShort:
-      terminalHint = "Hold longer to record"
-    case .captureFailed:
-      terminalHint = "Microphone unavailable — try again"
-    case .transcriptionFailed:
-      terminalHint = "Couldn't transcribe that — try again"
-    case .providerFailed, .providerNoResponse, .deferredCommitTimeout,
-      .bargeInReplacementTimeout, .toolTimeout, .journalFailed:
-      terminalHint = "Voice response failed — try again"
-    case .playbackFailed:
-      terminalHint = "Audio playback failed"
-    case .success, .silentRejected, .cancelled, .ownerChanged, .interruptedByBargeIn,
-      .explicitInterrupt, .permissionDenied, .hubWarmTimeout, .cleanup:
-      terminalHint = nil
-    }
-    if let terminalHint {
+    if let terminalHint = VoiceTurnUICopy.terminalHint(for: reason) {
       turn.projection.hint = terminalHint
       turn.deadlines.insert(.hintVisibility)
       effects.append(

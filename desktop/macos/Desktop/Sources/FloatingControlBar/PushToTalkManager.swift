@@ -370,8 +370,9 @@ class PushToTalkManager: ObservableObject {
       if Self.isHubRoute(route) {
         _ = RealtimeHubController.shared.cancelTurn(turnID: turnID)
       }
-    case .fallbackToTranscription(let turnID, _):
+    case .fallbackToTranscription(let turnID, let reason):
       guard voiceTurnCoordinator.activeTurnID == turnID else { return }
+      discloseBackupTranscriptionFallback(reason: reason)
       resolveRealtimeHubWarmWait(ready: false)
     case .stopPlayback(let lease):
       if lease.lane == .nativeRealtime {
@@ -1154,7 +1155,7 @@ class PushToTalkManager: ObservableObject {
         return
       }
 
-      voiceTurnCoordinator.send(.transcriptChanged(turnID: turnID, text: "Transcribing…"))
+      voiceTurnCoordinator.send(.transcriptChanged(turnID: turnID, text: VoiceTurnUICopy.transcribingProgress))
 
       Task {
         do {
@@ -1545,6 +1546,24 @@ class PushToTalkManager: ObservableObject {
     }
   }
 
+  /// One-line UX + shared fallback telemetry when hub warm/admission cascades.
+  private func discloseBackupTranscriptionFallback(reason: VoiceTurnTerminalReason) {
+    guard let turnID = currentVoiceTurnID else { return }
+    voiceTurnCoordinator.send(
+      .hintChanged(turnID: turnID, text: VoiceTurnUICopy.backupTranscription))
+    let toLane = phase == .finalizing ? "batch_stt" : "omni"
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "ptt_cascade",
+      from: "hub",
+      to: toLane,
+      reason: "timeout",
+      outcome: .degraded,
+      extra: [
+        "user_visible": true,
+        "terminal_reason": reason.rawValue,
+      ])
+  }
+
   private func commitBufferedRealtimeHubTurn() {
     guard isHubMode else { return }
     activeTracer = nil
@@ -1597,6 +1616,7 @@ class PushToTalkManager: ObservableObject {
       batchAudioLock.lock()
       batchAudioBuffer = turnAudio
       batchAudioLock.unlock()
+      discloseBackupTranscriptionFallback(reason: .hubWarmTimeout)
       transcribeBufferedWarmWaitAudio()
       return
     }
@@ -1669,11 +1689,35 @@ class PushToTalkManager: ObservableObject {
         log(
           "PushToTalkManager: warm-wait batch STT selected provider=\(batchResult.provider ?? "unknown") "
             + "model=\(batchResult.model ?? "unknown")")
+        let provider = batchResult.provider ?? "unknown"
+        let model = batchResult.model ?? "unknown"
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "ptt_cascade",
+          from: "hub",
+          to: provider,
+          reason: "timeout",
+          outcome: .recovered,
+          extra: [
+            "stt_provider": provider,
+            "stt_model": model,
+            "user_visible": true,
+          ])
         if let transcript = batchResult.transcript, !transcript.isEmpty {
           self.transcriptSegments = [transcript]
         }
       } catch {
         logError("PushToTalkManager: warm-wait fallback transcription failed", error: error)
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "ptt_cascade",
+          from: "hub",
+          to: "batch_stt",
+          reason: "timeout",
+          outcome: .exhausted,
+          extra: [
+            "stt_provider": "unknown",
+            "stt_model": "unknown",
+            "user_visible": true,
+          ])
         self.voiceTurnCoordinator.send(
           .transcriptionFailed(turnID: turnID, message: error.localizedDescription))
         return
@@ -2146,7 +2190,7 @@ extension PushToTalkManager {
       sendTranscript(turnID: turnID)
       return
     }
-    voiceTurnCoordinator.send(.transcriptChanged(turnID: turnID, text: "Transcribing…"))
+    voiceTurnCoordinator.send(.transcriptChanged(turnID: turnID, text: VoiceTurnUICopy.transcribingProgress))
     voiceTurnCoordinator.send(.selectRoute(turnID: turnID, route: .deepgramBatch))
     let capturedReason = reason
     Task { @MainActor [weak self] in
