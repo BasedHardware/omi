@@ -6,8 +6,8 @@ struct ExportsSection: View {
   let statuses: [MemoryExportDestination: MemoryExportStatus]
   let onSelectDestination: (MemoryExportDestination) -> Void
 
-  // Claude/Claude Code and ChatGPT/Codex are merged into one row each; tapping
-  // opens the grouped sheet that shows both options. The CLI-only cases drop out.
+  // Claude/Claude Code and ChatGPT/Codex each share one choice. Their setup
+  // sheets keep the cloud and CLI paths distinct without making this list uneven.
   private var entries: [(destination: MemoryExportDestination, title: String?, subtitle: String?)] {
     MemoryExportDestination.allCases.compactMap { d in
       switch d {
@@ -18,7 +18,9 @@ struct ExportsSection: View {
           .claude, "Claude / Claude Code", "Claude Code (CLI) or Claude cloud — choose in setup."
         )
       case .chatgpt:
-        return (.chatgpt, "ChatGPT / Codex", "Codex (CLI) or ChatGPT cloud — choose in setup.")
+        return (
+          .chatgpt, "ChatGPT / Codex", "Add Omi in ChatGPT or connect Codex locally — choose in setup."
+        )
       default:
         return (d, nil, nil)
       }
@@ -461,7 +463,9 @@ struct MemoryExportDestinationSheet: View {
     .background(OmiColors.backgroundPrimary)
     .task {
       await model.loadConfiguration()
-      statuses[destination] = await MemoryExportService.shared.status(for: destination)
+      statuses[destination] = destination == .chatgpt
+        ? await MemoryExportService.shared.refreshChatGPTDirectoryConnectionStatus()
+        : await MemoryExportService.shared.status(for: destination)
       if destination.supportsMCP && destination.requiresHostedMCPKeyForSetup && model.mcpKey == nil {
         await model.generateMCPKey()
       }
@@ -472,12 +476,20 @@ struct MemoryExportDestinationSheet: View {
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
     { _ in
       refreshPermissionStateIfNeeded()
+      refreshChatGPTDirectoryConnectionIfNeeded()
     }
   }
 
   private func refreshPermissionStateIfNeeded() {
     guard MemoryExportExecutor.requiresAccessibilityPreflight(destination) else { return }
     permissionRefreshID += 1
+  }
+
+  private func refreshChatGPTDirectoryConnectionIfNeeded() {
+    guard destination == .chatgpt else { return }
+    Task {
+      statuses[.chatgpt] = await MemoryExportService.shared.refreshChatGPTDirectoryConnectionStatus()
+    }
   }
 
   @ViewBuilder
@@ -507,14 +519,20 @@ struct MemoryExportDestinationSheet: View {
 
   @ViewBuilder
   private var manualSetupDisclosure: some View {
-    ManualInstallationDisclosure(isExpanded: $showManualSetup, fontSize: 13) {
+    ManualInstallationDisclosure(
+      isExpanded: $showManualSetup,
+      title: destination == .chatgpt ? "Developer-mode fallback" : "Manual installation",
+      fontSize: 13
+    ) {
       VStack(alignment: .leading, spacing: OmiSpacing.lg) {
         methodHeader(
           icon: "bolt.fill",
-          title: "Live connection",
-          tag: "AUTOMATIC",
-          tagColor: OmiColors.success,
-          subtitle: "Set it once — \(destination.title) reads your memories live and stays in sync."
+          title: destination == .chatgpt ? "Custom ChatGPT app" : "Live connection",
+          tag: destination == .chatgpt ? "ADVANCED" : "AUTOMATIC",
+          tagColor: destination == .chatgpt ? OmiColors.textTertiary : OmiColors.success,
+          subtitle: destination == .chatgpt
+            ? "Use only when your workspace requires a developer-mode custom app."
+            : "Set it once — \(destination.title) reads your memories live and stays in sync."
         )
         mcpSection
 
@@ -641,6 +659,8 @@ struct MemoryExportDestinationSheet: View {
 
   private var executeBlockSubtitle: String {
     switch destination.mcpExecuteKind {
+    case .directoryApp:
+      return "Open Omi’s approved ChatGPT listing, then add Omi and authorize it in ChatGPT. Omi checks the connection when you return."
     case .localAutonomous:
       return
         "Omi sets up \(destination.title) for you — it runs as an Omi task you can watch in the floating bar. If it gets stuck, use the manual steps below."
@@ -672,10 +692,10 @@ struct MemoryExportDestinationSheet: View {
           Image(systemName: "sparkles")
             .scaledFont(size: OmiType.body, weight: .semibold)
             .foregroundColor(OmiColors.textSecondary)
-          Text("Let Omi do it")
+          Text(destination.mcpExecuteKind == .directoryApp ? "Connect in ChatGPT" : "Let Omi do it")
             .scaledFont(size: OmiType.subheading, weight: .semibold)
             .foregroundColor(OmiColors.textPrimary)
-          Text("FASTEST")
+          Text(destination.mcpExecuteKind == .directoryApp ? "ONE CLICK" : "FASTEST")
             .scaledFont(size: OmiType.micro, weight: .bold)
             .foregroundColor(OmiColors.success)
             .padding(.horizontal, OmiSpacing.xs)
@@ -690,7 +710,9 @@ struct MemoryExportDestinationSheet: View {
         Button {
           Task {
             await model.executeWithOmi(destination: destination)
-            statuses[destination] = await MemoryExportService.shared.status(for: destination)
+            statuses[destination] = destination == .chatgpt
+              ? await MemoryExportService.shared.refreshChatGPTDirectoryConnectionStatus()
+              : await MemoryExportService.shared.status(for: destination)
             // Assisted flow: the user pastes values by hand, so surface the
             // field-by-field steps instead of leaving them collapsed.
             if destination.mcpExecuteKind == .assisted, destination.assistedOverlayHint != nil {
@@ -777,6 +799,8 @@ struct MemoryExportDestinationSheet: View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       if destination == .claude {
         claudeConnectorFields
+      } else if destination == .chatgpt {
+        chatGPTDeveloperModeFields
       } else {
         mcpCodeRow(
           label: "Server URL", value: MemoryExportDestination.mcpServerURL, copyLabel: "Server URL")
@@ -846,6 +870,48 @@ struct MemoryExportDestinationSheet: View {
         .scaledFont(size: OmiType.caption)
         .foregroundColor(OmiColors.textTertiary)
         .fixedSize(horizontal: false, vertical: true)
+    }
+  }
+
+  @ViewBuilder
+  private var chatGPTDeveloperModeFields: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.md) {
+      Text("Copy these fields only when creating a ChatGPT developer-mode custom app.")
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(OmiColors.textTertiary)
+        .fixedSize(horizontal: false, vertical: true)
+
+      mcpCodeRow(label: "Name", value: "Omi Memory", copyLabel: "Name")
+      mcpCodeRow(
+        label: "Connection / server URL",
+        value: MemoryExportDestination.mcpServerURL,
+        copyLabel: "Connection / server URL")
+      mcpCodeRow(label: "Authentication", value: "OAuth", copyLabel: "Authentication")
+
+      Text("Advanced OAuth settings")
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .foregroundColor(OmiColors.textSecondary)
+        .padding(.top, OmiSpacing.hairline)
+
+      mcpCodeRow(
+        label: "OAuth Client ID",
+        value: destination.cloudOAuthClientID ?? "",
+        copyLabel: "OAuth Client ID")
+      Text("Leave OAuth Client Secret blank.")
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(OmiColors.textTertiary)
+      mcpCodeRow(
+        label: "Token auth method",
+        value: destination.cloudTokenAuthMethod ?? "none",
+        copyLabel: "Token auth method")
+      mcpCodeRow(
+        label: "Auth URL",
+        value: MemoryExportDestination.mcpAuthorizeURL,
+        copyLabel: "Auth URL")
+      mcpCodeRow(
+        label: "Token URL",
+        value: MemoryExportDestination.mcpTokenURL,
+        copyLabel: "Token URL")
     }
   }
 
