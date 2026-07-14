@@ -37,7 +37,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<SyncProvider>().refreshWals();
+      // Discover offline recordings straight from the device so they list here
+      // even when auto-sync is off (device discovery otherwise only runs as the
+      // first step of a full sync). Falls back to the cached list on failure.
+      context.read<SyncProvider>().discoverDeviceWals();
       context.read<DeviceProvider>().refreshRingStorageStatus();
       SyncReconciler.instance.poke();
     });
