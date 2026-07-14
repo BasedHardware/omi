@@ -76,6 +76,7 @@ import { registerMeetingHandlers } from './ipc/meeting'
 import { startMeetingMonitor, stopMeetingMonitor, meetingDebug } from './meeting/meetingMonitor'
 import { registerAutomationHandlers } from './ipc/automation'
 import { registerCodingAgentHandlers } from './ipc/codingAgent'
+import { registerByokHandlers } from './ipc/byok'
 import { automationBridge } from './automation/bridge'
 import {
   startAutomationTargetTracker,
@@ -617,6 +618,8 @@ app.whenReady().then(async () => {
   // Coding-agent task IPC (cheap handler registration; adapter subprocesses spawn
   // only when a task actually runs).
   registerCodingAgentHandlers()
+  // BYOK key management IPC (encrypted-at-rest provider keys for Settings).
+  registerByokHandlers()
 
   // `win` is this launch's instance for one-shot wiring below (ready-to-show,
   // bench); long-lived consumers read the module-level `mainWindow` instead.

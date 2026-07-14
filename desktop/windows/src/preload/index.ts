@@ -31,6 +31,7 @@ import type {
   CodingAgentId,
   CodingAgentRunArgs
 } from '../shared/types'
+import type { ByokProvider } from '../shared/byok'
 import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
 
 const omi: OmiBridgeApi = {
@@ -160,6 +161,11 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('codingAgent:event', listener)
     return () => ipcRenderer.removeListener('codingAgent:event', listener)
   },
+  byokGetAll: () => ipcRenderer.invoke('byok:getAll'),
+  byokSet: (provider: ByokProvider, key: string) => ipcRenderer.invoke('byok:set', provider, key),
+  byokClear: (provider: ByokProvider) => ipcRenderer.invoke('byok:clear', provider),
+  byokClearAll: () => ipcRenderer.invoke('byok:clearAll'),
+  byokIsActive: () => ipcRenderer.invoke('byok:isActive'),
   screenSynthFramesSince: () => ipcRenderer.invoke('screenSynth:framesSince'),
   screenSynthGetState: () => ipcRenderer.invoke('screenSynth:getState'),
   screenSynthSetState: (patch) => ipcRenderer.invoke('screenSynth:setState', patch),
