@@ -122,6 +122,9 @@ env:
       configMapKeyRef:
         name: dev-omi-backend-config
         key: REDIS_DB_HOST
+      # Preserve this explicit null through Helm's strategic merge patch so an
+      # older live Secret-backed REDIS_DB_HOST source is removed on upgrade.
+      secretKeyRef: null
   - name: REDIS_DB_PASSWORD
     valueFrom:
       secretKeyRef:
