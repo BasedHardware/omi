@@ -1338,7 +1338,7 @@ const controlVoicePatches: Partial<Record<AgentControlManifestTool["name"], OmiT
   },
   list_agent_sessions: {
     realtimeDescription:
-      "List canonical Omi-managed agent sessions/runs across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. Use when the user asks what canonical agents or subagents are active, recent, failed, or manageable.",
+      "List canonical Omi-managed agent sessions/runs across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. For a prior child agent's final answer, do not infer run completion from session status or restrict discovery to status='open'. List recent sessions, then inspect the returned run with get_agent_run. Keep internal ids out of the user-visible response.",
     schemaOverride: schema(
       {
         status: { type: "string", enum: ["open", "archived", "closed"], description: "Optional session status filter." },
@@ -1353,7 +1353,7 @@ const controlVoicePatches: Partial<Record<AgentControlManifestTool["name"], OmiT
     ),
   },
   get_agent_run: {
-    realtimeDescription: "Inspect one canonical Omi-managed agent run. Prefer an agentRef from list_agent_sessions.",
+    realtimeDescription: "Inspect one canonical Omi-managed agent run. Prefer an agentRef or runId from list_agent_sessions. For a completed child, answer from run.finalText and do not expose the internal id.",
     schemaOverride: schema(
       {
         agentRef: { type: "string", description: "Opaque agent handle from list_agent_sessions." },

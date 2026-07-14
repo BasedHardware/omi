@@ -99,7 +99,8 @@ enum GeneratedToolCapabilities {
       summary: "List Omi-managed agent sessions from the local runtime kernel.",
       bullets: [
       "Use for current or recent kernel-backed Omi agents/subagents across chat, PTT/realtime, task chat, and floating-bar pills.",
-      "Returns task_agents and floating_agent_pills alongside canonical session summaries."
+      "Returns task_agents and floating_agent_pills alongside canonical session summaries.",
+      "For a prior child agent's final answer, do not infer run completion from session status or restrict discovery to status='open'. List recent sessions, then call get_agent_run with the returned runId and answer from run.finalText without exposing the internal id."
     ]
     ),
     Capability(
@@ -110,7 +111,8 @@ enum GeneratedToolCapabilities {
       summary: "Inspect one canonical Omi agent run.",
       bullets: [
       "Use a runId from list_agent_sessions or a correlated Omi result.",
-      "Returns the run, attempts, adapter bindings, events, and artifact metadata."
+      "Returns the run, attempts, adapter bindings, events, and artifact metadata.",
+      "For a completed child, use run.finalText to answer the user and keep the internal runId out of the user-visible response."
     ]
     ),
     Capability(

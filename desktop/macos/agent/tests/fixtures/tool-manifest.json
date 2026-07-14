@@ -320,7 +320,8 @@
     "promptSnippet": "list_agent_sessions - List Omi-managed agent sessions and active runs",
     "promptGuidelines": [
       "Use for current or recent kernel-backed Omi agents/subagents across chat, PTT/realtime, task chat, and floating-bar pills.",
-      "Returns task_agents and floating_agent_pills alongside canonical session summaries."
+      "Returns task_agents and floating_agent_pills alongside canonical session summaries.",
+      "For a prior child agent's final answer, do not infer run completion from session status or restrict discovery to status='open'. List recent sessions, then call get_agent_run with the returned runId and answer from run.finalText without exposing the internal id."
     ],
     "latency": "fast local",
     "inputSchema": {
@@ -425,7 +426,7 @@
       ]
     },
     "voice": {
-      "realtimeDescription": "List canonical Omi-managed agent sessions/runs across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. Use when the user asks what canonical agents or subagents are active, recent, failed, or manageable.",
+      "realtimeDescription": "List canonical Omi-managed agent sessions/runs across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. For a prior child agent's final answer, do not infer run completion from session status or restrict discovery to status='open'. List recent sessions, then inspect the returned run with get_agent_run. Keep internal ids out of the user-visible response.",
       "schemaOverride": {
         "type": "object",
         "properties": {
@@ -480,7 +481,8 @@
     "promptSnippet": "get_agent_run - Inspect one Omi agent run",
     "promptGuidelines": [
       "Use a runId from list_agent_sessions or a correlated Omi result.",
-      "Returns the run, attempts, adapter bindings, events, and artifact metadata."
+      "Returns the run, attempts, adapter bindings, events, and artifact metadata.",
+      "For a completed child, use run.finalText to answer the user and keep the internal runId out of the user-visible response."
     ],
     "latency": "fast local",
     "inputSchema": {
@@ -555,7 +557,7 @@
       ]
     },
     "voice": {
-      "realtimeDescription": "Inspect one canonical Omi-managed agent run. Prefer an agentRef from list_agent_sessions.",
+      "realtimeDescription": "Inspect one canonical Omi-managed agent run. Prefer an agentRef or runId from list_agent_sessions. For a completed child, answer from run.finalText and do not expose the internal id.",
       "schemaOverride": {
         "type": "object",
         "properties": {

@@ -73,7 +73,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "list_agent_sessions",
-    "description": "List canonical Omi-managed agent sessions/runs across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. Use when the user asks what canonical agents or subagents are active, recent, failed, or manageable.",
+    "description": "List canonical Omi-managed agent sessions/runs across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. For a prior child agent's final answer, do not infer run completion from session status or restrict discovery to status='open'. List recent sessions, then inspect the returned run with get_agent_run. Keep internal ids out of the user-visible response.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -110,7 +110,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "get_agent_run",
-    "description": "Inspect one canonical Omi-managed agent run. Prefer an agentRef from list_agent_sessions.",
+    "description": "Inspect one canonical Omi-managed agent run. Prefer an agentRef or runId from list_agent_sessions. For a completed child, answer from run.finalText and do not expose the internal id.",
     "parameters": {
       "type": "object",
       "properties": {
