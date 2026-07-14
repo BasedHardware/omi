@@ -1,3 +1,0 @@
-{
-  "change": "Made the notch island's hover expansion buttery-smooth: the panel no longer resizes on hover (content animates with a spring instead), icons travel with the expanding surface, and the island now animates in and out of the notch when shown or hidden"
-}

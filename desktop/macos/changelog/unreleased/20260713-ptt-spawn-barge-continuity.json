@@ -1,3 +1,0 @@
-{
-  "change": "Fixed push-to-talk background-agent launches being lost or duplicated when the voice turn is interrupted"
-}

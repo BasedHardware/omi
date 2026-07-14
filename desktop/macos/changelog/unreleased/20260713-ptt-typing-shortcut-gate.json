@@ -1,3 +1,0 @@
-{
-  "change": "Prevented normal typing chords from triggering modifier-only push-to-talk while preserving intentional barge-in holds from the chat input."
-}
