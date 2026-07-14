@@ -272,8 +272,8 @@ def _persist_processing_result_with_lifecycle(
     """Persist a processor result only while its lifecycle generation remains current.
 
     A processor works from an in-memory snapshot.  This transaction fences that
-    snapshot against a concurrent discard or terminal transition before merging
-    generated content back into the conversation document.
+    snapshot against a concurrent discard, delete, or terminal transition before
+    merging generated content back into the conversation document.
     """
     conversation_data.pop('updated_at', None)
     if 'audio_base64_url' in conversation_data:
@@ -290,8 +290,10 @@ def _persist_processing_result_with_lifecycle(
         write_data = copy.deepcopy(conversation_data)
         existing_snapshot = conversation_ref.get(transaction=transaction)
         if not getattr(existing_snapshot, 'exists', False):
-            transaction.set(conversation_ref, write_data)
-            return True
+            # A processor is never an authority to recreate a conversation.
+            # Treat deletion as the same terminal fence as a discard so a
+            # finalizer cannot resurrect it and emit derived side effects.
+            return False
 
         existing = existing_snapshot.to_dict() or {}
         if existing.get('discarded') or existing.get('status') not in expected_statuses:

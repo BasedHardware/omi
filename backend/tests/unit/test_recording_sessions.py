@@ -257,6 +257,37 @@ def test_dual_write_mode_keeps_legacy_route_while_reporting_the_mismatch(recordi
     assert result['lifecycle_sequence'] is None
 
 
+def test_dual_write_mismatch_keeps_legacy_processing_and_completion_events(recording_store, monkeypatch):
+    monkeypatch.setattr(lifecycle_service, 'recording_session_mode', lambda: 'dual_write')
+    lifecycle_service.open_recording_session('uid', 'session', 'first-conversation', firestore_client=recording_store)
+    binding = lifecycle_service.open_recording_session(
+        'uid', 'session', 'second-conversation', firestore_client=recording_store
+    )
+
+    processing = lifecycle_service.record_recording_session_event(
+        'uid', 'session', binding['conversation_id'], 'processing', firestore_client=recording_store
+    )
+    completed = lifecycle_service.record_recording_session_event(
+        'uid', 'session', binding['conversation_id'], 'completed', firestore_client=recording_store
+    )
+    canonical = recording_sessions.create_or_get_recording_session(
+        'uid', 'session', 'first-conversation', firestore_client=recording_store
+    )
+
+    expected_legacy_envelope = {
+        'recording_session_id': 'session',
+        'conversation_id': 'second-conversation',
+        'lifecycle_version': None,
+        'lifecycle_phase': None,
+        'lifecycle_sequence': None,
+    }
+    assert processing == expected_legacy_envelope
+    assert completed == expected_legacy_envelope
+    assert canonical['conversation_id'] == 'first-conversation'
+    assert canonical['lifecycle_phase'] == 'in_progress'
+    assert canonical['lifecycle_sequence'] == 0
+
+
 def test_shadow_mode_emits_legacy_envelope_when_durable_event_write_fails(monkeypatch):
     fallbacks: list[dict[str, Any]] = []
 

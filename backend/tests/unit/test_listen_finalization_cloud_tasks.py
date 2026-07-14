@@ -576,6 +576,28 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(m
 
 
 @pytest.mark.anyio
+async def test_finalizer_fences_a_deleted_conversation_before_processing(monkeypatch):
+    async def inline_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    process = MagicMock()
+    monkeypatch.setattr(persisted_finalizer, 'run_blocking', inline_run_blocking)
+    monkeypatch.setattr(persisted_finalizer.conversations_db, 'get_conversation', lambda *args: None)
+    monkeypatch.setattr(persisted_finalizer, 'process_conversation', process)
+
+    disposition = await persisted_finalizer.finalize_persisted_conversation(
+        'uid-1',
+        'conversation-1',
+        finalization_job_id='job-1',
+        dispatch_generation=2,
+        lease_epoch=3,
+    )
+
+    assert disposition == ConversationFinalizationDisposition.fenced
+    process.assert_not_called()
+
+
+@pytest.mark.anyio
 async def test_finalizer_skips_fanout_when_atomic_claim_is_fenced(monkeypatch):
     async def inline_run_blocking(_executor, func, *args, **kwargs):
         return func(*args, **kwargs)

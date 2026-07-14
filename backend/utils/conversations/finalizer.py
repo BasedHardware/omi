@@ -49,7 +49,14 @@ async def finalize_persisted_conversation(
     """
     conversation_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
     if not conversation_data:
-        raise ConversationFinalizationError('conversation_not_found')
+        # A deleted conversation is a successful no-fanout outcome. Retrying
+        # its lease would only risk resurrecting a stale processor result.
+        logger.info(
+            'persisted conversation finalization fenced because row is missing uid=%s conversation=%s',
+            uid,
+            conversation_id,
+        )
+        return ConversationFinalizationDisposition.fenced
 
     conversation = deserialize_conversation(conversation_data)
     if conversation.status != ConversationStatus.completed and conversation.status != ConversationStatus.processing:

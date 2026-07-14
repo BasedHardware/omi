@@ -332,7 +332,10 @@ def record_recording_session_event(
         conversation_id,
         event['discard_reason'],
     )
-    if recording_session_mode() == 'shadow':
+    if recording_session_mode() in {'shadow', 'dual_write'}:
+        # Dual-write continues the legacy route on an identity mismatch. The
+        # canonical session has correctly rejected this event, but suppressing
+        # the legacy envelope would strand the current desktop completion flow.
         return {
             'recording_session_id': recording_session_id,
             'conversation_id': conversation_id,

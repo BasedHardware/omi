@@ -186,6 +186,22 @@ def test_discard_fences_a_stale_processing_result_and_completion(lifecycle_store
     }
 
 
+def test_missing_conversation_fences_processing_result_without_resurrection(lifecycle_store):
+    persisted = lifecycle_service.persist_processed_conversation(
+        'uid',
+        {
+            'id': 'deleted-conversation',
+            'status': ConversationStatus.completed,
+            'title': 'stale processor output',
+            'data_protection_level': 'standard',
+        },
+    )
+
+    assert persisted is False
+    assert ('users', 'uid', 'conversations', 'deleted-conversation') not in lifecycle_store.documents
+    assert lifecycle_store.write_log == []
+
+
 def test_import_persists_through_the_lifecycle_owner(lifecycle_store):
     lifecycle_service.persist_imported_conversation(
         'uid',
