@@ -182,7 +182,7 @@ run_swift_focus() {
   (
     cd "$DESKTOP_DIR"
     xcrun swift test --package-path Desktop \
-      --filter 'AgentPillLifecycleTests|PushToTalkStateMachineTests|VoiceTurnReducerTests|VoiceTurnCoordinatorTests|VoiceTurnOutputOwnershipTests|LegacyVoiceJournalImporterTests|RealtimeHubBargeInContinuityTests|RealtimeHubSessionInputLifecycleTests|RealtimeHubSpawnAgentTests|RealtimeProviderToolResultPolicyTests|AgentContinuityGauntletTests|KernelTurnRecordedProjectionTests|ChatTimelineContinuityTests|FloatingControlBarStateTests|RuntimeOwnerIdentityTests|TaskThreadProjectionTests|AgentRuntimeBridgeLifecycleTests|AgentRuntimeContractFixtureTests|PiMonoWiringTests'
+      --filter 'AgentPillLifecycleTests|PushToTalkStateMachineTests|VoiceTurnReducerTests|VoiceTurnReducerFuzzTests|VoiceTurnCoordinatorTests|VoiceTurnOutputOwnershipTests|LegacyVoiceJournalImporterTests|RealtimeHubBargeInContinuityTests|RealtimeHubReconnectContractTests|RealtimeHubSessionInputLifecycleTests|RealtimeHubSpawnAgentTests|RealtimeProviderToolResultPolicyTests|AgentContinuityGauntletTests|KernelTurnRecordedProjectionTests|ChatTimelineContinuityTests|FloatingControlBarStateTests|RuntimeOwnerIdentityTests|TaskThreadProjectionTests|AgentRuntimeBridgeLifecycleTests|AgentRuntimeContractFixtureTests|PiMonoWiringTests'
   )
 }
 
@@ -231,7 +231,8 @@ run_cross_surface_agent_smoke() {
       tests/context-snapshot.test.ts \
       tests/agent-runtime-contract-fixtures.test.ts \
       tests/runtime-adapter-contract-conformance.test.ts \
-      tests/relay-tool-result.test.ts
+      tests/relay-tool-result.test.ts \
+      tests/spawn-receipt-fixtures.test.ts
   )
 }
 

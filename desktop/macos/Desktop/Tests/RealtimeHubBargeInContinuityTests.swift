@@ -121,6 +121,211 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
       .init(continuityKey: "voice:b", accepted: true))
   }
 
+  func testTurnPersistenceLedgerNoneToPendingDoesNotRetainReceiptYet() async {
+    let ledger = RealtimeTurnPersistenceLedger()
+    let gate = SuspendedTurnPersistenceGate()
+
+    let task = ledger.enqueue(continuityKey: "voice:matrix-none", retainingReceipt: false) {
+      await gate.persist(continuityKey: "voice:matrix-none")
+    }
+    await gate.waitUntilSuspended(continuityKey: "voice:matrix-none")
+    XCTAssertEqual(ledger.pendingContinuityKeys, ["voice:matrix-none"])
+    XCTAssertNil(ledger.receipt(for: "voice:matrix-none"))
+
+    let accepted = await gate.accept(continuityKey: "voice:matrix-none")
+    let result = await task.value
+    XCTAssertTrue(accepted)
+    XCTAssertTrue(result)
+    XCTAssertNil(
+      ledger.receipt(for: "voice:matrix-none"),
+      "retain=false must not invent a receipt after completion")
+  }
+
+  func testTurnPersistenceLedgerWidensRetentionOnDuplicateEnqueue() async {
+    let ledger = RealtimeTurnPersistenceLedger()
+    let gate = SuspendedTurnPersistenceGate()
+
+    let first = ledger.enqueue(continuityKey: "voice:matrix-widen", retainingReceipt: false) {
+      await gate.persist(continuityKey: "voice:matrix-widen")
+    }
+    await gate.waitUntilSuspended(continuityKey: "voice:matrix-widen")
+
+    let second = ledger.enqueue(continuityKey: "voice:matrix-widen", retainingReceipt: true) {
+      XCTFail("duplicate enqueue must reuse the in-flight obligation")
+      return false
+    }
+    XCTAssertEqual(ledger.pendingContinuityKeys, ["voice:matrix-widen"])
+    // Same-key enqueue must return the identical in-flight task (widen, don't replace).
+    let firstResultTask = Task { await first.value }
+    let secondResultTask = Task { await second.value }
+
+    let accepted = await gate.accept(continuityKey: "voice:matrix-widen")
+    let firstResult = await firstResultTask.value
+    let secondResult = await secondResultTask.value
+    XCTAssertTrue(accepted)
+    XCTAssertTrue(firstResult)
+    XCTAssertTrue(secondResult)
+    XCTAssertEqual(
+      ledger.receipt(for: "voice:matrix-widen"),
+      .init(continuityKey: "voice:matrix-widen", accepted: true),
+      "later retain=true must widen the live obligation before completion")
+  }
+
+  func testTurnPersistenceLedgerExternalAcceptanceStaysAuthoritative() async {
+    let ledger = RealtimeTurnPersistenceLedger()
+    let gate = SuspendedTurnPersistenceGate()
+
+    let task = ledger.enqueue(continuityKey: "voice:matrix-external", retainingReceipt: true) {
+      await gate.persist(continuityKey: "voice:matrix-external")
+    }
+    await gate.waitUntilSuspended(continuityKey: "voice:matrix-external")
+    ledger.recordAcceptedReceipt(for: "voice:matrix-external")
+    XCTAssertEqual(
+      ledger.receipt(for: "voice:matrix-external"),
+      .init(continuityKey: "voice:matrix-external", accepted: true))
+
+    let accepted = await gate.accept(continuityKey: "voice:matrix-external")
+    let result = await task.value
+    XCTAssertTrue(accepted)
+    XCTAssertTrue(result)
+    XCTAssertEqual(
+      ledger.receipt(for: "voice:matrix-external"),
+      .init(continuityKey: "voice:matrix-external", accepted: true),
+      "pending obligation completion must not overwrite an external acceptance")
+  }
+
+  func testTurnPersistenceLedgerDuplicateExternalAcceptanceIsIdempotent() {
+    let ledger = RealtimeTurnPersistenceLedger()
+    ledger.recordAcceptedReceipt(for: "voice:matrix-dup")
+    ledger.recordAcceptedReceipt(for: "voice:matrix-dup")
+    XCTAssertEqual(
+      ledger.receipt(for: "voice:matrix-dup"),
+      .init(continuityKey: "voice:matrix-dup", accepted: true))
+  }
+
+  func testTurnPersistenceLedgerConsumeIsOnceThenFreshEnqueue() async {
+    let ledger = RealtimeTurnPersistenceLedger()
+    let gate = SuspendedTurnPersistenceGate()
+
+    let first = ledger.enqueue(continuityKey: "voice:matrix-consume", retainingReceipt: true) {
+      await gate.persist(continuityKey: "voice:matrix-consume")
+    }
+    await gate.waitUntilSuspended(continuityKey: "voice:matrix-consume")
+    let acceptedFirst = await gate.accept(continuityKey: "voice:matrix-consume")
+    let firstResult = await first.value
+    XCTAssertTrue(acceptedFirst)
+    XCTAssertTrue(firstResult)
+
+    let consumed = await ledger.consumeReceipt(for: "voice:matrix-consume")
+    XCTAssertEqual(
+      consumed,
+      .init(continuityKey: "voice:matrix-consume", accepted: true))
+    let consumedAgain = await ledger.consumeReceipt(for: "voice:matrix-consume")
+    XCTAssertNil(consumedAgain)
+
+    let secondGate = SuspendedTurnPersistenceGate()
+    let second = ledger.enqueue(continuityKey: "voice:matrix-consume", retainingReceipt: true) {
+      await secondGate.persist(continuityKey: "voice:matrix-consume")
+    }
+    await secondGate.waitUntilSuspended(continuityKey: "voice:matrix-consume")
+    XCTAssertNil(
+      ledger.receipt(for: "voice:matrix-consume"),
+      "fresh obligation must not inherit the consumed receipt")
+    let acceptedAgain = await secondGate.accept(continuityKey: "voice:matrix-consume")
+    let secondResult = await second.value
+    XCTAssertTrue(acceptedAgain)
+    XCTAssertTrue(secondResult)
+    XCTAssertEqual(
+      ledger.receipt(for: "voice:matrix-consume"),
+      .init(continuityKey: "voice:matrix-consume", accepted: true))
+  }
+
+  func testTurnPersistenceLedgerLateCancelledCompletionCannotOverwriteNewer() async {
+    let ledger = RealtimeTurnPersistenceLedger()
+    let oldGate = SuspendedTurnPersistenceGate()
+    let newGate = SuspendedTurnPersistenceGate()
+
+    let oldTask = ledger.enqueue(continuityKey: "voice:matrix-cancel", retainingReceipt: true) {
+      await oldGate.persist(continuityKey: "voice:matrix-cancel")
+    }
+    await oldGate.waitUntilSuspended(continuityKey: "voice:matrix-cancel")
+    ledger.cancelAll()
+    XCTAssertTrue(ledger.pendingContinuityKeys.isEmpty)
+
+    let newTask = ledger.enqueue(continuityKey: "voice:matrix-cancel", retainingReceipt: true) {
+      await newGate.persist(continuityKey: "voice:matrix-cancel")
+    }
+    await newGate.waitUntilSuspended(continuityKey: "voice:matrix-cancel")
+    let acceptedNew = await newGate.accept(continuityKey: "voice:matrix-cancel")
+    let newResult = await newTask.value
+    XCTAssertTrue(acceptedNew)
+    XCTAssertTrue(newResult)
+    XCTAssertEqual(
+      ledger.receipt(for: "voice:matrix-cancel"),
+      .init(continuityKey: "voice:matrix-cancel", accepted: true))
+
+    let acceptedOld = await oldGate.accept(continuityKey: "voice:matrix-cancel")
+    let oldResult = await oldTask.value
+    XCTAssertTrue(acceptedOld)
+    XCTAssertTrue(oldResult)
+    XCTAssertEqual(
+      ledger.receipt(for: "voice:matrix-cancel"),
+      .init(continuityKey: "voice:matrix-cancel", accepted: true),
+      "late completion of a cancelled obligation must not clear newer state")
+  }
+
+  func testRestartReconcileUsesKernelOwnedExchangeInsteadOfSecondMutation() async {
+    let continuityKey = "voice:restart-reconcile"
+    let ownerID = "owner-restart"
+    let kernelTurnIDs = KernelTurnProjection.stableTurnIDs(continuityKey: continuityKey)
+    XCTAssertTrue(
+      RealtimeHubContinuityRestore.kernelOwnsExchange(
+        continuityKey: continuityKey,
+        kernelTurnIDs: kernelTurnIDs),
+      "fake kernel already accepted this continuity key's exchange")
+
+    // Fresh hub-local state after relaunch: no accepted-spawn map, empty ledger.
+    var refreshCount = 0
+    var mutationCount = 0
+    let accepted = await RealtimeTurnJournalAuthority.persist(
+      turnOwnerID: ownerID,
+      acceptedSpawnOwnerID: nil,
+      kernelOwnsExchange: RealtimeHubContinuityRestore.kernelOwnsExchange(
+        continuityKey: continuityKey,
+        kernelTurnIDs: kernelTurnIDs),
+      refreshAcceptedSpawn: {
+        refreshCount += 1
+        return true
+      },
+      recordProviderExchange: {
+        mutationCount += 1
+        return true
+      })
+
+    XCTAssertTrue(accepted)
+    XCTAssertEqual(refreshCount, 1)
+    XCTAssertEqual(
+      mutationCount, 0,
+      "reconcile must refresh the canonical exchange once — never append a duplicate pill")
+
+    let withoutReconcile = await RealtimeTurnJournalAuthority.persist(
+      turnOwnerID: ownerID,
+      acceptedSpawnOwnerID: nil,
+      kernelOwnsExchange: false,
+      refreshAcceptedSpawn: {
+        XCTFail("without reconcile the spawn refresh path must not run")
+        return false
+      },
+      recordProviderExchange: {
+        mutationCount += 1
+        return true
+      })
+    XCTAssertTrue(withoutReconcile)
+    XCTAssertEqual(
+      mutationCount, 1,
+      "removing reconcile must fall open to a second provider mutation")
+  }
+
   func testAcceptedSpawnOwnsJournalAndProviderCompletionMakesNoSecondMutation() async {
     var refreshCount = 0
     var mutationCount = 0

@@ -361,19 +361,35 @@ enum RealtimeHubLifecyclePolicy {
   }
 }
 
+/// Rebuilds hub decisions from kernel-owned continuity facts after relaunch.
+/// Hub maps die with the process; stable turn IDs already in the kernel journal
+/// (or its typed voice-context snapshot) are the durable ownership signal.
+enum RealtimeHubContinuityRestore {
+  static func kernelOwnsExchange(
+    continuityKey: String,
+    kernelTurnIDs: Set<String>
+  ) -> Bool {
+    guard !continuityKey.isEmpty else { return false }
+    return !kernelTurnIDs.isDisjoint(
+      with: KernelTurnProjection.stableTurnIDs(continuityKey: continuityKey))
+  }
+}
+
 /// Selects the sole journal owner after realtime `spawn_agent` admission. The
 /// spawn RPC atomically records the canonical exchange; provider turn_done may
 /// refresh that projection, but it must never submit a second mutation for the
-/// same continuity identity.
+/// same continuity identity. After relaunch, `kernelOwnsExchange` restores that
+/// same authority when hub-local spawn-receipt maps are empty.
 @MainActor
 enum RealtimeTurnJournalAuthority {
   static func persist(
     turnOwnerID: String,
     acceptedSpawnOwnerID: String?,
+    kernelOwnsExchange: Bool = false,
     refreshAcceptedSpawn: @escaping @MainActor () async -> Bool,
     recordProviderExchange: @escaping @MainActor () async -> Bool
   ) async -> Bool {
-    if acceptedSpawnOwnerID == turnOwnerID {
+    if acceptedSpawnOwnerID == turnOwnerID || kernelOwnsExchange {
       return await refreshAcceptedSpawn()
     }
     return await recordProviderExchange()
@@ -393,6 +409,7 @@ final class RealtimeTurnPersistenceLedger {
   private struct Obligation {
     let id: UUID
     let task: Task<Bool, Never>
+    var retainingReceipt: Bool
   }
 
   private var obligations: [String: Obligation] = [:]
@@ -403,13 +420,25 @@ final class RealtimeTurnPersistenceLedger {
     Set(obligations.keys)
   }
 
+  /// Idempotent and widen-never-narrow: a continuity key already in flight
+  /// returns its existing task unchanged rather than starting a second kernel
+  /// write. But retention is a live property of that obligation, not a value
+  /// frozen into the first caller's closure — a later call that additionally
+  /// needs a receipt (`retainingReceipt: true`) widens the same obligation in
+  /// place, and the completion below re-reads the current flag instead of the
+  /// value captured at creation, so the widening call is never lost to the
+  /// first caller's capture.
   @discardableResult
   func enqueue(
     continuityKey: String,
     retainingReceipt: Bool,
     _ operation: @escaping @MainActor () async -> Bool
   ) -> Task<Bool, Never> {
-    if let existing = obligations[continuityKey] {
+    if var existing = obligations[continuityKey] {
+      if retainingReceipt, !existing.retainingReceipt {
+        existing.retainingReceipt = true
+        obligations[continuityKey] = existing
+      }
       return existing.task
     }
 
@@ -425,15 +454,24 @@ final class RealtimeTurnPersistenceLedger {
         // transition or a newer obligation has retired this local ledger entry.
         return accepted
       }
+      // Re-read retention live rather than the value this closure captured at
+      // creation, so a widening `enqueue(retainingReceipt: true)` observed
+      // after this task started still gets its receipt.
+      let shouldRetain = self.obligations[continuityKey]?.retainingReceipt ?? retainingReceipt
       self.obligations.removeValue(forKey: continuityKey)
-      if retainingReceipt {
+      // An external authority (e.g. an atomically-accepted spawn) may have
+      // already recorded this key's receipt while this obligation was still
+      // pending via `recordAcceptedReceipt`. That acceptance stays
+      // authoritative — this obligation's own completion must never overwrite it.
+      if shouldRetain, self.receipts[continuityKey] == nil {
         self.receipts[continuityKey] = RealtimeTurnPersistenceReceipt(
           continuityKey: continuityKey,
           accepted: accepted)
       }
       return accepted
     }
-    obligations[continuityKey] = Obligation(id: obligationID, task: task)
+    obligations[continuityKey] = Obligation(
+      id: obligationID, task: task, retainingReceipt: retainingReceipt)
     return task
   }
 
@@ -453,6 +491,9 @@ final class RealtimeTurnPersistenceLedger {
   /// Use only for a kernel mutation that was atomically accepted by a different
   /// authority (currently `spawn_agent`).  It gives that exact continuity key a
   /// finalization receipt without inventing a second provider-exchange write.
+  /// Idempotent: recording the same key's acceptance twice (e.g. a duplicate
+  /// external acceptance callback) writes the same `accepted: true` payload
+  /// both times, so it is safe to call more than once without an assertion.
   func recordAcceptedReceipt(for continuityKey: String) {
     receipts[continuityKey] = RealtimeTurnPersistenceReceipt(
       continuityKey: continuityKey,
@@ -743,6 +784,27 @@ enum RealtimeHubReconnectIdentityPolicy {
   ) -> VoiceResponseID? {
     guard preservingReconnectAudio, let pendingReconnect else { return nil }
     return pendingReconnect.responseID
+  }
+
+  /// Production boundary that admits/fences provider session callbacks before
+  /// they become reducer events. Live-session object match is required so a
+  /// replaced socket cannot speak for the current hub; owner currency matches
+  /// `RealtimeHubOwnerFence.canReuseWarmSession`.
+  static func admitsSessionCallback(
+    isLiveSessionObject: Bool,
+    sessionOwnerIsCurrent: Bool
+  ) -> Bool {
+    isLiveSessionObject && sessionOwnerIsCurrent
+  }
+
+  /// After a successful reconnect handshake, only the newly admitted session ID
+  /// may complete the reducer path; a late callback carrying the superseded ID
+  /// is fenced.
+  static func admitsReconnectedSessionID(
+    callbackSessionID: VoiceSessionID,
+    liveSessionID: VoiceSessionID
+  ) -> Bool {
+    callbackSessionID == liveSessionID
   }
 }
 
@@ -1551,7 +1613,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var audioReceivedThisTurn = false
   /// Stable per-turn key for kernel idempotent voice-turn persistence.
   private var turnIdempotencyKey = ""
-  /// Exact untrusted context renderer prefetched from the typed kernel snapshot.
+  /// (a) Pure cache of the typed kernel voice-context snapshot. Rebuild via
+  /// `refreshVoiceContextSnapshot` / `fetchVoiceContextSnapshot` on relaunch.
   private var prefetchedVoiceContext = ""
   private var prefetchedVoiceContextSessionID = ""
   private var prefetchedVoiceContextFreshnessIdentity = ""
@@ -1570,11 +1633,17 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var voiceContextPrefetchTask: Task<Void, Never>?
   private var voiceContextRefreshGeneration: UInt64 = 0
   private var turnPreparationTask: Task<Void, Never>?
+  /// (b) Genuinely local: in-flight write Tasks + optional completion receipts.
+  /// Receipts shadow kernel acceptance only until consumed; on relaunch they are
+  /// rebuilt via `RealtimeHubContinuityRestore.kernelOwnsExchange`, never disk.
   private let turnPersistenceLedger = RealtimeTurnPersistenceLedger()
   private struct AcceptedSpawnJournalReceipt {
     let ownerID: String
     let receipt: RealtimeSpawnJournalReceipt
   }
+  /// (c) Shadow truth: mirrors a kernel-accepted spawn exchange for this process.
+  /// Authoritative owner is the kernel journal / voice-context turn IDs; restore
+  /// through `RealtimeHubContinuityRestore` + `RealtimeTurnJournalAuthority`.
   private var acceptedSpawnJournalReceiptByContinuityKey: [
     String: AcceptedSpawnJournalReceipt
   ] = [:]
@@ -1583,6 +1652,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var legacyVoiceJournalImportedOwners = Set<String>()
   private var deferredSessionRefreshTask: Task<Void, Never>?
   private var canceledTurnRewarmTask: Task<Void, Never>?
+  /// (b) Genuinely local race fence — never observed by the kernel.
   private var cancelContinuityFenceActive = false
   private var cancelContinuityFenceTurnID: VoiceTurnID?
   private var bargeInContinuityTask: Task<Void, Never>?
@@ -1629,6 +1699,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Transport correlation only. Logical pending-tool ownership and completion
   /// live in `VoiceTurn`; each correlation returns the reducer-issued identity.
   private var toolEffectIdentityByTransportKey: [String: VoiceEffectIdentity] = [:]
+  /// (b) Genuinely local: in-flight begin-external-run Task handle. Kernel owns
+  /// the resulting binding; this Task dies with the process and is not rebuilt.
   private struct ExternalRunAuthorityState {
     let ownerID: String
     let turnID: VoiceTurnID
@@ -1669,7 +1741,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       RuntimeOwnerTransitionCleanupCapability?
     ) async throws -> Void)?
 #endif
+  /// (b) Genuinely local: in-flight authorized tool envelopes for this process.
   private var authorizedRealtimeInvocations: [String: RealtimeAuthorizedToolInvocation] = [:]
+  /// (b) Genuinely local delivery dedupe for this process. Kernel authorizes
+  /// each run; this set only suppresses duplicate command delivery in-session.
   private var completedAuthorizedRealtimeInvocationIDs: Set<String> = []
   private var realtimeToolTurnEpoch = 0
   private var pendingCompletedAgentDeltaAckIds: [String] = []
@@ -3511,9 +3586,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       return false
     }
     let surface = FloatingControlBarManager.shared.mainChatSurfaceReference()
+    let kernelOwnsExchange = RealtimeHubContinuityRestore.kernelOwnsExchange(
+      continuityKey: idempotencyKey,
+      kernelTurnIDs: prefetchedVoiceContextTurnIDs)
     return await RealtimeTurnJournalAuthority.persist(
       turnOwnerID: ownerID,
       acceptedSpawnOwnerID: acceptedSpawnOwnerID,
+      kernelOwnsExchange: kernelOwnsExchange,
       refreshAcceptedSpawn: {
         guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
         await FloatingControlBarManager.shared.refreshKernelJournal(surface: surface)
@@ -4780,15 +4859,20 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   // MARK: - RealtimeHubSessionDelegate
 
   private func isCurrentSession(_ source: RealtimeHubSession) -> Bool {
-    guard source === session else { return false }
+    let isLiveSessionObject = source === session
+    let sessionOwnerIsCurrent = RealtimeHubOwnerFence.canReuseWarmSession(
+      sessionOwner: sessionOwnerScope,
+      currentOwnerID: RuntimeOwnerIdentity.currentOwnerId())
     guard
-      RealtimeHubOwnerFence.canReuseWarmSession(
-        sessionOwner: sessionOwnerScope,
-        currentOwnerID: RuntimeOwnerIdentity.currentOwnerId())
+      RealtimeHubReconnectIdentityPolicy.admitsSessionCallback(
+        isLiveSessionObject: isLiveSessionObject,
+        sessionOwnerIsCurrent: sessionOwnerIsCurrent)
     else {
-      log("RealtimeHub: dropping socket callback after authenticated owner changed")
-      discardSessionAfterOwnerChange()
-      ensureWarm()
+      if isLiveSessionObject {
+        log("RealtimeHub: dropping socket callback after authenticated owner changed")
+        discardSessionAfterOwnerChange()
+        ensureWarm()
+      }
       return false
     }
     return true

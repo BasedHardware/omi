@@ -152,6 +152,45 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
       .setupNeeded(.openclaw))
   }
 
+  func testSharedSpawnReceiptFixturesAcceptValidAndRejectMalformed() throws {
+    let fixtureDir = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("agent/fixtures/spawn-receipt/v1")
+    let names = try FileManager.default.contentsOfDirectory(atPath: fixtureDir.path)
+      .filter { $0.hasSuffix(".json") }
+      .sorted()
+    XCTAssertTrue(names.contains("valid-running.json"))
+    XCTAssertTrue(names.contains { $0.hasPrefix("malformed-") })
+
+    for name in names {
+      let data = try Data(contentsOf: fixtureDir.appendingPathComponent(name))
+      let output = try XCTUnwrap(String(data: data, encoding: .utf8))
+      let payload = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: data) as? [String: Any])
+      let continuityKey =
+        (payload["journalReceipt"] as? [String: Any])?["continuityKey"] as? String
+        ?? "voice:00000000-0000-0000-0000-00000000f001"
+      let parsed = RealtimeSpawnJournalReceipt.parse(
+        output: output,
+        expectedContinuityKey: continuityKey)
+      if name.hasPrefix("valid-") {
+        let receipt = try XCTUnwrap(parsed, "valid fixture \(name) must parse")
+        XCTAssertEqual(receipt.continuityKey, continuityKey)
+        XCTAssertEqual(
+          receipt.userTurnID,
+          KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "user"))
+        XCTAssertEqual(
+          receipt.assistantTurnID,
+          KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "assistant"))
+        XCTAssertFalse(receipt.assistantText.isEmpty)
+      } else {
+        XCTAssertNil(parsed, "malformed fixture \(name) must be rejected")
+      }
+    }
+  }
+
   private func canonicalSpawnPayload(
     continuityKey: String,
     pillID: UUID? = nil,
