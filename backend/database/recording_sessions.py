@@ -28,6 +28,7 @@ _PHASE_ORDER: dict[str, int] = {
     'failed': 2,
     'discarded': 2,
 }
+_TERMINAL_PHASES = frozenset({'completed', 'failed', 'discarded'})
 
 
 class RecordingSessionBinding(TypedDict):
@@ -167,6 +168,16 @@ def _record_lifecycle_event_txn(
             'lifecycle_sequence': sequence,
             'accepted': False,
             'discard_reason': 'mapping_conflict',
+        }
+    if current_phase in _TERMINAL_PHASES and phase != current_phase:
+        return {
+            'recording_session_id': recording_session_id,
+            'conversation_id': bound_conversation_id,
+            'lifecycle_version': version,
+            'lifecycle_phase': current_phase,
+            'lifecycle_sequence': sequence,
+            'accepted': False,
+            'discard_reason': 'terminal_immutable',
         }
     if _PHASE_ORDER[phase] < _PHASE_ORDER.get(current_phase, -1):
         return {

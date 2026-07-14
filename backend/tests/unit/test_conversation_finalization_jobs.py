@@ -68,6 +68,7 @@ def test_intent_persists_outbox_before_any_live_handoff_and_omits_byok_material(
         'uid-1',
         'conversation-1',
         False,
+        'fanout-key',
         _now(),
     )
 
@@ -79,6 +80,8 @@ def test_intent_persists_outbox_before_any_live_handoff_and_omits_byok_material(
     assert job['conversation_id'] == 'conversation-1'
     assert job['dispatch_generation'] == 1
     assert job['status'] == 'queued'
+    assert job['fanout_key'] == 'fanout-key'
+    assert job['fanout_status'] == 'pending'
     forbidden = {'byok_keys', 'transcript', 'transcript_segments', 'authorization', 'raw_error'}
     assert forbidden.isdisjoint(job)
     assert transaction.updates[0][1]['status'] == 'processing'
@@ -107,10 +110,17 @@ def test_duplicate_reconnect_reuses_the_same_outbox_job():
         'uid-1',
         'conversation-1',
         False,
+        'fanout-key',
         _now(),
     )
 
-    assert intent == {'job_id': job_id, 'status': 'queued', 'dispatch_generation': 1, 'requires_byok': False}
+    assert intent == {
+        'job_id': job_id,
+        'status': 'queued',
+        'dispatch_generation': 1,
+        'requires_byok': False,
+        'fanout_key': None,
+    }
     assert transaction.sets == []
     assert transaction.updates == []
 
@@ -152,6 +162,7 @@ def test_duplicate_finalization_intent_keeps_the_same_processing_admission():
         'uid-1',
         'conversation-1',
         False,
+        'fanout-key',
         _now(),
     )
 
@@ -172,6 +183,7 @@ def test_byok_job_is_explicitly_blocked_without_persisting_a_key():
         'uid-1',
         'conversation-1',
         True,
+        'fanout-key',
         _now(),
     )
 
@@ -219,6 +231,36 @@ def test_expired_worker_lease_can_be_safely_reclaimed():
     assert claim == {'status': 'claimed', 'lease_epoch': 1, 'attempt_count': 2}
     assert transaction.updates[0][1]['attempt_count'] == 2
     assert transaction.updates[0][1]['lease_epoch'] == 1
+
+
+def test_finalization_completion_requires_durable_fanout_completion():
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 1,
+            'lease_epoch': 4,
+            'fanout_status': 'pending',
+            'conversation_id': 'conversation-1',
+        },
+    )
+
+    blocked = _Transaction()
+    assert jobs._mark_finalization_completed_txn(blocked, ref, 1, 4, now) is False
+    assert blocked.updates == []
+
+    fanout = _Transaction()
+    claim = jobs._claim_finalization_fanout_txn(fanout, ref, 1, 4, now)
+    assert claim == {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization:1'}
+    ref.data = ref.data | fanout.updates[0][1]
+
+    completed_fanout = _Transaction()
+    assert jobs._mark_finalization_fanout_completed_txn(completed_fanout, ref, 1, 4, now) is True
+    ref.data = ref.data | completed_fanout.updates[0][1]
+
+    completed = _Transaction()
+    assert jobs._mark_finalization_completed_txn(completed, ref, 1, 4, now) is True
 
 
 def test_live_pusher_claim_cannot_use_another_conversations_job():
@@ -289,6 +331,7 @@ def test_expired_lease_reclaim_fences_a_stale_worker_terminal_write():
             'dispatch_generation': 3,
             'lease_epoch': 4,
             'lease_expires_at': now - timedelta(seconds=1),
+            'fanout_status': 'completed',
         },
     )
 

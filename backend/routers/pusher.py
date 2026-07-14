@@ -224,7 +224,14 @@ async def _process_conversation_task(
             await send_result({'conversation_id': conversation_id, 'error': 'processing_failed'})
             return
 
-        await finalize_persisted_conversation(uid, conversation_id, language)
+        await finalize_persisted_conversation(
+            uid,
+            conversation_id,
+            language,
+            finalization_job_id=job_id,
+            dispatch_generation=generation,
+            lease_epoch=lease_epoch,
+        )
 
         completed = await run_blocking(
             db_executor,

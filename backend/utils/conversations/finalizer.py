@@ -26,7 +26,15 @@ class ConversationFinalizationError(RuntimeError):
     """A retryable persisted-conversation finalization failure."""
 
 
-async def finalize_persisted_conversation(uid: str, conversation_id: str, language: str | None = None) -> None:
+async def finalize_persisted_conversation(
+    uid: str,
+    conversation_id: str,
+    language: str | None = None,
+    *,
+    finalization_job_id: str,
+    dispatch_generation: int,
+    lease_epoch: int,
+) -> None:
     """Finalize persisted data once the caller has acquired the job lease.
 
     The pusher WebSocket request already installs request-scoped BYOK context
@@ -38,9 +46,7 @@ async def finalize_persisted_conversation(uid: str, conversation_id: str, langua
         raise ConversationFinalizationError('conversation_not_found')
 
     conversation = deserialize_conversation(conversation_data)
-    if conversation.status == ConversationStatus.completed:
-        return
-    if conversation.status != ConversationStatus.processing:
+    if conversation.status != ConversationStatus.completed and conversation.status != ConversationStatus.processing:
         admitted = await run_blocking(db_executor, lifecycle_service.ensure_processing, uid, conversation.id)
         if not admitted:
             return
@@ -56,10 +62,35 @@ async def finalize_persisted_conversation(uid: str, conversation_id: str, langua
         # validated live BYOK keys) while isolating this expensive sync path
         # from WebSocket and Cloud Tasks event loops.
         resolved_language = language or getattr(conversation, 'language', None) or 'en'
-        conversation = await run_blocking(
-            postprocess_executor, process_conversation, uid, resolved_language, conversation
+        if conversation.status != ConversationStatus.completed:
+            conversation = await run_blocking(
+                postprocess_executor, process_conversation, uid, resolved_language, conversation
+            )
+        fanout = await run_blocking(
+            db_executor,
+            lifecycle_service.claim_finalization_fanout,
+            finalization_job_id,
+            dispatch_generation,
+            lease_epoch,
         )
-        await trigger_external_integrations(uid, conversation)
+        if fanout['status'] == 'claimed':
+            await trigger_external_integrations(
+                uid,
+                conversation,
+                idempotency_key=fanout['fanout_key'],
+                require_delivery=True,
+            )
+            fanout_completed = await run_blocking(
+                db_executor,
+                lifecycle_service.complete_finalization_fanout,
+                finalization_job_id,
+                dispatch_generation,
+                lease_epoch,
+            )
+            if not fanout_completed:
+                raise ConversationFinalizationError('fanout_completion_conflict')
+        elif fanout['status'] != 'completed':
+            raise ConversationFinalizationError('fanout_lease_conflict')
     except Exception as error:
         # Provider and validation exceptions can contain transcript excerpts.
         # The job stores and logs only a bounded failure code.

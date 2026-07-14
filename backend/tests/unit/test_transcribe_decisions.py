@@ -13,6 +13,7 @@ from utils.transcribe_decisions import (
     normalize_codec_frame,
     normalize_language,
     person_id_for_client,
+    select_recording_session_id,
     select_translation_language,
     should_enable_speaker_identification,
     should_flush_final_multi_channel_mix,
@@ -177,6 +178,37 @@ def test_conversation_lifecycle_actions():
     assert (
         decide_existing_conversation_action(seconds_since_last_segment=119.9, conversation_creation_timeout=120)
         == ConversationLifecycleAction.continue_current
+    )
+
+
+def test_recording_session_identity_retries_and_rollovers_are_distinct():
+    client_id = 'client-recording'
+    assert (
+        select_recording_session_id(
+            client_conversation_id=client_id,
+            current_recording_session_id=None,
+            rollover=False,
+            generated_id='initial-server-id',
+        )
+        == client_id
+    )
+    assert (
+        select_recording_session_id(
+            client_conversation_id=client_id,
+            current_recording_session_id=client_id,
+            rollover=False,
+            generated_id='retry-server-id',
+        )
+        == client_id
+    )
+    assert (
+        select_recording_session_id(
+            client_conversation_id=client_id,
+            current_recording_session_id=client_id,
+            rollover=True,
+            generated_id='rollover-server-id',
+        )
+        == 'rollover-server-id'
     )
     assert (
         decide_existing_conversation_action(seconds_since_last_segment=120, conversation_creation_timeout=120)

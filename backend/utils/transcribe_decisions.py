@@ -180,6 +180,26 @@ def decide_lifecycle_action(
     return ConversationLifecycleAction.continue_current
 
 
+def select_recording_session_id(
+    *,
+    client_conversation_id: Optional[str],
+    current_recording_session_id: Optional[str],
+    rollover: bool,
+    generated_id: str,
+) -> str:
+    """Choose the immutable recording identity for this listen generation.
+
+    A reconnect retries the current recording identity (and therefore returns
+    its canonical durable binding). A silence/status rollover is a new
+    recording generation even when the original client supplied an ID, so it
+    must receive a new server-generated identity instead of attempting to
+    mutate the completed binding.
+    """
+    if rollover:
+        return generated_id
+    return current_recording_session_id or client_conversation_id or generated_id
+
+
 def should_process_on_disconnect(
     *,
     is_multi_channel: bool,

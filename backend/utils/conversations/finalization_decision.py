@@ -63,8 +63,12 @@ def _terminal(state: FinalizationDecisionState, phase: LifecyclePhase) -> Finali
     )
 
 
-def _admit_finalization(state: FinalizationDecisionState, conversation_id: str) -> FinalizationDecision:
-    key = f'conversation:{conversation_id}:finalization'
+def _admit_finalization(
+    state: FinalizationDecisionState,
+    conversation_id: str,
+    fanout_key: str | None,
+) -> FinalizationDecision:
+    key = fanout_key or f'conversation:{conversation_id}:finalization'
     if key in state.emitted_fanout_keys:
         return FinalizationDecision(state=state, reason='duplicate_finalization')
     return FinalizationDecision(
@@ -81,6 +85,7 @@ def decide_finalization(
     event: FinalizationEvent,
     *,
     conversation_id: str,
+    fanout_key: str | None = None,
 ) -> FinalizationDecision:
     """Return the one allowed transition and, at most, one durable fanout key.
 
@@ -94,7 +99,7 @@ def decide_finalization(
 
     if event in {FinalizationEvent.DISCONNECT, FinalizationEvent.FINALIZE}:
         if state.phase == LifecyclePhase.IN_PROGRESS:
-            return _admit_finalization(state, conversation_id)
+            return _admit_finalization(state, conversation_id, fanout_key)
         return FinalizationDecision(state=state, reason='already_finalizing')
 
     if event == FinalizationEvent.PROCESSING_COMPLETED and state.phase == LifecyclePhase.PROCESSING:

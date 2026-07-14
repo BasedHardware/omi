@@ -100,6 +100,36 @@ def test_retry_keeps_one_canonical_recording_session_binding(recording_store):
     assert len(recording_store.documents) == 1
 
 
+def test_completed_retry_returns_its_canonical_terminal_envelope(recording_store):
+    recording_sessions.create_or_get_recording_session(
+        'uid', 'recording-one', 'conversation-one', firestore_client=recording_store
+    )
+    recording_sessions.record_lifecycle_event(
+        'uid', 'recording-one', 'conversation-one', 'processing', firestore_client=recording_store
+    )
+    completed = recording_sessions.record_lifecycle_event(
+        'uid', 'recording-one', 'conversation-one', 'completed', firestore_client=recording_store
+    )
+
+    retry = recording_sessions.create_or_get_recording_session(
+        'uid', 'recording-one', 'new-proposed-conversation', firestore_client=recording_store
+    )
+    replay = recording_sessions.record_lifecycle_event(
+        'uid', 'recording-one', retry['conversation_id'], 'completed', firestore_client=recording_store
+    )
+    rollover = recording_sessions.create_or_get_recording_session(
+        'uid', 'recording-two', 'conversation-two', firestore_client=recording_store
+    )
+
+    assert retry['conversation_id'] == 'conversation-one'
+    assert retry['mapping_conflict'] is True
+    assert replay['accepted'] is True
+    assert replay['lifecycle_phase'] == 'completed'
+    assert replay['lifecycle_sequence'] == completed['lifecycle_sequence']
+    assert rollover['conversation_id'] == 'conversation-two'
+    assert len(recording_store.documents) == 2
+
+
 def test_conflicting_retry_returns_the_original_conversation(recording_store):
     recording_sessions.create_or_get_recording_session(
         'uid', 'session', 'first-conversation', firestore_client=recording_store
@@ -143,8 +173,32 @@ def test_events_are_monotonic_and_stale_callbacks_are_discarded(recording_store)
     assert (processing['accepted'], processing['lifecycle_sequence']) == (True, 1)
     assert (completed['accepted'], completed['lifecycle_sequence']) == (True, 2)
     assert stale['accepted'] is False
-    assert stale['discard_reason'] == 'stale_event'
+    assert stale['discard_reason'] == 'terminal_immutable'
     assert stale['lifecycle_sequence'] == 2
+
+
+@pytest.mark.parametrize('terminal_phase', ('completed', 'failed', 'discarded'))
+@pytest.mark.parametrize('replacement_phase', ('completed', 'failed', 'discarded'))
+def test_terminal_session_phase_is_immutable(recording_store, terminal_phase, replacement_phase):
+    if terminal_phase == replacement_phase:
+        return
+    recording_sessions.create_or_get_recording_session(
+        'uid', 'session', 'conversation', firestore_client=recording_store
+    )
+    if terminal_phase != 'completed':
+        recording_sessions.record_lifecycle_event(
+            'uid', 'session', 'conversation', 'processing', firestore_client=recording_store
+        )
+    terminal = recording_sessions.record_lifecycle_event(
+        'uid', 'session', 'conversation', terminal_phase, firestore_client=recording_store
+    )
+    replacement = recording_sessions.record_lifecycle_event(
+        'uid', 'session', 'conversation', replacement_phase, firestore_client=recording_store
+    )
+
+    assert replacement['accepted'] is False
+    assert replacement['discard_reason'] == 'terminal_immutable'
+    assert replacement['lifecycle_sequence'] == terminal['lifecycle_sequence']
 
 
 def test_event_for_a_different_conversation_is_discarded(recording_store):

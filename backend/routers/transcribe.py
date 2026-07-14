@@ -148,6 +148,7 @@ from utils.transcribe_decisions import (  # async-blockers: no-import-scope; asy
     effective_conversation_timeout,
     is_user_self_match,
     normalize_codec_frame,
+    select_recording_session_id,
     normalize_language,
     person_id_for_client,
     validate_audio_format,
@@ -356,7 +357,13 @@ async def _stream_handler(
     client_conversation_id = _normalize_client_conversation_id(client_conversation_id)
     # Clients that already provide a UUID preserve it as the server recording
     # session id. Legacy clients receive a server id before any lifecycle work.
-    recording_session_id = client_conversation_id or str(uuid.uuid4())
+    recording_session_id = select_recording_session_id(
+        client_conversation_id=client_conversation_id,
+        current_recording_session_id=None,
+        rollover=False,
+        generated_id=str(uuid.uuid4()),
+    )
+    recording_session_ids_by_conversation: dict[str, str] = {}
     client_device_context = client_device_context or resolve_client_device_from_headers(websocket.headers)
 
     if not uid or len(uid) <= 0:
@@ -847,31 +854,35 @@ async def _stream_handler(
     conversation_creation_timeout = effective_conversation_timeout(conversation_timeout, is_multi_channel)
 
     # Stream transcript
-    async def _recording_session_event(conversation_id: str, phase: str) -> dict[str, Any] | None:
+    async def _recording_session_event(
+        event_recording_session_id: str, conversation_id: str, phase: str
+    ) -> dict[str, Any] | None:
         try:
             return await run_blocking(
                 db_executor,
                 lifecycle_service.record_recording_session_event,
                 uid,
-                recording_session_id,
+                event_recording_session_id,
                 conversation_id,
                 phase,
             )
         except Exception:
             logger.exception(
                 'recording session event persistence failed session=%s conversation=%s uid=%s',
-                recording_session_id,
+                event_recording_session_id,
                 conversation_id,
                 uid,
             )
             return None
 
-    def _send_conversation_session(binding: dict[str, Any], *, status: str = 'in_progress') -> None:
+    def _send_conversation_session(
+        binding: dict[str, Any], event_recording_session_id: str, *, status: str = 'in_progress'
+    ) -> None:
         _send_message_event(
             ConversationSessionEvent(
                 conversation_id=binding['conversation_id'],
                 status=status,
-                recording_session_id=recording_session_id,
+                recording_session_id=event_recording_session_id,
                 lifecycle_version=binding['lifecycle_version'],
                 lifecycle_phase=binding['lifecycle_phase'],
                 lifecycle_sequence=binding['lifecycle_sequence'],
@@ -887,11 +898,20 @@ async def _stream_handler(
                 uid,
             )
             return
+        event_recording_session_id = recording_session_ids_by_conversation.get(conversation_id)
+        if not event_recording_session_id:
+            logger.warning(
+                'Suppressing lifecycle event without durable recording binding conversation=%s listen=%s uid=%s',
+                conversation_id,
+                session_id,
+                uid,
+            )
+            return
         conversation_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
         if not conversation_data:
             return
         conversation = deserialize_conversation(conversation_data)
-        envelope = await _recording_session_event(conversation_id, phase)
+        envelope = await _recording_session_event(event_recording_session_id, conversation_id, phase)
         if envelope is None:
             return
         _send_message_event(
@@ -981,7 +1001,17 @@ async def _stream_handler(
     send_last_conversation()
 
     # Create new stub conversation for next batch
-    async def _create_new_in_progress_conversation():
+    async def _create_new_in_progress_conversation(*, rollover: bool = False):
+        nonlocal recording_session_id
+
+        # A silence/status rollover starts another recording generation on the
+        # same socket. It must never reuse the prior immutable session binding.
+        recording_session_id = select_recording_session_id(
+            client_conversation_id=client_conversation_id,
+            current_recording_session_id=recording_session_id,
+            rollover=rollover,
+            generated_id=str(uuid.uuid4()),
+        )
 
         conversation_source = ConversationSource.omi
         if source:
@@ -991,7 +1021,9 @@ async def _stream_handler(
                 logger.error(f"Invalid conversation source '{source}', defaulting to 'omi' {uid} {session_id}")
                 conversation_source = ConversationSource.omi
 
-        proposed_conversation_id = client_conversation_id or str(uuid.uuid4())
+        proposed_conversation_id = (
+            client_conversation_id if not rollover and client_conversation_id else str(uuid.uuid4())
+        )
         binding = await run_blocking(
             db_executor,
             lifecycle_service.open_recording_session,
@@ -1000,6 +1032,7 @@ async def _stream_handler(
             proposed_conversation_id,
         )
         new_conversation_id = binding['conversation_id']
+        recording_session_ids_by_conversation[new_conversation_id] = recording_session_id
         existing_conversation = await run_blocking(
             db_executor,
             conversations_db.get_conversation,
@@ -1011,7 +1044,7 @@ async def _stream_handler(
             if existing_status == ConversationStatus.in_progress:
                 session.current_conversation_id = new_conversation_id
                 redis_db.set_in_progress_conversation_id(uid, session.current_conversation_id)
-                _send_conversation_session(binding)
+                _send_conversation_session(binding, recording_session_id)
                 logger.info(
                     'Resuming durable recording session %s conversation=%s uid=%s listen=%s',
                     recording_session_id,
@@ -1020,9 +1053,18 @@ async def _stream_handler(
                     session_id,
                 )
                 return
-            raise lifecycle_service.LifecycleTransitionError(
-                f'recording session {recording_session_id} is already bound to terminal conversation {new_conversation_id}'
+            session.current_conversation_id = new_conversation_id
+            _send_conversation_session(binding, recording_session_id, status=str(existing_status))
+            if existing_status == ConversationStatus.completed.value:
+                on_conversation_processed(new_conversation_id)
+            logger.info(
+                'Returned terminal durable recording session %s conversation=%s uid=%s listen=%s',
+                recording_session_id,
+                new_conversation_id,
+                uid,
+                session_id,
             )
+            return
         stub_conversation = Conversation(
             id=new_conversation_id,
             created_at=datetime.now(timezone.utc),
@@ -1086,7 +1128,7 @@ async def _stream_handler(
             redis_db.set_conversation_meeting_id(new_conversation_id, detected_meeting_id)
 
         session.current_conversation_id = new_conversation_id
-        _send_conversation_session(binding)
+        _send_conversation_session(binding, recording_session_id)
 
         logger.info(f"Created new stub conversation: {new_conversation_id} {uid} {session_id}")
 
@@ -1147,7 +1189,8 @@ async def _stream_handler(
                     f'recording session {recording_session_id} cannot rebind legacy conversation {resuming_conversation_id}'
                 )
             session.current_conversation_id = resuming_conversation_id
-            _send_conversation_session(binding)
+            recording_session_ids_by_conversation[resuming_conversation_id] = recording_session_id
+            _send_conversation_session(binding, recording_session_id)
             logger.info(
                 f"Resuming conversation {session.current_conversation_id}. Will timeout in {conversation_creation_timeout - seconds_since_last_segment:.1f}s {uid} {session_id}"
             )
@@ -1506,7 +1549,7 @@ async def _stream_handler(
                 logger.warning(
                     f"WARN: the current conversation is not found (id: {session.current_conversation_id}) {uid} {session_id}"
                 )
-                await _create_new_in_progress_conversation()
+                await _create_new_in_progress_conversation(rollover=True)
                 continue
 
             # Check if conversation status is not in_progress
@@ -1521,7 +1564,7 @@ async def _stream_handler(
                 logger.warning(
                     f"WARN: conversation {session.current_conversation_id} status is {conversation.get('status')}, not in_progress. Creating new conversation. {uid} {session_id}"
                 )
-                await _create_new_in_progress_conversation()
+                await _create_new_in_progress_conversation(rollover=True)
                 continue
 
             # Check if conversation should be processed
@@ -1545,7 +1588,7 @@ async def _stream_handler(
                     )
                 _flush_speaker_assignments(session.current_conversation_id)
                 await _process_conversation(session.current_conversation_id)
-                await _create_new_in_progress_conversation()
+                await _create_new_in_progress_conversation(rollover=True)
 
     async def speaker_identification_task():
         """Consume segment queue, accumulate per speaker, trigger match when ready."""

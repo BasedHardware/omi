@@ -56,12 +56,19 @@ is higher than the last accepted sequence. The phase is part of the contract:
 `discarded`. Older events without the envelope retain the legacy identity and
 timestamp compatibility path only.
 
-`RECORDING_SESSION_MODE=enforce` (the default) makes the durable binding
-authoritative. `shadow` records and reports mapping conflicts through the shared
-fallback telemetry while preserving the old proposed route during a bounded
-rollout. The resource contains only IDs, phase, sequence, schema version, and
+`RECORDING_SESSION_MODE=dual_write` is the safe default: the durable binding
+is returned while the legacy pointer continues to be maintained. `shadow`
+records and reports mapping conflicts through shared fallback telemetry while
+preserving the old proposed route; `enforce` rejects durable-store failures.
+The resource contains only IDs, phase, sequence, schema version, and
 timestamps; it never stores transcript content, credentials, or raw WebSocket
 payloads.
+
+The same recording ID is always a retry of its original generation: after a
+terminal result the backend returns that canonical binding and its terminal
+envelope instead of rebinding it. A silence or status rollover on a live
+WebSocket receives a fresh server-generated recording ID and can therefore
+bind a new conversation without mutating the terminal generation.
 
 ## Capture-device provenance
 
@@ -146,6 +153,12 @@ finalization job. The legacy live pusher path claims that same job; when the
 durable dispatch flag is enabled, Cloud Tasks wakes the worker using only the
 opaque job id and generation. `pending_conversation_requests` remains a
 low-latency reconnect aid, not the durable source of truth.
+
+Before a job can become `completed`, the finalizer atomically claims a durable
+fanout boundary with a persistent idempotency key. It passes that key to the
+integration endpoint and records `fanout_status=completed` only after the
+call returns. Lease recovery retries the same key, so a crash after an
+integration call cannot silently drop fanout or create an unkeyed duplicate.
 
 ```mermaid
 sequenceDiagram

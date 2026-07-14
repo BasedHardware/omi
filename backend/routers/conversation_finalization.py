@@ -117,7 +117,13 @@ async def run_listen_finalization_job(
             return JSONResponse(status_code=500, content={'status': 'retry'})
 
         try:
-            await finalize_persisted_conversation(job['uid'], job['conversation_id'])
+            await finalize_persisted_conversation(
+                job['uid'],
+                job['conversation_id'],
+                finalization_job_id=job_id,
+                dispatch_generation=dispatch_generation,
+                lease_epoch=claimed_lease_epoch,
+            )
         except ConversationFinalizationError:
             terminal = await _retry_or_dead_letter(
                 job_id, dispatch_generation, claimed_lease_epoch, task_retry_count, 'processing_failed'

@@ -17,6 +17,12 @@ from database import conversations as conversations_db
 from database import recording_sessions as recording_sessions_db
 from models.conversation_enums import ConversationStatus
 from utils.cloud_tasks import enqueue_listen_finalization_job, is_listen_finalization_dispatch_enabled
+from utils.conversations.finalization_decision import (
+    FinalizationDecisionState,
+    FinalizationEvent,
+    LifecyclePhase,
+    decide_finalization,
+)
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -39,13 +45,13 @@ class LifecycleTransitionError(ValueError):
     """Raised when an intent would reopen or otherwise violate a terminal lifecycle."""
 
 
-RECORDING_SESSION_MODES = frozenset({'shadow', 'enforce'})
+RECORDING_SESSION_MODES = frozenset({'shadow', 'dual_write', 'enforce'})
 
 
 def recording_session_mode() -> str:
-    """Return the bounded recording-session rollout mode, defaulting to enforcement."""
-    configured = os.getenv('RECORDING_SESSION_MODE', 'enforce').strip().lower()
-    return configured if configured in RECORDING_SESSION_MODES else 'enforce'
+    """Return the bounded recording-session rollout mode, defaulting to dual write."""
+    configured = os.getenv('RECORDING_SESSION_MODE', 'dual_write').strip().lower()
+    return configured if configured in RECORDING_SESSION_MODES else 'dual_write'
 
 
 def _status_value(status: ConversationStatus | str | None) -> str:
@@ -197,7 +203,7 @@ def open_recording_session(
             firestore_client=firestore_client,
         )
     except Exception:
-        if recording_session_mode() != 'shadow':
+        if recording_session_mode() == 'enforce':
             raise
         record_fallback(
             component='other',
@@ -259,7 +265,7 @@ def record_recording_session_event(
             firestore_client=firestore_client,
         )
     except Exception:
-        if recording_session_mode() != 'shadow':
+        if recording_session_mode() == 'enforce':
             raise
         record_fallback(
             component='other',
@@ -309,6 +315,32 @@ def record_recording_session_event(
     return None
 
 
+def _finalization_decision_state(conversation: Mapping[str, Any], conversation_id: str) -> FinalizationDecisionState:
+    status = str(conversation.get('status') or ConversationStatus.in_progress.value)
+    revision = int(conversation.get('finalization_revision') or 0) + 1
+    fanout_key = f'conversation:{conversation_id}:finalization:{revision}'
+    if status == ConversationStatus.completed.value:
+        return FinalizationDecisionState(phase=LifecyclePhase.COMPLETED, terminal_outcome=LifecyclePhase.COMPLETED)
+    if status == ConversationStatus.processing.value:
+        return FinalizationDecisionState(
+            phase=LifecyclePhase.PROCESSING,
+            emitted_fanout_keys=frozenset({fanout_key}),
+        )
+    if conversation.get('discarded'):
+        return FinalizationDecisionState(phase=LifecyclePhase.DISCARDED, terminal_outcome=LifecyclePhase.DISCARDED)
+    return FinalizationDecisionState()
+
+
+def claim_finalization_fanout(job_id: str, dispatch_generation: int, lease_epoch: int) -> dict[str, Any]:
+    """Claim the durable external-integration fanout through the lifecycle owner."""
+    return jobs_db.claim_finalization_fanout(job_id, dispatch_generation, lease_epoch)
+
+
+def complete_finalization_fanout(job_id: str, dispatch_generation: int, lease_epoch: int) -> bool:
+    """Persist completion only after the idempotency-keyed fanout succeeds."""
+    return jobs_db.mark_finalization_fanout_completed(job_id, dispatch_generation, lease_epoch)
+
+
 def request_finalization(
     uid: str,
     conversation_id: str,
@@ -317,10 +349,30 @@ def request_finalization(
     firestore_client: Any = None,
 ) -> dict[str, Any]:
     """Atomically admit finalization and choose its sole durable handoff route."""
+    conversation = conversations_db.get_conversation(uid, conversation_id)
+    if not conversation:
+        return {
+            'job_id': None,
+            'status': 'missing',
+            'dispatch_generation': None,
+            'requires_byok': False,
+            'fanout_key': None,
+            'route': 'noop',
+        }
+    revision = int(conversation.get('finalization_revision') or 0) + 1
+    fanout_key = f'conversation:{conversation_id}:finalization:{revision}'
+    decision = decide_finalization(
+        _finalization_decision_state(conversation, conversation_id),
+        FinalizationEvent.FINALIZE,
+        conversation_id=conversation_id,
+        fanout_key=fanout_key,
+    )
+    fanout_key = decision.fanout_key or fanout_key
     intent = jobs_db.create_or_get_finalization_intent(
         uid,
         conversation_id,
         requires_byok=has_byok_keys,
+        fanout_key=fanout_key,
         firestore_client=firestore_client,
     )
     status = intent['status']
