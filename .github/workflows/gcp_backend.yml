@@ -137,6 +137,14 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Set up Node for Firebase index deployment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install locked Firebase tooling
+        run: npm ci --ignore-scripts
+
       - name: Verify serving sync ledger fence mode before deploy
         env:
           SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
@@ -145,6 +153,11 @@ jobs:
             --project=${{ vars.GCP_PROJECT_ID }} \
             --region=${{ env.REGION }} \
             --desired-mode="$SYNC_LEDGER_FENCE_MODE"
+
+      - name: Reconcile generated Firestore indexes before backend deploy
+        run: |
+          python3 backend/scripts/reconcile_firestore_indexes.py \
+            --project "${{ vars.GCP_PROJECT_ID }}"
 
       - name: Login to GCR
         run: gcloud auth configure-docker
@@ -407,6 +420,18 @@ jobs:
           gcloud run services update-traffic backend-sync --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-sync-revision.outputs.revision }}=100 --quiet
           gcloud run services update-traffic backend-sync-backfill --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.sync-backfill.outputs.revision }}=100 --quiet
           gcloud run services update-traffic backend-integration --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-integration-revision.outputs.revision }}=100 --quiet
+
+      - name: Smoke What Matters Now datastore query
+        if: ${{ github.event.inputs.environment == 'development' }}
+        env:
+          OMI_TASK_INTELLIGENCE_SMOKE_UID: ${{ secrets.OMI_TASK_INTELLIGENCE_SMOKE_UID }}
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          ADMIN_KEY="$(gcloud secrets versions access latest --secret=ADMIN_KEY --project="$PROJECT_ID")"
+          export ADMIN_KEY
+          trap 'unset ADMIN_KEY' EXIT
+          python3 backend/scripts/smoke_what_matters_now.py --base-url https://api.omi.dev
 
       - name: Cloud Run deploy status report
         if: always()
