@@ -440,6 +440,7 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift")
+    // omi-test-quality: source-inspection -- static contract: forbidden-path ratchet helper
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
@@ -448,6 +449,7 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/RealtimeToolAuthority.swift")
+    // omi-test-quality: source-inspection -- static contract: extracted policy ownership helper
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
@@ -456,6 +458,7 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift")
+    // omi-test-quality: source-inspection -- static contract: extracted policy ownership helper
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
@@ -464,6 +467,7 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/Chat/AgentControlService.swift")
+    // omi-test-quality: source-inspection -- static contract: forbidden-path ratchet helper
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 }

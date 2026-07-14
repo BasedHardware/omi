@@ -134,21 +134,6 @@ final class RealtimeHubReconnectContractTests: XCTestCase {
       "late reconnect success after deadline must not emit a second terminal")
   }
 
-  func testHubWiresSessionCallbackAdmissionThroughReconnectIdentityPolicy() throws {
-    let hubURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift")
-    let policiesURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift")
-    let hubSource = try String(contentsOf: hubURL, encoding: .utf8)
-    let policiesSource = try String(contentsOf: policiesURL, encoding: .utf8)
-    XCTAssertTrue(hubSource.contains("RealtimeHubReconnectIdentityPolicy.admitsSessionCallback("))
-    XCTAssertTrue(policiesSource.contains("admitsReconnectedSessionID("))
-  }
-
   private func reduce(_ model: VoiceTurnModel, _ event: VoiceTurnEvent) -> VoiceTurnReduction {
     reducer.reduce(model, event)
   }

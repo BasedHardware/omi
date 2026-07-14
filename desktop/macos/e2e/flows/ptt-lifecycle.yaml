@@ -14,6 +14,11 @@ covers:
   - desktop/macos/Desktop/Sources/RealtimeOmni/RealtimeOmniService.swift
   - desktop/macos/Desktop/Sources/RealtimeOmni/RealtimeOmniTestHarness.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubInputAdmission.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeSpawnReceipt.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeToolAuthority.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeTurnPersistence.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/ScreenCaptureManager.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSettings.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnCoordinator.swift

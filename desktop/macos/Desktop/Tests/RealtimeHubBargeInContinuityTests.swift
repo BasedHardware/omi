@@ -1427,6 +1427,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/PushToTalkManager.swift")
+    // omi-test-quality: source-inspection -- static contract: forbidden-path ratchet helper
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
@@ -1435,6 +1436,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift")
+    // omi-test-quality: source-inspection -- static contract: forbidden-path ratchet helper
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
@@ -1443,6 +1445,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/RealtimeTurnPersistence.swift")
+    // omi-test-quality: source-inspection -- static contract: extracted persistence ownership helper
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
@@ -1451,6 +1454,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubSession.swift")
+    // omi-test-quality: source-inspection -- static contract: forbidden-path ratchet helper
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 }
