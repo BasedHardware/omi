@@ -133,7 +133,7 @@ final class PiMonoWiringTests: XCTestCase {
       homeDirectory: "/tmp/missing-home")
 
     XCTAssertFalse(availability.isAvailable)
-    XCTAssertTrue(availability.setupPrompt.contains("npm install -g @openai/codex @zed-industries/codex-acp"))
+    XCTAssertTrue(availability.setupPrompt.contains("npm install -g @openai/codex @agentclientprotocol/codex-acp"))
     XCTAssertTrue(availability.setupPrompt.contains("codex login"))
   }
 

@@ -93,7 +93,7 @@ struct LocalAgentProviderAvailability: Equatable {
         case .openclaw:
             return "I don't see OpenClaw installed. Install it by running: curl -fsSL https://openclaw.ai/install.sh | bash — then try again."
         case .codex:
-            return "I don't see Codex set up for Omi. Install it by running: npm install -g @openai/codex @zed-industries/codex-acp — then sign in with codex login and try again."
+            return "I don't see Codex set up for Omi. Install it by running: npm install -g @openai/codex @agentclientprotocol/codex-acp — then sign in with codex login and try again."
         }
     }
 

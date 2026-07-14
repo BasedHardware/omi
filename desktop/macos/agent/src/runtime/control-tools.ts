@@ -1857,7 +1857,7 @@ export function directedProviderInstallHint(provider: "hermes" | "openclaw" | "c
     case "openclaw":
       return "Install it by running: curl -fsSL https://openclaw.ai/install.sh | bash — then ask again.";
     case "codex":
-      return "Install it by running: npm install -g @openai/codex @zed-industries/codex-acp — then sign in with `codex login` and ask again.";
+      return "Install it by running: npm install -g @openai/codex @agentclientprotocol/codex-acp — then sign in with `codex login` and ask again.";
   }
 }
 
