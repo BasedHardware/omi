@@ -78,6 +78,24 @@ def normalize_codec_frame(codec: str) -> CodecFrameDecision:
     return CodecFrameDecision(codec, frame_size, lc3_chunk_size, lc3_frame_duration_us)
 
 
+OPUS_SUPPORTED_SAMPLE_RATES = frozenset({8000, 12000, 16000, 24000, 48000})
+
+
+def validate_audio_format(codec: str, sample_rate: int) -> Optional[str]:
+    """Reason the client codec/sample_rate cannot initialize a decoder, or None if it can.
+
+    opuslib.Decoder only accepts the standard opus sample rates, and lc3py.Decoder needs a frame
+    duration that only the lc3_fs1030 variant carries (bare 'lc3' normalizes to a None duration).
+    Checked before any decoder is constructed so an unsupported request closes the socket cleanly
+    instead of raising OpusError/TypeError out of the ASGI handler as an unclean 1006 drop.
+    """
+    if codec in ('opus', 'opus_fs320') and sample_rate not in OPUS_SUPPORTED_SAMPLE_RATES:
+        return f'opus requires a sample rate in {sorted(OPUS_SUPPORTED_SAMPLE_RATES)}, got {sample_rate}'
+    if codec == 'lc3':
+        return 'lc3 streaming requires the lc3_fs1030 codec (bare lc3 has no frame duration)'
+    return None
+
+
 def normalize_language(language: str) -> str:
     return 'multi' if language == 'auto' else language
 
