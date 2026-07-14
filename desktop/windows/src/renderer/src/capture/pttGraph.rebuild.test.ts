@@ -223,3 +223,51 @@ describe('device-change handling (A7a)', () => {
     expect(deviceListeners).toHaveLength(0)
   })
 })
+
+describe('rebuild safety — never yanks an active hold', () => {
+  it('defers when a hold is already attached, then runs on detach', async () => {
+    const mod = await freshModule()
+    await mod.warmPttMic() // warm graph (acquire 1)
+    const cap = await mod.startPttCapture({}) // hold attaches (attachedCaptures = 1)
+    h.acquire.mockClear()
+    h.teardown.mockClear()
+
+    mod.rebuildWarmGraph('device_changed', true) // up-front guard defers (hold active)
+    await vi.advanceTimersByTimeAsync(300)
+    // The live graph must NOT be torn down while the hold holds it.
+    expect(h.teardown).not.toHaveBeenCalled()
+    expect(h.acquire).not.toHaveBeenCalled()
+
+    cap.dispose() // detach → runs the deferred rebuild
+    await vi.advanceTimersByTimeAsync(300)
+    expect(h.teardown).toHaveBeenCalled() // old graph destroyed now (hold gone)
+    expect(h.acquire).toHaveBeenCalledTimes(1) // new graph acquired
+    expect(h.trackEvent).toHaveBeenCalledWith(
+      'fallback_triggered',
+      expect.objectContaining({ outcome: 'recovered' })
+    )
+  })
+
+  it('does not tear down a hold that attaches DURING the settle window (race)', async () => {
+    const mod = await freshModule()
+    await mod.warmPttMic() // warm graph (acquire 1)
+    h.acquire.mockClear()
+    h.teardown.mockClear()
+
+    // Rebuild scheduled while nothing is attached (guard passes), THEN a hold
+    // attaches before the settle timer fires — the regression the fix closes.
+    mod.rebuildWarmGraph('device_changed', true)
+    const cap = await mod.startPttCapture({}) // attaches mid-settle (attachedCaptures = 1)
+
+    await vi.advanceTimersByTimeAsync(300) // settle fires attemptRebuild
+    // attemptRebuild must re-check attachedCaptures and defer — NOT destroy the
+    // graph the active capture is reading from.
+    expect(h.teardown).not.toHaveBeenCalled()
+    expect(h.acquire).not.toHaveBeenCalled()
+
+    cap.dispose() // detach → deferred rebuild now runs safely
+    await vi.advanceTimersByTimeAsync(300)
+    expect(h.teardown).toHaveBeenCalled()
+    expect(h.acquire).toHaveBeenCalledTimes(1)
+  })
+})

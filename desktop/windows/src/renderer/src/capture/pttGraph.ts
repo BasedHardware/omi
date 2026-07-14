@@ -273,6 +273,16 @@ async function attemptRebuild(
     stopRebuild(true)
     return
   }
+  if (attachedCaptures > 0) {
+    // A hold attached AFTER this ladder was scheduled (during the settle/backoff
+    // window) — rebuildWarmGraph's up-front guard couldn't have seen it. Don't yank
+    // the live graph out from under the active capture: defer and let the detach
+    // re-run us via runPendingRebuild. Clearing `reconfiguring` (not keeping it set)
+    // is required so the deferred rebuild isn't blocked as an overlap later.
+    pendingRebuild = { reason, emitTelemetry }
+    stopRebuild(false)
+    return
+  }
   if (warmGraph) {
     destroyGraph(warmGraph)
     warmGraph = null
