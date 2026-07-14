@@ -28,6 +28,20 @@ extension EnvironmentValues {
   }
 }
 
+/// Highest step the user has cleared. Progress dots are only clickable up to this
+/// index — you can revisit anything already answered/granted/skipped, but can't
+/// skip ahead past an unreached step.
+private struct OnboardingFurthestStepKey: EnvironmentKey {
+  static let defaultValue: Int = .max
+}
+
+extension EnvironmentValues {
+  var onboardingFurthestStep: Int {
+    get { self[OnboardingFurthestStepKey.self] }
+    set { self[OnboardingFurthestStepKey.self] = newValue }
+  }
+}
+
 enum OnboardingRightPaneMode {
   case graph
   case message(title: String, detail: String)
@@ -247,6 +261,7 @@ struct OnboardingProgressDots: View {
   let stepIndex: Int
   let totalSteps: Int
   @Environment(\.onboardingJumpTo) private var onboardingJumpTo
+  @Environment(\.onboardingFurthestStep) private var furthestStep
 
   var body: some View {
     HStack(spacing: OmiSpacing.sm) {
@@ -262,7 +277,8 @@ struct OnboardingProgressDots: View {
       .fill(index <= stepIndex ? Color.white : Color.white.opacity(0.1))
       .frame(width: index == stepIndex ? 28 : 8, height: 6)
 
-    if let onboardingJumpTo {
+    // Only steps the user has already cleared are clickable.
+    if let onboardingJumpTo, index <= furthestStep {
       Button {
         onboardingJumpTo(index)
       } label: {

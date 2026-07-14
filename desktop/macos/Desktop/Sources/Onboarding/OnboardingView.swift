@@ -11,6 +11,11 @@ struct OnboardingView: View {
   var exportStepOverride: Int? = nil
   var isExportPreview = false
   @AppStorage("onboardingStep") private var currentStep = 0
+  /// Highest step the user has ever reached — a step is "cleared" (answered,
+  /// granted, or skipped) once they advance past it. Monotonic and persisted so
+  /// it survives the app restart the permission steps trigger. Gates the
+  /// clickable progress dots and forward navigation.
+  @AppStorage("onboardingFurthestStep") private var furthestStep = 0
   @AppStorage("onboardingPagedIntroMigrationDone") private var hasMigratedPagedIntro = false
   @AppStorage("onboardingVideoStepMigrationDone") private var hasMigratedOnboardingSteps = false
   @AppStorage("onboardingVoiceShortcutStepMigrationDone") private var hasInsertedVoiceShortcutStep =
@@ -467,11 +472,18 @@ struct OnboardingView: View {
     }
     .environment(\.onboardingBack, canGoBack ? goBack : nil)
     .environment(\.onboardingJumpTo, isExportPreview ? nil : jumpTo)
+    .environment(\.onboardingFurthestStep, isExportPreview ? Int.max : furthestStep)
     .focusable()
     .focusEffectDisabled()
     .focused($contentFocused)
-    .onAppear { contentFocused = true }
-    .onChange(of: currentStep) { _, _ in contentFocused = true }
+    .onAppear {
+      contentFocused = true
+      furthestStep = max(furthestStep, currentStep)
+    }
+    .onChange(of: currentStep) { _, newStep in
+      contentFocused = true
+      furthestStep = max(furthestStep, newStep)
+    }
   }
 
   /// Back is available on every step past the first, except in the export preview
@@ -485,10 +497,25 @@ struct OnboardingView: View {
     currentStep -= 1
   }
 
-  /// Jump directly to any step — powers the clickable progress dots.
+  /// Jump directly to a step — powers the clickable progress dots. Only steps the
+  /// user has already cleared (≤ `furthestStep`) are reachable; you can't skip
+  /// forward past an unanswered required step.
   private func jumpTo(_ index: Int) {
     guard !isExportPreview else { return }
-    currentStep = min(max(0, index), OnboardingFlow.lastStepIndex)
+    let target = min(max(0, index), OnboardingFlow.lastStepIndex)
+    guard target <= furthestStep else { return }
+    currentStep = target
+  }
+
+  /// Forward navigation. Behind the frontier (the step is already cleared and its
+  /// answer/permission is fixed) it advances automatically. At the frontier it
+  /// defers to the step's own Continue gating so required questions still block.
+  private func handleForwardNavigation() -> Bool {
+    if currentStep < furthestStep {
+      currentStep += 1
+      return true
+    }
+    return handleForwardKey() == .handled
   }
 
   /// Arrow-key navigation runs off a local `NSEvent` monitor rather than SwiftUI
@@ -528,7 +555,7 @@ struct OnboardingView: View {
       goBack()
       return true
     case 124, 125:  // right, down
-      return handleForwardKey() == .handled
+      return handleForwardNavigation()
     default:
       return false
     }
