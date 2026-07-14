@@ -24,6 +24,7 @@ enum HubTool: String {
   case createCalendarEvent = "create_calendar_event"
   case askHigherModel = "ask_higher_model"
   case screenshot = "screenshot"
+  case reportScreenObservation = "report_screen_observation"
   case pointClick = "point_click"
 }
 
@@ -646,6 +647,33 @@ enum GeneratedRealtimeTools {
       "type": "object",
       "properties": {},
       "required": []
+    }
+  },
+  {
+    "type": "function",
+    "name": "report_screen_observation",
+    "description": "After screenshot succeeds for a current-screen question, report exactly one observation using its evidence_id and exact frontmost_app. Put only visual detail in answer; never identify, name, or claim an application there because the desktop supplies app identity from native evidence. Do not speak or answer the current-screen question outside this report.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "evidence_id": {
+          "type": "string",
+          "description": "Opaque evidence id returned by screenshot."
+        },
+        "frontmost_app": {
+          "type": "string",
+          "description": "Exact frontmost application name returned by screenshot."
+        },
+        "answer": {
+          "type": "string",
+          "description": "Concise visual detail only; do not name or identify an app."
+        }
+      },
+      "required": [
+        "evidence_id",
+        "frontmost_app",
+        "answer"
+      ]
     }
   },
   {

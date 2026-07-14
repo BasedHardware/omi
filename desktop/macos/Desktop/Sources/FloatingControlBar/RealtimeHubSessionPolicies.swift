@@ -652,6 +652,18 @@ enum RealtimeProviderTurnDoneDisposition: Equatable {
   }
 }
 
+/// A headless harness may retry only a turn whose request was actually lost.
+/// Once the kernel has accepted a canonical spawn receipt, a session refresh is
+/// expected completion work and replaying would create a second child run.
+enum RealtimeHeadlessPTTSessionSwapPolicy {
+  static func shouldRedrive(
+    sessionChanged: Bool,
+    hasCanonicalSpawnReceipt: Bool
+  ) -> Bool {
+    sessionChanged && !hasCanonicalSpawnReceipt
+  }
+}
+
 enum RealtimeHubBargeInContinuity {
   enum Outcome: Equatable {
     case started

@@ -141,22 +141,36 @@ final class RealtimeHubSessionInputLifecycleTests: XCTestCase {
   }
 
   func testGeminiScreenshotToolResultCarriesPixelsInsideTheMatchingFunctionResponse() {
+    let descriptor = RealtimeScreenEvidenceDescriptor(
+      evidenceID: "evidence-1",
+      turnID: VoiceTurnID(UUID(uuidString: "00000000-0000-0000-0000-000000000001")!),
+      capturedAt: Date(timeIntervalSince1970: 1),
+      target: .frontmostDisplay,
+      frontmostApp: "Codex",
+      frontmostBundleID: "com.openai.codex",
+      windowID: 1,
+      displayID: 1,
+      imageByteCount: 3,
+      imageDigest: "digest"
+    )
     let wire = RealtimeHubSession.geminiToolResponse(
       callId: "call-1",
       name: "screenshot",
       output: "Live screenshot captured just now.",
-      image: Data([1, 2, 3]))
+      screenEvidence: RealtimeScreenEvidenceAttachment(descriptor: descriptor, jpeg: Data([1, 2, 3])))
     let toolResponse = wire["toolResponse"] as? [String: Any]
     let responses = toolResponse?["functionResponses"] as? [[String: Any]]
     let response = try? XCTUnwrap(responses?.first)
     let body = response?["response"] as? [String: Any]
     let imageReference = body?["image"] as? [String: String]
+    let evidenceID = body?["evidence_id"] as? String
     let parts = response?["parts"] as? [[String: Any]]
     let inlineData = parts?.first?["inlineData"] as? [String: String]
 
     XCTAssertEqual(response?["id"] as? String, "call-1")
     XCTAssertEqual(response?["name"] as? String, "screenshot")
     XCTAssertEqual(imageReference?["$ref"], "live-screenshot.jpg")
+    XCTAssertEqual(evidenceID, "evidence-1")
     XCTAssertEqual(inlineData?["mimeType"], "image/jpeg")
     XCTAssertEqual(inlineData?["data"], "AQID")
     XCTAssertEqual(inlineData?["displayName"], "live-screenshot.jpg")

@@ -5,21 +5,19 @@ import XCTest
 /// Hermetic projection tests: reducer state / terminal reason → user-facing string.
 /// No sleeps, no UI harness.
 final class VoiceTurnUIProjectionCopyTests: XCTestCase {
-  func testStatusBannerPrefersHintOverTranscribingTranscript() {
+  func testStatusBannerShowsActionableFailureHint() {
     var projection = VoiceTurnUIProjection.idle
     projection.transcript = VoiceTurnUICopy.transcribingProgress
-    projection.hint = VoiceTurnUICopy.backupTranscription
+    projection.hint = "Couldn't get a voice reply — try again"
     XCTAssertEqual(
       VoiceTurnUICopy.statusBannerText(for: projection),
-      VoiceTurnUICopy.backupTranscription)
+      "Couldn't get a voice reply — try again")
   }
 
-  func testStatusBannerSurfacesTranscribingProgressWhenHintEmpty() {
+  func testStatusBannerHidesTranscribingProgress() {
     var projection = VoiceTurnUIProjection.idle
     projection.transcript = VoiceTurnUICopy.transcribingProgress
-    XCTAssertEqual(
-      VoiceTurnUICopy.statusBannerText(for: projection),
-      VoiceTurnUICopy.transcribingProgress)
+    XCTAssertEqual(VoiceTurnUICopy.statusBannerText(for: projection), "")
   }
 
   func testStatusBannerIgnoresOrdinaryTranscriptText() {
@@ -88,7 +86,7 @@ final class VoiceTurnUIProjectionCopyTests: XCTestCase {
       "Previous reply was interrupted — try again")
   }
 
-  func testBargeInStartProjectsMicroCopyOnReplacementTurn() {
+  func testBargeInStartKeepsReplacementTurnTextFree() {
     let reducer = VoiceTurnReducer()
     let oldID = VoiceTurnID()
     let newID = VoiceTurnID()
@@ -98,10 +96,8 @@ final class VoiceTurnUIProjectionCopyTests: XCTestCase {
       .start(turnID: newID, ownerID: nil, intent: .hold))
 
     XCTAssertEqual(replaced.model.turn?.id, newID)
-    XCTAssertEqual(
-      replaced.model.turn?.projection.hint,
-      VoiceTurnUICopy.bargeInInterrupted)
-    XCTAssertTrue(replaced.model.turn?.deadlines.contains(.hintVisibility) == true)
+    XCTAssertEqual(replaced.model.turn?.projection.hint, "")
+    XCTAssertFalse(replaced.model.turn?.deadlines.contains(.hintVisibility) == true)
     XCTAssertEqual(replaced.model.lastTerminal?.reason, .interruptedByBargeIn)
   }
 

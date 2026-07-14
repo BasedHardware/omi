@@ -57,6 +57,16 @@ SwiftUI and floating-bar state are projections.
   A late context result for a superseded turn is dropped.
 - User interrupt is a typed reducer event. It revokes tools/output and terminalizes
   exactly once; late tool and playback callbacks remain stale.
+- PTT status text is failure-only. Recording, transcription, fallback recovery,
+  and barge-in replacement remain visual states; only actionable typed capture,
+  provider, tool, journal, or playback failures may show a text banner.
+- A PTT current-screen answer is admitted only from one pre-overlay capture bound
+  to that exact voice turn. The provider may propose visual detail only after
+  the matching image was delivered and must echo its evidence id; native code
+  verifies the frontmost application and rejects stale, missing, contradictory,
+  or cross-turn reports without using historical chat, memory, OCR, or context
+  summaries as screen authority. A cancelled screenshot tool execution must
+  never mutate or speak into a barge-in replacement turn.
 - `PushToTalkManager` has no `PTTState`, lifecycle timer, or current-turn variable.
   It derives `phase` from the coordinator and forwards snapshots to observers.
 - Realtime delegation does not run a second Swift text classifier. Explicit model

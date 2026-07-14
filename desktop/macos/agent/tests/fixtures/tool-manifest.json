@@ -4698,6 +4698,65 @@
     }
   },
   {
+    "name": "report_screen_observation",
+    "label": "Report Screen Observation",
+    "description": "Submit one current-screen observation bound to the exact evidence returned by screenshot.",
+    "promptSnippet": "report_screen_observation - Submit a grounded current-screen answer",
+    "latency": "fast local",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "evidence_id": {
+          "type": "string",
+          "description": "Opaque evidence id returned by screenshot."
+        },
+        "frontmost_app": {
+          "type": "string",
+          "description": "Exact frontmost application name returned by screenshot."
+        },
+        "answer": {
+          "type": "string",
+          "description": "Concise visual detail only; do not name or identify an app."
+        }
+      },
+      "required": [
+        "evidence_id",
+        "frontmost_app",
+        "answer"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "timeoutClass": "normal",
+    "executor": {
+      "kind": "swiftTool",
+      "executorName": "realtimeHub"
+    },
+    "intendedForAgents": true,
+    "runtimePreconditions": [
+      "Realtime voice only; screenshot evidence must belong to the active PTT turn."
+    ],
+    "adapters": {},
+    "surfaces": [
+      "realtime_voice"
+    ],
+    "capabilityDoc": {
+      "title": "Report Screen Observation",
+      "summary": "Report a grounded current-screen answer.",
+      "bullets": [
+        "Only call after screenshot returns a current evidence id.",
+        "Use the exact frontmost application supplied by screenshot; do not infer it from history."
+      ]
+    },
+    "voice": {
+      "realtimeDescription": "After screenshot succeeds for a current-screen question, report exactly one observation using its evidence_id and exact frontmost_app. Put only visual detail in answer; never identify, name, or claim an application there because the desktop supplies app identity from native evidence. Do not speak or answer the current-screen question outside this report."
+    }
+  },
+  {
     "name": "point_click",
     "label": "Point Click",
     "description": "Click at on-screen pixel coordinates.",

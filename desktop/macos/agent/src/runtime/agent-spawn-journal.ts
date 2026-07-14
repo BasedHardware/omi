@@ -114,13 +114,37 @@ const LIFECYCLE_STATES = new Set<RealtimeSpawnLifecycleState>([
 export function agentSpawnJournalReceipt(
   descriptor: AgentSpawnProducerJournalDescriptor,
 ): AgentSpawnJournalReceipt {
+  const presentation = canonicalSpawnJournalPresentation(descriptor);
   return {
     accepted: true,
-    continuityKey: descriptor.continuityKey,
-    userTurnId: descriptor.producerTurnId ? null : stableTurnId(descriptor.continuityKey, "user"),
-    assistantTurnId: descriptor.producerTurnId
-      ?? stableTurnId(descriptor.continuityKey, "assistant"),
-    assistantText: descriptor.assistantText,
+    continuityKey: presentation.continuityKey,
+    userTurnId: presentation.producerTurnId ? null : stableTurnId(presentation.continuityKey, "user"),
+    assistantTurnId: presentation.producerTurnId
+      ?? stableTurnId(presentation.continuityKey, "assistant"),
+    assistantText: presentation.assistantText,
+  };
+}
+
+/**
+ * A realtime spawn receipt proves admission, not completion. Provider text is
+ * untrusted presentation input, so it must never claim an outcome for a child
+ * whose terminal lifecycle belongs to the kernel. Keep this transformation
+ * deterministic: journal repair can replay the same accepted child after its
+ * status has changed without colliding with the original assistant turn.
+ */
+function canonicalSpawnJournalPresentation(
+  descriptor: AgentSpawnProducerJournalDescriptor,
+): AgentSpawnProducerJournalDescriptor {
+  if (
+    !["realtime", "realtime_voice"].includes(descriptor.surface.surfaceKind)
+      || descriptor.producerTurnId
+  ) {
+    return descriptor;
+  }
+  const title = compactDisplayText(descriptor.title, "Background agent", 160);
+  return {
+    ...descriptor,
+    assistantText: `${title} started and is working in the background.`,
   };
 }
 
@@ -482,7 +506,9 @@ export function ensureAgentSpawnJournal(
     }
     const runInput = parseObject(String(child.input_json), "run input");
     const metadata = objectField(runInput, "metadata");
-    const descriptor = parseAgentSpawnProducerJournalDescriptor(metadata.producerJournal);
+    const descriptor = canonicalSpawnJournalPresentation(
+      parseAgentSpawnProducerJournalDescriptor(metadata.producerJournal),
+    );
     if (child.external_ref_id != null && String(child.external_ref_id) !== descriptor.pillId) {
       throw new Error("Agent spawn journal pill identity does not match the accepted child session");
     }

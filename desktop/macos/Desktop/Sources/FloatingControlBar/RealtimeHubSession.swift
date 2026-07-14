@@ -180,9 +180,13 @@ final class RealtimeHubSession: NSObject {
   // responses); Gemini sends cumulative usageMetadata (we keep the latest).
   private var usageInText = 0
   private var usageInAudio = 0
+  private var usageInImage = 0
   private var usageInCached = 0
   private var usageOutText = 0
   private var usageOutAudio = 0
+  /// Evidence is local-only. This opaque descriptor lets the local log correlate the
+  /// attachment with Gemini's later per-modality usage without logging pixels or app text.
+  private var activeScreenEvidence: RealtimeScreenEvidenceDescriptor?
 
   /// Log prefix that names the provider + model on every line, so it's always
   /// clear which model produced which event.
@@ -626,13 +630,22 @@ final class RealtimeHubSession: NSObject {
   /// may answer from older context before it processes the frame. Gemini 3 supports inline
   /// FunctionResponse parts; attach the fresh pixels there so the paused screenshot call resumes
   /// only with the exact image it captured.
-  func sendToolResult(callId: String, name: String, output: String, image: Data? = nil) {
+  func sendToolResult(
+    callId: String,
+    name: String,
+    output: String,
+    screenEvidence: RealtimeScreenEvidenceAttachment? = nil
+  ) {
     q.async { [weak self] in
       guard let self else { return }
       switch self.provider {
       case .openai:
-        if let image {
-          let b64 = image.base64EncodedString()
+        if let screenEvidence {
+          self.activeScreenEvidence = screenEvidence.descriptor
+          let b64 = screenEvidence.jpeg.base64EncodedString()
+          log(
+            "\(self.tag): ptt_screen_evidence stage=attached evidence=\(screenEvidence.descriptor.opaqueID) "
+              + "image_bytes=\(screenEvidence.jpeg.count) serialized_bytes=\(b64.utf8.count)")
           self.send(json: [
             "type": "conversation.item.create",
             "item": [
@@ -653,11 +666,21 @@ final class RealtimeHubSession: NSObject {
         }
       case .gemini:
         self.pendingGeminiToolCallIds.remove(callId)
-        self.send(json: Self.geminiToolResponse(
+        if let screenEvidence {
+          self.activeScreenEvidence = screenEvidence.descriptor
+        }
+        let wire = Self.geminiToolResponse(
           callId: callId,
           name: name,
           output: output,
-          image: image))
+          screenEvidence: screenEvidence)
+        if let screenEvidence {
+          let serializedBytes = (try? JSONSerialization.data(withJSONObject: wire))?.count ?? 0
+          log(
+            "\(self.tag): ptt_screen_evidence stage=attached evidence=\(screenEvidence.descriptor.opaqueID) "
+              + "image_bytes=\(screenEvidence.jpeg.count) serialized_bytes=\(serializedBytes)")
+        }
+        self.send(json: wire)
       }
     }
   }
@@ -666,23 +689,24 @@ final class RealtimeHubSession: NSObject {
     callId: String,
     name: String,
     output: String,
-    image: Data?
+    screenEvidence: RealtimeScreenEvidenceAttachment?
   ) -> [String: Any] {
     var functionResponse: [String: Any] = [
       "id": callId,
       "name": name,
       "response": ["result": output],
     ]
-    if let image {
+    if let screenEvidence {
       let displayName = "live-screenshot.jpg"
       functionResponse["response"] = [
         "result": output,
         "image": ["$ref": displayName],
+        "evidence_id": screenEvidence.descriptor.evidenceID,
       ]
       functionResponse["parts"] = [[
         "inlineData": [
           "mimeType": "image/jpeg",
-          "data": image.base64EncodedString(),
+          "data": screenEvidence.jpeg.base64EncodedString(),
           "displayName": displayName,
         ]
       ]]
@@ -982,6 +1006,7 @@ final class RealtimeHubSession: NSObject {
   private func resetTurnUsage() {
     usageInText = 0
     usageInAudio = 0
+    usageInImage = 0
     usageInCached = 0
     usageOutText = 0
     usageOutAudio = 0
@@ -996,6 +1021,7 @@ final class RealtimeHubSession: NSObject {
     let outD = usage["output_token_details"] as? [String: Any]
     usageInText += n(inD, "text_tokens")
     usageInAudio += n(inD, "audio_tokens")
+    usageInImage += n(inD, "image_tokens")
     usageInCached += n(inD, "cached_tokens")
     usageOutText += n(outD, "text_tokens")
     usageOutAudio += n(outD, "audio_tokens")
@@ -1003,22 +1029,28 @@ final class RealtimeHubSession: NSObject {
 
   /// Gemini: usageMetadata is cumulative for the turn → keep the latest (replace, not sum).
   private func accumulateGeminiUsage(_ um: [String: Any]) {
-    func split(_ arr: Any?) -> (text: Int, audio: Int) {
-      var t = 0, a = 0
+    func split(_ arr: Any?) -> (text: Int, audio: Int, image: Int) {
+      var t = 0, a = 0, i = 0
       for d in (arr as? [[String: Any]]) ?? [] {
         let c = (d["tokenCount"] as? Int) ?? (d["tokenCount"] as? NSNumber)?.intValue ?? 0
-        if (d["modality"] as? String)?.uppercased() == "AUDIO" { a += c } else { t += c }
+        switch (d["modality"] as? String)?.uppercased() {
+        case "AUDIO": a += c
+        case "IMAGE": i += c
+        default: t += c
+        }
       }
-      return (t, a)
+      return (t, a, i)
     }
     let pin = split(um["promptTokensDetails"])
     let pout = split(um["responseTokensDetails"])
-    if pin.text == 0 && pin.audio == 0 {
+    if pin.text == 0 && pin.audio == 0 && pin.image == 0 {
       usageInText = (um["promptTokenCount"] as? Int) ?? 0
       usageInAudio = 0
+      usageInImage = 0
     } else {
       usageInText = pin.text
       usageInAudio = pin.audio
+      usageInImage = pin.image
     }
     if pout.text == 0 && pout.audio == 0 {
       usageOutText = (um["candidatesTokenCount"] as? Int) ?? (um["responseTokenCount"] as? Int) ?? 0
@@ -1034,6 +1066,12 @@ final class RealtimeHubSession: NSObject {
   /// Resets first so a second finishTurn (barge-in edge) can't double-report.
   private func reportUsageIfNeeded() {
     let it = usageInText, ia = usageInAudio, ic = usageInCached, ot = usageOutText, oa = usageOutAudio
+    if let evidence = activeScreenEvidence {
+      log(
+        "\(tag): ptt_screen_evidence stage=provider_turn_done evidence=\(evidence.opaqueID) "
+          + "image_tokens=\(usageInImage)")
+      activeScreenEvidence = nil
+    }
     resetTurnUsage()
     guard auth.isEphemeral, it + ia + ic + ot + oa > 0 else { return }
     let providerName = provider == .gemini ? "gemini" : "openai"

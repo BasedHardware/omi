@@ -630,6 +630,45 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertEqual(acceptJournal(continuation).model.turn?.phase, .terminal(.success))
   }
 
+  func testCanonicalSpawnReceiptCompletesWithoutProviderContinuation() throws {
+    let (startingModel, turnID, sessionID, responseID) = awaitingHubResponse()
+    let reservation = reserveIdentity(startingModel, turnID: turnID)
+    let toolIdentity = reservation.identity
+    let callID = VoiceToolCallID("spawn-agent")
+    var model = reduce(
+      reservation.model,
+      .toolStartedScoped(turnID: turnID, identity: toolIdentity, callID: callID)
+    ).model
+
+    XCTAssertTrue(model.turn?.postToolContinuationRequired == true)
+    XCTAssertTrue(model.turn?.deadlines.contains(.pendingTools) == true)
+    XCTAssertFalse(model.turn?.deadlines.contains(.providerResponse) == true)
+
+    model = reduce(
+      model,
+      .canonicalToolReceiptAcceptedScoped(
+        turnID: turnID,
+        identity: toolIdentity,
+        callID: callID)
+    ).model
+
+    XCTAssertTrue(model.turn?.providerFinished == true)
+    XCTAssertFalse(model.turn?.postToolContinuationRequired == true)
+    guard case .writing = model.turn?.journalFinalization else {
+      return XCTFail("the canonical receipt must open the journal fence")
+    }
+
+    let finished = reduce(
+      model,
+      .toolFinishedScoped(turnID: turnID, identity: toolIdentity, callID: callID)
+    ).model
+    let accepted = acceptJournal(finished)
+    XCTAssertEqual(accepted.model.turn?.phase, .terminal(.success))
+    XCTAssertEqual(accepted.model.lastTerminal?.reason, .success)
+    XCTAssertEqual(accepted.model.lastTerminal?.route, .hub(sessionID: sessionID))
+    XCTAssertEqual(accepted.model.turn?.responseID, responseID)
+  }
+
   func testProviderOutputCannotMutateRecordingTurnBeforeCommit() {
     let turnID = VoiceTurnID()
     let lease = VoiceOutputLease(id: VoiceLeaseID(), turnID: turnID, lane: .nativeRealtime)

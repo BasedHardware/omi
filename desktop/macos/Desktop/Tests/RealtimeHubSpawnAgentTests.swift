@@ -47,6 +47,43 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertFalse(recall.assistantText.contains("GAUNTLET-OLD"))
   }
 
+  func testCanonicalSpawnReceiptSuppressesProviderContinuationPresentation() {
+    XCTAssertTrue(
+      RealtimeAcceptedSpawnPresentationPolicy.suppressesProviderContinuation(
+        hasCanonicalSpawnReceipt: true))
+    XCTAssertFalse(
+      RealtimeAcceptedSpawnPresentationPolicy.suppressesProviderContinuation(
+        hasCanonicalSpawnReceipt: false))
+    XCTAssertFalse(
+      RealtimeAcceptedSpawnPresentationPolicy.requiresProviderContinuation(
+        hasCanonicalSpawnReceipt: true))
+    XCTAssertTrue(
+      RealtimeAcceptedSpawnPresentationPolicy.requiresProviderContinuation(
+        hasCanonicalSpawnReceipt: false))
+    XCTAssertEqual(
+      RealtimeProviderTurnDoneDisposition.decide(
+        pendingToolCount: 0,
+        postToolContinuationRequired:
+          RealtimeAcceptedSpawnPresentationPolicy.requiresProviderContinuation(
+            hasCanonicalSpawnReceipt: true)),
+      .finalizeLogicalTurn)
+  }
+
+  func testCanonicalSpawnReceiptNeverRedrivesAfterExpectedSessionRefresh() {
+    XCTAssertFalse(
+      RealtimeHeadlessPTTSessionSwapPolicy.shouldRedrive(
+        sessionChanged: true,
+        hasCanonicalSpawnReceipt: true))
+    XCTAssertTrue(
+      RealtimeHeadlessPTTSessionSwapPolicy.shouldRedrive(
+        sessionChanged: true,
+        hasCanonicalSpawnReceipt: false))
+    XCTAssertFalse(
+      RealtimeHeadlessPTTSessionSwapPolicy.shouldRedrive(
+        sessionChanged: false,
+        hasCanonicalSpawnReceipt: false))
+  }
+
   func testSpawnJournalReceiptAcceptsOnlyCanonicalTurnIdentity() throws {
     let continuityKey = "voice:00000000-0000-0000-0000-000000009515"
     let payload = canonicalSpawnPayload(continuityKey: continuityKey)
@@ -303,6 +340,13 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(
       source.contains(
         "acquireVoiceOutput(.selectedVoiceFallback, reason: \"text_no_native_audio\")"))
+    // omi-test-quality: source-inspection -- static wiring contract for the
+    // behavioral policy tested above and the shared deterministic-ack lease.
+    XCTAssertTrue(source.contains("playCanonicalSpawnAcknowledgement(receipt.assistantText)"))
+    XCTAssertTrue(source.contains("acquireVoiceOutput(.deterministicAgentAck"))
+    XCTAssertTrue(source.contains(".canonicalToolReceiptAcceptedScoped("))
+    XCTAssertTrue(source.contains("RealtimeHeadlessPTTSessionSwapPolicy.shouldRedrive("))
+    XCTAssertTrue(source.contains("requiresProviderContinuation("))
   }
 
   func testRealtimeHubAudibleOutputIsLeaseGated() throws {

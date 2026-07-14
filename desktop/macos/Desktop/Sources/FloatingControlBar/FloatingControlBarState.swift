@@ -304,8 +304,7 @@ class FloatingControlBarState: NSObject, ObservableObject {
     }
     var isVoiceLocked: Bool { voiceProjection.isLocked }
     var voiceTranscript: String { voiceProjection.transcript }
-    /// Transient inline status shown in the bar (too-short / failure hints, or
-    /// "Transcribing…" progress already written to `voiceProjection.transcript`).
+    /// Transient inline status shown only for actionable PTT failures.
     var pttHintText: String { VoiceTurnUICopy.statusBannerText(for: voiceProjection) }
     var isVoiceResponseActive: Bool { voiceProjection.isResponseActive }
     var isVoiceResponseWaiting: Bool { voiceProjection.isResponseWaiting }

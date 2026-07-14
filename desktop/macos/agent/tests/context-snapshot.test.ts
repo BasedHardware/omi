@@ -104,6 +104,36 @@ describe("kernel ContextSnapshot", () => {
     expect(policy).toContain("Do not ask for a second confirmation merely to delegate");
   });
 
+  it("marks realtime history as historical-only visual context", () => {
+    const { store, session } = fixture("realtime_voice");
+    const surface = resolveSurfaceSession(store, {
+      ownerId: session.ownerId,
+      surfaceRef: { surfaceKind: "realtime_voice", externalRefKind: "chat", externalRefId: "default" },
+      defaultAdapterId: "fake",
+    }, () => 1);
+    recordJournalTurn(store, {
+      ownerId: session.ownerId,
+      conversationId: surface.conversationId,
+      turnId: "stale-visual-claim",
+      role: "assistant",
+      surfaceKind: "realtime_voice",
+      origin: "realtime_voice",
+      status: "completed",
+      content: "You are looking at a pull request in Cursor.",
+      contentBlocks: [],
+      createdAtMs: 1,
+    });
+
+    const snapshot = buildContextSnapshot(store, session.sessionId, session.ownerId, 2);
+    const rendered = renderContextSnapshot(snapshot, "realtime_voice", "coordinator");
+
+    expect(rendered).toContain('"visualAuthority":"historical_only"');
+    expect(rendered).toContain("You are looking at a pull request in Cursor.");
+    expect(kernelSystemPolicy("realtime_voice", "coordinator")).toContain(
+      "never present-screen evidence");
+    store.close();
+  });
+
   it("keeps user then assistant chronology when reconciliation revisions arrive in reverse order", () => {
     const { store } = fixture();
     const surface = resolveSurfaceSession(store, {

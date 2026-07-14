@@ -129,6 +129,7 @@ enum VoiceOutputLane: String, Equatable, Sendable, CaseIterable {
   case nativeRealtime = "native_realtime"
   case selectedVoiceFallback = "selected_voice_fallback"
   case deterministicAgentAck = "deterministic_agent_ack"
+  case deterministicScreenEvidence = "deterministic_screen_evidence"
   case filler
   case systemVoiceFallback = "system_voice_fallback"
 }
@@ -251,16 +252,11 @@ struct VoiceTurnUIProjection: Equatable, Sendable {
 /// — not a second lifecycle enum.
 enum VoiceTurnUICopy {
   static let transcribingProgress = "Transcribing…"
-  static let backupTranscription = "Using backup transcription…"
-  static let bargeInInterrupted = "New question — previous reply stopped"
-  static let bargeInHintVisibility: TimeInterval = 1
 
-  /// Banner text for the floating bar: explicit hint wins; otherwise surface the
-  /// in-progress transcription placeholder already written to `transcript`.
+  /// Banner text is reserved for actionable capture/provider failures. Normal
+  /// recording, transcription, fallback, and barge-in state stays visual.
   static func statusBannerText(for projection: VoiceTurnUIProjection) -> String {
-    if !projection.hint.isEmpty { return projection.hint }
-    if projection.transcript == transcribingProgress { return projection.transcript }
-    return ""
+    projection.hint
   }
 
   /// User-facing terminal hint. Branches on typed reason only.
@@ -475,6 +471,11 @@ enum VoiceTurnEvent: Equatable, Sendable {
     sessionID: VoiceSessionID?, responseID: VoiceResponseID?)
   case toolStartedScoped(
     turnID: VoiceTurnID, identity: VoiceEffectIdentity, callID: VoiceToolCallID)
+  /// A kernel-validated spawn receipt is the canonical response for a PTT
+  /// delegation. It replaces, rather than races, the provider's optional
+  /// post-tool narration.
+  case canonicalToolReceiptAcceptedScoped(
+    turnID: VoiceTurnID, identity: VoiceEffectIdentity, callID: VoiceToolCallID)
   case toolFinishedScoped(
     turnID: VoiceTurnID, identity: VoiceEffectIdentity, callID: VoiceToolCallID)
   case playbackStartedScoped(turnID: VoiceTurnID, lease: VoiceOutputLease)
@@ -523,7 +524,9 @@ enum VoiceTurnEvent: Equatable, Sendable {
       .transcriptionFailed(let turnID, _),
       .providerResponseStartedScoped(let turnID, _, _, _),
       .providerTurnFinishedScoped(let turnID, _, _, _),
-      .toolStartedScoped(let turnID, _, _), .toolFinishedScoped(let turnID, _, _),
+      .toolStartedScoped(let turnID, _, _),
+      .canonicalToolReceiptAcceptedScoped(let turnID, _, _),
+      .toolFinishedScoped(let turnID, _, _),
       .playbackStartedScoped(let turnID, _), .transcriptChanged(let turnID, _),
       .playbackDrainedScoped(let turnID, _, _),
       .playbackFailedScoped(let turnID, _, _, _),
@@ -574,6 +577,7 @@ enum VoiceTurnEvent: Equatable, Sendable {
     case .providerResponseStartedScoped: return "provider_response_started_scoped"
     case .providerTurnFinishedScoped: return "provider_turn_finished_scoped"
     case .toolStartedScoped: return "tool_started_scoped"
+    case .canonicalToolReceiptAcceptedScoped: return "canonical_tool_receipt_accepted_scoped"
     case .toolFinishedScoped: return "tool_finished_scoped"
     case .playbackStartedScoped: return "playback_started_scoped"
     case .playbackDrainedScoped: return "playback_drained_scoped"
@@ -655,18 +659,14 @@ struct VoiceTurnReducer {
 
     if case .start(let turnID, let ownerID, let intent) = event {
       let supersededTurnID: VoiceTurnID?
-      let interruptedByBargeIn: Bool
       if let active = model.turn, !active.phase.isTerminal {
         supersededTurnID = active.id
-        interruptedByBargeIn = true
         terminate(&model, reason: .interruptedByBargeIn, effects: &effects)
       } else if let terminal = model.turn, !terminal.deadlines.isEmpty {
         supersededTurnID = nil
-        interruptedByBargeIn = false
         effects.append(.cancelAllDeadlines(turnID: terminal.id))
       } else {
         supersededTurnID = nil
-        interruptedByBargeIn = false
       }
       model.turn = VoiceTurn(
         id: turnID,
@@ -676,14 +676,6 @@ struct VoiceTurnReducer {
       model.staleEventCount = 0
       model.invalidTransitionCount = 0
       model.duplicateTerminalCount = 0
-      if interruptedByBargeIn {
-        model.turn?.projection.hint = VoiceTurnUICopy.bargeInInterrupted
-        schedule(
-          .hintVisibility,
-          after: VoiceTurnUICopy.bargeInHintVisibility,
-          in: &model,
-          effects: &effects)
-      }
       schedule(.captureStart, after: deadlines.captureStart, in: &model, effects: &effects)
       return VoiceTurnReduction(model: model, effects: effects)
     }
@@ -1136,7 +1128,27 @@ struct VoiceTurnReducer {
       model.turn?.pendingToolCallIDs.insert(callID)
       model.turn?.postToolContinuationRequired = true
       model.turn?.phase = .awaitingTools
+      cancel(.providerResponse, in: &model, effects: &effects)
       schedule(.pendingTools, after: deadlines.pendingTools, in: &model, effects: &effects)
+
+    case .canonicalToolReceiptAcceptedScoped(_, let identity, let callID):
+      guard turn.toolEffectIdentities[callID] == identity,
+        acceptsProviderOutput(turn.phase)
+      else {
+        stale(&model, event: event, effects: &effects)
+        return VoiceTurnReduction(model: model, effects: effects)
+      }
+      // The kernel receipt proves that the requested child exists. Treat its
+      // deterministic admission acknowledgement as the logical PTT response;
+      // the provider's best-effort narration must neither alter the wording nor
+      // hold the parent external run open.
+      model.turn?.postToolContinuationRequired = false
+      model.turn?.providerFinished = true
+      cancel(.providerResponse, in: &model, effects: &effects)
+      startJournalFinalizationIfNeeded(in: &model, effects: &effects)
+      if completionFencesSatisfied(model.turn) {
+        terminate(&model, reason: .success, effects: &effects)
+      }
 
     case .toolFinishedScoped(_, let identity, let callID):
       guard turn.toolEffectIdentities[callID] == identity else {
