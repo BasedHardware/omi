@@ -22,6 +22,7 @@ import { usePushToTalk } from '../../hooks/usePushToTalk'
 import { useCodingAgents } from '../../hooks/useCodingAgents'
 import { Orb } from '../orb/Orb'
 import { BarChatSurface } from './BarChatSurface'
+import { createBarSender } from './barSend'
 import {
   deriveOrbState,
   isBarBusy,
@@ -120,12 +121,23 @@ export function BarApp(): React.JSX.Element {
   }, [])
 
   // --- chat viewport (projected from the main window) -------------------------
-  const sendFromBar = useCallback((text: string, fromVoice: boolean): void => {
-    if (!text.trim()) return
-    // Onboarding: the user asked something in the bar.
-    window.omiOverlay.notifyAsked()
-    window.omiBar.sendChat(text, fromVoice)
-  }, [])
+  // Every bar send — typed submit AND PTT commit — goes through the usage-limit
+  // gate (barSend.ts). A refused send never reaches the engine; it returns the
+  // limit line, which the bar shows inline while the main window raises the
+  // shared popup (and speaks it back for a voice turn). The quota is a cached
+  // snapshot, refreshed on mount + each reveal, so the send path stays off the
+  // network.
+  const [sender] = useState(() => createBarSender())
+  const [limitNotice, setLimitNotice] = useState<string | null>(null)
+  const sendFromBar = useCallback(
+    (text: string, fromVoice: boolean): void => {
+      void sender.send(text, fromVoice).then(setLimitNotice)
+    },
+    [sender]
+  )
+  useEffect(() => {
+    void sender.sync()
+  }, [sender])
   useEffect(() => window.omiBar.onChatState((s) => setChat(s)), [])
   // Pull the current thread on mount (in case we missed prior broadcasts).
   useEffect(() => window.omiBar.requestChatState(), [])
@@ -185,10 +197,17 @@ export function BarApp(): React.JSX.Element {
   }, [ready])
 
   // --- main → renderer lifecycle ---------------------------------------------
+  const senderRef = useRef(sender)
+  // eslint-disable-next-line react-hooks/refs -- latest-ref for the once-registered IPC listener
+  senderRef.current = sender
   useEffect(() => {
     return window.omiBar.onShow((p: BarShowPayload) => {
       setMode(p.mode)
       setSliding('in')
+      // A fresh reveal drops a stale limit notice and re-reads the quota, so the
+      // next send checks a current snapshot without touching the network itself.
+      setLimitNotice(null)
+      void senderRef.current.sync()
       // Each fresh reveal starts at the list (a summon is a pill; expanding lands
       // on the list, not a stale conversation) with no agent target carried over.
       setView('list')
@@ -386,6 +405,7 @@ export function BarApp(): React.JSX.Element {
                     draft={draft}
                     setDraft={setDraft}
                     onSubmit={(text) => sendFromBar(text, typedVoice)}
+                    limitNotice={limitNotice}
                     pttKeyDown={ptt.onKeyDown}
                     pttKeyUp={ptt.onKeyUp}
                     recording={ptt.recording}

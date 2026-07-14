@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useAppState } from '../../state/appState'
-import { interruptCurrentResponse } from '../../lib/voice/voiceController'
+import { interruptCurrentResponse, speakText } from '../../lib/voice/voiceController'
+import { showUsageLimit } from '../../lib/usageLimit'
 import type { BarChatState, BarChatStatus } from '../../../../shared/types'
 
 // The main-window half of the bar↔main chat bridge. The bar is a VIEWPORT over
@@ -109,6 +110,18 @@ export function ChatBridgeHost(): null {
   // speaks through, so this is the surface that can actually interrupt it.
   useEffect(() => {
     return window.omi?.onBarChatInterrupt?.(() => interruptCurrentResponse())
+  }, [])
+
+  // A bar send was refused by the chat usage limit. Both surfaces the user sees
+  // live here, not in the bar's own renderer: the shared UsageLimitPopup (Mac
+  // renders the modal on the MAIN window even when the floating bar raised it)
+  // and the TTS voice — so a blocked VOICE turn is answered aloud with the same
+  // line the bar shows inline, rather than dying in silence.
+  useEffect(() => {
+    return window.omi?.onBarUsageLimit?.(({ message, spoken }) => {
+      showUsageLimit('chat')
+      if (spoken) void speakText(message).catch(() => {})
+    })
   }, [])
 
   // Throttled broadcast on every state change (leading + trailing at 50ms).

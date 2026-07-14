@@ -69,6 +69,10 @@ export type BarChatSurfaceProps = {
   setDraft: (s: string) => void
   /** Send the typed draft (typed turn — spoken=false). */
   onSubmit: (text: string) => void
+  /** The chat usage limit refused the last send — show the line inline, above the
+   *  input (Mac drops the same copy into the bar as a local assistant message).
+   *  The main window raises the shared upgrade modal in parallel. */
+  limitNotice?: string | null
   /** PTT gets first dibs on Space in the textarea (hold-to-talk). Returns true
    *  when it consumed the event (skip Enter/typing). */
   pttKeyDown: (e: React.KeyboardEvent) => boolean
@@ -225,6 +229,12 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
           Ask Omi anything, or hold Space to talk.
         </div>
       )}
+
+      {props.limitNotice ? (
+        <div role="status" className="px-4 pb-1 pt-1 text-xs leading-relaxed text-amber-300/90">
+          {props.limitNotice}
+        </div>
+      ) : null}
 
       <div className="flex items-end gap-2 px-3 pb-3 pt-2">
         <textarea
