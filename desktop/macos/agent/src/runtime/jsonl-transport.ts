@@ -15,7 +15,7 @@ import type {
 } from "../protocol.js";
 import { PROTOCOL_VERSION } from "../protocol.js";
 import { serializeArtifact } from "./artifact-serialization.js";
-import { failureFromError, sanitizeProcessDiagnostic, type RuntimeFailure } from "./failures.js";
+import { failureFromError, normalizeRuntimeFailure, sanitizeProcessDiagnostic, type RuntimeFailure } from "./failures.js";
 import type { AgentEvent, RunMode } from "./types.js";
 import { AgentRuntimeKernel, type ExecuteAgentRunInput } from "./kernel.js";
 import { kernelSystemPolicy } from "./context-snapshot.js";
@@ -449,7 +449,10 @@ export class JsonlTransport {
       producingTurnId,
       prompt: message.prompt,
       promptBlocks: this.promptBlocks(message),
-      systemPrompt: kernelSystemPolicy(surfaceKind, executionRole),
+      systemPrompt: kernelSystemPolicy(surfaceKind, executionRole, snapshot.contextPlan),
+      systemPromptCacheIdentity: snapshot.contextPlan.stableCacheIdentity,
+      dynamicContextIdentity: snapshot.contextPlan.dynamicContextIdentity,
+      contextPlanId: snapshot.contextPlan.planId,
       admittedContextSnapshot: snapshot,
       mode,
       cwd,
@@ -639,7 +642,7 @@ function failureFromResultJson(resultJson: string | null): RuntimeFailure | unde
   try {
     const parsed = JSON.parse(resultJson) as { failure?: RuntimeFailure };
     if (parsed.failure?.code && parsed.failure.userMessage) {
-      return parsed.failure;
+      return normalizeRuntimeFailure(parsed.failure);
     }
   } catch {
     return undefined;
@@ -657,12 +660,16 @@ function boundedTerminalFailure(result: Awaited<ReturnType<AgentRuntimeKernel["e
   const userMessage = sanitizeProcessDiagnostic(
     persisted?.userMessage ?? result.run.errorMessage ?? fallbackMessage,
   ) || fallbackMessage;
-  return {
+  return normalizeRuntimeFailure({
     code,
+    failureCode: persisted?.failureCode,
     userMessage,
+    technicalMessage: persisted?.technicalMessage,
     source: persisted?.source ?? "runtime",
+    adapterId: persisted?.adapterId,
+    provider: persisted?.provider,
     retryable: persisted?.retryable ?? false,
-  };
+  });
 }
 
 function parsePayload(payloadJson: string): Record<string, unknown> {

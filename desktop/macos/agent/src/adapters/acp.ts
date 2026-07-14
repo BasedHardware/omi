@@ -21,6 +21,7 @@ import {
   AdapterRuntimeError,
   failureFromProcessError,
   failureFromProcessExit,
+  normalizeRuntimeFailure,
   type RuntimeFailure,
 } from "../runtime/failures.js";
 
@@ -171,14 +172,14 @@ function externalTerminalHttpFailure(
   if (!match) return undefined;
   const statusCode = Number(match[1]);
   const label = adapterId === "hermes" ? "Hermes" : "OpenClaw";
-  return {
+  return normalizeRuntimeFailure({
     code: "adapter_terminal_http_failure",
     source: "adapter_execution",
     adapterId,
     retryable: statusCode >= 500,
     userMessage: `${label} could not complete the request. Try again.`,
     technicalMessage: `${adapterId} ACP reported terminal HTTP ${statusCode}`,
-  };
+  });
 }
 
 function appendRecentStderr(current: string, next: string): string {

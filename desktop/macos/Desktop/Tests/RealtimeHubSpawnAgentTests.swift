@@ -141,6 +141,17 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
       .rejected)
   }
 
+  func testDirectedProviderSetupNeededIsTypedAndCannotCreateAPill() {
+    let continuityKey = "voice:00000000-0000-0000-0000-000000009519"
+    let setupNeeded = #"{"ok":false,"error":{"code":"provider_setup_needed","provider":"openclaw","message":"OpenClaw needs setup"}}"#
+
+    XCTAssertEqual(
+      RealtimeSpawnAgentToolOutcome.classify(
+        output: setupNeeded,
+        expectedContinuityKey: continuityKey),
+      .setupNeeded(.openclaw))
+  }
+
   private func canonicalSpawnPayload(
     continuityKey: String,
     pillID: UUID? = nil,

@@ -400,6 +400,8 @@ describe("agent control tools", () => {
       "resolve_desktop_dispatch",
       "cancel_agent_run",
       "inspect_agent_artifacts",
+      "read_tool_output",
+      "search_tool_output",
       "update_agent_artifact_lifecycle",
       "send_agent_message",
       "spawn_background_agent",
@@ -957,24 +959,204 @@ describe("agent control tools", () => {
     store.close();
   });
 
-  it("keeps session lists bounded and excludes persisted surface context", async () => {
+  it("keeps a 620 KiB session listing bounded and makes the full output artifact-readable", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
-    const surfaceContextSentinel = "SENSITIVE_CONTEXT_SENTINEL".repeat(20_000);
-    await kernel.executeRun({
+    const surfaceContextSentinel = "SENSITIVE_CONTEXT_SENTINEL".repeat(26_000);
+    const result = await kernel.executeRun({
       ...baseRunInput,
       surfaceContextJson: JSON.stringify({ rendered: surfaceContextSentinel }),
       prompt: "p".repeat(4_000),
     });
+    // Simulate the historical regression shape: a persisted run input that
+    // contains a 620 KiB surface payload. The production projection must stay
+    // bounded while the canonical full result remains artifact-readable.
+    store.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", [
+      JSON.stringify({ prompt: "p".repeat(4_000), surfaceContextJson: surfaceContextSentinel }),
+      result.run.runId,
+    ]);
 
     const raw = await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
       ownerId: "owner",
     });
     const listed = parseToolResult(raw);
 
-    expect(Buffer.byteLength(raw, "utf8")).toBeLessThan(64 * 1024);
+    expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(8 * 1024);
     expect(raw).not.toContain("SENSITIVE_CONTEXT_SENTINEL");
     expect(listed.sessions[0].latestRun.input.prompt).toContain("[truncated]");
     expect(listed.sessions[0].latestRun.input).not.toHaveProperty("surfaceContextJson");
+    expect(listed.toolResultEnvelope).toMatchObject({
+      version: 1,
+      truncated: true,
+      originalBytes: expect.any(Number),
+      projectedBytes: expect.any(Number),
+    });
+    expect(listed.toolResultEnvelope.originalBytes).toBeGreaterThanOrEqual(620 * 1024);
+    const artifactId = String(listed.toolResultEnvelope.fullOutputRef);
+    const recovered = parseToolResult(await handleAgentControlToolCall(ownerContext(kernel), "search_tool_output", {
+      ownerId: "owner",
+      artifactId,
+      query: "SENSITIVE_CONTEXT_SENTINEL",
+    }));
+    expect(recovered.ok).toBe(true);
+    expect(recovered.matches).toHaveLength(1);
+    store.close();
+  });
+
+  it("returns a typed failure when a 620 KiB session listing cannot persist its full output", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const surfaceContextSentinel = "UNSAVED_CONTEXT_SENTINEL".repeat(26_000);
+    const result = await kernel.executeRun({
+      ...baseRunInput,
+      surfaceContextJson: JSON.stringify({ rendered: surfaceContextSentinel }),
+      prompt: "p".repeat(4_000),
+    });
+    store.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", [
+      JSON.stringify({ prompt: "p".repeat(4_000), surfaceContextJson: surfaceContextSentinel }),
+      result.run.runId,
+    ]);
+    vi.spyOn(kernel, "persistArtifact").mockImplementation(() => {
+      throw new Error("deterministic artifact persistence failure");
+    });
+
+    const raw = await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+      ownerId: "owner",
+    });
+    const failed = parseToolResult(raw);
+
+    expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(8 * 1024);
+    expect(raw).not.toContain("UNSAVED_CONTEXT_SENTINEL");
+    expect(failed).toMatchObject({
+      ok: false,
+      error: { code: "tool_result_exceeded_provider_budget" },
+      toolResultEnvelope: {
+        status: "failed",
+        truncated: false,
+        fullOutputRef: null,
+      },
+    });
+    store.close();
+  });
+
+  it("finalizes oversized awareness snapshots through the same recoverable envelope", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const sentinel = "AWARENESS_CONTEXT_SENTINEL".repeat(26_000);
+    const result = await kernel.executeRun({
+      ...baseRunInput,
+      surfaceContextJson: JSON.stringify({ rendered: sentinel }),
+    });
+    store.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", [
+      JSON.stringify({ prompt: "awareness", surfaceContextJson: sentinel }),
+      result.run.runId,
+    ]);
+
+    const raw = await handleAgentControlToolCall(ownerContext(kernel), "build_desktop_awareness_snapshot", {
+      ownerId: "owner",
+    });
+    const projected = parseToolResult(raw);
+
+    expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(8 * 1024);
+    expect(raw).not.toContain("AWARENESS_CONTEXT_SENTINEL");
+    expect(projected).toMatchObject({ ok: true, toolResultEnvelope: {
+      version: 1,
+      status: "succeeded",
+      truncated: true,
+      originalBytes: expect.any(Number),
+      fullOutputRef: expect.stringMatching(/^artifact:/),
+    } });
+    expect(projected.toolResultEnvelope.originalBytes).toBeGreaterThan(620 * 1024);
+    const recovered = parseToolResult(await handleAgentControlToolCall(ownerContext(kernel), "search_tool_output", {
+      ownerId: "owner",
+      artifactId: projected.toolResultEnvelope.fullOutputRef,
+      query: "AWARENESS_CONTEXT_SENTINEL",
+    }));
+    expect(recovered.matches).toHaveLength(1);
+    store.close();
+  });
+
+  it("envelopes unknown and invalid control-tool errors", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const unknown = parseToolResult(await rawHandleAgentControlToolCall(ownerContext(kernel), "not_a_real_tool", {}));
+    const invalid = parseToolResult(await handleAgentControlToolCall(ownerContext(kernel), "get_agent_run", {}));
+
+    for (const result of [unknown, invalid]) {
+      expect(result).toMatchObject({
+        ok: false,
+        error: { code: expect.any(String) },
+        toolResultEnvelope: {
+          version: 1,
+          status: "failed",
+          truncated: false,
+          fullOutputRef: null,
+        },
+      });
+    }
+    expect(unknown.error.code).toBe("unknown_control_tool");
+    expect(invalid.error.code).toBe("invalid_tool_input");
+    store.close();
+  });
+
+  it("binds direct realtime control output and validation failures to the authorized invocation", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const invocation = {
+      invocationId: "invocation-realtime-control",
+      runId: "run-realtime-control",
+      attemptId: "attempt-realtime-control",
+      toolName: "list_agent_sessions",
+    };
+    const context = {
+      ...ownerContext(kernel),
+      authorizedToolInvocation: invocation,
+    };
+
+    const success = parseToolResult(await handleAgentControlToolCall(context, "list_agent_sessions", {
+      ownerId: "owner",
+    }));
+    expect(success.toolResultEnvelope.provenance).toEqual(invocation);
+
+    const failedInvocation = {
+      ...invocation,
+      invocationId: "invocation-realtime-invalid",
+      toolName: "get_agent_run",
+    };
+    const failure = parseToolResult(await handleAgentControlToolCall({
+      ...context,
+      authorizedToolInvocation: failedInvocation,
+    }, "get_agent_run", {}));
+    expect(failure).toMatchObject({ ok: false, error: { code: "invalid_tool_input" } });
+    expect(failure.toolResultEnvelope.provenance).toEqual(failedInvocation);
+    store.close();
+  });
+
+  it("bounds get_agent_run and accepts its fullOutputRef verbatim", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const sentinel = "RUN_DETAIL_SENTINEL".repeat(35_000);
+    const result = await kernel.executeRun({
+      ...baseRunInput,
+      surfaceContextJson: JSON.stringify({ rendered: sentinel }),
+    });
+    store.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", [
+      JSON.stringify({ prompt: "detail", surfaceContextJson: sentinel }),
+      result.run.runId,
+    ]);
+
+    const raw = await handleAgentControlToolCall(ownerContext(kernel), "get_agent_run", {
+      ownerId: "owner",
+      runId: result.run.runId,
+    });
+    const projected = parseToolResult(raw);
+
+    expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(8 * 1024);
+    expect(raw).not.toContain("RUN_DETAIL_SENTINEL");
+    expect(projected.toolResultEnvelope).toMatchObject({
+      truncated: true,
+      fullOutputRef: expect.stringMatching(/^artifact:/),
+    });
+    const recovered = parseToolResult(await handleAgentControlToolCall(ownerContext(kernel), "search_tool_output", {
+      ownerId: "owner",
+      artifactId: projected.toolResultEnvelope.fullOutputRef,
+      query: "RUN_DETAIL_SENTINEL",
+    }));
+    expect(recovered.matches).toHaveLength(1);
     store.close();
   });
 
@@ -2513,6 +2695,74 @@ describe("agent control tools", () => {
       expect(adapter.executed).toHaveLength(2);
       store.close();
     }
+  });
+
+  it("returns a typed setup-needed result when an authorized realtime spawn selects an unavailable provider", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
+    const surface = {
+      surfaceKind: "realtime_voice",
+      externalRefKind: "chat",
+      externalRefId: "voice-unavailable-provider",
+    };
+    const coordinator = kernel.resolveSurfaceSession({
+      ownerId: "owner",
+      surfaceRef: surface,
+      defaultAdapterId: "pi-mono",
+      modelProfile: "omi-sonnet",
+      providerBoundary: "managed_cloud",
+      executionRole: "coordinator",
+    });
+    const parentRun = store.insertRun({
+      sessionId: coordinator.agentSessionId,
+      clientId: "realtime",
+      requestId: "voice-parent-unavailable-provider",
+      status: "running",
+      mode: "act",
+    });
+
+    const result = parseToolResult(
+      await handleAgentControlToolCall(
+        {
+          ...ownerContext(kernel),
+          defaultAdapterId: "pi-mono",
+          providerBoundary: "managed_cloud",
+          callerSessionId: coordinator.agentSessionId,
+          executionRole: "coordinator",
+          authorizedCallerRunId: parentRun.runId,
+          authorizedProducerJournal: {
+            schemaVersion: 1,
+            surface,
+            continuityKey: "voice-provider-setup-needed",
+            pillId: "pill-provider-setup-needed",
+            userText: "Ask OpenClaw for a summary",
+            assistantText: "Starting OpenClaw",
+            objective: "Run this with OpenClaw",
+            title: "Ask OpenClaw",
+          },
+        },
+        "spawn_agent",
+        {
+          objective: "Run this with OpenClaw",
+          provider: "openclaw",
+          visible: true,
+          externalRefId: "pill-provider-setup-needed",
+          requestId: "voice-openclaw-unavailable",
+          clientId: "realtime",
+          ownerId: "owner",
+        },
+      ),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: "provider_setup_needed",
+        provider: "openclaw",
+        retryable: true,
+      },
+    });
+    expect(store.allRows("SELECT * FROM runs")).toHaveLength(1);
+    store.close();
   });
 
   it("does not let signed desktop control cross a managed parent run into a local provider", async () => {

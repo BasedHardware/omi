@@ -109,6 +109,12 @@ final class RealtimeHubSession: NSObject {
   private let provider: RealtimeHubProvider
   private let auth: HubAuth
   private let instructions: String
+  private let availableDirectedProviders: [String]
+  /// Opaque cache-plan fields only; never raw conversation material.
+  private let contextPlanID: String
+  private let stableCacheIdentity: String
+  private let dynamicContextIdentity: String
+  private let contextCacheReplaced: Bool
   private weak var delegate: RealtimeHubSessionDelegate?
 
   /// Mic PCM input rate per provider (Gemini 16k native, OpenAI GA needs 24k).
@@ -182,10 +188,25 @@ final class RealtimeHubSession: NSObject {
   /// clear which model produced which event.
   private var tag: String { "RealtimeHub[\(provider == .openai ? "openai" : "gemini"):\(provider.modelID)]" }
 
-  init(provider: RealtimeHubProvider, auth: HubAuth, instructions: String, delegate: RealtimeHubSessionDelegate) {
+  init(
+    provider: RealtimeHubProvider,
+    auth: HubAuth,
+    instructions: String,
+    availableDirectedProviders: [String] = [],
+    contextPlanID: String = "",
+    stableCacheIdentity: String = "",
+    dynamicContextIdentity: String = "",
+    contextCacheReplaced: Bool = false,
+    delegate: RealtimeHubSessionDelegate
+  ) {
     self.provider = provider
     self.auth = auth
     self.instructions = instructions
+    self.availableDirectedProviders = availableDirectedProviders
+    self.contextPlanID = contextPlanID
+    self.stableCacheIdentity = stableCacheIdentity
+    self.dynamicContextIdentity = dynamicContextIdentity
+    self.contextCacheReplaced = contextCacheReplaced
     self.delegate = delegate
     super.init()
   }
@@ -734,7 +755,7 @@ final class RealtimeHubSession: NSObject {
           ],
           "output": ["format": ["type": "audio/pcm", "rate": 24000], "voice": "marin"],
         ],
-        "tools": RealtimeHubTools.openAITools,
+        "tools": RealtimeHubTools.openAITools(availableDirectedProviders: availableDirectedProviders),
         "tool_choice": "auto",
       ],
     ]
@@ -766,7 +787,7 @@ final class RealtimeHubSession: NSObject {
             ],
           ],
           "systemInstruction": ["parts": [["text": instructions]]],
-          "tools": [["functionDeclarations": RealtimeHubTools.geminiFunctionDeclarations]],
+          "tools": [["functionDeclarations": RealtimeHubTools.geminiFunctionDeclarations(availableDirectedProviders: availableDirectedProviders)]],
           "inputAudioTranscription": [:],
           "outputAudioTranscription": [:],
           // turnCoverage = ALL_VIDEO so an injected screenshot frame is part of the turn
@@ -990,7 +1011,11 @@ final class RealtimeHubSession: NSObject {
     Task {
       await APIClient.shared.reportRealtimeUsage(
         provider: providerName, model: model,
-        inputText: it, inputAudio: ia, inputCached: ic, outputText: ot, outputAudio: oa)
+        inputText: it, inputAudio: ia, inputCached: ic, outputText: ot, outputAudio: oa,
+        contextPlanID: self.contextPlanID,
+        stableCacheIdentity: self.stableCacheIdentity,
+        dynamicContextIdentity: self.dynamicContextIdentity,
+        contextCacheReplaced: self.contextCacheReplaced)
     }
   }
 

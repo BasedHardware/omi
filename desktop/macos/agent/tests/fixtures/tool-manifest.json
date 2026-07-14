@@ -1830,6 +1830,230 @@
     }
   },
   {
+    "name": "read_tool_output",
+    "label": "Read Tool Output",
+    "description": "Read a bounded excerpt from a canonical Omi tool-output artifact.",
+    "promptSnippet": "read_tool_output - Read a bounded excerpt from a saved Omi tool result",
+    "promptGuidelines": [
+      "Use an artifactId returned by a toolResultEnvelope fullOutputRef or inspect_agent_artifacts.",
+      "The response is bounded; use search_tool_output for targeted retrieval."
+    ],
+    "latency": "fast local",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "artifactId": {
+          "type": "string",
+          "description": "Canonical tool-output artifact_id."
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Owner guard. Defaults to the active signed-in owner."
+        },
+        "maxBytes": {
+          "type": "number",
+          "description": "Maximum excerpt size in bytes. Default 4096, max 8192."
+        }
+      },
+      "required": [
+        "artifactId"
+      ],
+      "additionalProperties": false
+    },
+    "mcpInputSchema": {
+      "type": "object",
+      "properties": {
+        "artifactId": {
+          "type": "string",
+          "description": "Canonical tool-output artifact_id."
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Owner guard. Defaults to the active signed-in owner."
+        },
+        "maxBytes": {
+          "type": "number",
+          "description": "Maximum excerpt size in bytes. Default 4096, max 8192."
+        }
+      },
+      "required": [
+        "artifactId"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "timeoutClass": "normal",
+    "executor": {
+      "kind": "runtimeControl"
+    },
+    "surfaces": [
+      "desktop_chat",
+      "realtime_voice"
+    ],
+    "capabilityDoc": {
+      "title": "Read Tool Output",
+      "summary": "Read a bounded excerpt from a canonical Omi tool-output artifact.",
+      "bullets": [
+        "Requires a canonical artifact id and keeps provider payloads bounded."
+      ]
+    },
+    "voice": {
+      "realtimeDescription": "Read a bounded excerpt from an Omi tool-output artifact referenced by a prior toolResultEnvelope. Never request an arbitrary file path.",
+      "schemaOverride": {
+        "type": "object",
+        "properties": {
+          "artifactId": {
+            "type": "string",
+            "description": "Canonical tool-output artifact id."
+          },
+          "maxBytes": {
+            "type": "number",
+            "description": "Maximum excerpt size in bytes. Default 4096, max 8192."
+          }
+        },
+        "required": [
+          "artifactId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "intendedForAgents": true,
+    "runtimePreconditions": [
+      "Artifact must be a local canonical tool_output owned by the active user."
+    ],
+    "adapters": {
+      "pi-mono": {
+        "advertised": true
+      },
+      "omi-tools-stdio": {
+        "advertised": true
+      }
+    }
+  },
+  {
+    "name": "search_tool_output",
+    "label": "Search Tool Output",
+    "description": "Search a canonical Omi tool-output artifact without sending the complete artifact to a provider.",
+    "promptSnippet": "search_tool_output - Search a saved Omi tool result",
+    "promptGuidelines": [
+      "Use after a truncated toolResultEnvelope to find the relevant local output."
+    ],
+    "latency": "fast local",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "artifactId": {
+          "type": "string",
+          "description": "Canonical tool-output artifact_id."
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Owner guard. Defaults to the active signed-in owner."
+        },
+        "query": {
+          "type": "string",
+          "description": "Text to find in the saved output."
+        },
+        "maxMatches": {
+          "type": "number",
+          "description": "Maximum matching lines. Default 5, max 20."
+        }
+      },
+      "required": [
+        "artifactId",
+        "query"
+      ],
+      "additionalProperties": false
+    },
+    "mcpInputSchema": {
+      "type": "object",
+      "properties": {
+        "artifactId": {
+          "type": "string",
+          "description": "Canonical tool-output artifact_id."
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Owner guard. Defaults to the active signed-in owner."
+        },
+        "query": {
+          "type": "string",
+          "description": "Text to find in the saved output."
+        },
+        "maxMatches": {
+          "type": "number",
+          "description": "Maximum matching lines. Default 5, max 20."
+        }
+      },
+      "required": [
+        "artifactId",
+        "query"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "timeoutClass": "normal",
+    "executor": {
+      "kind": "runtimeControl"
+    },
+    "surfaces": [
+      "desktop_chat",
+      "realtime_voice"
+    ],
+    "capabilityDoc": {
+      "title": "Search Tool Output",
+      "summary": "Search a canonical Omi tool-output artifact without returning the complete artifact.",
+      "bullets": [
+        "Requires a canonical artifact id and returns bounded matching lines."
+      ]
+    },
+    "voice": {
+      "realtimeDescription": "Search a saved Omi tool-output artifact for matching lines without returning the complete artifact.",
+      "schemaOverride": {
+        "type": "object",
+        "properties": {
+          "artifactId": {
+            "type": "string",
+            "description": "Canonical tool-output artifact id."
+          },
+          "query": {
+            "type": "string",
+            "description": "Text to find in the saved output."
+          },
+          "maxMatches": {
+            "type": "number",
+            "description": "Maximum matching lines. Default 5."
+          }
+        },
+        "required": [
+          "artifactId",
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "intendedForAgents": true,
+    "runtimePreconditions": [
+      "Artifact must be a local canonical tool_output owned by the active user."
+    ],
+    "adapters": {
+      "pi-mono": {
+        "advertised": true
+      },
+      "omi-tools-stdio": {
+        "advertised": true
+      }
+    }
+  },
+  {
     "name": "update_agent_artifact_lifecycle",
     "label": "Update Agent Artifact Lifecycle",
     "description": "Update metadata-only lifecycle state for one canonical Omi agent artifact.\n\nThis only records artifact metadata state and ordered kernel events. It does not open files, delete files, retain blobs, or read artifact contents.",

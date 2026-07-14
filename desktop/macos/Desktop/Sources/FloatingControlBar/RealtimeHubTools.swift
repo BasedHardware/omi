@@ -23,10 +23,6 @@ enum RealtimeHubTools {
     return resolved
   }
 
-  private static func availableDirectedProviderRawValues() -> [String] {
-    ["openclaw", "hermes"]
-  }
-
   /// One line telling the model which languages the user actually speaks, so a short or
   /// ambiguous utterance is never interpreted (or transcribed, where the provider allows
   /// it) as some third language. Falls back to the Mac's preferred language when the user
@@ -46,9 +42,12 @@ enum RealtimeHubTools {
   }
 
   static func systemInstruction(
-    kernelContext: String = "", userLanguages: [String] = []
+    kernelContext: String = "",
+    kernelSemanticGuidance: String = "",
+    userLanguages: [String] = []
   ) -> String {
     let canonicalContext = kernelContext.trimmingCharacters(in: .whitespacesAndNewlines)
+    let semanticGuidance = kernelSemanticGuidance.trimmingCharacters(in: .whitespacesAndNewlines)
 
     return """
     You are Omi, a fast spoken-voice assistant on the user's Mac. You hear the user's \
@@ -56,6 +55,8 @@ enum RealtimeHubTools {
     \(userLanguagesLine(userLanguages))Reply in the same language the user is speaking.
 
     \(canonicalContext)
+
+    \(semanticGuidance)
 
     \(DesktopCapabilityRegistry.realtimeSelfModelPrompt)
 
@@ -85,7 +86,9 @@ enum RealtimeHubTools {
 
   /// OpenAI Realtime GA `session.tools` entries.
   static var openAITools: [[String: Any]] {
-    openAITools(availableDirectedProviders: availableDirectedProviderRawValues())
+    // Standalone callers fail closed. A physical RealtimeHubSession receives
+    // the exact Node registry projection at construction time.
+    openAITools(availableDirectedProviders: [])
   }
 
   static func openAITools(availableDirectedProviders: [String]) -> [[String: Any]] {
@@ -100,7 +103,7 @@ enum RealtimeHubTools {
   /// Gemini Live `setup.tools[0].functionDeclarations` entries (same surface). Derived once
   /// from `openAITools`.
   static var geminiFunctionDeclarations: [[String: Any]] {
-    geminiFunctionDeclarations(availableDirectedProviders: availableDirectedProviderRawValues())
+    geminiFunctionDeclarations(availableDirectedProviders: [])
   }
 
   static func geminiFunctionDeclarations(availableDirectedProviders: [String]) -> [[String: Any]] {

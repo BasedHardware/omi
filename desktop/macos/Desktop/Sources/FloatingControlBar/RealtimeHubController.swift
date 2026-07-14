@@ -120,28 +120,85 @@ struct RealtimeProviderToolResult: Equatable {
 enum RealtimeProviderToolResultPolicy {
   static let maximumByteCount = 48 * 1024
 
-  static func prepare(name: String, output: String) -> RealtimeProviderToolResult {
+  /// The sole model-visible result boundary for both realtime providers.
+  /// Provider-specific transport only happens after this method returns a
+  /// canonical envelope, including rejected/authorization error paths.
+  static func prepare(
+    provider: RealtimeHubProvider = .openai,
+    name: String,
+    output: String
+  ) -> RealtimeProviderToolResult {
     let originalByteCount = output.utf8.count
+    var providerOutput = output
     if name == HubTool.spawnAgent.rawValue,
       let payload = try? JSONSerialization.jsonObject(with: Data(output.utf8)) as? [String: Any],
       let providerResult = payload["providerResult"] as? [String: Any],
+      isCanonicalToolResultEnvelope(providerResult["toolResultEnvelope"]),
       let data = try? JSONSerialization.data(withJSONObject: providerResult, options: [.sortedKeys]),
       let compact = String(data: data, encoding: .utf8)
     {
-      return RealtimeProviderToolResult(
-        output: compact,
-        originalByteCount: originalByteCount,
-        wasOversized: false)
+      providerOutput = compact
     }
-    guard originalByteCount <= maximumByteCount else {
+    guard providerOutput.utf8.count <= maximumByteCount else {
+      return oversizedFailure(
+        provider: provider,
+        name: name,
+        originalOutput: output,
+        originalByteCount: originalByteCount)
+    }
+    let finalized = finalize(provider: provider, name: name, output: providerOutput)
+    guard finalized.utf8.count <= maximumByteCount else {
+      return oversizedFailure(
+        provider: provider,
+        name: name,
+        originalOutput: output,
+        originalByteCount: originalByteCount)
+    }
+    return RealtimeProviderToolResult(
+      output: finalized,
+      originalByteCount: originalByteCount,
+      wasOversized: false)
+  }
+
+  static func rejectedOutput(
+    code: String,
+    message: String,
+    preservingCanonicalEnvelopeFrom sourceOutput: String? = nil
+  ) -> String {
+    var payload: [String: Any] = [
+      "ok": false,
+      "error": ["code": String(code.prefix(128)), "message": String(message.prefix(512))],
+    ]
+    // Node owns the capability tuple. A Swift classification may refine the
+    // user-facing error, but it must never replace a valid external-run
+    // envelope with synthetic realtime provenance.
+    if let sourceOutput,
+      let sourcePayload = try? JSONSerialization.jsonObject(with: Data(sourceOutput.utf8)) as? [String: Any],
+      isCanonicalToolResultEnvelope(sourcePayload["toolResultEnvelope"])
+    {
+      payload["toolResultEnvelope"] = sourcePayload["toolResultEnvelope"]
+    }
+    let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+    return data.flatMap { String(data: $0, encoding: .utf8) }
+      ?? #"{"ok":false,"error":{"code":"realtime_tool_rejected","message":"The tool could not be completed."}}"#
+  }
+
+  private static func oversizedFailure(
+    provider: RealtimeHubProvider,
+    name: String,
+    originalOutput: String,
+    originalByteCount: Int
+  ) -> RealtimeProviderToolResult {
+      let error: [String: Any] = [
+        "code": "tool_result_too_large",
+        "message": "The tool returned too much detail. Retry with narrower filters.",
+        "tool": String(name.prefix(128)),
+        "originalBytes": originalByteCount,
+      ]
       let payload: [String: Any] = [
         "ok": false,
-        "error": [
-          "code": "tool_result_too_large",
-          "message": "The tool returned too much detail. Retry with narrower filters.",
-          "tool": String(name.prefix(128)),
-          "originalBytes": originalByteCount,
-        ],
+        "error": error,
+        "toolResultEnvelope": providerFailureEnvelope(provider: provider, name: name, error: error, originalOutput: originalOutput),
       ]
       let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
       let bounded = data.flatMap { String(data: $0, encoding: .utf8) }
@@ -150,11 +207,126 @@ enum RealtimeProviderToolResultPolicy {
         output: bounded,
         originalByteCount: originalByteCount,
         wasOversized: true)
+  }
+
+  private static func finalize(provider: RealtimeHubProvider, name: String, output: String) -> String {
+    if parsedCanonicalToolResultEnvelope(from: output) != nil { return output }
+    guard var payload = try? JSONSerialization.jsonObject(with: Data(output.utf8)) as? [String: Any] else {
+      return rejectedOutputEnvelope(
+        provider: provider,
+        name: name,
+        code: "realtime_tool_result_unstructured",
+        message: "The tool returned an invalid response.")
     }
-    return RealtimeProviderToolResult(
-      output: output,
-      originalByteCount: originalByteCount,
-      wasOversized: false)
+    let status = payload["ok"] as? Bool == true ? "succeeded" : "failed"
+    let payloadBytes = (try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]))?.count ?? 0
+    payload["toolResultEnvelope"] = [
+      "version": 1,
+      "status": status,
+      "truncated": false,
+      "originalBytes": payloadBytes,
+      "projectedBytes": payloadBytes,
+      "fullOutputRef": NSNull(),
+      "provenance": [
+        "invocationId": "realtime-\(provider.rawValue)-\(String(name.prefix(64)))",
+        "runId": "unknown",
+        "attemptId": "unknown",
+        "toolName": String(name.prefix(128)),
+      ],
+    ]
+    let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+    return data.flatMap { String(data: $0, encoding: .utf8) }
+      ?? rejectedOutputEnvelope(
+        provider: provider,
+        name: name,
+        code: "realtime_tool_result_encoding_failed",
+        message: "The tool response could not be prepared.")
+  }
+
+  private static func rejectedOutputEnvelope(
+    provider: RealtimeHubProvider,
+    name: String,
+    code: String,
+    message: String
+  ) -> String {
+    let error: [String: Any] = ["code": String(code.prefix(128)), "message": String(message.prefix(512))]
+    let payload: [String: Any] = [
+      "ok": false,
+      "error": error,
+      "toolResultEnvelope": providerFailureEnvelope(
+        provider: provider,
+        name: name,
+        error: error,
+        originalOutput: ""),
+    ]
+    let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+    return data.flatMap { String(data: $0, encoding: .utf8) }
+      ?? #"{"ok":false}"#
+  }
+
+  /// The Node bridge owns artifacts. Swift never replaces a canonical reference
+  /// with a provider-only payload; it either forwards that envelope or returns
+  /// a typed provider-budget error which preserves an existing artifact ref.
+  private static func providerFailureEnvelope(
+    provider: RealtimeHubProvider,
+    name: String,
+    error: [String: Any],
+    originalOutput: String
+  ) -> [String: Any] {
+    let sourceEnvelope = parsedCanonicalToolResultEnvelope(from: originalOutput)
+    let errorBytes = (try? JSONSerialization.data(withJSONObject: error, options: [.sortedKeys]))?.count ?? 0
+    let sourceOriginalBytes = sourceEnvelope?["originalBytes"] as? Int
+    let sourceRef = sourceEnvelope?["fullOutputRef"] as? String
+    let preservesArtifact = sourceRef != nil && (sourceOriginalBytes ?? 0) > errorBytes
+    let sourceProvenance = sourceEnvelope?["provenance"] as? [String: Any]
+    return [
+      "version": 1,
+      "status": "failed",
+      "truncated": preservesArtifact,
+      "originalBytes": preservesArtifact ? sourceOriginalBytes! : errorBytes,
+      "projectedBytes": errorBytes,
+      "fullOutputRef": preservesArtifact ? sourceRef! : NSNull(),
+      "provenance": sourceProvenance ?? [
+        "invocationId": "realtime-\(provider.rawValue)-provider-budget-\(String(name.prefix(64)))",
+        "runId": "unknown",
+        "attemptId": "unknown",
+        "toolName": String(name.prefix(128)),
+      ],
+    ]
+  }
+
+  private static func parsedCanonicalToolResultEnvelope(from output: String) -> [String: Any]? {
+    guard let payload = try? JSONSerialization.jsonObject(with: Data(output.utf8)) as? [String: Any] else {
+      return nil
+    }
+    if let envelope = payload["toolResultEnvelope"] as? [String: Any], isCanonicalToolResultEnvelope(envelope) {
+      return envelope
+    }
+    if let providerResult = payload["providerResult"] as? [String: Any],
+      let envelope = providerResult["toolResultEnvelope"] as? [String: Any],
+      isCanonicalToolResultEnvelope(envelope)
+    {
+      return envelope
+    }
+    return nil
+  }
+
+  private static func isCanonicalToolResultEnvelope(_ value: Any?) -> Bool {
+    guard let envelope = value as? [String: Any],
+      envelope["version"] as? Int == 1,
+      ["succeeded", "failed", "cancelled"].contains(envelope["status"] as? String ?? ""),
+      let originalBytes = envelope["originalBytes"] as? Int,
+      let projectedBytes = envelope["projectedBytes"] as? Int,
+      let truncated = envelope["truncated"] as? Bool,
+      originalBytes >= projectedBytes,
+      truncated == (projectedBytes < originalBytes),
+      let provenance = envelope["provenance"] as? [String: Any]
+    else { return false }
+    guard ["invocationId", "runId", "attemptId", "toolName"].allSatisfy({
+      (provenance[$0] as? String)?.isEmpty == false
+    }) else { return false }
+    if projectedBytes < originalBytes { return envelope["fullOutputRef"] as? String != nil }
+    return envelope["fullOutputRef"] is NSNull || envelope["fullOutputRef"] == nil
   }
 }
 
@@ -770,16 +942,27 @@ struct RealtimeSpawnJournalReceipt: Equatable {
 /// being persisted as successful when no child agent was actually created.
 enum RealtimeSpawnAgentToolOutcome: Equatable {
   case accepted(RealtimeSpawnJournalReceipt)
+  case setupNeeded(AgentPillsManager.DirectedProvider)
   case rejected
 
   static func classify(output: String, expectedContinuityKey: String) -> Self {
-    guard let receipt = RealtimeSpawnJournalReceipt.parse(
+    if let receipt = RealtimeSpawnJournalReceipt.parse(
       output: output,
       expectedContinuityKey: expectedContinuityKey)
+    {
+      return .accepted(receipt)
+    }
+    guard
+      let data = output.data(using: .utf8),
+      let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let error = payload["error"] as? [String: Any],
+      error["code"] as? String == "provider_setup_needed",
+      let rawProvider = error["provider"] as? String,
+      let provider = AgentPillsManager.DirectedProvider(rawValue: rawProvider)
     else {
       return .rejected
     }
-    return .accepted(receipt)
+    return .setupNeeded(provider)
   }
 }
 
@@ -1372,6 +1555,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var prefetchedVoiceContext = ""
   private var prefetchedVoiceContextSessionID = ""
   private var prefetchedVoiceContextFreshnessIdentity = ""
+  private var prefetchedVoiceContextPlanID = ""
+  private var prefetchedVoiceStableCacheIdentity = ""
+  private var prefetchedVoiceDynamicContextIdentity = ""
+  private var pendingContextCacheReplacement = false
+  private var prefetchedVoiceSemanticGuidance = ""
+  /// Exact Node registry projection from the bridge init handshake. Empty is a
+  /// fail-closed value until the runtime has declared available adapters.
+  private var registeredDirectedProviderIDs: [String] = []
   private var prefetchedVoiceContextTurnIDs: Set<String> = []
   private var prefetchedVoiceContextOwnerScope: RealtimeHubOwnerScope?
   /// Typed snapshot identity baked into the current warm session's instructions.
@@ -1621,6 +1812,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     prefetchedVoiceContext = ""
     prefetchedVoiceContextSessionID = ""
     prefetchedVoiceContextFreshnessIdentity = ""
+    prefetchedVoiceContextPlanID = ""
+    prefetchedVoiceStableCacheIdentity = ""
+    prefetchedVoiceDynamicContextIdentity = ""
+    prefetchedVoiceSemanticGuidance = ""
     prefetchedVoiceContextTurnIDs.removeAll()
     prefetchedVoiceContextOwnerScope = nil
   }
@@ -1700,6 +1895,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     prefetchedVoiceContext = ""
     prefetchedVoiceContextSessionID = ""
     prefetchedVoiceContextFreshnessIdentity = ""
+    prefetchedVoiceContextPlanID = ""
+    prefetchedVoiceStableCacheIdentity = ""
+    prefetchedVoiceDynamicContextIdentity = ""
+    prefetchedVoiceSemanticGuidance = ""
     prefetchedVoiceContextTurnIDs.removeAll()
     prefetchedVoiceContextOwnerScope = nil
 
@@ -1786,6 +1985,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     prefetchedVoiceContext = "owner-private-context"
     prefetchedVoiceContextSessionID = "owner-session"
     prefetchedVoiceContextFreshnessIdentity = "owner-freshness"
+    prefetchedVoiceContextPlanID = "owner-plan"
+    prefetchedVoiceStableCacheIdentity = "owner-stable-cache"
+    prefetchedVoiceDynamicContextIdentity = "owner-dynamic-context"
+    prefetchedVoiceSemanticGuidance = "owner semantic guidance"
     prefetchedVoiceContextTurnIDs = ["owner-turn"]
     prefetchedVoiceContextOwnerScope = ownerScope
     pendingSessionRefreshReason = "owner-fixture-refresh"
@@ -3007,9 +3210,19 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     sessionVoiceContextFreshnessIdentity = topLevelContext.snapshotFreshnessIdentity
     let instructions = RealtimeHubTools.systemInstruction(
       kernelContext: topLevelContext.rendered,
+      kernelSemanticGuidance: topLevelContext.semanticGuidance,
       userLanguages: AssistantSettings.shared.voiceBaseLanguages)
     let s = RealtimeHubSession(
-      provider: provider, auth: auth, instructions: instructions, delegate: self)
+      provider: provider,
+      auth: auth,
+      instructions: instructions,
+      availableDirectedProviders: registeredDirectedProviderIDs,
+      contextPlanID: topLevelContext.planID,
+      stableCacheIdentity: topLevelContext.stableCacheIdentity,
+      dynamicContextIdentity: topLevelContext.dynamicContextIdentity,
+      contextCacheReplaced: pendingContextCacheReplacement,
+      delegate: self)
+    pendingContextCacheReplacement = false
     lastWarmAt = nil
     hubConnected = false
     session = s
@@ -3028,22 +3241,32 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     log(
       "RealtimeHub: warming \(provider.displayName) session "
         + "(\(auth.isEphemeral ? "ephemeral/managed" : "client-direct/BYOK"), "
-        + "contextChars=\(topLevelContext.rendered.count))")
+        + "contextChars=\(topLevelContext.rendered.count) plan=\(topLevelContext.planID.prefix(24)))")
   }
 
   private struct VoiceSessionContext {
     let rendered: String
     let snapshotFreshnessIdentity: String
+    let planID: String
+    let stableCacheIdentity: String
+    let dynamicContextIdentity: String
+    let semanticGuidance: String
   }
 
   /// Exact context material selected and rendered by the kernel for realtime.
   private func voiceSessionContext(for ownerScope: RealtimeHubOwnerScope) -> VoiceSessionContext {
     guard prefetchedVoiceContextOwnerScope == ownerScope else {
-      return VoiceSessionContext(rendered: "", snapshotFreshnessIdentity: "")
+      return VoiceSessionContext(
+        rendered: "", snapshotFreshnessIdentity: "", planID: "", stableCacheIdentity: "",
+        dynamicContextIdentity: "", semanticGuidance: "")
     }
     return VoiceSessionContext(
       rendered: prefetchedVoiceContext,
-      snapshotFreshnessIdentity: prefetchedVoiceContextFreshnessIdentity
+      snapshotFreshnessIdentity: prefetchedVoiceContextFreshnessIdentity,
+      planID: prefetchedVoiceContextPlanID,
+      stableCacheIdentity: prefetchedVoiceStableCacheIdentity,
+      dynamicContextIdentity: prefetchedVoiceDynamicContextIdentity,
+      semanticGuidance: prefetchedVoiceSemanticGuidance
     )
   }
 
@@ -3066,6 +3289,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       } catch {
         return
       }
+      let registeredProviders = await AgentRuntimeProcess.shared.registeredDirectedProviderIDs()
       await MainActor.run {
         guard !Task.isCancelled,
           self.voiceContextRefreshGeneration == refreshGeneration,
@@ -3075,6 +3299,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         self.prefetchedVoiceContext = resolvedSnapshot.context
         self.prefetchedVoiceContextSessionID = resolvedSnapshot.sessionId
         self.prefetchedVoiceContextFreshnessIdentity = resolvedSnapshot.freshnessIdentity
+        self.prefetchedVoiceContextPlanID = resolvedSnapshot.contextPlanID
+        self.prefetchedVoiceStableCacheIdentity = resolvedSnapshot.stableCacheIdentity
+        self.prefetchedVoiceDynamicContextIdentity = resolvedSnapshot.dynamicContextIdentity
+        self.prefetchedVoiceSemanticGuidance = resolvedSnapshot.semanticGuidance
+        self.updateRegisteredDirectedProviders(registeredProviders)
         self.prefetchedVoiceContextTurnIDs = resolvedSnapshot.turnIDs
         self.prefetchedVoiceContextOwnerScope = ownerScope
       }
@@ -3097,6 +3326,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     } catch {
       return false
     }
+    let registeredProviders = await AgentRuntimeProcess.shared.registeredDirectedProviderIDs()
     guard resolvedSnapshot.isResolved else {
       log("RealtimeHub: retaining the last voice context after an unresolved kernel snapshot")
       return false
@@ -3109,9 +3339,26 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     prefetchedVoiceContext = resolvedSnapshot.context
     prefetchedVoiceContextSessionID = resolvedSnapshot.sessionId
     prefetchedVoiceContextFreshnessIdentity = resolvedSnapshot.freshnessIdentity
+    prefetchedVoiceContextPlanID = resolvedSnapshot.contextPlanID
+    prefetchedVoiceStableCacheIdentity = resolvedSnapshot.stableCacheIdentity
+    prefetchedVoiceDynamicContextIdentity = resolvedSnapshot.dynamicContextIdentity
+    prefetchedVoiceSemanticGuidance = resolvedSnapshot.semanticGuidance
+    updateRegisteredDirectedProviders(registeredProviders)
     prefetchedVoiceContextTurnIDs = resolvedSnapshot.turnIDs
     prefetchedVoiceContextOwnerScope = ownerScope
     return true
+  }
+
+  private func updateRegisteredDirectedProviders(_ providers: [String]) {
+    let normalized = providers.filter { ["hermes", "openclaw"].contains($0) }.sorted()
+    guard registeredDirectedProviderIDs != normalized else { return }
+    registeredDirectedProviderIDs = normalized
+    // A realtime provider's tool schema is immutable for the physical session.
+    // Replace a warm session so it cannot advertise a stale local adapter.
+    if session != nil {
+      teardownSession()
+      ensureWarm()
+    }
   }
 
   /// Establish a reducer-owned input boundary before a PTT turn can touch the
@@ -4103,6 +4350,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
             sessionSnapshotIdentity: self.sessionVoiceContextFreshnessIdentity)
         if needsSessionRefresh {
           log("RealtimeHub: reconnecting before PTT input so provider instructions match canonical context")
+          self.pendingContextCacheReplacement = true
           self.teardownSession(preservingReconnectAudio: true)
         }
         guard !Task.isCancelled,
@@ -4603,7 +4851,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         turnID: turnID,
         identity: identity,
         callID: VoiceToolCallID(callId)))
-    let providerResult = RealtimeProviderToolResultPolicy.prepare(name: name, output: output)
+    let providerResult = RealtimeProviderToolResultPolicy.prepare(
+      provider: effectiveProvider,
+      name: name,
+      output: output)
     if providerResult.wasOversized {
       DesktopDiagnosticsManager.shared.recordFallback(
         area: "realtime_hub",
@@ -4818,34 +5069,50 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           let spawnOutcome = RealtimeSpawnAgentToolOutcome.classify(
             output: output,
             expectedContinuityKey: self.turnIdempotencyKey)
-          guard case .accepted(let receipt) = spawnOutcome,
-            receipt.continuityKey == "voice:\(turnID.rawValue.uuidString.lowercased())"
-          else {
+          let expectedContinuityKey = "voice:\(turnID.rawValue.uuidString.lowercased())"
+          switch spawnOutcome {
+          case .accepted(let receipt) where receipt.continuityKey == expectedContinuityKey:
+            self.acceptedSpawnJournalReceiptByContinuityKey[receipt.continuityKey] =
+              AcceptedSpawnJournalReceipt(ownerID: binding.ownerID, receipt: receipt)
+            self.turnPersistenceLedger.recordAcceptedReceipt(for: receipt.continuityKey)
+            self.assistantText = receipt.assistantText
+            if let pill = receipt.pillProjection {
+              AgentPillsManager.shared.upsertSpawnedPill(
+                id: pill.pillID,
+                query: pill.objective,
+                title: pill.title,
+                sessionId: pill.sessionID,
+                runId: pill.runID,
+                attemptId: pill.attemptID,
+                provider: pill.provider,
+                producingJournalSurface: FloatingControlBarManager.shared.realtimeVoiceSurfaceReference())
+            }
+          case .setupNeeded(let provider):
+            self.lastExternalToolErrorCode = "provider_setup_needed"
+            self.sendToolResultIfCurrent(
+              source: source,
+              callId: callId,
+              name: name,
+              output: RealtimeProviderToolResultPolicy.rejectedOutput(
+                code: "provider_setup_needed",
+                message: provider.setupNeededStatus,
+                preservingCanonicalEnvelopeFrom: output),
+              expectedTurnEpoch: expectedTurnEpoch)
+            VoiceTurnCoordinator.shared.send(.finish(turnID: turnID, reason: .providerFailed))
+            return
+          case .accepted, .rejected:
             log("RealtimeHub[\(self.providerTag)]: spawn_agent rejected without a canonical child receipt")
             self.sendToolResultIfCurrent(
               source: source,
               callId: callId,
               name: name,
-              output: "The background agent could not start. Please try again.",
+              output: RealtimeProviderToolResultPolicy.rejectedOutput(
+                code: "realtime_spawn_rejected",
+                message: "The background agent could not start. Please try again.",
+                preservingCanonicalEnvelopeFrom: output),
               expectedTurnEpoch: expectedTurnEpoch)
             VoiceTurnCoordinator.shared.send(.finish(turnID: turnID, reason: .providerFailed))
             return
-          }
-
-          self.acceptedSpawnJournalReceiptByContinuityKey[receipt.continuityKey] =
-            AcceptedSpawnJournalReceipt(ownerID: binding.ownerID, receipt: receipt)
-          self.turnPersistenceLedger.recordAcceptedReceipt(for: receipt.continuityKey)
-          self.assistantText = receipt.assistantText
-          if let pill = receipt.pillProjection {
-            AgentPillsManager.shared.upsertSpawnedPill(
-              id: pill.pillID,
-              query: pill.objective,
-              title: pill.title,
-              sessionId: pill.sessionID,
-              runId: pill.runID,
-              attemptId: pill.attemptID,
-              provider: pill.provider,
-              producingJournalSurface: FloatingControlBarManager.shared.realtimeVoiceSurfaceReference())
           }
         }
         self.sendToolResultIfCurrent(
@@ -4870,7 +5137,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           source: source,
           callId: callId,
           name: name,
-          output: "The tool could not be authorized (\(code)).",
+          output: RealtimeProviderToolResultPolicy.rejectedOutput(
+            code: code,
+            message: "The tool could not be authorized. Please try again."),
           expectedTurnEpoch: expectedTurnEpoch)
       }
     }
