@@ -86,21 +86,25 @@ struct OnboardingVoiceDemoView: View {
 
             Spacer()
 
-            if showContinue {
-                Button(action: onComplete) {
-                    Text("Continue")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.black)
-                        .frame(maxWidth: 280)
-                        .padding(.vertical, OmiSpacing.md)
-                        .background(Color.white)
-                        .cornerRadius(OmiChrome.smallControlRadius)
+            HStack(spacing: OmiSpacing.md) {
+                OnboardingBackButton()
+
+                if showContinue {
+                    Button(action: onComplete) {
+                        Text("Continue")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.black)
+                            .frame(maxWidth: 280)
+                            .padding(.vertical, OmiSpacing.md)
+                            .background(Color.white)
+                            .cornerRadius(OmiChrome.smallControlRadius)
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(.defaultAction)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                .buttonStyle(.plain)
-                .keyboardShortcut(.defaultAction)
-                .padding(.bottom, OmiSpacing.section)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+            .padding(.bottom, OmiSpacing.section)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(OmiColors.backgroundPrimary)
