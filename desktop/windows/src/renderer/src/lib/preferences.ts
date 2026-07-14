@@ -2,6 +2,7 @@
 // setters write back to localStorage and notify subscribers so live components
 // can react.
 import { DEFAULT_LANGUAGE } from './languages'
+import type { VoiceProviderSetting } from './voice/sessionMachine'
 
 const KEY = 'omi-windows-prefs-v1'
 
@@ -97,6 +98,11 @@ export type Preferences = {
   // read/write; undefined = 1.0 (default). Set in Settings → General → Font Size
   // and via the Ctrl+= / Ctrl+- / Ctrl+0 shortcuts.
   fontScale?: number
+  // Realtime-voice provider selection (macOS RealtimeOmniProvider.selectedProvider).
+  // 'auto' (default) defers to autoModelSelector's daily quality/speed pick;
+  // 'openai'/'gemini' pins a concrete lane. Resolved to a concrete VoiceProvider
+  // at session start via resolveEffectiveVoiceProvider(). Track-6 owns the UI toggle.
+  voiceProvider?: VoiceProviderSetting
 }
 
 const defaults: Preferences = {
@@ -107,7 +113,10 @@ const defaults: Preferences = {
   // Infinite by default: one ongoing conversation that persists across launches
   // and is accessible from the beginning (the Home thread windows it in as you
   // scroll up). Users can switch back to 'per-launch' in Settings.
-  chatHistoryMode: 'infinite'
+  chatHistoryMode: 'infinite',
+  // Auto is the out-of-the-box default (macOS RealtimeOmniProvider.auto): the
+  // daily benchmark pick decides the lane until the user pins one in Settings.
+  voiceProvider: 'auto'
 }
 
 function load(): Preferences {

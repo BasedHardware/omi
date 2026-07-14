@@ -20,6 +20,7 @@ import {
 import { EchoGate, isHeadsetOutput } from './echoGate'
 import { GATE_REASSERT_MS } from '../../capture/assistantGate'
 import { mintRealtimeToken, MintError } from './tokenMint'
+import { refreshIfStale, resolveEffectiveVoiceProvider } from './autoModelSelector'
 import { reportRealtimeUsage } from './usageReport'
 import { startOpenAiSession } from './openaiSession'
 import { startGeminiSession } from './geminiSession'
@@ -235,16 +236,24 @@ export function getVoiceEvents(): VoiceEventRecord[] {
   return events.slice()
 }
 
-export async function startVoiceSession(preferred: VoiceProvider = 'openai'): Promise<void> {
+export async function startVoiceSession(preferred?: VoiceProvider): Promise<void> {
   if (state.status === 'connecting' || state.status === 'live') return
+  // Refresh the daily Auto pick if stale (fire-and-forget, no-op when fresh) so
+  // the NEXT session uses a current pick; THIS session resolves synchronously
+  // from the cache below. Mirrors Mac's "call refreshIfStale at session start".
+  refreshIfStale()
+  // No explicit lane (the UI path) → honor the user's provider setting, resolving
+  // 'auto' to the cached concrete pick (macOS effectiveProvider). An explicit
+  // provider (a forced-lane caller / test) bypasses the selector entirely.
+  const preferredProvider = preferred ?? resolveEffectiveVoiceProvider()
   const mySeq = ++startSeq
-  dispatch({ type: 'start', provider: preferred })
-  record('start', preferred)
+  dispatch({ type: 'start', provider: preferredProvider })
+  record('start', preferredProvider)
 
   const headset = await refreshHeadsetState()
 
   // Mint, falling back to the other lane when THIS provider is down/unconfigured.
-  let provider = preferred
+  let provider = preferredProvider
   let token: string
   try {
     try {
