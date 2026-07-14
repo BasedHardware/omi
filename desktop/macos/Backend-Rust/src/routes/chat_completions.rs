@@ -380,9 +380,7 @@ fn translate_request_inner(
         model: upstream_model.to_string(),
         max_tokens,
         messages: anthropic_messages,
-        // Use the system block produced by cached_system_block() above
-        // (line 226) which already handles sentinel splitting for cache
-        // stability — do NOT re-create here or we lose the split.
+        // Use the typed system block produced by cached_system_block() above.
         system,
         temperature: req.temperature,
         stream: req.stream,
@@ -409,41 +407,40 @@ fn ephemeral_cache_control() -> serde_json::Value {
     json!({ "type": "ephemeral", "ttl": "1h" })
 }
 
-/// Sentinel the desktop client inserts between the static (cacheable) system
-/// prefix and the per-conversation live context (date/time, memories, screen
-/// activity). The prefix is byte-identical across every conversation; the tail
-/// changes per conversation. Splitting here lets the cache_control breakpoint
-/// cover only the stable prefix so a changing tail never busts the cached
-/// ~16k-token prefix. Must match `ChatProvider.cacheSplitSentinel` in the app.
-const SYSTEM_CACHE_SPLIT: &str = "<<<OMI_CACHE_SPLIT_V1>>>";
+const OMI_CONTEXT_CACHE_BOUNDARY: &str = "<!-- OMI_CONTEXT_CACHE_V1 ";
 
-/// Wrap a system prompt string in cache_control content block(s).
-///
-/// If the prompt carries the `SYSTEM_CACHE_SPLIT` sentinel, emit two blocks: the
-/// static prefix (cached) followed by the live-context tail (uncached, re-sent
-/// every request). Otherwise emit a single cached block (legacy behavior).
+/// Split the producer-owned desktop context-plan boundary. The static kernel
+/// policy gets the cache breakpoint; the plan identity remains an uncached
+/// dynamic block so changed conversation context cannot poison the stable
+/// cache. Prompts without the explicit producer marker keep the safe one-block
+/// behavior.
 fn cached_system_block(text: String) -> serde_json::Value {
-    if let Some((static_prefix, live_tail)) = text.split_once(SYSTEM_CACHE_SPLIT) {
-        // Both blocks are non-empty in practice (prefix = instructions+tools,
-        // tail = at least the current date/time), so neither trips Anthropic's
-        // empty-text-block rejection.
-        return json!([
-            {
-                "type": "text",
-                "text": static_prefix,
-                "cache_control": ephemeral_cache_control()
-            },
-            {
-                "type": "text",
-                "text": live_tail
-            }
-        ]);
+    let Some(marker_offset) = text.find(OMI_CONTEXT_CACHE_BOUNDARY) else {
+        return json!([{
+            "type": "text",
+            "text": text,
+            "cache_control": ephemeral_cache_control()
+        }]);
+    };
+    let (stable, dynamic) = text.split_at(marker_offset);
+    if stable.trim().is_empty() || !dynamic.ends_with("-->") {
+        return json!([{
+            "type": "text",
+            "text": text,
+            "cache_control": ephemeral_cache_control()
+        }]);
     }
-    json!([{
-        "type": "text",
-        "text": text,
-        "cache_control": ephemeral_cache_control()
-    }])
+    json!([
+        {
+            "type": "text",
+            "text": stable.trim_end(),
+            "cache_control": ephemeral_cache_control()
+        },
+        {
+            "type": "text",
+            "text": dynamic
+        }
+    ])
 }
 
 /// Attach an ephemeral cache_control breakpoint to the latest user message so
@@ -2087,6 +2084,46 @@ mod tests {
                 "cache_control": {"type": "ephemeral", "ttl": "1h"}
             }])
         );
+    }
+
+    #[test]
+    fn test_translate_request_splits_producer_context_cache_boundary() {
+        let req = ChatCompletionRequest {
+            model: "omi-sonnet".to_string(),
+            messages: vec![
+                ChatMessage {
+                    role: "system".to_string(),
+                    content: Some(json!("Stable policy\n<!-- OMI_CONTEXT_CACHE_V1 stable=sha256:stable dynamic=sha256:dynamic plan=sha256:plan -->")),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                },
+                ChatMessage {
+                    role: "user".to_string(),
+                    content: Some(json!("Hello")),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                },
+            ],
+            stream: false,
+            temperature: None,
+            max_tokens: None,
+            max_completion_tokens: None,
+            tools: None,
+            tool_choice: None,
+        };
+        let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
+        let system = result.system.unwrap();
+        let blocks = system.as_array().unwrap();
+        assert_eq!(blocks.len(), 2);
+        assert_eq!(blocks[0]["text"], "Stable policy");
+        assert_eq!(blocks[0]["cache_control"]["type"], "ephemeral");
+        assert_eq!(blocks[1]["cache_control"], serde_json::Value::Null);
+        assert!(blocks[1]["text"]
+            .as_str()
+            .unwrap()
+            .contains("dynamic=sha256:dynamic"));
     }
 
     #[test]

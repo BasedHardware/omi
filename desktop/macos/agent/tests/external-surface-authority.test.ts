@@ -1061,8 +1061,9 @@ describe("external realtime surface authority", () => {
     });
     expect(JSON.parse(compactRealtimeSpawnToolResult('{"ok":true}', descriptor))).toMatchObject({
       ok: false,
-      error: { code: "realtime_spawn_child_receipt_missing" },
-      providerResult: { ok: false, code: "realtime_spawn_child_receipt_missing" },
+      error: { code: "realtime_spawn_missing_tool_result_envelope" },
+      providerResult: { ok: false, code: "realtime_spawn_missing_tool_result_envelope" },
+      toolResultEnvelope: expect.objectContaining({ version: 1, status: "failed" }),
     });
 
     // Once the spawn receipt commits the exchange, any late provider mutation
@@ -1243,12 +1244,23 @@ describe("external realtime surface authority", () => {
       getOwnerId: () => "owner",
     }, "spawn_agent", routed.toolInput));
 
-    expect(rejected).toEqual({
+    expect(rejected).toMatchObject({
       ok: false,
       error: {
-        code: "external_spawn_admission_failed",
-        message: "The requested agent could not be started. Try again.",
+        code: "provider_setup_needed",
+        message: "OpenClaw needs setup before it can run an agent.",
+        provider: "openclaw",
         retryable: true,
+      },
+      toolResultEnvelope: {
+        version: 1,
+        status: "failed",
+        truncated: false,
+        fullOutputRef: null,
+        provenance: {
+          runId: run.runId,
+          toolName: "spawn_agent",
+        },
       },
     });
     expect(store.getRow("SELECT COUNT(*) AS count FROM runs").count).toBe(1);

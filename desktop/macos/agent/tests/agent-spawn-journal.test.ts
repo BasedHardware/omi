@@ -23,6 +23,7 @@ describe("realtime spawn semantic receipt", () => {
     const compact = JSON.parse(compactRealtimeSpawnToolResult(JSON.stringify({
       ok: true,
       journalReceipt: { accepted: true, continuityKey: "forged-parent-only" },
+      toolResultEnvelope: canonicalEnvelope(),
     }), producerDescriptor("10000000-0000-0000-0000-000000000001")));
 
     expect(compact).toMatchObject({
@@ -30,6 +31,7 @@ describe("realtime spawn semantic receipt", () => {
       ok: false,
       error: { code: "realtime_spawn_child_receipt_missing", retryable: true },
       providerResult: { ok: false, code: "realtime_spawn_child_receipt_missing" },
+      toolResultEnvelope: expect.objectContaining({ version: 1, status: "succeeded" }),
     });
     expect(compact.child).toBeUndefined();
     expect(compact.journalReceipt).toBeUndefined();
@@ -64,6 +66,7 @@ describe("realtime spawn semantic receipt", () => {
         ok: true,
         code: "spawn_queued",
         child: { state: "queued", revision: 100 },
+        toolResultEnvelope: expect.objectContaining({ version: 1 }),
       },
     });
     expect(started).toMatchObject({
@@ -73,6 +76,7 @@ describe("realtime spawn semantic receipt", () => {
         ok: true,
         code: "spawn_started",
         child: { state: "running", revision: 200 },
+        toolResultEnvelope: expect.objectContaining({ version: 1 }),
       },
     });
     expect(queued.providerResult.semanticDigest).toBe(queued.semanticDigest);
@@ -106,6 +110,11 @@ describe("realtime spawn semantic receipt", () => {
         ok: false,
         code: "spawn_child_failed",
         child: { state: "failed", error: { code: "adapter_not_registered" } },
+        toolResultEnvelope: expect.objectContaining({
+          version: 1,
+          truncated: false,
+          fullOutputRef: null,
+        }),
       },
     });
   });
@@ -132,6 +141,11 @@ describe("realtime spawn semantic receipt", () => {
         lifecycle: { error: { code: "adapter_failed" } },
       },
       providerResult: { code: "spawn_child_failed" },
+      toolResultEnvelope: expect.objectContaining({
+        version: 1,
+        truncated: true,
+        fullOutputRef: "artifact:tool-output:oversized-spawn",
+      }),
     });
     expect(Buffer.byteLength(compact.child.title, "utf8")).toBeLessThanOrEqual(160);
     expect(Buffer.byteLength(compact.child.objective, "utf8")).toBeLessThanOrEqual(384);
@@ -483,7 +497,7 @@ function realtimeSpawnResult(input: {
         ...(input.errorMessage ? { errorMessage: input.errorMessage } : {}),
       }
     : {};
-  return JSON.stringify({
+  const result = {
     ok: true,
     agents: [{
       session: {
@@ -508,7 +522,40 @@ function realtimeSpawnResult(input: {
         ...error,
       },
     }],
+  };
+  const originalBytes = Buffer.byteLength(JSON.stringify(result), "utf8");
+  const truncated = originalBytes > 8 * 1024;
+  return JSON.stringify({
+    ...result,
+    toolResultEnvelope: canonicalEnvelope({
+      truncated,
+      originalBytes: truncated ? originalBytes : 512,
+      projectedBytes: truncated ? 8 * 1024 : 512,
+      fullOutputRef: truncated ? "artifact:tool-output:oversized-spawn" : null,
+    }),
   });
+}
+
+function canonicalEnvelope(input: {
+  truncated?: boolean;
+  originalBytes?: number;
+  projectedBytes?: number;
+  fullOutputRef?: string | null;
+} = {}) {
+  return {
+    version: 1,
+    status: "succeeded",
+    truncated: input.truncated ?? false,
+    originalBytes: input.originalBytes ?? 512,
+    projectedBytes: input.projectedBytes ?? 512,
+    fullOutputRef: input.fullOutputRef ?? null,
+    provenance: {
+      invocationId: "invocation-spawn",
+      runId: "run-parent",
+      attemptId: "attempt-parent",
+      toolName: "spawn_agent",
+    },
+  };
 }
 
 function newRoot(): string {

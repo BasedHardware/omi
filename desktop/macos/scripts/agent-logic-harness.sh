@@ -182,7 +182,7 @@ run_swift_focus() {
   (
     cd "$DESKTOP_DIR"
     xcrun swift test --package-path Desktop \
-      --filter 'AgentPillLifecycleTests|PushToTalkStateMachineTests|VoiceTurnReducerTests|VoiceTurnCoordinatorTests|VoiceTurnOutputOwnershipTests|LegacyVoiceJournalImporterTests|RealtimeHubBargeInContinuityTests|RealtimeHubSessionInputLifecycleTests|RealtimeHubSpawnAgentTests|RealtimeProviderToolResultPolicyTests|AgentContinuityGauntletTests|KernelTurnRecordedProjectionTests|ChatTimelineContinuityTests|FloatingControlBarStateTests|RuntimeOwnerIdentityTests|TaskThreadProjectionTests'
+      --filter 'AgentPillLifecycleTests|PushToTalkStateMachineTests|VoiceTurnReducerTests|VoiceTurnCoordinatorTests|VoiceTurnOutputOwnershipTests|LegacyVoiceJournalImporterTests|RealtimeHubBargeInContinuityTests|RealtimeHubSessionInputLifecycleTests|RealtimeHubSpawnAgentTests|RealtimeProviderToolResultPolicyTests|AgentContinuityGauntletTests|KernelTurnRecordedProjectionTests|ChatTimelineContinuityTests|FloatingControlBarStateTests|RuntimeOwnerIdentityTests|TaskThreadProjectionTests|AgentRuntimeBridgeLifecycleTests|AgentRuntimeContractFixtureTests|PiMonoWiringTests'
   )
 }
 
@@ -190,7 +190,7 @@ run_cross_surface_swift_smoke() {
   (
     cd "$DESKTOP_DIR"
     xcrun swift test --package-path Desktop \
-      --filter 'CrossSurfaceContractSmokeTests|AgentRuntimeStatusStoreTests|RealtimeHubSpawnAgentTests|DesktopAutomationBridgeRouteTests/testUnauthenticatedHealthReportsBackendAndRuntimeProtocolIdentity'
+      --filter 'CrossSurfaceContractSmokeTests|AgentRuntimeStatusStoreTests|AgentRuntimeBridgeLifecycleTests|AgentRuntimeContractFixtureTests|RealtimeHubSpawnAgentTests|PiMonoWiringTests|DesktopAutomationBridgeRouteTests/testUnauthenticatedHealthReportsBackendAndRuntimeProtocolIdentity'
   )
 }
 
@@ -227,7 +227,11 @@ run_cross_surface_agent_smoke() {
       tests/conversation-journal.test.ts \
       tests/control-tools.test.ts \
       tests/runtime-adapter.test.ts \
-      tests/pi-mono-adapter.test.ts
+      tests/pi-mono-adapter.test.ts \
+      tests/context-snapshot.test.ts \
+      tests/agent-runtime-contract-fixtures.test.ts \
+      tests/runtime-adapter-contract-conformance.test.ts \
+      tests/relay-tool-result.test.ts
   )
 }
 

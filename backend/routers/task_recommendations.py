@@ -126,6 +126,7 @@ def get_what_matters_now(
     device_id: Optional[str] = Query(default=None, min_length=1, max_length=128),
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    task_control_db.ensure_development_smoke_fixture(uid)
     rollout = _require_product(uid)
     bound_device_id = _bound_device_id(request_context, device_id, required=False)
     try:

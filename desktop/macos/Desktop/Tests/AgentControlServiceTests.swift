@@ -318,17 +318,19 @@ final class AgentControlServiceTests: XCTestCase {
 }
 
 final class RealtimeProviderToolResultPolicyTests: XCTestCase {
-  func testSmallToolResultPassesThroughUnchanged() {
+  func testSmallToolResultReceivesCanonicalEnvelope() throws {
     let result = RealtimeProviderToolResultPolicy.prepare(
       name: HubTool.listAgentSessions.rawValue,
       output: #"{"ok":true,"sessions":[]}"#)
 
     XCTAssertFalse(result.wasOversized)
-    XCTAssertEqual(result.output, #"{"ok":true,"sessions":[]}"#)
+    let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(result.output.utf8)) as? [String: Any])
+    XCTAssertEqual(object["ok"] as? Bool, true)
+    XCTAssertEqual((object["toolResultEnvelope"] as? [String: Any])?["status"] as? String, "succeeded")
   }
 
   func testSpawnSendsOnlyCompactSemanticChildToProvider() throws {
-    let envelope = #"{"schemaVersion":1,"ok":true,"journalReceipt":{"accepted":true},"child":{"sessionId":"session-a"},"semanticDigest":"digest-a","providerResult":{"schemaVersion":1,"ok":true,"code":"spawn_started","message":"The background agent has started.","child":{"sessionId":"session-a","runId":"run-a","attemptId":"attempt-a","state":"running","attemptState":"running","revision":2,"adapterId":"hermes","updatedAtMs":2},"semanticDigest":"digest-a"}}"#
+    let envelope = #"{"schemaVersion":1,"ok":true,"journalReceipt":{"accepted":true},"child":{"sessionId":"session-a"},"semanticDigest":"digest-a","toolResultEnvelope":{"version":1,"status":"succeeded","truncated":false,"originalBytes":400,"projectedBytes":400,"fullOutputRef":null,"provenance":{"invocationId":"invocation-a","runId":"run-a","attemptId":"attempt-a","toolName":"spawn_agent"}},"providerResult":{"schemaVersion":1,"ok":true,"code":"spawn_started","message":"The background agent has started.","child":{"sessionId":"session-a","runId":"run-a","attemptId":"attempt-a","state":"running","attemptState":"running","revision":2,"adapterId":"hermes","updatedAtMs":2},"semanticDigest":"digest-a","toolResultEnvelope":{"version":1,"status":"succeeded","truncated":false,"originalBytes":400,"projectedBytes":400,"fullOutputRef":null,"provenance":{"invocationId":"invocation-a","runId":"run-a","attemptId":"attempt-a","toolName":"spawn_agent"}}}}"#
 
     let result = RealtimeProviderToolResultPolicy.prepare(
       name: HubTool.spawnAgent.rawValue,
@@ -339,6 +341,7 @@ final class RealtimeProviderToolResultPolicyTests: XCTestCase {
     XCTAssertEqual(object["code"] as? String, "spawn_started")
     XCTAssertNotNil(object["child"])
     XCTAssertNil(object["journalReceipt"])
+    XCTAssertEqual((object["toolResultEnvelope"] as? [String: Any])?["version"] as? Int, 1)
     XCTAssertLessThan(result.output.utf8.count, envelope.utf8.count)
   }
 
@@ -354,5 +357,106 @@ final class RealtimeProviderToolResultPolicyTests: XCTestCase {
     let error = try XCTUnwrap(object["error"] as? [String: Any])
     XCTAssertEqual(error["code"] as? String, "tool_result_too_large")
     XCTAssertEqual(error["tool"] as? String, HubTool.listAgentSessions.rawValue)
+    let envelope = try XCTUnwrap(object["toolResultEnvelope"] as? [String: Any])
+    XCTAssertEqual(envelope["status"] as? String, "failed")
+    XCTAssertEqual(envelope["truncated"] as? Bool, false)
+    XCTAssertNil(envelope["fullOutputRef"] as? String)
+  }
+
+  func testOversizedProviderResultRetainsTheCanonicalArtifactReference() throws {
+    let original = String(repeating: "x", count: RealtimeProviderToolResultPolicy.maximumByteCount + 1)
+    let output = try XCTUnwrap(String(data: JSONSerialization.data(withJSONObject: [
+      "ok": true,
+      "payload": original,
+      "toolResultEnvelope": [
+        "version": 1,
+        "status": "succeeded",
+        "truncated": true,
+        "originalBytes": original.utf8.count,
+        "projectedBytes": 8192,
+        "fullOutputRef": "artifact:tool-output:provider-oversize",
+        "provenance": [
+          "invocationId": "invocation-oversize",
+          "runId": "run-oversize",
+          "attemptId": "attempt-oversize",
+          "toolName": HubTool.listAgentSessions.rawValue,
+        ],
+      ],
+    ]), encoding: .utf8))
+
+    let result = RealtimeProviderToolResultPolicy.prepare(
+      name: HubTool.listAgentSessions.rawValue,
+      output: output)
+    let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(result.output.utf8)) as? [String: Any])
+    let envelope = try XCTUnwrap(object["toolResultEnvelope"] as? [String: Any])
+
+    XCTAssertTrue(result.wasOversized)
+    XCTAssertEqual(object["ok"] as? Bool, false)
+    XCTAssertEqual(envelope["status"] as? String, "failed")
+    XCTAssertEqual(envelope["truncated"] as? Bool, true)
+    XCTAssertEqual(envelope["fullOutputRef"] as? String, "artifact:tool-output:provider-oversize")
+  }
+
+  func testGeminiAndOpenAIWrapSpawnSetupAndAuthorizationFailures() throws {
+    for provider in [RealtimeHubProvider.gemini, .openai] {
+      for (code, message) in [
+        ("provider_setup_needed", "OpenClaw needs setup before it can run an agent."),
+        ("external_surface_tool_failed", "The tool could not be authorized. Please try again."),
+      ] {
+        let result = RealtimeProviderToolResultPolicy.prepare(
+          provider: provider,
+          name: HubTool.spawnAgent.rawValue,
+          output: RealtimeProviderToolResultPolicy.rejectedOutput(code: code, message: message))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(result.output.utf8)) as? [String: Any])
+        let error = try XCTUnwrap(object["error"] as? [String: Any])
+        let envelope = try XCTUnwrap(object["toolResultEnvelope"] as? [String: Any])
+
+        XCTAssertFalse(result.wasOversized)
+        XCTAssertEqual(object["ok"] as? Bool, false)
+        XCTAssertEqual(error["code"] as? String, code)
+        XCTAssertEqual(envelope["status"] as? String, "failed")
+        XCTAssertEqual((envelope["provenance"] as? [String: Any])?["toolName"] as? String, HubTool.spawnAgent.rawValue)
+        XCTAssertTrue(((envelope["provenance"] as? [String: Any])?["invocationId"] as? String ?? "").contains(provider.rawValue))
+      }
+    }
+  }
+
+  func testSpawnRejectionPreservesAuthorizedNodeEnvelope() throws {
+    let sourceOutput = try XCTUnwrap(String(data: JSONSerialization.data(withJSONObject: [
+      "ok": false,
+      "error": ["code": "provider_setup_needed", "message": "Node detected a provider setup requirement."],
+      "toolResultEnvelope": [
+        "version": 1,
+        "status": "failed",
+        "truncated": false,
+        "originalBytes": 144,
+        "projectedBytes": 144,
+        "fullOutputRef": NSNull(),
+        "provenance": [
+          "invocationId": "node-authorized-invocation",
+          "runId": "node-authorized-run",
+          "attemptId": "node-authorized-attempt",
+          "toolName": HubTool.spawnAgent.rawValue,
+        ],
+      ],
+    ], options: [.sortedKeys]), encoding: .utf8))
+
+    let rejected = RealtimeProviderToolResultPolicy.rejectedOutput(
+      code: "provider_setup_needed",
+      message: "OpenClaw needs setup before it can run an agent.",
+      preservingCanonicalEnvelopeFrom: sourceOutput)
+    let result = RealtimeProviderToolResultPolicy.prepare(
+      provider: .openai,
+      name: HubTool.spawnAgent.rawValue,
+      output: rejected)
+    let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(result.output.utf8)) as? [String: Any])
+    let envelope = try XCTUnwrap(object["toolResultEnvelope"] as? [String: Any])
+    let provenance = try XCTUnwrap(envelope["provenance"] as? [String: Any])
+
+    XCTAssertEqual((object["error"] as? [String: Any])?["code"] as? String, "provider_setup_needed")
+    XCTAssertEqual(provenance["invocationId"] as? String, "node-authorized-invocation")
+    XCTAssertEqual(provenance["runId"] as? String, "node-authorized-run")
+    XCTAssertEqual(provenance["attemptId"] as? String, "node-authorized-attempt")
+    XCTAssertEqual(provenance["toolName"] as? String, HubTool.spawnAgent.rawValue)
   }
 }

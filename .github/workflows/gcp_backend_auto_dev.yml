@@ -369,7 +369,6 @@ jobs:
 
       - name: Smoke What Matters Now datastore query
         env:
-          OMI_TASK_INTELLIGENCE_SMOKE_UID: ${{ secrets.OMI_TASK_INTELLIGENCE_SMOKE_UID }}
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
         run: |
           set -euo pipefail

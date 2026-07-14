@@ -103,6 +103,9 @@ class ViewModelContainer: ObservableObject {
         // DB-dependent loads are guarded — skip them if database init failed
         // to prevent a stampede of retries from each storage actor
         let dbAvailable = !databaseInitFailed
+        if dbAvailable {
+            await homeStatusStore.databaseDidBecomeReady()
+        }
 
         schedulePostInteractiveWarmup(dbAvailable: dbAvailable)
         isLoading = false
@@ -154,6 +157,7 @@ class ViewModelContainer: ObservableObject {
         do {
             try await RewindDatabase.shared.initialize()
             databaseInitFailed = false
+            await homeStatusStore.databaseDidBecomeReady()
             warmupCoordinator.markDatabaseRetryComplete()
             TranscriptionRetryService.shared.resumeAfterDatabaseRecovery()
             log("ViewModelContainer: Database retry succeeded, scheduling staged startup warmup")
