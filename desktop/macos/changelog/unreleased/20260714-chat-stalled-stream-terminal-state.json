@@ -1,0 +1,3 @@
+{
+  "change": "Fixed chat hanging on a spinning cursor when the model provider stalled mid-answer — the turn now ends with a clear error instead of waiting"
+}

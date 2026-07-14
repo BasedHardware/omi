@@ -96,6 +96,14 @@ const WEB_SEARCH_MAX_USES: u32 = 5;
 /// Anthropic web search pricing: $10 per 1,000 searches.
 const WEB_SEARCH_COST_PER_REQUEST: f64 = 10.0 / 1_000.0;
 
+/// How long a streaming turn may go without a single byte from Anthropic before we end it.
+///
+/// Streaming deliberately sets no total response timeout (a long answer is not a stuck one), so
+/// this idle bound is the only thing that catches a stalled upstream. Anthropic emits `ping`
+/// events every few seconds throughout a generation, so a gap this long means the stream is
+/// dead, not slow.
+const STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
+
 fn web_search_tool_def() -> AnthropicToolDef {
     AnthropicToolDef::Server(json!({
         "type": WEB_SEARCH_TOOL_TYPE,
@@ -662,6 +670,33 @@ fn translate_response(resp: &AnthropicResponse, public_model: &str) -> ChatCompl
 fn sse_line(data: &serde_json::Value) -> Bytes {
     let json_str = serde_json::to_string(data).unwrap_or_default();
     Bytes::from(format!("data: {}\n\n", json_str))
+}
+
+/// The SSE events that terminate a stream which produced no terminal event of its own —
+/// an upstream stall, a transport error, or an EOF before `message_stop`.
+///
+/// The OpenAI SSE contract this endpoint speaks ends at `finish_reason` + `data: [DONE]`. A body
+/// that simply stops leaves the client with no terminal signal, so the assistant bubble spins
+/// until the platform request timeout kills the socket. The error chunk is emitted only when no
+/// `finish_reason` was sent, so a turn whose answer already completed is never contradicted after
+/// the fact.
+fn stream_termination_chunks(sent_done: bool, sent_finish: bool) -> Vec<Bytes> {
+    if sent_done {
+        return Vec::new();
+    }
+
+    let mut chunks = Vec::new();
+    if !sent_finish {
+        chunks.push(sse_line(&json!({
+            "error": {
+                "message": "Upstream stream ended before the response completed",
+                "type": "server_error",
+                "code": 502
+            }
+        })));
+    }
+    chunks.push(Bytes::from_static(b"data: [DONE]\n\n"));
+    chunks
 }
 
 /// Pull every complete SSE event block out of the raw byte buffer, leaving any
@@ -1253,7 +1288,24 @@ async fn handle_streaming(
 
         // Collect raw bytes and split into SSE events
         let mut byte_stream = std::pin::pin!(byte_stream);
-        while let Some(chunk_result) = byte_stream.next().await {
+        // Terminal state of the turn, so a stream that dies mid-flight still ends the SSE body.
+        let mut sent_finish = false;
+        let mut sent_done = false;
+        loop {
+            let next = match tokio::time::timeout(STREAM_IDLE_TIMEOUT, byte_stream.next()).await {
+                Ok(next) => next,
+                Err(_) => {
+                    tracing::error!(
+                        "chat_completions: no bytes from Anthropic for {}s, ending stalled turn for user {}",
+                        STREAM_IDLE_TIMEOUT.as_secs(),
+                        uid
+                    );
+                    break;
+                }
+            };
+
+            let Some(chunk_result) = next else { break };
+
             let chunk = match chunk_result {
                 Ok(c) => c,
                 Err(e) => {
@@ -1432,6 +1484,7 @@ async fn handle_streaming(
                             None,
                         );
                         yield Ok(sse_line(&chunk_val));
+                        sent_finish = true;
 
                         // Send usage chunk
                         if let Some(ref fu) = final_usage {
@@ -1452,6 +1505,7 @@ async fn handle_streaming(
 
                     AnthropicStreamEvent::MessageStop {} => {
                         yield Ok(Bytes::from_static(b"data: [DONE]\n\n"));
+                        sent_done = true;
 
                         // Log usage asynchronously — skip for BYOK (user pays own bill)
                         if !is_byok {
@@ -1492,9 +1546,17 @@ async fn handle_streaming(
                         });
                         yield Ok(sse_line(&err_chunk));
                         yield Ok(Bytes::from_static(b"data: [DONE]\n\n"));
+                        sent_done = true;
                     }
                 }
             }
+        }
+
+        // The loop above exits on a stall, a transport error, or an upstream EOF. Any of those
+        // can happen after a partial answer and before `message_stop`, so terminate the SSE body
+        // ourselves — otherwise the client never sees finish_reason or [DONE] and keeps waiting.
+        for chunk in stream_termination_chunks(sent_done, sent_finish) {
+            yield Ok(chunk);
         }
     };
 
@@ -1547,6 +1609,38 @@ pub fn chat_completions_routes() -> Router<AppState> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Regression: a streaming turn whose upstream stalls or dies mid-flight used to end the SSE
+    /// body with no terminal event at all (the read loop just broke), so the desktop client sat on
+    /// a spinning assistant bubble until the platform request timeout killed the socket.
+    #[test]
+    fn a_stream_that_dies_before_message_stop_still_terminates() {
+        let chunks = stream_termination_chunks(false, false);
+        let body = chunks
+            .iter()
+            .map(|c| String::from_utf8_lossy(c).into_owned())
+            .collect::<String>();
+
+        assert!(body.contains("\"type\":\"server_error\""));
+        assert!(body.ends_with("data: [DONE]\n\n"));
+    }
+
+    /// A turn that already emitted finish_reason completed from the client's point of view — an
+    /// EOF after it must close the body, not append an error that contradicts the answer.
+    #[test]
+    fn a_finished_answer_is_terminated_without_an_error_chunk() {
+        let chunks = stream_termination_chunks(false, true);
+
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0], Bytes::from_static(b"data: [DONE]\n\n"));
+    }
+
+    /// message_stop / the Anthropic error event already send [DONE] themselves — no second one.
+    #[test]
+    fn a_stream_that_sent_done_is_not_terminated_twice() {
+        assert!(stream_termination_chunks(true, true).is_empty());
+        assert!(stream_termination_chunks(true, false).is_empty());
+    }
 
     #[test]
     fn server_key_chat_fails_closed_when_metering_is_unavailable() {
