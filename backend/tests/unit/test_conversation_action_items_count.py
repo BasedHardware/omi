@@ -58,7 +58,9 @@ def test_count_by_conversation_never_negative():
     with patch.object(ai_db, "db", fake_db):
         result = ai_db.get_action_items_count_by_conversation("u1", "c1")
 
-    assert result == {"total": 1, "completed": 4, "incomplete": 0}
+    # completed's aggregation (4) exceeds total's (1) from a racing write; completed is capped to
+    # total so the badge is self-consistent (completed <= total, total == completed + incomplete).
+    assert result == {"total": 1, "completed": 1, "incomplete": 0}
 
 
 def test_count_by_conversation_excludes_soft_retired():

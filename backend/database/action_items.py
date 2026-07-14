@@ -585,6 +585,9 @@ def get_action_items_count_by_conversation(uid: str, conversation_id: str) -> Di
 
     total = max(0, total - deleted_total)
     completed = max(0, completed - deleted_completed)
+    # total and completed come from separate (non-atomic) count() aggregations, so a concurrent write
+    # between them can leave completed > total. Cap it so the three values stay internally consistent.
+    completed = min(completed, total)
     return {'total': total, 'completed': completed, 'incomplete': max(0, total - completed)}
 
 
