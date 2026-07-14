@@ -1854,7 +1854,11 @@ function serializeAgentSessionsList(
     hiddenUntilMs?: number | null;
   }[],
 ): Record<string, unknown> {
-  const maximumSerializedBytes = 40 * 1024;
+  // This result is used directly as a realtime provider tool response. Keep
+  // the canonical list well below the provider's aggregate-turn budget so a
+  // routine status lookup cannot prevent the provider from speaking the
+  // completed child result it just found.
+  const maximumSerializedBytes = 8 * 1024;
   const dismissed = new Set(
     overrides
       .filter((override) => override.dismissedAtMs != null || (override.hiddenUntilMs ?? 0) > Date.now())

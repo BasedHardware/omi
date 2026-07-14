@@ -955,7 +955,7 @@ describe("agent control tools", () => {
     });
     const listed = parseToolResult(raw);
 
-    expect(Buffer.byteLength(raw, "utf8")).toBeLessThan(48 * 1024);
+    expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(8 * 1024);
     expect(listed.fetched_session_count).toBe(50);
     expect(listed.returned_session_count).toBeLessThan(listed.fetched_session_count);
     expect(listed.truncated).toBe(true);
