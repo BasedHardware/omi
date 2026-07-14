@@ -105,7 +105,7 @@ struct FloatingControlBarView: View {
                     barChrome
 
                     if let notification = state.currentNotification, !state.showingAIConversation {
-                        notificationView(notification)
+                        barNotification(notification)
                             .padding(.horizontal, OmiSpacing.sm)
                             .padding(.bottom, OmiSpacing.sm)
                             .transition(.move(edge: .top).combined(with: .opacity))
@@ -224,7 +224,7 @@ struct FloatingControlBarView: View {
             }
 
             if let notification = state.currentNotification, !state.showingAIConversation {
-                notificationView(notification)
+                barNotification(notification)
                     .padding(.horizontal, 10)
                     .padding(.bottom, 10)
                     .transition(.move(edge: .top).combined(with: .opacity))
@@ -963,6 +963,69 @@ struct FloatingControlBarView: View {
             chromeHeight: hitHeight,
             horizontalOutset: horizontalOutset
         )
+    }
+
+    /// Picks the actionable "Couldn't reach Omi" card for reach errors, else the
+    /// normal notification card.
+    @ViewBuilder
+    private func barNotification(_ notification: FloatingBarNotification) -> some View {
+        if notification.assistantId == "reach_error" {
+            reachErrorCard(notification)
+        } else {
+            notificationView(notification)
+        }
+    }
+
+    /// Hard reach failure (retries exhausted). Persists until the user picks
+    /// Retry (re-runs the query, restarting backoff) or Skip (back to idle).
+    private func reachErrorCard(_ notification: FloatingBarNotification) -> some View {
+        HStack(alignment: .center, spacing: OmiSpacing.sm) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.white.opacity(0.9))
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(notification.title)
+                    .scaledFont(size: OmiType.body, weight: .semibold)
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                if !notification.message.isEmpty {
+                    Text(notification.message)
+                        .scaledFont(size: 11)
+                        .foregroundColor(.white.opacity(0.7))
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: OmiSpacing.sm)
+
+            Button {
+                FloatingControlBarManager.shared.retryReachError()
+            } label: {
+                Text("Retry")
+                    .scaledFont(size: 12, weight: .semibold)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, OmiSpacing.sm)
+                    .padding(.vertical, OmiSpacing.xxs)
+                    .background(Color.white.opacity(0.18))
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                FloatingControlBarManager.shared.dismissReachError()
+            } label: {
+                Text("Skip")
+                    .scaledFont(size: 12, weight: .semibold)
+                    .foregroundColor(.white.opacity(0.6))
+                    .padding(.horizontal, OmiSpacing.xs)
+                    .padding(.vertical, OmiSpacing.xxs)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, OmiSpacing.md)
+        .padding(.vertical, OmiSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func notificationView(_ notification: FloatingBarNotification) -> some View {
