@@ -21,8 +21,23 @@ export function HubAskBar(props: {
   sending: boolean
   connectActive: boolean
   onToggleConnect: () => void
+  /** Take keyboard focus on mount. See HomeHub: the bar RE-DOCKS into the chat
+   *  panel, which means React unmounts and remounts this input under a new parent
+   *  — and the caret goes with it. Without this, clicking the ask bar opens the
+   *  panel and silently drops your focus on the floor, so the first thing you type
+   *  goes nowhere. */
+  autoFocus?: boolean
 }): React.JSX.Element {
-  const { value, onChange, onSubmit, onFocus, sending, connectActive, onToggleConnect } = props
+  const {
+    value,
+    onChange,
+    onSubmit,
+    onFocus,
+    sending,
+    connectActive,
+    onToggleConnect,
+    autoFocus
+  } = props
   const [focused, setFocused] = useState(false)
   const canSend = value.trim().length > 0 && !sending
 
@@ -44,6 +59,10 @@ export function HubAskBar(props: {
       }}
     >
       <input
+        // eslint-disable-next-line jsx-a11y/no-autofocus -- not a page-load autofocus:
+        // this only fires when the bar re-mounts inside the chat panel, restoring the
+        // focus the user already had. In the resting hub it is false.
+        autoFocus={autoFocus}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => {

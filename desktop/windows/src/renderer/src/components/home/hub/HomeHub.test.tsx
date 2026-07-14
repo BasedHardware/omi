@@ -104,6 +104,16 @@ describe('HomeHub — stage machine', () => {
     expect(cluster.textContent).toMatch(/Conversations/)
   })
 
+  it('keeps the caret in the ask bar when focusing it opens the chat panel', () => {
+    // The bar RE-DOCKS into the panel, so React remounts the input under a new
+    // parent. Without an explicit re-focus the caret lands on <body> and the first
+    // thing the user types after clicking the bar goes nowhere.
+    renderHub()
+    fireEvent.focus(askBar())
+    expect(mode()).toBe('chat')
+    expect(document.activeElement).toBe(askBar())
+  })
+
   it('moves to chat and sends through the SHARED chat engine on submit', () => {
     renderHub()
     fireEvent.change(askBar(), { target: { value: 'hello omi' } })

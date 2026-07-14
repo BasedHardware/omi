@@ -79,6 +79,12 @@ export function HomeHub(): React.JSX.Element {
       sending={chat.sending}
       connectActive={mode === 'connect'}
       onToggleConnect={() => dispatch({ type: 'connectToggled' })}
+      // The bar re-docks into the panel, so React remounts the input under a new
+      // parent and the caret is lost — measured: after clicking the ask bar,
+      // document.activeElement was BODY, i.e. the panel opened and then swallowed
+      // the very keystrokes the click was inviting. Re-take focus on the way in.
+      // SwiftUI's @FocusState survives the equivalent move on Mac; React's does not.
+      autoFocus={isPanelMode(mode)}
     />
   )
 
