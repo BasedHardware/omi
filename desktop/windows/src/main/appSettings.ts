@@ -28,7 +28,12 @@ export type AppSettings = {
    *  never shown (fresh install / pre-feature) → baseline silently, no toast. */
   lastShownChangelogVersion: string | null
   /** Track 3 (AI user profile): whether the once-daily synthesized "about the
-   *  user" doc auto-generates in the background. Default on (Mac parity). */
+   *  user" doc auto-generates in the background. Default OFF for now: nothing
+   *  consumes the profile yet (the Focus assistant's context block is the
+   *  consumer and lands in the next PR) and there is no Settings toggle yet, so
+   *  a default-on daily two-stage LLM call that uploads a synthesized personal
+   *  dossier would cost the user with no benefit and no off-switch. The PR that
+   *  adds the consumer flips this default on. */
   aiProfileEnabled: boolean
 }
 
@@ -78,7 +83,9 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
     meeting: sanitizeMeeting(r.meeting),
     lastShownChangelogVersion:
       typeof r.lastShownChangelogVersion === 'string' ? r.lastShownChangelogVersion : null,
-    aiProfileEnabled: r.aiProfileEnabled !== false
+    // Opt-IN (=== true), unlike the other flags' opt-out (!== false) — see the
+    // AppSettings field comment.
+    aiProfileEnabled: r.aiProfileEnabled === true
   }
 }
 
