@@ -334,7 +334,13 @@ const omi: OmiBridgeApi = {
   suspendShortcutCapture: () => ipcRenderer.send('shortcuts:suspend-capture'),
   resumeShortcutCapture: () => ipcRenderer.send('shortcuts:resume-capture'),
   // --- Track 6 (UI surfaces) additions ---
-  resetWindowSize: () => ipcRenderer.invoke('window:resetSize')
+  resetWindowSize: () => ipcRenderer.invoke('window:resetSize'),
+  // --- Track 1 (agent control plane) — trusted direct control ---
+  agentControlCall: (name: string, input: Record<string, unknown> = {}) =>
+    ipcRenderer.invoke('agentControl:call', name, input),
+  agentControlSetOwner: (ownerId: string | null) =>
+    ipcRenderer.invoke('agentControl:setOwner', ownerId),
+  agentControlTools: () => ipcRenderer.invoke('agentControl:tools')
 }
 
 const omiOverlay: OmiOverlayApi = {

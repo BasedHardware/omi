@@ -860,6 +860,22 @@ export type OmiBridgeApi = {
   /** Settings → General → Font Size "Reset Window Size": restore the main window
    *  to its default content size (1280×820) and re-center it. */
   resetWindowSize: () => Promise<void>
+  // --- Track 1 (agent control plane) ---
+  /**
+   * Call one agent-control tool as TRUSTED DIRECT CONTROL. The renderer is the
+   * user's own UI, so a call from here carries the user's authority — which is
+   * what lets it resolve a dispatch. Returns the raw JSON envelope:
+   * `{"ok":true,...}` or `{"ok":false,"error":{"code","message"}}`.
+   *
+   * Tool names: see `AGENT_CONTROL_TOOL_NAMES` in shared/agentControlTools.ts.
+   */
+  agentControlCall: (name: string, input?: Record<string, unknown>) => Promise<string>
+  /** Set the authoritative owner (the signed-in uid) for subsequent control calls. */
+  agentControlSetOwner: (ownerId: string | null) => Promise<void>
+  /** The control tools this caller may see. */
+  agentControlTools: () => Promise<
+    Array<{ name: string; description: string; inputSchema: Record<string, unknown> }>
+  >
 }
 
 // --- Coding agents ---
