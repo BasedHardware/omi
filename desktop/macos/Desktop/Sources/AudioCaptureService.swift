@@ -516,6 +516,18 @@ class AudioCaptureService: @unchecked Sendable {
         return status == noErr ? format : nil
     }
 
+    /// Frames a `sourceSampleRate`→`targetSampleRate` conversion of `frameCount` input
+    /// frames produces. Returns 0 when the source rate is unknown (0): dividing by a
+    /// zero rate yields `.infinity`, and `AVAudioFrameCount(.infinity)` traps the
+    /// real-time IOProc thread — reachable when a device reports no rate at start or
+    /// `stopCapture` zeroes `detectedSampleRate` mid-callback. Pure math, unit-testable.
+    static func resampledFrameCapacity(
+        frameCount: AVAudioFrameCount, sourceSampleRate: Double, targetSampleRate: Double
+    ) -> AVAudioFrameCount {
+        guard frameCount > 0, sourceSampleRate > 0, targetSampleRate > 0 else { return 0 }
+        return AVAudioFrameCount(ceil(Double(frameCount) * targetSampleRate / sourceSampleRate))
+    }
+
     /// Handle incoming audio data from the IOProc callback
     private func handleAudioInput(_ inputData: UnsafePointer<AudioBufferList>?, timestamp: UnsafePointer<AudioTimeStamp>?) {
         guard isCapturing,
@@ -528,6 +540,7 @@ class AudioCaptureService: @unchecked Sendable {
         guard let data = buffer.mData, buffer.mDataByteSize > 0 else { return }
 
         let bytesPerFrame = UInt32(MemoryLayout<Float32>.size) * buffer.mNumberChannels
+        guard bytesPerFrame > 0 else { return }
         let frameCount = buffer.mDataByteSize / bytesPerFrame
         guard frameCount > 0 else { return }
 
@@ -553,8 +566,10 @@ class AudioCaptureService: @unchecked Sendable {
         }
 
         // Convert to target format (16kHz mono)
-        let outputFrameCapacity = AVAudioFrameCount(ceil(Double(frameCount) * targetSampleRate / detectedSampleRate))
-        guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: targetFmt, frameCapacity: outputFrameCapacity) else { return }
+        let outputFrameCapacity = Self.resampledFrameCapacity(
+            frameCount: frameCount, sourceSampleRate: detectedSampleRate, targetSampleRate: targetSampleRate)
+        guard outputFrameCapacity > 0,
+              let outputBuffer = AVAudioPCMBuffer(pcmFormat: targetFmt, frameCapacity: outputFrameCapacity) else { return }
 
         var error: NSError?
         var hasConsumedInput = false
