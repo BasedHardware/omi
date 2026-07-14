@@ -3,7 +3,7 @@ import { app } from 'electron'
 import { basename, join } from 'path'
 import { categorize } from '../usage/category'
 import { isNewLocalDay } from '../usage/usageDay'
-import { buildRewindSearchQuery } from '../rewind/rewindSearchQuery'
+import { buildRewindFtsMatch } from '../rewind/rewindSearchQuery'
 import { addColumnIfMissing as ensureColumn, runMigrations } from './dbMigrations'
 import { wipeUserDataOn } from './dbWipe'
 import {
@@ -36,6 +36,7 @@ import type {
   LocalKnowledgeGraph,
   OnboardingGraphNode,
   OnboardingGraphEdge,
+  OcrLine,
   RewindFrame,
   SyncSegment,
   UsageCategory,
@@ -1000,17 +1001,27 @@ export function listRewindFrames(from: number, to: number): RewindFrame[] {
   )
 }
 
+// --- Track 4: Rewind FTS5 search ---
+// Columns qualified to `rewind_frames.` — the FTS join exposes an identically
+// named ocr_text/window_title/app that would otherwise be ambiguous.
+const REWIND_COLUMNS_QUALIFIED =
+  'rewind_frames.id, rewind_frames.ts, rewind_frames.app, rewind_frames.window_title AS windowTitle, ' +
+  'rewind_frames.process_name AS processName, rewind_frames.ocr_text AS ocrText, ' +
+  'rewind_frames.image_path AS imagePath, rewind_frames.width, rewind_frames.height, rewind_frames.indexed'
+
 export function searchRewindFrames(query: string, limit = 500): RewindFrame[] {
   return timed('searchRewindFrames', () => {
-    const search = buildRewindSearchQuery(query)
-    if (!search) return []
+    const match = buildRewindFtsMatch(query)
+    if (!match) return []
     return get()
       .prepare(
-        `SELECT ${REWIND_COLUMNS} FROM rewind_frames
-       WHERE ${search.where}
-       ORDER BY ts DESC LIMIT ?`
+        `SELECT ${REWIND_COLUMNS_QUALIFIED} FROM rewind_frames
+           JOIN rewind_frames_fts ON rewind_frames.id = rewind_frames_fts.rowid
+          WHERE rewind_frames_fts MATCH ?
+          ORDER BY bm25(rewind_frames_fts) ASC, rewind_frames.ts DESC
+          LIMIT ?`
       )
-      .all(...search.params, limit) as RewindFrame[]
+      .all(match, limit) as RewindFrame[]
   })
 }
 
@@ -1037,8 +1048,27 @@ export function unindexedRewindFrames(limit = 20): RewindFrame[] {
     .all(limit) as RewindFrame[]
 }
 
-export function setRewindFrameOcr(id: number, ocrText: string): void {
-  get().prepare('UPDATE rewind_frames SET ocr_text = ?, indexed = 1 WHERE id = ?').run(ocrText, id)
+// `ocrLinesJson` (Track 4) is the JSON-serialized per-line bounding boxes for the
+// on-image highlight overlay. Optional + additive: existing 2-arg callers keep
+// working (lines stored as NULL). The AFTER UPDATE trigger re-syncs the FTS index.
+export function setRewindFrameOcr(id: number, ocrText: string, ocrLinesJson?: string | null): void {
+  get()
+    .prepare('UPDATE rewind_frames SET ocr_text = ?, ocr_lines_json = ?, indexed = 1 WHERE id = ?')
+    .run(ocrText, ocrLinesJson ?? null, id)
+}
+
+/** Per-line OCR bounding boxes for a frame (empty when none stored or malformed). */
+export function getRewindFrameOcrLines(id: number): OcrLine[] {
+  const row = get().prepare('SELECT ocr_lines_json FROM rewind_frames WHERE id = ?').get(id) as
+    | { ocr_lines_json: string | null }
+    | undefined
+  if (!row?.ocr_lines_json) return []
+  try {
+    const parsed = JSON.parse(row.ocr_lines_json)
+    return Array.isArray(parsed) ? (parsed as OcrLine[]) : []
+  } catch {
+    return []
+  }
 }
 
 export function deleteRewindFramesOlderThan(cutoffTs: number): RewindFrame[] {
