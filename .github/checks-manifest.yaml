@@ -12,6 +12,11 @@ checks:
     triggers: [".github/schemas/desktop-release-manifest-v1.schema.json", ".github/scripts/desktop_release_manifest.py", ".github/scripts/test_desktop_release_manifest.py", ".github/scripts/fixtures/desktop_release_manifest/**"]
     lanes: ["local", "ci"]
     reason: "immutable desktop app/backend release-unit contract"
+  - id: desktop-release-doctor-v1
+    command: ["python3", ".github/scripts/test_desktop_release_doctor.py"]
+    triggers: [".github/schemas/desktop-release-evidence-v1.schema.json", ".github/scripts/desktop_release_doctor.py", ".github/scripts/desktop_release_doctor_report.py", ".github/scripts/test_desktop_release_doctor.py", ".github/workflows/desktop_release_doctor.yml"]
+    lanes: ["local", "ci"]
+    reason: "advisory desktop release evidence and drift report"
   - id: diff-hygiene
     command: ["python3", ".github/scripts/check_diff_hygiene.py", "--changed-files", "{changed_files}", "--base", "{base}", "--head", "{head}"]
     triggers: ["all"]
