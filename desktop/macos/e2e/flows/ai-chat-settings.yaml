@@ -5,6 +5,7 @@ description: AI Chat settings section navigation and snapshot (non-prod only)
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+FloatingBarAndChat.swift
+  - desktop/macos/Desktop/Sources/Providers/AIProvider.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Advanced.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Assistants.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+DeveloperKeys.swift
