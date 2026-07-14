@@ -346,7 +346,7 @@ class PushToTalkManager: ObservableObject {
       continueFinalization()
     case .commitClaimedHubInput(let turnID):
       RealtimeHubController.shared.commitClaimedHubInput(turnID: turnID)
-    case .activateHub(let turnID, _):
+    case .prepareHubInput(let turnID, _):
       guard voiceTurnCoordinator.activeTurnID == turnID else { return }
       resolveRealtimeHubWarmWait(ready: true)
     case .transcriptionFinalizationTimedOut(let turnID, let mode):
@@ -590,7 +590,7 @@ class PushToTalkManager: ObservableObject {
     AnalyticsManager.shared.floatingBarPTTStarted(mode: mode)
     DesktopDiagnosticsManager.shared.recordPTTStarted(
       mode: mode,
-      hubActive: RealtimeHubController.shared.isActive,
+      hubActive: RealtimeHubController.shared.isTransportReady,
       micPermissionGranted: refreshedMicPermission())
     let preOverlayImage = ScreenCaptureManager.captureScreenImage()
     updateBarState()
@@ -626,7 +626,7 @@ class PushToTalkManager: ObservableObject {
     AnalyticsManager.shared.floatingBarPTTStarted(mode: mode)
     DesktopDiagnosticsManager.shared.recordPTTStarted(
       mode: mode,
-      hubActive: RealtimeHubController.shared.isActive,
+      hubActive: RealtimeHubController.shared.isTransportReady,
       micPermissionGranted: refreshedMicPermission())
 
     // If we were already listening from the first tap, keep going.
@@ -1449,11 +1449,11 @@ class PushToTalkManager: ObservableObject {
     // + spoken reply). Stream mic PCM to the hub and skip both the omni/Deepgram
     // STT path AND the transcript→router→ChatProvider hop. The Haiku classify()
     // router is bypassed — routing is the model's tool choice.
-    if RealtimeHubController.shared.isActive {
+    if RealtimeHubController.shared.isTransportReady {
       if let turnID = currentVoiceTurnID {
         voiceTurnCoordinator.send(.selectRoute(turnID: turnID, route: .hub(sessionID: nil)))
       }
-      startRealtimeHubCapture(bufferWhileWarming: false)
+      _ = startRealtimeHubCapture(bufferWhileWarming: false)
       return
     }
 
@@ -1461,11 +1461,21 @@ class PushToTalkManager: ObservableObject {
     return
   }
 
-  private func startRealtimeHubCapture(bufferWhileWarming: Bool) {
+  @discardableResult
+  private func startRealtimeHubCapture(bufferWhileWarming: Bool) -> Bool {
     if !bufferWhileWarming {
       batchAudioLock.lock(); batchAudioBuffer = Data(); batchAudioLock.unlock()
     }
-    RealtimeHubController.shared.beginTurn(turnID: currentVoiceTurnID)
+    let preparation = RealtimeHubController.shared.beginTurn(turnID: currentVoiceTurnID)
+    guard preparation == .accepted else {
+      log("PushToTalkManager: realtime transport was ready but context admission was rejected")
+      if bufferWhileWarming {
+        resolveRealtimeHubWarmWait(ready: false)
+      } else {
+        _ = startOmniTranscription(captureAlreadyRunning: false)
+      }
+      return false
+    }
     if bufferWhileWarming {
       batchAudioLock.lock()
       let bufferedAudio = batchAudioBuffer
@@ -1489,6 +1499,7 @@ class PushToTalkManager: ObservableObject {
       }
     }
     log("PushToTalkManager: realtime hub active — model is the voice hub")
+    return true
   }
 
   private func startRealtimeHubWarmWait() {
@@ -1513,8 +1524,8 @@ class PushToTalkManager: ObservableObject {
       return
     }
     if ready {
-      startRealtimeHubCapture(bufferWhileWarming: true)
-      if phase == .finalizing {
+      let accepted = startRealtimeHubCapture(bufferWhileWarming: true)
+      if accepted, phase == .finalizing {
         commitBufferedRealtimeHubTurn()
       }
       return

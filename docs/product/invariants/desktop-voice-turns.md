@@ -39,6 +39,10 @@ SwiftUI and floating-bar state are projections.
 - Reconnect and replacement state belongs to the reducer. The realtime controller
   may buffer bounded PCM while a socket authenticates, but that buffer does not
   decide whether the turn is recording, responding, finished, or current.
+- Transport authentication is not input admission. Buffered PCM may reach a
+  realtime provider only after the exact current kernel context identity is
+  installed on that physical session; a missing, stale, or superseded identity
+  fails closed into the existing fallback route.
 - A physical release is idempotent once the reducer has a pending hub commit.
   `PushToTalkManager` must not start batch transcription for that same audio; only
   a still-finalizing turn with no accepted/deferred hub commit may take the batch
@@ -46,6 +50,9 @@ SwiftUI and floating-bar state are projections.
 - A barge-in replacement session starts only after the canonical snapshot proves
   it contains every just-persisted interrupted turn ID. A merely resolved but
   stale snapshot is retried and never becomes provider context.
+- Provider failure captures the visible user/assistant exchange into a per-
+  continuity-key journal obligation before terminal cleanup clears local text.
+  Concurrent turn B persistence cannot invalidate turn A's acceptance receipt.
 - Context capture publishes one versioned captured/omitted outcome to the turn.
   A late context result for a superseded turn is dropped.
 - User interrupt is a typed reducer event. It revokes tools/output and terminalizes

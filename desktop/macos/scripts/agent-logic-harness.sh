@@ -182,7 +182,7 @@ run_swift_focus() {
   (
     cd "$DESKTOP_DIR"
     xcrun swift test --package-path Desktop \
-      --filter 'AgentPillLifecycleTests|PushToTalkStateMachineTests|VoiceTurnReducerTests|VoiceTurnCoordinatorTests|VoiceTurnOutputOwnershipTests|LegacyVoiceJournalImporterTests|RealtimeHubSessionInputLifecycleTests|RealtimeHubSpawnAgentTests|AgentContinuityGauntletTests|KernelTurnRecordedProjectionTests|ChatTimelineContinuityTests|FloatingControlBarStateTests|RuntimeOwnerIdentityTests|TaskThreadProjectionTests'
+      --filter 'AgentPillLifecycleTests|PushToTalkStateMachineTests|VoiceTurnReducerTests|VoiceTurnCoordinatorTests|VoiceTurnOutputOwnershipTests|LegacyVoiceJournalImporterTests|RealtimeHubBargeInContinuityTests|RealtimeHubSessionInputLifecycleTests|RealtimeHubSpawnAgentTests|RealtimeProviderToolResultPolicyTests|AgentContinuityGauntletTests|KernelTurnRecordedProjectionTests|ChatTimelineContinuityTests|FloatingControlBarStateTests|RuntimeOwnerIdentityTests|TaskThreadProjectionTests'
   )
 }
 

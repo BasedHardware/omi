@@ -94,6 +94,17 @@ enum RealtimeProviderToolResultPolicy {
 
   static func prepare(name: String, output: String) -> RealtimeProviderToolResult {
     let originalByteCount = output.utf8.count
+    if name == HubTool.spawnAgent.rawValue,
+      let payload = try? JSONSerialization.jsonObject(with: Data(output.utf8)) as? [String: Any],
+      let providerResult = payload["providerResult"] as? [String: Any],
+      let data = try? JSONSerialization.data(withJSONObject: providerResult, options: [.sortedKeys]),
+      let compact = String(data: data, encoding: .utf8)
+    {
+      return RealtimeProviderToolResult(
+        output: compact,
+        originalByteCount: originalByteCount,
+        wasOversized: false)
+    }
     guard originalByteCount <= maximumByteCount else {
       let payload: [String: Any] = [
         "ok": false,
@@ -166,6 +177,110 @@ enum RealtimeTurnJournalAuthority {
       return await refreshAcceptedSpawn()
     }
     return await recordProviderExchange()
+  }
+}
+
+/// A single kernel write is an obligation of one stable continuity key.  The
+/// controller may have several turns in flight while a barge-in replaces a
+/// physical session, so completion of B must never supersede A's receipt.
+struct RealtimeTurnPersistenceReceipt: Equatable {
+  let continuityKey: String
+  let accepted: Bool
+}
+
+@MainActor
+final class RealtimeTurnPersistenceLedger {
+  private struct Obligation {
+    let id: UUID
+    let task: Task<Bool, Never>
+  }
+
+  private var obligations: [String: Obligation] = [:]
+  private var receipts: [String: RealtimeTurnPersistenceReceipt] = [:]
+  private(set) var generation: UInt64 = 0
+
+  var pendingContinuityKeys: Set<String> {
+    Set(obligations.keys)
+  }
+
+  @discardableResult
+  func enqueue(
+    continuityKey: String,
+    retainingReceipt: Bool,
+    _ operation: @escaping @MainActor () async -> Bool
+  ) -> Task<Bool, Never> {
+    if let existing = obligations[continuityKey] {
+      return existing.task
+    }
+
+    receipts.removeValue(forKey: continuityKey)
+    generation &+= 1
+    let obligationID = UUID()
+    let task = Task { @MainActor [weak self] in
+      let accepted = await operation()
+      guard let self,
+        self.obligations[continuityKey]?.id == obligationID
+      else {
+        // The kernel result remains truthful to this caller even if an owner
+        // transition or a newer obligation has retired this local ledger entry.
+        return accepted
+      }
+      self.obligations.removeValue(forKey: continuityKey)
+      if retainingReceipt {
+        self.receipts[continuityKey] = RealtimeTurnPersistenceReceipt(
+          continuityKey: continuityKey,
+          accepted: accepted)
+      }
+      return accepted
+    }
+    obligations[continuityKey] = Obligation(id: obligationID, task: task)
+    return task
+  }
+
+  /// Awaits the exact obligation for this logical turn and consumes only its
+  /// receipt.  A concurrent B write cannot alter A's outcome.
+  func consumeReceipt(for continuityKey: String) async -> RealtimeTurnPersistenceReceipt? {
+    if let obligation = obligations[continuityKey] {
+      _ = await obligation.task.value
+    }
+    return receipts.removeValue(forKey: continuityKey)
+  }
+
+  func receipt(for continuityKey: String) -> RealtimeTurnPersistenceReceipt? {
+    receipts[continuityKey]
+  }
+
+  /// Use only for a kernel mutation that was atomically accepted by a different
+  /// authority (currently `spawn_agent`).  It gives that exact continuity key a
+  /// finalization receipt without inventing a second provider-exchange write.
+  func recordAcceptedReceipt(for continuityKey: String) {
+    receipts[continuityKey] = RealtimeTurnPersistenceReceipt(
+      continuityKey: continuityKey,
+      accepted: true)
+  }
+
+  /// Repeatedly observes pending obligations because a new turn may enqueue a
+  /// write while an earlier write is suspended.  It never serializes unrelated
+  /// continuity keys.
+  func awaitPendingObligations() async {
+    while !Task.isCancelled {
+      let pending = obligations.values.map(\.task)
+      guard !pending.isEmpty else { return }
+      for task in pending {
+        _ = await task.value
+      }
+    }
+  }
+
+  /// Owner replacement revokes every local waiter.  An ignored cancellation can
+  /// still complete its kernel RPC, but its old obligation is forbidden from
+  /// removing or writing over any newer key's state.
+  func cancelAll() {
+    let pending = obligations.values.map(\.task)
+    obligations.removeAll()
+    receipts.removeAll()
+    generation &+= 1
+    for task in pending { task.cancel() }
   }
 }
 
@@ -390,6 +505,9 @@ struct RealtimeReconnectAudioBuffer {
   let responseID: VoiceResponseID
   let identity: VoiceEffectIdentity
   let interrupting: Bool
+  /// Opaque canonical identity that this logical input must observe. Audio may
+  /// not leave this buffer until the physical provider binding carries it.
+  private(set) var requiredContextFreshnessIdentity: String? = nil
   private(set) var audioBuffer: [Data] = []
   private(set) var bufferedAudioBytes = 0
 
@@ -402,6 +520,15 @@ struct RealtimeReconnectAudioBuffer {
     audioBuffer.append(accepted)
     bufferedAudioBytes += accepted.count
     return accepted.count == pcm16k.count
+  }
+
+  mutating func bindRequiredContextFreshnessIdentity(_ identity: String) -> Bool {
+    guard !identity.isEmpty else { return false }
+    if let existing = requiredContextFreshnessIdentity, existing != identity {
+      return false
+    }
+    requiredContextFreshnessIdentity = identity
+    return true
   }
 }
 
@@ -428,6 +555,20 @@ struct InterruptedTurnPayload: Equatable {
   /// User-visible chat text for a PTT-barged reply: keep streamed partial text only.
   static func visibleAssistantText(partialAssistantText: String) -> String {
     partialAssistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+}
+
+/// Resolves and records the visible portion of a provider-failed turn before
+/// terminal cleanup clears its transcript. The provider callback invokes this
+/// policy before sending the terminal reducer event, which makes the ordering
+/// deterministic and directly testable without a live socket.
+enum RealtimeProviderFailureContinuity {
+  static func persistCapturedTurn(
+    resolve: () async -> InterruptedTurnPayload?,
+    record: (InterruptedTurnPayload) async -> Bool
+  ) async -> Bool {
+    guard let interruptedTurn = await resolve() else { return true }
+    return await record(interruptedTurn)
   }
 }
 
@@ -471,6 +612,8 @@ struct RealtimeSpawnJournalReceipt: Equatable {
     guard !expectedContinuityKey.isEmpty,
       let data = output.data(using: .utf8),
       let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      payload["schemaVersion"] as? Int == 1,
+      payload["ok"] as? Bool == true,
       let raw = payload["journalReceipt"] as? [String: Any],
       raw["accepted"] as? Bool == true,
       let continuityKey = raw["continuityKey"] as? String,
@@ -483,7 +626,8 @@ struct RealtimeSpawnJournalReceipt: Equatable {
       assistantTurnID
         == KernelTurnProjection.stableTurnID(
           continuityKey: continuityKey, role: "assistant"),
-      let rawAssistantText = raw["assistantText"] as? String
+      let rawAssistantText = raw["assistantText"] as? String,
+      let child = canonicalChild(in: payload)
     else { return nil }
     let assistantText = rawAssistantText.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !assistantText.isEmpty, assistantText.utf8.count <= 4_096 else { return nil }
@@ -492,54 +636,68 @@ struct RealtimeSpawnJournalReceipt: Equatable {
       userTurnID: userTurnID,
       assistantTurnID: assistantTurnID,
       assistantText: assistantText,
-      pillProjection: pillProjection(in: payload))
+      pillProjection: pillProjection(in: child))
   }
 
   /// The kernel attaches the journal receipt only after the agent-control
   /// invocation has accepted its child run. Parse the child from that same
   /// result; never derive identities from the provider's tool arguments.
-  private static func pillProjection(in payload: [String: Any]) -> PillProjection? {
-    let firstAgent = (payload["agents"] as? [[String: Any]])?.first
-    let session = (firstAgent?["session"] as? [String: Any])
-      ?? (payload["session"] as? [String: Any])
-    let run = (firstAgent?["run"] as? [String: Any])
-      ?? (payload["run"] as? [String: Any])
-    let attempt = (firstAgent?["attempt"] as? [String: Any])
-      ?? (payload["attempt"] as? [String: Any])
-    let metadata = session?["metadata"] as? [String: Any]
-    let runInput = run?["input"] as? [String: Any]
-
-    func text(_ value: Any?) -> String? {
-      guard let raw = value as? String else { return nil }
-      let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-      return trimmed.isEmpty ? nil : trimmed
-    }
-
-    guard
-      let pillID = (text(session?["externalRefId"])
-        ?? text(metadata?["pillId"])
-        ?? text(payload["pillId"])).flatMap(UUID.init(uuidString:)),
-      let sessionID = text(session?["sessionId"]),
-      let runID = text(run?["runId"]),
-      text(run?["sessionId"]) == sessionID
+  /// The external surface returns one compact semantic child. The provider
+  /// mirror must describe that exact child and carry the same digest; accepting
+  /// only a journal receipt would let a missing/failed launch masquerade as a
+  /// successful voice delegation.
+  private static func canonicalChild(in payload: [String: Any]) -> [String: Any]? {
+    guard let child = payload["child"] as? [String: Any],
+      let providerResult = payload["providerResult"] as? [String: Any],
+      providerResult["schemaVersion"] as? Int == 1,
+      providerResult["ok"] is Bool,
+      let providerChild = providerResult["child"] as? [String: Any],
+      let digest = text(payload["semanticDigest"]),
+      text(providerResult["semanticDigest"]) == digest,
+      let lifecycle = child["lifecycle"] as? [String: Any],
+      let sessionID = text(child["sessionId"]),
+      let runID = text(child["runId"]),
+      let attemptID = text(child["attemptId"]),
+      text(child["title"]) != nil,
+      text(child["objective"]) != nil,
+      let provider = text(child["provider"]),
+      let state = text(lifecycle["state"]),
+      let attemptState = text(lifecycle["attemptState"]),
+      let adapterID = text(lifecycle["adapterId"]),
+      lifecycle["revision"] as? Int != nil,
+      lifecycle["updatedAtMs"] as? NSNumber != nil,
+      text(providerChild["sessionId"]) == sessionID,
+      text(providerChild["runId"]) == runID,
+      text(providerChild["attemptId"]) == attemptID,
+      text(providerChild["state"]) == state,
+      text(providerChild["attemptState"]) == attemptState,
+      text(providerChild["adapterId"]) == adapterID,
+      text(providerResult["code"]) != nil,
+      text(providerResult["message"]) != nil,
+      provider == adapterID
     else { return nil }
+    return child
+  }
 
-    let adapterID = text(session?["defaultAdapterId"])
-    let authoritativeProvider = ["openclaw", "hermes"].contains(adapterID ?? "")
-      ? adapterID
-      : nil
-    let legacyProvider = text(metadata?["provider"]).flatMap {
-      ["openclaw", "hermes"].contains($0) ? $0 : nil
-    }
+  private static func text(_ value: Any?) -> String? {
+    guard let raw = value as? String else { return nil }
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+  }
 
+  private static func pillProjection(in child: [String: Any]) -> PillProjection? {
+    guard let pillID = text(child["pillId"]).flatMap(UUID.init(uuidString:)),
+      let sessionID = text(child["sessionId"]),
+      let runID = text(child["runId"])
+    else { return nil }
     return PillProjection(
       pillID: pillID,
       sessionID: sessionID,
       runID: runID,
-      attemptID: text(attempt?["attemptId"]),
-      provider: authoritativeProvider ?? legacyProvider,
-      title: text(session?["title"]) ?? "Background agent",
-      objective: text(runInput?["prompt"]) ?? "Background agent")
+      attemptID: text(child["attemptId"]),
+      provider: text(child["provider"]),
+      title: text(child["title"]) ?? "Background agent",
+      objective: text(child["objective"]) ?? "Background agent")
   }
 }
 
@@ -700,12 +858,34 @@ enum RealtimeHubBargeInAction: Equatable {
   }
 }
 
-enum RealtimeHubConnectReplayGate {
-  static func shouldBeginGenericInput(
-    replayedReconnectTurn: Bool,
-    replayedReplacementTurn: Bool
-  ) -> Bool {
-    !replayedReconnectTurn && !replayedReplacementTurn
+enum RealtimeInputPreparationResult: Equatable {
+  case accepted
+  case rejected
+}
+
+enum RealtimeInputAdmissionDecision: Equatable {
+  case admit
+  case rejectSupersededTurn
+  case rejectMissingContextIdentity
+  case rejectStaleProviderContext
+}
+
+/// Pure fail-closed oracle used by production replay and deterministic race
+/// tests. Physical transport readiness alone can never return `.admit`.
+enum RealtimeInputAdmissionPolicy {
+  static func decide(
+    pending: RealtimeReconnectAudioBuffer,
+    activeTurnID: VoiceTurnID?,
+    sessionContextFreshnessIdentity: String
+  ) -> RealtimeInputAdmissionDecision {
+    guard pending.turnID == activeTurnID else { return .rejectSupersededTurn }
+    guard let required = pending.requiredContextFreshnessIdentity, !required.isEmpty else {
+      return .rejectMissingContextIdentity
+    }
+    guard required == sessionContextFreshnessIdentity else {
+      return .rejectStaleProviderContext
+    }
+    return .admit
   }
 }
 
@@ -1137,9 +1317,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var voiceContextPrefetchTask: Task<Void, Never>?
   private var voiceContextRefreshGeneration: UInt64 = 0
   private var turnPreparationTask: Task<Void, Never>?
-  private var turnPersistenceTask: Task<Bool, Never>?
-  private var turnPersistenceGeneration: UInt64 = 0
-  private var journalAcceptanceByContinuityKey: [String: Bool] = [:]
+  private let turnPersistenceLedger = RealtimeTurnPersistenceLedger()
   private struct AcceptedSpawnJournalReceipt {
     let ownerID: String
     let receipt: RealtimeSpawnJournalReceipt
@@ -1147,7 +1325,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var acceptedSpawnJournalReceiptByContinuityKey: [
     String: AcceptedSpawnJournalReceipt
   ] = [:]
-  private var pendingJournalContinuityKeys = Set<String>()
   private let legacyVoiceJournalImportStore = LegacyVoiceJournalImportStore.shared
   private var legacyVoiceJournalImportTask: Task<Void, Never>?
   private var legacyVoiceJournalImportedOwners = Set<String>()
@@ -1413,7 +1590,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
     ownerBoundaryGeneration &+= 1
     voiceContextRefreshGeneration &+= 1
-    turnPersistenceGeneration &+= 1
+    turnPersistenceLedger.cancelAll()
     turnEpoch &+= 1
     realtimePlaybackEpoch &+= 1
     mintGeneration &+= 1
@@ -1424,8 +1601,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     voiceContextPrefetchTask = nil
     turnPreparationTask?.cancel()
     turnPreparationTask = nil
-    turnPersistenceTask?.cancel()
-    turnPersistenceTask = nil
     legacyVoiceJournalImportTask?.cancel()
     legacyVoiceJournalImportTask = nil
     deferredSessionRefreshTask?.cancel()
@@ -1459,9 +1634,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     turnEarlyVerdictCode = nil
     lastTurnDiagnostics.removeAll()
     testProviderTranscriptOverride = nil
-    journalAcceptanceByContinuityKey.removeAll()
     acceptedSpawnJournalReceiptByContinuityKey.removeAll()
-    pendingJournalContinuityKeys.removeAll()
     prefetchedVoiceContext = ""
     prefetchedVoiceContextSessionID = ""
     prefetchedVoiceContextFreshnessIdentity = ""
@@ -1554,7 +1727,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     prefetchedVoiceContextTurnIDs = ["owner-turn"]
     prefetchedVoiceContextOwnerScope = ownerScope
     pendingSessionRefreshReason = "owner-fixture-refresh"
-    pendingJournalContinuityKeys = ["owner-fixture-journal"]
     turnAudio16k = Data(repeating: 1, count: 16)
   }
 
@@ -1621,10 +1793,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       prefetchedOwnerID: prefetchedVoiceContextOwnerScope?.authenticatedOwnerID,
       prefetchedContextIsEmpty: prefetchedVoiceContext.isEmpty,
       hasPendingOwnerWork: pendingSessionRefreshReason != nil
-        || !pendingJournalContinuityKeys.isEmpty
+        || !turnPersistenceLedger.pendingContinuityKeys.isEmpty
         || voiceContextPrefetchTask != nil
         || turnPreparationTask != nil
-        || turnPersistenceTask != nil
         || !detachedSessionsAwaitingDrain.isEmpty
         || externalRunAuthorityState != nil
         || !externalRunTerminalizations.isEmpty,
@@ -1805,9 +1976,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       retryable: error.payload?.retryable)
   }
 
-  /// True when the hub should drive this PTT turn. Read by PushToTalkManager at PTT
-  /// start. The hub is the default voice path (no opt-in toggle).
-  var isActive: Bool {
+  /// True only when a physical provider socket is authenticated. This is a
+  /// latency hint, never authority to open input; every turn still obtains a
+  /// context-bound admission before audio leaves its buffer.
+  var isTransportReady: Bool {
     // Drive a turn only when the hub is actually CONNECTED + authenticated for the
     // selected provider OR the failover provider we switched to. A turn never enters hub
     // mode on a key/token that can't connect (stale/revoked key, failed mint, mid-
@@ -1835,14 +2007,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// become ready before falling back to the slower transcript cascade.
   func waitUntilActive(timeout: TimeInterval) async -> Bool {
     ensureWarm()
-    if isActive { return true }
+    if isTransportReady { return true }
     let deadline = Date().addingTimeInterval(timeout)
     while Date() < deadline {
       try? await Task.sleep(nanoseconds: 50_000_000)
       if Task.isCancelled { return false }
-      if isActive { return true }
+      if isTransportReady { return true }
     }
-    return isActive
+    return isTransportReady
   }
 
   func setup() {
@@ -2376,16 +2548,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private func refreshVoiceContextAfterPersistenceFence(reason: String) async -> Bool {
     while !Task.isCancelled {
       let observedTurnEpoch = turnEpoch
-      let observedPersistenceGeneration = turnPersistenceGeneration
-      if let persistence = turnPersistenceTask {
-        _ = await persistence.value
-      }
+      let observedPersistenceGeneration = turnPersistenceLedger.generation
+      await turnPersistenceLedger.awaitPendingObligations()
       guard RealtimeHubLifecyclePolicy.canReplaceSession(lifecycleSnapshot) else {
         pendingSessionRefreshReason = reason
         return false
       }
       guard observedTurnEpoch == turnEpoch,
-        observedPersistenceGeneration == turnPersistenceGeneration
+        observedPersistenceGeneration == turnPersistenceLedger.generation
       else { continue }
 
       guard await refreshVoiceContextSnapshot() else {
@@ -2399,7 +2569,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         return false
       }
       guard observedTurnEpoch == turnEpoch,
-        observedPersistenceGeneration == turnPersistenceGeneration
+        observedPersistenceGeneration == turnPersistenceLedger.generation
       else { continue }
 
       return true
@@ -2915,12 +3085,20 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// fresh socket.
   private func finishContextFreshInputOnCurrentSession() {
     guard let pending = reconnectAudioBuffer, let live = session else { return }
-    guard VoiceTurnCoordinator.shared.activeTurnID == pending.turnID,
-      let voiceSessionID
-    else {
+    guard let voiceSessionID else { return }
+    let admission = RealtimeInputAdmissionPolicy.decide(
+      pending: pending,
+      activeTurnID: VoiceTurnCoordinator.shared.activeTurnID,
+      sessionContextFreshnessIdentity: sessionVoiceContextFreshnessIdentity)
+    guard admission == .admit else {
       reconnectAudioBuffer = nil
       live.abandonInputTurn()
-      log("RealtimeHub: discarded context-preparation audio for a superseded PTT turn")
+      VoiceTurnCoordinator.shared.send(
+        .providerReconnectFailed(
+          turnID: pending.turnID,
+          identity: pending.identity,
+          message: "realtime context admission rejected: \(admission)"))
+      log("RealtimeHub: rejected context-preparation audio before provider admission: \(admission)")
       return
     }
     VoiceTurnCoordinator.shared.send(
@@ -2999,24 +3177,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   @discardableResult
   private func enqueueTurnPersistence(
     idempotencyKey: String,
+    retainingReceipt: Bool = false,
     _ operation: @escaping @MainActor () async -> Bool
   ) -> Task<Bool, Never> {
-    let previous = turnPersistenceTask
-    turnPersistenceGeneration &+= 1
-    let persistenceGeneration = turnPersistenceGeneration
-    pendingJournalContinuityKeys.insert(idempotencyKey)
-    let task = Task { @MainActor in
-      if let previous { _ = await previous.value }
-      let accepted = await operation()
-      guard persistenceGeneration == turnPersistenceGeneration else { return false }
-      if idempotencyKey == turnIdempotencyKey {
-        journalAcceptanceByContinuityKey[idempotencyKey] = accepted
-      }
-      pendingJournalContinuityKeys.remove(idempotencyKey)
-      return accepted
-    }
-    turnPersistenceTask = task
-    return task
+    turnPersistenceLedger.enqueue(
+      continuityKey: idempotencyKey,
+      retainingReceipt: retainingReceipt,
+      operation)
   }
 
   /// The kernel journal and its SQLite outbox are the only durable transcript
@@ -3117,11 +3284,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   private func awaitTurnPersistenceFence() async {
     while !Task.isCancelled {
-      let observedGeneration = turnPersistenceGeneration
-      if let persistence = turnPersistenceTask {
-        _ = await persistence.value
-      }
-      guard observedGeneration != turnPersistenceGeneration else { return }
+      let observedGeneration = turnPersistenceLedger.generation
+      await turnPersistenceLedger.awaitPendingObligations()
+      guard observedGeneration == turnPersistenceLedger.generation else { continue }
+      return
     }
   }
 
@@ -3132,10 +3298,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     let idempotencyKey = turnIdempotencyKey
     Task { @MainActor [weak self] in
       guard let self else { return }
-      await self.awaitTurnPersistenceFence()
+      let receipt = await self.turnPersistenceLedger.consumeReceipt(for: idempotencyKey)
       guard VoiceTurnCoordinator.shared.activeTurnID == turnID else { return }
-      let accepted = self.journalAcceptanceByContinuityKey.removeValue(
-        forKey: idempotencyKey) == true
+      let accepted = receipt?.accepted == true
       guard VoiceTurnCoordinator.shared.activeTurnID == turnID else { return }
       if accepted {
         VoiceTurnCoordinator.shared.send(
@@ -3560,15 +3725,23 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// and OpenAI's event ownership remain tied to the original PTT turn.
   private func finishSessionReconnectAfterReady() {
     guard let pending = reconnectAudioBuffer, let live = session else { return }
-    reconnectAudioBuffer = nil
-    guard VoiceTurnCoordinator.shared.activeTurnID == pending.turnID,
-      VoiceTurnCoordinator.shared.activeTurnID == pending.turnID
-    else {
+    guard let voiceSessionID else { return }
+    let admission = RealtimeInputAdmissionPolicy.decide(
+      pending: pending,
+      activeTurnID: VoiceTurnCoordinator.shared.activeTurnID,
+      sessionContextFreshnessIdentity: sessionVoiceContextFreshnessIdentity)
+    guard admission == .admit else {
+      reconnectAudioBuffer = nil
       live.abandonInputTurn()
-      log("RealtimeHub: discarded reconnect audio for a superseded PTT turn")
+      VoiceTurnCoordinator.shared.send(
+        .providerReconnectFailed(
+          turnID: pending.turnID,
+          identity: pending.identity,
+          message: "realtime reconnect admission rejected: \(admission)"))
+      log("RealtimeHub: rejected reconnect audio before provider admission: \(admission)")
       return
     }
-    guard let voiceSessionID else { return }
+    reconnectAudioBuffer = nil
     VoiceTurnCoordinator.shared.send(
       .providerReconnected(
         turnID: pending.turnID,
@@ -3713,8 +3886,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   // MARK: - PTT integration
 
-  /// PTT-down: make sure the socket is warm and reset per-turn state.
-  func beginTurn(turnID requestedTurnID: VoiceTurnID? = nil) {
+  /// PTT-down: make sure the socket is warm and reset per-turn state. The typed
+  /// result is the caller's fail-closed gate for buffered audio replay.
+  @discardableResult
+  func beginTurn(turnID requestedTurnID: VoiceTurnID? = nil) -> RealtimeInputPreparationResult {
     if discardMismatchedSessionIfNeeded() { ensureWarm() }
     turnPreparationTask?.cancel()
     turnPreparationTask = nil
@@ -3738,7 +3913,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       ?? VoiceTurnCoordinator.shared.begin(intent: .hold)
     guard VoiceTurnCoordinator.shared.requireCurrentOwner(for: turnID) != nil else {
       log("RealtimeHub: refusing to begin provider input for a stale voice owner")
-      return
+      return .rejected
     }
     if let pending = reconnectAudioBuffer, pending.turnID != turnID {
       reconnectAudioBuffer = nil
@@ -3831,7 +4006,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         interrupting: providerResponseInFlight
       ) else {
         log("RealtimeHub: unable to establish a context-fresh PTT input boundary")
-        return
+        return .rejected
       }
       turnPreparationTask = Task { @MainActor [weak self] in
         guard let self else { return }
@@ -3848,6 +4023,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
             preparationEpoch: preparationEpoch)
         else { return }
         let current = self.voiceSessionContext(for: self.currentOwnerScope)
+        guard var pending = self.reconnectAudioBuffer,
+          pending.turnID == turnID,
+          pending.bindRequiredContextFreshnessIdentity(current.snapshotFreshnessIdentity)
+        else {
+          self.failContextFreshInputPreparation(
+            turnID: turnID,
+            message: "Voice context admission identity is unavailable")
+          return
+        }
+        self.reconnectAudioBuffer = pending
         let needsSessionRefresh = self.session != nil
           && RealtimeVoiceContextRefreshPolicy.requiresRefresh(
             currentSnapshotIdentity: current.snapshotFreshnessIdentity,
@@ -3881,11 +4066,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         }
       }
     }
+    return .accepted
   }
 
   private func captureInterruptedTurnPayloadIfNeeded() -> Task<InterruptedTurnPayload?, Never>? {
-    if pendingJournalContinuityKeys.contains(turnIdempotencyKey)
-      || journalAcceptanceByContinuityKey[turnIdempotencyKey] == true
+    if turnPersistenceLedger.pendingContinuityKeys.contains(turnIdempotencyKey)
+      || turnPersistenceLedger.receipt(for: turnIdempotencyKey)?.accepted == true
       || !prefetchedVoiceContextTurnIDs.isDisjoint(
         with: KernelTurnProjection.stableTurnIDs(continuityKey: turnIdempotencyKey)
       )
@@ -4582,7 +4768,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
           self.acceptedSpawnJournalReceiptByContinuityKey[receipt.continuityKey] =
             AcceptedSpawnJournalReceipt(ownerID: binding.ownerID, receipt: receipt)
-          self.journalAcceptanceByContinuityKey[receipt.continuityKey] = true
+          self.turnPersistenceLedger.recordAcceptedReceipt(for: receipt.continuityKey)
           self.assistantText = receipt.assistantText
           if let pill = receipt.pillProjection {
             AgentPillsManager.shared.upsertSpawnedPill(
@@ -4767,20 +4953,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         extra: ["user_visible": false])
       pendingFailoverReason = nil
     }
-    if reducerCapturingInput,
-      RealtimeHubConnectReplayGate.shouldBeginGenericInput(
-        replayedReconnectTurn: replayedReconnectTurn,
-        replayedReplacementTurn: replayedReplacementTurn),
-      inputTurnActivityStartPending || sessionProvider == .gemini
-    {
-      if let live = session {
-        live.beginInputTurn(
-          turnID: VoiceTurnCoordinator.shared.activeTurnID,
-          responseID: voiceResponseID,
-          interrupting: reducerInterruptsPreviousTurn)
-      }
-      inputTurnActivityStartPending = false
-    }
+    // Transport readiness has no authority to open provider input. Reconnect
+    // and replacement replay paths above require an exact context admission;
+    // an ordinary warm connection waits for prepareHubInput -> beginTurn.
   }
 
   func hubDidReceiveInputTranscript(
@@ -5032,7 +5207,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       let candidates = AssistantSettings.shared.voiceBaseLanguages
       let fullTask = fullLIDTask
       let provider = providerTag
-      enqueueTurnPersistence(idempotencyKey: completedTurnIdempotencyKey) { [weak self] in
+      enqueueTurnPersistence(
+        idempotencyKey: completedTurnIdempotencyKey,
+        retainingReceipt: true
+      ) { [weak self] in
         let resolution = await Self.resolveTranscript(
           providerText: heard,
           preferredLanguages: candidates,
@@ -5135,6 +5313,33 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   func hubDidError(_ message: String, source: RealtimeHubSession) {
     guard isCurrentSession(source) else { return }
+    // Capture while the reducer still owns this turn. `.providerReconnectFailed`
+    // or `.finish` synchronously terminalizes it and `cancelTurn` clears the
+    // transcript, so starting this obligation any later loses the just-spoken
+    // user turn from the next shared-context snapshot.
+    let interruptedTurnTask = captureInterruptedTurnPayloadIfNeeded()
+    if let interruptedTurnTask {
+      Task { @MainActor [weak self] in
+        guard let self else { return }
+        _ = await RealtimeProviderFailureContinuity.persistCapturedTurn(
+          resolve: { await interruptedTurnTask.value },
+          record: { [weak self] interruptedTurn in
+            guard let self else { return false }
+            let persistence = self.enqueueTurnPersistence(
+              idempotencyKey: interruptedTurn.idempotencyKey,
+              retainingReceipt: true
+            ) { [weak self] in
+              await self?.persistTurnDirectlyToKernel(
+                ownerID: interruptedTurn.ownerID,
+                userText: interruptedTurn.userText,
+                assistantText: interruptedTurn.assistantText,
+                interrupted: true,
+                idempotencyKey: interruptedTurn.idempotencyKey) ?? false
+            }
+            return await persistence.value
+          })
+      }
+    }
     // A socket we intentionally dropped is detached in teardownSession() before it's
     // released, so its death-rattle never reaches us — only the live session's errors
     // land here.

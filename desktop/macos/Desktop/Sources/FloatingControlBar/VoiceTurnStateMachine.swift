@@ -556,7 +556,9 @@ enum VoiceTurnEffect: Equatable, Sendable {
   /// enqueued `hubCommitClaimed`, because `VoiceTurnCoordinator` drains nested
   /// events FIFO.
   case commitClaimedHubInput(turnID: VoiceTurnID)
-  case activateHub(turnID: VoiceTurnID, sessionID: VoiceSessionID)
+  /// The physical socket is authenticated, but provider input is still closed.
+  /// The driver must bind the current canonical context before replaying audio.
+  case prepareHubInput(turnID: VoiceTurnID, sessionID: VoiceSessionID)
   case transcriptionFinalizationTimedOut(
     turnID: VoiceTurnID, mode: VoiceTranscriptionFinalizationMode)
   case finalizeJournal(turnID: VoiceTurnID, identity: VoiceEffectIdentity)
@@ -762,9 +764,9 @@ struct VoiceTurnReducer {
         return VoiceTurnReduction(model: model, effects: effects)
       }
       cancel(.hubWarm, in: &model, effects: &effects)
-      model.turn?.route = .hub(sessionID: sessionID)
-      model.turn?.sessionID = sessionID
-      effects.append(.activateHub(turnID: turn.id, sessionID: sessionID))
+      // Transport readiness is not context admission. Keep the logical route in
+      // warm-wait until providerReconnected proves an admitted physical binding.
+      effects.append(.prepareHubInput(turnID: turn.id, sessionID: sessionID))
 
     case .hubCommitAccepted(_, let sessionID, let responseID):
       let isDeferredCommit = turn.phase == .awaitingResponse && turn.hubCommitPending

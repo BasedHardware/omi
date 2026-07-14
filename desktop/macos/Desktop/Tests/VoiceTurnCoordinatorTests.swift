@@ -240,15 +240,10 @@ final class VoiceTurnCoordinatorTests: XCTestCase {
     let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
     let sessionID = VoiceSessionID()
     var resolutions = 0
-    var didReenter = false
-    coordinator.setSnapshotHandler { model in
-      guard model.turn?.route == .hub(sessionID: sessionID), !didReenter else { return }
-      didReenter = true
+    coordinator.setEffectHandler { effect in
+      guard case .prepareHubInput(let turnID, let preparedSessionID) = effect else { return }
+      XCTAssertEqual(preparedSessionID, sessionID)
       resolutions += 1
-      guard let turnID = coordinator.activeTurnID else {
-        XCTFail("hub-ready transition must retain its active turn")
-        return
-      }
       // RealtimeHubController.beginTurn clears its response glow synchronously,
       // which publishes another snapshot. The consumed transition must not run
       // the warm-wait resolver again.
@@ -260,7 +255,7 @@ final class VoiceTurnCoordinatorTests: XCTestCase {
     coordinator.send(.hubReady(turnID: turnID, sessionID: sessionID))
 
     XCTAssertEqual(resolutions, 1)
-    XCTAssertEqual(coordinator.model.turn?.route, .hub(sessionID: sessionID))
+    XCTAssertEqual(coordinator.model.turn?.route, .hubWarmWait)
     XCTAssertEqual(
       coordinator.timelineSnapshot().filter { $0.event == "hub_ready" }.count,
       1)
