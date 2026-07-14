@@ -35,6 +35,7 @@
  */
 import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, renameSync } from 'fs'
 import { dirname, join } from 'path'
+import type { DbRecoveryStatus } from '../../shared/types'
 
 // --- Driver seam -----------------------------------------------------------
 // The minimal SQLite surface recovery needs, satisfied structurally by both
@@ -220,7 +221,9 @@ function quote(id: string): string {
 
 function readMaster(src: RecoveryDb): MasterRow[] {
   const rows = src
-    .prepare("SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'")
+    .prepare(
+      "SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'"
+    )
     .all() as MasterRow[]
   return rows.filter((r) => typeof r.sql === 'string' && typeof r.name === 'string')
 }
@@ -341,13 +344,15 @@ export function salvage(srcFile: string, destFile: string, driver: RecoveryDrive
     const isShadow = (name: string): boolean =>
       virtualNames.some((v) => FTS_SHADOW_SUFFIXES.some((s) => name === `${v}_${s}`))
 
-    const tables = master.filter((r) => r.type === 'table').filter((r) => {
-      if (isVirtual(r.sql) || isShadow(r.name)) {
-        skipped.push(r.name)
-        return false
-      }
-      return true
-    })
+    const tables = master
+      .filter((r) => r.type === 'table')
+      .filter((r) => {
+        if (isVirtual(r.sql) || isShadow(r.name)) {
+          skipped.push(r.name)
+          return false
+        }
+        return true
+      })
 
     dest = driver.open(destFile)
     // The destination is a throwaway being built from an already-corrupt source:
@@ -427,15 +432,8 @@ export function salvage(srcFile: string, destFile: string, driver: RecoveryDrive
 
 // --- Open with recovery -----------------------------------------------------
 
-export type RecoveryStatus = {
-  /** Corruption was detected and handled on this launch. */
-  recovered: boolean
-  /** Nothing was salvageable — the database was reset to an empty schema. */
-  reset: boolean
-  rowsRecovered: number
-  tablesRecovered: Record<string, number>
-  backupPath: string | null
-}
+/** One shape, shared with the renderer's recovery notice (shared/types.ts). */
+export type RecoveryStatus = DbRecoveryStatus
 
 export const NO_RECOVERY: RecoveryStatus = {
   recovered: false,

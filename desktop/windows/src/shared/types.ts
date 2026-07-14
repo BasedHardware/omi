@@ -778,6 +778,9 @@ export type OmiBridgeApi = {
   /** Capture the primary screen once and OCR it, returning the recognized text
    *  (or '' on failure/timeout). Used by the chat to read the screen at send time. */
   screenReadText: () => Promise<string>
+  /** What happened to omi.db at startup — whether it was found corrupt and had to
+   *  be repaired or reset. Read once on mount to tell the user. */
+  dbRecoveryStatus: () => Promise<DbRecoveryStatus>
   insightGetSettings: () => Promise<InsightSettings>
   insightSetSettings: (patch: Partial<InsightSettings>) => Promise<InsightSettings>
   insightAdd: (p: InsightPayload) => Promise<void>
@@ -1435,6 +1438,21 @@ export type RescueSegment = {
 export type InsightCategory = 'productivity' | 'communication' | 'learning' | 'health' | 'other'
 
 // One insight as shown in the toast (mirrors macOS ExtractedInsight).
+/** Outcome of the startup corruption check on omi.db (see main/ipc/dbRecovery.ts).
+ *  Shared so the renderer's recovery notice and the main-process recovery agree on
+ *  one shape. */
+export type DbRecoveryStatus = {
+  /** Corruption was detected and handled on this launch. */
+  recovered: boolean
+  /** Nothing was salvageable — the database was reset to an empty schema. */
+  reset: boolean
+  rowsRecovered: number
+  /** Rows recovered per table (only tables that yielded at least one row). */
+  tablesRecovered: Record<string, number>
+  /** Where the corrupt original was archived, if the backup succeeded. */
+  backupPath: string | null
+}
+
 export type InsightPayload = {
   headline: string // <= 5 words
   advice: string // 1-2 sentences, <= ~100 chars

@@ -1,11 +1,19 @@
 import Database from 'better-sqlite3'
 import { app } from 'electron'
-import { basename, join } from 'path'
+import { basename, dirname, join } from 'path'
 import { categorize } from '../usage/category'
 import { isNewLocalDay } from '../usage/usageDay'
 import { buildRewindFtsMatch } from '../rewind/rewindSearchQuery'
 import { addColumnIfMissing as ensureColumn, runMigrations } from './dbMigrations'
 import { applyRewindEmbeddingSchema } from './rewindEmbeddingSchema'
+import {
+  NO_RECOVERY,
+  openDatabaseWithRecovery,
+  type RecoveryDb,
+  type RecoveryDriver,
+  type RecoveryStatus
+} from './dbRecovery'
+import { captureError } from '../sentry'
 import { wipeUserDataOn } from './dbWipe'
 import {
   insertVoiceTurnOn,
@@ -97,17 +105,81 @@ function dropIfMissingColumn(d: Database.Database, table: string, col: string): 
   if (!cols.some((c) => c.name === col)) d.exec(`DROP TABLE ${table}`)
 }
 
+// OMI_DB_PATH lets the bench harness point at a throwaway DB so benchmarking
+// never reads or writes the user's real omi.db.
+function dbFilePath(): string {
+  return process.env.OMI_DB_PATH ?? join(app.getPath('userData'), 'omi.db')
+}
+
+// Corrupt originals are archived next to the database (macOS: <dataDir>/backups),
+// keyed off the db file so a bench/test DB keeps its backups in its own temp dir.
+function backupsDir(): string {
+  return join(dirname(dbFilePath()), 'backups')
+}
+
+// The production driver for dbRecovery's seam. The casts bridge better-sqlite3's
+// generically-typed statement methods to the structural RecoveryDb surface —
+// same duck-typing idiom as voiceTurnDb() below and the node:sqlite test drivers.
+const betterSqliteDriver: RecoveryDriver = {
+  open: (file) => new Database(file) as unknown as RecoveryDb,
+  openReadonly: (file) =>
+    new Database(file, { readonly: true, fileMustExist: true }) as unknown as RecoveryDb
+}
+
+let recoveryStatus: RecoveryStatus = NO_RECOVERY
+
+/** What happened to the database on this launch: whether corruption was detected,
+ *  how many rows were salvaged, and whether it had to be reset. Surfaced to the
+ *  user over IPC (`db:recoveryStatus`) — unlike macOS, whose equivalent flag is
+ *  declared but never set, so its recovery UI can never fire. */
+export function getDbRecoveryStatus(): RecoveryStatus {
+  return recoveryStatus
+}
+
+/**
+ * Open the database (recovering it first if it is corrupt) before anything else
+ * touches it. Called once at startup.
+ *
+ * This must run before the KG write worker (`kgWorker.ts`, which opens its OWN
+ * better-sqlite3 handle to the same path in a worker_thread) and before the
+ * read-only `roDb` handle below. Recovery replaces the file on disk; doing that
+ * under a live handle would leave that handle pointing at a deleted inode. All of
+ * those open lazily and later, so running recovery here — single-threaded, before
+ * any window exists — is what makes the swap safe by construction.
+ */
+export function initDatabase(): RecoveryStatus {
+  get()
+  return recoveryStatus
+}
+
 function get(): Database.Database {
   if (db) return db
-  // OMI_DB_PATH lets the bench harness point at a throwaway DB so benchmarking
-  // never reads or writes the user's real omi.db.
-  const file = process.env.OMI_DB_PATH ?? join(app.getPath('userData'), 'omi.db')
-  db = new Database(file)
+  const file = dbFilePath()
+  // Detect + recover corruption BEFORE any schema work. A healthy database is
+  // opened untouched; only a positively-classified corrupt one is backed up,
+  // salvaged and replaced. See dbRecovery.ts.
+  const opened = openDatabaseWithRecovery(file, betterSqliteDriver, {
+    backupsDir: backupsDir(),
+    hooks: {
+      log: (m) => console.log(m),
+      onCorruption: (err) => {
+        // Silent UX healing is fine; silent ops is not (AGENTS.md). No Windows
+        // recordFallback emitter exists, so this is console + Sentry.
+        console.error('db: CORRUPTION DETECTED in omi.db — recovering', err)
+        captureError(err, { area: 'db_corruption', extra: { file } })
+      }
+    }
+  })
+  db = opened.db as unknown as Database.Database
+  recoveryStatus = opened.status
   // WAL mode: allows main-thread reads to proceed concurrently while the KG
   // write worker holds the write lock. Synchronous stays at the default FULL so
   // non-KG tables (local_conversation etc.) are not at power-loss risk.
   // The worker sets synchronous=NORMAL only on its own connection.
   db.pragma('journal_mode = WAL')
+  // Wait out a concurrent writer (the KG worker) instead of failing with
+  // SQLITE_BUSY. macOS sets the same 5s timeout.
+  db.pragma('busy_timeout = 5000')
   // Migrate away the incompatible local_kg_* schema from the parked KG experiment.
   dropIfMissingColumn(db, 'local_kg_nodes', 'summary')
   dropIfMissingColumn(db, 'local_kg_edges', 'id')
@@ -395,6 +467,19 @@ function get(): Database.Database {
   // Versioned migrations (PRAGMA user_version) — everything beyond the additive
   // baseline above. Ordered + exactly-once; see dbMigrations.ts.
   runMigrations(db)
+  // After a salvage the FTS index is empty: salvage skips virtual tables (copying
+  // FTS shadow tables raw would produce a corrupt index) and preserves
+  // user_version, so migration v2's backfill does not re-run. The bootstrap block
+  // above has just recreated the vtable + triggers, so rebuild the index from the
+  // recovered rewind_frames rows — same 'rebuild' idiom as migration v2. Never let
+  // this block startup.
+  if (recoveryStatus.recovered && !recoveryStatus.reset) {
+    try {
+      db.exec("INSERT INTO rewind_frames_fts(rewind_frames_fts) VALUES('rebuild')")
+    } catch (e) {
+      console.error('db: FTS rebuild after recovery failed (search may be stale)', e)
+    }
+  }
   return db
 }
 
@@ -797,8 +882,14 @@ export function getLocalKGStatus(): LocalKGStatus {
 // connection first (get()) so the file/tables exist before we open it.
 function getReadonly(): Database.Database {
   if (roDb) return roDb
-  get() // ensure the db file + schema exist before opening read-only
-  roDb = new Database(join(app.getPath('userData'), 'omi.db'), { readonly: true })
+  // get() first: it ensures the file + schema exist, and — critically — that any
+  // corruption recovery (which REPLACES the file) has already run, so this handle
+  // can never be left pointing at a deleted inode.
+  get()
+  // dbFilePath(), not a hardcoded userData path: this used to ignore OMI_DB_PATH,
+  // so the bench/e2e harness opened the user's REAL omi.db read-only while the
+  // writable handle used the throwaway one.
+  roDb = new Database(dbFilePath(), { readonly: true })
   return roDb
 }
 

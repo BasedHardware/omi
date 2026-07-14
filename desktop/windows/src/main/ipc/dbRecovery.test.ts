@@ -9,7 +9,19 @@
 // _electron smoke in e2e/db-recovery.spec.mjs instead.
 import { DatabaseSync } from 'node:sqlite'
 import { randomBytes } from 'node:crypto'
-import { closeSync, existsSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, truncateSync, writeFileSync, writeSync } from 'node:fs'
+import {
+  closeSync,
+  existsSync,
+  mkdtempSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  truncateSync,
+  writeFileSync,
+  writeSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -276,7 +288,8 @@ describe('salvage — table-agnostic, per-table and per-row resilient', () => {
 
     // Schema extras survive so the recovered DB behaves like the original.
     const d = new DatabaseSync(out, { readOnly: true })
-    const version = (d.prepare('PRAGMA user_version').get() as { user_version: number }).user_version
+    const version = (d.prepare('PRAGMA user_version').get() as { user_version: number })
+      .user_version
     const idx = d
       .prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_rewind_frames_ts'")
       .get()

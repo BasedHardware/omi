@@ -235,6 +235,7 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('rewind:capture-directive', listener)
     return () => ipcRenderer.removeListener('rewind:capture-directive', listener)
   },
+  dbRecoveryStatus: () => ipcRenderer.invoke('db:recoveryStatus'),
   insightGetSettings: () => ipcRenderer.invoke('insight:getSettings'),
   insightSetSettings: (patch) => ipcRenderer.invoke('insight:setSettings', patch),
   insightAdd: (p) => ipcRenderer.invoke('insight:add', p),

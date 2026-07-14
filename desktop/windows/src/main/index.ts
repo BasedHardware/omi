@@ -305,6 +305,8 @@ import {
   markVoiceTurnAcked,
   recordVoiceTurnFailure,
   pruneOrphanedRewindEmbeddings,
+  getDbRecoveryStatus,
+  initDatabase,
   wipeUserData
 } from './ipc/db'
 
@@ -465,6 +467,27 @@ app.whenReady().then(async () => {
   // window/service setup, just let it exit and hand off to the first instance.
   if (!gotSingleInstanceLock) return
   perfMark('main:ready')
+
+  // Open (and, if it is corrupt, recover) omi.db before anything else can touch
+  // it. This has to happen here, first: recovery REPLACES the database file, and
+  // both the read-only chat handle and the KG write worker's own connection open
+  // lazily later — swapping the file under them would strand them on a deleted
+  // inode. Single-instance lock is already held, so no other process has it open.
+  // Never fatal: a throw here would be an unstartable app, and the renderer can
+  // still run (every DB call surfaces its own error).
+  try {
+    const recovery = initDatabase()
+    if (recovery.recovered) {
+      console.error(
+        `[main] omi.db was corrupt and has been recovered: ` +
+          `${recovery.rowsRecovered} row(s) restored, reset=${recovery.reset}, ` +
+          `backup=${recovery.backupPath}`
+      )
+    }
+  } catch (e) {
+    console.error('[main] database init failed', e)
+  }
+  perfMark('main:db-ready')
 
   // Production only (dev uses the vite dev server): serve the packaged renderer
   // over localhost so Firebase auth sees an authorized origin. Must be up before
@@ -663,6 +686,10 @@ app.whenReady().then(async () => {
   // (push-during-load race), and opens the release notes in the system browser.
   ipcMain.handle('whatsnew:getPending', async () => getCurrentWhatsNew())
   ipcMain.on('whatsnew:openNotes', () => void shell.openExternal(releaseNotesUrl()))
+  // Database corruption recovery: the renderer pulls this once on mount and tells
+  // the user what happened to their data. macOS declares the equivalent flag but
+  // never sets it, so its recovery UI can never fire; ours reports for real.
+  ipcMain.handle('db:recoveryStatus', () => getDbRecoveryStatus())
   perfMark('main:handlers-registered')
   // One-time cold-start seed: rank the first brain map by real historical app
   // usage from the Windows UserAssist registry. No-op when disabled/off-Windows/

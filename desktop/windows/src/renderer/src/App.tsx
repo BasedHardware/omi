@@ -6,6 +6,7 @@ import { AppChrome } from './components/layout/AppChrome'
 import { MainViews } from './components/layout/MainViews'
 import { TitleBar } from './components/layout/TitleBar'
 import { Spinner } from './components/ui/Spinner'
+import { DbRecoveryNotice } from './components/ui/DbRecoveryNotice'
 import { purgeAppMemoriesOnce } from './lib/appMemories'
 import { AppStateProvider } from './state/AppStateProvider'
 import { useAppState } from './state/appState'
@@ -99,6 +100,8 @@ function AppShellInner(): React.JSX.Element {
     <div className="app-canvas flex h-full min-h-0 flex-col">
       {/* Native-caption drag strip (Window Controls Overlay). */}
       <TitleBar />
+      {/* Only renders when omi.db was found corrupt and repaired at startup. */}
+      <DbRecoveryNotice />
       <AppChrome>
         <MainViews />
       </AppChrome>
