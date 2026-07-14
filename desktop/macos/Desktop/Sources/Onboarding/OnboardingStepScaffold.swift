@@ -2,6 +2,19 @@ import AppKit
 import SwiftUI
 import OmiTheme
 
+/// Back action for the current onboarding step, injected by `OnboardingView`.
+/// `nil` on the first step (nothing to return to), which hides the back button.
+private struct OnboardingBackActionKey: EnvironmentKey {
+  static let defaultValue: (() -> Void)? = nil
+}
+
+extension EnvironmentValues {
+  var onboardingBack: (() -> Void)? {
+    get { self[OnboardingBackActionKey.self] }
+    set { self[OnboardingBackActionKey.self] = newValue }
+  }
+}
+
 enum OnboardingRightPaneMode {
   case graph
   case message(title: String, detail: String)
@@ -209,6 +222,21 @@ struct OnboardingLogoMark: View {
       onForceComplete?()
     }
     .accessibilityLabel("omi")
+  }
+}
+
+/// Grey "Back" button that returns to the previous onboarding step. Renders
+/// nothing on the first step (where the injected `onboardingBack` action is nil).
+/// Place it to the left of a step's Continue button.
+struct OnboardingBackButton: View {
+  @Environment(\.onboardingBack) private var onboardingBack
+
+  var body: some View {
+    if let onboardingBack {
+      Button("Back", action: onboardingBack)
+        .buttonStyle(OmiButtonStyle(.secondary))
+        .accessibilityLabel("Back")
+    }
   }
 }
 
