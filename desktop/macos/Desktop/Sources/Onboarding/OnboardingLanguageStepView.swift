@@ -86,12 +86,16 @@ struct OnboardingLanguageStepView: View {
             .foregroundColor(OmiColors.textTertiary)
         }
 
-        Button(saving ? "Saving…" : "Continue") {
-          saveAndContinue()
+        HStack(spacing: OmiSpacing.md) {
+          OnboardingBackButton()
+
+          Button(saving ? "Saving…" : "Continue") {
+            saveAndContinue()
+          }
+          .buttonStyle(OmiButtonStyle(.primary))
+          .keyboardShortcut(.defaultAction)
+          .disabled(coordinator.selectedLanguageCodes.isEmpty || saving)
         }
-        .buttonStyle(OmiButtonStyle(.primary))
-        .keyboardShortcut(.defaultAction)
-        .disabled(coordinator.selectedLanguageCodes.isEmpty || saving)
 
         if let error = coordinator.lastActionError {
           Text(error)
