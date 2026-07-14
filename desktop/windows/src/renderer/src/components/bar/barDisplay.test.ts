@@ -5,8 +5,13 @@ import {
   omiChatListStatus,
   deriveAgentRows,
   agentRowStatus,
-  pillLabel
+  pillLabel,
+  agentDraftPrefill,
+  nextConversationDraft,
+  type BarAgentRow
 } from './barDisplay'
+// Imported (not edited) to prove the seed actually triggers agent delegation.
+import { detectAgentTask } from '../../lib/agentTask'
 import type { BarChatState, CodingAgentInfo } from '../../../../shared/types'
 
 const chat = (partial: Partial<BarChatState> = {}): BarChatState => ({
@@ -163,6 +168,69 @@ describe('agentRowStatus', () => {
       'Working…'
     )
     expect(agentRowStatus({ id: 'acp', displayName: 'Claude Code', working: false })).toBe('Ready')
+  })
+})
+
+describe('agentDraftPrefill', () => {
+  const rows: BarAgentRow[] = [
+    { id: 'acp', displayName: 'Claude Code', working: false },
+    { id: 'openclaw', displayName: 'OpenClaw', working: false },
+    { id: 'hermes', displayName: 'Hermes', working: false },
+    { id: 'codex', displayName: 'Codex', working: false }
+  ]
+
+  it('seeds a leading-mention string detectAgentTask matches for EVERY agent', () => {
+    // The whole point of the prefill: what the user types after it is delegated
+    // to that agent. Assert detection fires and resolves to the right adapter id.
+    for (const row of rows) {
+      const seed = agentDraftPrefill(row.displayName)
+      const detected = detectAgentTask(`${seed}fix the failing test`)
+      expect(detected).not.toBeNull()
+      expect(detected?.agentId).toBe(row.id)
+    }
+  })
+
+  it('the bare seed (before the user types) already reads as a delegation', () => {
+    // A row click prefills before any typing; the seed alone must not fall back
+    // to normal Omi chat, so the header/framing stays truthful.
+    expect(detectAgentTask(agentDraftPrefill('Claude Code'))).not.toBeNull()
+  })
+})
+
+describe('nextConversationDraft', () => {
+  const acp: BarAgentRow = { id: 'acp', displayName: 'Claude Code', working: false }
+  const codex: BarAgentRow = { id: 'codex', displayName: 'Codex', working: false }
+
+  it('seeds the agent phrasing when an agent row opens an empty draft', () => {
+    expect(nextConversationDraft({ target: acp, previous: null, current: '' })).toBe('Claude Code, ')
+  })
+
+  it('leaves the Omi thread draft empty when the Omi row opens', () => {
+    expect(nextConversationDraft({ target: null, previous: null, current: '' })).toBe('')
+  })
+
+  it('drops a stale agent seed when returning to the Omi row (no leftover prefill)', () => {
+    // Open Claude Code (draft seeded), go back, open Omi → clean, empty draft.
+    expect(
+      nextConversationDraft({ target: null, previous: acp, current: 'Claude Code, ' })
+    ).toBe('')
+  })
+
+  it('replaces one agent seed with the next agent seed when switching agents', () => {
+    expect(
+      nextConversationDraft({ target: codex, previous: acp, current: 'Claude Code, ' })
+    ).toBe('Codex, ')
+  })
+
+  it('never clobbers text the user actually typed', () => {
+    // Typed an Omi message, wandered to the list, opened an agent → keep the text.
+    expect(
+      nextConversationDraft({ target: acp, previous: null, current: 'draft I wrote' })
+    ).toBe('draft I wrote')
+    // Typed on top of a seed, then returned to Omi → not a bare seed, so kept.
+    expect(
+      nextConversationDraft({ target: null, previous: acp, current: 'Claude Code, do X' })
+    ).toBe('Claude Code, do X')
   })
 })
 

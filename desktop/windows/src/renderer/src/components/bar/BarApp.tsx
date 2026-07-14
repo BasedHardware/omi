@@ -22,7 +22,14 @@ import { usePushToTalk } from '../../hooks/usePushToTalk'
 import { useCodingAgents } from '../../hooks/useCodingAgents'
 import { Orb } from '../orb/Orb'
 import { BarChatSurface } from './BarChatSurface'
-import { deriveOrbState, isBarBusy, deriveAgentRows, pillLabel } from './barDisplay'
+import {
+  deriveOrbState,
+  isBarBusy,
+  deriveAgentRows,
+  pillLabel,
+  nextConversationDraft,
+  type BarAgentRow
+} from './barDisplay'
 import type {
   BarMode,
   BarShowPayload,
@@ -73,6 +80,11 @@ export function BarApp(): React.JSX.Element {
   // row shows "Working…".
   const [activeAgentId, setActiveAgentId] = useState<CodingAgentId | null>(null)
   const [view, setView] = useState<'list' | 'conversation'>('list')
+  // Which row the open conversation belongs to: null = the Omi Chat thread, else
+  // the coding-agent row that opened it (drives the header title + draft seed).
+  // The engine + history stay one shared thread (INV-CHAT-1) — this only steers
+  // the entry framing so "Claude Code" no longer opens a view titled "Omi Chat".
+  const [target, setTarget] = useState<BarAgentRow | null>(null)
   const [draft, setDraft] = useState('')
   const modeRef = useRef<BarMode | null>(null)
   // eslint-disable-next-line react-hooks/refs -- latest-ref for IPC listeners
@@ -167,8 +179,9 @@ export function BarApp(): React.JSX.Element {
       setMode(p.mode)
       setSliding('in')
       // Each fresh reveal starts at the list (a summon is a pill; expanding lands
-      // on the list, not a stale conversation).
+      // on the list, not a stale conversation) with no agent target carried over.
       setView('list')
+      setTarget(null)
       // Signature motion: the orb materializes from nothing on every reveal.
       setGenesisNonce((n) => n + 1)
       // The bar persists across hide/show — re-pull the thread so it's current.
@@ -295,6 +308,17 @@ export function BarApp(): React.JSX.Element {
   // Connected coding agents to list under "Omi Chat" (at most one "Working…").
   const agentRows = deriveAgentRows(agents, activeAgentId, agentsActive)
 
+  // Open the inline conversation for a clicked row. `null` = the Omi Chat thread;
+  // an agent row titles the header with its name and seeds the delegation phrasing
+  // detectAgentTask matches, so the user's next words are handed to that agent
+  // (they can clear it for a normal Omi turn). Returning to Omi drops a stale seed
+  // but never a message the user actually typed (nextConversationDraft).
+  const openConversation = (next: BarAgentRow | null): void => {
+    setDraft((current) => nextConversationDraft({ target: next, previous: target, current }))
+    setTarget(next)
+    setView('conversation')
+  }
+
   const surfaceStyle = expanded
     ? { width: PANEL_WIDTH, height: panelHeight }
     : { width: PILL.width, height: PILL.height }
@@ -344,7 +368,8 @@ export function BarApp(): React.JSX.Element {
                     chat={chat}
                     agents={agentRows}
                     view={view}
-                    onOpenConversation={() => setView('conversation')}
+                    conversationTitle={target ? target.displayName : 'Omi Chat'}
+                    onOpenConversation={openConversation}
                     onBack={() => setView('list')}
                     onClose={() => window.omiOverlay.hide()}
                     draft={draft}
