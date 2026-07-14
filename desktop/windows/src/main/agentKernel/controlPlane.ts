@@ -10,11 +10,18 @@
 // `trustedUserControl: false` and the caller's real `executionRole`, and
 // `agentControlToolDefinitionsFor()` tells it which tools that caller may see.
 //
-// OWNER AUTHORITY (INV-AGENT). The active owner is host state, set once at
-// sign-in via `setControlPlaneOwner`. A per-call `ownerId` in a tool's input is
-// only a GUARD — `effectiveControlToolOwnerId` rejects it when it does not match
-// the active owner. A caller can never widen its own scope by asserting a
-// different ownerId, which is why the owner is not read off the per-call payload.
+// OWNER AUTHORITY (INV-AGENT). The active owner is host state. A per-call
+// `ownerId` in a tool's input is only a GUARD — `effectiveControlToolOwnerId`
+// rejects it when it does not match the active owner. A caller can never widen
+// its own scope by asserting a different ownerId, which is why the owner is not
+// read off the per-call payload.
+//
+// For the same reason `setControlPlaneOwner` is MAIN-SIDE ONLY and is not
+// reachable from the renderer: a caller that can set the active owner defeats the
+// per-call guard entirely (the guard would just compare against whatever it set).
+// Until main itself owns auth, the owner stays DEFAULT_LOCAL_OWNER_ID — the
+// single local user. Wire this to main's auth state when sign-in moves into main;
+// never re-expose it over IPC. See ../ipc/agentControl.ts.
 //
 // Chat routing stays OFF: constructing the kernel does not route user-facing chat
 // through it. The adapter registry starts EMPTY, so the read/policy/dispatch
@@ -53,7 +60,10 @@ export function getAgentAdapterRegistry(): AdapterRegistry {
   return registry as AdapterRegistry
 }
 
-/** Set the authoritative owner for control-tool calls. Call at sign-in. */
+/**
+ * Set the authoritative owner for control-tool calls. MAIN-SIDE ONLY — must never
+ * be wired to an IPC handler (see the owner-authority note above).
+ */
 export function setControlPlaneOwner(ownerId: string | null | undefined): void {
   activeOwnerId = ownerId?.trim() || DEFAULT_LOCAL_OWNER_ID
 }

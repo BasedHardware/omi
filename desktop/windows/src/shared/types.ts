@@ -870,8 +870,9 @@ export type OmiBridgeApi = {
    * Tool names: see `AGENT_CONTROL_TOOL_NAMES` in shared/agentControlTools.ts.
    */
   agentControlCall: (name: string, input?: Record<string, unknown>) => Promise<string>
-  /** Set the authoritative owner (the signed-in uid) for subsequent control calls. */
-  agentControlSetOwner: (ownerId: string | null) => Promise<void>
+  // There is deliberately no `agentControlSetOwner`. The active owner — the
+  // identity every control call's data is scoped to — is main-side host state and
+  // is not settable from the renderer. See src/main/ipc/agentControl.ts.
   /** The control tools this caller may see. */
   agentControlTools: () => Promise<
     Array<{ name: string; description: string; inputSchema: Record<string, unknown> }>
