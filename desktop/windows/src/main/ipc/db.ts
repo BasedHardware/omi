@@ -14,6 +14,15 @@ import {
   type VoiceTurnOutboxDb
 } from './voiceTurnOutbox'
 import { bufferToVector, vectorToBuffer } from './taskEmbeddingVector'
+import {
+  listConversationFoldersOn,
+  replaceConversationFoldersOn,
+  upsertConversationFolderOn,
+  deleteConversationFolderOn,
+  setLocalConversationStarredOn,
+  setLocalConversationFolderOn,
+  type ConversationFoldersDb
+} from './conversationFolders'
 import type {
   AiUserProfileInput,
   AiUserProfileRecord,
@@ -22,6 +31,7 @@ import type {
   TaskEmbeddingRecord,
   AppUsageRecord,
   ChatMessage,
+  ConversationFolder,
   ConversationSyncPatch,
   ConversationSyncState,
   FileIndexDigest,
@@ -501,6 +511,40 @@ export function claimConversationForPosting(id: string, resetAttempts = false): 
     )
     .run(id)
   return r.changes > 0
+}
+
+// --- Track 4: conversation folders / starred ---
+// Thin wrappers over the driver-agnostic CRUD in conversationFolders.ts (extracted
+// so the SQL is unit-testable under plain-node vitest with node:sqlite; see that
+// file + its test). get() returns a better-sqlite3 Database whose prepared
+// statements satisfy the ConversationFoldersDb shape structurally — cast to bridge
+// the driver duck-typing, same idiom the voice-turn-outbox wrappers use.
+function foldersDb(): ConversationFoldersDb {
+  return get() as unknown as ConversationFoldersDb
+}
+
+export function listConversationFolders(): ConversationFolder[] {
+  return listConversationFoldersOn(foldersDb())
+}
+
+export function replaceConversationFolders(folders: ConversationFolder[]): void {
+  replaceConversationFoldersOn(foldersDb(), folders)
+}
+
+export function upsertConversationFolder(folder: ConversationFolder): void {
+  upsertConversationFolderOn(foldersDb(), folder)
+}
+
+export function deleteConversationFolder(id: string): void {
+  deleteConversationFolderOn(foldersDb(), id)
+}
+
+export function setLocalConversationStarred(id: string, starred: boolean): void {
+  setLocalConversationStarredOn(foldersDb(), id, starred)
+}
+
+export function setLocalConversationFolder(id: string, folderId: string | null): void {
+  setLocalConversationFolderOn(foldersDb(), id, folderId)
 }
 
 export function updateLocalConversationTitle(id: string, title: string): void {
