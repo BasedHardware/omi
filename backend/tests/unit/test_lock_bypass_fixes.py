@@ -1333,30 +1333,40 @@ class TestPromptDataLockFilter:
     def test_get_prompt_data_filters_locked_memories(self):
         """get_prompt_data must not include locked memories in prompt context."""
         import database.memories as memories_db
+        from utils.memory.memory_system import MemorySystem
 
         locked_mem = {
             'id': 'mem-1',
+            'uid': 'test-uid',
             'content': 'LOCKED_SECRET',
             'is_locked': True,
             'manually_added': False,
             'category': 'interesting',
+            'created_at': '2024-01-01T00:00:00+00:00',
+            'updated_at': '2024-01-01T00:00:00+00:00',
         }
         unlocked_mem = {
             'id': 'mem-2',
+            'uid': 'test-uid',
             'content': 'VISIBLE_CONTENT',
             'is_locked': False,
             'manually_added': False,
             'category': 'interesting',
+            'created_at': '2024-01-01T00:00:00+00:00',
+            'updated_at': '2024-01-01T00:00:00+00:00',
         }
         memories_db.get_memories = MagicMock(return_value=[locked_mem, unlocked_mem])
 
-        with patch('utils.llms.memory.get_user_name', return_value='Test'):
+        with (
+            patch('utils.llms.memory.resolve_memory_system', return_value=MemorySystem.LEGACY),
+            patch('utils.llms.memory.get_user_name', return_value='Test'),
+        ):
             from utils.llms.memory import get_prompt_data
 
-            _, user_made, generated = get_prompt_data('test-uid')
+            _, baseline, user_made, generated = get_prompt_data('test-uid')
 
         # Only unlocked memory should appear
-        all_mems = user_made + generated
+        all_mems = baseline + user_made + generated
         assert len(all_mems) == 1
         assert all_mems[0].content == 'VISIBLE_CONTENT'
 

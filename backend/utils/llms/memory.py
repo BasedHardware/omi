@@ -20,7 +20,7 @@ def get_prompt_memories(uid: str) -> Tuple[Any, str]:
             f' \n{Memory.get_memories_as_str(baseline_memories)}.\n'
         )
     memories_str += (
-        f'you also know the following facts about {user_name}: \n{Memory.get_memories_as_str(generated_memories)}.'
+        f'you already know the following facts about {user_name}: \n{Memory.get_memories_as_str(generated_memories)}.'
     )
     if user_made_memories:
         memories_str += (
