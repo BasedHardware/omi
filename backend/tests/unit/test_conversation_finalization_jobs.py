@@ -141,7 +141,7 @@ def test_duplicate_task_delivery_claims_only_once_until_lease_expires():
     first = _Transaction()
 
     claim = jobs._claim_finalization_job_txn(first, ref, 2, False, 1500, now)
-    assert claim == {'status': 'claimed', 'lease_epoch': 1}
+    assert claim == {'status': 'claimed', 'lease_epoch': 1, 'attempt_count': 1}
     claim_update = first.updates[0][1]
     assert claim_update['status'] == 'leased'
     assert claim_update['attempt_count'] == 1
@@ -151,6 +151,7 @@ def test_duplicate_task_delivery_claims_only_once_until_lease_expires():
     assert jobs._claim_finalization_job_txn(duplicate, ref, 2, False, 1500, now + timedelta(seconds=1)) == {
         'status': 'leased',
         'lease_epoch': None,
+        'attempt_count': 0,
     }
     assert duplicate.updates == []
 
@@ -169,7 +170,7 @@ def test_expired_worker_lease_can_be_safely_reclaimed():
     transaction = _Transaction()
 
     claim = jobs._claim_finalization_job_txn(transaction, ref, 2, False, 1500, now)
-    assert claim == {'status': 'claimed', 'lease_epoch': 1}
+    assert claim == {'status': 'claimed', 'lease_epoch': 1, 'attempt_count': 2}
     assert transaction.updates[0][1]['attempt_count'] == 2
     assert transaction.updates[0][1]['lease_epoch'] == 1
 
@@ -197,7 +198,7 @@ def test_live_pusher_claim_cannot_use_another_conversations_job():
         expected_conversation_id='other-conversation',
     )
 
-    assert status == {'status': 'identity_mismatch', 'lease_epoch': None}
+    assert status == {'status': 'identity_mismatch', 'lease_epoch': None, 'attempt_count': 0}
     assert transaction.updates == []
 
 
@@ -208,6 +209,7 @@ def test_completed_and_dead_letter_jobs_never_execute_again():
         assert jobs._claim_finalization_job_txn(transaction, ref, 1, False, 1500, _now()) == {
             'status': status,
             'lease_epoch': None,
+            'attempt_count': 0,
         }
         assert transaction.updates == []
 
@@ -246,7 +248,7 @@ def test_expired_lease_reclaim_fences_a_stale_worker_terminal_write():
 
     reclaim = _Transaction()
     new_claim = jobs._claim_finalization_job_txn(reclaim, ref, 3, False, 1500, now)
-    assert new_claim == {'status': 'claimed', 'lease_epoch': 5}
+    assert new_claim == {'status': 'claimed', 'lease_epoch': 5, 'attempt_count': 1}
     ref.data = ref.data | reclaim.updates[0][1]
 
     stale_completion = _Transaction()

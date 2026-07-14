@@ -250,7 +250,7 @@ async def test_pusher_rejects_legacy_finalization_without_a_durable_job():
 @pytest.mark.anyio
 async def test_pusher_claims_the_durable_job_before_finalizing(monkeypatch):
     websocket = _PusherWebSocket()
-    claim = MagicMock(return_value={'status': 'claimed', 'lease_epoch': 7})
+    claim = MagicMock(return_value={'status': 'claimed', 'lease_epoch': 7, 'attempt_count': 1})
     completed = MagicMock(return_value=True)
     finalizer = AsyncMock()
     monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
@@ -280,9 +280,12 @@ async def test_pusher_requeues_an_unexpected_failure_after_claim(monkeypatch):
     retryable = MagicMock(return_value=True)
     monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(
-        jobs_db, 'claim_finalization_job', lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 4}
+        jobs_db,
+        'claim_finalization_job',
+        lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 4, 'attempt_count': 1},
     )
     monkeypatch.setattr(jobs_db, 'mark_finalization_retryable', retryable)
+    monkeypatch.setattr(pusher_router, 'get_listen_finalization_tasks_max_attempts', lambda: 5)
     monkeypatch.setattr(
         pusher_router, 'finalize_persisted_conversation', AsyncMock(side_effect=RuntimeError('raw transcript'))
     )
@@ -292,7 +295,76 @@ async def test_pusher_requeues_an_unexpected_failure_after_claim(monkeypatch):
     )
 
     retryable.assert_called_once_with('job-1', 3, 4, 'worker_failed')
-    assert json.loads(websocket.sent[0][4:]) == {'conversation_id': 'conversation-1', 'error': 'processing_failed'}
+    assert json.loads(websocket.sent[0][4:]) == {
+        'conversation_id': 'conversation-1',
+        'error': 'processing_failed',
+        'terminal': False,
+    }
+
+
+@pytest.mark.anyio
+async def test_pusher_dead_letters_a_job_that_exhausted_its_attempt_budget(monkeypatch):
+    """Inline dispatch owns the attempt budget: no Cloud Tasks worker will ever exhaust it.
+
+    Without this the conversation stays `processing` forever and every later
+    listen session re-runs the same failing LLM finalization.
+    """
+    websocket = _PusherWebSocket()
+    retryable = MagicMock(return_value=True)
+    dead_letter = MagicMock(return_value=True)
+    status_update = MagicMock()
+    discard = MagicMock()
+    monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(
+        jobs_db,
+        'claim_finalization_job',
+        lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 4, 'attempt_count': 5},
+    )
+    monkeypatch.setattr(jobs_db, 'mark_finalization_retryable', retryable)
+    monkeypatch.setattr(jobs_db, 'mark_finalization_dead_letter', dead_letter)
+    monkeypatch.setattr(pusher_router, 'get_listen_finalization_tasks_max_attempts', lambda: 5)
+    monkeypatch.setattr(pusher_router.conversations_db, 'update_conversation_status', status_update)
+    monkeypatch.setattr(pusher_router.conversations_db, 'set_conversation_as_discarded', discard)
+    monkeypatch.setattr(
+        pusher_router,
+        'finalize_persisted_conversation',
+        AsyncMock(side_effect=ConversationFinalizationError('processing_failed')),
+    )
+
+    await pusher_router._process_conversation_task(
+        'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
+    )
+
+    dead_letter.assert_called_once_with('job-1', 3, 4, 5, firestore_client=None)
+    retryable.assert_not_called()
+    status_update.assert_called_once_with('uid-1', 'conversation-1', ConversationStatus.failed)
+    discard.assert_called_once_with('uid-1', 'conversation-1')
+    assert json.loads(websocket.sent[0][4:]) == {
+        'conversation_id': 'conversation-1',
+        'error': 'processing_failed',
+        'terminal': True,
+    }
+
+
+@pytest.mark.anyio
+async def test_pusher_tells_the_live_session_a_dead_lettered_job_is_terminal(monkeypatch):
+    websocket = _PusherWebSocket()
+    monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(
+        jobs_db,
+        'claim_finalization_job',
+        lambda *args, **kwargs: {'status': 'dead_letter', 'lease_epoch': None, 'attempt_count': 0},
+    )
+
+    await pusher_router._process_conversation_task(
+        'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
+    )
+
+    assert json.loads(websocket.sent[0][4:]) == {
+        'conversation_id': 'conversation-1',
+        'error': 'job_dead_letter',
+        'terminal': True,
+    }
 
 
 @pytest.mark.anyio
