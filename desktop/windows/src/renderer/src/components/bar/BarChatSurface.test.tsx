@@ -42,7 +42,7 @@ function renderSurface(overrides: Partial<BarChatSurfaceProps> = {}): BarChatSur
     onClose: vi.fn(),
     draft: '',
     setDraft: vi.fn(),
-    onSubmit: vi.fn(),
+    onSubmit: vi.fn(async () => null),
     pttKeyDown: vi.fn(() => false),
     pttKeyUp: vi.fn(() => false),
     recording: false,
@@ -126,6 +126,31 @@ describe('BarChatSurface', () => {
     expect(props.setDraft).toHaveBeenCalledWith('')
   })
 
+  it('conversation: an IN-QUOTA send clears the input and leaves it cleared (no restore)', async () => {
+    const props = renderSurface({ view: 'conversation', draft: 'hello there' })
+    fireEvent.keyDown(screen.getByPlaceholderText(/Ask Omi/i), { key: 'Enter' })
+    await vi.waitFor(() => expect(props.onSubmit).toHaveBeenCalled())
+    // The only draft write is the immediate clear — normal typing is untouched.
+    expect(props.setDraft).toHaveBeenCalledTimes(1)
+    expect(props.setDraft).toHaveBeenCalledWith('')
+  })
+
+  it('conversation: a BLOCKED send RESTORES the draft — the usage limit must not eat the question', async () => {
+    // Regression: the input was cleared before the send, and a send refused by the
+    // usage limit never reaches the transcript — so the user's typed question just
+    // vanished behind the amber notice and had to be retyped.
+    const onSubmit = vi.fn(async () => "You've reached your monthly free message limit.")
+    const props = renderSurface({ view: 'conversation', draft: 'what is on my calendar', onSubmit })
+    fireEvent.keyDown(screen.getByPlaceholderText(/Ask Omi/i), { key: 'Enter' })
+
+    await vi.waitFor(() => expect(props.setDraft).toHaveBeenCalledTimes(2))
+    expect(props.setDraft).toHaveBeenNthCalledWith(1, '')
+    const restore = vi.mocked(props.setDraft).mock.calls[1][0] as (c: string) => string
+    expect(restore('')).toBe('what is on my calendar')
+    // …but never clobber text the user typed while the check was in flight.
+    expect(restore('a new question')).toBe('a new question')
+  })
+
   it('conversation: an empty thread invites instead of dead-ending', () => {
     renderSurface({ view: 'conversation', chat: { messages: [], sending: false, status: 'idle' } })
     expect(screen.getByText(/Ask Omi anything/i)).toBeTruthy()
@@ -161,7 +186,10 @@ describe('BarChatSurface', () => {
     // top"). overflow:clip clips identically but is NOT scrollable, so the content
     // stays seated and the box reveals it top-down. If this regresses to hidden/
     // auto/scroll the slide returns — so pin clip.
-    const css = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'bar.css'), 'utf8')
+    const css = readFileSync(
+      path.join(path.dirname(fileURLToPath(import.meta.url)), 'bar.css'),
+      'utf8'
+    )
     const body = css.match(/\.bar-surface\s*\{([^}]*)\}/)?.[1] ?? ''
     const overflow = body.match(/(?:^|[^-])overflow:\s*([a-z]+)/)?.[1]
     expect(overflow).toBe('clip')

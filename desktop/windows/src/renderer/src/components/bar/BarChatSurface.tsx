@@ -66,9 +66,10 @@ export type BarChatSurfaceProps = {
   onBack: () => void
   onClose: () => void
   draft: string
-  setDraft: (s: string) => void
-  /** Send the typed draft (typed turn — spoken=false). */
-  onSubmit: (text: string) => void
+  setDraft: React.Dispatch<React.SetStateAction<string>>
+  /** Send the typed draft (typed turn — spoken=false). Resolves to the
+   *  usage-limit notice when the send was REFUSED, else null. */
+  onSubmit: (text: string) => Promise<string | null>
   /** The chat usage limit refused the last send — show the line inline, above the
    *  input (Mac drops the same copy into the bar as a local assistant message).
    *  The main window raises the shared upgrade modal in parallel. */
@@ -139,7 +140,14 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
     if (!text) return
     props.setDraft('')
     followRef.current = true
-    props.onSubmit(text)
+    void props.onSubmit(text).then((notice) => {
+      // A REFUSED send never reaches the transcript, so clearing the input would
+      // just eat the user's question behind the amber notice — they'd have to
+      // retype it (Mac keeps the turn visible as a bubble instead). Put the text
+      // back so they can upgrade and resend, unless they already typed something
+      // else while the check was in flight (a cold-start check can await).
+      if (notice) props.setDraft((current) => (current.trim() ? current : text))
+    })
   }
 
   if (view === 'list') {

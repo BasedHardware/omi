@@ -9,6 +9,10 @@ import { createBarSender } from './barSend'
 // and instead notifies the main window (which owns the shared UsageLimitPopup and
 // the TTS voice).
 
+// ./firebase is mocked so the sender's signed-in probe never touches the real SDK.
+const h = vi.hoisted(() => ({ authObj: { currentUser: null as unknown } }))
+vi.mock('../../lib/firebase', () => ({ auth: h.authObj }))
+
 const quota = (over: Partial<ChatUsageQuota> = {}): ChatUsageQuota => ({
   plan: 'Free',
   plan_type: 'basic',
@@ -27,6 +31,7 @@ const notifyAsked = vi.fn()
 
 beforeEach(() => {
   vi.clearAllMocks()
+  h.authObj.currentUser = { uid: 'u1' }
   ;(window as unknown as { omiBar: unknown }).omiBar = { sendChat, notifyUsageLimit }
   ;(window as unknown as { omiOverlay: unknown }).omiOverlay = { notifyAsked }
 })
@@ -109,6 +114,34 @@ describe('bar send — usage-limit gate', () => {
     expect(await sender.send('   ', false)).toBeNull()
 
     expect(fetchQuota).not.toHaveBeenCalled()
+    expect(sendChat).not.toHaveBeenCalled()
+  })
+
+  it('SIGNED OUT: never calls the quota API — an unauthenticated probe would 401 into a spurious "session expired" toast', async () => {
+    // Regression: the quota sync (mount + every reveal) is the first authenticated
+    // call the bar renderer ever makes. With a dead session the bar is still
+    // summonable (`onboarded` survives a forceReauth sign-out), so the GET 401'd →
+    // refreshIdToken → forceReauth → a "Your session expired" toast raised FROM the
+    // bar. No session ⇒ no quota call, on the reveal sync AND the send path.
+    h.authObj.currentUser = null
+    const fetchQuota = vi.fn(async () => quota())
+    const sender = createBarSender(createChatQuotaGate(fetchQuota))
+
+    await sender.sync()
+    await sender.send('hello', false)
+
+    expect(fetchQuota).not.toHaveBeenCalled()
+    expect(notifyUsageLimit).not.toHaveBeenCalled()
+  })
+
+  it('SIGNED IN: the reveal sync still hits the quota API (the gate is not disabled for a real session)', async () => {
+    const fetchQuota = vi.fn(async () => quota({ allowed: false }))
+    const sender = createBarSender(createChatQuotaGate(fetchQuota))
+
+    await sender.sync()
+    expect(fetchQuota).toHaveBeenCalledTimes(1)
+    // …and the synced snapshot still blocks an over-cap send.
+    expect(await sender.send('hello', false)).toContain("You've reached")
     expect(sendChat).not.toHaveBeenCalled()
   })
 })

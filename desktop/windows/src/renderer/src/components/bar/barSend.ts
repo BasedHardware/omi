@@ -11,6 +11,7 @@
 // turn — while the bar itself renders the same copy inline (Mac shows both: a
 // local assistant bubble in the bar AND the modal on the main window).
 import { createChatQuotaGate, type ChatQuotaGate } from '../../lib/chatQuotaGate'
+import { auth } from '../../lib/firebase'
 
 export type BarSender = {
   /** Send through the quota gate. Resolves to the blocked-notice text when the
@@ -21,12 +22,24 @@ export type BarSender = {
   sync: () => Promise<void>
 }
 
-export function createBarSender(gate: ChatQuotaGate = createChatQuotaGate()): BarSender {
+export function createBarSender(
+  gate: ChatQuotaGate = createChatQuotaGate(),
+  // Signed-out gate: the quota probe is the FIRST authenticated call the bar
+  // renderer ever makes. A dead session (a forceReauth sign-out leaves
+  // `onboarded` set, so the bar stays summonable) would 401 it → refreshIdToken
+  // → forceReauth → a spurious "Your session expired" toast raised from the bar.
+  // No session ⇒ no quota call. Nothing is weakened: a signed-out user has no
+  // chat to gate, and the server enforces the cap regardless.
+  isSignedIn: () => boolean = () => auth.currentUser != null
+): BarSender {
   return {
-    sync: gate.sync,
+    sync: async (): Promise<void> => {
+      if (!isSignedIn()) return
+      await gate.sync()
+    },
     send: async (text: string, fromVoice: boolean): Promise<string | null> => {
       if (!text.trim()) return null
-      const verdict = await gate.check()
+      const verdict = isSignedIn() ? await gate.check() : ({ blocked: false } as const)
       if (verdict.blocked) {
         window.omiBar.notifyUsageLimit({ message: verdict.message, spoken: fromVoice })
         return verdict.message

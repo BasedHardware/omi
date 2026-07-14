@@ -129,9 +129,14 @@ export function BarApp(): React.JSX.Element {
   // network.
   const [sender] = useState(() => createBarSender())
   const [limitNotice, setLimitNotice] = useState<string | null>(null)
+  // Resolves to the blocked-limit notice (null when the send went out) so the
+  // typed surface can put the user's words back in the input instead of eating
+  // them — a refused send never lands in the transcript.
   const sendFromBar = useCallback(
-    (text: string, fromVoice: boolean): void => {
-      void sender.send(text, fromVoice).then(setLimitNotice)
+    async (text: string, fromVoice: boolean): Promise<string | null> => {
+      const notice = await sender.send(text, fromVoice)
+      setLimitNotice(notice)
+      return notice
     },
     [sender]
   )
@@ -155,7 +160,8 @@ export function BarApp(): React.JSX.Element {
 
   // --- push-to-talk (always mounted; drives the orb + voice sends) ------------
   const ptt = usePushToTalk({
-    onCommit: (text) => sendFromBar(text, true),
+    // A blocked voice turn involves no draft — the main window speaks the line.
+    onCommit: (text) => void sendFromBar(text, true),
     // Barge-in: a new PTT hold cuts off Omi's still-playing spoken reply. The
     // reply plays in the MAIN window (useChat → voiceController), so hop over the
     // bar→main bridge; ChatBridgeHost calls interruptCurrentResponse there.
