@@ -112,7 +112,13 @@ def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) 
     expected = (
         {ConversationStatus.in_progress.value, ConversationStatus.processing.value}
         if status == ConversationStatus.processing.value
-        else {ConversationStatus.processing.value, ConversationStatus.merging.value}
+        else {
+            ConversationStatus.processing.value,
+            ConversationStatus.merging.value,
+            # Reprocess overwrites an already-completed conversation's
+            # generated content; the lifecycle guard must not fence it out.
+            ConversationStatus.completed.value,
+        }
     )
     return conversations_db.persist_processing_result_with_lifecycle(
         uid,
