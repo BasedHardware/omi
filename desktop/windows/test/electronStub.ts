@@ -51,7 +51,7 @@ export const screen = {
   getAllDisplays: (): unknown[] => [],
   on: noop
 }
-export const powerMonitor = { on: noop, getSystemIdleTime: (): number => 0 }
+export const powerMonitor = { on: noop, getSystemIdleTime: (): number => 0, onBatteryPower: false }
 export const safeStorage = {
   isEncryptionAvailable: (): boolean => false,
   encryptString: (s: string): Buffer => Buffer.from(s),

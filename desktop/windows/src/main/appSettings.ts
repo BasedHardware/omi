@@ -41,6 +41,21 @@ export type AppSettings = {
    *  verdict, which is itself gated, and it is click-through, so it costs nothing
    *  when Focus is idle. Mirrors Mac's `assistantsGlowOverlayEnabled`. */
   glowOverlayEnabled: boolean
+  /** Track 3 (proactive framework): master switch for the whole screen-analysis
+   *  loop. Default ON, mirroring Mac's `screenAnalysisEnabled`. It is not a
+   *  per-frame gate — when off, the coordinator's tick timer does not run at all,
+   *  so no frame is ever read. */
+  screenAnalysisEnabled: boolean
+  /** Track 3: master switch for proactive notifications, mirroring Mac's
+   *  `notifications_enabled`. Default ON. Separate from `notificationFrequency`
+   *  because a functional notification may bypass this gate
+   *  (`respectFrequency: false`) while never bypassing snooze. */
+  notificationsEnabled: boolean
+  /** Track 3: how often a proactive assistant may interrupt, 0–5 →
+   *  [off, 60m, 30m, 10m, 3m, no throttle]. Default 0 = Off: assistants that
+   *  reach the throttle stay silent until the user opts in, which is Mac's
+   *  post-migration default (`NotificationService.defaultFrequencyLevel`). */
+  notificationFrequency: number
 }
 
 const MEETING_MODES: MeetingMode[] = ['off', 'ask', 'auto']
@@ -69,6 +84,14 @@ function sanitizeMeeting(raw: Partial<MeetingSettings> | null | undefined): Meet
   return { mode, endGraceMinutes: grace, perApp, firstRunToastShown: r.firstRunToastShown === true }
 }
 
+// A non-integer / out-of-range level would silently disable the throttle (an
+// undefined interval reads as "no throttle"), so clamp into 0–5 and default a
+// junk value to 0 = Off.
+function clampFrequency(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return 0
+  return Math.min(5, Math.max(0, Math.round(raw)))
+}
+
 // Coerce a partial/untrusted object into fully-valid settings. Passing null/
 // undefined yields the defaults, so defaults live in exactly one place.
 export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined): AppSettings {
@@ -92,7 +115,10 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
     // Opt-IN (=== true), unlike the other flags' opt-out (!== false) — see the
     // AppSettings field comment.
     aiProfileEnabled: r.aiProfileEnabled === true,
-    glowOverlayEnabled: r.glowOverlayEnabled !== false
+    glowOverlayEnabled: r.glowOverlayEnabled !== false,
+    screenAnalysisEnabled: r.screenAnalysisEnabled !== false,
+    notificationsEnabled: r.notificationsEnabled !== false,
+    notificationFrequency: clampFrequency(r.notificationFrequency)
   }
 }
 

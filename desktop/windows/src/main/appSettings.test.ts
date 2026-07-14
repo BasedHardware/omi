@@ -61,8 +61,22 @@ describe('appSettings', () => {
       meeting: { mode: 'ask', endGraceMinutes: 2, perApp: {}, firstRunToastShown: false },
       lastShownChangelogVersion: null,
       aiProfileEnabled: false,
-      glowOverlayEnabled: true
+      glowOverlayEnabled: true,
+      screenAnalysisEnabled: true,
+      notificationsEnabled: true,
+      notificationFrequency: 0
     })
+    // Proactive notifications default to Off (level 0) — an assistant may only
+    // interrupt once the user has chosen a frequency. A junk level must read as
+    // Off too, never as level 5 ("no throttle"), so clamp rather than trust.
+    expect(sanitizeAppSettings({ notificationFrequency: 4 }).notificationFrequency).toBe(4)
+    expect(sanitizeAppSettings({ notificationFrequency: 9 }).notificationFrequency).toBe(5)
+    expect(sanitizeAppSettings({ notificationFrequency: -2 }).notificationFrequency).toBe(0)
+    expect(
+      sanitizeAppSettings({ notificationFrequency: 'max' } as never).notificationFrequency
+    ).toBe(0)
+    // Screen analysis is opt-OUT: on unless the user turns it off.
+    expect(sanitizeAppSettings({ screenAnalysisEnabled: false }).screenAnalysisEnabled).toBe(false)
     // The focus halo is opt-OUT (on unless explicitly disabled) — it only ever
     // appears in response to a Focus verdict, and it is click-through.
     expect(sanitizeAppSettings({ glowOverlayEnabled: false }).glowOverlayEnabled).toBe(false)
