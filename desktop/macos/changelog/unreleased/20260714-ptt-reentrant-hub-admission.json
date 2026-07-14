@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a realtime PTT reconnect race that could reject an otherwise-ready context admission and unnecessarily fall back to batch transcription."
+}

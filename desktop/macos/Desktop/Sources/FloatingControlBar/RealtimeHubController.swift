@@ -579,6 +579,23 @@ struct InterruptedTurnPayload: Equatable {
   let userText: String
   let assistantText: String
   let idempotencyKey: String
+  /// A successful `spawn_agent` call has already committed this turn's exchange
+  /// to the kernel. Capture that authority before a barge-in clears transport state.
+  let acceptedSpawnOwnerID: String?
+
+  init(
+    ownerID: String,
+    userText: String,
+    assistantText: String,
+    idempotencyKey: String,
+    acceptedSpawnOwnerID: String? = nil
+  ) {
+    self.ownerID = ownerID
+    self.userText = userText
+    self.assistantText = assistantText
+    self.idempotencyKey = idempotencyKey
+    self.acceptedSpawnOwnerID = acceptedSpawnOwnerID
+  }
 
   /// User-visible chat text for a PTT-barged reply: keep streamed partial text only.
   static func visibleAssistantText(partialAssistantText: String) -> String {
@@ -3239,14 +3256,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     userText: String,
     assistantText: String,
     interrupted: Bool,
-    idempotencyKey: String
+    idempotencyKey: String,
+    acceptedSpawnOwnerID: String?
   ) async -> Bool {
     guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else {
       log("RealtimeHub: refusing voice journal write after authenticated owner changed")
       return false
     }
     let surface = FloatingControlBarManager.shared.mainChatSurfaceReference()
-    let acceptedSpawnOwnerID = acceptedSpawnJournalReceiptByContinuityKey[idempotencyKey]?.ownerID
     return await RealtimeTurnJournalAuthority.persist(
       turnOwnerID: ownerID,
       acceptedSpawnOwnerID: acceptedSpawnOwnerID,
@@ -3502,7 +3519,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
               userText: turn.userText,
               assistantText: turn.assistantText,
               interrupted: true,
-              idempotencyKey: turn.idempotencyKey) ?? false
+              idempotencyKey: turn.idempotencyKey,
+              acceptedSpawnOwnerID: turn.acceptedSpawnOwnerID) ?? false
           }
           return await task.value
         },
@@ -3985,7 +4003,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
             userText: interruptedTurn.userText,
             assistantText: interruptedTurn.assistantText,
             interrupted: true,
-            idempotencyKey: interruptedTurn.idempotencyKey) ?? false
+            idempotencyKey: interruptedTurn.idempotencyKey,
+            acceptedSpawnOwnerID: interruptedTurn.acceptedSpawnOwnerID) ?? false
         }
       }
     }
@@ -4130,6 +4149,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     let preferredLanguages = AssistantSettings.shared.voiceBaseLanguages
     let partialAssistantText = assistantText
     let idempotencyKey = turnIdempotencyKey
+    let acceptedSpawnOwnerID = acceptedSpawnJournalReceiptByContinuityKey[idempotencyKey]?.ownerID
     guard let ownerID = VoiceTurnCoordinator.shared.activeTurn?.ownerID else { return nil }
     return Task {
       let resolution = await Self.resolveTranscript(
@@ -4142,7 +4162,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         userText: resolution.userText,
         assistantText: InterruptedTurnPayload.visibleAssistantText(
           partialAssistantText: partialAssistantText),
-        idempotencyKey: idempotencyKey)
+        idempotencyKey: idempotencyKey,
+        acceptedSpawnOwnerID: acceptedSpawnOwnerID)
     }
   }
 
@@ -5232,8 +5253,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       log("RealtimeHub: TEST override provider transcript → \"\(forced.prefix(60))\"")
     }
     let providerReply = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
-    let reply = acceptedSpawnJournalReceiptByContinuityKey[turnIdempotencyKey]?
-      .receipt.assistantText ?? providerReply
+    let acceptedSpawnOwnerID = acceptedSpawnJournalReceiptByContinuityKey[turnIdempotencyKey]?.ownerID
+    let reply = acceptedSpawnJournalReceiptByContinuityKey[turnIdempotencyKey]?.receipt.assistantText
+      ?? providerReply
     log(
       "RealtimeHub[\(providerTag)]: turn done — transcript_chars=\(heard.count) audio=\(audioReceivedThisTurn)"
     )
@@ -5270,7 +5292,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           userText: resolution.userText,
           assistantText: reply,
           interrupted: false,
-          idempotencyKey: completedTurnIdempotencyKey) ?? false
+          idempotencyKey: completedTurnIdempotencyKey,
+          acceptedSpawnOwnerID: acceptedSpawnOwnerID) ?? false
         self?.lastTurnDiagnostics = [
           "provider": provider,
           "provider_transcript": heard,
@@ -5379,7 +5402,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           userText: interruptedTurn.userText,
           assistantText: interruptedTurn.assistantText,
           interrupted: true,
-          idempotencyKey: interruptedTurn.idempotencyKey) ?? false
+          idempotencyKey: interruptedTurn.idempotencyKey,
+          acceptedSpawnOwnerID: interruptedTurn.acceptedSpawnOwnerID) ?? false
       }
     }
     // A socket we intentionally dropped is detached in teardownSession() before it's
@@ -5399,6 +5423,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       route: activeTurn?.route,
       activeSessionID: voiceSessionID)
     let hasActiveTurn = ownsActiveHubTurn
+    let terminalToolName = lastExternalToolName.isEmpty ? "none" : lastExternalToolName
+    let terminalToolErrorCode = lastExternalToolErrorCode.isEmpty ? "none" : lastExternalToolErrorCode
+    let terminalHadAcceptedSpawn =
+      acceptedSpawnJournalReceiptByContinuityKey[turnIdempotencyKey] != nil
     pendingCompletedAgentDeltaAckIds.removeAll()
     pendingCompletedAgentDeltaHighWaterMs = nil
     clearRealtimeToolTracking()
@@ -5456,6 +5484,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         "RealtimeHub: session closed —\(categoryText) provider=\(providerTag) aliveFor=\(Int(aliveFor))s\(safeMessage)"
       )
     }
+    log(
+      "RealtimeHub: provider close terminal state tool=\(terminalToolName) "
+        + "tool_error=\(terminalToolErrorCode) accepted_spawn=\(terminalHadAcceptedSpawn)"
+    )
     if let sessionRotationPlan = RealtimeHubCloseClassifier.sessionRotationPlan(
       for: closeCategory,
       hasActiveTurn: hasActiveTurn)

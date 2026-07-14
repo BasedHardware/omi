@@ -8,6 +8,7 @@ import {
   KERNEL_CONTEXT_RENDERER_POLICY_VERSION,
   buildContextSnapshot,
   inheritContextSnapshotForSession,
+  kernelSystemPolicy,
   renderContextSnapshot,
   updateContextSource,
 } from "../src/runtime/context-snapshot.js";
@@ -42,6 +43,13 @@ function fixture(surfaceKind = "main_chat", maxWorkers = 1) {
 }
 
 describe("kernel ContextSnapshot", () => {
+  it("requires direct conversational recall from canonical recent turns", () => {
+    const policy = kernelSystemPolicy("realtime_voice", "coordinator");
+
+    expect(policy).toContain("recentTurns are the canonical history");
+    expect(policy).toContain("before searching memories");
+  });
+
   it("keeps user then assistant chronology when reconciliation revisions arrive in reverse order", () => {
     const { store } = fixture();
     const surface = resolveSurfaceSession(store, {

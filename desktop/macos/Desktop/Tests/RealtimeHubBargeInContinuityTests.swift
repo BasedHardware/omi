@@ -144,6 +144,39 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
       "provider turn_done must not write after spawn admission recorded the canonical exchange")
   }
 
+  func testBargedTurnRetainsSpawnJournalAuthorityAfterTransportTrackingClears() async {
+    let interrupted = InterruptedTurnPayload(
+      ownerID: "owner-a",
+      userText: "ask a subagent to check the release",
+      assistantText: "Starting a background agent now",
+      idempotencyKey: "voice:spawn-barged",
+      acceptedSpawnOwnerID: "owner-a")
+    var refreshCount = 0
+    var mutationCount = 0
+
+    let accepted = await RealtimeProviderFailureContinuity.persistCapturedTurn(
+      resolve: { interrupted },
+      record: { captured in
+        await RealtimeTurnJournalAuthority.persist(
+          turnOwnerID: captured.ownerID,
+          acceptedSpawnOwnerID: captured.acceptedSpawnOwnerID,
+          refreshAcceptedSpawn: {
+            refreshCount += 1
+            return true
+          },
+          recordProviderExchange: {
+            mutationCount += 1
+            return true
+          })
+      })
+
+    XCTAssertTrue(accepted)
+    XCTAssertEqual(refreshCount, 1)
+    XCTAssertEqual(
+      mutationCount, 0,
+      "a barge-in must retain the accepted spawn receipt rather than append a second provider exchange")
+  }
+
   func testProviderCompletionRecordsWhenNoSpawnReceiptOwnsTheExchange() async {
     var mutationCount = 0
 
