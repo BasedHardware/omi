@@ -38,13 +38,15 @@ export function MainViews(): React.JSX.Element {
   }
 
   // Exclusive full-screen route (LiveConversation, ConversationDetail): replaces
-  // the whole panel grid, mounted only while matched (not memoized).
+  // the whole panel grid, mounted only while matched (not memoized). The entry
+  // renders itself from its own params, so its props stay type-checked.
   if (resolved && 'entry' in resolved && resolved.entry.kind === 'exclusive') {
-    const Component = resolved.entry.Component
-    if (Component) {
-      const props = resolved.entry.propsFor ? resolved.entry.propsFor(resolved.params) : {}
-      return <Component {...props} />
-    }
+    const { render, id } = resolved.entry
+    // Fail loudly. Falling through to the panel grid would leave activeId pointing
+    // at an exclusive route that no panel matches — a blank content area with no
+    // error, which is the worst way to learn a manifest entry is malformed.
+    if (!render) throw new Error(`exclusive route "${id}" has no render()`)
+    return render(resolved.params)
   }
 
   // Panel grid: every panel mounted-hidden, the active one shown. Unknown
@@ -58,7 +60,7 @@ export function MainViews(): React.JSX.Element {
         const active = entry.id === activeId
         return (
           <div key={entry.id} className={panelClass(active)}>
-            {Component && (active || entry.eager || hydrateAll) && <Component />}
+            {Component && (active || hydrateAll) && <Component />}
           </div>
         )
       })}

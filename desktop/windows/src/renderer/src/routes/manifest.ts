@@ -1,5 +1,5 @@
-import { memo } from 'react'
-import type { ComponentType } from 'react'
+import { memo, createElement } from 'react'
+import type { ComponentType, ReactElement } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { House, GanttChartSquare, ListChecks, History, LayoutGrid } from 'lucide-react'
 import { Home } from '../pages/Home'
@@ -40,17 +40,15 @@ export interface RouteEntry {
   match?: (pathname: string) => Record<string, string> | null
   // Destination for kind: 'redirect'.
   redirectTo?: string
-  // The page component. Panel components are memo-wrapped (see below); exclusive
-  // components render fresh each time (full-screen, mounted only while matched).
-  // Route components are heterogeneous (zero-prop panels + prop-taking exclusive
-  // routes like ConversationDetail), so the prop type is erased here and supplied
-  // per-route via propsFor.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  Component?: ComponentType<any>
-  // Maps matched params to component props, e.g. { id } -> { conversationId }.
-  propsFor?: (params: Record<string, string>) => Record<string, unknown>
-  // Panel mounts immediately (even before deferred hydration) — the landing page.
-  eager?: boolean
+  // Panel page. Panels take no props and are memo-wrapped (see below).
+  Component?: ComponentType
+  // Exclusive routes render THEMSELVES from their matched params, rather than
+  // handing a component + a loose props bag to the caller. That keeps the prop
+  // contract statically checked: rename ConversationDetail's `conversationId` and
+  // this file stops compiling. The obvious alternative — `ComponentType<any>` plus
+  // a `propsFor` that returns Record<string, unknown> — type-checks happily while
+  // passing the page an undefined prop at runtime.
+  render?: (params: Record<string, string>) => ReactElement
   // Sidebar nav entry; absent for pages with no rail item (Memories/Goals/Settings).
   nav?: RouteNav
 }
@@ -85,7 +83,7 @@ export const routeManifest: RouteEntry[] = [
     id: 'conversation-live',
     kind: 'exclusive',
     match: (pathname) => (pathname === '/conversations/live' ? {} : null),
-    Component: LiveConversation
+    render: () => createElement(LiveConversation)
   },
   {
     id: 'conversation-detail',
@@ -94,8 +92,11 @@ export const routeManifest: RouteEntry[] = [
       const m = pathname.match(/^\/conversations\/([^/]+)$/)
       return m ? { id: m[1] } : null
     },
-    Component: ConversationDetail,
-    propsFor: (params) => ({ conversationId: params.id })
+    // createElement, not JSX, so this stays a .ts module: a .tsx here would trip
+    // react-refresh/only-export-components (the file exports data + helpers, not
+    // just components). Type-checking is identical — rename ConversationDetail's
+    // `conversationId` and this line stops compiling.
+    render: (params) => createElement(ConversationDetail, { conversationId: params.id })
   },
 
   // Panel routes (kept mounted; inactive ones hidden). Declaration order = DOM

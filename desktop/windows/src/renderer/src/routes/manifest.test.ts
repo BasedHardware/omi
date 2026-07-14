@@ -28,13 +28,16 @@ describe('route manifest', () => {
     expect(r && 'entry' in r ? r.entry.id : undefined).toBe('conversation-live')
   })
 
-  it('resolves /conversations/:id to detail with a conversationId prop', () => {
+  it('resolves /conversations/:id to detail and extracts the id', () => {
     const r = resolveRoute('/conversations/abc123')
     expect(r && 'entry' in r ? r.entry.id : undefined).toBe('conversation-detail')
     if (r && 'entry' in r) {
       expect(r.params).toEqual({ id: 'abc123' })
-      expect(r.entry.propsFor?.(r.params)).toEqual({ conversationId: 'abc123' })
     }
+    // That the id reaches ConversationDetail's `conversationId` prop is asserted in
+    // MainViews.test.tsx, where the route is actually rendered. It is also enforced
+    // at COMPILE time now: the manifest entry renders <ConversationDetail
+    // conversationId={params.id} /> itself, so renaming that prop breaks the build.
   })
 
   it('resolves a panel route', () => {
