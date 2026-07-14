@@ -235,6 +235,44 @@ final class OnboardingFlowTests: XCTestCase {
     XCTAssertEqual(OnboardingFlow.steps[8], "Accessibility")
   }
 
+  func testCanJumpAllowsBackwardAndReachedStepsAlways() {
+    XCTAssertTrue(OnboardingFlow.canJump(to: 0, furthestStep: 10))
+    XCTAssertTrue(OnboardingFlow.canJump(to: 10, furthestStep: 10))
+    XCTAssertTrue(OnboardingFlow.canJump(to: 2, furthestStep: 2))
+  }
+
+  func testCanJumpBlocksForwardOverUnansweredRequiredSteps() {
+    // Steps 0-3 (Name/Language/HowDidYouHear/Trust) have no Skip button.
+    XCTAssertFalse(OnboardingFlow.canJump(to: 3, furthestStep: 2))
+    XCTAssertFalse(OnboardingFlow.canJump(to: 9, furthestStep: 0))
+    XCTAssertFalse(OnboardingFlow.canJump(to: 4, furthestStep: 3))
+  }
+
+  func testCanJumpAllowsForwardOverSkippableSteps() {
+    // Every step from ScreenRecording (4) onward has a Skip button, so once the
+    // required intro is cleared the user may jump anywhere forward.
+    XCTAssertTrue(OnboardingFlow.canJump(to: 9, furthestStep: 4))
+    XCTAssertTrue(
+      OnboardingFlow.canJump(to: OnboardingFlow.lastStepIndex, furthestStep: 4))
+    XCTAssertTrue(OnboardingFlow.canJump(to: 17, furthestStep: 10))
+  }
+
+  func testCanJumpRejectsOutOfRangeTargets() {
+    XCTAssertFalse(OnboardingFlow.canJump(to: -1, furthestStep: 10))
+    XCTAssertFalse(
+      OnboardingFlow.canJump(to: OnboardingFlow.steps.count, furthestStep: 17))
+  }
+
+  func testUnskippableStepsMatchFlowLayout() {
+    // Static tripwire: if steps are reordered/inserted so that the Skip-less
+    // intro block moves, unskippableSteps must be updated with it.
+    XCTAssertEqual(OnboardingFlow.steps[0], "Name")
+    XCTAssertEqual(OnboardingFlow.steps[1], "Language")
+    XCTAssertEqual(OnboardingFlow.steps[2], "HowDidYouHear")
+    XCTAssertEqual(OnboardingFlow.steps[3], "Trust")
+    XCTAssertEqual(OnboardingFlow.unskippableSteps, [0, 1, 2, 3])
+  }
+
   func testVoiceShortcutContinueUnlocksOnlyAfterReleaseFollowingObservedPress() {
     XCTAssertFalse(
       OnboardingFlow.shouldUnlockVoiceShortcutContinue(

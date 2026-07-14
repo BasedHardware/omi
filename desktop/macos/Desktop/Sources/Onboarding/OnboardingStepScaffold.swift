@@ -28,9 +28,9 @@ extension EnvironmentValues {
   }
 }
 
-/// Highest step the user has cleared. Progress dots are only clickable up to this
-/// index — you can revisit anything already answered/granted/skipped, but can't
-/// skip ahead past an unreached step.
+/// Highest step the user has cleared. Combined with `OnboardingFlow.canJump`,
+/// this decides which progress dots are clickable: anything already cleared, plus
+/// forward jumps that only pass over skippable steps.
 private struct OnboardingFurthestStepKey: EnvironmentKey {
   static let defaultValue: Int = .max
 }
@@ -277,8 +277,9 @@ struct OnboardingProgressDots: View {
       .fill(index <= stepIndex ? Color.white : Color.white.opacity(0.1))
       .frame(width: index == stepIndex ? 28 : 8, height: 6)
 
-    // Only steps the user has already cleared are clickable.
-    if let onboardingJumpTo, index <= furthestStep {
+    // Clickable when the jump policy allows it: cleared steps always, forward
+    // jumps only over skippable steps (see OnboardingFlow.canJump).
+    if let onboardingJumpTo, OnboardingFlow.canJump(to: index, furthestStep: furthestStep) {
       Button {
         onboardingJumpTo(index)
       } label: {

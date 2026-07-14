@@ -127,6 +127,7 @@ struct OnboardingView: View {
     .onReceive(NotificationCenter.default.publisher(for: .resetOnboardingRequested)) { _ in
       log("OnboardingView: resetOnboardingRequested — returning to the first onboarding step")
       currentStep = 0
+      furthestStep = 0
     }
   }
 
@@ -137,7 +138,7 @@ struct OnboardingView: View {
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 0,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 0, stepName: "Name")
             currentStep = 1
@@ -149,7 +150,7 @@ struct OnboardingView: View {
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 1,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 1, stepName: "Language")
             currentStep = 2
@@ -160,7 +161,7 @@ struct OnboardingView: View {
         OnboardingHowDidYouHearStepView(
           graphViewModel: graphViewModel,
           stepIndex: 2,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 2, stepName: "HowDidYouHear")
             currentStep = 3
@@ -172,7 +173,7 @@ struct OnboardingView: View {
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 3,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "Trust")
             currentStep = 4
@@ -185,7 +186,7 @@ struct OnboardingView: View {
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 4,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           eyebrow: "Permission",
           title: "Let Omi read your screen.",
           description: "Screen Recording lets Omi see what you're working on.",
@@ -215,7 +216,7 @@ struct OnboardingView: View {
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 5,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           eyebrow: "Access",
           title: "Let Omi scan your work.",
           description: "File access lets Omi map your projects and files.",
@@ -242,7 +243,7 @@ struct OnboardingView: View {
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 6,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 6, stepName: "FileScan")
             currentStep = 7
@@ -259,7 +260,7 @@ struct OnboardingView: View {
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 7,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           eyebrow: "Permission",
           title: "Let Omi use your mic.",
           description: "Microphone lets Omi transcribe meetings.",
@@ -285,7 +286,7 @@ struct OnboardingView: View {
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 8,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           eyebrow: "Permission",
           title: "Let Omi see the active app.",
           description: "Accessibility lets Omi know which app is active.",
@@ -312,7 +313,7 @@ struct OnboardingView: View {
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 9,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           eyebrow: "Permission",
           title: "Let Omi act when asked.",
           description: "Automation lets Omi take actions for you.",
@@ -338,7 +339,7 @@ struct OnboardingView: View {
           appState: appState,
           chatProvider: chatProvider,
           stepIndex: 10,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           onComplete: {
             AnalyticsManager.shared.onboardingStepCompleted(
               step: 10, stepName: "FloatingBarShortcut")
@@ -356,7 +357,7 @@ struct OnboardingView: View {
           appState: appState,
           chatProvider: chatProvider,
           stepIndex: 11,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           onComplete: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 11, stepName: "FloatingBar")
             currentStep = 12
@@ -372,6 +373,8 @@ struct OnboardingView: View {
         OnboardingVoiceShortcutStepView(
           appState: appState,
           chatProvider: chatProvider,
+          stepIndex: 12,
+          totalSteps: OnboardingFlow.steps.count,
           onComplete: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 12, stepName: "VoiceShortcut")
             currentStep = 13
@@ -387,6 +390,8 @@ struct OnboardingView: View {
         OnboardingVoiceDemoView(
           appState: appState,
           chatProvider: chatProvider,
+          stepIndex: 13,
+          totalSteps: OnboardingFlow.steps.count,
           onComplete: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 13, stepName: "VoiceDemo")
             currentStep = 14
@@ -403,7 +408,7 @@ struct OnboardingView: View {
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 14,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 14, stepName: "DataSources")
             currentStep = 15
@@ -419,7 +424,7 @@ struct OnboardingView: View {
         OnboardingExportsStepView(
           graphViewModel: graphViewModel,
           stepIndex: 15,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           summaryText: introCoordinator.connectedContextSummary,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 15, stepName: "Exports")
@@ -438,7 +443,7 @@ struct OnboardingView: View {
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 16,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 16, stepName: "Goal")
             if !AppBuild.usesLazyDevPermissions, !ProactiveAssistantsPlugin.shared.isMonitoring {
@@ -458,6 +463,8 @@ struct OnboardingView: View {
         )
       } else {
         OnboardingTasksStepView(
+          stepIndex: 17,
+          totalSteps: OnboardingFlow.steps.count,
           onComplete: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 17, stepName: "Tasks")
             handleOnboardingComplete()
@@ -478,11 +485,11 @@ struct OnboardingView: View {
     .focused($contentFocused)
     .onAppear {
       contentFocused = true
-      furthestStep = max(furthestStep, currentStep)
+      recordFrontier(currentStep)
     }
     .onChange(of: currentStep) { _, newStep in
       contentFocused = true
-      furthestStep = max(furthestStep, newStep)
+      recordFrontier(newStep)
     }
   }
 
@@ -497,22 +504,33 @@ struct OnboardingView: View {
     currentStep -= 1
   }
 
-  /// Jump directly to a step — powers the clickable progress dots. Only steps the
-  /// user has already cleared (≤ `furthestStep`) are reachable; you can't skip
-  /// forward past an unanswered required step.
-  private func jumpTo(_ index: Int) {
+  /// Advance the cleared-step frontier. Monotonic, clamped to the real step
+  /// range (a pre-migration index could exceed it), and never written by the
+  /// export preview — that pins an arbitrary step and must not mark the real
+  /// user's steps as cleared.
+  private func recordFrontier(_ step: Int) {
     guard !isExportPreview else { return }
-    let target = min(max(0, index), OnboardingFlow.lastStepIndex)
-    guard target <= furthestStep else { return }
-    currentStep = target
+    furthestStep = min(max(furthestStep, step), OnboardingFlow.lastStepIndex)
   }
 
-  /// Forward navigation. Behind the frontier (the step is already cleared and its
-  /// answer/permission is fixed) it advances automatically. At the frontier it
-  /// defers to the step's own Continue gating so required questions still block.
+  /// Jump directly to a step — powers the clickable progress dots. Backward and
+  /// already-cleared steps are always reachable; forward jumps may pass over
+  /// skippable steps (equivalent to pressing their Skip buttons) but stop at an
+  /// unanswered required step. Policy lives in `OnboardingFlow.canJump`.
+  private func jumpTo(_ index: Int) {
+    guard !isExportPreview else { return }
+    guard OnboardingFlow.canJump(to: index, furthestStep: furthestStep) else { return }
+    currentStep = index
+  }
+
+  /// Forward navigation. Cleared and skippable steps advance automatically
+  /// (answers/permissions are already fixed, or the step could be skipped
+  /// anyway). At an unanswered required step it defers to the step's own
+  /// Continue gating by re-issuing the default action.
   private func handleForwardNavigation() -> Bool {
-    if currentStep < furthestStep {
-      currentStep += 1
+    let next = currentStep + 1
+    if OnboardingFlow.canJump(to: next, furthestStep: furthestStep) {
+      currentStep = next
       return true
     }
     return handleForwardKey() == .handled

@@ -21,9 +21,26 @@ enum OnboardingFlow {
     "Goal",
     "Tasks",
   ]
-  static let introStepCount = 13
   static let legacyPostIntroOffset = 11
   static let lastStepIndex = steps.count - 1
+
+  /// Steps without a Skip button — the user must answer to get past them.
+  /// Everything from ScreenRecording (4) onward is skippable, so forward
+  /// navigation may jump over those freely; these four gate it.
+  static let unskippableSteps: Set<Int> = [0, 1, 2, 3]
+
+  /// Whether the user may navigate directly to `target` (progress dots, forward
+  /// arrow). Backward and already-reached steps are always allowed. A forward
+  /// jump is allowed when every step it would pass over — from the current
+  /// frontier up to the target — is skippable (jumping over a skippable step is
+  /// equivalent to pressing its Skip button). An unskippable step that hasn't
+  /// been cleared yet blocks all jumps beyond it.
+  static func canJump(to target: Int, furthestStep: Int) -> Bool {
+    guard target >= 0, target <= lastStepIndex else { return false }
+    if target <= furthestStep { return true }
+    let frontier = max(0, furthestStep)
+    return !(frontier..<target).contains { unskippableSteps.contains($0) }
+  }
 
   static func migratedStep(
     currentStep: Int,
