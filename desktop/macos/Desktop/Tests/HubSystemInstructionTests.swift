@@ -52,6 +52,8 @@ final class HubSystemInstructionTests: XCTestCase {
     func testInstructionKeepsOnlyGenericSpokenToolUseContractAroundGeneratedCapabilities() {
         let instr = RealtimeHubTools.systemInstruction()
         XCTAssertTrue(instr.contains("short spoken heads-up"))
+        XCTAssertTrue(instr.contains("call the tool in the same turn"))
+        XCTAssertTrue(instr.contains("status, not a question or confirmation"))
         XCTAssertTrue(instr.contains("Never claim a physical action succeeded"))
         XCTAssertTrue(instr.contains("never read tool JSON or ids aloud"))
         XCTAssertTrue(instr.contains("spawn_agent"))
