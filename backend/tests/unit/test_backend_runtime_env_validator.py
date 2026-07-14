@@ -44,7 +44,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omiapi.com"},
         {"name": "DEEPGRAM_API_KEY", "valueFrom": {"secretKeyRef": {"name": "DEEPGRAM_API_KEY", "key": "latest"}}},
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},
-        {"name": "GOOGLE_CLIENT_ID", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_ID", "key": "latest"}}},
+        {"name": "GOOGLE_CLIENT_ID", "value": "fake-public-client-id"},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET", "key": "latest"}}},
         {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "latest"}}},
         {"name": "MEMORY_MODE", "value": "read"},
@@ -68,9 +68,7 @@ def with_sync_ledger_fence_mode(payload: str) -> str:
 
 
 GOOGLE_OAUTH_SECRETS = '''\
-        {"name": "GOOGLE_CLIENT_ID", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_ID"}}},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET"}}},
-        {"name": "STT_PRERECORDED_MODEL", "valueFrom": {"secretKeyRef": {"name": "STT_PRERECORDED_MODEL", "key": "latest"}}},
         {"name": "DEEPGRAM_API_KEY", "valueFrom": {"secretKeyRef": {"name": "DEEPGRAM_API_KEY", "key": "latest"}}},
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},'''
 
@@ -144,6 +142,44 @@ def test_repo_prod_gke_values_match_manifest():
     errors = validator.validate_runtime_env(env='prod')
 
     assert errors == []
+
+
+def test_gke_config_map_contract_rejects_missing_config_map(tmp_path):
+    validator = load_validator()
+    values_path = tmp_path / 'values.yaml'
+    write_yaml(
+        values_path,
+        {
+            'envFrom': [{'configMapRef': {'name': 'test-omi-backend-config'}}],
+            'env': [],
+        },
+    )
+    env_config = {
+        'gke': {
+            'backend-listen': {
+                'values_file': str(values_path),
+                'env': {
+                    'FAKE_RUNTIME_CONFIG': {
+                        'config_map': {
+                            'name': 'test-omi-backend-config',
+                            'key': 'FAKE_RUNTIME_CONFIG',
+                        }
+                    }
+                },
+            }
+        }
+    }
+
+    assert validator._validate_gke(env_config, strict_provisional=False) == []
+
+    write_yaml(values_path, {'envFrom': [], 'env': []})
+
+    assert validator._validate_gke(env_config, strict_provisional=False) == [
+        validator.ValidationError(
+            'gke/backend-listen',
+            "env FAKE_RUNTIME_CONFIG must come from ConfigMap 'test-omi-backend-config'",
+        )
+    ]
 
 
 def test_repo_cloud_run_workflows_match_manifest():

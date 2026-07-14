@@ -130,6 +130,11 @@ jobs:
           location: ${{ env.REGION }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
+      - name: Require non-secret backend runtime config
+        if: env.SERVICE == 'pusher'
+        run: |
+          kubectl -n ${{ vars.ENV }}-omi-backend get configmap ${{ vars.ENV }}-omi-backend-config >/dev/null
+
       - name: Deploy Pusher to GKE cluster using Helm
         env:
           BACKEND_SECRETS_GSA: ${{ vars.BACKEND_SECRETS_GSA }}

@@ -82,6 +82,10 @@ ingress:
   #    hosts:
   #      - chart-example.local
 
+envFrom:
+  - configMapRef:
+      name: dev-omi-backend-config
+
 env:
   - name: BUCKET_SPEECH_PROFILES
     value: "speech-profiles-dev"
@@ -111,11 +115,6 @@ env:
         key: PINECONE_API_KEY
   - name: PINECONE_INDEX_NAME
     value: "memories-backend-dev"
-  - name: REDIS_DB_HOST
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: REDIS_DB_HOST
   - name: REDIS_DB_PORT
     value: "13151"
   - name: REDIS_DB_PASSWORD
@@ -138,11 +137,6 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: GOOGLE_MAPS_API_KEY
-  - name: GOOGLE_CLIENT_ID
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: GOOGLE_CLIENT_ID
   - name: GOOGLE_CLIENT_SECRET
     valueFrom:
       secretKeyRef:
@@ -213,11 +207,6 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: MARKETPLACE_APP_REVIEWERS
-  - name: TYPESENSE_HOST
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: TYPESENSE_HOST
   - name: TYPESENSE_HOST_PORT
     value: "443"
   - name: TYPESENSE_API_KEY
