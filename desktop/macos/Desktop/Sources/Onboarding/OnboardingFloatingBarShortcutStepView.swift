@@ -75,21 +75,25 @@ struct OnboardingFloatingBarShortcutStepView: View {
                     }
                 }
 
-                if showContinue {
-                    Button(action: onComplete) {
-                        Text("Continue")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.black)
-                            .padding(.horizontal, OmiSpacing.xxl)
-                            .padding(.vertical, OmiSpacing.md)
-                            .background(
-                                RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-                                    .fill(Color.white)
-                            )
+                HStack(spacing: OmiSpacing.md) {
+                    OnboardingBackButton()
+
+                    if showContinue {
+                        Button(action: onComplete) {
+                            Text("Continue")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(.black)
+                                .padding(.horizontal, OmiSpacing.xxl)
+                                .padding(.vertical, OmiSpacing.md)
+                                .background(
+                                    RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
+                                        .fill(Color.white)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .keyboardShortcut(.defaultAction)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
-                    .buttonStyle(.plain)
-                    .keyboardShortcut(.defaultAction)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
 
