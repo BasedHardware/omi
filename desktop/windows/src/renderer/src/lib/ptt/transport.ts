@@ -20,7 +20,7 @@ import {
   batchTranscribeParams,
   RECORDING_TOO_LONG_MESSAGE
 } from './constants'
-import { collectPttKeywords, pttKeywordsParam } from './vocabulary'
+import { consumePttKeywords, pttKeywordsParam } from './vocabulary'
 import type { BackendSegment } from '../../../../shared/types'
 
 /** Fire-and-forget token warm-up for key-down: Firebase caches the result, so
@@ -160,17 +160,12 @@ export function __resetPttLanguageMemoryForTests(): void {
  *  transcript ('' when the backend heard nothing). One transparent retry on 401
  *  with a force-refreshed token (covers a just-expired cached token). */
 export async function batchTranscribe(pcm: Int16Array, signal: AbortSignal): Promise<string> {
-  // Best-effort vocabulary boosting (A2): gather on-screen / recent-activity
-  // terms and ship them as the `keywords` hint. Never load-bearing —
-  // collectPttKeywords swallows every source failure, and the param always
-  // carries at least the "Omi,OMI" brand prepend. Collected once so a 401 retry
-  // reuses it rather than re-running OCR.
-  let keywords: string
-  try {
-    keywords = pttKeywordsParam(await collectPttKeywords())
-  } catch {
-    keywords = pttKeywordsParam([])
-  }
+  // Best-effort vocabulary boosting (A2): consume the terms collected at
+  // hold-start (see startPttKeywordCollection) and ship them as the `keywords`
+  // hint. Never load-bearing — consumePttKeywords is bounded and swallows every
+  // source failure, and the param always carries at least the "Omi,OMI" brand
+  // prepend. Consumed once here so a 401 retry reuses it rather than re-collecting.
+  const keywords = pttKeywordsParam(await consumePttKeywords())
 
   const post = (): Promise<{ data?: { transcript?: string; language?: string } }> =>
     omiApi.post(BATCH_TRANSCRIBE_PATH, pcm.buffer, {

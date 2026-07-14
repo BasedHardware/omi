@@ -1,5 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { collectPttKeywords, pttKeywordsParam } from './vocabulary'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import {
+  collectPttKeywords,
+  pttKeywordsParam,
+  startPttKeywordCollection,
+  consumePttKeywords,
+  __resetPttKeywordsForTests
+} from './vocabulary'
 import type { RewindFrame } from '../../../../shared/types'
 
 type Bridge = {
@@ -28,6 +34,7 @@ function frame(p: Partial<RewindFrame>): RewindFrame {
 
 beforeEach(() => {
   setBridge({}) // no context methods by default
+  __resetPttKeywordsForTests()
 })
 
 describe('collectPttKeywords', () => {
@@ -96,5 +103,51 @@ describe('pttKeywordsParam', () => {
 
   it('returns just the brand prepend for an empty collection', () => {
     expect(pttKeywordsParam([])).toBe('Omi,OMI')
+  })
+})
+
+describe('hold-start collection cache (start/consume)', () => {
+  it('consume returns the terms collected at hold-start (normal hold — resolved by key-up)', async () => {
+    setBridge({ screenReadText: async () => 'Photoshop Illustrator' })
+    startPttKeywordCollection(1000)
+    const terms = (await consumePttKeywords()).map((t) => t.toLowerCase())
+    expect(terms).toContain('photoshop')
+    expect(terms).toContain('illustrator')
+  })
+
+  it('consume with nothing collected this turn returns [] (⇒ brand prepend only)', async () => {
+    expect(await consumePttKeywords()).toEqual([])
+  })
+
+  it('is one-shot: a second consume without a fresh start returns [] (no stale reuse)', async () => {
+    setBridge({ screenReadText: async () => 'Charlie' })
+    startPttKeywordCollection(1000)
+    expect((await consumePttKeywords()).map((t) => t.toLowerCase())).toContain('charlie')
+    expect(await consumePttKeywords()).toEqual([]) // cache cleared by the first consume
+  })
+
+  it('a fresh start overwrites the prior turn — stale terms are never carried forward', async () => {
+    setBridge({ screenReadText: async () => 'Alpha' })
+    startPttKeywordCollection(1) // turn 1
+    setBridge({ screenReadText: async () => 'Bravo' })
+    startPttKeywordCollection(2) // turn 2 overwrites turn 1
+    const terms = (await consumePttKeywords()).map((t) => t.toLowerCase())
+    expect(terms).toContain('bravo')
+    expect(terms).not.toContain('alpha')
+  })
+
+  it('short hold: consume degrades to [] when collection has not finished within the bound', async () => {
+    vi.useFakeTimers()
+    try {
+      // OCR that never resolves within the consume window (a very short hold that
+      // released before the bounded collection could complete).
+      setBridge({ screenReadText: () => new Promise<string>(() => {}) })
+      startPttKeywordCollection(1000)
+      const pending = consumePttKeywords(300)
+      await vi.advanceTimersByTimeAsync(300)
+      expect(await pending).toEqual([])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

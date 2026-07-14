@@ -126,6 +126,13 @@ export const PTT_VOCAB_OCR_TIMEOUT_MS = 700
 /** Ceiling on the rewind-frame lookup (a local SQLite read; normally < 100ms). */
 export const PTT_VOCAB_REWIND_TIMEOUT_MS = 700
 
+/** How long batchTranscribe waits on the hold-start collection before shipping.
+ *  Collection is kicked off at hold-start and overlaps the user's speech, so on a
+ *  normal hold (> the OCR ceiling above) it is already resolved by key-up and this
+ *  wait returns instantly. A very short hold that released before collection
+ *  finished degrades to the brand prepend instead of stalling the transcribe. */
+export const PTT_VOCAB_CONSUME_TIMEOUT_MS = 300
+
 /** One copy of the user-facing over-length message (hint + 413 error share it). */
 export const RECORDING_TOO_LONG_MESSAGE = 'Recording too long — keep it under 5 minutes'
 

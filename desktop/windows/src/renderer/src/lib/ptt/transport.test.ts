@@ -25,6 +25,7 @@ import {
   batchErrorMessage,
   __resetPttLanguageMemoryForTests
 } from './transport'
+import { startPttKeywordCollection, __resetPttKeywordsForTests } from './vocabulary'
 
 function axiosErrorWithStatus(status: number): AxiosError {
   return new AxiosError('boom', 'ERR_BAD_REQUEST', undefined, undefined, {
@@ -46,6 +47,7 @@ beforeEach(() => {
   h.getIdToken.mockResolvedValue('test-token')
   h.prefs = { language: 'en' }
   __resetPttLanguageMemoryForTests()
+  __resetPttKeywordsForTests()
   // Minimal window.omi bridge fake.
   ;(globalThis as Record<string, unknown>).window = {
     omi: {
@@ -159,6 +161,23 @@ describe('batchTranscribe', () => {
     })
     expect(config.headers['Content-Type']).toBe('application/octet-stream')
     expect(config.__noRetry).toBe(true)
+  })
+
+  it('ships the hold-start-collected keywords after the brand prepend', async () => {
+    // Collection is kicked off at hold-start; batchTranscribe consumes the cache
+    // instead of running OCR on the release/transcribe path.
+    ;(globalThis as Record<string, unknown>).window = {
+      omi: { screenReadText: async () => 'Photoshop Illustrator' }
+    }
+    startPttKeywordCollection(1000)
+    h.post.mockResolvedValueOnce({ data: { transcript: 'x' } })
+    await batchTranscribe(new Int16Array(4), new AbortController().signal)
+    const kw = String(
+      (h.post.mock.calls[0][2] as { params: Record<string, unknown> }).params.keywords
+    ).split(',')
+    expect(kw.slice(0, 2)).toEqual(['Omi', 'OMI'])
+    expect(kw).toContain('Photoshop')
+    expect(kw).toContain('Illustrator')
   })
 
   it('returns "" when the backend heard nothing', async () => {

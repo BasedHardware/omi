@@ -22,6 +22,7 @@
 // (40), and comma-joins for the query param.
 import type { RewindFrame } from '../../../../shared/types'
 import {
+  PTT_VOCAB_CONSUME_TIMEOUT_MS,
   PTT_VOCAB_FRAME_OCR_CHARS,
   PTT_VOCAB_IMMEDIATE_OCR_CHARS,
   PTT_VOCAB_LOOKBACK_MS,
@@ -115,6 +116,51 @@ export async function collectPttKeywords(now: number = Date.now()): Promise<stri
   } catch {
     return []
   }
+}
+
+// --- Hold-start collection cache (A2 latency hiding) ---------------------------
+//
+// Keyword collection runs bounded OCR (up to PTT_VOCAB_OCR_TIMEOUT_MS). Running
+// it inside batchTranscribe — on key-UP, the gesture-critical path — would tax
+// every turn's latency by that ceiling. macOS instead collects at key-DOWN so
+// the work overlaps the hold and is free by the time the user releases. We do the
+// same: startPttKeywordCollection() fires at hold-start and stashes the in-flight
+// promise here; batchTranscribe consumes it with a short bound. On a normal hold
+// (longer than the OCR ceiling) the promise is already resolved at key-up, so the
+// consume returns instantly; a very short hold degrades to the brand prepend.
+let inFlightCollection: Promise<string[]> | null = null
+
+/**
+ * Kick off this turn's keyword collection (call at hold-start). Overwrites any
+ * prior turn's in-flight collection, so a new hold never reuses stale terms.
+ * Never throws — collectPttKeywords swallows every source failure.
+ */
+export function startPttKeywordCollection(now: number = Date.now()): void {
+  inFlightCollection = collectPttKeywords(now)
+}
+
+/**
+ * Consume this turn's collected keywords, bounded by `timeoutMs` so a short hold
+ * that released before collection finished never stalls the transcribe POST.
+ * Returns [] (⇒ brand prepend only from pttKeywordsParam) when nothing was
+ * collected or the collection is not ready yet. One-shot: clears the cache so a
+ * later transcribe in the same session can't reuse this turn's terms.
+ */
+export async function consumePttKeywords(
+  timeoutMs: number = PTT_VOCAB_CONSUME_TIMEOUT_MS
+): Promise<string[]> {
+  const pending = inFlightCollection
+  inFlightCollection = null
+  if (!pending) return []
+  // Non-throwing at the boundary: batchTranscribe awaits this with no guard of
+  // its own, so vocabulary must never break a turn even if a source starts
+  // rejecting. (collectPttKeywords already swallows failures; this is a backstop.)
+  return withTimeout(pending, timeoutMs, [] as string[]).catch(() => [] as string[])
+}
+
+/** Test-only: drop any cached in-flight collection. */
+export function __resetPttKeywordsForTests(): void {
+  inFlightCollection = null
 }
 
 /**
