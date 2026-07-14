@@ -2,11 +2,7 @@ import { ipcMain, BrowserWindow } from 'electron'
 import { readFile } from 'fs/promises'
 import { resolve, sep } from 'path'
 import { getPrimarySourceId } from '../rewind/sourceId'
-import {
-  listRewindFrames,
-  searchRewindFrames,
-  rewindDayBounds
-} from './db'
+import { listRewindFrames, searchRewindFrames, rewindDayBounds, rewindFrameCount } from './db'
 import { groupFrames } from '../rewind/rewindGrouping'
 import {
   getRewindSettings,
@@ -18,8 +14,11 @@ import { rewindRoot } from '../rewind/paths'
 import type { RewindSettings } from '../../shared/types'
 
 export function registerRewindHandlers(): void {
-  ipcMain.handle('rewind:frames', async (_e, from: number, to: number) => listRewindFrames(from, to))
+  ipcMain.handle('rewind:frames', async (_e, from: number, to: number) =>
+    listRewindFrames(from, to)
+  )
   ipcMain.handle('rewind:dayBounds', async () => rewindDayBounds())
+  ipcMain.handle('rewind:frameCount', async () => rewindFrameCount())
   ipcMain.handle('rewind:search', async (_e, query: string) => {
     const q = query.trim()
     if (!q) return []

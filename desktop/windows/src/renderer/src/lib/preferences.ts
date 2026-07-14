@@ -55,6 +55,9 @@ export type Preferences = {
   // AudioSessionHost); PTT is passthrough regardless. Undefined = enabled
   // (gated), the macOS-faithful default. Set false to send all audio ungated.
   vadGateEnabled?: boolean
+  // Fall back to the original Home screen instead of the Hub. Undefined = off, so
+  // the Hub is what a user sees by default; Settings → Appearance can switch back.
+  useLegacyHomeDesign?: boolean
   // Launch commands for the external coding agents (OpenClaw/Hermes/Codex).
   // Set in Settings → Agents; undefined = not connected (the matching
   // OMI_*_ADAPTER_COMMAND env var still works as a power-user override).

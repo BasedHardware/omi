@@ -2,13 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ListChecks, Check, RefreshCw, Plus, Trash2, Calendar, X, Loader2 } from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
+import { fetchAllActionItems } from '../lib/actionItems'
 import { PageHeader } from '../components/layout/PageHeader'
 import { TasksGoalsToggle } from '../components/layout/TasksGoalsToggle'
 import { EmptyState } from '../components/ui/EmptyState'
 import { toast } from '../lib/toast'
 import type {
   ActionItemResponse as ActionItem,
-  ActionItemsResponse,
   Conversation as CloudConversation
 } from '../lib/omiApi.generated'
 
@@ -32,29 +32,6 @@ function apiError(e: unknown): string {
     (e as { response?: { data?: { detail?: string } } }).response?.data?.detail ??
     (e as Error).message
   )
-}
-
-// Page through /v1/action-items following `has_more` (Mac pages at 100) instead
-// of relying on a single request with a hard cap — a hard `limit` alone silently
-// truncates users with more items than the cap. `pageCap` bounds a runaway loop
-// if the server ever reports `has_more: true` forever.
-const TASKS_PAGE_SIZE = 100
-
-async function fetchAllActionItems(pageCap = 100): Promise<ActionItem[]> {
-  const all: ActionItem[] = []
-  let offset = 0
-  for (let page = 0; page < pageCap; page++) {
-    const res = await omiApi.get('/v1/action-items', {
-      params: { limit: TASKS_PAGE_SIZE, offset }
-    })
-    const data = res.data as ActionItem[] | ActionItemsResponse
-    const batch = Array.isArray(data) ? data : (data.action_items ?? [])
-    all.push(...batch)
-    const hasMore = Array.isArray(data) ? batch.length === TASKS_PAGE_SIZE : Boolean(data.has_more)
-    if (!hasMore || batch.length === 0) break
-    offset += TASKS_PAGE_SIZE
-  }
-  return all
 }
 
 // Fetch action items plus a best-effort conversation title/emoji map for the

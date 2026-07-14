@@ -15,6 +15,7 @@ import {
 import { omiApi } from '../lib/apiClient'
 import {
   conversationsCache,
+  publishConversationsCache,
   subscribeConversations,
   subscribeCloudRefresh,
   invalidateConversationsCache,
@@ -199,8 +200,7 @@ export function Conversations(): React.JSX.Element {
     // at the top so a just-finalized conversation shows instantly.
     reconcilePending(out.filter((r) => r.source === 'cloud'))
     const merged = [...getPendingConversations(), ...out].sort((a, b) => b.sortAt - a.sortAt)
-    conversationsCache.rows = merged
-    conversationsCache.loaded = true
+    publishConversationsCache(merged)
     setRows(merged)
     setLoading(false)
   }, [])
@@ -238,7 +238,7 @@ export function Conversations(): React.JSX.Element {
             const merged = [...getPendingConversations(), ...cloud, ...localRows].sort(
               (a, b) => b.sortAt - a.sortAt
             )
-            conversationsCache.rows = merged
+            publishConversationsCache(merged)
             return merged
           })
           setLoading(false)

@@ -55,9 +55,7 @@ let roDb: Database.Database | null = null
 // silently broke every INSERT. These tables are a derived cache with no user
 // data worth migrating, so recreating them is safe.
 function dropIfMissingColumn(d: Database.Database, table: string, col: string): void {
-  const exists = d
-    .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?")
-    .get(table)
+  const exists = d.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table)
   if (!exists) return
   const cols = d.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
   if (!cols.some((c) => c.name === col)) d.exec(`DROP TABLE ${table}`)
@@ -346,7 +344,9 @@ export function getLocalConversation(id: string): LocalConversation | null {
 export function listLocalConversations(): LocalConversation[] {
   return timed('listLocalConversations', () => {
     const rows = get()
-      .prepare(`SELECT ${LOCAL_CONVERSATION_COLUMNS} FROM local_conversation ORDER BY created_at DESC`)
+      .prepare(
+        `SELECT ${LOCAL_CONVERSATION_COLUMNS} FROM local_conversation ORDER BY created_at DESC`
+      )
       .all() as LocalConversationRow[]
     return rows.map(mapLocalConversation)
   })
@@ -355,7 +355,6 @@ export function listLocalConversations(): LocalConversation[] {
 export function deleteLocalConversation(id: string): void {
   get().prepare('DELETE FROM local_conversation WHERE id = ?').run(id)
 }
-
 
 export function remapConversationId(fromId: string, toId: string): number {
   const r = get()
@@ -558,9 +557,7 @@ function getReadonly(): Database.Database {
 export function execSafeSelect(sql: string): KgSqlResult {
   const stmt = getReadonly().prepare(sql)
   const rows = stmt.all() as Record<string, unknown>[]
-  const columns = rows.length
-    ? Object.keys(rows[0])
-    : (stmt.columns().map((c) => c.name) ?? [])
+  const columns = rows.length ? Object.keys(rows[0]) : (stmt.columns().map((c) => c.name) ?? [])
   return { columns, rows }
 }
 
@@ -641,11 +638,7 @@ export function queryKgNodes(q: string, limit = 12): LocalKnowledgeGraph {
 
 // indexed_files whose filename/folder match q. Excludes apps (file_type
 // 'application') unless explicitly requested via fileType.
-export function searchIndexedFiles(
-  q: string,
-  fileType?: string,
-  limit = 20
-): IndexedFileRecord[] {
+export function searchIndexedFiles(q: string, fileType?: string, limit = 20): IndexedFileRecord[] {
   const like = `%${q}%`
   const cols =
     'path, filename, extension, file_type AS fileType, size_bytes AS sizeBytes, folder, depth, created_at AS createdAt, modified_at AS modifiedAt'
@@ -822,10 +815,12 @@ export function insertRewindFrame(f: Omit<RewindFrame, 'id'>): number {
 }
 
 export function listRewindFrames(from: number, to: number): RewindFrame[] {
-  return timed('listRewindFrames', () =>
-    get()
-      .prepare(`SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE ts BETWEEN ? AND ? ORDER BY ts`)
-      .all(from, to) as RewindFrame[]
+  return timed(
+    'listRewindFrames',
+    () =>
+      get()
+        .prepare(`SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE ts BETWEEN ? AND ? ORDER BY ts`)
+        .all(from, to) as RewindFrame[]
   )
 }
 
@@ -843,10 +838,19 @@ export function searchRewindFrames(query: string, limit = 500): RewindFrame[] {
   })
 }
 
+/** Total captured frames, all time. A COUNT(*) rather than a row fetch: the Hub's
+ *  stat ribbon needs the number only, and listRewindFrames would drag full rows
+ *  (OCR text included) across IPC just to take a length. */
+export function rewindFrameCount(): number {
+  const row = get().prepare('SELECT COUNT(*) AS n FROM rewind_frames').get() as { n: number }
+  return row.n
+}
+
 export function rewindDayBounds(): { min: number; max: number } | null {
-  const row = get()
-    .prepare('SELECT MIN(ts) AS min, MAX(ts) AS max FROM rewind_frames')
-    .get() as { min: number | null; max: number | null }
+  const row = get().prepare('SELECT MIN(ts) AS min, MAX(ts) AS max FROM rewind_frames').get() as {
+    min: number | null
+    max: number | null
+  }
   return row.min == null || row.max == null ? null : { min: row.min, max: row.max }
 }
 

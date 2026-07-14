@@ -615,6 +615,8 @@ export type OmiBridgeApi = {
   googleMarkProcessed: (source: GoogleSource, ids: string[]) => Promise<void>
   rewindFrames: (from: number, to: number) => Promise<RewindFrame[]>
   rewindDayBounds: () => Promise<{ min: number; max: number } | null>
+  /** Total captured frames, all time — a COUNT(*), not a row fetch. */
+  rewindFrameCount: () => Promise<number>
   rewindSearch: (query: string) => Promise<RewindSearchGroup[]>
   rewindFrameImage: (imagePath: string) => Promise<string>
   rewindGetSettings: () => Promise<RewindSettings>

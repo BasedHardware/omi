@@ -25,6 +25,7 @@ import { LiveMirrorHost } from './components/recording/LiveMirrorHost'
 import { auth, onAuthStateChanged } from './lib/firebase'
 import { invalidateConversationsCache } from './lib/pageCache'
 import { startOutboxSweep, stopOutboxSweep } from './lib/sync/outboxSweep'
+import { useAppLifetimeJobs } from './lib/appLifetimeJobs'
 import { runAnimBench } from './lib/dev/animBench'
 import { InsightToast } from './components/insight/InsightToast'
 import { TrayStateHost } from './components/tray/TrayStateHost'
@@ -87,6 +88,12 @@ function AppShellInner(): React.JSX.Element {
     startOutboxSweep()
     return () => stopOutboxSweep()
   }, [])
+
+  // The four app-lifetime background engines (knowledge graph, screen synthesis,
+  // insights, retention). They live in the shell — NOT in a page — so that neither
+  // Home design owns them and swapping Home cannot silently switch them off. See
+  // lib/appLifetimeJobs.ts for the full why.
+  useAppLifetimeJobs()
 
   return (
     <div className="app-canvas flex h-full min-h-0 flex-col">
