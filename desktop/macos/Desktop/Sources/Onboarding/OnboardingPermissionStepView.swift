@@ -94,25 +94,28 @@ struct OnboardingPermissionStepView: View {
         }
         .frame(maxWidth: 540, alignment: .leading)
 
-        if isGranted {
-          Text("Permission granted. Continuing…")
-            .font(.system(size: 13, weight: .medium))
-            .foregroundColor(OmiColors.textTertiary)
-        } else {
-          Button(isRequesting ? "Waiting for macOS…" : primaryActionLabel) {
-            Task {
-              isRequesting = true
-              _ = await coordinator.requestPermission(permissionType, appState: appState)
-              isRequesting = false
-              refreshPermissionState()
-              if isGranted {
-                scheduleAutoAdvance()
+        HStack(spacing: OmiSpacing.md) {
+          OnboardingBackButton()
+
+          if isGranted {
+            Text("Permission granted. Continuing…")
+              .font(.system(size: 13, weight: .medium))
+              .foregroundColor(OmiColors.textTertiary)
+          } else {
+            Button(isRequesting ? "Waiting for macOS…" : primaryActionLabel) {
+              Task {
+                isRequesting = true
+                _ = await coordinator.requestPermission(permissionType, appState: appState)
+                isRequesting = false
+                refreshPermissionState()
+                if isGranted {
+                  scheduleAutoAdvance()
+                }
               }
             }
+            .buttonStyle(OmiButtonStyle(.primary))
+            .disabled(isRequesting)
           }
-          .buttonStyle(OmiButtonStyle(.primary))
-          .disabled(isRequesting)
-
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
