@@ -6,8 +6,6 @@ struct TryAskingPopupView: View {
   let onAsk: (String) -> Void
   let onDismiss: () -> Void
 
-  private let calloutAmber = Color(hex: 0xE3BF63)
-
   var body: some View {
     GeometryReader { proxy in
       let popupWidth = min(max(proxy.size.width - 72, 560), 660)
@@ -29,13 +27,13 @@ struct TryAskingPopupView: View {
         )
         .overlay(
           RoundedRectangle(cornerRadius: 28, style: .continuous)
-            .stroke(calloutAmber.opacity(0.18), lineWidth: 1)
+            .stroke(Color.white.opacity(0.10), lineWidth: 1)
         )
         .overlay(alignment: .topLeading) {
           RoundedRectangle(cornerRadius: 28, style: .continuous)
             .fill(
               LinearGradient(
-                colors: [calloutAmber.opacity(0.12), .clear],
+                colors: [Color.white.opacity(0.06), .clear],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
               )
@@ -69,12 +67,12 @@ struct TryAskingPopupView: View {
         Text("Suggested first ask")
           .font(.system(size: 12, weight: .semibold))
       }
-      .foregroundColor(calloutAmber)
+      .foregroundColor(OmiColors.textSecondary)
       .padding(.horizontal, OmiSpacing.sm)
       .padding(.vertical, OmiSpacing.xs)
       .background(
         Capsule()
-          .fill(calloutAmber.opacity(0.14))
+          .fill(Color.white.opacity(0.08))
       )
 
       Text("What would you like to ask omi first?")
@@ -94,7 +92,7 @@ struct TryAskingPopupView: View {
             HStack(spacing: OmiSpacing.sm) {
               Image(systemName: "sparkles")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(calloutAmber)
+                .foregroundColor(OmiColors.textSecondary)
 
               Text(suggestion)
                 .font(.system(size: 15, weight: .medium))
@@ -134,10 +132,9 @@ struct PromptSuggestionBanner: View {
   let onAsk: (String) -> Void
   let onDismiss: () -> Void
 
-  private let calloutAmber = Color(hex: 0xE3BF63)
   private let bannerSurface = OmiColors.backgroundSecondary
-  private let bannerSurfaceShadow = Color(hex: 0x22201C)
-  private let bannerStroke = Color(hex: 0x4E4535)
+  private let bannerSurfaceShadow = Color(hex: 0x1C1C1E)
+  private let bannerStroke = Color(hex: 0x3A3A3C)
   private let bannerPrimaryText = OmiColors.textPrimary
   private let bannerSecondaryText = OmiColors.textSecondary
   private let bannerChipFill = OmiColors.backgroundTertiary
@@ -226,7 +223,7 @@ struct PromptSuggestionBanner: View {
       RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
         .fill(
           LinearGradient(
-            colors: [calloutAmber.opacity(0.15), .clear],
+            colors: [Color.white.opacity(0.06), .clear],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
           )
@@ -236,7 +233,7 @@ struct PromptSuggestionBanner: View {
     .overlay(alignment: .topTrailing) {
       ZStack(alignment: .topTrailing) {
         Circle()
-          .fill(calloutAmber.opacity(0.08))
+          .fill(Color.white.opacity(0.05))
           .frame(width: 120, height: 120)
           .blur(radius: 34)
           .offset(x: 34, y: -42)
