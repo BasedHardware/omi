@@ -409,6 +409,7 @@ jobs:
         with:
           candidate_api_url: ${{ steps.transcription-candidate.outputs.url }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
+          firebase_auth_project_id: based-hardware
 
       - name: Remove passed transcription candidate tag
         if: ${{ success() }}

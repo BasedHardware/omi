@@ -18,6 +18,7 @@ on:
 env:
   SERVICE: desktop-backend
   REGION: us-central1
+  FIREBASE_AUTH_PROJECT_ID: based-hardware
   DEFAULT_DESKTOP_BACKEND_BASE_API_URL: https://desktop-backend-dt5lrfkkoa-uc.a.run.app
 
 concurrency:
@@ -107,7 +108,7 @@ jobs:
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
           flags: '--allow-unauthenticated'
           env_vars: |
-            FIREBASE_PROJECT_ID=based-hardware
+            FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
             GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
             BASE_API_URL=${{ steps.desktop-base-api-url.outputs.base_api_url }}
             OMI_DESKTOP_RELEASE_SHA=${{ github.sha }}
@@ -236,7 +237,8 @@ jobs:
           token_file="$(mktemp "$RUNNER_TEMP/omi-voice-provider-probe.XXXXXX")"
           trap 'rm -f "$token_file"' EXIT
           python3 backend/scripts/firebase_release_probe_token.py \
-            --project "$PROJECT_ID" \
+            --secret-project "$PROJECT_ID" \
+            --firebase-project "$FIREBASE_AUTH_PROJECT_ID" \
             --token-output "$token_file"
 
           for provider in openai gemini; do

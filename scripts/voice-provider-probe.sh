@@ -246,7 +246,12 @@ class ProviderWebSocket:
         encoded = json.dumps(payload, separators=(",", ":")).encode("utf-8")
         if len(encoded) > MAX_WEBSOCKET_MESSAGE_BYTES:
             raise ProbeFailure("commit_failed")
-        self._send_frame(0x1, encoded)
+        try:
+            self._send_frame(0x1, encoded)
+        except (socket.timeout, TimeoutError) as error:
+            raise ProbeFailure("timeout", retryable=True) from error
+        except (OSError, ssl.SSLError) as error:
+            raise ProbeFailure("provider_transport") from error
 
     def _send_frame(self, opcode: int, payload: bytes) -> None:
         length = len(payload)
@@ -345,6 +350,8 @@ def _receive_until(websocket: ProviderWebSocket, timeout_seconds: float, matcher
             event = websocket.receive_json()
         except (socket.timeout, TimeoutError) as error:
             raise ProbeFailure("timeout", retryable=True) from error
+        except (OSError, ssl.SSLError) as error:
+            raise ProbeFailure("provider_transport") from error
         if event.get("type") == "error" or "error" in event:
             raise ProbeFailure("provider_event_error")
         if matcher(event):
@@ -357,36 +364,44 @@ def _openai_websocket(token: str, timeout_seconds: float) -> ProviderWebSocket:
         {"Authorization": f"Bearer {token}"},
         timeout_seconds,
     )
-    websocket.connect()
-    websocket.send_json(
-        {
-            "type": "session.update",
-            "session": {
-                "type": "realtime",
-                "instructions": "Return the requested deterministic response.",
-                "output_modalities": ["text"],
-            },
-        }
-    )
-    _receive_until(websocket, timeout_seconds, lambda event: event.get("type") == "session.updated")
-    return websocket
+    try:
+        websocket.connect()
+        websocket.send_json(
+            {
+                "type": "session.update",
+                "session": {
+                    "type": "realtime",
+                    "instructions": "Return the requested deterministic response.",
+                    "output_modalities": ["text"],
+                },
+            }
+        )
+        _receive_until(websocket, timeout_seconds, lambda event: event.get("type") == "session.updated")
+        return websocket
+    except Exception:
+        websocket.close()
+        raise
 
 
 def _gemini_websocket(token: str, timeout_seconds: float) -> ProviderWebSocket:
     query = urllib.parse.urlencode({"access_token": token})
     websocket = ProviderWebSocket(f"{GEMINI_URL_PREFIX}?{query}", {}, timeout_seconds)
-    websocket.connect()
-    websocket.send_json(
-        {
-            "setup": {
-                "model": "models/gemini-3.1-flash-live-preview",
-                "generationConfig": {"responseModalities": ["AUDIO"], "temperature": 0.0},
-                "systemInstruction": {"parts": [{"text": "Return the requested deterministic response."}]},
+    try:
+        websocket.connect()
+        websocket.send_json(
+            {
+                "setup": {
+                    "model": "models/gemini-3.1-flash-live-preview",
+                    "generationConfig": {"responseModalities": ["AUDIO"], "temperature": 0.0},
+                    "systemInstruction": {"parts": [{"text": "Return the requested deterministic response."}]},
+                }
             }
-        }
-    )
-    _receive_until(websocket, timeout_seconds, lambda event: "setupComplete" in event)
-    return websocket
+        )
+        _receive_until(websocket, timeout_seconds, lambda event: "setupComplete" in event)
+        return websocket
+    except Exception:
+        websocket.close()
+        raise
 
 
 def run_probe(config: ProbeConfig) -> int:
@@ -454,6 +469,12 @@ def run_probe(config: ProbeConfig) -> int:
     except ProbeFailure as error:
         _emit(config.provider, current_step, "FAIL", error.failure_class)
         return 75 if error.retryable else 1
+    except (socket.timeout, TimeoutError):
+        _emit(config.provider, current_step, "FAIL", "timeout")
+        return 75
+    except (OSError, ssl.SSLError):
+        _emit(config.provider, current_step, "FAIL", "provider_transport")
+        return 1
     finally:
         provider_token = ""
     _emit(config.provider, "close", "PASS", "expected_idle_teardown")
