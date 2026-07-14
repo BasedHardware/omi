@@ -12,6 +12,12 @@ package enum OmiIconName: String, CaseIterable {
   case arrowUp = "LucideArrowUp"
   case sparkles = "LucideSparkles"
   case arrowUpRight = "LucideArrowUpRight"
+  case arrowRight = "LucideArrowRight"
+  case home = "LucideHome"
+  case sliders = "LucideSliders"
+  case monitor = "LucideMonitor"
+  case calendar = "LucideCalendar"
+  case mail = "LucideMail"
   case link = "LucideLink"
   case square = "LucideSquare"
 
@@ -22,9 +28,18 @@ package enum OmiIconName: String, CaseIterable {
   fileprivate var resourceURL: URL? {
     Bundle.module.url(
       forResource: resourceName,
-      withExtension: "pdf",
+      withExtension: resourceExtension,
       subdirectory: "OmiIcons.xcassets/\(rawValue).imageset"
     )
+  }
+
+  private var resourceExtension: String {
+    switch self {
+    case .arrowRight, .home, .sliders, .monitor, .calendar, .mail:
+      return "svg"
+    default:
+      return "pdf"
+    }
   }
 
   private var resourceName: String {
@@ -37,6 +52,12 @@ package enum OmiIconName: String, CaseIterable {
     case .arrowUp: return "lucide-arrow-up"
     case .sparkles: return "lucide-sparkles"
     case .arrowUpRight: return "lucide-arrow-up-right"
+    case .arrowRight: return "lucide-arrow-right"
+    case .home: return "lucide-home"
+    case .sliders: return "lucide-sliders"
+    case .monitor: return "lucide-monitor"
+    case .calendar: return "lucide-calendar"
+    case .mail: return "lucide-mail"
     case .link: return "lucide-link"
     case .square: return "lucide-square"
     }
