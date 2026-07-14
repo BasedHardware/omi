@@ -4,6 +4,29 @@ import XCTest
 
 @MainActor
 final class VoiceTurnCoordinatorTests: XCTestCase {
+  /// A committed turn is still active (so `cancelListening()` would terminate it) but is no
+  /// longer capturing. Surface teardown must gate on `isCapturingAudio`, or collapsing the Ask
+  /// Omi panel to present the answer cancels the turn and drops the user's spoken question.
+  func testIsCapturingAudioIsFalseOnceTheTranscriptIsCommitted() {
+    let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
+    let turnID = coordinator.begin(intent: .hold)
+    coordinator.send(.captureStarted(turnID: turnID, captureID: VoiceCaptureID(1)))
+
+    XCTAssertTrue(coordinator.isCapturingAudio)
+
+    coordinator.send(.finalize(turnID: turnID))
+    coordinator.send(.transcriptionFinal(turnID: turnID, text: "what is on my screen"))
+
+    XCTAssertEqual(coordinator.activeTurn?.phase, .awaitingResponse)
+    XCTAssertFalse(coordinator.isCapturingAudio)
+    XCTAssertNotNil(coordinator.activeTurnID)
+
+    // The turn a surface collapse would have cancelled is the one that still owns the query.
+    coordinator.send(.cancel(turnID: turnID, reason: .cancelled))
+    XCTAssertNil(coordinator.activeTurnID)
+    XCTAssertFalse(coordinator.isCapturingAudio)
+  }
+
   func testLocalAutomationFinalizeRemainsCommitableWithoutPhysicalCaptureBuffer() {
     let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
     var physicalFinalizeCount = 0

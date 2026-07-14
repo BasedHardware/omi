@@ -1,0 +1,3 @@
+{
+  "change": "Fixed push-to-talk silently dropping your question when the Ask Omi panel was already open"
+}

@@ -1192,8 +1192,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         responseHeightCancellable = nil
         state.responseContentHeight = 0
 
-        // Cancel PTT if listening while chat closes
-        PushToTalkManager.shared.cancelListening()
+        // Cancel PTT only while the mic is still capturing. A turn that has already committed
+        // its transcript is awaiting its answer, and `openAIInputWithQuery` collapses this
+        // surface *before* dispatching the voice query — an unconditional cancel there
+        // terminates the turn, so `routeQuery` is fenced out and the user's spoken question is
+        // silently dropped.
+        if PushToTalkManager.shared.isCapturingAudio {
+            PushToTalkManager.shared.cancelListening()
+        }
 
         OmiMotion.withGated(.easeOut(duration: 0.08)) {
             state.showingAIConversation = false

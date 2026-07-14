@@ -95,6 +95,10 @@ class PushToTalkManager: ObservableObject {
   /// A projection of the authoritative reducer. This manager owns microphone and
   /// provider I/O only; it never stores a second logical lifecycle state.
   var phase: VoiceTurnPhase? { voiceTurnCoordinator.activeTurn?.phase }
+  /// True only while the mic is still capturing. Callers that cancel PTT as a side effect of a
+  /// UI transition (rather than an explicit user abort) must gate on this: `cancelListening()`
+  /// terminates any non-idle turn, including one that has already committed its transcript.
+  var isCapturingAudio: Bool { voiceTurnCoordinator.isCapturingAudio }
   private var currentVoiceTurnID: VoiceTurnID? { voiceTurnCoordinator.activeTurnID }
   private var isIdle: Bool { currentVoiceTurnID == nil }
 

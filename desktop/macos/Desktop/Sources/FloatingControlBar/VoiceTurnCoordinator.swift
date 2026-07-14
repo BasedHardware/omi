@@ -124,6 +124,10 @@ final class VoiceTurnCoordinator {
 
   var activeTurnID: VoiceTurnID? { model.turn?.phase.isTerminal == false ? model.turn?.id : nil }
   var activeTurn: VoiceTurn? { model.turn?.phase.isTerminal == false ? model.turn : nil }
+  /// True only while the mic is still capturing for the active turn. Once the transcript
+  /// is committed the turn is awaiting its answer, so it is active but no longer capturing —
+  /// cancelling it there discards what the user already said.
+  var isCapturingAudio: Bool { activeTurn?.phase.isRecording == true }
   var projection: VoiceTurnUIProjection { model.turn?.projection ?? .idle }
   var outputSnapshot: VoiceOutputSnapshot {
     VoiceOutputSnapshot(
