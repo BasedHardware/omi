@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act, cleanup } from '@testing-library/react'
-import { HOLD_THRESHOLD_MS, STREAM_FINALIZE_DEADLINE_MS, ERROR_STRIP_MS } from '../lib/ptt/constants'
+import {
+  HOLD_THRESHOLD_MS,
+  STREAM_FINALIZE_DEADLINE_MS,
+  ERROR_STRIP_MS
+} from '../lib/ptt/constants'
 
 // The pure machine/gate/transport logic has its own suites — these tests cover
 // what only the hook owns: the Space gesture timing, effect interpretation,
@@ -26,7 +30,11 @@ const h = vi.hoisted(() => {
     deferStream: false,
     streamReleasers: [] as Array<() => void>,
     captureOpts: [] as CaptureOpts[],
-    captures: [] as Array<{ analyser: object; drain: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }>,
+    captures: [] as Array<{
+      analyser: object
+      drain: ReturnType<typeof vi.fn>
+      dispose: ReturnType<typeof vi.fn>
+    }>,
     streamCbs: [] as StreamCbs[],
     streams: [] as Array<{
       feed: ReturnType<typeof vi.fn>
@@ -63,7 +71,9 @@ const h = vi.hoisted(() => {
     }),
     batchTranscribe: vi.fn(
       (pcm: Int16Array, signal: AbortSignal) =>
-        new Promise<string>((resolve, reject) => state.batchCalls.push({ pcm, signal, resolve, reject }))
+        new Promise<string>((resolve, reject) =>
+          state.batchCalls.push({ pcm, signal, resolve, reject })
+        )
     )
   }
 })
@@ -90,20 +100,23 @@ function setup(): {
   onCommit: ReturnType<typeof vi.fn>
   onTranscript: ReturnType<typeof vi.fn>
   onCaptureEnd: ReturnType<typeof vi.fn>
+  onHoldStart: ReturnType<typeof vi.fn>
 } {
   const onCommit = vi.fn()
   const onTranscript = vi.fn()
   const onCaptureEnd = vi.fn()
+  const onHoldStart = vi.fn()
   const { result } = renderHook(() =>
     usePushToTalk({
       onCommit,
       onTranscript,
       onCaptureEnd,
+      onHoldStart,
       restoreDraft: vi.fn(),
       getDraft: () => ''
     })
   )
-  return { result, onCommit, onTranscript, onCaptureEnd }
+  return { result, onCommit, onTranscript, onCaptureEnd, onHoldStart }
 }
 
 const pressSpace = (): void => {
@@ -147,6 +160,19 @@ describe('space gesture', () => {
     releaseSpace()
     await advance(1000)
     expect(h.startPttCapture).not.toHaveBeenCalled()
+  })
+
+  it('fires onHoldStart (barge-in) at hold-start, but never for a quick tap', async () => {
+    const { onHoldStart } = setup()
+    // A quick tap (threshold not crossed) must not interrupt a playing reply.
+    pressSpace()
+    await advance(HOLD_THRESHOLD_MS - 100)
+    releaseSpace()
+    expect(onHoldStart).not.toHaveBeenCalled()
+    // A real hold fires it exactly once as capture begins.
+    pressSpace()
+    await advance(HOLD_THRESHOLD_MS)
+    expect(onHoldStart).toHaveBeenCalledTimes(1)
   })
 
   it('a hold starts capture (with key-down backfill) and the opportunistic stream', async () => {

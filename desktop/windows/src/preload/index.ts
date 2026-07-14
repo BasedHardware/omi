@@ -51,10 +51,8 @@ const omi: OmiBridgeApi = {
   claimConversationForPosting: (id: string, resetAttempts?: boolean) =>
     ipcRenderer.invoke('db:claimConversationForPosting', id, resetAttempts),
   // --- Track 2: Voice & PTT depth (voice turn outbox) ---
-  insertVoiceTurn: (entry: VoiceTurnOutboxInput) =>
-    ipcRenderer.invoke('db:insertVoiceTurn', entry),
-  listPendingVoiceTurns: (limit?: number) =>
-    ipcRenderer.invoke('db:listPendingVoiceTurns', limit),
+  insertVoiceTurn: (entry: VoiceTurnOutboxInput) => ipcRenderer.invoke('db:insertVoiceTurn', entry),
+  listPendingVoiceTurns: (limit?: number) => ipcRenderer.invoke('db:listPendingVoiceTurns', limit),
   markVoiceTurnAcked: (idempotencyKey: string) =>
     ipcRenderer.invoke('db:markVoiceTurnAcked', idempotencyKey),
   recordVoiceTurnFailure: (idempotencyKey: string, error: string) =>
@@ -263,6 +261,11 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('chat:barSend', listener)
     return () => ipcRenderer.removeListener('chat:barSend', listener)
   },
+  onBarChatInterrupt: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('chat:barInterrupt', listener)
+    return () => ipcRenderer.removeListener('chat:barInterrupt', listener)
+  },
   onBarRequestChatState: (cb: () => void) => {
     const listener = (): void => cb()
     ipcRenderer.on('chat:barRequestState', listener)
@@ -362,6 +365,7 @@ const omiBar: OmiBarApi = {
   keepAlive: (active: boolean) => ipcRenderer.send('bar:keepAlive', active),
   sendChat: (text: string, fromVoice: boolean) =>
     ipcRenderer.send('bar:sendChat', { text, fromVoice }),
+  interruptTts: () => ipcRenderer.send('bar:interruptTts'),
   requestChatState: () => ipcRenderer.send('bar:requestChatState'),
   onChatState: (cb: (state: BarChatState) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, state: BarChatState): void => cb(state)

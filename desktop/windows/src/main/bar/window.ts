@@ -892,6 +892,12 @@ export function registerBarIpc(sendToMain: (channel: string, ...args: unknown[])
   ipcMain.on('bar:sendChat', (_e, payload: { text: string; fromVoice: boolean }) => {
     sendToMain('chat:barSend', payload)
   })
+  // Barge-in: a bar PTT hold started — tell the main window (which owns the
+  // spoken-reply playback via useChat → voiceController) to interrupt it. Same
+  // bar→main hop as sendChat; ChatBridgeHost calls interruptCurrentResponse().
+  ipcMain.on('bar:interruptTts', () => {
+    sendToMain('chat:barInterrupt')
+  })
   // The bar (re)requests the current chat state — e.g. on first mount / each
   // reveal — so it renders the ongoing thread even if it missed prior broadcasts.
   ipcMain.on('bar:requestChatState', () => {

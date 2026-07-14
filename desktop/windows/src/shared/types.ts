@@ -430,6 +430,10 @@ export type OmiBarApi = {
   /** Send a chat message through the bar→main bridge (the main window's single
    *  chat engine owns the thread). `fromVoice` requests a spoken reply. */
   sendChat: (text: string, fromVoice: boolean) => void
+  /** Barge-in: a new PTT hold started — stop Omi's still-playing spoken reply.
+   *  The reply plays in the MAIN window (useChat → voiceController), so this hops
+   *  over the bar→main bridge; ChatBridgeHost calls interruptCurrentResponse. */
+  interruptTts: () => void
   /** Ask the main window to (re)broadcast the current chat state — called on
    *  mount / each reveal so the bar shows the ongoing thread. */
   requestChatState: () => void
@@ -721,6 +725,9 @@ export type OmiBridgeApi = {
   /** The bar sent a message — the main window's ChatBridgeHost drives the ONE
    *  chat.send() (with fromVoice). Main-window renderer only. */
   onBarChatSend: (cb: (payload: { text: string; fromVoice: boolean }) => void) => () => void
+  /** A bar PTT hold started — the main window barge-in: ChatBridgeHost calls
+   *  voiceController.interruptCurrentResponse(). Main-window renderer only. */
+  onBarChatInterrupt: (cb: () => void) => () => void
   /** The bar (re)requested current chat state — ChatBridgeHost publishes now. */
   onBarRequestChatState: (cb: () => void) => () => void
   /** Broadcast the projected chat state to the bar (history + streaming + status). */
