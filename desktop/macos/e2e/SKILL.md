@@ -181,11 +181,10 @@ a stale SQLite re-read clobbering it — so `requery_suppressed_during_drag=true
 TASK-06 assertion; the control proves the guard is load-bearing. The action **forces the
 filtered-requery branch** internally, so the assertion is never vacuous even with no user
 filter active; it polls the requery counter (no fixed sleeps) for a deterministic signal.
-The default task filter (`.last7Days`, a date tag) also arms the path in normal use, so
-`requery_fires_without_suppress=true` confirms the injected push *would* have requeried
-without the drag guard. `had_non_status_filters=false` means no filter is active and the
-requery path is inert (the suppression assertion is then vacuous — apply a date/tag
-filter first). Non-production bundles only.
+The Tasks page no longer exposes user filters (the popover was replaced by the
+mobile-parity completed toggle), so the forced branch is the only way the requery
+path arms; `requery_fires_without_suppress=true` confirms the injected push *would*
+have requeried without the drag guard. Non-production bundles only.
 
 ### 2g. Inspect the feedback payload without submitting (SET-02)
 `FeedbackView.submitFeedback()` always fires a real Sentry event and attaches the app log

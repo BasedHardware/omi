@@ -50,11 +50,6 @@ struct TaskSortOrderSyncFailure: Equatable {
     }
 }
 
-private struct TaskDynamicFilterInput: Sendable {
-    let source: String?
-    let tags: [String]
-}
-
 // MARK: - Task Filter Tag
 
 enum TaskFilterGroup: String, CaseIterable {
@@ -301,14 +296,6 @@ enum TaskFilterTag: String, CaseIterable, Identifiable, Hashable {
     }
 
     /// All known source values
-    static var knownSources: Set<String> {
-        Set(allCases.compactMap { $0.sourceValue })
-    }
-
-    /// All known category values
-    static var knownCategories: Set<String> {
-        Set(allCases.compactMap { $0.categoryValue })
-    }
 }
 
 // MARK: - Dynamic Filter Tag (for unknown sources/categories)
@@ -321,27 +308,7 @@ struct DynamicFilterTag: Identifiable, Hashable {
     let displayName: String
     let icon: String
 
-    /// Create a dynamic tag for an unknown source
-    static func source(_ value: String) -> DynamicFilterTag {
-        DynamicFilterTag(
-            id: "source:\(value)",
-            group: .source,
-            rawValue: value,
-            displayName: formatDisplayName(value),
-            icon: "arrow.right.circle"  // Generic source icon
-        )
-    }
 
-    /// Create a dynamic tag for an unknown category
-    static func category(_ value: String) -> DynamicFilterTag {
-        DynamicFilterTag(
-            id: "category:\(value)",
-            group: .category,
-            rawValue: value,
-            displayName: formatDisplayName(value),
-            icon: "tag"  // Generic category icon
-        )
-    }
 
     /// Check if a task matches this dynamic tag
     func matches(_ task: TaskActionItem) -> Bool {
@@ -365,97 +332,6 @@ struct DynamicFilterTag: Identifiable, Hashable {
             .split(separator: " ")
             .map { $0.prefix(1).uppercased() + $0.dropFirst().lowercased() }
             .joined(separator: " ")
-    }
-}
-
-// MARK: - Saved Filter View
-
-struct SavedFilterView: Codable, Identifiable, Equatable {
-    let id: String
-    let name: String
-    let predefinedTagRawValues: [String]
-    let dynamicTagIds: [String]  // stored as "group:rawValue" e.g. "source:email:inbound"
-
-    init(name: String, predefinedTags: Set<TaskFilterTag>, dynamicTags: Set<DynamicFilterTag>) {
-        self.id = UUID().uuidString
-        self.name = name
-        self.predefinedTagRawValues = predefinedTags.map { $0.rawValue }
-        self.dynamicTagIds = dynamicTags.map { $0.id }
-    }
-
-    func restoredPredefinedTags() -> Set<TaskFilterTag> {
-        Set(predefinedTagRawValues.compactMap { TaskFilterTag(rawValue: $0) })
-    }
-
-    func restoredDynamicTags(from available: [DynamicFilterTag]) -> Set<DynamicFilterTag> {
-        let idSet = Set(dynamicTagIds)
-        return Set(available.filter { idSet.contains($0.id) })
-    }
-}
-
-// MARK: - Unified Filter Tag (wraps both predefined and dynamic)
-
-enum UnifiedFilterTag: Identifiable, Hashable {
-    case predefined(TaskFilterTag)
-    case dynamic(DynamicFilterTag)
-
-    var id: String {
-        switch self {
-        case .predefined(let tag): return "predefined:\(tag.rawValue)"
-        case .dynamic(let tag): return tag.id
-        }
-    }
-
-    var group: TaskFilterGroup {
-        switch self {
-        case .predefined(let tag): return tag.group
-        case .dynamic(let tag): return tag.group
-        }
-    }
-
-    var displayName: String {
-        switch self {
-        case .predefined(let tag): return tag.displayName
-        case .dynamic(let tag): return tag.displayName
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .predefined(let tag): return tag.icon
-        case .dynamic(let tag): return tag.icon
-        }
-    }
-
-    func matches(_ task: TaskActionItem) -> Bool {
-        switch self {
-        case .predefined(let tag): return tag.matches(task)
-        case .dynamic(let tag): return tag.matches(task)
-        }
-    }
-
-    /// Get the raw source value if this is a source filter
-    var sourceValue: String? {
-        switch self {
-        case .predefined(let tag): return tag.sourceValue
-        case .dynamic(let tag): return tag.group == .source ? tag.rawValue : nil
-        }
-    }
-
-    /// Get the raw category value if this is a category filter
-    var categoryValue: String? {
-        switch self {
-        case .predefined(let tag): return tag.categoryValue
-        case .dynamic(let tag): return tag.group == .category ? tag.rawValue : nil
-        }
-    }
-
-    /// Get the raw origin category value if this is an origin filter
-    var originCategoryValue: String? {
-        switch self {
-        case .predefined(let tag): return tag.originCategoryValue
-        case .dynamic(_): return nil
-        }
     }
 }
 
@@ -540,48 +416,25 @@ class TasksViewModel: ObservableObject {
             recomputeDisplayCaches()
         }
     }
-    // Filter tags (Memories-style dropdown)
-    @Published var selectedTags: Set<TaskFilterTag> = [.todo, .last7Days] {
+    // Status view state. Only ever [.todo] or [.done] since the filter popover
+    // was replaced with the mobile-parity completed toggle; the tag plumbing
+    // remains for the TASK-06 drag-safety requery path and navigation reveals.
+    @Published var selectedTags: Set<TaskFilterTag> = [.todo] {
         didSet {
-            // Reset display limit and keyboard selection when filters change
+            // Reset display limit and keyboard selection when the view changes
             displayLimit = 100
             keyboardSelectedTaskId = nil
             isInlineCreating = false
 
-            // Map status tags to showCompleted for server-side loading
-            let hasStatusFilter = selectedTags.contains(where: { $0.group == .status })
-            if hasStatusFilter {
-                let wantsDone = selectedTags.contains(.done)
-                let wantsTodo = selectedTags.contains(.todo)
-                let wantsDeleted = selectedTags.contains(.removedByAI) || selectedTags.contains(.removedByMe)
-                if wantsDeleted {
-                    // Load deleted tasks from server
-                    Task { await store.loadDeletedTasks() }
-                }
-                if wantsDone && !wantsTodo && !wantsDeleted && !showCompleted {
-                    showCompleted = true
-                } else if wantsTodo && !wantsDone && !wantsDeleted && showCompleted {
-                    showCompleted = false
-                } else if wantsDone && wantsTodo {
-                    // Both selected - load both
-                    if !showCompleted {
-                        Task { await store.loadCompletedTasks() }
-                    }
-                }
+            // Map the status view to showCompleted for server-side loading;
+            // its didSet reloads the right store list and recomputes caches.
+            let wantsDone = selectedTags.contains(.done)
+            if wantsDone != showCompleted {
+                showCompleted = wantsDone
             } else {
-                // No status filter = "All" — ensure completed tasks are present for the in-memory fallback
-                if !showCompleted {
-                    Task { await store.loadCompletedTasks() }
-                }
-            }
-            // When non-status filters (including date) are applied, query SQLite directly
-            let hasNonStatusFilters = selectedTags.contains(where: { $0.group != .status })
-            if hasNonStatusFilters {
-                Task { await loadFilteredTasksFromDatabase() }
-            } else {
-                filteredFromDatabase = []
                 recomputeDisplayCaches()
             }
+            filteredFromDatabase = []
         }
     }
 
@@ -589,17 +442,9 @@ class TasksViewModel: ObservableObject {
     @Published private(set) var filteredFromDatabase: [TaskActionItem] = []
     @Published private(set) var isLoadingFiltered = false
 
-    /// Cached tag counts - recomputed when tasks change (not @Published to avoid extra re-renders;
-    /// values are read during re-renders triggered by displayTasks/categorizedTasks changes)
-    private(set) var tagCounts: [TaskFilterTag: Int] = [:]
-
-    /// Dynamically discovered tags (sources/categories not in predefined list)
-    private(set) var dynamicTags: [DynamicFilterTag] = []
-
-    /// Counts for dynamic tags
-    private(set) var dynamicTagCounts: [String: Int] = [:]
-
-    /// Selected dynamic tags
+    /// Selected dynamic tags — no longer user-settable (the filter popover was
+    /// replaced by the mobile-parity completed toggle); kept because the
+    /// TASK-06 drag-safety requery path still consumes it.
     @Published var selectedDynamicTags: Set<DynamicFilterTag> = [] {
         didSet {
             displayLimit = 100
@@ -614,89 +459,11 @@ class TasksViewModel: ObservableObject {
         }
     }
 
-    /// Count tasks for a specific tag
-    func tagCount(_ tag: TaskFilterTag) -> Int {
-        tagCounts[tag] ?? 0
-    }
-
-    /// Count tasks for a dynamic tag
-    func dynamicTagCount(_ tag: DynamicFilterTag) -> Int {
-        dynamicTagCounts[tag.id] ?? 0
-    }
-
-    /// Get all available tags for a group (predefined + dynamic)
-    func availableTags(for group: TaskFilterGroup) -> [UnifiedFilterTag] {
-        var tags: [UnifiedFilterTag] = []
-
-        // Add predefined tags
-        for tag in TaskFilterTag.tags(for: group) {
-            tags.append(.predefined(tag))
-        }
-
-        // Add dynamic tags for this group
-        for tag in dynamicTags where tag.group == group {
-            tags.append(.dynamic(tag))
-        }
-
-        return tags
-    }
-
-    /// Check if any filters are active (predefined or dynamic)
-    var hasActiveFilters: Bool {
-        !selectedTags.isEmpty || !selectedDynamicTags.isEmpty
-    }
-
-    /// Clear all filters
-    func clearAllFilters() {
-        selectedTags.removeAll()
-        selectedDynamicTags.removeAll()
-    }
-
-    // MARK: - Saved Filter Views
-
-    private static let savedFilterViewsKey = "TasksSavedFilterViews"
-    @Published var savedFilterViews: [SavedFilterView] = []
-
-    /// Whether current filters differ from the default [.todo, .last7Days]
-    var hasNonDefaultFilters: Bool {
-        let isDefault = selectedTags == [.todo, .last7Days] && selectedDynamicTags.isEmpty
-        let isEmpty = selectedTags.isEmpty && selectedDynamicTags.isEmpty
-        return !isDefault && !isEmpty
-    }
-
-    func saveCurrentFilters(name: String) {
-        let view = SavedFilterView(name: name, predefinedTags: selectedTags, dynamicTags: selectedDynamicTags)
-        savedFilterViews.append(view)
-        persistSavedFilterViews()
-    }
-
-    func applySavedView(_ view: SavedFilterView) {
-        selectedTags = view.restoredPredefinedTags()
-        selectedDynamicTags = view.restoredDynamicTags(from: dynamicTags)
-    }
-
-    func deleteSavedView(_ view: SavedFilterView) {
-        savedFilterViews.removeAll { $0.id == view.id }
-        persistSavedFilterViews()
-    }
-
-    func isActiveSavedView(_ view: SavedFilterView) -> Bool {
-        let predefined = view.restoredPredefinedTags()
-        let dynamic = view.restoredDynamicTags(from: dynamicTags)
-        return selectedTags == predefined && selectedDynamicTags == dynamic
-    }
-
-    private func loadSavedFilterViews() {
-        guard let data = UserDefaults.standard.data(forKey: Self.savedFilterViewsKey),
-              let views = try? JSONDecoder().decode([SavedFilterView].self, from: data) else {
-            return
-        }
-        savedFilterViews = views
-    }
-
-    private func persistSavedFilterViews() {
-        guard let data = try? JSONEncoder().encode(savedFilterViews) else { return }
-        UserDefaults.standard.set(data, forKey: Self.savedFilterViewsKey)
+    /// Mobile-parity view toggle: the Tasks list shows either incomplete (To Do)
+    /// or completed (Done) tasks — the only status filter, exactly like the
+    /// mobile app's circled-check toggle.
+    func toggleShowCompletedView() {
+        selectedTags = showCompleted ? [.todo] : [.done]
     }
 
     // Keyboard navigation state
@@ -712,9 +479,7 @@ class TasksViewModel: ObservableObject {
 
     /// Flat task list matching visual order (for arrow key navigation)
     var navigationOrder: [TaskActionItem] {
-        let onlyDone = selectedTags.contains(.done) && !selectedTags.contains(.todo)
-        let onlyDeleted = (selectedTags.contains(.removedByAI) || selectedTags.contains(.removedByMe)) && !selectedTags.contains(.todo) && !selectedTags.contains(.done)
-        if !onlyDone && !onlyDeleted && !isMultiSelectMode {
+        if !showCompleted && !isMultiSelectMode {
             return TaskCategory.allCases.flatMap { getOrderedTasks(for: $0) }
         } else {
             return displayTasks
@@ -795,8 +560,6 @@ class TasksViewModel: ObservableObject {
 
     @Published private(set) var displayTasks: [TaskActionItem] = []
     @Published private(set) var categorizedTasks: [TaskCategory: [TaskActionItem]] = [:]
-    private(set) var todoCount: Int = 0
-    private(set) var doneCount: Int = 0
 
     /// Whether there are more filtered/search results beyond the display limit
     private(set) var hasMoreFilteredResults = false
@@ -832,10 +595,9 @@ class TasksViewModel: ObservableObject {
         } else {
             removeUnscopedLegacyOrderingDefaults()
         }
-        // Load saved order, indent levels, and saved filter views
+        // Load saved order and indent levels
         loadCategoryOrder()
         loadIndentLevels()
-        loadSavedFilterViews()
 
         NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)
             .sink { [weak self] _ in
@@ -1562,32 +1324,7 @@ class TasksViewModel: ObservableObject {
 
     /// Get the source tasks based on current view (completed vs incomplete)
     private func getSourceTasks() -> [TaskActionItem] {
-        let statusTags = selectedTags.filter { $0.group == .status }
-
-        // If only deleted filters are selected, show only deleted tasks
-        let wantsDeletedOnly = (statusTags.contains(.removedByAI) || statusTags.contains(.removedByMe)) && !statusTags.contains(.todo) && !statusTags.contains(.done)
-        if wantsDeletedOnly {
-            return store.deletedTasks
-        }
-
-        // Build combined list from selected status filters
-        var result: [TaskActionItem] = []
-        if statusTags.isEmpty || statusTags.contains(.todo) || statusTags.contains(.done) {
-            if statusTags.isEmpty || (statusTags.contains(.todo) && statusTags.contains(.done)) {
-                result = store.incompleteTasks + store.completedTasks
-            } else if statusTags.contains(.done) {
-                result = store.completedTasks
-            } else {
-                result = store.incompleteTasks
-            }
-        }
-
-        // If any deleted filter is also selected alongside other status tags, include deleted
-        if statusTags.contains(.removedByAI) || statusTags.contains(.removedByMe) {
-            result += store.deletedTasks
-        }
-
-        return result
+        showCompleted ? store.completedTasks : store.incompleteTasks
     }
 
     /// Apply selected filter tags to tasks (non-status tags)
@@ -1611,54 +1348,6 @@ class TasksViewModel: ObservableObject {
         recomputeVersion += 1
         let version = recomputeVersion
 
-        // Snapshot inputs for background computation
-        let tagInputs = (store.incompleteTasks + store.completedTasks).map { task in
-            TaskDynamicFilterInput(source: task.source, tags: task.tags)
-        }
-        let knownSources = TaskFilterTag.knownSources
-        let knownCategories = TaskFilterTag.knownCategories
-
-        // Discover dynamic tags on a background thread (iterates all tasks)
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            var newDynamicTags: [DynamicFilterTag] = []
-            var newDynamicCounts: [String: Int] = [:]
-
-            var allSources: [String: Int] = [:]
-            var allCategories: [String: Int] = [:]
-
-            for input in tagInputs {
-                if let source = input.source, !source.isEmpty {
-                    allSources[source, default: 0] += 1
-                }
-                for tag in input.tags {
-                    allCategories[tag, default: 0] += 1
-                }
-            }
-
-            for (source, count) in allSources {
-                if !knownSources.contains(source) {
-                    let tag = DynamicFilterTag.source(source)
-                    newDynamicTags.append(tag)
-                    newDynamicCounts[tag.id] = count
-                }
-            }
-
-            for (category, count) in allCategories {
-                if !knownCategories.contains(category) {
-                    let tag = DynamicFilterTag.category(category)
-                    newDynamicTags.append(tag)
-                    newDynamicCounts[tag.id] = count
-                }
-            }
-
-            newDynamicTags.sort { (newDynamicCounts[$0.id] ?? 0) > (newDynamicCounts[$1.id] ?? 0) }
-
-            DispatchQueue.main.async { [weak self] in
-                guard let self, self.recomputeVersion == version else { return }
-                self.dynamicTags = newDynamicTags
-                self.dynamicTagCounts = newDynamicCounts
-            }
-        }
 
         // If non-status filters (including date) are active, re-query SQLite to pick up changes
         // (e.g. a task was just toggled completed and should no longer appear).
@@ -1673,58 +1362,6 @@ class TasksViewModel: ObservableObject {
         } else {
             recomputeDisplayCaches()
         }
-
-        // Load true counts from SQLite asynchronously
-        Task { [weak self] in
-            guard let self, self.recomputeVersion == version else { return }
-            await self.loadTagCountsFromDatabase()
-        }
-    }
-
-    /// Discover unknown sources/categories from task data and create dynamic tags
-    private func discoverDynamicTags() {
-        let allTasks = store.incompleteTasks + store.completedTasks
-        var newDynamicTags: [DynamicFilterTag] = []
-        var newDynamicCounts: [String: Int] = [:]
-
-        // Collect all unique sources and categories
-        var allSources: [String: Int] = [:]
-        var allCategories: [String: Int] = [:]
-
-        for task in allTasks {
-            if let source = task.source, !source.isEmpty {
-                allSources[source, default: 0] += 1
-            }
-            for tag in task.tags {
-                allCategories[tag, default: 0] += 1
-            }
-        }
-
-        // Find sources not in predefined list
-        let knownSources = TaskFilterTag.knownSources
-        for (source, count) in allSources {
-            if !knownSources.contains(source) {
-                let tag = DynamicFilterTag.source(source)
-                newDynamicTags.append(tag)
-                newDynamicCounts[tag.id] = count
-            }
-        }
-
-        // Find categories not in predefined list
-        let knownCategories = TaskFilterTag.knownCategories
-        for (category, count) in allCategories {
-            if !knownCategories.contains(category) {
-                let tag = DynamicFilterTag.category(category)
-                newDynamicTags.append(tag)
-                newDynamicCounts[tag.id] = count
-            }
-        }
-
-        // Sort by count descending
-        newDynamicTags.sort { (dynamicTagCounts[$0.id] ?? 0) > (dynamicTagCounts[$1.id] ?? 0) }
-
-        dynamicTags = newDynamicTags
-        dynamicTagCounts = newDynamicCounts
     }
 
     /// Load filtered tasks from SQLite when non-status filters are applied
@@ -1841,120 +1478,6 @@ class TasksViewModel: ObservableObject {
         recomputeDisplayCaches()
     }
 
-    /// Load tag counts from SQLite database (shows true totals, not just loaded items)
-    private func loadTagCountsFromDatabase() async {
-        do {
-            let filterCounts = try await ActionItemStorage.shared.getFilterCounts()
-
-            // Update counts on main actor
-            todoCount = filterCounts.todo
-            doneCount = filterCounts.done
-
-            var counts: [TaskFilterTag: Int] = [:]
-
-            // Status counts
-            counts[.todo] = filterCounts.todo
-            counts[.done] = filterCounts.done
-            counts[.removedByAI] = filterCounts.deletedByAI
-            counts[.removedByMe] = filterCounts.deletedByUser
-
-            // Category counts
-            counts[.personal] = filterCounts.categories["personal"] ?? 0
-            counts[.work] = filterCounts.categories["work"] ?? 0
-            counts[.feature] = filterCounts.categories["feature"] ?? 0
-            counts[.bug] = filterCounts.categories["bug"] ?? 0
-            counts[.code] = filterCounts.categories["code"] ?? 0
-            counts[.research] = filterCounts.categories["research"] ?? 0
-            counts[.communication] = filterCounts.categories["communication"] ?? 0
-            counts[.finance] = filterCounts.categories["finance"] ?? 0
-            counts[.health] = filterCounts.categories["health"] ?? 0
-            counts[.other] = filterCounts.categories["other"] ?? 0
-
-            // Date range counts (computed in-memory)
-            let allTasks = store.incompleteTasks + store.completedTasks
-            let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date())!
-            counts[.last7Days] = allTasks.filter { task in
-                if let dueAt = task.dueAt {
-                    return dueAt >= sevenDaysAgo
-                } else {
-                    return task.createdAt >= sevenDaysAgo
-                }
-            }.count
-
-            // Source counts
-            counts[.sourceScreen] = filterCounts.sources["screenshot"] ?? 0
-            counts[.sourceOmi] = filterCounts.sources["transcription:omi"] ?? 0
-            counts[.sourceDesktop] = filterCounts.sources["transcription:desktop"] ?? 0
-            counts[.sourceManual] = filterCounts.sources["manual"] ?? 0
-            counts[.sourceOmiAnalytics] = filterCounts.sources["omi-analytics"] ?? 0
-
-            // Priority counts
-            counts[.priorityHigh] = filterCounts.priorities["high"] ?? 0
-            counts[.priorityMedium] = filterCounts.priorities["medium"] ?? 0
-            counts[.priorityLow] = filterCounts.priorities["low"] ?? 0
-
-            // Origin counts
-            counts[.originDirectRequest] = filterCounts.origins["direct_request"] ?? 0
-            counts[.originSelfGenerated] = filterCounts.origins["self_generated"] ?? 0
-            counts[.originCalendarDriven] = filterCounts.origins["calendar_driven"] ?? 0
-            counts[.originReactive] = filterCounts.origins["reactive"] ?? 0
-            counts[.originExternalSystem] = filterCounts.origins["external_system"] ?? 0
-            counts[.originOther] = filterCounts.origins["other"] ?? 0
-
-            tagCounts = counts
-
-            // Discover and count dynamic tags from SQLite data
-            var newDynamicTags: [DynamicFilterTag] = []
-            var newDynamicCounts: [String: Int] = [:]
-
-            // Find unknown sources
-            let knownSources = TaskFilterTag.knownSources
-            for (source, count) in filterCounts.sources {
-                if !knownSources.contains(source) && count > 0 {
-                    let tag = DynamicFilterTag.source(source)
-                    newDynamicTags.append(tag)
-                    newDynamicCounts[tag.id] = count
-                }
-            }
-
-            // Find unknown categories
-            let knownCategories = TaskFilterTag.knownCategories
-            for (category, count) in filterCounts.categories {
-                if !knownCategories.contains(category) && count > 0 {
-                    let tag = DynamicFilterTag.category(category)
-                    newDynamicTags.append(tag)
-                    newDynamicCounts[tag.id] = count
-                }
-            }
-
-            // Sort by count descending
-            newDynamicTags.sort { (newDynamicCounts[$0.id] ?? 0) > (newDynamicCounts[$1.id] ?? 0) }
-
-            dynamicTags = newDynamicTags
-            dynamicTagCounts = newDynamicCounts
-
-        } catch {
-            logError("TasksViewModel: Failed to load tag counts from database", error: error)
-            // Fall back to in-memory counts
-            let allTasks = store.incompleteTasks + store.completedTasks
-            todoCount = store.incompleteTasks.count
-            doneCount = store.completedTasks.count
-
-            var counts: [TaskFilterTag: Int] = [:]
-            for tag in TaskFilterTag.allCases {
-                if tag == .removedByAI || tag == .removedByMe {
-                    counts[tag] = store.deletedTasks.filter { tag.matches($0) }.count
-                } else {
-                    counts[tag] = allTasks.filter { tag.matches($0) }.count
-                }
-            }
-            tagCounts = counts
-
-            // Also discover dynamic tags from in-memory tasks
-            discoverDynamicTags()
-        }
-    }
-
     /// Perform search against SQLite database
     private func performSearch() async {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1986,9 +1509,10 @@ class TasksViewModel: ObservableObject {
         recomputeDisplayCaches()
     }
 
-    /// Whether we're currently in a filtered/search mode
+    /// Whether we're currently in search mode (the only filtered mode left —
+    /// the status toggle is a view switch, not a filter, matching mobile)
     var isInFilteredMode: Bool {
-        !searchText.isEmpty || hasActiveFilters
+        !searchText.isEmpty
     }
 
     /// Recompute display-related caches when filters or sort change
@@ -2052,16 +1576,12 @@ class TasksViewModel: ObservableObject {
         let startOfToday = calendar.startOfDay(for: Date())
         let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
         let startOfDayAfterTomorrow = calendar.date(byAdding: .day, value: 2, to: startOfToday)!
-        // Only apply 7-day cutoff when the last7Days filter is active (matches Flutter _categorizeItems default)
-        let applySevenDayCutoff = selectedTags.contains(.last7Days)
-        let sevenDaysAgo = Date().addingTimeInterval(-7 * 24 * 60 * 60)
         for task in displayTasks {
-            if applySevenDayCutoff && !task.completed {
-                if let dueAt = task.dueAt {
-                    if dueAt < sevenDaysAgo { continue }
-                } else if task.createdAt < sevenDaysAgo {
-                    continue
-                }
+            // Mobile-parity gate (Flutter _categorizeItems): the categorized list
+            // shows only the active view's tasks — To Do shows incomplete, Done
+            // shows completed. Search bypasses the gate like mobile's flat search.
+            if searchText.isEmpty && task.completed != showCompleted {
+                continue
             }
             let category = categoryFor(task: task, startOfTomorrow: startOfTomorrow, startOfDayAfterTomorrow: startOfDayAfterTomorrow)
             result[category, default: []].append(task)
@@ -2088,16 +1608,12 @@ class TasksViewModel: ObservableObject {
         let startOfToday = calendar.startOfDay(for: Date())
         let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
         let startOfDayAfterTomorrow = calendar.date(byAdding: .day, value: 2, to: startOfToday)!
-        // Only apply 7-day cutoff when the last7Days filter is active
-        let applySevenDayCutoff = selectedTags.contains(.last7Days)
-        let sevenDaysAgo = Date().addingTimeInterval(-7 * 24 * 60 * 60)
         for task in displayTasks {
-            if applySevenDayCutoff && !task.completed {
-                if let dueAt = task.dueAt {
-                    if dueAt < sevenDaysAgo { continue }
-                } else if task.createdAt < sevenDaysAgo {
-                    continue
-                }
+            // Mobile-parity gate (Flutter _categorizeItems): the categorized list
+            // shows only the active view's tasks — To Do shows incomplete, Done
+            // shows completed. Search bypasses the gate like mobile's flat search.
+            if searchText.isEmpty && task.completed != showCompleted {
+                continue
             }
             let category = categoryFor(task: task, startOfTomorrow: startOfTomorrow, startOfDayAfterTomorrow: startOfDayAfterTomorrow)
             result[category, default: []].append(task)
@@ -2914,16 +2430,6 @@ struct TasksPage: View {
     @FocusState private var inlineCreateFocused: Bool
     @State private var keyboardMonitor: Any?
 
-    // Filter popover state
-    @State private var showFilterPopover = false
-    @State private var pendingSelectedTags: Set<TaskFilterTag> = [.todo, .last7Days]
-    @State private var pendingSelectedDynamicTags: Set<DynamicFilterTag> = []
-    @State private var filterSearchText = ""
-
-    // Save filter view state
-    @State private var showSaveFilterAlert = false
-    @State private var saveFilterName = ""
-
     // Chat panel resize state
     @State private var isDraggingDivider = false
     @State private var dragStartWidth: Double = 0
@@ -3297,42 +2803,8 @@ struct TasksPage: View {
             .background(OmiColors.backgroundSecondary)
             .cornerRadius(OmiChrome.elementRadius)
 
-            // Saved filter view chips
-            if !viewModel.savedFilterViews.isEmpty && !viewModel.isMultiSelectMode {
-                ForEach(viewModel.savedFilterViews) { savedView in
-                    let isActive = viewModel.isActiveSavedView(savedView)
-                    Button {
-                        viewModel.applySavedView(savedView)
-                    } label: {
-                        Text(savedView.name)
-                            .scaledFont(size: OmiType.caption, weight: .medium)
-                            .foregroundColor(isActive ? .white : OmiColors.textSecondary)
-                            .padding(.horizontal, OmiSpacing.sm)
-                            .padding(.vertical, OmiSpacing.xs)
-                            .background(isActive ? OmiColors.backgroundTertiary : OmiColors.backgroundSecondary)
-                            .cornerRadius(OmiChrome.badgeRadius)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
-                                    .stroke(isActive ? OmiColors.border : Color.clear, lineWidth: 1)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .contextMenu {
-                        Button(role: .destructive) {
-                            viewModel.deleteSavedView(savedView)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
-                }
-            }
-
             if !viewModel.isMultiSelectMode {
-                // Save current filters button
-                if viewModel.hasNonDefaultFilters {
-                    saveFilterButton
-                }
-                filterDropdownButton
+                completedToggleButton
             } else {
                 multiSelectControls
             }
@@ -3353,38 +2825,6 @@ struct TasksPage: View {
         .padding(.horizontal, OmiSpacing.lg)
         .padding(.top, OmiSpacing.lg)
         .padding(.bottom, OmiSpacing.md)
-        .alert("Save Filter View", isPresented: $showSaveFilterAlert) {
-            TextField("View name", text: $saveFilterName)
-            Button("Save") {
-                let name = saveFilterName.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !name.isEmpty {
-                    viewModel.saveCurrentFilters(name: name)
-                }
-                saveFilterName = ""
-            }
-            Button("Cancel", role: .cancel) {
-                saveFilterName = ""
-            }
-        } message: {
-            Text("Enter a name for this filter combination.")
-        }
-    }
-
-    private var saveFilterButton: some View {
-        Button {
-            saveFilterName = ""
-            showSaveFilterAlert = true
-        } label: {
-            Image(systemName: "bookmark")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textSecondary)
-                .padding(.horizontal, OmiSpacing.sm)
-                .padding(.vertical, OmiSpacing.sm)
-                .background(OmiColors.backgroundSecondary)
-                .cornerRadius(OmiChrome.elementRadius)
-        }
-        .buttonStyle(.plain)
-        .help("Save current filters as a view")
     }
 
     private var addTaskButton: some View {
@@ -3404,290 +2844,26 @@ struct TasksPage: View {
         .help("Add task (⌘N)")
     }
 
-    // MARK: - Filter Dropdown
+    // MARK: - Completed Toggle (mobile parity)
 
-    private var filterLabel: String {
-        let totalCount = viewModel.selectedTags.count + viewModel.selectedDynamicTags.count
-        if totalCount == 0 {
-            return "All"
-        } else if viewModel.selectedTags == [.todo, .last7Days] && viewModel.selectedDynamicTags.isEmpty {
-            return "To Do"
-        } else if totalCount == 1 {
-            if let tag = viewModel.selectedTags.first {
-                return tag.displayName
-            } else if let dynamicTag = viewModel.selectedDynamicTags.first {
-                return dynamicTag.displayName
-            }
-            return "1 selected"
-        } else {
-            return "\(totalCount) selected"
-        }
-    }
-
-    /// Filtered predefined tags based on search text, grouped by filter group
-    private func filteredTags(for group: TaskFilterGroup) -> [TaskFilterTag] {
-        let tags = TaskFilterTag.tags(for: group)
-        if filterSearchText.isEmpty {
-            return tags.sorted { viewModel.tagCount($0) > viewModel.tagCount($1) }
-        }
-        return tags
-            .filter { $0.displayName.localizedCaseInsensitiveContains(filterSearchText) }
-            .sorted { viewModel.tagCount($0) > viewModel.tagCount($1) }
-    }
-
-    /// Filtered dynamic tags based on search text, grouped by filter group
-    private func filteredDynamicTags(for group: TaskFilterGroup) -> [DynamicFilterTag] {
-        let tags = viewModel.dynamicTags.filter { $0.group == group }
-        if filterSearchText.isEmpty {
-            return tags.sorted { viewModel.dynamicTagCount($0) > viewModel.dynamicTagCount($1) }
-        }
-        return tags
-            .filter { $0.displayName.localizedCaseInsensitiveContains(filterSearchText) }
-            .sorted { viewModel.dynamicTagCount($0) > viewModel.dynamicTagCount($1) }
-    }
-
-    private var filterDropdownButton: some View {
+    private var completedToggleButton: some View {
         Button {
-            pendingSelectedTags = viewModel.selectedTags
-            pendingSelectedDynamicTags = viewModel.selectedDynamicTags
-            filterSearchText = ""
-            showFilterPopover = true
+            viewModel.toggleShowCompletedView()
         } label: {
-            Image(systemName: "line.3.horizontal.decrease")
+            Image(systemName: viewModel.showCompleted ? "checkmark.circle.fill" : "checkmark.circle")
                 .scaledFont(size: OmiType.caption)
-            .foregroundColor(viewModel.hasActiveFilters ? OmiColors.textPrimary : OmiColors.textSecondary)
-            .padding(.horizontal, OmiSpacing.sm)
-            .padding(.vertical, OmiSpacing.sm)
-            .background(OmiColors.backgroundSecondary)
-            .cornerRadius(OmiChrome.elementRadius)
-            .overlay(
-                RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-                    .stroke(viewModel.hasActiveFilters ? OmiColors.border : Color.clear, lineWidth: 1)
-            )
+                .foregroundColor(viewModel.showCompleted ? OmiColors.textPrimary : OmiColors.textSecondary)
+                .padding(.horizontal, OmiSpacing.sm)
+                .padding(.vertical, OmiSpacing.sm)
+                .background(OmiColors.backgroundSecondary)
+                .cornerRadius(OmiChrome.elementRadius)
+                .overlay(
+                    RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+                        .stroke(viewModel.showCompleted ? OmiColors.border : Color.clear, lineWidth: 1)
+                )
         }
         .buttonStyle(.plain)
-        .popover(isPresented: $showFilterPopover, arrowEdge: .bottom) {
-            filterPopover
-        }
-    }
-
-    private var filterPopover: some View {
-        VStack(spacing: 0) {
-            // Search field
-            HStack(spacing: OmiSpacing.sm) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(OmiColors.textTertiary)
-                    .scaledFont(size: OmiType.caption)
-
-                TextField("Search filters...", text: $filterSearchText)
-                    .textFieldStyle(.plain)
-                    .scaledFont(size: OmiType.body)
-                    .foregroundColor(OmiColors.textPrimary)
-
-                if !filterSearchText.isEmpty {
-                    Button {
-                        filterSearchText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(OmiColors.textTertiary)
-                            .scaledFont(size: OmiType.caption)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, OmiSpacing.md)
-            .padding(.vertical, OmiSpacing.sm)
-            .background(OmiColors.backgroundTertiary)
-            .cornerRadius(OmiChrome.badgeRadius)
-            .padding(.horizontal, OmiSpacing.md)
-            .padding(.top, OmiSpacing.md)
-            .padding(.bottom, OmiSpacing.sm)
-
-            Divider()
-                .padding(.horizontal, OmiSpacing.md)
-
-            // Tag list grouped by filter group
-            ScrollView {
-                VStack(spacing: OmiSpacing.hairline) {
-                    // "All" option
-                    Button {
-                        pendingSelectedTags.removeAll()
-                        pendingSelectedDynamicTags.removeAll()
-                    } label: {
-                        HStack {
-                            Image(systemName: "tray.full")
-                                .scaledFont(size: OmiType.caption)
-                                .frame(width: 20)
-                            Text("All")
-                                .scaledFont(size: OmiType.body)
-                            Spacer()
-                            Text("\(viewModel.todoCount + viewModel.doneCount)")
-                                .scaledFont(size: OmiType.caption)
-                                .foregroundColor(OmiColors.textTertiary)
-                                .padding(.horizontal, OmiSpacing.xs)
-                                .padding(.vertical, OmiSpacing.hairline)
-                                .background(OmiColors.backgroundTertiary)
-                                .cornerRadius(OmiChrome.stripRadius)
-                            if pendingSelectedTags.isEmpty && pendingSelectedDynamicTags.isEmpty {
-                                Image(systemName: "checkmark")
-                                    .scaledFont(size: OmiType.caption, weight: .medium)
-                                    .foregroundColor(.white)
-                            }
-                        }
-                        .foregroundColor(OmiColors.textPrimary)
-                        .padding(.horizontal, OmiSpacing.md)
-                        .padding(.vertical, OmiSpacing.sm)
-                        .background(pendingSelectedTags.isEmpty && pendingSelectedDynamicTags.isEmpty ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
-                        .cornerRadius(OmiChrome.badgeRadius)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-
-                    // Groups
-                    ForEach(TaskFilterGroup.allCases, id: \.self) { group in
-                        let tags = filteredTags(for: group)
-                        let dynTags = filteredDynamicTags(for: group)
-                        if !tags.isEmpty || !dynTags.isEmpty {
-                            Divider()
-                                .padding(.vertical, OmiSpacing.xxs)
-
-                            // Group header
-                            Text(group.rawValue)
-                                .scaledFont(size: OmiType.caption, weight: .semibold)
-                                .foregroundColor(OmiColors.textTertiary)
-                                .textCase(.uppercase)
-                                .padding(.horizontal, OmiSpacing.md)
-                                .padding(.vertical, OmiSpacing.xxs)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-
-                            // Predefined tags in group
-                            ForEach(tags) { tag in
-                                let isSelected = pendingSelectedTags.contains(tag)
-                                let count = viewModel.tagCount(tag)
-
-                                Button {
-                                    if isSelected {
-                                        pendingSelectedTags.remove(tag)
-                                    } else {
-                                        pendingSelectedTags.insert(tag)
-                                    }
-                                } label: {
-                                    HStack {
-                                        Image(systemName: tag.icon)
-                                            .scaledFont(size: OmiType.caption)
-                                            .frame(width: 20)
-                                        Text(tag.displayName)
-                                            .scaledFont(size: OmiType.body)
-                                        Spacer()
-                                        Text("\(count)")
-                                            .scaledFont(size: OmiType.caption)
-                                            .foregroundColor(OmiColors.textTertiary)
-                                            .padding(.horizontal, OmiSpacing.xs)
-                                            .padding(.vertical, OmiSpacing.hairline)
-                                            .background(OmiColors.backgroundTertiary)
-                                            .cornerRadius(OmiChrome.stripRadius)
-                                        if isSelected {
-                                            Image(systemName: "checkmark")
-                                                .scaledFont(size: OmiType.caption, weight: .medium)
-                                                .foregroundColor(.white)
-                                        }
-                                    }
-                                    .foregroundColor(OmiColors.textPrimary)
-                                    .padding(.horizontal, OmiSpacing.md)
-                                    .padding(.vertical, OmiSpacing.sm)
-                                    .background(isSelected ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
-                                    .cornerRadius(OmiChrome.badgeRadius)
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                            }
-
-                            // Dynamic tags for this group (discovered from task data)
-                            ForEach(filteredDynamicTags(for: group)) { tag in
-                                let isSelected = pendingSelectedDynamicTags.contains(tag)
-                                let count = viewModel.dynamicTagCount(tag)
-
-                                Button {
-                                    if isSelected {
-                                        pendingSelectedDynamicTags.remove(tag)
-                                    } else {
-                                        pendingSelectedDynamicTags.insert(tag)
-                                    }
-                                } label: {
-                                    HStack {
-                                        Image(systemName: tag.icon)
-                                            .scaledFont(size: OmiType.caption)
-                                            .frame(width: 20)
-                                        Text(tag.displayName)
-                                            .scaledFont(size: OmiType.body)
-                                        Spacer()
-                                        Text("\(count)")
-                                            .scaledFont(size: OmiType.caption)
-                                            .foregroundColor(OmiColors.textTertiary)
-                                            .padding(.horizontal, OmiSpacing.xs)
-                                            .padding(.vertical, OmiSpacing.hairline)
-                                            .background(OmiColors.backgroundTertiary)
-                                            .cornerRadius(OmiChrome.stripRadius)
-                                        if isSelected {
-                                            Image(systemName: "checkmark")
-                                                .scaledFont(size: OmiType.caption, weight: .medium)
-                                                .foregroundColor(.white)
-                                        }
-                                    }
-                                    .foregroundColor(OmiColors.textPrimary)
-                                    .padding(.horizontal, OmiSpacing.md)
-                                    .padding(.vertical, OmiSpacing.sm)
-                                    .background(isSelected ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
-                                    .cornerRadius(OmiChrome.badgeRadius)
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal, OmiSpacing.md)
-                .padding(.vertical, OmiSpacing.sm)
-            }
-            .frame(maxHeight: 350)
-
-            Divider()
-                .padding(.horizontal, OmiSpacing.md)
-
-            // Action buttons
-            HStack(spacing: OmiSpacing.sm) {
-                Button {
-                    pendingSelectedTags.removeAll()
-                    pendingSelectedDynamicTags.removeAll()
-                } label: {
-                    Text("Clear")
-                        .scaledFont(size: OmiType.body, weight: .medium)
-                        .foregroundColor(OmiColors.textSecondary)
-                        .padding(.horizontal, OmiSpacing.lg)
-                        .padding(.vertical, OmiSpacing.sm)
-                        .background(OmiColors.backgroundTertiary)
-                        .cornerRadius(OmiChrome.badgeRadius)
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    viewModel.selectedTags = pendingSelectedTags
-                    viewModel.selectedDynamicTags = pendingSelectedDynamicTags
-                    showFilterPopover = false
-                } label: {
-                    Text("Apply")
-                        .scaledFont(size: OmiType.body, weight: .medium)
-                        .foregroundColor(.black)
-                        .padding(.horizontal, OmiSpacing.lg)
-                        .padding(.vertical, OmiSpacing.sm)
-                        .background(Color.white)
-                        .cornerRadius(OmiChrome.badgeRadius)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(OmiSpacing.md)
-        }
-        .frame(width: 280)
+        .help(viewModel.showCompleted ? "Hide completed tasks" : "Show completed tasks")
     }
 
     private var multiSelectControls: some View {
@@ -3889,32 +3065,22 @@ struct TasksPage: View {
     // MARK: - Empty View
 
     private var emptyView: some View {
-        // Only show filter-related messaging when tasks exist but are all filtered out
-        let isFilteredEmpty = viewModel.hasActiveFilters && !viewModel.tasks.isEmpty
+        // Search with no hits gets its own messaging (mobile parity);
+        // otherwise the list is genuinely empty for the current view.
+        let isSearchEmpty = !viewModel.searchText.isEmpty
         return VStack(spacing: OmiSpacing.lg) {
-            Image(systemName: isFilteredEmpty ? "line.3.horizontal.decrease" : "tray.fill")
+            Image(systemName: isSearchEmpty ? "magnifyingglass" : "tray.fill")
                 .scaledFont(size: 48)
                 .foregroundColor(OmiColors.textTertiary)
 
-            Text(isFilteredEmpty ? "No Matching Tasks" : "All Caught Up")
+            Text(isSearchEmpty ? "No Results Found" : (viewModel.showCompleted ? "No Completed Tasks" : "All Caught Up"))
                 .scaledFont(size: 24, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
-            Text(isFilteredEmpty ? "Try adjusting your filters" : "You have no tasks yet")
+            Text(isSearchEmpty ? "Try a different search" : (viewModel.showCompleted ? "Tasks you complete will appear here" : "You have no tasks yet"))
                 .scaledFont(size: OmiType.body)
                 .foregroundColor(OmiColors.textTertiary)
                 .multilineTextAlignment(.center)
-
-            if isFilteredEmpty {
-                Button("Clear Filters") {
-                    OmiMotion.withGated {
-                        viewModel.clearAllFilters()
-                    }
-                }
-                .buttonStyle(.bordered)
-                .tint(OmiColors.textSecondary)
-                .padding(.top, OmiSpacing.sm)
-            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -3926,9 +3092,7 @@ struct TasksPage: View {
             ScrollView {
                 LazyVStack(spacing: OmiSpacing.lg) {
                     // Show tasks grouped by due-date category (Today, Tomorrow, Later, No Deadline)
-                    let onlyDone = viewModel.selectedTags.contains(.done) && !viewModel.selectedTags.contains(.todo)
-                    let onlyDeleted = (viewModel.selectedTags.contains(.removedByAI) || viewModel.selectedTags.contains(.removedByMe)) && !viewModel.selectedTags.contains(.todo) && !viewModel.selectedTags.contains(.done)
-                    if !onlyDone && !onlyDeleted && !viewModel.isMultiSelectMode {
+                    if !viewModel.showCompleted && !viewModel.isMultiSelectMode {
                         SuggestedTasksSection(
                             store: suggestedStore,
                             onCanonicalChange: {
