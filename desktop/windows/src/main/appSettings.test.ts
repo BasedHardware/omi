@@ -68,8 +68,13 @@ describe('appSettings', () => {
       hudContentProtection: true,
       meeting: { mode: 'ask', endGraceMinutes: 2, perApp: {}, firstRunToastShown: false },
       lastShownChangelogVersion: null,
-      aiProfileEnabled: true
+      aiProfileEnabled: false
     })
+    // The AI user profile is the one opt-IN flag: it defaults OFF until a
+    // consumer and a Settings toggle exist, so only an explicit true enables it
+    // (everything else here is opt-out). See the AppSettings field comment.
+    expect(sanitizeAppSettings({ aiProfileEnabled: true }).aiProfileEnabled).toBe(true)
+    expect(sanitizeAppSettings({ aiProfileEnabled: 'yes' } as never).aiProfileEnabled).toBe(false)
     expect(sanitizeAppSettings({ summonHotkey: '  ' } as never).summonHotkey).toBe('Shift+Space')
     expect(sanitizeAppSettings({ summonHotkey: 'Alt+K' } as never).summonHotkey).toBe('Alt+K')
     expect(sanitizeAppSettings({ recordHotkey: '  ' } as never).recordHotkey).toBe('Ctrl+Space')

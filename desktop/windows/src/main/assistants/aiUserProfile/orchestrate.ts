@@ -96,6 +96,16 @@ export async function collectSources(fetchers: SourceFetchers): Promise<ProfileS
   return { memories, tasks, goals, conversations, messages }
 }
 
+/** The backend session changed (sign-out, or a different user) while a generation
+ *  was in flight, so its result was discarded rather than written. See
+ *  OrchestratorDeps.isStale. */
+export class SessionChangedError extends Error {
+  constructor() {
+    super('AI profile: session changed mid-generation — result discarded')
+    this.name = 'SessionChangedError'
+  }
+}
+
 /** Injected seams for generateProfile — every side effect lives here. */
 export type OrchestratorDeps = {
   fetchers: SourceFetchers
@@ -109,6 +119,15 @@ export type OrchestratorDeps = {
   syncProfile: (id: number, text: string, generatedAtMs: number, itemCount: number) => Promise<void>
   /** Clock seam (defaults to Date.now). */
   now?: () => number
+  /**
+   * True when the session that started this generation is no longer the current
+   * one. A generation takes 10–90s, and sign-out is wipe-then-signout — so
+   * without this check an in-flight run can re-insert the signed-out user's
+   * synthesized dossier AFTER the wipe that existed to erase it (and PATCH it to
+   * the backend with their token). Checked immediately before each write, with
+   * no await in between, so the check cannot be raced.
+   */
+  isStale?: () => boolean
 }
 
 /**
@@ -141,6 +160,12 @@ export async function generateProfile(deps: OrchestratorDeps): Promise<AiUserPro
   finalText = enforceCharCap(finalText)
 
   const generatedAt = deps.now ? deps.now() : Date.now()
+
+  // LAST GATE before the first write. Everything above is read-only, so bailing
+  // here leaves no trace of the departed session's data. Nothing between this
+  // check and insertProfile awaits, so the session cannot change in between.
+  if (deps.isStale?.()) throw new SessionChangedError()
+
   const id = deps.insertProfile({
     profileText: finalText,
     dataSourcesUsed,
@@ -151,6 +176,9 @@ export async function generateProfile(deps: OrchestratorDeps): Promise<AiUserPro
 
   // Fire-and-forget backend sync — a sync failure must NOT lose the local row.
   // `total` is the exact item count Mac reports (data_sources_used).
+  // Re-checked (defence in depth): syncProfile carries the session's bearer
+  // token, so it must never fire for a session that has since gone away.
+  if (deps.isStale?.()) throw new SessionChangedError()
   void deps
     .syncProfile(id, finalText, generatedAt, total)
     .catch((e) => warnDegraded('backend_sync_failed', { op: 'generate', error: describeError(e) }))
