@@ -23,6 +23,9 @@ importers:
       '@fontsource-variable/jetbrains-mono':
         specifier: ^5.2.8
         version: 5.2.8
+      '@fontsource-variable/newsreader':
+        specifier: ^5.2.8
+        version: 5.2.10
       '@google/genai':
         specifier: ^2.11.0
         version: 2.11.0(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))
@@ -1110,6 +1113,9 @@ packages:
 
   '@fontsource-variable/jetbrains-mono@5.2.8':
     resolution: {integrity: sha512-WBA9elru6Jdp5df2mES55wuOO0WIrn3kpXnI4+W2ek5u3ZgLS9XS4gmIlcQhiZOWEKl95meYdvK7xI+ETLCq/Q==}
+
+  '@fontsource-variable/newsreader@5.2.10':
+    resolution: {integrity: sha512-MdI2iRwrqWpMOU/2aV2BgfZ4dJNlj/XlYaY8Zb7t87mWqHskYW0XiUANkt1cyOCiEfW2VQ0bQ5vZgGPp6B2B4w==}
 
   '@google/genai@2.11.0':
     resolution: {integrity: sha512-d2Csf29vS0GfHc52H0MG25ccY4FKvvbDgqDlEovLrPLF8sPegWr/GGO+LMOy85/1SnX0iV0zDAW7R8SsvWg8Vg==}
@@ -6143,6 +6149,8 @@ snapshots:
   '@fontsource-variable/inter@5.2.8': {}
 
   '@fontsource-variable/jetbrains-mono@5.2.8': {}
+
+  '@fontsource-variable/newsreader@5.2.10': {}
 
   '@google/genai@2.11.0(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))':
     dependencies:

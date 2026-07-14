@@ -51,15 +51,15 @@ export default {
         },
         // HomePalette — redesigned-Home (Hub) surface tokens (macOS DashboardPage).
         home: {
-          paper: '#050506',
-          panel: '#0c0c0d',
+          paper: '#050505',
+          panel: '#0b0c0d',
           tile: '#141416',
           tileHover: '#1d1a24',
-          ink: '#f0ebe3',
+          ink: '#f0ece3',
           secondary: '#c7c3b9',
           muted: '#7d786e',
           faint: '#5c5954',
-          hairline: '#27272c',
+          hairline: '#28282c',
           green: '#2bc761',
           stageGlow: '#7a4df2'
         }
@@ -79,7 +79,10 @@ export default {
         body: ['var(--font-app)', 'sans-serif'],
         // Monospace — JetBrains Mono Variable via --font-code (previously the
         // `font-mono` utility fell through to Tailwind's default → Consolas).
-        mono: ['var(--font-code)', 'monospace']
+        mono: ['var(--font-code)', 'monospace'],
+        // Serif ACCENT (Newsreader Variable via --font-serif) — the Hub's stat
+        // numerals, Connect column headers, and "Try asking" headline. Not body.
+        serif: ['var(--font-serif)', 'serif']
       },
       backdropBlur: {
         glass: '24px',

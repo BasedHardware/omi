@@ -11,6 +11,12 @@ import '@fontsource-variable/inter/opsz-italic.css'
 import '@fontsource-variable/jetbrains-mono'
 // Real code italics (same font-synthesis:none rationale as Inter above).
 import '@fontsource-variable/jetbrains-mono/wght-italic.css'
+// Serif ACCENT typeface: Newsreader Variable (bundled, OFL) — the New York analog
+// behind --font-serif / the `font-serif` utility. The Hub uses it for stat-ribbon
+// numerals, Connect column headers, and the "Try asking" headline; nothing else.
+// Roman only: the serif never renders italic copy, so the italic faces would be
+// dead weight in the bundle (font-synthesis:none only bites where italics are used).
+import '@fontsource-variable/newsreader/opsz.css'
 import './styles/globals.css'
 
 import { StrictMode } from 'react'
