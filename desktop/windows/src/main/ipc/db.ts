@@ -13,7 +13,13 @@ import {
   recordVoiceTurnFailureOn,
   type VoiceTurnOutboxDb
 } from './voiceTurnOutbox'
+import { bufferToVector, vectorToBuffer } from './taskEmbeddingVector'
 import type {
+  AiUserProfileInput,
+  AiUserProfileRecord,
+  FocusSessionInput,
+  FocusSessionRecord,
+  TaskEmbeddingRecord,
   AppUsageRecord,
   ChatMessage,
   ConversationSyncPatch,
@@ -308,6 +314,45 @@ function get(): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS idx_voice_turn_outbox_pending
       ON voice_turn_outbox(status, created_at_ms);
+  `)
+  /* ---- Track 3 (proactive intelligence & memory) ---- */
+  // Net-new tables — CREATE TABLE IF NOT EXISTS only, no numbered migration, so
+  // sibling tracks never collide on a user_version bump. See shared/types.ts for
+  // the record shapes and the readers/writers at the end of this file.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ai_user_profiles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      profile_text TEXT NOT NULL,
+      data_sources_used TEXT,
+      generated_at INTEGER NOT NULL,
+      backend_synced INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_ai_user_profiles_generated_at ON ai_user_profiles(generated_at);
+
+    CREATE TABLE IF NOT EXISTS focus_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      screenshot_id TEXT,
+      status TEXT NOT NULL,
+      app_or_site TEXT,
+      description TEXT,
+      message TEXT,
+      duration_seconds INTEGER NOT NULL DEFAULT 0,
+      backend_id TEXT,
+      backend_synced INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      window_title TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_focus_sessions_created_at ON focus_sessions(created_at);
+
+    CREATE TABLE IF NOT EXISTS task_embeddings (
+      source TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      vector BLOB NOT NULL,
+      text TEXT NOT NULL,
+      model TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (source, item_id)
+    );
   `)
   // Migrate older databases that have local_conversation without these columns.
   ensureColumn(db, 'local_conversation', 'kind', "TEXT NOT NULL DEFAULT 'recording'")
@@ -1053,4 +1098,235 @@ export function markVoiceTurnAcked(idempotencyKey: string): void {
 
 export function recordVoiceTurnFailure(idempotencyKey: string, error: string): void {
   recordVoiceTurnFailureOn(voiceTurnDb(), idempotencyKey, error, Date.now())
+}
+
+/* ---- Track 3 (proactive intelligence & memory) ---- */
+
+// --- AI User Profile history ---
+// Local history of the daily-synthesized AI User Profile. Backend is the source
+// of truth; these rows feed the stage-2 consolidation (reads up to 5 past ones).
+
+const AI_USER_PROFILE_COLUMNS =
+  'id, profile_text AS profileText, data_sources_used AS dataSourcesUsed, generated_at AS generatedAt, backend_synced AS backendSynced'
+
+type AiUserProfileRow = {
+  id: number
+  profileText: string
+  dataSourcesUsed: string | null
+  generatedAt: number
+  backendSynced: number
+}
+
+function mapAiUserProfile(row: AiUserProfileRow): AiUserProfileRecord {
+  return {
+    id: row.id,
+    profileText: row.profileText,
+    dataSourcesUsed: parseJsonArray(row.dataSourcesUsed) ?? [],
+    generatedAt: row.generatedAt,
+    backendSynced: row.backendSynced !== 0
+  }
+}
+
+export function insertAiUserProfile(rec: AiUserProfileInput): number {
+  const info = get()
+    .prepare(
+      `INSERT INTO ai_user_profiles (profile_text, data_sources_used, generated_at, backend_synced)
+       VALUES (?, ?, ?, ?)`
+    )
+    .run(
+      rec.profileText,
+      rec.dataSourcesUsed && rec.dataSourcesUsed.length
+        ? JSON.stringify(rec.dataSourcesUsed)
+        : null,
+      rec.generatedAt,
+      rec.backendSynced ? 1 : 0
+    )
+  return info.lastInsertRowid as number
+}
+
+// Newest first, for the consolidation read (default 5).
+export function listAiUserProfiles(limit = 5): AiUserProfileRecord[] {
+  const rows = get()
+    .prepare(
+      `SELECT ${AI_USER_PROFILE_COLUMNS} FROM ai_user_profiles ORDER BY generated_at DESC, id DESC LIMIT ?`
+    )
+    .all(limit) as AiUserProfileRow[]
+  return rows.map(mapAiUserProfile)
+}
+
+export function latestAiUserProfile(): AiUserProfileRecord | null {
+  const row = get()
+    .prepare(
+      `SELECT ${AI_USER_PROFILE_COLUMNS} FROM ai_user_profiles ORDER BY generated_at DESC, id DESC LIMIT 1`
+    )
+    .get() as AiUserProfileRow | undefined
+  return row ? mapAiUserProfile(row) : null
+}
+
+export function updateAiUserProfileText(id: number, text: string): void {
+  get().prepare('UPDATE ai_user_profiles SET profile_text = ? WHERE id = ?').run(text, id)
+}
+
+export function markAiUserProfileSynced(id: number): void {
+  get().prepare('UPDATE ai_user_profiles SET backend_synced = 1 WHERE id = ?').run(id)
+}
+
+export function deleteAiUserProfile(id: number): void {
+  get().prepare('DELETE FROM ai_user_profiles WHERE id = ?').run(id)
+}
+
+export function deleteAllAiUserProfiles(): void {
+  get().prepare('DELETE FROM ai_user_profiles').run()
+}
+
+// --- Focus sessions ---
+// One row per Focus-assistant analysis. No backend focus API on Mac; sessions
+// live locally (and are dual-written as memories elsewhere).
+
+const FOCUS_SESSION_COLUMNS =
+  'id, screenshot_id AS screenshotId, status, app_or_site AS appOrSite, description, message, ' +
+  'duration_seconds AS durationSeconds, backend_id AS backendId, backend_synced AS backendSynced, ' +
+  'created_at AS createdAt, window_title AS windowTitle'
+
+type FocusSessionRow = {
+  id: number
+  screenshotId: string | null
+  status: string
+  appOrSite: string | null
+  description: string | null
+  message: string | null
+  durationSeconds: number
+  backendId: string | null
+  backendSynced: number
+  createdAt: number
+  windowTitle: string | null
+}
+
+function mapFocusSession(row: FocusSessionRow): FocusSessionRecord {
+  return {
+    id: row.id,
+    screenshotId: row.screenshotId,
+    status: row.status === 'distracted' ? 'distracted' : 'focused',
+    appOrSite: row.appOrSite,
+    description: row.description,
+    message: row.message,
+    durationSeconds: row.durationSeconds,
+    backendId: row.backendId,
+    backendSynced: row.backendSynced !== 0,
+    createdAt: row.createdAt,
+    windowTitle: row.windowTitle
+  }
+}
+
+export function insertFocusSession(rec: FocusSessionInput): number {
+  const info = get()
+    .prepare(
+      `INSERT INTO focus_sessions
+         (screenshot_id, status, app_or_site, description, message, duration_seconds, backend_id, backend_synced, created_at, window_title)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      rec.screenshotId ?? null,
+      rec.status,
+      rec.appOrSite ?? null,
+      rec.description ?? null,
+      rec.message ?? null,
+      rec.durationSeconds ?? 0,
+      rec.backendId ?? null,
+      rec.backendSynced ? 1 : 0,
+      rec.createdAt,
+      rec.windowTitle ?? null
+    )
+  return info.lastInsertRowid as number
+}
+
+// Newest first; optionally filtered to created_at >= sinceEpochMs and capped.
+export function listFocusSessions(sinceEpochMs?: number, limit?: number): FocusSessionRecord[] {
+  const params: unknown[] = []
+  let sql = `SELECT ${FOCUS_SESSION_COLUMNS} FROM focus_sessions`
+  if (sinceEpochMs !== undefined) {
+    sql += ' WHERE created_at >= ?'
+    params.push(sinceEpochMs)
+  }
+  sql += ' ORDER BY created_at DESC, id DESC'
+  if (limit !== undefined) {
+    sql += ' LIMIT ?'
+    params.push(limit)
+  }
+  const rows = get()
+    .prepare(sql)
+    .all(...params) as FocusSessionRow[]
+  return rows.map(mapFocusSession)
+}
+
+export function markFocusSessionSynced(id: number, backendId: string): void {
+  get()
+    .prepare('UPDATE focus_sessions SET backend_synced = 1, backend_id = ? WHERE id = ?')
+    .run(backendId, id)
+}
+
+// --- Task embeddings (semantic ranking) ---
+// 3072-dim Gemini vectors keyed by (source, item_id) so ids from different
+// source tables can't collide. Vectors stored as a Float32 little-endian BLOB
+// (see taskEmbeddingVector.ts), exposed as Float32Array.
+
+const TASK_EMBEDDING_COLUMNS =
+  'source, item_id AS itemId, vector, text, model, updated_at AS updatedAt'
+
+type TaskEmbeddingRow = {
+  source: string
+  itemId: string
+  vector: Buffer | Uint8Array
+  text: string
+  model: string
+  updatedAt: number
+}
+
+function mapTaskEmbedding(row: TaskEmbeddingRow): TaskEmbeddingRecord {
+  return {
+    source: row.source === 'staged_task' ? 'staged_task' : 'action_item',
+    itemId: row.itemId,
+    vector: bufferToVector(row.vector),
+    text: row.text,
+    model: row.model,
+    updatedAt: row.updatedAt
+  }
+}
+
+export function upsertTaskEmbedding(rec: TaskEmbeddingRecord): void {
+  get()
+    .prepare(
+      `INSERT INTO task_embeddings (source, item_id, vector, text, model, updated_at)
+       VALUES (@source, @itemId, @vector, @text, @model, @updatedAt)
+       ON CONFLICT(source, item_id) DO UPDATE SET
+         vector = excluded.vector, text = excluded.text, model = excluded.model, updated_at = excluded.updated_at`
+    )
+    .run({
+      source: rec.source,
+      itemId: rec.itemId,
+      vector: vectorToBuffer(rec.vector),
+      text: rec.text,
+      model: rec.model,
+      updatedAt: rec.updatedAt
+    })
+}
+
+export function getTaskEmbedding(source: string, itemId: string): TaskEmbeddingRecord | null {
+  const row = get()
+    .prepare(
+      `SELECT ${TASK_EMBEDDING_COLUMNS} FROM task_embeddings WHERE source = ? AND item_id = ?`
+    )
+    .get(source, itemId) as TaskEmbeddingRow | undefined
+  return row ? mapTaskEmbedding(row) : null
+}
+
+export function allTaskEmbeddings(): TaskEmbeddingRecord[] {
+  const rows = get()
+    .prepare(`SELECT ${TASK_EMBEDDING_COLUMNS} FROM task_embeddings`)
+    .all() as TaskEmbeddingRow[]
+  return rows.map(mapTaskEmbedding)
+}
+
+export function deleteTaskEmbedding(source: string, itemId: string): void {
+  get().prepare('DELETE FROM task_embeddings WHERE source = ? AND item_id = ?').run(source, itemId)
 }

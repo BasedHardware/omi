@@ -32,7 +32,14 @@ export const USER_DATA_TABLES = [
   'live_notes',
   'rescue_segments',
   'rewind_embeddings',
-  'file_index_meta'
+  'file_index_meta',
+  // Track 2's voice-turn outbox holds queued user voice-message data; it must be
+  // cleared on account switch (drift-guard caught it missing — see dbWipe.test.ts).
+  'voice_turn_outbox',
+  // --- Track 3 (proactive) ---
+  'ai_user_profiles',
+  'focus_sessions',
+  'task_embeddings'
 ] as const
 
 // Minimal DB surface the wipe needs — satisfied by both better-sqlite3 (prod)

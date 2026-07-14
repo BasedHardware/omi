@@ -1260,6 +1260,76 @@ export type InsightRecord = InsightPayload & { id: number; ts: number; dismissed
 
 export type InsightNotificationStyle = 'omi' | 'native'
 
+// ---- Track 3 (proactive) ----
+// Local persistence backing the proactive-intelligence + memory features. All
+// three sets mirror the macOS reference implementation; see src/main/ipc/db.ts
+// for the tables and readers/writers.
+
+// Local history of the daily-synthesized AI User Profile. The backend is the
+// source of truth; local rows exist so the stage-2 consolidation can read up to
+// 5 past profiles.
+export type AiUserProfileRecord = {
+  id: number
+  profileText: string
+  dataSourcesUsed: string[] // parsed from the stored JSON array (never null)
+  generatedAt: number // epoch ms
+  backendSynced: boolean
+}
+
+// Insert input: id is assigned by SQLite; backendSynced defaults to false.
+export type AiUserProfileInput = {
+  profileText: string
+  dataSourcesUsed?: string[]
+  generatedAt: number
+  backendSynced?: boolean
+}
+
+export type FocusSessionStatus = 'focused' | 'distracted'
+
+// One Focus-assistant analysis. Mac has no backend focus API, so sessions live
+// locally (and are dual-written as memories elsewhere).
+export type FocusSessionRecord = {
+  id: number
+  screenshotId: string | null
+  status: FocusSessionStatus
+  appOrSite: string | null
+  description: string | null
+  message: string | null
+  durationSeconds: number
+  backendId: string | null
+  backendSynced: boolean
+  createdAt: number // epoch ms
+  windowTitle: string | null
+}
+
+// Insert input: id is assigned by SQLite; optional fields default to null/0/false.
+export type FocusSessionInput = {
+  screenshotId?: string | null
+  status: FocusSessionStatus
+  appOrSite?: string | null
+  description?: string | null
+  message?: string | null
+  durationSeconds?: number
+  backendId?: string | null
+  backendSynced?: boolean
+  createdAt: number
+  windowTitle?: string | null
+}
+
+export type TaskEmbeddingSource = 'action_item' | 'staged_task'
+
+// Persisted Gemini embedding vector for a task / staged-task (semantic ranking).
+// The composite (source, item_id) primary key is a deliberate fix ported from
+// macOS: ids from different source tables must not collide.
+export type TaskEmbeddingRecord = {
+  source: TaskEmbeddingSource
+  itemId: string
+  vector: Float32Array // L2-normalized, Float32 little-endian
+  text: string
+  model: string
+  updatedAt: number
+}
+
 // --- Meeting detection (Phase 5) ---
 export type MeetingMode = 'off' | 'ask' | 'auto'
 
