@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { onSettingsTabRequest, consumeSettingsTabRequest } from '../lib/settingsNav'
 import { SettingsSearchProvider } from '../components/settings/SettingsSearchProvider'
 import { useSettingsSearch } from '../components/settings/searchContext'
@@ -37,7 +36,6 @@ const TAB_COMPONENTS: Partial<Record<SettingsTabId, () => React.JSX.Element>> = 
 function SettingsInner(): React.JSX.Element {
   const [active, setActive] = useState<SettingsTabId>('general')
   const { query, setQuery } = useSettingsSearch()
-  const navigate = useNavigate()
 
   // Deep-link consumer: callers elsewhere (e.g. the usage-limit popup's Upgrade
   // button) request a tab via settingsNav before/after this view mounts; the
@@ -61,7 +59,6 @@ function SettingsInner(): React.JSX.Element {
         }}
         query={query}
         onQuery={setQuery}
-        onBack={() => navigate('/home')}
       />
       {active === 'memories' ? (
         // Full page: owns its own header, scroll and width (the brain map needs the

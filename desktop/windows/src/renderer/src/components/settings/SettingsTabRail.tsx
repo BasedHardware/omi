@@ -1,29 +1,22 @@
-import { Search, ArrowLeft } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { SETTINGS_TABS, type SettingsTabId } from './tabs'
 
 const HOVER = 'hover:bg-[var(--nav-sel)]'
 
+// No Back button here: Settings gets the shared PageChromeBar "Home" pill like every
+// other non-Home page, which is macOS's only escape hatch from Settings (SettingsPage
+// .swift has no back control of its own). A rail Back button on top of that pill would
+// be two back-to-home controls, which macOS does not have.
 export function SettingsTabRail(props: {
   active: SettingsTabId
   onSelect: (id: SettingsTabId) => void
   query: string
   onQuery: (q: string) => void
-  onBack: () => void
 }): React.JSX.Element {
-  const { active, onSelect, query, onQuery, onBack } = props
+  const { active, onSelect, query, onQuery } = props
   return (
     <nav className="flex w-60 shrink-0 flex-col gap-1 border-r border-white/10 px-3 py-6">
-      <button
-        onClick={onBack}
-        className={cn(
-          'mb-4 flex items-center gap-2 self-start rounded-lg px-2.5 py-1.5 text-sm font-medium text-white/60 transition-colors hover:text-white/90',
-          HOVER
-        )}
-      >
-        <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
-        Back
-      </button>
       <h2 className="mb-3 px-2.5 font-display text-2xl font-semibold text-text-primary">Settings</h2>
       <div className="relative mb-3">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
