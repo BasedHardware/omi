@@ -6,10 +6,22 @@ import type { ConversationFolder } from '../../../../shared/types'
 import { isCloudBacked } from '../../lib/conversations/filtering'
 import { MoveToFolderMenu } from './MoveToFolderMenu'
 
-// Selected-row tint (Track 4 ruling — purple ports as-is).
+// Selected-row tint (Track 4 ruling — purple ports as-is). Applied inline so it
+// beats the component-layer surface background AND the hover background, i.e. a
+// selected row stays unmistakably purple whether or not the pointer is on it.
 const SELECTED_TINT: React.CSSProperties = {
   backgroundColor: 'rgba(139, 92, 246, 0.22)',
-  borderColor: 'rgba(139, 92, 246, 0.4)'
+  borderColor: 'rgba(139, 92, 246, 0.55)'
+}
+
+// Placeholder previews minted upstream when a conversation has no text yet —
+// never worth a line of its own.
+const PREVIEW_PLACEHOLDERS = new Set(['(no transcript)', '(empty chat)', '(empty transcript)'])
+
+function previewOf(row: ConversationRow): string | null {
+  const p = row.preview?.trim()
+  if (!p || PREVIEW_PLACEHOLDERS.has(p)) return null
+  return p
 }
 
 /** The 36×36 topic-emoji tile. Falls back to 💬 (Mac parity). */
@@ -53,6 +65,20 @@ function SyncBadge({
     )
   }
   return <span className="badge-warning shrink-0">Not synced</span>
+}
+
+/** Title, single-line overview snippet (when the conversation has one), timestamp. */
+function RowBody({ row }: { row: ConversationRow }): React.JSX.Element {
+  const preview = previewOf(row)
+  return (
+    <div className="min-w-0 flex-1">
+      <div className="truncate text-sm font-medium text-text-primary">
+        {row.title || <span className="italic text-text-tertiary">loading…</span>}
+      </div>
+      {preview && <div className="mt-0.5 truncate text-xs text-text-tertiary">{preview}</div>}
+      {row.subtitle && <div className="mt-0.5 text-xs text-text-quaternary">{row.subtitle}</div>}
+    </div>
+  )
 }
 
 export function ConversationListRow({
@@ -133,31 +159,30 @@ export function ConversationListRow({
   }
 
   // --- Select mode (checkbox + purple selected tint). ---
+  // Deliberately NOT .surface-card-interactive: its `transition-all` faded the
+  // selected tint in over 200ms (and its hover fill is a dark wash that reads as
+  // "highlighted" too). Here selection paints instantly and unmistakably — purple
+  // fill + purple border + filled checkbox — while hover is a faint white lift
+  // that can never be mistaken for it.
   if (selectMode) {
     return (
       <button
         onClick={() => onToggleSelect(row.id)}
+        aria-pressed={selected}
         style={selected ? SELECTED_TINT : undefined}
-        className={`surface-card-interactive flex w-full items-center gap-3 p-3 text-left ${
-          selected ? 'border' : ''
+        className={`surface-card flex w-full items-center gap-3 border p-3 text-left ${
+          selected ? '' : 'hover:bg-white/[0.06]'
         }`}
       >
         <span
-          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors ${
-            selected ? 'border-white/40 bg-white/25 text-white' : 'border-white/20 bg-transparent'
+          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${
+            selected ? 'border-white/50 bg-white/30 text-white' : 'border-white/25 bg-transparent'
           }`}
         >
           {selected && <Check className="h-3.5 w-3.5" />}
         </span>
         <EmojiTile emoji={row.emoji} />
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium text-text-primary">
-            {row.title || <span className="italic text-text-tertiary">loading…</span>}
-          </div>
-          {row.subtitle && (
-            <div className="mt-0.5 text-xs text-text-quaternary">{row.subtitle}</div>
-          )}
-        </div>
+        <RowBody row={row} />
         <SyncBadge r={row} />
       </button>
     )
@@ -170,15 +195,12 @@ export function ConversationListRow({
       className="group surface-card-interactive flex items-center gap-3 p-3"
     >
       <EmojiTile emoji={row.emoji} />
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium text-text-primary">
-          {row.title || <span className="italic text-text-tertiary">loading…</span>}
-        </div>
-        {row.subtitle && <div className="mt-0.5 text-xs text-text-quaternary">{row.subtitle}</div>}
-      </div>
+      <RowBody row={row} />
 
-      {/* Hover-revealed inline actions. */}
-      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+      {/* Hover-revealed inline actions. `focus-within` keeps them painted while a
+          menu they own is open (the move-to-folder trigger holds focus), so the
+          group can't fade out from under an open dropdown. */}
+      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
         <button
           onClick={(e) => {
             e.preventDefault()

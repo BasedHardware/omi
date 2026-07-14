@@ -34,6 +34,8 @@ export function DateFilterButton({
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const active = dateRange.start != null || dateRange.end != null
+  const fromValue = toInputValue(dateRange.start)
+  const toValue = toInputValue(dateRange.end)
 
   const setStart = (v: string): void => {
     const d = parseInputDate(v)
@@ -63,30 +65,42 @@ export function DateFilterButton({
           {/* Outside-click catcher. */}
           <div className="fixed inset-0 z-[90]" onClick={() => setOpen(false)} />
           <div className="surface-panel absolute right-0 z-[100] mt-2 w-64 p-4">
-            <label className="block text-xs font-medium text-white/50">From</label>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-white/50">Date range</span>
+              {/* Always offered while a range is set — the only way to undo one. */}
+              {active && (
+                <button
+                  onClick={() => onChange(NO_DATE_RANGE)}
+                  className="rounded-md px-1.5 py-0.5 text-xs font-medium text-white/55 transition-colors hover:bg-white/10 hover:text-white"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <label className="mt-2.5 block text-xs font-medium text-white/50" htmlFor="date-from">
+              From
+            </label>
             <input
+              id="date-from"
               type="date"
-              value={toInputValue(dateRange.start)}
-              max={toInputValue(dateRange.end) || undefined}
+              value={fromValue}
+              data-empty={fromValue === ''}
+              max={toValue || undefined}
               onChange={(e) => setStart(e.target.value)}
-              className="input-field mt-1.5 py-2 [color-scheme:dark]"
+              className="date-input mt-1.5 py-2"
             />
-            <label className="mt-3 block text-xs font-medium text-white/50">To</label>
+            <label className="mt-3 block text-xs font-medium text-white/50" htmlFor="date-to">
+              To
+            </label>
             <input
+              id="date-to"
               type="date"
-              value={toInputValue(dateRange.end)}
-              min={toInputValue(dateRange.start) || undefined}
+              value={toValue}
+              data-empty={toValue === ''}
+              min={fromValue || undefined}
               onChange={(e) => setEnd(e.target.value)}
-              className="input-field mt-1.5 py-2 [color-scheme:dark]"
+              className="date-input mt-1.5 py-2"
             />
-            {active && (
-              <button
-                onClick={() => onChange(NO_DATE_RANGE)}
-                className="mt-3 text-xs font-medium text-white/55 transition-colors hover:text-white"
-              >
-                Clear dates
-              </button>
-            )}
           </div>
         </>
       )}
