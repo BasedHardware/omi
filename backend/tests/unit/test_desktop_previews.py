@@ -5,7 +5,9 @@ import pytest
 from database.desktop_previews import (
     PREVIEW_MANIFESTS_COLLECTION,
     PREVIEW_POINTERS_COLLECTION,
+    _build_preview_delisting,
     _build_preview_pointer,
+    _delist_preview_transaction,
     get_current_preview,
     get_preview_manifest,
     normalize_preview_manifest,
@@ -84,6 +86,49 @@ class TestPreviewPointers:
 
         with pytest.raises(ValueError, match="generation mismatch"):
             _build_preview_pointer(current, normalize_preview_manifest(_manifest()), expected_generation=3)
+
+    def test_delisting_requires_the_current_generation_and_preserves_the_manifest(self):
+        current = {"slug": SLUG, "source_sha": SOURCE_SHA, "generation": 4}
+
+        result = _build_preview_delisting(current, slug=SLUG, expected_generation=4)
+
+        assert result == {"slug": SLUG, "deleted": True, "generation": 4}
+        assert current["source_sha"] == SOURCE_SHA
+        with pytest.raises(ValueError, match="generation mismatch"):
+            _build_preview_delisting(current, slug=SLUG, expected_generation=3)
+
+    def test_delisting_transaction_deletes_only_the_pointer(self):
+        pointer_snapshot = MagicMock(exists=True)
+        pointer_snapshot.to_dict.return_value = {"slug": SLUG, "source_sha": SOURCE_SHA, "generation": 4}
+        pointer_ref = MagicMock()
+        pointer_ref.get.return_value = pointer_snapshot
+        transaction = MagicMock()
+
+        result = _delist_preview_transaction.to_wrap(
+            transaction,
+            pointer_ref,
+            slug=SLUG,
+            expected_generation=4,
+        )
+
+        assert result == {"slug": SLUG, "deleted": True, "generation": 4}
+        transaction.delete.assert_called_once_with(pointer_ref)
+
+    def test_delisting_an_absent_pointer_is_idempotent(self):
+        pointer_snapshot = MagicMock(exists=False)
+        pointer_ref = MagicMock()
+        pointer_ref.get.return_value = pointer_snapshot
+        transaction = MagicMock()
+
+        result = _delist_preview_transaction.to_wrap(
+            transaction,
+            pointer_ref,
+            slug=SLUG,
+            expected_generation=4,
+        )
+
+        assert result == {"slug": SLUG, "deleted": False, "generation": None}
+        transaction.delete.assert_not_called()
 
 
 class TestPreviewLookup:

@@ -177,6 +177,18 @@ def _build_preview_pointer(
     }
 
 
+def _build_preview_delisting(current: dict[str, Any], *, slug: str, expected_generation: int) -> dict[str, Any]:
+    """Validate a compare-and-delete request for one mutable preview pointer."""
+    source_sha = current.get("source_sha")
+    if current.get("slug") != slug or not isinstance(source_sha, str):
+        raise ValueError("preview pointer is malformed")
+    _source_sha(source_sha)
+    current_generation = _generation(current.get("generation", 0))
+    if expected_generation != current_generation:
+        raise ValueError(f"generation mismatch: expected {expected_generation}, current {current_generation}")
+    return {"slug": slug, "deleted": True, "generation": current_generation}
+
+
 @transactional
 def _publish_preview_transaction(
     transaction: Any,
@@ -226,6 +238,45 @@ def publish_preview(
         manifest_ref,
         pointer_ref,
         manifest=manifest,
+        expected_generation=expected_generation,
+    )
+
+
+@transactional
+def _delist_preview_transaction(
+    transaction: Any,
+    pointer_ref: Any,
+    *,
+    slug: str,
+    expected_generation: int,
+) -> dict[str, Any]:
+    pointer_snapshot = pointer_ref.get(transaction=transaction)
+    if not getattr(pointer_snapshot, "exists", False):
+        return {"slug": slug, "deleted": False, "generation": None}
+    raw_current: object = pointer_snapshot.to_dict()
+    current = cast(dict[str, Any], raw_current) if isinstance(raw_current, dict) else {}
+    result = _build_preview_delisting(current, slug=slug, expected_generation=expected_generation)
+    transaction.delete(pointer_ref)
+    return result
+
+
+def delist_preview(
+    slug: str,
+    *,
+    expected_generation: int,
+    firestore_client: Any = None,
+) -> dict[str, Any]:
+    """Atomically delist one mutable preview pointer, retaining immutable artifacts."""
+    normalized_slug = _slug(slug.strip())
+    if isinstance(expected_generation, bool) or expected_generation < 0:
+        raise ValueError("expected_generation must be a non-negative integer")
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    pointer_ref = client.collection(PREVIEW_POINTERS_COLLECTION).document(normalized_slug)
+    transaction = client.transaction()
+    return _delist_preview_transaction(
+        transaction,
+        pointer_ref,
+        slug=normalized_slug,
         expected_generation=expected_generation,
     )
 

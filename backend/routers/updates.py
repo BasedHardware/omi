@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Header, Query
 from fastapi.responses import RedirectResponse, Response, HTMLResponse
 from pydantic import BaseModel, Field
 
-from database.desktop_previews import get_current_preview, get_preview_manifest, publish_preview
+from database.desktop_previews import delist_preview, get_current_preview, get_preview_manifest, publish_preview
 from database.desktop_update_channels import promote_channel, register_release_manifest
 from database.desktop_update_policy import default_desktop_update_policy, get_desktop_update_policy
 from database.redis_db import delete_generic_cache
@@ -94,6 +94,12 @@ class DesktopPreviewPublishRequest(BaseModel):
     notes: Optional[str] = None
     backend_url: Optional[str] = None
     expected_generation: Optional[int] = Field(default=None, ge=0)
+
+
+class DesktopPreviewDelistRequest(BaseModel):
+    """Compare-and-delete request for a mutable preview landing-page pointer."""
+
+    expected_generation: int = Field(ge=0)
 
 
 VALID_CHANNELS = {"beta", "stable"}
@@ -773,6 +779,27 @@ async def publish_desktop_preview(request: DesktopPreviewPublishRequest, secret_
             db_executor,
             publish_preview,
             request.model_dump(exclude={"expected_generation"}),
+            expected_generation=request.expected_generation,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"success": True, **result}
+
+
+@router.delete("/v2/desktop/previews/{slug}")
+async def delist_desktop_preview(
+    slug: str,
+    request: DesktopPreviewDelistRequest,
+    secret_key: str = Header(...),
+):
+    """Remove only a slug's mutable landing-page pointer, retaining immutable artifacts."""
+    if not _has_preview_publish_authorization(secret_key):
+        raise HTTPException(status_code=403, detail="You are not authorized to delist desktop previews")
+    try:
+        result = await run_blocking(
+            db_executor,
+            delist_preview,
+            slug,
             expected_generation=request.expected_generation,
         )
     except ValueError as exc:

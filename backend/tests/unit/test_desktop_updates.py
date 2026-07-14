@@ -1065,3 +1065,29 @@ class TestDesktopPreviewEndpoints:
         assert accepted.status_code == 201
         assert accepted.json()["pointer"]["generation"] == 1
         publish.assert_called_once_with(_preview_manifest(), expected_generation=0)
+
+    @pytest.mark.asyncio
+    async def test_preview_delist_requires_preview_key_and_current_generation(self):
+        delisted = {"slug": PREVIEW_SLUG, "deleted": True, "generation": 2}
+        with (
+            patch.dict("os.environ", {"ADMIN_KEY": "admin-key", "DESKTOP_PREVIEW_PUBLISH_KEY": "preview-key"}),
+            patch("routers.updates.delist_preview", return_value=delisted) as delist,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                rejected = await client.request(
+                    "DELETE",
+                    f"/v2/desktop/previews/{PREVIEW_SLUG}",
+                    headers={"secret-key": "admin-key"},
+                    json={"expected_generation": 2},
+                )
+                accepted = await client.request(
+                    "DELETE",
+                    f"/v2/desktop/previews/{PREVIEW_SLUG}",
+                    headers={"secret-key": "preview-key"},
+                    json={"expected_generation": 2},
+                )
+
+        assert rejected.status_code == 403
+        assert accepted.status_code == 200
+        assert accepted.json() == {"success": True, **delisted}
+        delist.assert_called_once_with(PREVIEW_SLUG, expected_generation=2)

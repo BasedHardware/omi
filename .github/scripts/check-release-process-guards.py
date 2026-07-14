@@ -156,6 +156,8 @@ def check_desktop_preview_publishing() -> list[str]:
     app_build = ROOT / "desktop/macos/Desktop/Sources/AppBuild.swift"
     updater = ROOT / "desktop/macos/Desktop/Sources/UpdaterViewModel.swift"
     smoke = ROOT / "desktop/macos/scripts/smoke-signed-desktop-artifact.sh"
+    preview_router = ROOT / "backend/routers/updates.py"
+    preview_registry = ROOT / "backend/database/desktop_previews.py"
 
     if not dispatcher.exists():
         return ["desktop previews are missing the protected GitHub dispatcher"]
@@ -216,6 +218,25 @@ def check_desktop_preview_publishing() -> list[str]:
     )
     if required_runtime_secret not in runtime_env_text:
         errors.append("production backend must receive the preview publishing key from Secret Manager")
+
+    preview_router_text = preview_router.read_text(encoding="utf-8") if preview_router.exists() else ""
+    for required in (
+        '@router.delete("/v2/desktop/previews/{slug}")',
+        "DesktopPreviewDelistRequest",
+        "delist_preview,",
+        "expected_generation=request.expected_generation",
+    ):
+        if required not in preview_router_text:
+            errors.append(f"desktop preview delisting is missing required router guard fragment: {required}")
+
+    preview_registry_text = preview_registry.read_text(encoding="utf-8") if preview_registry.exists() else ""
+    for required in (
+        "def delist_preview(",
+        "def _delist_preview_transaction(",
+        "transaction.delete(pointer_ref)",
+    ):
+        if required not in preview_registry_text:
+            errors.append(f"desktop preview delisting is missing required registry guard fragment: {required}")
 
     app_build_text = app_build.read_text(encoding="utf-8") if app_build.exists() else ""
     for required in (
