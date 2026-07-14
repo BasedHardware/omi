@@ -221,6 +221,7 @@ struct DashboardPage: View {
     @ObservedObject var memoriesViewModel: MemoriesViewModel
     var taskChatCoordinator: TaskChatCoordinator? = nil
     @StateObject private var intelligenceStore = DashboardIntelligenceStore()
+    @StateObject private var dayZeroSourceStore = DashboardDayZeroSourceStore()
     @Binding var selectedIndex: Int
     @State private var citedConversation: ServerConversation? = nil
     @State private var isLoadingCitation = false
@@ -229,12 +230,15 @@ struct DashboardPage: View {
     @State private var isTogglingListening = false
     @State private var showingAllGoals = false
     @State private var showingGoalDetail = false
+    @State private var selectedImportConnector: ImportConnector?
+    @State private var proofDataHasSettled = false
     @AppStorage("dashboardWidgetsCollapsed") private var widgetsCollapsed = false
     @AppStorage("screenAnalysisEnabled") private var screenAnalysisEnabled = true
     @AppStorage("transcriptionEnabled") private var transcriptionEnabled = true
     @AppStorage("systemAudioCaptureMode") private var systemAudioCaptureModeRaw =
         AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings.rawValue
     @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
+    @AppStorage("useProofFirstHomeDesign") private var useProofFirstHomeDesign = true
     @State private var homeMode: HomeStageMode = .hub
     @FocusState private var homeAskFieldFocused: Bool
 
@@ -292,6 +296,8 @@ struct DashboardPage: View {
         Group {
             if useLegacyHomeDesign {
                 legacyHome
+            } else if useProofFirstHomeDesign {
+                proofFirstHome
             } else {
                 redesignedHome
             }
@@ -336,6 +342,21 @@ struct DashboardPage: View {
                 ProgressView().frame(width: 300, height: 180)
             }
         }
+        .sheet(item: $selectedImportConnector) { connector in
+            ImportConnectorSheet(
+                connector: connector,
+                appState: appState,
+                statusStore: homeStatusStore.connectorStatusStore,
+                onDismiss: {
+                    selectedImportConnector = nil
+                    Task {
+                        await homeStatusStore.refreshIfNeeded(force: true)
+                        await refreshDayZeroSources()
+                    }
+                }
+            )
+            .frame(minWidth: 600, minHeight: 560)
+        }
         .overlay {
             if isLoadingCitation {
                 ZStack {
@@ -357,7 +378,9 @@ struct DashboardPage: View {
     private func applyHomeLifecycle<Content: View>(to content: Content) -> some View {
         content
         .onAppear {
-            if PostOnboardingPromptSuggestions.shouldShowPopup && !postOnboardingSuggestions.isEmpty {
+            if !isProofFirstHomeActive,
+               PostOnboardingPromptSuggestions.shouldShowPopup,
+               !postOnboardingSuggestions.isEmpty {
                 NotificationCenter.default.post(name: .showTryAskingPopup, object: nil)
             }
             syncCaptureState()
@@ -366,23 +389,26 @@ struct DashboardPage: View {
                 await openRecommendation(recommendation)
             }
             intelligenceStore.registerAutomationActions()
-            Task { await intelligenceStore.load() }
+            Task { await loadProofFirstData() }
             Task {
                 if let recommendationID = ContextualTaskNavigationRouter.shared.consume() {
                     _ = await intelligenceStore.openRecommendation(id: recommendationID)
                 }
             }
-            Task { await homeStatusStore.refreshIfNeeded() }
         }
         .onDisappear {
             intelligenceStore.setRecommendationActionHandler(nil)
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             viewModel.refreshGoals()
-            Task { await intelligenceStore.load() }
+            Task {
+                async let intelligence: Void = intelligenceStore.load()
+                async let connectorStatus: Void = homeStatusStore.refreshIfNeeded()
+                _ = await (intelligence, connectorStatus)
+                await refreshDayZeroSources()
+            }
             appState.checkAllPermissions()
             syncCaptureState()
-            Task { await homeStatusStore.refreshIfNeeded() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
             syncCaptureState()
@@ -440,6 +466,43 @@ struct DashboardPage: View {
                 chatProvider.addAttachments([attachment])
             }
         }
+    }
+
+    private var isProofFirstHomeActive: Bool {
+        useProofFirstHomeDesign && !useLegacyHomeDesign
+    }
+
+    private func loadProofFirstData() async {
+        if isProofFirstHomeActive {
+            proofDataHasSettled = false
+            async let intelligence: Void = intelligenceStore.load()
+            async let dashboard: Void = viewModel.loadDashboardData()
+            async let connectorStatus: Void = homeStatusStore.refreshIfNeeded()
+            if appState.conversations.isEmpty {
+                await appState.loadConversations()
+            }
+            _ = await (intelligence, dashboard, connectorStatus)
+            proofDataHasSettled = true
+            if proofFirstHeroTier == .dayZero || proofFirstHeroTier == .loading {
+                await refreshDayZeroSources()
+            }
+        } else {
+            async let intelligence: Void = intelligenceStore.load()
+            async let connectorStatus: Void = homeStatusStore.refreshIfNeeded()
+            _ = await (intelligence, connectorStatus)
+        }
+    }
+
+    private func refreshDayZeroSources() async {
+        guard isProofFirstHomeActive, proofFirstBaseHeroTier == .dayZero else { return }
+        let connected = Set(
+            ImportConnector.all.compactMap { connector in
+                homeStatusStore.connectorStatusStore.snapshot(for: connector).isConnected
+                    ? connector.id
+                    : nil
+            }
+        )
+        await dayZeroSourceStore.load(connectedConnectorIDs: connected)
     }
 
     private var legacyHome: some View {
@@ -523,6 +586,180 @@ struct DashboardPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.clear)
+    }
+
+    // MARK: - Proof-first Home
+
+    private var proofFirstHome: some View {
+        GeometryReader { proxy in
+            let sideInset = homeStageSideInset(for: proxy.size.width)
+
+            ZStack(alignment: .topTrailing) {
+                HomeCanvasBackground()
+
+                ProofFirstDashboardView(
+                    heroTier: proofFirstHeroTier,
+                    heroContent: proofFirstHeroContent,
+                    dayZeroCards: dayZeroSourceStore.cards,
+                    upNextTasks: proofFirstUpNextTasks,
+                    connectorStatusStore: homeStatusStore.connectorStatusStore,
+                    onHeroAction: handOffToFloatingBar,
+                    onConnectSetup: {},
+                    onToggleTask: { task in
+                        Task { await viewModel.toggleTaskCompletion(task) }
+                    },
+                    onViewTasks: { navigate(to: .tasks) },
+                    onSelectConnector: { connector in
+                        selectedImportConnector = connector
+                    },
+                    onOpenShortcutSettings: {
+                        navigate(to: .settings)
+                        DispatchQueue.main.async {
+                            NotificationCenter.default.post(name: .navigateToFloatingBarSettings, object: nil)
+                        }
+                    }
+                )
+                .frame(width: proxy.size.width, height: proxy.size.height)
+
+                homeHeader
+                    .padding(.horizontal, sideInset)
+                    .padding(.top, OmiSpacing.xxl)
+            }
+        }
+    }
+
+    private var proofFirstBaseHeroTier: DashboardHeroTier {
+        DashboardHeroCascadePolicy.resolve(
+            hasSettled: proofDataHasSettled
+                && !intelligenceStore.isLoading
+                && !viewModel.isLoading
+                && !appState.isLoadingConversations,
+            hasRecommendation: intelligenceStore.recommendations.first != nil,
+            mostRecentConversationAt: proofFirstMostRecentConversation.map(conversationRecency),
+            mostRecentTaskAt: proofFirstMostRecentTask.map(taskRecency)
+        )
+    }
+
+    private var proofFirstHeroTier: DashboardHeroTier {
+        let resolved = proofFirstBaseHeroTier
+        if resolved == .dayZero && !dayZeroSourceStore.hasSettled {
+            return .loading
+        }
+        return resolved
+    }
+
+    private var proofFirstHeroContent: DashboardHeroContent? {
+        switch proofFirstHeroTier {
+        case .recommendation:
+            guard let recommendation = intelligenceStore.recommendations.first else { return nil }
+            let title = normalizedDashboardText(recommendation.headline) ?? "Review what matters now"
+            let context = normalizedDashboardText(recommendation.whyNow) ?? "Omi found a useful next step in your recent work."
+            let action = normalizedDashboardText(recommendation.recommendedAction) ?? "Ask Omi"
+            return DashboardHeroContent(
+                icon: .listChecks,
+                eyebrow: "What matters now",
+                title: title,
+                context: context,
+                action: action,
+                prompt: "Help me \(action.lowercased()) for \(title). \(context)"
+            )
+        case .recentConversation:
+            guard let conversation = proofFirstMostRecentConversation else { return nil }
+            let context = recentConversationContext(conversation)
+            let title = sentenceCasedDashboardTitle(conversation.title)
+            return DashboardHeroContent(
+                icon: .messageCircle,
+                eyebrow: "Continue where you left off",
+                title: title,
+                context: context,
+                action: "Open conversation",
+                prompt: "Help me continue \(title). \(context)"
+            )
+        case .recentTask:
+            guard let task = proofFirstMostRecentTask else { return nil }
+            let context = recentTaskContext(task)
+            return DashboardHeroContent(
+                icon: .listChecks,
+                eyebrow: "Continue where you left off",
+                title: task.description,
+                context: context,
+                action: "Ask Omi about it",
+                prompt: "Help me with this task: \(task.description). \(context)"
+            )
+        case .loading, .dayZero:
+            return nil
+        }
+    }
+
+    private var proofFirstDashboardTasks: [TaskActionItem] {
+        var seen = Set<String>()
+        return (viewModel.overdueTasks + viewModel.todaysTasks + viewModel.recentTasks)
+            .filter { !$0.completed && seen.insert($0.id).inserted }
+    }
+
+    private var proofFirstUpNextTasks: [TaskActionItem] {
+        proofFirstDashboardTasks.sorted { lhs, rhs in
+            let lhsDue = lhs.dueAt ?? .distantFuture
+            let rhsDue = rhs.dueAt ?? .distantFuture
+            if lhsDue != rhsDue { return lhsDue < rhsDue }
+            return taskRecency(lhs) > taskRecency(rhs)
+        }
+    }
+
+    private var proofFirstMostRecentTask: TaskActionItem? {
+        proofFirstDashboardTasks.max { taskRecency($0) < taskRecency($1) }
+    }
+
+    private var proofFirstMostRecentConversation: ServerConversation? {
+        appState.conversations
+            .filter { !$0.discarded && !$0.deleted }
+            .max { conversationRecency($0) < conversationRecency($1) }
+    }
+
+    private func conversationRecency(_ conversation: ServerConversation) -> Date {
+        conversation.startedAt ?? conversation.createdAt
+    }
+
+    private func taskRecency(_ task: TaskActionItem) -> Date {
+        task.updatedAt ?? task.createdAt
+    }
+
+    private func recentConversationContext(_ conversation: ServerConversation) -> String {
+        if let first = conversation.structured.actionItems.first,
+           let description = normalizedDashboardText(first.description) {
+            let remaining = conversation.structured.actionItems.count - 1
+            return remaining > 0
+                ? "\(description) — plus \(remaining) more item\(remaining == 1 ? "" : "s") from this conversation."
+                : description
+        }
+        if let overview = normalizedDashboardText(conversation.overview) {
+            return overview
+        }
+        return "Your most recent conversation is ready to continue."
+    }
+
+    private func sentenceCasedDashboardTitle(_ title: String) -> String {
+        guard let first = title.first, first.isLowercase else { return title }
+        return first.uppercased() + title.dropFirst()
+    }
+
+    private func recentTaskContext(_ task: TaskActionItem) -> String {
+        guard let dueAt = task.dueAt else {
+            return "This is your most recently updated open task."
+        }
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return "Still open, due \(formatter.string(from: dueAt))."
+    }
+
+    private func normalizedDashboardText(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func handOffToFloatingBar(_ prompt: String) {
+        FloatingControlBarManager.shared.openDashboardQuery(prompt)
     }
 
     // MARK: - Redesigned Home
