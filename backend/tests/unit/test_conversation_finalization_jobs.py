@@ -109,6 +109,27 @@ def test_intent_persists_outbox_before_any_live_handoff_and_omits_byok_material(
     assert transaction.updates[0][1]['finalization_job_id'] == intent['job_id']
 
 
+def test_photo_only_conversation_with_durable_content_marker_is_admitted():
+    transaction = _Transaction()
+    conversation_ref = _conversation({'transcript_segments': [], 'has_content': True})
+    collection = _Collection({})
+
+    intent = jobs._create_or_get_finalization_intent_txn(
+        transaction,
+        conversation_ref,
+        collection,
+        'uid-1',
+        'conversation-1',
+        False,
+        _admit_finalization,
+        _now(),
+    )
+
+    assert intent['status'] == 'queued'
+    assert len(transaction.sets) == 1
+    assert transaction.updates[0][1]['status'] == 'processing'
+
+
 def test_duplicate_reconnect_reuses_the_same_outbox_job():
     job_id = 'job-1'
     transaction = _Transaction()

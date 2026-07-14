@@ -136,7 +136,7 @@ def _create_or_get_finalization_intent_txn(
     conversation = conversation_snapshot.to_dict() or {}
     if conversation.get('deferred'):
         return _no_finalization_intent('deferred')
-    if not (conversation.get('transcript_segments') or conversation.get('photos')):
+    if not (conversation.get('has_content') or conversation.get('transcript_segments') or conversation.get('photos')):
         return _no_finalization_intent('no_content')
 
     # The lifecycle service owns this pure decision, but it is evaluated while
