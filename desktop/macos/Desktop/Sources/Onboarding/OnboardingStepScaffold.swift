@@ -329,10 +329,13 @@ struct OnboardingKeyCapView: View {
             .font(.system(size: 18, weight: .semibold))
             .frame(maxWidth: .infinity, alignment: .leading)
           Spacer(minLength: 4)
+          // Wide keys (return/space) carry their name in the bottom-right
+          // corner like a physical keyboard; square keys center it.
           Text(keyName)
             .font(.system(size: 10, weight: .medium))
             .lineLimit(1)
             .fixedSize()
+            .frame(maxWidth: .infinity, alignment: isWide ? .trailing : .center)
         }
       } else {
         // Plain letter keys show just the letter, centered.
