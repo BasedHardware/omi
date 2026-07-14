@@ -15,7 +15,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Iterable
 
 
@@ -42,13 +42,17 @@ class Binding:
     name: str
 
 
+def _repository_relative_path(path: PurePath, root: PurePath) -> str:
+    return path.relative_to(root).as_posix()
+
+
 def _value_from_match(match: re.Match[str], group: int = 1) -> str:
     return match.group(group)
 
 
 def _deployment_paths(root: Path) -> set[str]:
     paths = {
-        str(path.relative_to(root))
+        _repository_relative_path(path, root)
         for path in (root / ".github" / "workflows").glob("*.y*ml")
         if path.is_file()
     }
@@ -57,11 +61,7 @@ def _deployment_paths(root: Path) -> set[str]:
             paths.add(relative)
     charts = root / "backend" / "charts"
     if charts.is_dir():
-        paths.update(
-            str(path.relative_to(root))
-            for path in charts.glob("*/*_values.yaml")
-            if path.is_file()
-        )
+        paths.update(_repository_relative_path(path, root) for path in charts.glob("*/*_values.yaml") if path.is_file())
     return paths
 
 
@@ -83,7 +83,8 @@ def _base_paths(root: Path, base: str) -> set[str]:
     return {
         path
         for path in paths
-        if path.startswith(".github/workflows/") and path.endswith((".yml", ".yaml"))
+        if path.startswith(".github/workflows/")
+        and path.endswith((".yml", ".yaml"))
         or path == "backend/deploy/runtime_env.yaml"
         or re.fullmatch(r"backend/charts/[^/]+/[^/]+_values\.yaml", path) is not None
     }
@@ -275,7 +276,9 @@ def validate_bindings(
     # Public build configuration is an explicit migration target, not legacy
     # debt. Reject it even when a pre-ratchet line still exists in the base.
     to_validate = new_or_changed | {
-        binding for binding in current if binding.source == "github_secrets" and _classification(policy, binding.name) == "public_build"
+        binding
+        for binding in current
+        if binding.source == "github_secrets" and _classification(policy, binding.name) == "public_build"
     }
     for binding in sorted(to_validate):
         kind = _classification(policy, binding.name)
@@ -286,7 +289,9 @@ def validate_bindings(
         if kind in expected or _exception_allows(policy, binding):
             continue
         if binding.source == "github_secrets" and kind == "public_build":
-            errors.append(f"{binding.path}: public_build setting {binding.name} must use vars.{binding.name}, not secrets.{binding.name}")
+            errors.append(
+                f"{binding.path}: public_build setting {binding.name} must use vars.{binding.name}, not secrets.{binding.name}"
+            )
         else:
             expected_text = " or ".join(sorted(expected))
             errors.append(
