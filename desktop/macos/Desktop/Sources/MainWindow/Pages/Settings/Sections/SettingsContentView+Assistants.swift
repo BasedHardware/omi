@@ -1017,6 +1017,31 @@ extension SettingsContentView {
         }
       }
 
+      settingsCard(settingId: "advanced.preferences.prooffirsthome") {
+        HStack(spacing: OmiSpacing.lg) {
+          Image(systemName: "rectangle.3.group")
+            .scaledFont(size: OmiType.subheading)
+            .foregroundColor(OmiColors.textSecondary)
+            .frame(width: 24, height: 24)
+
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text("Use proof-first Home design")
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+
+            Text("Turn off to return to the previous redesigned Home")
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(OmiColors.textTertiary)
+          }
+
+          Spacer()
+
+          Toggle("", isOn: $useProofFirstHomeDesign)
+            .toggleStyle(.checkbox)
+            .labelsHidden()
+        }
+      }
+
       settingsCard(settingId: "advanced.preferences.legacyhome") {
         HStack(spacing: OmiSpacing.lg) {
           Image(systemName: "rectangle.split.2x1")

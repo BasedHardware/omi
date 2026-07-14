@@ -289,6 +289,7 @@ struct SettingsContentView: View {
   @AppStorage("multiChatEnabled") var multiChatEnabled = false
   @AppStorage("conversationsCompactView") var conversationsCompactView = true
   @AppStorage("useLegacyHomeDesign") var useLegacyHomeDesign = false
+  @AppStorage("useProofFirstHomeDesign") var useProofFirstHomeDesign = true
 
   // AI Chat settings
   @AppStorage("chatBridgeMode") var chatBridgeMode: String = "piMono"
