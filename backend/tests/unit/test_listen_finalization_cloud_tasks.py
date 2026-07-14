@@ -606,6 +606,10 @@ async def test_finalizer_fences_a_deleted_conversation_before_processing(monkeyp
     monkeypatch.setattr(persisted_finalizer, 'run_blocking', inline_run_blocking)
     monkeypatch.setattr(persisted_finalizer.conversations_db, 'get_conversation', lambda *args: None)
     monkeypatch.setattr(persisted_finalizer, 'process_conversation', process)
+    claim_fanout = MagicMock(
+        return_value={'status': 'fenced', 'fanout_key': 'conversation:conversation-1:finalization'}
+    )
+    monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'claim_finalization_fanout', claim_fanout)
 
     disposition = await persisted_finalizer.finalize_persisted_conversation(
         'uid-1',
@@ -617,6 +621,39 @@ async def test_finalizer_fences_a_deleted_conversation_before_processing(monkeyp
 
     assert disposition == ConversationFinalizationDisposition.fenced
     process.assert_not_called()
+    claim_fanout.assert_called_once_with('job-1', 2, 3)
+
+
+@pytest.mark.anyio
+async def test_deleted_conversation_after_delivered_fanout_replay_completes_job(monkeypatch):
+    """A deletion after durable fanout acknowledgement cannot strand the lease."""
+    monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(persisted_finalizer, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda key: 'lock-token')
+    monkeypatch.setattr(finalization_router, 'release_job_run_lock', lambda key, token: None)
+    monkeypatch.setattr(
+        jobs_db, 'claim_finalization_job', lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 3}
+    )
+    monkeypatch.setattr(
+        jobs_db, 'get_finalization_job', lambda job_id: {'uid': 'uid-1', 'conversation_id': 'conversation-1'}
+    )
+    monkeypatch.setattr(persisted_finalizer.conversations_db, 'get_conversation', lambda *args: None)
+    fanout = MagicMock(return_value={'status': 'completed', 'fanout_key': 'conversation:conversation-1:finalization'})
+    integrations = AsyncMock()
+    completed = MagicMock(return_value=True)
+    monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'claim_finalization_fanout', fanout)
+    monkeypatch.setattr(persisted_finalizer, 'trigger_external_integrations', integrations)
+    monkeypatch.setattr(jobs_db, 'mark_finalization_completed', completed)
+
+    response = await finalization_router.run_listen_finalization_job(
+        _Request({'job_id': 'job-1', 'dispatch_generation': 2}), task_retry_count=0
+    )
+
+    assert response.status_code == 200
+    assert json.loads(response.body) == {'status': 'done'}
+    fanout.assert_called_once_with('job-1', 2, 3)
+    integrations.assert_not_awaited()
+    completed.assert_called_once_with('job-1', 2, 3)
 
 
 @pytest.mark.anyio

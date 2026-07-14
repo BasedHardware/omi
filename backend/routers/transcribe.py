@@ -1041,6 +1041,7 @@ async def _stream_handler(
             existing_status = existing_conversation.get('status')
             reconnect_action = decide_recording_session_reconnect_action(
                 status=existing_status,
+                discarded=bool(existing_conversation.get('discarded')),
                 in_progress_status=ConversationStatus.in_progress,
             )
             if reconnect_action == RecordingSessionReconnectAction.resume_current:
@@ -1054,6 +1055,16 @@ async def _stream_handler(
                     uid,
                     session_id,
                 )
+                return
+            if reconnect_action == RecordingSessionReconnectAction.suppress_discarded_and_rollover:
+                logger.info(
+                    'Suppressing discarded durable recording session %s conversation=%s uid=%s listen=%s',
+                    recording_session_id,
+                    new_conversation_id,
+                    uid,
+                    session_id,
+                )
+                await _create_new_in_progress_conversation(rollover=True)
                 return
             _send_conversation_session(binding, recording_session_id, status=str(existing_status))
             if existing_status == ConversationStatus.completed.value:

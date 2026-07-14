@@ -33,6 +33,7 @@ class ConversationLifecycleAction(str, Enum):
 class RecordingSessionReconnectAction(str, Enum):
     resume_current = 'resume_current'
     replay_terminal_and_rollover = 'replay_terminal_and_rollover'
+    suppress_discarded_and_rollover = 'suppress_discarded_and_rollover'
 
 
 @dataclass(frozen=True)
@@ -206,14 +207,17 @@ def select_recording_session_id(
 
 
 def decide_recording_session_reconnect_action(
-    *, status: Any, in_progress_status: Any
+    *, status: Any, discarded: bool = False, in_progress_status: Any
 ) -> RecordingSessionReconnectAction:
     """Choose whether a reconnect may accept audio for an existing binding.
 
-    Only an in-progress conversation can be resumed. A terminal binding is
-    replayed to the client, then immediately rolled to a fresh generation so
+    Only a non-discarded in-progress conversation can be resumed. A discarded
+    row is suppressed rather than replayed as a completion, while other
+    terminal bindings are replayed before rolling to a fresh generation so
     bytes received before the next lifecycle tick cannot mutate terminal data.
     """
+    if discarded:
+        return RecordingSessionReconnectAction.suppress_discarded_and_rollover
     if status == in_progress_status:
         return RecordingSessionReconnectAction.resume_current
     return RecordingSessionReconnectAction.replay_terminal_and_rollover

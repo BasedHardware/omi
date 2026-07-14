@@ -49,6 +49,20 @@ async def finalize_persisted_conversation(
     """
     conversation_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
     if not conversation_data:
+        # A prior delivery can have durably completed fanout just before the
+        # worker crashes.  Preserve that acknowledgement even if the row is
+        # deleted before replay, so the caller can close its current lease.
+        fanout = await run_blocking(
+            db_executor,
+            lifecycle_service.claim_finalization_fanout,
+            finalization_job_id,
+            dispatch_generation,
+            lease_epoch,
+        )
+        if fanout['status'] == 'completed':
+            return ConversationFinalizationDisposition.completed
+        if fanout['status'] != 'fenced':
+            raise ConversationFinalizationError('missing_conversation_fanout_claim_conflict')
         # A deleted conversation is a successful no-fanout outcome. Retrying
         # its lease would only risk resurrecting a stale processor result.
         logger.info(

@@ -262,6 +262,17 @@ def test_terminal_recording_session_reconnect_rolls_before_accepting_audio():
         )
 
 
+def test_discarded_completed_recording_session_reconnect_is_suppressed():
+    assert (
+        decide_recording_session_reconnect_action(
+            status='completed',
+            discarded=True,
+            in_progress_status='in_progress',
+        )
+        == RecordingSessionReconnectAction.suppress_discarded_and_rollover
+    )
+
+
 def test_delayed_finalizer_keeps_the_pre_rollover_recording_binding():
     bindings = {
         'finished-before-rollover': 'recording-one',
