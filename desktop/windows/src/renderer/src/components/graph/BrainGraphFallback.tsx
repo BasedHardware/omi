@@ -10,20 +10,26 @@
 // carries no text, and never animates (there is no GPU to animate it with).
 // Monochrome white at low alpha — no purple anywhere (brand invariant INV-UI-1).
 
-// Satellites on a fixed ring, at deterministic angles (no RNG — this must render
-// identically every time). Radii vary slightly so the ring doesn't look stamped.
+// The orbit every satellite sits ON. Earlier the satellites were scattered at
+// varying distances while the ring stayed fixed, so the ring read as a stray
+// circle from some other drawing rather than the orbit they belong to.
+const ORBIT = 33
+
+// Deterministic angles (no RNG — this must render identically every time), all at
+// the orbit radius. Node sizes still vary, which is what keeps it from looking
+// like a stamped clock face; their POSITIONS are what has to be disciplined.
 const SATELLITES = [
-  { angle: -90, dist: 34, r: 2.6 },
-  { angle: -38, dist: 30, r: 3.4 },
-  { angle: 14, dist: 36, r: 2.2 },
-  { angle: 58, dist: 28, r: 3 },
-  { angle: 104, dist: 35, r: 2.4 },
-  { angle: 150, dist: 31, r: 3.2 },
-  { angle: 196, dist: 27, r: 2.2 },
-  { angle: 244, dist: 34, r: 2.8 }
-].map(({ angle, dist, r }) => {
+  { angle: -90, r: 2.6 },
+  { angle: -38, r: 3.4 },
+  { angle: 14, r: 2.2 },
+  { angle: 58, r: 3 },
+  { angle: 104, r: 2.4 },
+  { angle: 150, r: 3.2 },
+  { angle: 196, r: 2.2 },
+  { angle: 244, r: 2.8 }
+].map(({ angle, r }) => {
   const rad = (angle * Math.PI) / 180
-  return { x: 50 + Math.cos(rad) * dist, y: 50 + Math.sin(rad) * dist, r }
+  return { x: 50 + Math.cos(rad) * ORBIT, y: 50 + Math.sin(rad) * ORBIT, r }
 })
 
 export function BrainGraphFallback(): React.JSX.Element {
@@ -32,12 +38,10 @@ export function BrainGraphFallback(): React.JSX.Element {
       className="absolute inset-0 flex items-center justify-center"
       data-testid="brain-graph-fallback"
     >
-      <svg
-        viewBox="0 0 100 100"
-        className="h-full w-full max-h-[520px] max-w-[520px] text-white"
-        aria-hidden
-        role="img"
-      >
+      {/* Fills the host square (which is already sized/centred by the pane), so the
+          mark grows with the window instead of sitting small in a big empty pane —
+          the live map it stands in for scales, and so must this. */}
+      <svg viewBox="0 0 100 100" className="h-full w-full text-white" aria-hidden role="img">
         {SATELLITES.map((s, i) => (
           <line
             key={`l${i}`}
@@ -50,10 +54,12 @@ export function BrainGraphFallback(): React.JSX.Element {
             opacity="0.1"
           />
         ))}
+        {/* The orbit itself — same constant the satellites are placed on, so the two
+            can never drift apart again. */}
         <circle
           cx="50"
           cy="50"
-          r="33"
+          r={ORBIT}
           fill="none"
           stroke="currentColor"
           strokeWidth="0.2"
