@@ -1,11 +1,13 @@
 """Durable workflow-owned handoff for canonical recurrence signals."""
 
 import hashlib
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
+from pydantic import ValidationError
 
 from database._client import db as default_db
 from models.memory_recurrence import CanonicalRecurrenceSignal
@@ -15,6 +17,8 @@ from models.workstream_association import (
     RecurrenceOutcomeKind,
 )
 from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
+
+logger = logging.getLogger(__name__)
 
 RECURRENCE_INBOX_COLLECTION = 'task_recurrence_inbox'
 TASK_INTELLIGENCE_CONTROL_COLLECTION = 'task_intelligence_control'
@@ -55,7 +59,20 @@ def _control_ref(uid: str, *, firestore_client: Any = None):
 
 
 def _validate_generation(snapshot: Any, account_generation: int) -> None:
-    control = TaskWorkflowControl.model_validate(snapshot.to_dict() or {}) if snapshot.exists else TaskWorkflowControl()
+    try:
+        control = (
+            TaskWorkflowControl.model_validate(snapshot.to_dict() or {}) if snapshot.exists else TaskWorkflowControl()
+        )
+    except ValidationError as e:
+        # A drifted control doc (extra='forbid' plus a renamed/removed field, a bad enum) must not crash the
+        # recurrence handoff. Fall back to the legacy-safe default (workflow_mode=off, account_generation=0),
+        # which fails the checks below, so a malformed control is treated as a generation mismatch (fail-closed)
+        # rather than raising ValidationError. Log bounded error types only, never input_value (task text).
+        logger.warning(
+            'Ignoring malformed task workflow control in recurrence inbox: %s',
+            [str(err.get('type', 'unknown')) for err in e.errors(include_input=False, include_url=False)[:5]],
+        )
+        control = TaskWorkflowControl()
     if control.account_generation != account_generation:
         raise RecurrenceGenerationMismatchError('account generation mismatch')
     if control.workflow_mode not in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
