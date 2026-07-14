@@ -187,6 +187,15 @@ final class ChatErrorStateTests: XCTestCase {
     )
   }
 
+  func testTypedBridgeStartFailureSurfacesARecoverableRetryCard() {
+    let error = BridgeError.failedToStart(.handshakeTimedOut)
+    XCTAssertEqual(
+      ChatErrorState.from(error),
+      .bridgeUnavailable(reason: .failedToStart(.handshakeTimedOut)))
+    XCTAssertEqual(ChatErrorState.from(error)?.primaryRecovery, .retry)
+    XCTAssertEqual(ChatErrorState.from(error)?.userFacingSummary, "AI took too long to start. Try again.")
+  }
+
   func testBridgeUnavailableReasonsCoverUnknown() {
     XCTAssertEqual(
       ChatErrorState.from(.notRunning),

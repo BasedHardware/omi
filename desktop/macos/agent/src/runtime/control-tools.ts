@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { z } from "zod";
 import { isProductionAdapterId } from "../adapters/interface.js";
 import type {
@@ -14,6 +16,8 @@ import type {
 } from "./types.js";
 import { AgentRuntimeKernel, type DesktopAwarenessSnapshot, type ExecuteAgentRunInput } from "./kernel.js";
 import { serializeArtifact } from "./artifact-serialization.js";
+import { defaultArtifactRoot } from "./artifact-storage.js";
+import { assertToolResultEnvelope, makeToolResultEnvelope, type ToolResultEnvelope } from "./tool-result-envelope.js";
 import { agentControlCapabilityManifest, agentControlInputSchema } from "./control-tool-manifest.js";
 import type { McpServerBuildContext } from "./jsonl-transport.js";
 import {
@@ -266,6 +270,19 @@ const updateAgentArtifactLifecycleSchema = strictObject({
   metadata: z.record(z.string(), z.unknown()).default({}),
 });
 
+const readToolOutputSchema = strictObject({
+  artifactId: z.string().min(1),
+  ownerId: z.string().min(1).optional(),
+  maxBytes: z.coerce.number().int().positive().max(8 * 1024).default(4 * 1024),
+});
+
+const searchToolOutputSchema = strictObject({
+  artifactId: z.string().min(1),
+  ownerId: z.string().min(1).optional(),
+  query: z.string().min(1).max(256),
+  maxMatches: z.coerce.number().int().positive().max(20).default(5),
+});
+
 const sendAgentMessageSchema = strictObject({
   sessionId: z.string().min(1),
   originSurfaceKind: originSurfaceKindSchema,
@@ -453,6 +470,8 @@ export const agentControlToolSchemas = {
   resolve_desktop_dispatch: resolveDesktopDispatchSchema,
   cancel_agent_run: cancelAgentRunSchema,
   inspect_agent_artifacts: inspectAgentArtifactsSchema,
+  read_tool_output: readToolOutputSchema,
+  search_tool_output: searchToolOutputSchema,
   update_agent_artifact_lifecycle: updateAgentArtifactLifecycleSchema,
   send_agent_message: sendAgentMessageSchema,
   spawn_background_agent: spawnBackgroundAgentSchema,
@@ -488,6 +507,19 @@ export const SWIFT_ADVERTISED_AGENT_CONTROL_TOOL_NAMES = [
 
 const CONTROL_TOOL_NAME_SET = new Set<string>(Object.keys(agentControlToolSchemas));
 
+/**
+ * The final provider-result boundary needs the authoritative tool identity and
+ * artifact owner even for early validation and catch paths. AsyncLocalStorage
+ * keeps that authority with the request across awaited tool effects without
+ * asking every individual switch branch to remember a serialization step.
+ */
+interface ControlToolOutputScope {
+  context: AgentControlToolContext;
+  toolName: string;
+}
+
+const controlToolOutputScope = new AsyncLocalStorage<ControlToolOutputScope>();
+
 export interface AgentControlToolDefinition {
   name: AgentControlToolName;
   description: string;
@@ -515,6 +547,13 @@ export interface AgentControlToolContext {
   /** Kernel-synthesized authority; never copied from adapter/model metadata. */
   authorizedProducerJournal?: AgentSpawnProducerJournalDescriptor;
   authorizedCallerRunId?: string;
+  /** Exact kernel capability identity for a model-visible control-tool result. */
+  authorizedToolInvocation?: {
+    invocationId: string;
+    runId: string;
+    attemptId: string;
+    toolName: string;
+  };
   trustedUserControl?: boolean;
   getOwnerId?: () => string;
   /** Broker-owned authority checked immediately around every physical effect. */
@@ -758,26 +797,25 @@ export async function handleAgentControlToolCall(
   name: string,
   input: Record<string, unknown>,
 ): Promise<string> {
-  if (!isAgentControlToolName(name)) {
-    return JSON.stringify({
-      ok: false,
-      error: {
-        code: "unknown_control_tool",
-        message: `Unknown control tool: ${name}`,
-      },
-    });
-  }
-  if (name === "resolve_desktop_dispatch" && !context.trustedUserControl) {
-    return JSON.stringify({
-      ok: false,
-      error: {
-        code: "policy_denied",
-        message: "resolve_desktop_dispatch requires trusted user control",
-      },
-    });
-  }
+  return controlToolOutputScope.run({ context, toolName: name }, async () => {
+    if (!isAgentControlToolName(name)) {
+      return stringifyToolResult({
+        error: {
+          code: "unknown_control_tool",
+          message: `Unknown control tool: ${name}`,
+        },
+      }, "failed");
+    }
+    if (name === "resolve_desktop_dispatch" && !context.trustedUserControl) {
+      return stringifyToolResult({
+        error: {
+          code: "policy_denied",
+          message: "resolve_desktop_dispatch requires trusted user control",
+        },
+      }, "failed");
+    }
 
-  try {
+    try {
     assertLeafControlToolsAllowed(context, name);
     switch (name) {
       case "list_agent_sessions": {
@@ -798,15 +836,32 @@ export async function handleAgentControlToolCall(
           executionRole: isChildDiscovery ? "leaf" : undefined,
         });
         const overrides = context.kernel.listDesktopAttentionOverrides(ownerId);
-        return stringifyToolResult(serializeAgentSessionsList(sessions, overrides));
+        const projected = serializeAgentSessionsList(sessions, overrides);
+        return stringifyToolResult(withToolResultEnvelope(
+          context,
+          "list_agent_sessions",
+          serializeFullSessionListing(sessions, projected),
+          projected,
+          ownerId,
+          context.callerSessionId ?? sessions[0]?.session.sessionId,
+        ));
       }
       case "get_agent_run": {
         const parsed = agentControlToolSchemas.get_agent_run.parse(input);
+        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
         const details = context.kernel.getRun({
           ...parsed,
-          ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
+          ownerId,
         });
-        return stringifyToolResult(serializeRunDetails(details));
+        const full = serializeRunDetails(details);
+        return stringifyToolResult(withToolResultEnvelope(
+          context,
+          "get_agent_run",
+          full,
+          projectProviderPayload(full, "get_agent_run"),
+          ownerId,
+          details.session.sessionId,
+        ));
       }
       case "build_desktop_awareness_snapshot": {
         const parsed = agentControlToolSchemas.build_desktop_awareness_snapshot.parse(input);
@@ -929,6 +984,42 @@ export async function handleAgentControlToolCall(
         return stringifyToolResult({
           artifacts: artifacts.map(serializeArtifact),
         });
+      }
+      case "read_tool_output": {
+        const parsed = agentControlToolSchemas.read_tool_output.parse(input);
+        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        const artifact = readToolOutputArtifact(context, parsed.artifactId, ownerId);
+        const fullText = readLocalArtifactText(artifact.uri);
+        const projectedText = truncateUtf8(fullText, parsed.maxBytes);
+        return stringifyToolResult(withToolResultEnvelope(
+          context,
+          "read_tool_output",
+          { artifactId: artifact.artifactId, output: fullText, truncated: false },
+          { artifactId: artifact.artifactId, output: projectedText.text, truncated: projectedText.truncated },
+          ownerId,
+          artifact.sessionId,
+          `artifact:${artifact.artifactId}`,
+        ));
+      }
+      case "search_tool_output": {
+        const parsed = agentControlToolSchemas.search_tool_output.parse(input);
+        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        const artifact = readToolOutputArtifact(context, parsed.artifactId, ownerId);
+        const fullText = readLocalArtifactText(artifact.uri);
+        const needle = parsed.query.toLocaleLowerCase();
+        const matches = fullText.split(/\r?\n/)
+          .filter((line) => line.toLocaleLowerCase().includes(needle))
+          .slice(0, parsed.maxMatches)
+          .map((line) => truncateUtf8(line, 512).text);
+        return stringifyToolResult(withToolResultEnvelope(
+          context,
+          "search_tool_output",
+          { artifactId: artifact.artifactId, matches, matchCount: matches.length, fullOutput: fullText },
+          { artifactId: artifact.artifactId, matches, matchCount: matches.length },
+          ownerId,
+          artifact.sessionId,
+          `artifact:${artifact.artifactId}`,
+        ));
       }
       case "update_agent_artifact_lifecycle": {
         const parsed = agentControlToolSchemas.update_agent_artifact_lifecycle.parse(input);
@@ -1696,34 +1787,50 @@ export async function handleAgentControlToolCall(
         });
       }
     }
-  } catch (error) {
-    const rawCode = error && typeof error === "object" && "code" in error
-      ? String((error as { code: unknown }).code)
-      : "";
-    const details = error instanceof PartialAgentSpawnError ? error.details : undefined;
-    const isAuthorizedExternalSpawnAdmission = name === "spawn_agent"
-      && context.authorizedCallerRunId !== undefined
-      && context.authorizedProducerJournal !== undefined;
-    const errorCode = error instanceof z.ZodError
-      ? "invalid_tool_input"
-      : /^[a-z0-9_]{1,64}$/.test(rawCode) ? rawCode : "control_tool_failed";
-    return JSON.stringify({
-      ok: false,
-      error: {
-        // Realtime callers consume this response through a model tool result,
-        // so an admission failure needs a stable recovery signal rather than
-        // an adapter/policy exception that may contain implementation detail.
-        code: isAuthorizedExternalSpawnAdmission && errorCode === "control_tool_failed"
-          ? "external_spawn_admission_failed"
-          : errorCode,
-        message: isAuthorizedExternalSpawnAdmission && errorCode === "control_tool_failed"
-          ? "The requested agent could not be started. Try again."
-          : error instanceof Error ? error.message : String(error),
-        ...(isAuthorizedExternalSpawnAdmission ? { retryable: true } : {}),
-        ...(details ? { details } : {}),
-      },
-    });
-  }
+    } catch (error) {
+      const rawCode = error && typeof error === "object" && "code" in error
+        ? String((error as { code: unknown }).code)
+        : "";
+      const routeReasonCode = error && typeof error === "object" && "reasonCode" in error
+        ? String((error as { reasonCode: unknown }).reasonCode)
+        : "";
+      const details = error instanceof PartialAgentSpawnError ? error.details : undefined;
+      // A directed local provider is a user-visible capability, not an opaque
+      // routing failure. Keep this translation at the control-tool boundary so
+      // every surface (including PTT) receives the same bounded recovery state.
+      const requestedDirectedProvider = name === "spawn_agent"
+        && (input.provider === "hermes" || input.provider === "openclaw")
+        ? input.provider
+        : undefined;
+      const isProviderSetupNeeded = (rawCode === "provider_unavailable" || routeReasonCode === "provider_unavailable")
+        && requestedDirectedProvider !== undefined;
+      const isAuthorizedExternalSpawnAdmission = name === "spawn_agent"
+        && context.authorizedCallerRunId !== undefined
+        && context.authorizedProducerJournal !== undefined;
+      const errorCode = error instanceof z.ZodError
+        ? "invalid_tool_input"
+        : isProviderSetupNeeded ? "provider_setup_needed"
+        : /^[a-z0-9_]{1,64}$/.test(rawCode) ? rawCode : "control_tool_failed";
+      return stringifyToolResult({
+        error: {
+          // Realtime callers consume this response through a model tool result,
+          // so an admission failure needs a stable recovery signal rather than
+          // an adapter/policy exception that may contain implementation detail.
+          code: isAuthorizedExternalSpawnAdmission && errorCode === "control_tool_failed"
+            ? "external_spawn_admission_failed"
+            : errorCode,
+          message: isAuthorizedExternalSpawnAdmission && errorCode === "control_tool_failed"
+            ? "The requested agent could not be started. Try again."
+            : isProviderSetupNeeded
+              ? `${requestedDirectedProvider === "hermes" ? "Hermes" : "OpenClaw"} needs setup before it can run an agent.`
+            : error instanceof Error ? error.message : String(error),
+          ...(isProviderSetupNeeded ? { provider: requestedDirectedProvider } : {}),
+          ...(isAuthorizedExternalSpawnAdmission ? { retryable: true } : {}),
+          ...(details ? { details } : {}),
+        },
+      }, "failed");
+    }
+  });
 }
 
 function buildControlRunMcpServers(
@@ -1806,8 +1913,394 @@ function rejectSynchronousNestedRun(context: AgentControlToolContext, adapterId:
   }
 }
 
-function stringifyToolResult(payload: Record<string, unknown>): string {
-  return JSON.stringify({ ok: true, ...payload });
+const MAX_REALTIME_TOOL_RESULT_BYTES = 8 * 1024;
+
+function controlToolResultProvenance(
+  context: AgentControlToolContext | undefined,
+  toolName: string,
+): ToolResultEnvelope["provenance"] {
+  const authorized = context?.authorizedToolInvocation;
+  if (authorized) {
+    // The capability tuple is the only identity a provider may observe. This
+    // applies equally to validation, budget, and catch branches.
+    return {
+      invocationId: authorized.invocationId,
+      runId: authorized.runId,
+      attemptId: authorized.attemptId,
+      toolName: authorized.toolName,
+    };
+  }
+  return {
+    invocationId: `control:${toolName}:${randomUUID()}`,
+    runId: context?.authorizedCallerRunId ?? "unknown",
+    attemptId: "unknown",
+    toolName,
+  };
+}
+
+/**
+ * Provider-facing results carry one typed envelope.  The compact response is
+ * useful in a realtime turn, while the full local result is recoverable by a
+ * canonical artifact reference instead of being silently discarded.
+ */
+function withToolResultEnvelope(
+  context: AgentControlToolContext,
+  toolName: string,
+  fullPayload: Record<string, unknown>,
+  projectedPayload: Record<string, unknown>,
+  ownerId: string,
+  sessionId: string | undefined,
+  existingFullOutputRef?: string,
+): Record<string, unknown> {
+  const fullJson = JSON.stringify(fullPayload);
+  const originalBytes = Buffer.byteLength(fullJson, "utf8");
+  const projectedBytes = Buffer.byteLength(JSON.stringify(projectedPayload), "utf8");
+  // Small structural projections are normal response shaping, not an
+  // artifact-backed truncation. Once the full payload cannot cross the
+  // provider boundary (or the caller supplied an existing canonical ref),
+  // it must be recoverable or become a typed failure.
+  const needsArtifactBackedProjection = originalBytes > projectedBytes
+    && (existingFullOutputRef !== undefined || originalBytes > MAX_REALTIME_TOOL_RESULT_BYTES);
+  const fullOutputRef = needsArtifactBackedProjection
+    ? existingFullOutputRef
+      ?? (sessionId
+      ? persistToolOutputArtifact(context, ownerId, sessionId, toolName, fullJson)
+      : null)
+    : null;
+  if (needsArtifactBackedProjection && fullOutputRef === null) {
+    // Never relabel a lossy success as an untruncated success. The provider
+    // receives a typed failure unless the complete result is durably readable
+    // through its artifact reference.
+    return providerBudgetFailure(toolName, context);
+  }
+  const isRecoverableProjection = needsArtifactBackedProjection && fullOutputRef !== null;
+  const result = {
+    ...projectedPayload,
+    toolResultEnvelope: makeToolResultEnvelope({
+      status: "succeeded",
+      truncated: isRecoverableProjection,
+      originalBytes: isRecoverableProjection ? originalBytes : projectedBytes,
+      projectedBytes,
+      fullOutputRef,
+      provenance: controlToolResultProvenance(context, toolName),
+    }),
+  };
+  if (Buffer.byteLength(JSON.stringify({ ok: true, ...result }), "utf8") > MAX_REALTIME_TOOL_RESULT_BYTES) {
+    const recoveredRef = fullOutputRef ?? (sessionId
+      ? persistToolOutputArtifact(context, ownerId, sessionId, toolName, fullJson)
+      : null);
+    const failure = {
+      error: {
+        code: "tool_result_projection_exceeded_budget",
+        message: `${toolName} output was saved locally; use its fullOutputRef with read_tool_output or search_tool_output.`,
+      },
+    };
+    const failureBytes = Buffer.byteLength(JSON.stringify(failure), "utf8");
+    if (recoveredRef) {
+      return {
+        ...failure,
+        toolResultEnvelope: makeToolResultEnvelope({
+          status: "failed",
+          truncated: true,
+          originalBytes: Math.max(originalBytes, projectedBytes),
+          projectedBytes: failureBytes,
+          fullOutputRef: recoveredRef,
+          provenance: controlToolResultProvenance(context, toolName),
+        }),
+      };
+    }
+    return providerBudgetFailure(toolName, context);
+  }
+  return result;
+}
+
+function persistToolOutputArtifact(
+  context: AgentControlToolContext,
+  ownerId: string,
+  sessionId: string,
+  toolName: string,
+  fullJson: string,
+): string | null {
+  try {
+    const directory = join(defaultArtifactRoot(), "tool-output", ownerId, sessionId);
+    mkdirSync(directory, { recursive: true });
+    const path = join(directory, `${toolName}-${randomUUID()}.json`);
+    writeFileSync(path, `${fullJson}\n`, "utf8");
+    const artifact = context.kernel.persistArtifact({
+      sessionId,
+      kind: "tool_output",
+      role: "tool_output",
+      uri: pathToFileURL(path).toString(),
+      displayName: `${toolName} full output`,
+      mimeType: "application/json",
+      contentHash: `sha256:${createHash("sha256").update(fullJson).digest("hex")}`,
+      sizeBytes: Buffer.byteLength(fullJson, "utf8"),
+      metadata: { toolName, projection: "provider_bounded", ownerId },
+    });
+    return `artifact:${artifact.artifactId}`;
+  } catch {
+    return null;
+  }
+}
+
+function readToolOutputArtifact(context: AgentControlToolContext, artifactId: string, ownerId: string): AgentArtifact {
+  const canonicalArtifactId = artifactId.startsWith("artifact:") ? artifactId.slice("artifact:".length) : artifactId;
+  const artifact = context.kernel.inspectArtifacts({ artifactId: canonicalArtifactId, ownerId, limit: 1 })[0];
+  if (!artifact || artifact.role !== "tool_output") {
+    throw new Error("Tool output artifact was not found");
+  }
+  return artifact;
+}
+
+function readLocalArtifactText(uri: string): string {
+  if (!uri.startsWith("file://")) throw new Error("Tool output artifact is not locally readable");
+  return readFileSync(fileURLToPath(uri), "utf8");
+}
+
+function truncateUtf8(text: string, maxBytes: number): { text: string; truncated: boolean } {
+  if (Buffer.byteLength(text, "utf8") <= maxBytes) return { text, truncated: false };
+  let end = Math.min(text.length, maxBytes);
+  while (end > 0 && Buffer.byteLength(text.slice(0, end), "utf8") > maxBytes) end -= 1;
+  return { text: text.slice(0, end), truncated: true };
+}
+
+/**
+ * The one and only provider-result finalizer for control tools. It owns both
+ * normal and error output so malformed input, denied policy, and unexpected
+ * throws cannot bypass the envelope/artifact contract.
+ */
+function stringifyToolResult(
+  payload: Record<string, unknown>,
+  requestedStatus?: "succeeded" | "failed" | "cancelled",
+): string {
+  const scope = controlToolOutputScope.getStore();
+  const toolName = scope?.toolName ?? "unscoped_control_tool";
+  const existingEnvelope = payload.toolResultEnvelope;
+  if (existingEnvelope) {
+    // Dedicated detail tools have already persisted the complete source before
+    // returning their compact projection. Preserve that reference verbatim.
+    try {
+      assertToolResultEnvelope(existingEnvelope);
+      const sourceEnvelope = existingEnvelope;
+      const status = requestedStatus ?? sourceEnvelope.status;
+      const envelope = makeToolResultEnvelope({
+        status,
+        truncated: sourceEnvelope.truncated,
+        originalBytes: sourceEnvelope.originalBytes,
+        projectedBytes: sourceEnvelope.projectedBytes,
+        fullOutputRef: sourceEnvelope.fullOutputRef,
+        provenance: controlToolResultProvenance(scope?.context, toolName),
+      });
+      const result = JSON.stringify({ ok: status === "succeeded", ...payload, toolResultEnvelope: envelope });
+      if (Buffer.byteLength(result, "utf8") <= MAX_REALTIME_TOOL_RESULT_BYTES) return result;
+      return stringifyProviderBudgetFailure(toolName, envelope.originalBytes, envelope.fullOutputRef, scope?.context);
+    } catch {
+      // An invalid envelope is itself an untrusted transport value. Continue
+      // through the finalizer below so it becomes a typed bounded failure.
+    }
+  }
+
+  const fullJson = JSON.stringify(payload) ?? "{}";
+  const originalBytes = Buffer.byteLength(fullJson, "utf8");
+  const status = requestedStatus ?? (Object.hasOwn(payload, "error") ? "failed" : "succeeded");
+  const ownerId = scope ? safeControlToolOwnerId(scope.context) : null;
+  const sessionId = scope ? scope.context.callerSessionId ?? findSessionIdForToolOutput(payload) : undefined;
+  let persistedFullOutputRef: string | null | undefined;
+  const candidates = [
+    payload,
+    ...([[512, 24, 32], [256, 16, 24], [128, 10, 16], [64, 6, 10], [32, 3, 8]] as const)
+      .map((limits) => compactProviderPayload(payload, ...limits)),
+  ];
+
+  for (const projectedPayload of candidates) {
+    const projectedJson = JSON.stringify(projectedPayload) ?? "{}";
+    const projectedBytes = Buffer.byteLength(projectedJson, "utf8");
+    const projected = projectedBytes < originalBytes;
+    if (projected && persistedFullOutputRef === undefined) {
+      persistedFullOutputRef = ownerId && sessionId && scope
+        ? persistToolOutputArtifact(scope.context, ownerId, sessionId, toolName, fullJson)
+        : null;
+    }
+    const fullOutputRef = projected ? persistedFullOutputRef ?? null : null;
+    if (projected && !fullOutputRef) {
+      // Do not report a lossy success. The bounded error explicitly tells the
+      // caller that no recoverable projection could be produced.
+      return stringifyProviderBudgetFailure(toolName, undefined, null, scope?.context);
+    }
+    const toolResultEnvelope = makeToolResultEnvelope({
+      status,
+      truncated: projected,
+      originalBytes: projected ? originalBytes : projectedBytes,
+      projectedBytes,
+      fullOutputRef,
+      provenance: controlToolResultProvenance(scope?.context, toolName),
+    });
+    const result = JSON.stringify({
+      ok: status === "succeeded",
+      ...projectedPayload,
+      toolResultEnvelope,
+    });
+    if (Buffer.byteLength(result, "utf8") <= MAX_REALTIME_TOOL_RESULT_BYTES) return result;
+  }
+
+  return stringifyProviderBudgetFailure(toolName, undefined, null, scope?.context);
+}
+
+function stringifyProviderBudgetFailure(
+  toolName: string,
+  originalBytes?: number,
+  fullOutputRef: string | null = null,
+  context: AgentControlToolContext | undefined = controlToolOutputScope.getStore()?.context,
+): string {
+  const failure = {
+    error: {
+      code: "tool_result_exceeded_provider_budget",
+      message: "The tool result exceeded the provider budget and was not delivered.",
+    },
+  };
+  const projectedBytes = Buffer.byteLength(JSON.stringify(failure), "utf8");
+  const truncated = fullOutputRef !== null && (originalBytes ?? projectedBytes) > projectedBytes;
+  return JSON.stringify({
+    ok: false,
+    ...failure,
+    toolResultEnvelope: makeToolResultEnvelope({
+      status: "failed",
+      truncated,
+      originalBytes: truncated ? originalBytes! : projectedBytes,
+      projectedBytes,
+      fullOutputRef: truncated ? fullOutputRef : null,
+      provenance: controlToolResultProvenance(context, toolName),
+    }),
+  });
+}
+
+function safeControlToolOwnerId(context: AgentControlToolContext): string | null {
+  try {
+    return controlToolOwnerId(context);
+  } catch {
+    return null;
+  }
+}
+
+function findSessionIdForToolOutput(value: unknown, depth = 0): string | undefined {
+  if (depth > 6 || !value || typeof value !== "object") return undefined;
+  if (Array.isArray(value)) {
+    for (const item of value.slice(0, 64)) {
+      const sessionId = findSessionIdForToolOutput(item, depth + 1);
+      if (sessionId) return sessionId;
+    }
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  if (typeof record.sessionId === "string" && record.sessionId.startsWith("ses_")) return record.sessionId;
+  for (const key of ["session", "sessions", "run", "runs", "snapshot", "route", "dispatch", "result"]) {
+    const sessionId = findSessionIdForToolOutput(record[key], depth + 1);
+    if (sessionId) return sessionId;
+  }
+  return undefined;
+}
+
+/**
+ * Last-resort transport guard for every control-tool branch. Operations with a
+ * recoverable full result use `withToolResultEnvelope`; this path makes an
+ * unexpected oversize response a typed failure instead of a provider-specific
+ * disconnect or an unbounded JSONL frame.
+ */
+function providerBudgetFailure(
+  toolName: string,
+  context: AgentControlToolContext | undefined = controlToolOutputScope.getStore()?.context,
+): Record<string, unknown> {
+  const failure = {
+    error: {
+      code: "tool_result_exceeded_provider_budget",
+      message: "The tool result exceeded the provider budget and was not delivered.",
+    },
+  };
+  const bytes = Buffer.byteLength(JSON.stringify(failure), "utf8");
+  return {
+    ...failure,
+    toolResultEnvelope: makeToolResultEnvelope({
+      status: "failed",
+      truncated: false,
+      originalBytes: bytes,
+      projectedBytes: bytes,
+      fullOutputRef: null,
+      provenance: controlToolResultProvenance(context, toolName),
+    }),
+  };
+}
+
+/** A compact projection for detail endpoints whose stored JSON can be huge. */
+function projectProviderPayload(fullPayload: Record<string, unknown>, toolName: string): Record<string, unknown> {
+  const originalBytes = Buffer.byteLength(JSON.stringify(fullPayload), "utf8");
+  const maximumProjectedBytes = 5 * 1024;
+  for (const limits of [[512, 24, 32], [256, 16, 24], [128, 10, 16], [64, 6, 10]] as const) {
+    const compact = compactProviderPayload(fullPayload, ...limits);
+    if (Buffer.byteLength(JSON.stringify(compact), "utf8") <= maximumProjectedBytes) return compact;
+  }
+  const preview = truncateUtf8(JSON.stringify(compactProviderPayload(fullPayload, 64, 6, 10)), maximumProjectedBytes).text;
+  return {
+    projection: "bounded_json_preview",
+    toolName,
+    originalBytes,
+    preview,
+  };
+}
+
+const OMITTED_PROVIDER_VALUE = Symbol("omitted_provider_value");
+
+/**
+ * Central defensive projection for model-visible control results. Dedicated
+ * operations retain a full artifact reference; this fallback keeps unrelated
+ * control responses structurally useful and under the transport ceiling.
+ */
+function compactProviderPayload(
+  payload: Record<string, unknown>,
+  stringLimit = 512,
+  arrayLimit = 24,
+  fieldLimit = 32,
+): Record<string, unknown> {
+  return compactProviderValue(payload, "", 0, stringLimit, arrayLimit, fieldLimit) as Record<string, unknown>;
+}
+
+function compactProviderValue(
+  value: unknown,
+  key: string,
+  depth: number,
+  stringLimit: number,
+  arrayLimit: number,
+  fieldLimit: number,
+): unknown {
+  const lowerKey = key.toLocaleLowerCase();
+  if (lowerKey.includes("surfacecontext") || lowerKey.includes("admittedcontext") || lowerKey === "renderedcontext") {
+    return OMITTED_PROVIDER_VALUE;
+  }
+  if (typeof value === "string") {
+    return truncateUtf8(value, stringLimit).text;
+  }
+  if (Array.isArray(value)) {
+    const retained = value.length <= arrayLimit
+      ? value
+      : [...value.slice(0, Math.min(3, arrayLimit)), ...value.slice(-(arrayLimit - Math.min(3, arrayLimit)))];
+    const items = retained
+      .map((item) => compactProviderValue(item, "", depth + 1, stringLimit, arrayLimit, fieldLimit))
+      .filter((item) => item !== OMITTED_PROVIDER_VALUE);
+    if (value.length > items.length) items.push({ truncatedItemCount: value.length - items.length });
+    return items;
+  }
+  if (!value || typeof value !== "object") return value;
+  if (depth >= 5) return { projection: "depth_limited" };
+  const actualFieldLimit = depth == 0 ? Math.max(fieldLimit, 64) : fieldLimit;
+  const entries = Object.entries(value as Record<string, unknown>).slice(0, actualFieldLimit);
+  const compact: Record<string, unknown> = {};
+  for (const [childKey, childValue] of entries) {
+    const projected = compactProviderValue(childValue, childKey, depth + 1, stringLimit, arrayLimit, fieldLimit);
+    if (projected !== OMITTED_PROVIDER_VALUE) compact[childKey] = projected;
+  }
+  if (Object.keys(value as Record<string, unknown>).length > entries.length) {
+    compact.truncatedFieldCount = Object.keys(value as Record<string, unknown>).length - entries.length;
+  }
+  return compact;
 }
 
 function serializeContinuityDelivery(delivery: {
@@ -1868,7 +2361,9 @@ function serializeAgentSessionsList(
   // the canonical list well below the provider's aggregate-turn budget so a
   // routine status lookup cannot prevent the provider from speaking the
   // completed child result it just found.
-  const maximumSerializedBytes = 8 * 1024;
+  // Reserve room for the common ToolResultEnvelope. The final guard above is
+  // authoritative and protects every provider response from transport drift.
+  const maximumSerializedBytes = 6 * 1024;
   const dismissed = new Set(
     overrides
       .filter((override) => override.dismissedAtMs != null || (override.hiddenUntilMs ?? 0) > Date.now())
@@ -1923,6 +2418,21 @@ function serializeAgentSessionsList(
     truncated,
     returned_session_count: serializedSessions.length,
     fetched_session_count: sessions.length,
+  };
+}
+
+function serializeFullSessionListing(
+  sessions: Parameters<typeof serializeSessionSummary>[0][],
+  projected: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    ...projected,
+    canonicalSessions: sessions.map((summary) => ({
+      session: summary.session,
+      latestRun: summary.latestRun ?? null,
+      activeRun: summary.activeRun ?? null,
+      adapterBindings: summary.adapterBindings,
+    })),
   };
 }
 

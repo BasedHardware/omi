@@ -39,6 +39,8 @@ export interface AgentControlManifestTool {
     | "resolve_desktop_dispatch"
     | "cancel_agent_run"
     | "inspect_agent_artifacts"
+    | "read_tool_output"
+    | "search_tool_output"
     | "update_agent_artifact_lifecycle"
     | "send_agent_message"
     | "spawn_background_agent"
@@ -523,6 +525,56 @@ Returns metadata and references only. It does not read arbitrary artifact conten
       limit: { type: "number", description: "Maximum artifacts to return. Default 50, max 200." },
     },
     required: [],
+  },
+  {
+    name: "read_tool_output",
+    label: "Read Tool Output",
+    description: "Read a bounded excerpt from a canonical Omi tool-output artifact.",
+    promptSnippet: "read_tool_output - Read a bounded excerpt from a saved Omi tool result",
+    promptGuidelines: [
+      "Use an artifactId returned by a toolResultEnvelope fullOutputRef or inspect_agent_artifacts.",
+      "The response is bounded; use search_tool_output for targeted retrieval.",
+    ],
+    capabilityDoc: controlDoc(
+      "Read Tool Output",
+      "Read a bounded excerpt from a canonical Omi tool-output artifact.",
+      ["Requires a canonical artifact id and keeps provider payloads bounded."],
+    ),
+    latency: "fast local",
+    surfaces: ["desktopChat", "realtimeHub"],
+    ...artifactManagePolicy,
+    runtimePreconditions: ["Artifact must be a local canonical tool_output owned by the active user."],
+    timeoutClass: "normal",
+    properties: {
+      artifactId: { type: "string", description: "Canonical tool-output artifact_id." },
+      ownerId: { type: "string", description: "Owner guard. Defaults to the active signed-in owner." },
+      maxBytes: { type: "number", description: "Maximum excerpt size in bytes. Default 4096, max 8192." },
+    },
+    required: ["artifactId"],
+  },
+  {
+    name: "search_tool_output",
+    label: "Search Tool Output",
+    description: "Search a canonical Omi tool-output artifact without sending the complete artifact to a provider.",
+    promptSnippet: "search_tool_output - Search a saved Omi tool result",
+    promptGuidelines: ["Use after a truncated toolResultEnvelope to find the relevant local output."],
+    capabilityDoc: controlDoc(
+      "Search Tool Output",
+      "Search a canonical Omi tool-output artifact without returning the complete artifact.",
+      ["Requires a canonical artifact id and returns bounded matching lines."],
+    ),
+    latency: "fast local",
+    surfaces: ["desktopChat", "realtimeHub"],
+    ...artifactManagePolicy,
+    runtimePreconditions: ["Artifact must be a local canonical tool_output owned by the active user."],
+    timeoutClass: "normal",
+    properties: {
+      artifactId: { type: "string", description: "Canonical tool-output artifact_id." },
+      ownerId: { type: "string", description: "Owner guard. Defaults to the active signed-in owner." },
+      query: { type: "string", description: "Text to find in the saved output." },
+      maxMatches: { type: "number", description: "Maximum matching lines. Default 5, max 20." },
+    },
+    required: ["artifactId", "query"],
   },
   {
     name: "update_agent_artifact_lifecycle",

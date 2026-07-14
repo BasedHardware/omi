@@ -1396,6 +1396,29 @@ const controlVoicePatches: Partial<Record<AgentControlManifestTool["name"], OmiT
       [],
     ),
   },
+  read_tool_output: {
+    realtimeDescription:
+      "Read a bounded excerpt from an Omi tool-output artifact referenced by a prior toolResultEnvelope. Never request an arbitrary file path.",
+    schemaOverride: schema(
+      {
+        artifactId: { type: "string", description: "Canonical tool-output artifact id." },
+        maxBytes: { type: "number", description: "Maximum excerpt size in bytes. Default 4096, max 8192." },
+      },
+      ["artifactId"],
+    ),
+  },
+  search_tool_output: {
+    realtimeDescription:
+      "Search a saved Omi tool-output artifact for matching lines without returning the complete artifact.",
+    schemaOverride: schema(
+      {
+        artifactId: { type: "string", description: "Canonical tool-output artifact id." },
+        query: { type: "string", description: "Text to find in the saved output." },
+        maxMatches: { type: "number", description: "Maximum matching lines. Default 5." },
+      },
+      ["artifactId", "query"],
+    ),
+  },
   update_agent_artifact_lifecycle: {
     realtimeDescription:
       "Update metadata-only lifecycle state for one canonical Omi-managed agent artifact. Does not open, delete, retain, or read files.",

@@ -1,0 +1,3 @@
+{
+  "change": "Improved recovery guidance when the desktop AI runtime or a selected local provider cannot start"
+}

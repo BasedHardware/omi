@@ -21,7 +21,9 @@ covers:
   - desktop/macos/Desktop/Sources/Providers/AgentRuntimeRouting.swift
   - desktop/macos/Desktop/Sources/AnalyticsManager.swift
   - desktop/macos/Desktop/Sources/Chat/AgentBridge.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeBridgeLifecycle.swift
   - desktop/macos/Desktop/Sources/Chat/AgentControlService.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeFailure.swift
   - desktop/macos/Desktop/Sources/Chat/ChatContentBlockCodec.swift
   - desktop/macos/Desktop/Sources/Chat/ChatContinuityInvariants.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/TaskChatMessageStorage.swift

@@ -4,7 +4,7 @@
 // === Swift → Bridge (stdin) ===
 
 export const PROTOCOL_VERSION = 2 as const;
-export const RUNTIME_CAPABILITIES = ["journal_import_remote_turn"] as const;
+export const RUNTIME_CAPABILITIES = ["journal_import_remote_turn", "runtime_adapter_availability"] as const;
 export type ProtocolVersion = typeof PROTOCOL_VERSION;
 
 export interface ProtocolEnvelope {
@@ -481,6 +481,8 @@ export interface InitMessage extends OutboundEnvelope {
   agentControlTools: string[];
   runtimeVersion: string;
   runtimeCapabilities: string[];
+  /** Exact registry projection used by Swift to build local-provider schemas. */
+  runtimeAdapterIds: string[];
 }
 
 export interface TextDeltaMessage extends QueryScopedOutbound {
@@ -616,6 +618,8 @@ export interface SerializedArtifact {
 
 export interface RuntimeFailurePayload {
   code: string;
+  /** Closed failure taxonomy; `code` remains the detailed diagnostic key. */
+  failureCode?: "authentication" | "quota_exceeded" | "invalid_request" | "timeout" | "transport_interruption" | "adapter_unavailable" | "adapter_incompatible" | "bridge_start_failed" | "provider_setup_needed" | "malformed_or_oversized_tool_result" | "cancelled" | "stale_owner" | "policy_denied" | "unknown";
   userMessage: string;
   technicalMessage?: string;
   source?: string;
@@ -739,6 +743,25 @@ export interface ContextSnapshotProjection {
   capabilityVersion: string;
   /** Canonical, surface-specific context material rendered by the kernel. */
   renderedContext: string;
+  /**
+   * Kernel-owned history/cache plan shared by typed chat and realtime voice.
+   * Older history is intentionally not implied by a 64-turn window: callers
+   * must honor the declared handoff strategy rather than pretending it exists.
+   */
+  contextPlan: {
+    version: 1;
+    planId: string;
+    semanticGuidanceVersion: string;
+    semanticGuidance: string;
+    retainedTurnStartSeq: number | null;
+    retainedTurnEndSeq: number | null;
+    retainedTurnCount: number;
+    totalTurnCount: number;
+    omittedTurnCount: number;
+    olderHistoryStrategy: "none" | "truncated";
+    stableCacheIdentity: string;
+    dynamicContextIdentity: string;
+  };
   ownerId: string;
   sessionId: string;
   conversationId: string;

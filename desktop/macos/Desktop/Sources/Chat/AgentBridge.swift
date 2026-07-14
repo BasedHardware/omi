@@ -423,6 +423,7 @@ struct AgentContextSnapshot: @unchecked Sendable {
   let sourceOutcomes: [[String: Any]]
   let activeRuns: [[String: Any]]
   let capabilities: [String: Any]
+  let contextPlan: AgentConversationContextPlan
 
   init?(dictionary: [String: Any]) {
     guard
@@ -440,6 +441,8 @@ struct AgentContextSnapshot: @unchecked Sendable {
       let sourceOutcomes = dictionary["sourceOutcomes"] as? [[String: Any]],
       let activeRuns = dictionary["activeRuns"] as? [[String: Any]],
       let capabilities = dictionary["capabilities"] as? [String: Any],
+      let contextPlanDictionary = dictionary["contextPlan"] as? [String: Any],
+      let contextPlan = AgentConversationContextPlan(dictionary: contextPlanDictionary),
       capabilities["executionRole"] as? String != nil,
       capabilities["manifestVersion"] as? Int != nil,
       capabilities["manifestDigest"] as? String != nil,
@@ -459,6 +462,7 @@ struct AgentContextSnapshot: @unchecked Sendable {
     self.sourceOutcomes = sourceOutcomes
     self.activeRuns = activeRuns
     self.capabilities = capabilities
+    self.contextPlan = contextPlan
   }
 
   var freshness: AgentContextFreshness {
@@ -475,6 +479,60 @@ struct AgentContextSnapshot: @unchecked Sendable {
 
   var typedRecentTurns: [AgentContextRecentTurn] {
     recentTurns.compactMap(AgentContextRecentTurn.init(dictionary:))
+  }
+}
+
+struct AgentConversationContextPlan: Equatable, Sendable {
+  let version: Int
+  let planId: String
+  let semanticGuidanceVersion: String
+  let semanticGuidance: String
+  let retainedTurnStartSeq: Int?
+  let retainedTurnEndSeq: Int?
+  let retainedTurnCount: Int
+  let totalTurnCount: Int
+  let omittedTurnCount: Int
+  let olderHistoryStrategy: String
+  let stableCacheIdentity: String
+  let dynamicContextIdentity: String
+
+  init?(dictionary: [String: Any]) {
+    guard
+      let version = dictionary["version"] as? Int,
+      version == 1,
+      let planId = dictionary["planId"] as? String,
+      let semanticGuidanceVersion = dictionary["semanticGuidanceVersion"] as? String,
+      let semanticGuidance = dictionary["semanticGuidance"] as? String,
+      let retainedTurnCount = dictionary["retainedTurnCount"] as? Int,
+      let totalTurnCount = dictionary["totalTurnCount"] as? Int,
+      let omittedTurnCount = dictionary["omittedTurnCount"] as? Int,
+      let olderHistoryStrategy = dictionary["olderHistoryStrategy"] as? String,
+      ["none", "truncated"].contains(olderHistoryStrategy),
+      let stableCacheIdentity = dictionary["stableCacheIdentity"] as? String,
+      let dynamicContextIdentity = dictionary["dynamicContextIdentity"] as? String,
+      retainedTurnCount >= 0, totalTurnCount >= retainedTurnCount,
+      omittedTurnCount == totalTurnCount - retainedTurnCount,
+      olderHistoryStrategy == (omittedTurnCount > 0 ? "truncated" : "none")
+    else { return nil }
+    let retainedTurnStartSeq = dictionary["retainedTurnStartSeq"] as? Int
+    let retainedTurnEndSeq = dictionary["retainedTurnEndSeq"] as? Int
+    guard
+      retainedTurnCount == 0
+        ? retainedTurnStartSeq == nil && retainedTurnEndSeq == nil
+        : retainedTurnStartSeq != nil && retainedTurnEndSeq != nil
+    else { return nil }
+    self.version = version
+    self.planId = planId
+    self.semanticGuidanceVersion = semanticGuidanceVersion
+    self.semanticGuidance = semanticGuidance
+    self.retainedTurnStartSeq = retainedTurnStartSeq
+    self.retainedTurnEndSeq = retainedTurnEndSeq
+    self.retainedTurnCount = retainedTurnCount
+    self.totalTurnCount = totalTurnCount
+    self.omittedTurnCount = omittedTurnCount
+    self.olderHistoryStrategy = olderHistoryStrategy
+    self.stableCacheIdentity = stableCacheIdentity
+    self.dynamicContextIdentity = dynamicContextIdentity
   }
 }
 
@@ -1882,6 +1940,7 @@ enum BridgeError: LocalizedError {
   case timeout
   case processExited
   case outOfMemory
+  case failedToStart(AgentRuntimeBridgeLifecycle.StartFailure)
   case stopped
   case restarting
   case requestAlreadyActive
@@ -1899,7 +1958,7 @@ enum BridgeError: LocalizedError {
       guard failure.source == "runtime" else { return false }
       return failure.userMessage == exactCode || failure.technicalMessage == exactCode
     case .nodeNotFound, .bridgeScriptNotFound, .notRunning, .encodingError, .timeout,
-         .processExited, .outOfMemory, .stopped, .restarting, .requestAlreadyActive,
+         .processExited, .outOfMemory, .failedToStart, .stopped, .restarting, .requestAlreadyActive,
          .quotaExceeded, .authMissing:
       return false
     }
@@ -1915,7 +1974,7 @@ enum BridgeError: LocalizedError {
       return Self.isSessionAuthenticationFailureMessage(failure.displayMessage)
         || (failure.technicalMessage.map(Self.isSessionAuthenticationFailureMessage) ?? false)
     case .nodeNotFound, .bridgeScriptNotFound, .notRunning, .encodingError, .timeout,
-         .processExited, .outOfMemory, .stopped, .restarting, .requestAlreadyActive,
+         .processExited, .outOfMemory, .failedToStart, .stopped, .restarting, .requestAlreadyActive,
          .quotaExceeded:
       return false
     }
@@ -1963,6 +2022,8 @@ enum BridgeError: LocalizedError {
       return "AI stopped unexpectedly. Try sending your message again."
     case .outOfMemory:
       return "Not enough memory for AI chat. Close some apps and try again."
+    case .failedToStart:
+      return "AI couldn't start. Please try again."
     case .stopped:
       return "Response stopped."
     case .restarting:

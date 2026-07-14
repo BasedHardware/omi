@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { PROTOCOL_VERSION, type OutboundMessage } from "../src/protocol.js";
+import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
+import { readToolInvocation } from "../src/runtime/tool-invocation-ledger.js";
 
 interface CapturedLine {
   stream: "stdout" | "stderr";
@@ -64,7 +66,7 @@ class RuntimeProcessFixture {
     throw new Error(`runtime message timeout; stderr=${this.stderrSummary()}`);
   }
 
-  async close(): Promise<void> {
+  async stop(): Promise<void> {
     if (!this.child.killed && this.child.exitCode === null) {
       this.send({ type: "stop" });
       await new Promise<void>((resolve) => {
@@ -78,6 +80,10 @@ class RuntimeProcessFixture {
         });
       });
     }
+  }
+
+  async close(): Promise<void> {
+    await this.stop();
     rmSync(this.root, { recursive: true, force: true });
   }
 
@@ -182,5 +188,108 @@ describe("runtime stdio contract", () => {
     expect(fixture.lines.some(
       (line) => line.stream === "stderr" && line.value.includes("Unknown message type"),
     )).toBe(false);
+  });
+
+  it("records a Swift oversized tool completion as failed after relay finalization", async () => {
+    fixture = new RuntimeProcessFixture();
+    await fixture.waitForMessage((message) => message.type === "init");
+    fixture.send({ type: "refresh_owner", ownerId: "owner-contract" });
+
+    fixture.send({
+      type: "resolve_surface_session",
+      protocolVersion: PROTOCOL_VERSION,
+      requestId: "resolve-realtime",
+      clientId: "contract-smoke",
+      ownerId: "owner-contract",
+      surfaceKind: "realtime_voice",
+      externalRefKind: "chat",
+      externalRefId: "contract-realtime",
+    });
+    const resolved = await fixture.waitForMessage(
+      (message) => message.type === "surface_session_resolved" && message.requestId === "resolve-realtime",
+    );
+    if (resolved.type !== "surface_session_resolved") throw new Error("missing realtime session receipt");
+
+    fixture.send({
+      type: "external_surface_run_begin",
+      protocolVersion: PROTOCOL_VERSION,
+      requestId: "begin-realtime",
+      clientId: "contract-smoke",
+      ownerId: "owner-contract",
+      sessionId: resolved.sessionId,
+      turnId: "turn-oversized-relay",
+      prompt: "Check Omi's screen-recording permission status.",
+      mode: "act",
+    });
+    const begun = await fixture.waitForMessage(
+      (message) => message.type === "external_surface_run_begin_result" && message.requestId === "begin-realtime",
+    );
+    if (begun.type !== "external_surface_run_begin_result" || !begun.ok || !begun.runId || !begun.attemptId) {
+      throw new Error("realtime run admission failed");
+    }
+
+    fixture.send({
+      type: "external_surface_tool_invoke",
+      protocolVersion: PROTOCOL_VERSION,
+      requestId: "invoke-swift-permission-tool",
+      clientId: "contract-smoke",
+      ownerId: "owner-contract",
+      sessionId: begun.sessionId,
+      runId: begun.runId,
+      attemptId: begun.attemptId,
+      invocationId: "invocation-swift-oversized-result",
+      toolName: "check_permission_status",
+      input: { type: "screen_recording" },
+    });
+    const execution = await fixture.waitForMessage(
+      (message) => message.type === "authorized_tool_execution"
+        && message.invocationId === "invocation-swift-oversized-result",
+    );
+    if (execution.type !== "authorized_tool_execution") throw new Error("missing Swift tool execution request");
+
+    fixture.send({
+      type: "authorized_tool_execution_result",
+      protocolVersion: PROTOCOL_VERSION,
+      invocationId: execution.invocationId,
+      ownerId: execution.ownerId,
+      sessionId: execution.sessionId,
+      runId: execution.runId,
+      attemptId: execution.attemptId,
+      profileGeneration: execution.profileGeneration,
+      manifestVersion: execution.manifestVersion,
+      manifestDigest: execution.manifestDigest,
+      daemonBootEpoch: execution.daemonBootEpoch,
+      executionGeneration: execution.executionGeneration,
+      inputHash: execution.inputHash,
+      outcome: "succeeded",
+      // Swift transport marks every ChatToolExecutor return as succeeded;
+      // the structured result itself is the semantic failure signal.
+      result: JSON.stringify({
+        ok: false,
+        error: { code: "permission_denied", message: "Screen Recording is not available." },
+        snapshot: "x".repeat(9 * 1024),
+      }),
+    });
+    const delivered = await fixture.waitForMessage(
+      (message) => message.type === "external_surface_tool_result"
+        && message.requestId === "invoke-swift-permission-tool",
+    );
+    if (delivered.type !== "external_surface_tool_result" || !delivered.ok || !delivered.result) {
+      throw new Error("missing bounded external tool result");
+    }
+    const finalized = JSON.parse(delivered.result) as { ok: boolean; toolResultEnvelope: { status: string; truncated: boolean; fullOutputRef: string | null } };
+    expect(finalized).toMatchObject({
+      ok: false,
+      toolResultEnvelope: {
+        status: "failed",
+        truncated: true,
+        fullOutputRef: expect.stringMatching(/^artifact:/),
+      },
+    });
+
+    await fixture.stop();
+    const store = new SqliteAgentStore({ stateDir: join(fixture.root, "state"), reconcileOnOpen: false });
+    expect(readToolInvocation(store, execution.invocationId)).toMatchObject({ status: "failed" });
+    store.close();
   });
 });

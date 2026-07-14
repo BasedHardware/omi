@@ -62,6 +62,12 @@ export interface ExecuteAgentRunInput extends KernelSessionResolutionInput {
   prompt: string;
   promptBlocks?: PromptBlock[];
   systemPrompt?: string;
+  /** Stable cache key for the process-local provider binding; never includes turn history. */
+  systemPromptCacheIdentity?: string;
+  /** Privacy-safe, per-turn context identity carried in binding/usage diagnostics. */
+  dynamicContextIdentity?: string;
+  /** Privacy-safe plan identity used to correlate cache behavior across surfaces. */
+  contextPlanId?: string;
   mode?: RunMode;
   adapterId?: string;
   cwd?: string;
