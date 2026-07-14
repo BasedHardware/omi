@@ -116,4 +116,7 @@ jobs:
           NEXT_PUBLIC_OMI_API_URL: https://api.omiapi.com
         run: |
           npm ci
+          npm run lint
+          npm run typecheck
+          npm test
           npm run build
