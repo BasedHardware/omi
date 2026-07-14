@@ -245,7 +245,7 @@ _stub_package("utils.retrieval.tools")
 _stub_package("utils.llm")
 _stub_package("utils.conversations")
 
-# Stub utils.conversations.render (action_item_tools imports resolve_display_tz)
+# Stub utils.conversations.render (action_item_tools imports resolve_display_tz, format_local_time)
 _render_stub = _stub_module("utils.conversations.render")
 
 
@@ -258,7 +258,14 @@ def _real_resolve_display_tz(tz):
     return timezone.utc, "UTC"
 
 
+def _real_format_local_time(dt, display_tz, tz_label):
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return f"{dt.astimezone(display_tz).strftime('%Y-%m-%d %H:%M:%S')} {tz_label}"
+
+
 _render_stub.resolve_display_tz = _real_resolve_display_tz
+_render_stub.format_local_time = _real_format_local_time
 
 # Stub utils.retrieval.agentic
 import contextvars
