@@ -258,6 +258,10 @@ export class KernelSessions extends KernelArtifacts {
       where.push("surface_kind = ?");
       values.push(input.surfaceKind);
     }
+    if (input.executionRole) {
+      where.push("execution_role = ?");
+      values.push(input.executionRole);
+    }
     if (input.beforeUpdatedAtMs !== undefined) {
       where.push("updated_at_ms < ?");
       values.push(input.beforeUpdatedAtMs);

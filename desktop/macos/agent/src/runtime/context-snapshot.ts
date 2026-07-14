@@ -173,10 +173,22 @@ export function buildContextSnapshot(
   const conversationId = conversation ? String(conversation.conversation_id) : "";
   const recentTurns = conversationId
     ? store.allRows(
-        `SELECT turn_id, turn_seq, role, content, status, origin, created_at_ms
-         FROM conversation_turns
-         WHERE conversation_id = ?
-         ORDER BY turn_seq DESC, turn_id DESC
+        `SELECT ct.turn_id, ct.turn_seq, ct.role, ct.content, ct.status, ct.origin,
+                ct.created_at_ms,
+                COALESCE(MIN(revision.turn_seq), ct.turn_seq) AS insertion_seq
+         FROM conversation_turns ct
+         LEFT JOIN conversation_turn_revisions revision
+           ON revision.conversation_id = ct.conversation_id
+          AND revision.turn_id = ct.turn_id
+         WHERE ct.conversation_id = ?
+         -- turn_seq is the latest journal revision sequence, not immutable
+         -- conversational position. Backend/status updates can revise the two
+         -- halves in either order, so chronology must come from the stable
+         -- creation timestamp established by recordJournalExchange. The first
+         -- revision sequence is the durable insertion ordinal for coarse-clock
+         -- legacy imports whose immutable creation timestamps tie.
+         GROUP BY ct.conversation_id, ct.turn_id
+         ORDER BY ct.created_at_ms DESC, insertion_seq DESC
          LIMIT ?`,
         [conversationId, RECENT_TURN_LIMIT],
       ).reverse().map((row) => ({

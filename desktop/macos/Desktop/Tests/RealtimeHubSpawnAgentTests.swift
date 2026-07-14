@@ -49,18 +49,7 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
 
   func testSpawnJournalReceiptAcceptsOnlyCanonicalTurnIdentity() throws {
     let continuityKey = "voice:00000000-0000-0000-0000-000000009515"
-    let payload: [String: Any] = [
-      "ok": true,
-      "journalReceipt": [
-        "accepted": true,
-        "continuityKey": continuityKey,
-        "userTurnId": KernelTurnProjection.stableTurnID(
-          continuityKey: continuityKey, role: "user"),
-        "assistantTurnId": KernelTurnProjection.stableTurnID(
-          continuityKey: continuityKey, role: "assistant"),
-        "assistantText": "I started a background agent for that.",
-      ],
-    ]
+    let payload = canonicalSpawnPayload(continuityKey: continuityKey)
     let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
     let output = try XCTUnwrap(String(data: data, encoding: .utf8))
 
@@ -73,31 +62,141 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
           continuityKey: continuityKey, role: "user"),
         assistantTurnID: KernelTurnProjection.stableTurnID(
           continuityKey: continuityKey, role: "assistant"),
-        assistantText: "I started a background agent for that."))
+        assistantText: "I started a background agent for that.",
+        pillProjection: nil))
     XCTAssertNil(
       RealtimeSpawnJournalReceipt.parse(
         output: output,
         expectedContinuityKey: "voice:00000000-0000-0000-0000-000000000000"))
   }
 
+  func testSpawnJournalReceiptProjectsTheKernelAcceptedChildRun() throws {
+    let continuityKey = "voice:00000000-0000-0000-0000-000000009516"
+    let pillID = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+    let payload = canonicalSpawnPayload(
+      continuityKey: continuityKey,
+      pillID: pillID,
+      title: "Research models",
+      objective: "Research the latest models")
+    let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+    let output = try XCTUnwrap(String(data: data, encoding: .utf8))
+
+    let receipt = try XCTUnwrap(
+      RealtimeSpawnJournalReceipt.parse(output: output, expectedContinuityKey: continuityKey))
+    XCTAssertEqual(
+      receipt.pillProjection,
+      RealtimeSpawnJournalReceipt.PillProjection(
+        pillID: pillID,
+        sessionID: "session-child",
+        runID: "run-child",
+        attemptID: "attempt-child",
+        provider: "hermes",
+        title: "Research models",
+        objective: "Research the latest models"))
+  }
+
   func testSpawnJournalReceiptRejectsTamperedStableIdentity() throws {
     let continuityKey = "voice:00000000-0000-0000-0000-000000009515"
-    let payload: [String: Any] = [
-      "journalReceipt": [
-        "accepted": true,
-        "continuityKey": continuityKey,
-        "userTurnId": "turn_tampered",
-        "assistantTurnId": KernelTurnProjection.stableTurnID(
-          continuityKey: continuityKey, role: "assistant"),
-        "assistantText": "I started a background agent for that.",
-      ]
-    ]
+    var payload = canonicalSpawnPayload(continuityKey: continuityKey)
+    var receipt = try XCTUnwrap(payload["journalReceipt"] as? [String: Any])
+    receipt["userTurnId"] = "turn_tampered"
+    payload["journalReceipt"] = receipt
     let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
     let output = try XCTUnwrap(String(data: data, encoding: .utf8))
 
     XCTAssertNil(
       RealtimeSpawnJournalReceipt.parse(
         output: output, expectedContinuityKey: continuityKey))
+  }
+
+  func testSpawnJournalReceiptRejectsMissingOrMismatchedChildLifecycle() throws {
+    let continuityKey = "voice:00000000-0000-0000-0000-000000009518"
+    var missingChild = canonicalSpawnPayload(continuityKey: continuityKey)
+    missingChild.removeValue(forKey: "child")
+    let missingData = try JSONSerialization.data(withJSONObject: missingChild, options: [.sortedKeys])
+    XCTAssertNil(
+      RealtimeSpawnJournalReceipt.parse(
+        output: try XCTUnwrap(String(data: missingData, encoding: .utf8)),
+        expectedContinuityKey: continuityKey))
+
+    var mismatched = canonicalSpawnPayload(continuityKey: continuityKey)
+    var providerResult = try XCTUnwrap(mismatched["providerResult"] as? [String: Any])
+    providerResult["semanticDigest"] = "different-semantic-child"
+    mismatched["providerResult"] = providerResult
+    let mismatchData = try JSONSerialization.data(withJSONObject: mismatched, options: [.sortedKeys])
+    XCTAssertNil(
+      RealtimeSpawnJournalReceipt.parse(
+        output: try XCTUnwrap(String(data: mismatchData, encoding: .utf8)),
+        expectedContinuityKey: continuityKey))
+  }
+
+  func testRejectedSpawnResultCannotBeTreatedAsAnAcceptedVoiceTurn() {
+    let continuityKey = "voice:00000000-0000-0000-0000-000000009517"
+    let rejected = #"{"ok":false,"error":{"code":"provider_boundary_rejected","message":"not allowed"}}"#
+
+    XCTAssertEqual(
+      RealtimeSpawnAgentToolOutcome.classify(
+        output: rejected,
+        expectedContinuityKey: continuityKey),
+      .rejected)
+  }
+
+  private func canonicalSpawnPayload(
+    continuityKey: String,
+    pillID: UUID? = nil,
+    title: String = "Background agent",
+    objective: String = "Research the latest models"
+  ) -> [String: Any] {
+    let childLifecycle: [String: Any] = [
+      "state": "running",
+      "attemptState": "running",
+      "revision": 2,
+      "adapterId": "hermes",
+      "updatedAtMs": 1_720_000_000_000 as NSNumber,
+    ]
+    var child: [String: Any] = [
+      "sessionId": "session-child",
+      "runId": "run-child",
+      "attemptId": "attempt-child",
+      "title": title,
+      "objective": objective,
+      "provider": "hermes",
+      "lifecycle": childLifecycle,
+    ]
+    if let pillID { child["pillId"] = pillID.uuidString }
+    let semanticDigest = "semantic-child-digest"
+    return [
+      "schemaVersion": 1,
+      "ok": true,
+      "journalReceipt": [
+        "accepted": true,
+        "continuityKey": continuityKey,
+        "userTurnId": KernelTurnProjection.stableTurnID(
+          continuityKey: continuityKey, role: "user"),
+        "assistantTurnId": KernelTurnProjection.stableTurnID(
+          continuityKey: continuityKey, role: "assistant"),
+        "assistantText": "I started a background agent for that.",
+      ],
+      "child": child,
+      "semanticDigest": semanticDigest,
+      "providerResult": [
+        "schemaVersion": 1,
+        "ok": true,
+        "code": "spawn_started",
+        "message": "Background agent started.",
+        "child": [
+          "sessionId": "session-child",
+          "runId": "run-child",
+          "attemptId": "attempt-child",
+          "state": "running",
+          "attemptState": "running",
+          "revision": 2,
+          "adapterId": "hermes",
+          "updatedAtMs": 1_720_000_000_000 as NSNumber,
+        ],
+        "semanticDigest": semanticDigest,
+      ],
+    ]
   }
 
   func testRealtimeToolRequestHasNoLocalExecutionBranch() throws {
@@ -125,6 +224,18 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertFalse(source.contains("setDesktopAttentionOverride"))
     XCTAssertFalse(source.contains("userExplicitlyRequestedPillManagement"))
     XCTAssertTrue(source.contains("invokeExternalSurfaceTool("))
+  }
+
+  func testRealtimeAcceptedSpawnProjectsPillOnlyAfterTheCurrentTurnFence() throws {
+    // omi-test-quality: source-inspection -- static contract: an accepted PTT spawn can project only after the same current-turn fence used for its tool result.
+    let source = try realtimeHubControllerSource()
+
+    let outputCall = try XCTUnwrap(source.range(of: "let output = try await AgentRuntimeProcess.shared.invokeExternalSurfaceTool("))
+    let currentFence = try XCTUnwrap(source.range(of: "guard self.isCurrentToolTurn(", range: outputCall.upperBound..<source.endIndex))
+    let pillProjection = try XCTUnwrap(source.range(of: "AgentPillsManager.shared.upsertSpawnedPill(", range: currentFence.upperBound..<source.endIndex))
+    XCTAssertLessThan(outputCall.lowerBound, currentFence.lowerBound)
+    XCTAssertLessThan(currentFence.lowerBound, pillProjection.lowerBound)
+    XCTAssertTrue(source.contains("producingJournalSurface: FloatingControlBarManager.shared.realtimeVoiceSurfaceReference()"))
   }
 
   func testRealtimeHubUsesCanonicalVoicePlaybackServiceForLocalSpeechFallbacks() throws {
@@ -184,10 +295,11 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
   }
 
   func testRealtimeDelegationCannotExecuteAfterStaleTurn() throws {
+    // omi-test-quality: source-inspection -- static contract: all realtime tool paths must retain the shared turn fence.
     let source = try realtimeHubControllerSource()
 
     XCTAssertTrue(source.contains("RealtimeAuthorizedToolOwnership.accepts("))
-    XCTAssertTrue(source.contains("RealtimeDeferredToolOwnership.accepts("))
+    XCTAssertTrue(source.contains("RealtimeToolTurnOwnership.accepts("))
     XCTAssertTrue(source.contains("private func isCurrentToolTurn("))
     XCTAssertTrue(
       source.contains(
@@ -204,15 +316,16 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(source.contains("invokeExternalSurfaceTool("))
   }
 
-  func testRealtimeToolUsesFinalTranscriptAsExternalRunPrompt() throws {
+  func testRealtimeToolUsesAuthorizedFallbackWhenProviderTranscriptIsUnavailable() throws {
+    // omi-test-quality: source-inspection -- static contract: the realtime tool path must not reintroduce a transcript/tool circular wait.
     let source = try realtimeHubControllerSource()
 
-    XCTAssertTrue(source.contains("RealtimeExternalRunPromptPolicy.finalizedPrompt("))
-    XCTAssertTrue(source.contains("deferredRealtimeToolInvocations.enqueue("))
-    XCTAssertTrue(source.contains("resumeDeferredRealtimeToolsIfReady()"))
-    XCTAssertTrue(source.contains("deferredRealtimeToolInvocations.revokeAll()"))
+    XCTAssertTrue(source.contains("RealtimeExternalRunPromptPolicy.promptForAuthorizedTool("))
+    XCTAssertTrue(source.contains("authorizedToolFallback"))
+    XCTAssertFalse(source.contains("deferredRealtimeToolInvocations.enqueue("))
+    XCTAssertFalse(source.contains("resumeDeferredRealtimeToolsIfReady()"))
     XCTAssertTrue(source.contains("prompt: normalizedPrompt"))
-    XCTAssertFalse(source.contains("Realtime voice request"))
+    XCTAssertTrue(source.contains("Execute only that separately authorized invocation"))
     XCTAssertFalse(source.contains("I couldn't confirm the spoken request"))
   }
 

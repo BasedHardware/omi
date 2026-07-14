@@ -61,6 +61,7 @@ final class AgentPill: ObservableObject, Identifiable {
     let model: String
     let ownerID: String
     let bridgeHarnessOverride: AgentHarnessMode?
+    @Published private(set) var providerIdentity: AgentHarnessMode?
     var canonicalSessionId: String?
     var canonicalRunId: String?
     var canonicalAttemptId: String?
@@ -96,8 +97,22 @@ final class AgentPill: ObservableObject, Identifiable {
         self.model = model
         self.ownerID = ownerID ?? RuntimeOwnerIdentity.currentOwnerId() ?? ""
         self.bridgeHarnessOverride = bridgeHarnessOverride
+        self.providerIdentity = bridgeHarnessOverride
         self.title = AgentPill.deriveTitle(from: query)
         self.createdAt = Date()
+    }
+
+    /// Provider provenance is kernel-authored and may arrive after the local
+    /// projection is created (snapshot hydration/restart). It is display truth,
+    /// never execution authority; `bridgeHarnessOverride` remains the immutable
+    /// launch request for locally-created pills.
+    func applyCanonicalProviderIdentity(_ rawValue: String?) {
+        guard let rawValue,
+              let provider = AgentRuntimeRouting.harnessMode(from: rawValue),
+              provider == .hermes || provider == .openclaw,
+              providerIdentity != provider
+        else { return }
+        providerIdentity = provider
     }
 
     func markContentChanged() {
@@ -1102,7 +1117,8 @@ final class AgentPillsManager: ObservableObject {
                         runId: inspection.runId ?? runId,
                         attemptId: inspection.attemptId,
                         title: nil,
-                        query: nil
+                        query: nil,
+                        provider: inspection.provider
                     ) {
                         return true
                     }
@@ -1124,7 +1140,8 @@ final class AgentPillsManager: ObservableObject {
                             runId: session.runId,
                             attemptId: session.attemptId,
                             title: session.title,
-                            query: nil
+                            query: nil,
+                            provider: session.provider
                         ) {
                             return true
                         }
@@ -1155,7 +1172,8 @@ final class AgentPillsManager: ObservableObject {
                             runId: session.runId,
                             attemptId: session.attemptId,
                             title: session.title,
-                            query: nil
+                            query: nil,
+                            provider: session.provider
                         ) {
                             return true
                         }
@@ -1175,7 +1193,8 @@ final class AgentPillsManager: ObservableObject {
         runId: String?,
         attemptId: String?,
         title: String?,
-        query: String?
+        query: String?,
+        provider: String?
     ) -> Bool {
         guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return false }
         let trimmedSession = sessionId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -1221,6 +1240,7 @@ final class AgentPillsManager: ObservableObject {
         if let attemptId, !attemptId.isEmpty {
             pill.canonicalAttemptId = attemptId
         }
+        pill.applyCanonicalProviderIdentity(provider)
         Self.ensureStreamingAssistantMessage(for: pill)
         pill.markContentChanged()
         objectWillChange.send()
@@ -1235,6 +1255,7 @@ final class AgentPillsManager: ObservableObject {
         sessionId: String,
         runId: String,
         attemptId: String?,
+        provider: String? = nil,
         producingJournalSurface: AgentSurfaceReference? = nil
     ) {
         guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
@@ -1255,9 +1276,13 @@ final class AgentPillsManager: ObservableObject {
         pill.canonicalSessionId = sessionId
         pill.canonicalRunId = runId
         pill.canonicalAttemptId = attemptId
+        pill.applyCanonicalProviderIdentity(provider)
         if let producingJournalSurface {
             bindProducingJournalSurface(pillID: pill.id, surface: producingJournalSurface)
         }
+        // A delayed duplicate spawn receipt must not turn a terminal pill back
+        // into a running row after the completion was already projected.
+        guard !pill.status.isFinished else { return }
         pill.status = .running
         pill.completedAt = nil
         pill.latestActivity = "Working…"
@@ -1313,6 +1338,7 @@ final class AgentPillsManager: ObservableObject {
             pill.canonicalSessionId = sessionId
             pill.canonicalRunId = runId
             pill.canonicalAttemptId = canonicalString(entry["attemptId"])
+            pill.applyCanonicalProviderIdentity(canonicalString(entry["provider"]))
             let projectedStatus = (entry["status"] as? String) ?? "running"
             applyProjectedStatus(projectedStatus, to: pill)
             if let activity = entry["latestActivity"] as? String, !activity.isEmpty {
@@ -1322,20 +1348,31 @@ final class AgentPillsManager: ObservableObject {
             pill.markContentChanged()
         }
         let removable = pills.filter { pill in
-            if runTasksByPill[pill.id] != nil {
-                return false
-            }
-            guard let sessionId = pill.canonicalSessionId, !sessionId.isEmpty,
-                  let runId = pill.canonicalRunId, !runId.isEmpty
-            else {
-                return !hasLocalTransientState(pillID: pill.id)
-            }
-            return !seen.contains(pill.id)
+            Self.shouldRemoveRenderedProjection(
+                status: pill.status,
+                isPolling: runTasksByPill[pill.id] != nil,
+                isSeenInRuntimeSnapshot: seen.contains(pill.id),
+                hasLocalTransientState: hasLocalTransientState(pillID: pill.id)
+            )
         }
         for pill in removable {
             removeRenderedProjection(pillID: pill.id)
         }
         objectWillChange.send()
+    }
+
+    /// Runtime session lists are intentionally an active-work snapshot and can
+    /// omit a run immediately after it completes. A finished pill remains a
+    /// user-visible attention item until the normal viewed/dismissed retention
+    /// policy removes it; a refresh must not orphan it from the hover list.
+    nonisolated static func shouldRemoveRenderedProjection(
+        status: AgentPill.Status,
+        isPolling: Bool,
+        isSeenInRuntimeSnapshot: Bool,
+        hasLocalTransientState: Bool
+    ) -> Bool {
+        guard !isPolling, !status.isFinished else { return false }
+        return !isSeenInRuntimeSnapshot && !hasLocalTransientState
     }
 
     private func applyRuntimeProjections() {
@@ -1797,7 +1834,7 @@ final class AgentPillsManager: ObservableObject {
                 if !trimmed.isEmpty {
                     return String(trimmed.prefix(110))
                 }
-            case .agentSpawn(_, _, _, _, let title, let objective):
+            case .agentSpawn(_, _, _, _, let title, let objective, _):
                 let label = objective.isEmpty ? title : objective
                 let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {

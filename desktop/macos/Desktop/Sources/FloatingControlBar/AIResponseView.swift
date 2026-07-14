@@ -123,7 +123,9 @@ struct AIResponseView: View {
                 return ["thinking", id, text].joined(separator: "\u{1E}")
             case .discoveryCard(let id, let title, let summary, let fullText):
                 return ["discovery", id, title, summary, fullText].joined(separator: "\u{1E}")
-            case .agentSpawn(let id, let pillId, let sessionId, let runId, let title, let objective):
+            case .agentSpawn(
+                let id, let pillId, let sessionId, let runId, let title, let objective, let provider
+            ):
                 return [
                     "agentSpawn",
                     id,
@@ -132,6 +134,7 @@ struct AIResponseView: View {
                     runId,
                     title,
                     objective,
+                    provider?.rawValue ?? "",
                 ].joined(separator: "\u{1E}")
             case .agentCompletion(
                 let id, let pillId, let sessionId, let runId, let title, let promptSnippet, let output, let status
@@ -211,10 +214,13 @@ struct AIResponseView: View {
                 case .discoveryCard(_, let title, let summary, let fullText):
                     DiscoveryCard(title: title, summary: summary, fullText: fullText)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                case .agentSpawn(_, let pillId, let sessionId, let runId, let title, let objective):
+                case .agentSpawn(
+                    _, let pillId, let sessionId, let runId, let title, let objective, let provider
+                ):
                     AgentSpawnCard(
                         title: title,
                         objective: objective,
+                        provider: provider,
                         ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
                         onOpen: openAgentRef
                     )
@@ -265,19 +271,13 @@ struct AIResponseView: View {
     }
 
     private func groupedContentBlocks(for message: ChatMessage) -> [ContentBlockGroup] {
-        let grouped = ContentBlockGroup.group(message.contentBlocks)
+        let grouped = ContentBlockGroup.visibleChatGroups(
+            message.contentBlocks,
+            isStreaming: message.isStreaming
+        )
         guard !message.isStreaming else { return grouped }
 
-        return grouped.filter { group in
-            switch group {
-            case .text, .discoveryCard, .agentSpawn, .agentCompletion:
-                return true
-            case .toolCalls(_, let calls):
-                return calls.contains { $0.spawnedAgentID != nil }
-            case .thinking:
-                return false
-            }
-        }
+        return grouped
     }
 
     // MARK: - Per-Message Hover Action Overlay

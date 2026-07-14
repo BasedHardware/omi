@@ -179,6 +179,7 @@ export interface ListSessionsInput {
   ownerId?: string;
   status?: AgentSession["status"];
   surfaceKind?: string;
+  executionRole?: AgentExecutionRole;
   limit?: number;
   beforeUpdatedAtMs?: number;
 }

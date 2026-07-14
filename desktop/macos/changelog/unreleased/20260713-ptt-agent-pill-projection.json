@@ -1,0 +1,3 @@
+{
+  "change": "Fixed push-to-talk background-agent requests so accepted runs immediately appear in the subagent pill and hover status surfaces."
+}

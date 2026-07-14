@@ -1,0 +1,3 @@
+{
+  "change": "Fixed push-to-talk agent launches so a rejected background-agent request ends the voice turn as failed instead of reporting a false success."
+}

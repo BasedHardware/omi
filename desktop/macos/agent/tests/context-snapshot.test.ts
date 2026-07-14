@@ -11,7 +11,12 @@ import {
   renderContextSnapshot,
   updateContextSource,
 } from "../src/runtime/context-snapshot.js";
-import { recordJournalTurn } from "../src/runtime/conversation-journal.js";
+import {
+  importRemoteJournalTurn,
+  recordJournalExchange,
+  recordJournalTurn,
+  updateJournalTurn,
+} from "../src/runtime/conversation-journal.js";
 import { resolveSurfaceSession } from "../src/runtime/surface-session.js";
 import { createKernelHarness, waitUntil } from "./kernel-fakes.js";
 
@@ -37,6 +42,146 @@ function fixture(surfaceKind = "main_chat", maxWorkers = 1) {
 }
 
 describe("kernel ContextSnapshot", () => {
+  it("keeps user then assistant chronology when reconciliation revisions arrive in reverse order", () => {
+    const { store } = fixture();
+    const surface = resolveSurfaceSession(store, {
+      ownerId: "continuity-owner",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "default" },
+      defaultAdapterId: "fake",
+    }, () => 1);
+    recordJournalTurn(store, {
+      ownerId: "continuity-owner",
+      conversationId: surface.conversationId,
+      turnId: "voice-user",
+      role: "user",
+      surfaceKind: "main_chat",
+      origin: "realtime_voice",
+      status: "pending",
+      content: "Can you see my screen?",
+      contentBlocks: [],
+      createdAtMs: 10,
+    });
+    recordJournalTurn(store, {
+      ownerId: "continuity-owner",
+      conversationId: surface.conversationId,
+      turnId: "voice-assistant",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "realtime_voice",
+      status: "pending",
+      content: "I need screen recording permission.",
+      contentBlocks: [],
+      createdAtMs: 11,
+    });
+
+    // Delivery/status acknowledgements are independent and may arrive in the
+    // opposite order from the original exchange.
+    updateJournalTurn(store, {
+      ownerId: "continuity-owner",
+      conversationId: surface.conversationId,
+      turnId: "voice-assistant",
+      status: "completed",
+      nowMs: 12,
+    });
+    updateJournalTurn(store, {
+      ownerId: "continuity-owner",
+      conversationId: surface.conversationId,
+      turnId: "voice-user",
+      status: "completed",
+      nowMs: 13,
+    });
+
+    const snapshot = buildContextSnapshot(
+      store,
+      surface.agentSessionId,
+      "continuity-owner",
+      14,
+      "main_chat",
+    );
+    expect(snapshot.recentTurns.map(({ role, content }) => ({ role, content }))).toEqual([
+      { role: "user", content: "Can you see my screen?" },
+      { role: "assistant", content: "I need screen recording permission." },
+    ]);
+    expect(snapshot.renderedContext.indexOf("Can you see my screen?")).toBeLessThan(
+      snapshot.renderedContext.indexOf("I need screen recording permission."),
+    );
+    store.close();
+  });
+
+  it("normalizes equal imported exchange timestamps into immutable user-assistant order", () => {
+    const { store } = fixture();
+    const surface = resolveSurfaceSession(store, {
+      ownerId: "continuity-owner",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "default" },
+      defaultAdapterId: "fake",
+    }, () => 1);
+    const result = recordJournalExchange(store, {
+      ownerId: "continuity-owner",
+      conversationId: surface.conversationId,
+      turns: [
+        {
+          turnId: "import-user",
+          role: "user",
+          surfaceKind: "main_chat",
+          origin: "backend",
+          status: "completed",
+          content: "Request it.",
+          contentBlocks: [],
+          createdAtMs: 100,
+        },
+        {
+          turnId: "import-assistant",
+          role: "assistant",
+          surfaceKind: "main_chat",
+          origin: "backend",
+          status: "completed",
+          content: "Permission opened.",
+          contentBlocks: [],
+          createdAtMs: 100,
+        },
+      ],
+    });
+
+    expect(result.turns.map((turn) => turn.createdAtMs)).toEqual([100, 101]);
+    const snapshot = buildContextSnapshot(store, surface.agentSessionId, "continuity-owner", 102);
+    expect(snapshot.recentTurns.map((turn) => [turn.role, turn.content])).toEqual([
+      ["user", "Request it."],
+      ["assistant", "Permission opened."],
+    ]);
+    store.close();
+  });
+
+  it("uses the immutable insertion ordinal for individually imported equal timestamps", () => {
+    const { store } = fixture();
+    const surface = resolveSurfaceSession(store, {
+      ownerId: "continuity-owner",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "default" },
+      defaultAdapterId: "fake",
+    }, () => 1);
+    for (const turn of [
+      { remoteId: "remote-user", role: "user" as const, content: "Request it." },
+      { remoteId: "remote-assistant", role: "assistant" as const, content: "Permission opened." },
+    ]) {
+      importRemoteJournalTurn(store, {
+        ownerId: "continuity-owner",
+        conversationId: surface.conversationId,
+        ...turn,
+        surfaceKind: "main_chat",
+        contentBlocks: [],
+        createdAtMs: 100,
+        nowMs: 101,
+        source: "legacy_upgrade",
+      });
+    }
+
+    const snapshot = buildContextSnapshot(store, surface.agentSessionId, "continuity-owner", 102);
+    expect(snapshot.recentTurns.map((turn) => [turn.role, turn.content])).toEqual([
+      ["user", "Request it."],
+      ["assistant", "Permission opened."],
+    ]);
+    store.close();
+  });
+
   it("keeps exact no-op snapshots stable and uses monotonic generation across A→B→A", () => {
     const { store, session } = fixture();
     const first = updateContextSource(store, {

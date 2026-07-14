@@ -27,6 +27,38 @@ enum ChatLegacyPageCollector {
     }
 }
 
+enum ChatLegacyImportChronology {
+    struct Entry<Row> {
+        let row: Row
+        let createdAtMs: Int
+    }
+
+    /// Converts a backend page into a strict immutable chronology before the
+    /// rows cross the one-at-a-time runtime import protocol.
+    static func plan<Row>(
+        _ rows: [Row],
+        createdAt: (Row) -> Date,
+        role: (Row) -> String
+    ) -> [Entry<Row>] {
+        let ordered = rows.enumerated().sorted { lhs, rhs in
+            let lhsDate = createdAt(lhs.element)
+            let rhsDate = createdAt(rhs.element)
+            if lhsDate != rhsDate { return lhsDate < rhsDate }
+            let lhsRank = role(lhs.element) == "human" ? 0 : 1
+            let rhsRank = role(rhs.element) == "human" ? 0 : 1
+            if lhsRank != rhsRank { return lhsRank < rhsRank }
+            return lhs.offset < rhs.offset
+        }
+        var previousCreatedAtMs: Int?
+        return ordered.map { item in
+            let raw = Int(createdAt(item.element).timeIntervalSince1970 * 1_000)
+            let normalized = max(raw, (previousCreatedAtMs ?? (raw - 1)) + 1)
+            previousCreatedAtMs = normalized
+            return Entry(row: item.element, createdAtMs: normalized)
+        }
+    }
+}
+
 struct ChatRunAccountingPolicy: Equatable {
     let usesOmiAccountQuota: Bool
     let recordsPersonalProviderUsage: Bool
@@ -277,7 +309,8 @@ enum ChatContentBlock: Identifiable {
         sessionId: String,
         runId: String,
         title: String,
-        objective: String
+        objective: String,
+        provider: AgentHarnessMode? = nil
     )
     case agentCompletion(
         id: String,
@@ -296,14 +329,14 @@ enum ChatContentBlock: Identifiable {
         case .toolCall(let id, _, _, _, _, _): return id
         case .thinking(let id, _): return id
         case .discoveryCard(let id, _, _, _): return id
-        case .agentSpawn(let id, _, _, _, _, _): return id
+        case .agentSpawn(let id, _, _, _, _, _, _): return id
         case .agentCompletion(let id, _, _, _, _, _, _, _): return id
         }
     }
 
     var agentTimelineRef: AgentTimelineRef? {
         switch self {
-        case .agentSpawn(_, let pillId, let sessionId, let runId, _, _):
+        case .agentSpawn(_, let pillId, let sessionId, let runId, _, _, _):
             return AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId)
         case .agentCompletion(_, let pillId, let sessionId, let runId, _, _, _, _):
             return AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId)
@@ -815,7 +848,7 @@ extension ChatContentBlock {
         case .discoveryCard(_, let title, _, let fullText):
             let trimmed = fullText.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? title : "\(title)\n\(trimmed)"
-        case .agentSpawn(_, _, _, _, let title, let objective):
+        case .agentSpawn(_, _, _, _, let title, let objective, _):
             let trimmed = objective.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? title : "\(title)\n\(trimmed)"
         case .agentCompletion(_, _, _, _, let title, let promptSnippet, let output, _):
@@ -938,6 +971,10 @@ enum ChatSystemPromptStyle {
 /// Uses hybrid architecture: Swift → Claude Agent (via Node.js bridge) for AI, Backend for persistence + context
 @MainActor
 class ChatProvider: ObservableObject {
+
+    nonisolated static func shouldInterruptTimedOutAgentQuery(queryStarted: Bool) -> Bool {
+        queryStarted
+    }
 
     /// Weak reference to the app-root main-window instance (set by
     /// ViewModelContainer.init()), so the local automation bridge can drive
@@ -1121,6 +1158,8 @@ private var activeBridgeSendGeneration: Int?
     private var journalOwnerByMessageID: [String: String] = [:]
     private var journalTerminalTargets = ChatTerminalTargetRegistry<ChatJournalTerminalTarget>()
     private var agentBridgeStarted = false
+    private let bridgeReadinessSingleFlight =
+        AgentRuntimeStartupSingleFlight<RuntimeOwnerAuthorizationSnapshot, Bool>()
     /// Tracks the harness mode the bridge is actually running (NOT the @AppStorage preference).
     /// @AppStorage("chatBridgeMode") can be updated by other views sharing the same key,
     /// so comparing against it in switchBridgeMode() would always match → no-op.
@@ -1410,8 +1449,9 @@ private var activeBridgeSendGeneration: Int?
                     self.agentBridgeStarted = false
                     do {
                         try await self.resolvedAgentClient().restart()
-                        self.agentBridgeStarted = true
-                        log("ChatProvider: agent bridge restarted with new Playwright settings")
+                        if await self.ensureBridgeStarted() {
+                            log("ChatProvider: agent bridge restarted with new Playwright settings")
+                        }
                     } catch {
                         logError("Failed to restart agent bridge after Playwright setting change", error: error)
                     }
@@ -1488,11 +1528,10 @@ private var activeBridgeSendGeneration: Int?
         agentBridgeStarted = false
         do {
             try await resolvedAgentClient().restart()
-            agentBridgeStarted = true
         } catch {
             try await resolvedAgentClient().start()
-            agentBridgeStarted = true
         }
+        guard await ensureBridgeStarted() else { throw BridgeError.stopped }
         return try await resolvedAgentClient().testPlaywrightConnection()
     }
 
@@ -1509,6 +1548,22 @@ private var activeBridgeSendGeneration: Int?
     private func ensureBridgeStarted(
         authoritativeGeneration: Int? = nil
     ) async -> Bool {
+        guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+            presentBridgeStartupFailure(BridgeError.authMissing, authoritativeGeneration: authoritativeGeneration)
+            return false
+        }
+        do {
+            return try await bridgeReadinessSingleFlight.run(key: authorization) { [weak self] in
+                guard let self else { throw BridgeError.stopped }
+                return try await self.performBridgeReadinessStartup()
+            }
+        } catch {
+            presentBridgeStartupFailure(error, authoritativeGeneration: authoritativeGeneration)
+            return false
+        }
+    }
+
+    private func performBridgeReadinessStartup() async throws -> Bool {
         if agentBridgeStarted {
             let alive = await resolvedAgentClient().isAlive
             if alive {
@@ -1521,55 +1576,56 @@ private var activeBridgeSendGeneration: Int?
         guard !agentBridgeStarted else { return true }
         // Wait for API keys (Firebase, Calendar) before starting the bridge.
         await APIKeyService.shared.waitForKeys()
-        do {
-            await preparePromptContextIfNeeded()
-            try await resolvedAgentClient().start()
-            agentBridgeStarted = true
-            log("ChatProvider: agent bridge started successfully")
-            // Set up global auth handlers so auth_required during warmup is handled
-            await resolvedAgentClient().setGlobalAuthHandlers(
-                onAuthRequired: { [weak self] methods, authUrl in
-                    Task { @MainActor [weak self] in
-                        self?.handleClaudeAuthRequired(methods: methods, authUrl: authUrl)
-                    }
-                },
-                onAuthSuccess: { [weak self] in
-                    Task { @MainActor [weak self] in
-                        self?.handleClaudeAuthSuccess()
-                    }
+        await preparePromptContextIfNeeded()
+        try await resolvedAgentClient().start()
+        // Set up global auth handlers so auth_required during warmup is handled
+        await resolvedAgentClient().setGlobalAuthHandlers(
+            onAuthRequired: { [weak self] methods, authUrl in
+                Task { @MainActor [weak self] in
+                    self?.handleClaudeAuthRequired(methods: methods, authUrl: authUrl)
                 }
-            )
-            await kernelTurnProjection.attachClient(resolvedAgentClient())
-            // Preferences are kernel-owned defaults for future sessions. Existing
-            // sessions keep their immutable execution profile and the shared
-            // daemon stays alive when this preference changes.
-            let usesNativeModelChoice = activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw"
-            guard let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: activeBridgeHarness) else {
-                throw BridgeError.agentError("Unknown AI runtime mode: \(activeBridgeHarness)")
-            }
-            _ = try await resolvedAgentClient().configureDefaultExecutionProfile(
-                adapterId: adapterId,
-                modelProfile: usesNativeModelChoice ? nil : ModelQoS.Claude.chat,
-                workingDirectory: effectiveAgentWorkingDirectory()
-            )
-            let warmSurfaces: [AgentSurfaceReference] = [.mainChat(chatId: nil), .floatingChat()]
-            for surface in warmSurfaces {
-                let session = try await resolvedAgentClient().resolveSurfaceSession(surface)
-                await resolvedAgentClient().warmupSession(session)
-            }
-            return true
-        } catch {
-            logError("Failed to start agent bridge", error: error)
-            let mayMutateSendState = authoritativeGeneration.map { sendGeneration == $0 } ?? true
-            if mayMutateSendState {
-                if let bridgeError = error as? BridgeError, let card = ChatErrorState.from(bridgeError) {
-                    currentError = card
-                    errorMessage = nil
-                } else {
-                    errorMessage = "AI not available: \(error.localizedDescription)"
+            },
+            onAuthSuccess: { [weak self] in
+                Task { @MainActor [weak self] in
+                    self?.handleClaudeAuthSuccess()
                 }
             }
-            return false
+        )
+        await kernelTurnProjection.attachClient(resolvedAgentClient())
+        // Preferences are kernel-owned defaults for future sessions. Existing
+        // sessions keep their immutable execution profile and the shared
+        // daemon stays alive when this preference changes.
+        let usesNativeModelChoice = activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw"
+        guard let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: activeBridgeHarness) else {
+            throw BridgeError.agentError("Unknown AI runtime mode: \(activeBridgeHarness)")
+        }
+        _ = try await resolvedAgentClient().configureDefaultExecutionProfile(
+            adapterId: adapterId,
+            modelProfile: usesNativeModelChoice ? nil : ModelQoS.Claude.chat,
+            workingDirectory: effectiveAgentWorkingDirectory()
+        )
+        let warmSurfaces: [AgentSurfaceReference] = [.mainChat(chatId: nil), .floatingChat()]
+        for surface in warmSurfaces {
+            let session = try await resolvedAgentClient().resolveSurfaceSession(surface)
+            await resolvedAgentClient().warmupSession(session)
+        }
+        agentBridgeStarted = true
+        log("ChatProvider: agent bridge ready")
+        return true
+    }
+
+    private func presentBridgeStartupFailure(
+        _ error: Error,
+        authoritativeGeneration: Int?
+    ) {
+        logError("Failed to start agent bridge", error: error)
+        let mayMutateSendState = authoritativeGeneration.map { sendGeneration == $0 } ?? true
+        guard mayMutateSendState else { return }
+        if let bridgeError = error as? BridgeError, let card = ChatErrorState.from(bridgeError) {
+            currentError = card
+            errorMessage = nil
+        } else {
+            errorMessage = "AI not available: \(error.localizedDescription)"
         }
     }
 
@@ -1780,11 +1836,11 @@ private var activeBridgeSendGeneration: Int?
     /// Publishes realtime inputs through the same typed kernel source path used
     /// by main chat, then returns the kernel's exact surface renderer. Realtime
     /// never selects, concatenates, or re-renders source material itself.
-    func prepareRealtimeVoiceContextSnapshot() async -> KernelVoiceContextSnapshot {
+    func prepareRealtimeVoiceContextSnapshot() async throws -> KernelVoiceContextSnapshot {
         guard await ensureBridgeStartedForKernel() else { return .empty }
         do {
             let context = try await prepareKernelQueryContext(
-                surface: .realtimeVoice(),
+                surface: realtimeVoiceSurfaceReference(),
                 systemPromptStyle: .floating,
                 systemPromptPrefix: nil,
                 systemPromptSuffix: nil,
@@ -1796,6 +1852,11 @@ private var activeBridgeSendGeneration: Int?
                 from: context.snapshot,
                 sessionId: context.session.sessionId
             )
+        } catch is CancellationError {
+            // Cancellation is caller-owned. A speculative key-down prefetch may
+            // suppress its own supersession, while a hard refresh/barge-in must
+            // observe cancellation and fail its continuity fence.
+            throw CancellationError()
         } catch {
             log("ChatProvider: realtime kernel context preparation failed: \(error.localizedDescription)")
             return .empty
@@ -2907,7 +2968,13 @@ private var activeBridgeSendGeneration: Int?
                     )
                 }
             }
-            for row in legacy.sorted(by: { $0.createdAt < $1.createdAt }) {
+            let importPlan = ChatLegacyImportChronology.plan(
+                legacy,
+                createdAt: { $0.createdAt },
+                role: { $0.sender }
+            )
+            for entry in importPlan {
+                let row = entry.row
                 let blocks = ChatContentBlockCodec.decodeFromMessageMetadata(row.metadata)
                 let resources = ChatResource.decodeResourcesFromMessageMetadata(row.metadata)
                 let accepted = await kernelTurnProjection.importRemoteTurn(
@@ -2920,7 +2987,7 @@ private var activeBridgeSendGeneration: Int?
                         contentBlocksJSON: ChatContentBlockCodec.encode(blocks) ?? "[]",
                         resourcesJSON: ChatResource.encodeResourcesForPersistence(resources) ?? "[]",
                         metadataJSON: row.metadata ?? "{}",
-                        createdAtMs: Int(row.createdAt.timeIntervalSince1970 * 1_000)
+                        createdAtMs: entry.createdAtMs
                     ),
                     ownerID: ownerId
                 )
@@ -3145,16 +3212,26 @@ private var activeBridgeSendGeneration: Int?
         .mainChat(chatId: mainChatRuntimeChatId(sessionId: isInDefaultChat ? nil : currentSessionId))
     }
 
+    /// PTT is a realtime projection of the selected main chat, never a second
+    /// chat. Retain the exact external reference so the runtime resolves the
+    /// canonical main-chat conversation for non-default chats and app scopes.
+    func realtimeVoiceSurfaceReference() -> AgentSurfaceReference {
+        mainChatSurfaceReference().realtimeVoiceCompanion()
+    }
+
     /// Upsert by canonical turn ID only. Text equality is deliberately ignored:
     /// two identical messages with distinct turn IDs are distinct journal rows.
     func projectJournalTurn(_ turn: KernelJournalTurn) {
         let expected = mainChatSurfaceReference()
-        guard turn.surfaceKind == expected.surfaceKind,
+        let voiceCompanion = expected.realtimeVoiceCompanion()
+        let isCanonicalChatSurface = turn.surfaceKind == expected.surfaceKind
+            || turn.surfaceKind == voiceCompanion.surfaceKind
+        guard isCanonicalChatSurface,
               turn.externalRefKind == expected.externalRefKind,
               turn.externalRefId == expected.externalRefId else { return }
         let projected = turn.chatMessage()
         for block in projected.contentBlocks {
-            guard case .agentSpawn(_, let projectedPillID, _, _, _, _) = block,
+            guard case .agentSpawn(_, let projectedPillID, _, _, _, _, _) = block,
                   let pillID = projectedPillID else { continue }
             AgentPillsManager.shared.bindProducingJournalSurface(
                 pillID: pillID,
@@ -3879,6 +3956,7 @@ private var activeBridgeSendGeneration: Int?
         var completedResponseText: String?
         var screenContextEligibleForTurn = false
         var correlatedTerminalResult: AgentClient.QueryResult?
+        var agentQueryStarted = false
 
         // Stall detection.
         // The detector observes every bridge event (text deltas, tool
@@ -4185,6 +4263,7 @@ private var activeBridgeSendGeneration: Int?
             }
 
             activeBridgeSendGeneration = sendGen
+            agentQueryStarted = true
             let queryResult: AgentClient.QueryResult
             do {
                 queryResult = try await resolvedAgentClient().query(
@@ -4555,10 +4634,16 @@ private var activeBridgeSendGeneration: Int?
                 return nil
             }
 
-            // On timeout, cancel the stuck ACP session so it's not left dangling
+            // Kernel context readiness happens before the model query. Never
+            // interrupt a session that has not been queried yet: doing so turns
+            // a recoverable setup timeout into a misleading ACP-query failure.
             if let bridgeError = error as? BridgeError, case .timeout = bridgeError {
-                log("ChatProvider: ACP query timed out, sending interrupt to cancel stuck session")
-                await resolvedAgentClient().interrupt()
+                if Self.shouldInterruptTimedOutAgentQuery(queryStarted: agentQueryStarted) {
+                    log("ChatProvider: agent query timed out, sending interrupt to cancel stuck session")
+                    await resolvedAgentClient().interrupt()
+                } else {
+                    log("ChatProvider: kernel context preparation timed out before an agent query started")
+                }
             }
 
             // Flush any remaining buffered streaming text before handling the error
@@ -4955,28 +5040,54 @@ private var activeBridgeSendGeneration: Int?
             toolUseId: toolUseId,
             extraTexts: [output]
         )
-        Self.materializeAgentSpawnBlockIfNeeded(
+        if let spawnedAgent = Self.materializeAgentSpawnBlockIfNeeded(
             in: &messages[index].contentBlocks,
             toolUseId: toolUseId,
             toolName: name
-        )
+        ), !spawnedAgent.sessionID.isEmpty, !spawnedAgent.runID.isEmpty {
+            // The transcript and notch must project the same accepted kernel
+            // run. Without this handoff, main-chat spawn receipts render a
+            // structured card while the compact notch still sees an empty
+            // AgentPillsManager (white mark and no hover row).
+            AgentPillsManager.shared.upsertSpawnedPill(
+                id: spawnedAgent.pillID,
+                query: spawnedAgent.objective,
+                title: spawnedAgent.title,
+                sessionId: spawnedAgent.sessionID,
+                runId: spawnedAgent.runID,
+                attemptId: nil,
+                provider: spawnedAgent.provider,
+                producingJournalSurface: mainChatSurfaceReference()
+            )
+        }
         scheduleJournalUpdate(messageId: messageId, status: .streaming)
     }
 
+    struct SpawnedAgentPillProjection: Equatable, Sendable {
+        let pillID: UUID
+        let sessionID: String
+        let runID: String
+        let title: String
+        let objective: String
+        let provider: String?
+    }
+
     /// When `spawn_agent` completes, append a structured `.agentSpawn` block so
-    /// cross-surface identity does not depend on tool-output text alone (INV-6 #4).
+    /// cross-surface identity does not depend on tool-output text alone (INV-6 #4),
+    /// then return the same receipt for the floating pill projection.
+    @discardableResult
     nonisolated static func materializeAgentSpawnBlockIfNeeded(
         in blocks: inout [ChatContentBlock],
         toolUseId: String?,
         toolName: String
-    ) {
+    ) -> SpawnedAgentPillProjection? {
         let cleanName: String
         if toolName.hasPrefix("mcp__") {
             cleanName = String(toolName.split(separator: "__").last ?? Substring(toolName))
         } else {
             cleanName = toolName
         }
-        guard cleanName == "spawn_agent" else { return }
+        guard cleanName == "spawn_agent" else { return nil }
 
         guard let toolIndex = blocks.lastIndex(where: { block in
             guard case .toolCall(_, let name, let status, let existingToolUseId, _, let output) = block,
@@ -4994,24 +5105,22 @@ private var activeBridgeSendGeneration: Int?
                 return existingToolUseId == toolUseId || existingToolUseId == nil
             }
             return true
-        }) else { return }
+        }) else { return nil }
 
-        guard case .toolCall(_, _, _, _, let input, _) = blocks[toolIndex] else { return }
+        guard case .toolCall(_, _, _, _, let input, _) = blocks[toolIndex] else { return nil }
         let spawnSource = blocks[toolIndex]
-        guard let pillId = spawnSource.spawnedAgentID else { return }
+        guard let pillId = spawnSource.spawnedAgentID else { return nil }
         let sessionId = spawnSource.spawnedAgentSessionID ?? ""
         let runId = spawnSource.spawnedAgentRunID ?? ""
 
         // Idempotent: do not append a second spawn card for the same pill/run.
         let alreadyPresent = blocks.contains { block in
-            if case .agentSpawn(_, let existingPill, _, let existingRun, _, _) = block {
+            if case .agentSpawn(_, let existingPill, _, let existingRun, _, _, _) = block {
                 if let existingPill, existingPill == pillId { return true }
                 if !runId.isEmpty, existingRun == runId { return true }
             }
             return false
         }
-        guard !alreadyPresent else { return }
-
         let titleFromOutput = spawnSource.spawnedAgentTitle
         let title = (titleFromOutput?.isEmpty == false)
             ? (titleFromOutput ?? "Background agent")
@@ -5019,6 +5128,19 @@ private var activeBridgeSendGeneration: Int?
         let objective = (input?.details?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
             ? (input?.details ?? "")
             : (input?.summary ?? "")
+        let projection = SpawnedAgentPillProjection(
+            pillID: pillId,
+            sessionID: sessionId,
+            runID: runId,
+            title: title,
+            objective: objective,
+            provider: spawnSource.spawnedAgentProvider
+        )
+
+        // A repeat display event must still restore the matching notch pill if
+        // its in-memory projection was evicted, but must not add a duplicate
+        // transcript block.
+        guard !alreadyPresent else { return projection }
 
         let stableSpawnIdentity = !runId.isEmpty ? runId : pillId.uuidString.lowercased()
         let spawnBlock = ChatContentBlock.agentSpawn(
@@ -5027,12 +5149,16 @@ private var activeBridgeSendGeneration: Int?
             sessionId: sessionId,
             runId: runId,
             title: title,
-            objective: objective
+            objective: objective,
+            provider: spawnSource.spawnedAgentProvider
+                .flatMap(AgentRuntimeRouting.harnessMode(from:))
+                .flatMap { $0 == .hermes || $0 == .openclaw ? $0 : nil }
         )
         // Keep the tool block for in-session progress; insert structured spawn
         // immediately after it so reload/metadata durability has a first-class card.
         let insertAt = min(toolIndex + 1, blocks.count)
         blocks.insert(spawnBlock, at: insertAt)
+        return projection
     }
 
     private func attachGeneratedFileResources(

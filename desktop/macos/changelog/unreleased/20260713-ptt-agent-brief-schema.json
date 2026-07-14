@@ -1,0 +1,3 @@
+{
+  "change": "Fixed push-to-talk background-agent launches when the realtime provider includes its optional agent-summary field."
+}

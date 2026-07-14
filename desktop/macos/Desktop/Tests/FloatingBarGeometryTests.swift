@@ -177,6 +177,46 @@ final class FloatingBarGeometryTests: XCTestCase {
         XCTAssertEqual(expandedFrame.size, NSSize(width: 430, height: 110))
     }
 
+    func testChatAndHoverKeepNotchControlsAtCompactHeaderWidth() {
+        let compactChromeWidth: CGFloat = 268
+        let expandedSurfaceWidth: CGFloat = 900
+
+        for hoverProgress in [CGFloat(0), 0.5, 1] {
+            for isChatPresented in [false, true] {
+                XCTAssertEqual(
+                    NotchChromeLayout.width(
+                        chromeWidth: compactChromeWidth,
+                        expandedWidth: expandedSurfaceWidth,
+                        switcherProgress: hoverProgress,
+                        isChatPresented: isChatPresented
+                    ),
+                    compactChromeWidth
+                )
+            }
+        }
+    }
+
+    func testRestoringVisibleChatAlsoPinsNotchControls() {
+        XCTAssertTrue(
+            NotchChromeLayout.isChatPinned(
+                showingAIConversation: false,
+                hasVisibleConversation: true
+            )
+        )
+        XCTAssertEqual(
+            NotchChromeLayout.width(
+                chromeWidth: 268,
+                expandedWidth: 1_200,
+                switcherProgress: 1,
+                isChatPresented: NotchChromeLayout.isChatPinned(
+                    showingAIConversation: false,
+                    hasVisibleConversation: true
+                )
+            ),
+            268
+        )
+    }
+
     func testPTTExpansionKeepsCompactPillCenter() {
         let compactFrame = FloatingControlBarGeometry.defaultPillFrame(
             size: compactSize,

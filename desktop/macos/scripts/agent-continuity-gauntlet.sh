@@ -10,8 +10,9 @@
 # Drives a named omi-* bundle through:
 #   0. (non-prod) clear kernel main_chat turns to avoid stale model-visible history
 #   1. typed main-chat turn
-#   2. PTT hub turn (ptt_test_turn + forced transcript)
-#   3. typed follow-up that must see the PTT turn
+#   2. PTT hub turn that must blind-recall the typed marker, then persist a PTT marker
+#   3. a second PTT turn that must blind-recall the first PTT marker
+#   4. typed follow-up that must see the PTT turn
 #   4a. exact #9515 PTT request → one child → successful get_memories;
 #       continue that same child session and require get_memories to succeed again
 #   4b. background agent spawn (spawn_agent)
@@ -37,7 +38,7 @@
 # Usage:
 #   cd desktop/macos && ./scripts/agent-continuity-gauntlet.sh
 #   ./scripts/agent-continuity-gauntlet.sh --self-check          # validate hooks only
-#   ./scripts/agent-continuity-gauntlet.sh --suite prompts       # fast typed-only prompt probes (P1-P3)
+#   ./scripts/agent-continuity-gauntlet.sh --suite prompts       # fast typed-only prompt probes (P1-P4, including live public-web)
 #   ./scripts/agent-continuity-gauntlet.sh --suite continuity    # steps 1-3 only (includes PTT)
 #   ./scripts/agent-continuity-gauntlet.sh --suite agents        # exact voice-memory authority + agent probes
 #   ./scripts/agent-continuity-gauntlet.sh --suite resilience    # startup/resilience probes (R1-R4)
