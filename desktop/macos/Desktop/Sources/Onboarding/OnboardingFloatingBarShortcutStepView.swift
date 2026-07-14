@@ -58,8 +58,8 @@ struct OnboardingFloatingBarShortcutStepView: View {
 
                 RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
                     .fill(OmiColors.backgroundSecondary)
-                    .frame(height: 128)
-                    .frame(maxWidth: 420)
+                    .frame(height: 152)
+                    .frame(maxWidth: 480)
                     .overlay {
                         shortcutKeyPreview
                     }
@@ -121,7 +121,7 @@ struct OnboardingFloatingBarShortcutStepView: View {
         VStack(spacing: OmiSpacing.md) {
             HStack(spacing: OmiSpacing.sm) {
                 ForEach(Array(shortcutSettings.askOmiShortcut.displayTokens.enumerated()), id: \.offset) { _, symbol in
-                    keyCap(symbol)
+                    OnboardingKeyCapView(token: symbol, isActive: shortcutDetected)
                 }
             }
 
@@ -135,10 +135,10 @@ struct OnboardingFloatingBarShortcutStepView: View {
         let isSelected = shortcutSettings.askOmiUsesCustomShortcut || isRecordingCustomShortcut
         return Button(action: beginCustomShortcutCapture) {
             Text("Custom")
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 14, weight: .medium))
                 .foregroundColor(isSelected ? .black : OmiColors.textSecondary)
-                .padding(.horizontal, OmiSpacing.md)
-                .padding(.vertical, OmiSpacing.sm)
+                .padding(.horizontal, OmiSpacing.lg)
+                .padding(.vertical, OmiSpacing.md)
                 .background(
                     RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
                         .fill(isSelected ? Color.white : OmiColors.backgroundSecondary)
@@ -195,26 +195,6 @@ struct OnboardingFloatingBarShortcutStepView: View {
         )
     }
 
-    private func keyCap(_ label: String) -> some View {
-        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-            .fill(shortcutDetected ? Color.white : OmiColors.backgroundTertiary)
-            .frame(minWidth: 48, minHeight: 48)
-            .overlay(
-                RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-                    .stroke(
-                        shortcutDetected ? Color.white : OmiColors.textTertiary.opacity(0.3),
-                        lineWidth: 2
-                    )
-            )
-            .overlay {
-                Text(label)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(shortcutDetected ? .black : OmiColors.textPrimary)
-                    .padding(.horizontal, label.count > 2 ? 14 : 10)
-            }
-            .fixedSize()
-    }
-
     private func smallKeyCap(_ label: String, active: Bool) -> some View {
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
             .fill(active ? Color.white : OmiColors.backgroundTertiary)
@@ -239,12 +219,12 @@ struct OnboardingFloatingBarShortcutStepView: View {
             HStack(spacing: OmiSpacing.xxs) {
                 ForEach(Array(shortcut.displayTokens.enumerated()), id: \.offset) { _, symbol in
                     Text(symbol)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 14, weight: .medium))
                 }
             }
             .foregroundColor(isSelected ? .black : OmiColors.textSecondary)
-            .padding(.horizontal, OmiSpacing.md)
-            .padding(.vertical, OmiSpacing.sm)
+            .padding(.horizontal, OmiSpacing.lg)
+            .padding(.vertical, OmiSpacing.md)
             .background(
                 RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
                     .fill(isSelected ? Color.white : OmiColors.backgroundSecondary)

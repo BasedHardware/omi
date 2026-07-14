@@ -300,6 +300,50 @@ struct OnboardingProgressDots: View {
   }
 }
 
+/// A keycap styled like a physical Mac keyboard key: the symbol with the key's
+/// name written under it (⌘ over "command"), and a wide cap for Return/Space.
+/// Plain letter keys show just the letter. Used by the shortcut-setup steps.
+struct OnboardingKeyCapView: View {
+  let token: String
+  var isActive: Bool = false
+
+  private static let keyNames: [String: String] = [
+    "⌘": "command", "⇧": "shift", "⌥": "option", "⌃": "control",
+    "⇪": "caps lock", "↩": "return", "⏎": "return", "␣": "space",
+    "Space": "space", "⎋": "esc", "⇥": "tab", "Right ⌘": "command",
+  ]
+  private static let wideTokens: Set<String> = ["↩", "⏎", "␣", "Space"]
+
+  private var keyName: String? { Self.keyNames[token] }
+  private var isWide: Bool { Self.wideTokens.contains(token) }
+
+  var body: some View {
+    RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
+      .fill(isActive ? Color.white : OmiColors.backgroundTertiary)
+      .frame(minWidth: isWide ? 116 : 64, minHeight: 64)
+      .overlay(
+        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
+          .stroke(
+            isActive ? Color.white : OmiColors.textTertiary.opacity(0.3),
+            lineWidth: 2
+          )
+      )
+      .overlay {
+        VStack(spacing: 2) {
+          Text(token)
+            .font(.system(size: 22, weight: .semibold))
+          if let keyName {
+            Text(keyName)
+              .font(.system(size: 11, weight: .medium))
+          }
+        }
+        .foregroundColor(isActive ? .black : OmiColors.textPrimary)
+        .padding(.horizontal, 12)
+      }
+      .fixedSize()
+  }
+}
+
 /// Grey "Back" button that returns to the previous onboarding step. Renders
 /// nothing on the first step (where the injected `onboardingBack` action is nil).
 /// Place it to the left of a step's Continue button.
