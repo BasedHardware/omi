@@ -41,6 +41,12 @@ export function releasePttMic(): void {
   window.omi?.captureCommand({ type: 'ptt-release' })
 }
 
+/** Rebuild the warm mic graph (silent-mic recovery escalation, A7b). The capture
+ *  window runs the tear-down + retry ladder; this is fire-and-forget. */
+export function rebuildPttMic(): void {
+  window.omi?.captureCommand({ type: 'ptt-rebuild' })
+}
+
 /**
  * Start a push-to-talk capture in the capture window. Resolves once the capture
  * is confirmed live (first streamed event), or rejects if the mic failed to

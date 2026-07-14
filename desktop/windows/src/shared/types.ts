@@ -248,6 +248,9 @@ export type CaptureCommand =
   | { type: 'ptt-start'; captureId: string; backfillMs: number }
   | { type: 'ptt-drain'; captureId: string }
   | { type: 'ptt-dispose'; captureId: string }
+  // Rebuild the warm mic graph (silent-mic recovery escalation, A7b) — the capture
+  // window tears down + reopens getUserMedia with a retry ladder. Fire-and-forget.
+  | { type: 'ptt-rebuild' }
   // A decorative desktop-video session (the screen-record mode's preview stream).
   // `sourceId` is the user-picked capture source; the capture window falls back to
   // the primary screen when it's absent.

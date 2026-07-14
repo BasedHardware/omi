@@ -74,15 +74,20 @@ const h = vi.hoisted(() => {
         new Promise<string>((resolve, reject) =>
           state.batchCalls.push({ pcm, signal, resolve, reject })
         )
-    )
+    ),
+    rebuildPttMic: vi.fn(),
+    trackEvent: vi.fn()
   }
 })
 
 vi.mock('../lib/ptt/capture', () => ({
   startPttCapture: h.startPttCapture,
   warmPttMic: vi.fn(async () => {}),
-  releasePttMic: vi.fn()
+  releasePttMic: vi.fn(),
+  rebuildPttMic: h.rebuildPttMic
 }))
+// deadMicPolicy → analytics: assert the silent_mic fallback events without a fetch.
+vi.mock('../lib/analytics', () => ({ trackEvent: h.trackEvent }))
 vi.mock('../lib/ptt/transport', () => ({
   startPttStream: h.startPttStream,
   batchTranscribe: h.batchTranscribe,
@@ -372,5 +377,82 @@ describe('cancel', () => {
     act(() => result.current.cancel())
     expect(h.state.batchCalls[0].signal.aborted).toBe(true)
     expect(result.current.transcribing).toBe(false)
+  })
+})
+
+describe('silent-mic escalation (A7b)', () => {
+  // Zeros, 1s: totalSec 1 ≥ 0.35, no voiced frames, peak 0 < DEAD_MIC_PEAK → dead-mic.
+  const DEAD_1S = new Int16Array(16000)
+  const BASE_HINT = 'Mic heard nothing — check your input device in Windows sound settings'
+  const ESCALATED_HINT = 'Mic still silent — check your microphone, or restart Omi'
+
+  // A completed dead-mic hold (release → drain → gate 'dead-mic' → terminal).
+  const deadHold = async (result: { current: ReturnType<typeof usePushToTalk> }): Promise<void> => {
+    h.state.drainBuffer = DEAD_1S
+    pressSpace()
+    await advance(HOLD_THRESHOLD_MS)
+    releaseSpace()
+    await advance(0)
+    void result // keep the signature parallel to goodHold
+  }
+
+  // A completed good hold: gate 'ok' → batch → resolve → commit (resets the counter).
+  const goodHold = async (): Promise<void> => {
+    h.state.drainBuffer = VOICED_1S
+    pressSpace()
+    await advance(HOLD_THRESHOLD_MS)
+    releaseSpace()
+    await advance(0)
+    await act(async () => {
+      h.state.batchCalls[h.state.batchCalls.length - 1].resolve('hello')
+      await vi.advanceTimersByTimeAsync(0)
+    })
+  }
+
+  it('turn 1 hints only; turn 2 rebuilds + degraded; turn 3 escalates + exhausted', async () => {
+    const { result } = setup()
+
+    await deadHold(result) // 1
+    expect(result.current.hint).toBe(BASE_HINT)
+    expect(h.rebuildPttMic).not.toHaveBeenCalled()
+    expect(h.trackEvent).not.toHaveBeenCalled()
+
+    await deadHold(result) // 2 → rebuild
+    expect(h.rebuildPttMic).toHaveBeenCalledTimes(1)
+    expect(h.trackEvent).toHaveBeenLastCalledWith('fallback_triggered', {
+      component: 'silent_mic',
+      from: 'default_device',
+      to: 'rebuilt',
+      reason: 'local_heal',
+      outcome: 'degraded'
+    })
+    expect(result.current.hint).toBe(BASE_HINT)
+
+    await deadHold(result) // 3 → escalate
+    expect(h.rebuildPttMic).toHaveBeenCalledTimes(1) // no second rebuild
+    expect(h.trackEvent).toHaveBeenLastCalledWith('fallback_triggered', {
+      component: 'silent_mic',
+      from: 'default_device',
+      to: 'none',
+      reason: 'local_heal',
+      outcome: 'exhausted'
+    })
+    expect(result.current.hint).toBe(ESCALATED_HINT)
+  })
+
+  it('a good turn resets the counter', async () => {
+    const { result } = setup()
+    await deadHold(result) // 1
+    await deadHold(result) // 2 → rebuild
+    expect(h.rebuildPttMic).toHaveBeenCalledTimes(1)
+
+    await goodHold() // resets
+
+    h.rebuildPttMic.mockClear()
+    h.trackEvent.mockClear()
+    await deadHold(result) // back to turn 1 — base hint, no rebuild
+    expect(result.current.hint).toBe(BASE_HINT)
+    expect(h.rebuildPttMic).not.toHaveBeenCalled()
+    expect(h.trackEvent).not.toHaveBeenCalled()
   })
 })
