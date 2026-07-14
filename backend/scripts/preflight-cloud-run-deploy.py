@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
+import yaml
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import render_backend_runtime_env  # noqa: E402
 import repair_cloud_run_traffic  # noqa: E402
@@ -108,18 +110,46 @@ def main() -> int:
     return exit_code
 
 
-PUBLIC_BINDING = 'GOOGLE_CLIENT_ID'
 DEVELOPMENT_PROJECT = 'based-hardware-dev'
 
 
 def migrate_legacy_public_bindings(
-    *, services: tuple[str, ...] | list[str], env: str, project: str, region: str, runner: Any = subprocess.run
+    *,
+    services: tuple[str, ...] | list[str],
+    env: str,
+    project: str,
+    region: str,
+    manifest_path: Path = DEFAULT_MANIFEST,
+    runner: Any = subprocess.run,
 ) -> list[str]:
     if env != 'dev' or project != DEVELOPMENT_PROJECT:
         raise ValueError('Legacy public-binding migration is development-only')
 
+    manifest = yaml.safe_load(manifest_path.read_text(encoding='utf-8'))
+    if not isinstance(manifest, dict):
+        raise ValueError(f'Expected a mapping in {manifest_path}')
+    environments = manifest.get('environments')
+    if not isinstance(environments, dict):
+        raise ValueError(f'Missing environments in {manifest_path}')
+    environment_config = environments.get(env)
+    if not isinstance(environment_config, dict):
+        raise ValueError(f'Missing {env} environment in {manifest_path}')
+    cloud_run = environment_config.get('cloud_run')
+    if not isinstance(cloud_run, dict):
+        raise ValueError(f'Missing Cloud Run config for {env} in {manifest_path}')
+    service_configs = cloud_run.get('services')
+    if not isinstance(service_configs, dict):
+        raise ValueError(f'Missing Cloud Run services for {env} in {manifest_path}')
+
     migrated: list[str] = []
     for service in services:
+        service_config = service_configs.get(service)
+        if not isinstance(service_config, dict):
+            raise ValueError(f'Missing Cloud Run service config for {service}')
+        public_env = service_config.get('env')
+        if not isinstance(public_env, dict):
+            raise ValueError(f'Missing public environment config for {service}')
+        public_binding_names = set(public_env)
         document = json.loads(
             runner(
                 [
@@ -140,13 +170,13 @@ def migrate_legacy_public_bindings(
         containers = document['spec']['template']['spec'].get('containers')
         if not isinstance(containers, list) or len(containers) != 1 or not isinstance(containers[0], dict):
             raise ValueError('Legacy public-binding migration requires exactly one container per Cloud Run service')
-        environments = containers[0].get('env', [])
-        has_legacy_secret = any(
-            entry.get('name') == PUBLIC_BINDING
-            and entry.get('valueFrom', {}).get('secretKeyRef', {}).get('name') == PUBLIC_BINDING
-            for entry in environments
+        legacy_binding_names = sorted(
+            entry['name']
+            for entry in containers[0].get('env', [])
+            if entry.get('name') in public_binding_names
+            and entry.get('valueFrom', {}).get('secretKeyRef', {}).get('name') == entry.get('name')
         )
-        if not has_legacy_secret:
+        if not legacy_binding_names:
             continue
         runner(
             [
@@ -157,7 +187,7 @@ def migrate_legacy_public_bindings(
                 service,
                 f'--project={project}',
                 f'--region={region}',
-                f'--remove-secrets={PUBLIC_BINDING}',
+                f'--remove-secrets={",".join(legacy_binding_names)}',
                 '--no-traffic',
                 '--quiet',
             ],
