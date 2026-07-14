@@ -9,9 +9,10 @@ Mac reference (frozen ground truth): `.worktrees/mac-ref` @ tag `v0.12.72+12072-
 
 ## Phase plan (dependency order)
 
-- [ ] **P0 Ground truth** — 9 Sonnet extractors → `track3-ground-truth/*.md` (IN PROGRESS)
-- [ ] **P0 Additive schema PR** (land FIRST): db.ts + types.ts + preload append-only block for
-      profile / assistants / focus / insight / memory-extract / embeddings tables. Additive-only.
+- [x] **P0 Ground truth** — extractors done (coordinator+insight respawned narrower after hanging).
+- [x] **P0 Additive schema PR — MERGED (PR #32, merge c3b01ec).** 3 tables + CRUD + drift-guard.
+      Real-app-boot verified tables create; full suite 1484 pass. Drift-guard caught+fixed a real
+      Track-2 leak (voice_turn_outbox missing from sign-out wipe) and exempted Track-4 app_meta.
 - [ ] **P1 AI User Profile** (enabler #1): wire get/update_ai_profile, 2-stage synthesis, daily cadence.
 - [ ] **P2 AssistantCoordinator** (framework): throttling (per-assistant+global clocks, freq 0–5,
       suppression snooze→master→frequency), context-switch detection, backpressure.
