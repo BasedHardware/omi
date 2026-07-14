@@ -13,9 +13,10 @@
 // Every frame is DRAWN AT ITS NATIVE SIZE (supersampled 4x for anti-aliasing)
 // rather than downscaled — a naive downscale fuses the 8 dots into blobs at
 // small sizes (the same lesson gen-tray-icons.mjs records). The disc/ring/ico
-// helpers are copied from gen-tray-icons.mjs (that geometry passed a skeptical
-// icon review); the only new piece is two-color compositing (white disc +
-// black dots), which the single-color tray downsampler can't express.
+// helpers are shared with gen-tray-icons.mjs via ./lib/icon-raster.mjs (that
+// geometry passed a skeptical icon review); the only new piece is two-color
+// compositing (white disc + black dots), which the single-color tray
+// downsampler can't express.
 //
 // BRAND RULE: never purple — white disc, black mark, nothing else.
 //
@@ -24,6 +25,7 @@ import { writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { PNG } from 'pngjs'
+import { SS, disc, ring, packIco } from './lib/icon-raster.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const resDir = join(here, '..', 'resources')
@@ -32,7 +34,6 @@ const resDir = join(here, '..', 'resources')
 // electron-builder; the smaller sizes keep the taskbar/Alt-Tab crisp.
 const ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
 const PNG_SIZE = 256
-const SS = 4 // supersample factor for anti-aliasing
 
 // Mark geometry. At >= 24px: dot centers on a ring of radius 0.34*size, dot
 // radius 0.095*size (the 32px look that passed the tray review). The mark's
@@ -44,30 +45,6 @@ const SS = 4 // supersample factor for anti-aliasing
 function geometry(size) {
   if (size <= 20) return { ringR: 0.36, dotR: 0.082 }
   return { ringR: 0.34, dotR: 0.095 }
-}
-
-/** Draw a filled disc onto a supersampled boolean coverage grid. */
-function disc(grid, gridSize, cx, cy, r) {
-  const r2 = r * r
-  const x0 = Math.max(0, Math.floor(cx - r))
-  const x1 = Math.min(gridSize - 1, Math.ceil(cx + r))
-  const y0 = Math.max(0, Math.floor(cy - r))
-  const y1 = Math.min(gridSize - 1, Math.ceil(cy + r))
-  for (let y = y0; y <= y1; y++) {
-    for (let x = x0; x <= x1; x++) {
-      const dx = x + 0.5 - cx
-      const dy = y + 0.5 - cy
-      if (dx * dx + dy * dy <= r2) grid[y * gridSize + x] = 1
-    }
-  }
-}
-
-/** Draw the 8-dot ring centered at (cx, cy) with the given scale. */
-function ring(grid, gridSize, cx, cy, ringR, dotR) {
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2 - Math.PI / 2 // start at 12 o'clock
-    disc(grid, gridSize, cx + ringR * Math.cos(a), cy + ringR * Math.sin(a), dotR)
-  }
 }
 
 /**
@@ -121,33 +98,6 @@ function drawFrame(size) {
   ring(dotGrid, g, c, c, ringR * size * SS, dotR * size * SS)
 
   return compositeToPng(discGrid, dotGrid, size)
-}
-
-/** Pack PNG-compressed frames into a .ico (ICONDIR + entries + PNG blobs). */
-function packIco(framesBySize) {
-  const entries = []
-  const blobs = []
-  let offset = 6 + 16 * framesBySize.length
-  for (const [size, png] of framesBySize) {
-    const buf = PNG.sync.write(png)
-    const entry = Buffer.alloc(16)
-    entry.writeUInt8(size >= 256 ? 0 : size, 0) // width (0 = 256)
-    entry.writeUInt8(size >= 256 ? 0 : size, 1) // height
-    entry.writeUInt8(0, 2) // palette
-    entry.writeUInt8(0, 3) // reserved
-    entry.writeUInt16LE(1, 4) // planes
-    entry.writeUInt16LE(32, 6) // bpp
-    entry.writeUInt32LE(buf.length, 8)
-    entry.writeUInt32LE(offset, 12)
-    entries.push(entry)
-    blobs.push(buf)
-    offset += buf.length
-  }
-  const header = Buffer.alloc(6)
-  header.writeUInt16LE(0, 0)
-  header.writeUInt16LE(1, 2) // type: icon
-  header.writeUInt16LE(framesBySize.length, 4)
-  return Buffer.concat([header, ...entries, ...blobs])
 }
 
 const pngPath = join(resDir, 'icon.png')
