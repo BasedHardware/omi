@@ -1,7 +1,7 @@
 import ast
 import json
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
 from types import SimpleNamespace
 
 import pytest
@@ -178,6 +178,34 @@ def test_inventory_finds_a_direct_compound_chain_wrapped_by_list():
         ('status', '=='),
         ('expires_at', '>'),
     ]
+
+
+def test_query_fingerprints_are_platform_independent():
+    tree = ast.parse(
+        "def read(client):\n"
+        "    return client.collection('items').where('status', '==', 'open').where('expires_at', '>', 0).stream()\n"
+    )
+    function = tree.body[0]
+
+    def fingerprint(source_path: PurePath) -> tuple[str, str]:
+        source = firestore_query_coverage._canonical_source(source_path)
+        analyzer = firestore_query_coverage.FunctionQueryAnalyzer(
+            source=source,
+            symbol='read',
+            constants={},
+            non_serving_scope=None,
+            registered_signatures={},
+            waiver_ids=set(),
+        )
+        shapes = analyzer.analyze(function.body)
+        assert len(shapes) == 1
+        return source, shapes[0].fingerprint
+
+    windows_source, windows_fingerprint = fingerprint(PureWindowsPath('backend/database/example.py'))
+    posix_source, posix_fingerprint = fingerprint(PurePosixPath('backend/database/example.py'))
+
+    assert windows_source == posix_source == 'backend/database/example.py'
+    assert windows_fingerprint == posix_fingerprint
 
 
 def test_query_coverage_ratchet_rejects_a_new_raw_serving_shape():
