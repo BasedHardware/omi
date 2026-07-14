@@ -77,6 +77,7 @@ import { startMeetingMonitor, stopMeetingMonitor, meetingDebug } from './meeting
 import { registerAutomationHandlers } from './ipc/automation'
 import { registerCodingAgentHandlers } from './ipc/codingAgent'
 import { registerByokHandlers } from './ipc/byok'
+import { probeAgentStoreRuntimeAtStartup } from './agentKernel/startup'
 import { automationBridge } from './automation/bridge'
 import {
   startAutomationTargetTracker,
@@ -649,6 +650,10 @@ app.whenReady().then(async () => {
   // a session (Firebase token + base URLs) and drives generation. The background
   // startup check + daily timer are wired at ready-to-show below.
   registerAiUserProfileHandlers()
+  // Agent-kernel SQLite runtime guard (non-fatal): validates the production
+  // better-sqlite3 driver path that unit tests can't cover. Logs and continues
+  // on failure — the kernel is not yet wired to any caller.
+  probeAgentStoreRuntimeAtStartup()
 
   // `win` is this launch's instance for one-shot wiring below (ready-to-show,
   // bench); long-lived consumers read the module-level `mainWindow` instead.

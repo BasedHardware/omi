@@ -1479,6 +1479,84 @@ describe('SqliteAgentStore', () => {
     expect(count).toBe(0)
     store.close()
   })
+
+  it('cascades a session delete to its runs, attempts, bindings, artifacts, and events', () => {
+    const store = newStore({ reconcileOnOpen: false })
+    const session = store.insertSession({
+      ownerId: 'owner',
+      surfaceKind: 'main_chat',
+      defaultAdapterId: 'acp'
+    })
+    const run = store.insertRun({
+      sessionId: session.sessionId,
+      clientId: 'client',
+      requestId: 'req',
+      status: 'running',
+      mode: 'ask'
+    })
+    const attempt = store.insertAttempt({
+      runId: run.runId,
+      attemptNo: 1,
+      status: 'running',
+      adapterId: 'acp',
+      adapterInstanceId: '',
+      runtimeNodeId: 'node'
+    })
+    const binding = store.insertAdapterBinding({
+      sessionId: session.sessionId,
+      adapterId: 'acp',
+      bindingGeneration: 1,
+      adapterNativeSessionId: 'native-cascade',
+      adapterInstanceId: 'node',
+      resumeFidelity: 'native',
+      status: 'active'
+    })
+    const artifact = store.insertArtifact({
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      kind: 'markdown',
+      role: 'result',
+      uri: 'omi-artifact://cascade'
+    })
+    store.appendEvent({
+      sessionId: session.sessionId,
+      runId: run.runId,
+      type: 'run.running',
+      payloadJson: '{}'
+    })
+
+    // Sanity: everything is present before the delete.
+    const counts = () => ({
+      runs: Number(
+        store.getRow('SELECT COUNT(*) AS c FROM runs WHERE session_id = ?', [session.sessionId]).c
+      ),
+      attempts: Number(
+        store.getRow('SELECT COUNT(*) AS c FROM run_attempts WHERE run_id = ?', [run.runId]).c
+      ),
+      bindings: Number(
+        store.getRow('SELECT COUNT(*) AS c FROM adapter_bindings WHERE binding_id = ?', [
+          binding.bindingId
+        ]).c
+      ),
+      artifacts: Number(
+        store.getRow('SELECT COUNT(*) AS c FROM artifacts WHERE artifact_id = ?', [
+          artifact.artifactId
+        ]).c
+      ),
+      events: Number(
+        store.getRow('SELECT COUNT(*) AS c FROM events WHERE session_id = ?', [session.sessionId]).c
+      )
+    })
+    expect(counts()).toEqual({ runs: 1, attempts: 1, bindings: 1, artifacts: 1, events: 1 })
+
+    // ON DELETE CASCADE (enforced by the foreign_keys=ON pragma) must remove the
+    // whole subtree when the parent session is deleted.
+    store.execute('DELETE FROM sessions WHERE session_id = ?', [session.sessionId])
+    expect(counts()).toEqual({ runs: 0, attempts: 0, bindings: 0, artifacts: 0, events: 0 })
+
+    store.close()
+  })
 })
 
 function openStore(
