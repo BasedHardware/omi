@@ -148,7 +148,10 @@ describe('merge eligibility', () => {
 
 describe('buildConversationQuery', () => {
   it('defaults to limit/offset only', () => {
-    expect(buildConversationQuery({ kind: 'all' }, NO_DATE_RANGE)).toEqual({ limit: 100, offset: 0 })
+    expect(buildConversationQuery({ kind: 'all' }, NO_DATE_RANGE)).toEqual({
+      limit: 100,
+      offset: 0
+    })
   })
   it('adds starred=true for the starred chip', () => {
     expect(buildConversationQuery({ kind: 'starred' }, NO_DATE_RANGE)).toMatchObject({

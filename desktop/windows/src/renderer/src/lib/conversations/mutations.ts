@@ -15,11 +15,15 @@ export async function setConversationStarred(id: string, starred: boolean): Prom
 
 /** Assign a conversation to a folder (or unfile it with null). Backend contract:
  *  folder_id is a JSON BODY ({folder_id}), unlike starred. */
-export async function moveConversationToFolder(
-  id: string,
-  folderId: string | null
-): Promise<void> {
+export async function moveConversationToFolder(id: string, folderId: string | null): Promise<void> {
   await omiApi.patch(`/v1/conversations/${id}/folder`, { folder_id: folderId })
+}
+
+/** Rename a cloud conversation. Backend contract: title is a QUERY param on a
+ *  bodyless PATCH (same shape as starred). Local rows rename via
+ *  window.omi.updateLocalConversationTitle instead. */
+export async function setConversationTitle(id: string, title: string): Promise<void> {
+  await omiApi.patch(`/v1/conversations/${id}/title`, null, { params: { title } })
 }
 
 /** Merge ≥2 conversations into one. FIRE-AND-FORGET: the backend returns

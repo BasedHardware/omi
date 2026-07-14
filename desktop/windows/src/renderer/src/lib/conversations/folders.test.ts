@@ -33,7 +33,12 @@ describe('toConversationFolder', () => {
 
   it('defaults missing optional fields', () => {
     const f = toConversationFolder(
-      backendFolder({ color: undefined, icon: undefined, order: undefined, conversation_count: undefined })
+      backendFolder({
+        color: undefined,
+        icon: undefined,
+        order: undefined,
+        conversation_count: undefined
+      })
     )
     expect(f).toMatchObject({ color: null, icon: null, orderIdx: 0, conversationCount: 0 })
   })

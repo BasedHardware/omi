@@ -135,9 +135,10 @@ describe('conversation folder cache CRUD', () => {
 
 describe('local starred / folder mirror', () => {
   function readConv(id: string): { starred: number; folder_id: string | null } {
-    return db
-      .prepare('SELECT starred, folder_id FROM local_conversation WHERE id = ?')
-      .get(id) as { starred: number; folder_id: string | null }
+    return db.prepare('SELECT starred, folder_id FROM local_conversation WHERE id = ?').get(id) as {
+      starred: number
+      folder_id: string | null
+    }
   }
 
   it('sets and clears the local starred flag', () => {
