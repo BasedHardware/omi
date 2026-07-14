@@ -17,6 +17,7 @@ from google.cloud import firestore
 from database._client import get_firestore_client
 
 RECORDING_SESSIONS_COLLECTION = 'recording_sessions'
+CONVERSATIONS_COLLECTION = 'conversations'
 RECORDING_SESSION_SCHEMA_VERSION = 1
 LIFECYCLE_ENVELOPE_VERSION = 1
 RecordingPhase = Literal['in_progress', 'processing', 'completed', 'failed', 'discarded']
@@ -151,6 +152,67 @@ def get_recording_session(
     if data.get('uid') != uid or data.get('recording_session_id') != recording_session_id:
         raise ValueError('recording session identity does not match its document binding')
     return _binding(data, recording_session_id, mapping_conflict=False)
+
+
+def tombstone_and_delete_empty_conversation(
+    uid: str,
+    conversation_id: str,
+    recording_session_id: str | None,
+    *,
+    firestore_client: Any = None,
+) -> bool:
+    """Atomically delete an empty live row and terminalize its bound session.
+
+    Segment/photo writes set the conversation's durable ``has_content`` marker
+    in transactions on this same parent document. Firestore therefore retries
+    this transaction when a late content write wins, preventing cleanup from
+    deleting user data based on a stale empty read.
+    """
+    client = _client(firestore_client)
+    conversation_ref = (
+        client.collection('users').document(uid).collection(CONVERSATIONS_COLLECTION).document(conversation_id)
+    )
+    session_ref = _session_ref(client, uid, recording_session_id) if recording_session_id else None
+    transaction = client.transaction()
+
+    @firestore.transactional
+    def _delete_empty(transaction: Any) -> bool:
+        snapshot = conversation_ref.get(transaction=transaction)
+        if not getattr(snapshot, 'exists', False):
+            return False
+        conversation = snapshot.to_dict() or {}
+        if (
+            conversation.get('status') != 'in_progress'
+            or conversation.get('discarded')
+            or conversation.get('has_content')
+            or conversation.get('transcript_segments')
+            or conversation.get('photos')
+        ):
+            return False
+
+        if session_ref is not None:
+            session_snapshot = session_ref.get(transaction=transaction)
+            if getattr(session_snapshot, 'exists', False):
+                session = session_snapshot.to_dict() or {}
+                if (
+                    session.get('uid') == uid
+                    and session.get('recording_session_id') == recording_session_id
+                    and session.get('conversation_id') == conversation_id
+                ):
+                    phase = str(session.get('lifecycle_phase') or 'in_progress')
+                    if phase not in _TERMINAL_PHASES:
+                        transaction.update(
+                            session_ref,
+                            {
+                                'lifecycle_phase': 'discarded',
+                                'lifecycle_sequence': int(session.get('lifecycle_sequence') or 0) + 1,
+                                'updated_at': _now(),
+                            },
+                        )
+        transaction.delete(conversation_ref)
+        return True
+
+    return _delete_empty(transaction)
 
 
 def _record_lifecycle_event_txn(

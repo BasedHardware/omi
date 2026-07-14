@@ -59,6 +59,9 @@ class _Transaction:
     def update(self, document: _DocumentRef, updates: dict[str, Any]) -> None:
         self.firestore.documents[document.path].update(copy.deepcopy(updates))
 
+    def delete(self, document: _DocumentRef) -> None:
+        self.firestore.documents.pop(document.path, None)
+
 
 @dataclass
 class _FakeFirestore:
@@ -173,6 +176,52 @@ def test_missing_active_binding_is_tombstoned_before_rollover(recording_store, m
     assert reconnect['requires_rollover'] is True
     assert original is not None
     assert original['lifecycle_phase'] == 'discarded'
+
+
+def test_empty_cleanup_atomically_tombstones_its_session(recording_store):
+    conversation_path = ('users', 'uid', 'conversations', 'conversation')
+    recording_store.documents[conversation_path] = {
+        'id': 'conversation',
+        'status': 'in_progress',
+        'transcript_segments': [],
+        'has_content': False,
+    }
+    recording_sessions.create_or_get_recording_session(
+        'uid', 'recording', 'conversation', firestore_client=recording_store
+    )
+
+    deleted = recording_sessions.tombstone_and_delete_empty_conversation(
+        'uid', 'conversation', 'recording', firestore_client=recording_store
+    )
+    binding = recording_sessions.get_recording_session('uid', 'recording', firestore_client=recording_store)
+
+    assert deleted is True
+    assert conversation_path not in recording_store.documents
+    assert binding is not None
+    assert binding['lifecycle_phase'] == 'discarded'
+
+
+def test_empty_cleanup_refuses_late_content_without_tombstoning(recording_store):
+    conversation_path = ('users', 'uid', 'conversations', 'conversation')
+    recording_store.documents[conversation_path] = {
+        'id': 'conversation',
+        'status': 'in_progress',
+        'transcript_segments': [{'id': 'late-segment', 'text': 'persisted'}],
+        'has_content': True,
+    }
+    recording_sessions.create_or_get_recording_session(
+        'uid', 'recording', 'conversation', firestore_client=recording_store
+    )
+
+    deleted = recording_sessions.tombstone_and_delete_empty_conversation(
+        'uid', 'conversation', 'recording', firestore_client=recording_store
+    )
+    binding = recording_sessions.get_recording_session('uid', 'recording', firestore_client=recording_store)
+
+    assert deleted is False
+    assert conversation_path in recording_store.documents
+    assert binding is not None
+    assert binding['lifecycle_phase'] == 'in_progress'
 
 
 def test_conflicting_retry_returns_the_original_conversation(recording_store):

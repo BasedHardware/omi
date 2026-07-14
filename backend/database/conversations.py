@@ -1145,22 +1145,28 @@ def update_conversation_segments(
     data_protection_level: str = None,
 ):
     doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
-    if data_protection_level is not None:
-        doc_level = data_protection_level
-    else:
-        doc_snapshot = doc_ref.get(field_paths=['data_protection_level'])
-        if not doc_snapshot.exists:
-            return
-        doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
-    update_payload = {'transcript_segments': segments}
-    if finished_at:
-        update_payload['finished_at'] = finished_at
-    prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
-    try:
-        doc_ref.update(prepared_payload)
-    except NotFound:
-        # Document was deleted between cache read and write — safe to skip
-        return
+    transaction = db.transaction()
+
+    @firestore.transactional
+    def _write_segments(transaction) -> bool:
+        doc_snapshot = doc_ref.get(transaction=transaction)
+        if not getattr(doc_snapshot, 'exists', False):
+            return False
+        current = doc_snapshot.to_dict() or {}
+        doc_level = data_protection_level or current.get('data_protection_level', 'standard')
+        update_payload = {
+            'transcript_segments': segments,
+            # Once a live generation has received content, empty cleanup must
+            # never reclaim it even if an older in-memory snapshot is empty.
+            'has_content': bool(current.get('has_content')) or bool(segments),
+        }
+        if finished_at:
+            update_payload['finished_at'] = finished_at
+        prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
+        transaction.update(doc_ref, prepared_payload)
+        return True
+
+    return _write_segments(transaction)
 
 
 # ***********************************
@@ -1290,25 +1296,28 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
 # ***********************************
 
 
-def store_conversation_photos(uid: str, conversation_id: str, photos: List[ConversationPhoto]):
+def store_conversation_photos(uid: str, conversation_id: str, photos: List[ConversationPhoto]) -> bool:
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-
-    conversation_snapshot = conversation_ref.get(field_paths=['data_protection_level'])
-    level = 'standard'
-    if conversation_snapshot.exists:
-        level = conversation_snapshot.to_dict().get('data_protection_level', 'standard')
-
     photos_ref = conversation_ref.collection('photos')
-    batch = db.batch()
-    for photo in photos:
-        photo_id = photo.id or str(uuid.uuid4())
-        photo_ref = photos_ref.document(photo_id)
-        data = photo.model_dump()
-        data['id'] = photo_id
-        prepared_data = _prepare_photo_for_write(data, uid, level)
-        batch.set(photo_ref, prepared_data)
-    batch.commit()
+    transaction = db.transaction()
+
+    @firestore.transactional
+    def _store(transaction) -> bool:
+        conversation_snapshot = conversation_ref.get(transaction=transaction)
+        if not getattr(conversation_snapshot, 'exists', False):
+            return False
+        level = (conversation_snapshot.to_dict() or {}).get('data_protection_level', 'standard')
+        for photo in photos:
+            photo_id = photo.id or str(uuid.uuid4())
+            photo_ref = photos_ref.document(photo_id)
+            data = photo.model_dump()
+            data['id'] = photo_id
+            transaction.set(photo_ref, _prepare_photo_for_write(data, uid, level))
+        transaction.update(conversation_ref, {'has_content': True})
+        return True
+
+    return _store(transaction)
 
 
 # ********************************

@@ -403,6 +403,7 @@ def test_fenced_completion_submits_no_derived_work(monkeypatch):
     trigger_apps = MagicMock()
     create_audio_files = MagicMock()
     update_conversation = MagicMock()
+    observed_persistence: list[bool] = []
     monkeypatch.setattr(process_conversation, "_get_structured", lambda *args, **kwargs: (MagicMock(), False))
     monkeypatch.setattr(process_conversation, "_get_conversation_obj", lambda *args, **kwargs: completed_conversation)
     monkeypatch.setattr(process_conversation.lifecycle_service, "persist_processed_conversation", persistence)
@@ -411,7 +412,12 @@ def test_fenced_completion_submits_no_derived_work(monkeypatch):
     monkeypatch.setattr(process_conversation.conversations_db, "create_audio_files_from_chunks", create_audio_files)
     monkeypatch.setattr(process_conversation.conversations_db, "update_conversation", update_conversation)
 
-    result = process_conversation.process_conversation("uid", "en", input_conversation)
+    result = process_conversation.process_conversation(
+        "uid",
+        "en",
+        input_conversation,
+        persistence_observer=observed_persistence.append,
+    )
 
     assert result is completed_conversation
     persistence.assert_called_once()
@@ -419,6 +425,7 @@ def test_fenced_completion_submits_no_derived_work(monkeypatch):
     trigger_apps.assert_not_called()
     create_audio_files.assert_not_called()
     update_conversation.assert_not_called()
+    assert observed_persistence == [False]
 
 
 def test_fresh_creation_uses_the_explicit_completed_lifecycle_owner(monkeypatch):

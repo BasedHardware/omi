@@ -1178,16 +1178,19 @@ async def _stream_handler(
                     recording_session_ids_by_conversation,
                     conversation_id,
                 )
-                if event_recording_session_id:
-                    await run_blocking(
-                        db_executor,
-                        lifecycle_service.tombstone_recording_session,
-                        uid,
-                        event_recording_session_id,
-                        conversation_id,
-                    )
-                conversations_db.delete_conversation(uid, conversation_id)
-                return True
+                deleted = await run_blocking(
+                    db_executor,
+                    lifecycle_service.delete_empty_recording_conversation,
+                    uid,
+                    conversation_id,
+                    event_recording_session_id,
+                )
+                if deleted:
+                    return True
+                latest = conversations_db.get_conversation(uid, conversation_id)
+                if latest and (latest.get('transcript_segments') or latest.get('has_content') or latest.get('photos')):
+                    return await _schedule_conversation_finalization(conversation_id)
+                return False
         return False
 
     # Process existing conversations
@@ -1280,13 +1283,16 @@ async def _stream_handler(
                     speaker_to_person_map,
                 )
             segments_dicts = [segment.model_dump() for segment in conversation.transcript_segments]
-            conversations_db.update_conversation_segments(
+            segments_persisted = conversations_db.update_conversation_segments(
                 uid, conversation.id, segments_dicts, data_protection_level=_cached_protection_level
             )
+            if not segments_persisted:
+                return None
             _update_cached_segments(segments_dicts)
 
         if photos:
-            conversations_db.store_conversation_photos(uid, conversation.id, photos)
+            if not conversations_db.store_conversation_photos(uid, conversation.id, photos):
+                return None
             # Photo-bearing conversations default to the openglass label unless the
             # source already identifies a photo-capable device (e.g. rayban_meta).
             new_source_value = resolve_photo_conversation_source(

@@ -187,7 +187,22 @@ def process_in_progress_conversation(
         redis_db.remove_in_progress_conversation_id(uid)
 
     conversation.status = ConversationStatus.processing
-    conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
+    persisted = False
+
+    def record_persistence(current: bool) -> None:
+        nonlocal persisted
+        persisted = current
+
+    conversation = process_conversation(
+        uid,
+        conversation.language,
+        conversation,
+        force_process=True,
+        persistence_observer=record_persistence,
+    )
+    if not persisted:
+        latest = _get_valid_conversation_by_id(uid, conversation.id)
+        return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
     messages = asyncio.run(trigger_external_integrations(uid, conversation))
 
     return CreateConversationResponse(conversation=conversation, messages=messages)
@@ -240,7 +255,22 @@ def finalize_conversation(
         geolocation = Geolocation(**geolocation)
         conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
 
-    conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
+    persisted = False
+
+    def record_persistence(current: bool) -> None:
+        nonlocal persisted
+        persisted = current
+
+    conversation = process_conversation(
+        uid,
+        conversation.language,
+        conversation,
+        force_process=True,
+        persistence_observer=record_persistence,
+    )
+    if not persisted:
+        latest = _get_valid_conversation_by_id(uid, conversation_id)
+        return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
     messages = asyncio.run(trigger_external_integrations(uid, conversation))
 
     return CreateConversationResponse(conversation=conversation, messages=messages)

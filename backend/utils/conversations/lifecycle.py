@@ -373,6 +373,24 @@ def tombstone_recording_session(
     )
 
 
+def delete_empty_recording_conversation(
+    uid: str,
+    conversation_id: str,
+    recording_session_id: str | None,
+) -> bool:
+    """Delete only a still-empty listen generation and tombstone it atomically."""
+    deleted = recording_sessions_db.tombstone_and_delete_empty_conversation(
+        uid,
+        conversation_id,
+        recording_session_id,
+    )
+    if deleted:
+        # Parent deletion is transactionally fenced with content writes; photos
+        # are a subcollection and need their physical cleanup afterwards.
+        conversations_db.delete_conversation_photos(uid, conversation_id)
+    return deleted
+
+
 def open_live_recording_session(
     uid: str,
     recording_session_id: str,

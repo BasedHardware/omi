@@ -5,7 +5,7 @@ import uuid
 import logging
 import asyncio
 from datetime import timezone, timedelta, datetime
-from typing import Any, Dict, List, Optional, Set, Tuple, Union, cast
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, cast
 
 from fastapi import HTTPException
 
@@ -991,7 +991,12 @@ def process_conversation(
     force_process: bool = False,
     is_reprocess: bool = False,
     app_id: Optional[str] = None,
+    persistence_observer: Callable[[bool], None] | None = None,
 ) -> Conversation:
+    def report_persistence(current: bool) -> None:
+        if persistence_observer is not None:
+            persistence_observer(current)
+
     is_initial_creation = isinstance(conversation, (CreateConversation, ExternalIntegrationCreateConversation))
     # Trial paywall: skip ALL post-processing (summaries, memories, action
     # items, embeddings, app integrations) for paywalled desktop users.
@@ -1019,6 +1024,7 @@ def process_conversation(
                 conversation.status = ConversationStatus.completed
             except Exception:
                 pass
+        report_persistence(False)
         return cast(Conversation, conversation)
 
     # Lazy desktop processing (freemium cost cut): desktop users without a desktop-entitled
@@ -1035,7 +1041,9 @@ def process_conversation(
         and conversation.source == ConversationSource.desktop
         and should_defer_desktop_processing(uid)
     ):
-        return _store_deferred_conversation(uid, conversation)
+        deferred = _store_deferred_conversation(uid, conversation)
+        report_persistence(False)
+        return deferred
 
     # Fetch meeting context from Firestore if meeting_id is associated with this conversation
     if isinstance(conversation, Conversation) and conversation.id:
@@ -1072,6 +1080,7 @@ def process_conversation(
         persisted = lifecycle_service.create_completed_conversation(uid, conversation.dict(), idempotent=True)
     else:
         persisted = lifecycle_service.persist_processed_conversation(uid, conversation.dict())
+    report_persistence(persisted)
     if not persisted:
         logger.info(
             'processing result fenced before completion side effects uid=%s conversation=%s', uid, conversation.id
