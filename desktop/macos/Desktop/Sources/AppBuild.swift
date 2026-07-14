@@ -8,6 +8,11 @@ enum AppBuild {
   private static let desktopAppcastURL = URL(
     string: "https://api.omi.me/v2/desktop/appcast.xml?platform=macos")!
 
+  /// How long the launch-time channel probe may hold the main thread. It runs before the
+  /// first frame, so it has to stay clear of the 3s watchdog that reports "App Hanging".
+  private static let channelProbeMainThreadBudget: TimeInterval = 1.5
+  private static let channelProbeRequestTimeout: TimeInterval = 3
+
   static var bundleIdentifier: String {
     Bundle.main.bundleIdentifier ?? productionBundleIdentifier
   }
@@ -101,7 +106,7 @@ enum AppBuild {
   @discardableResult
   static func syncUpdateChannelOnFirstLaunch() -> String? {
     guard UserDefaults.standard.string(forKey: updateChannelDefaultsKey) == nil else { return nil }
-    let resolved = resolveFreshInstallUpdateChannelSynchronously()
+    let resolved = probeFreshInstallUpdateChannel()
     UserDefaults.standard.set(resolved, forKey: updateChannelDefaultsKey)
     return resolved
   }
@@ -110,13 +115,21 @@ enum AppBuild {
   /// by the syncUpdateChannelWithInstalledApp() bug (commit 8c60fafe8, March 27 2026).
   /// Re-checks the appcast: if the current build is ahead of latest stable, restore beta.
   static func migrateBetaChannelOverwrite() {
+    migrateBetaChannelOverwrite(probeAppcast: probeFreshInstallUpdateChannel)
+  }
+
+  static func migrateBetaChannelOverwrite(probeAppcast: () -> String) {
     guard !UserDefaults.standard.bool(forKey: betaOverwriteMigrationKey) else { return }
     UserDefaults.standard.set(true, forKey: betaOverwriteMigrationKey)
 
+    // A fresh install has no stored channel, so there is nothing to restore — and
+    // syncUpdateChannelOnFirstLaunch() probes the same appcast moments later. Probing
+    // here as well made every new install pay for two serial launch-blocking round
+    // trips to answer one question.
+    guard UserDefaults.standard.string(forKey: updateChannelDefaultsKey) != nil else { return }
     guard currentUpdateChannel == "stable" else { return }
 
-    let resolved = resolveFreshInstallUpdateChannelSynchronously()
-    if resolved == "beta" {
+    if probeAppcast() == "beta" {
       UserDefaults.standard.set("beta", forKey: updateChannelDefaultsKey)
     }
   }
@@ -202,43 +215,115 @@ enum AppBuild {
     return Int(raw)
   }
 
-  private static func resolveFreshInstallUpdateChannelSynchronously(timeout: TimeInterval = 3) -> String {
-    let fallback = inferredUpdateChannel
+  private static func probeFreshInstallUpdateChannel() -> String {
+    probeFreshInstallUpdateChannel(
+      fallback: inferredUpdateChannel,
+      currentBuild: currentBuildNumber,
+      mainThreadBudget: channelProbeMainThreadBudget,
+      fetchAppcast: fetchDesktopAppcast,
+      persistLateCorrection: storeLateChannelCorrection
+    )
+  }
 
+  /// Resolve the channel for an install with no stored preference.
+  ///
+  /// This runs on the main thread during launch (`AppState.init` needs the channel before
+  /// it loads backend URLs), so it waits at most `mainThreadBudget` for the appcast. Past
+  /// that it returns the bundle-inferred channel and lets the request finish in the
+  /// background: a late answer that disagrees is written through `persistLateCorrection`,
+  /// so the next launch starts on the right channel.
+  ///
+  /// It used to block for up to 3.5s inline, and pinned the timed-out guess permanently.
+  static func probeFreshInstallUpdateChannel(
+    fallback: String,
+    currentBuild: Int?,
+    mainThreadBudget: TimeInterval,
+    fetchAppcast: @escaping (@escaping (String?) -> Void) -> Void,
+    persistLateCorrection: @escaping (String) -> Void
+  ) -> String {
     if fallback == "beta" {
       return "beta"
     }
 
-    guard let currentBuild = currentBuildNumber else {
+    guard let currentBuild else {
       return fallback
     }
 
+    let appcast = AppcastProbeResult()
+    let semaphore = DispatchSemaphore(value: 0)
+
+    fetchAppcast { xml in
+      appcast.set(xml)
+      semaphore.signal()
+    }
+
+    if semaphore.wait(timeout: .now() + mainThreadBudget) == .success {
+      guard let appcastXML = appcast.value else { return fallback }
+      return resolveFreshInstallUpdateChannel(
+        currentBuild: currentBuild,
+        fallback: fallback,
+        appcastXML: appcastXML
+      )
+    }
+
+    DispatchQueue.global(qos: .utility).async {
+      guard
+        semaphore.wait(timeout: .now() + channelProbeRequestTimeout + 0.5) == .success,
+        let appcastXML = appcast.value
+      else { return }
+
+      let resolved = resolveFreshInstallUpdateChannel(
+        currentBuild: currentBuild,
+        fallback: fallback,
+        appcastXML: appcastXML
+      )
+      guard resolved != fallback else { return }
+      persistLateCorrection(resolved)
+    }
+
+    return fallback
+  }
+
+  private static func fetchDesktopAppcast(completion: @escaping (String?) -> Void) {
     let configuration = URLSessionConfiguration.ephemeral
-    configuration.timeoutIntervalForRequest = timeout
-    configuration.timeoutIntervalForResource = timeout
+    configuration.timeoutIntervalForRequest = channelProbeRequestTimeout
+    configuration.timeoutIntervalForResource = channelProbeRequestTimeout
 
     let session = URLSession(configuration: configuration)
-    let semaphore = DispatchSemaphore(value: 0)
-    var appcastXML: String?
+    session.dataTask(with: desktopAppcastURL) { data, _, _ in
+      defer { session.finishTasksAndInvalidate() }
+      guard let data, let xml = String(data: data, encoding: .utf8) else {
+        completion(nil)
+        return
+      }
+      completion(xml)
+    }.resume()
+  }
 
-    let task = session.dataTask(with: desktopAppcastURL) { data, _, _ in
-      defer { semaphore.signal() }
-      guard let data, let xml = String(data: data, encoding: .utf8) else { return }
-      appcastXML = xml
+  private static func storeLateChannelCorrection(_ resolved: String) {
+    DispatchQueue.main.async {
+      // Only upgrade the guess this probe stored — never clobber a channel the user
+      // picked in Settings while the appcast was still in flight.
+      guard currentUpdateChannel == "stable" else { return }
+      UserDefaults.standard.set(resolved, forKey: updateChannelDefaultsKey)
+      log("AppBuild: appcast answered after the launch budget; update channel set to \(resolved)")
     }
-    task.resume()
+  }
+}
 
-    let finishedInTime = semaphore.wait(timeout: .now() + timeout + 0.5) == .success
-    session.finishTasksAndInvalidate()
+private final class AppcastProbeResult: @unchecked Sendable {
+  private let lock = NSLock()
+  private var xml: String?
 
-    guard finishedInTime, let appcastXML else {
-      return fallback
-    }
+  func set(_ value: String?) {
+    lock.lock()
+    defer { lock.unlock() }
+    xml = value
+  }
 
-    return resolveFreshInstallUpdateChannel(
-      currentBuild: currentBuild,
-      fallback: fallback,
-      appcastXML: appcastXML
-    )
+  var value: String? {
+    lock.lock()
+    defer { lock.unlock() }
+    return xml
   }
 }
