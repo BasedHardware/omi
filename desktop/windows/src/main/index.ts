@@ -271,6 +271,10 @@ import {
   updateLocalConversationTitle,
   updateLocalConversationSync,
   claimConversationForPosting,
+  insertVoiceTurn,
+  listPendingVoiceTurns,
+  markVoiceTurnAcked,
+  recordVoiceTurnFailure,
   wipeUserData
 } from './ipc/db'
 
@@ -548,6 +552,18 @@ app.whenReady().then(async () => {
     'db:claimConversationForPosting',
     async (_e, id: string, resetAttempts?: boolean) =>
       claimConversationForPosting(id, resetAttempts)
+  )
+  // Track 2: Voice & PTT depth — durable voice-turn outbox (unconsumed until
+  // Phase B / Track 1 wire the kernel-write path; see ipc/voiceTurnOutbox.ts).
+  ipcMain.handle('db:insertVoiceTurn', async (_e, entry) => insertVoiceTurn(entry))
+  ipcMain.handle('db:listPendingVoiceTurns', async (_e, limit?: number) =>
+    listPendingVoiceTurns(limit)
+  )
+  ipcMain.handle('db:markVoiceTurnAcked', async (_e, idempotencyKey: string) =>
+    markVoiceTurnAcked(idempotencyKey)
+  )
+  ipcMain.handle('db:recordVoiceTurnFailure', async (_e, idempotencyKey: string, error: string) =>
+    recordVoiceTurnFailure(idempotencyKey, error)
   )
   // Sign-out teardown: clear every user-scoped table so a second account on this
   // machine can't see the prior user's local data (renderer authTeardown.ts).

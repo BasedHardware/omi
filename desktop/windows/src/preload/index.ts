@@ -29,7 +29,8 @@ import type {
   CodingAgentCommandOverrides,
   CodingAgentEvent,
   CodingAgentId,
-  CodingAgentRunArgs
+  CodingAgentRunArgs,
+  VoiceTurnOutboxInput
 } from '../shared/types'
 import type { ByokProvider } from '../shared/byok'
 import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
@@ -49,6 +50,15 @@ const omi: OmiBridgeApi = {
     ipcRenderer.invoke('db:updateLocalConversationSync', id, patch),
   claimConversationForPosting: (id: string, resetAttempts?: boolean) =>
     ipcRenderer.invoke('db:claimConversationForPosting', id, resetAttempts),
+  // --- Track 2: Voice & PTT depth (voice turn outbox) ---
+  insertVoiceTurn: (entry: VoiceTurnOutboxInput) =>
+    ipcRenderer.invoke('db:insertVoiceTurn', entry),
+  listPendingVoiceTurns: (limit?: number) =>
+    ipcRenderer.invoke('db:listPendingVoiceTurns', limit),
+  markVoiceTurnAcked: (idempotencyKey: string) =>
+    ipcRenderer.invoke('db:markVoiceTurnAcked', idempotencyKey),
+  recordVoiceTurnFailure: (idempotencyKey: string, error: string) =>
+    ipcRenderer.invoke('db:recordVoiceTurnFailure', idempotencyKey, error),
   wipeUserData: () => ipcRenderer.invoke('db:wipeUserData'),
   onRecordHotkey: (cb: (choice: CaptureChoice) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, choice: CaptureChoice): void => cb(choice)

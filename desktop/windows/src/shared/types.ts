@@ -488,6 +488,18 @@ export type OmiBridgeApi = {
    *  stale-snapshot second driver from re-POSTing. `resetAttempts` restarts the
    *  attempt counter (manual re-sync of a wedged row). */
   claimConversationForPosting: (id: string, resetAttempts?: boolean) => Promise<boolean>
+  // --- Track 2: Voice & PTT depth (voice turn outbox) ---
+  /** Enqueue (idempotent UPSERT on idempotencyKey) a voice turn for durable
+   *  delivery. A re-enqueue for the same key updates the assistant text /
+   *  interrupted flag (a barge-in follow-up) rather than inserting a duplicate. */
+  insertVoiceTurn: (entry: VoiceTurnOutboxInput) => Promise<void>
+  /** Pending turns oldest-first (created_at ascending), to preserve the
+   *  single-writer drain ordering. Optional cap on rows returned. */
+  listPendingVoiceTurns: (limit?: number) => Promise<VoiceTurnOutboxEntry[]>
+  /** Delete the row on a positive kernel ack (Mac deletes on ack). */
+  markVoiceTurnAcked: (idempotencyKey: string) => Promise<void>
+  /** Record a failed delivery attempt: bumps attempts, stores the last error. */
+  recordVoiceTurnFailure: (idempotencyKey: string, error: string) => Promise<void>
   /** Sign-out teardown: delete every user-scoped local table (conversations,
    *  captions, local KG, rewind frames, app usage, insights, indexed files) so a
    *  different account on this machine starts clean. */
@@ -1349,4 +1361,53 @@ export interface PlanRunResult {
   ok: boolean
   failedStepIndex?: number
   message?: string
+}
+
+// --- Track 2: Voice & PTT depth (voice turn outbox) ---
+// Durable main-process outbox for a voice turn (PTT or realtime-session
+// utterance) that must survive an app restart mid-flight. Mirrors the macOS
+// RealtimeVoiceTurnOutboxEntry 1:1 (see the Track 2 Phase-B ground-truth doc);
+// backed by the voice_turn_outbox SQLite table in main/ipc/db.ts. Unconsumed
+// until Phase B / Track 1 publish the kernel-write path — the table + CRUD land
+// early to claim the shared additive files.
+
+/** A pending voice turn is either awaiting a positive kernel ack ('pending') or
+ *  removed once acked (Mac deletes the row on ack — 'acked' is a terminal marker
+ *  callers rarely observe, kept for parity/debuggability). */
+export type VoiceTurnStatus = 'pending' | 'acked'
+
+/** Fields the caller supplies when enqueuing a voice turn. Drain bookkeeping
+ *  (status/attempts/lastError/updatedAtMs) is owned by the outbox itself. The
+ *  same idempotencyKey is reused across a turn's completed/interrupted/optimistic
+ *  variants so a re-enqueue is an idempotent UPSERT, not a duplicate. */
+export interface VoiceTurnOutboxInput {
+  /** UUID string, one per logical turn (natural dedup key). */
+  idempotencyKey: string
+  ownerId: string
+  /** The surface triple (surface kind / app / session). Null until wired. */
+  surface?: string | null
+  appId?: string | null
+  sessionId?: string | null
+  userText?: string | null
+  assistantText?: string | null
+  /** True only for a barge-in-captured partial turn. */
+  interrupted?: boolean
+  createdAtMs: number
+}
+
+/** A durable voice_turn_outbox row (the shape listPendingVoiceTurns returns). */
+export interface VoiceTurnOutboxEntry {
+  idempotencyKey: string
+  ownerId: string
+  surface: string | null
+  appId: string | null
+  sessionId: string | null
+  userText: string | null
+  assistantText: string | null
+  interrupted: boolean
+  createdAtMs: number
+  status: VoiceTurnStatus
+  attempts: number
+  lastError: string | null
+  updatedAtMs: number
 }

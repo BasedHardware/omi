@@ -6,6 +6,13 @@ import { isNewLocalDay } from '../usage/usageDay'
 import { buildRewindSearchQuery } from '../rewind/rewindSearchQuery'
 import { addColumnIfMissing as ensureColumn, runMigrations } from './dbMigrations'
 import { wipeUserDataOn } from './dbWipe'
+import {
+  insertVoiceTurnOn,
+  listPendingVoiceTurnsOn,
+  markVoiceTurnAckedOn,
+  recordVoiceTurnFailureOn,
+  type VoiceTurnOutboxDb
+} from './voiceTurnOutbox'
 import type {
   AppUsageRecord,
   ChatMessage,
@@ -25,7 +32,9 @@ import type {
   OnboardingGraphEdge,
   RewindFrame,
   SyncSegment,
-  UsageCategory
+  UsageCategory,
+  VoiceTurnOutboxEntry,
+  VoiceTurnOutboxInput
 } from '../../shared/types'
 import { perfMark } from '../../shared/perf'
 
@@ -273,6 +282,32 @@ function get(): Database.Database {
       key TEXT PRIMARY KEY,
       value TEXT
     );
+
+    -- Track 2: Voice & PTT depth (voice turn outbox)
+    -- Durable outbox for a voice turn (PTT or realtime-session utterance) that
+    -- must survive an app restart mid-flight. Mirrors the macOS
+    -- RealtimeVoiceTurnOutbox 1:1: idempotency_key is the natural per-turn dedup
+    -- key (one UUID reused across the turn's completed / interrupted / optimistic
+    -- variants), a positive kernel ack deletes the row, and the drain scans
+    -- pending rows oldest-first. Unconsumed until Phase B / Track 1 wire the
+    -- kernel-write path — the table lands early to claim the shared additive file.
+    CREATE TABLE IF NOT EXISTS voice_turn_outbox (
+      idempotency_key TEXT PRIMARY KEY,
+      owner_id TEXT NOT NULL,
+      surface TEXT,
+      app_id TEXT,
+      session_id TEXT,
+      user_text TEXT,
+      assistant_text TEXT,
+      interrupted INTEGER NOT NULL DEFAULT 0,
+      created_at_ms INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      updated_at_ms INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_voice_turn_outbox_pending
+      ON voice_turn_outbox(status, created_at_ms);
   `)
   // Migrate older databases that have local_conversation without these columns.
   ensureColumn(db, 'local_conversation', 'kind', "TEXT NOT NULL DEFAULT 'recording'")
@@ -992,4 +1027,30 @@ export function recentInsights(limit = 30): InsightRecord[] {
   return get()
     .prepare(`SELECT ${INSIGHT_COLUMNS} FROM insights ORDER BY ts DESC LIMIT ?`)
     .all(limit) as InsightRecord[]
+}
+
+// --- Track 2: Voice & PTT depth (voice turn outbox) ---
+// Thin wrappers over the driver-agnostic CRUD in voiceTurnOutbox.ts (extracted so
+// the SQL is unit-testable under plain-node vitest; see that file + its test).
+// get() returns a better-sqlite3 Database whose prepared statements satisfy the
+// VoiceTurnOutboxDb shape structurally — cast to bridge the driver duck-typing,
+// same idiom the migration/wipe tests use for node:sqlite.
+function voiceTurnDb(): VoiceTurnOutboxDb {
+  return get() as unknown as VoiceTurnOutboxDb
+}
+
+export function insertVoiceTurn(entry: VoiceTurnOutboxInput): void {
+  insertVoiceTurnOn(voiceTurnDb(), entry, Date.now())
+}
+
+export function listPendingVoiceTurns(limit?: number): VoiceTurnOutboxEntry[] {
+  return listPendingVoiceTurnsOn(voiceTurnDb(), limit)
+}
+
+export function markVoiceTurnAcked(idempotencyKey: string): void {
+  markVoiceTurnAckedOn(voiceTurnDb(), idempotencyKey)
+}
+
+export function recordVoiceTurnFailure(idempotencyKey: string, error: string): void {
+  recordVoiceTurnFailureOn(voiceTurnDb(), idempotencyKey, error, Date.now())
 }
