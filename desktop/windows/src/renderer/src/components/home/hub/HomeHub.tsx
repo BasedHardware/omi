@@ -18,12 +18,17 @@ import type { HomeStageEvent, HomeStageMode } from './hubStage'
 // two responsive ones; everything else is fixed, because on Mac these are elements
 // on a stage that grows around them, not elements that stretch with it.
 const SIDE_INSET = 'min(96px, max(30px, 6vw))'
-// Mac's homeStageBottomPadding is a flat 26px, and the cluster docks right onto it.
-// Ported literally, the cluster read as stuck to the bottom edge on Windows — Mac's
-// window has no sidebar and a taller floor (680 vs our 600), so the same 26px does not
-// land the same way. This is a DELIBERATE deviation from Mac, on Chris's call: lift the
-// cluster off the floor, scaling with the window so it doesn't crowd a short one.
-const STAGE_BOTTOM_INSET = 'clamp(26px, 8vh, 80px)'
+// Mac's homeStageBottomPadding, ported as-is (DashboardPage.swift:302).
+//
+// This briefly became clamp(26px, 8vh, 80px) because the cluster read as stuck to the
+// floor — but that was treating the symptom. The vertical numbers already match Mac to
+// the pixel (Mac's window is 1200x800 default / 1200x680 min; ours is 1280x820 / 600 —
+// Mac actually has LESS height than we do). What differs is the SIDEBAR: it takes ~120px
+// of width and shifts the stage right, which changes how the composition reads even
+// though every vertical value is identical. The rail is being deleted in the next PR, so
+// deviating here would be compensating for a defect that is about to disappear. Held at
+// Mac's number; revisit against pixels once the sidebar is gone.
+const STAGE_BOTTOM_INSET = 26
 const STAGE_MAX = 1360
 const ASK_MAX_HUB = 980
 const ASK_MAX_PANEL = 1280
