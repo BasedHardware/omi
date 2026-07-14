@@ -8,6 +8,7 @@ import type {
   BarShowPayload,
   BarChatState,
   LocalConversation,
+  ConversationFolder,
   ConversationSyncPatch,
   CaptureChoice,
   ListenStartArgs,
@@ -50,6 +51,13 @@ const omi: OmiBridgeApi = {
     ipcRenderer.invoke('db:updateLocalConversationTitle', id, title),
   updateLocalConversationSync: (id: string, patch: ConversationSyncPatch) =>
     ipcRenderer.invoke('db:updateLocalConversationSync', id, patch),
+  // --- Track 4: conversation folders / starred ---
+  listConversationFolders: () => ipcRenderer.invoke('db:listConversationFolders'),
+  replaceConversationFolders: (folders: ConversationFolder[]) =>
+    ipcRenderer.invoke('db:replaceConversationFolders', folders),
+  upsertConversationFolder: (folder: ConversationFolder) =>
+    ipcRenderer.invoke('db:upsertConversationFolder', folder),
+  deleteConversationFolder: (id: string) => ipcRenderer.invoke('db:deleteConversationFolder', id),
   claimConversationForPosting: (id: string, resetAttempts?: boolean) =>
     ipcRenderer.invoke('db:claimConversationForPosting', id, resetAttempts),
   // --- Track 2: Voice & PTT depth (voice turn outbox) ---

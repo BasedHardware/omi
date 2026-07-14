@@ -500,6 +500,15 @@ export type OmiBridgeApi = {
    *  stale-snapshot second driver from re-POSTing. `resetAttempts` restarts the
    *  attempt counter (manual re-sync of a wedged row). */
   claimConversationForPosting: (id: string, resetAttempts?: boolean) => Promise<boolean>
+  // --- Track 4: conversation folders / starred (local cache + mirror) ---
+  /** Cached folders for instant paint (ordered), reconciled from /v1/folders. */
+  listConversationFolders: () => Promise<ConversationFolder[]>
+  /** Replace the whole folder cache from a backend fetch. */
+  replaceConversationFolders: (folders: ConversationFolder[]) => Promise<void>
+  /** Optimistic single-folder upsert (create/edit) before the reconcile lands. */
+  upsertConversationFolder: (folder: ConversationFolder) => Promise<void>
+  /** Drop a folder from the cache (optimistic delete). */
+  deleteConversationFolder: (id: string) => Promise<void>
   // --- Track 2: Voice & PTT depth (voice turn outbox) ---
   /** Enqueue (idempotent UPSERT on idempotencyKey) a voice turn for durable
    *  delivery. A re-enqueue for the same key updates the assistant text /

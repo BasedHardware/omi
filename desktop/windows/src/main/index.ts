@@ -17,6 +17,7 @@ import iconPath from '../../resources/icon.png?asset'
 import { listCaptureSources } from './ipc/capture'
 import { isAllowedExternalScheme } from './externalUrl'
 import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
+import type { ConversationFolder } from '../shared/types'
 import {
   registerOmiListenHandlers,
   startTestListenSession,
@@ -287,6 +288,10 @@ import {
   updateLocalConversationTitle,
   updateLocalConversationSync,
   claimConversationForPosting,
+  listConversationFolders,
+  replaceConversationFolders,
+  upsertConversationFolder,
+  deleteConversationFolder,
   insertVoiceTurn,
   listPendingVoiceTurns,
   markVoiceTurnAcked,
@@ -563,6 +568,17 @@ app.whenReady().then(async () => {
   )
   ipcMain.handle('db:updateLocalConversationSync', async (_e, id, patch) =>
     updateLocalConversationSync(id, patch)
+  )
+  // Track 4: conversation folders (local cache) + starred/folder mirror.
+  ipcMain.handle('db:listConversationFolders', async () => listConversationFolders())
+  ipcMain.handle('db:replaceConversationFolders', async (_e, folders: ConversationFolder[]) =>
+    replaceConversationFolders(folders)
+  )
+  ipcMain.handle('db:upsertConversationFolder', async (_e, folder: ConversationFolder) =>
+    upsertConversationFolder(folder)
+  )
+  ipcMain.handle('db:deleteConversationFolder', async (_e, id: string) =>
+    deleteConversationFolder(id)
   )
   ipcMain.handle(
     'db:claimConversationForPosting',
