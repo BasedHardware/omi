@@ -232,6 +232,9 @@ def _build_fakes() -> dict[str, ModuleType]:
     utils_calendar_linking.get_overlapping_calendar_event = MagicMock(return_value=None)
     utils_calendar_linking.write_conversation_link_to_calendar_event = MagicMock()
 
+    lifecycle_service = add("utils.conversations.lifecycle")
+    lifecycle_service.persist_processed_conversation = MagicMock(return_value=True)
+
     # utils.conversations.* and utils.memory.* leaves imported by process_conversation.
     subjects = add("utils.conversations.subjects")
     subjects.infer_subject_from_segments = lambda segments: (None, None)

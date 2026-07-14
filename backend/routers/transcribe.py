@@ -138,9 +138,11 @@ from utils.listen_session_bootstrap import finalize_listen_connect_context, load
 from utils.translation_coordinator import TranslationCoordinator
 from utils.transcribe_decisions import (  # async-blockers: no-import-scope; async-blockers: no-changed-range-scope
     ConversationLifecycleAction,
+    RecordingSessionReconnectAction,
     USER_SELF_PERSON_ID,
     decide_existing_conversation_action,
     decide_lifecycle_action,
+    decide_recording_session_reconnect_action,
     decide_multi_channel_mix,
     decide_multi_channel_stt_send,
     decide_stt_buffer_flush,
@@ -1037,7 +1039,11 @@ async def _stream_handler(
         )
         if existing_conversation:
             existing_status = existing_conversation.get('status')
-            if existing_status == ConversationStatus.in_progress:
+            reconnect_action = decide_recording_session_reconnect_action(
+                status=existing_status,
+                in_progress_status=ConversationStatus.in_progress,
+            )
+            if reconnect_action == RecordingSessionReconnectAction.resume_current:
                 session.current_conversation_id = new_conversation_id
                 redis_db.set_in_progress_conversation_id(uid, session.current_conversation_id)
                 _send_conversation_session(binding, recording_session_id)
@@ -1049,7 +1055,6 @@ async def _stream_handler(
                     session_id,
                 )
                 return
-            session.current_conversation_id = new_conversation_id
             _send_conversation_session(binding, recording_session_id, status=str(existing_status))
             if existing_status == ConversationStatus.completed.value:
                 on_conversation_processed(new_conversation_id)
@@ -1060,6 +1065,10 @@ async def _stream_handler(
                 uid,
                 session_id,
             )
+            # A terminal durable binding is useful to replay, but it is never a
+            # writable current conversation. Roll immediately rather than
+            # waiting for the five-second lifecycle task before accepting audio.
+            await _create_new_in_progress_conversation(rollover=True)
             return
         stub_conversation = Conversation(
             id=new_conversation_id,

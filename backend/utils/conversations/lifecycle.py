@@ -86,8 +86,12 @@ def create_processing_conversation(uid: str, conversation_data: dict[str, Any], 
     return True
 
 
-def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) -> None:
-    """Persist only a processing result; callers cannot use it to reopen a terminal row."""
+def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) -> bool:
+    """Persist a processing result and report whether its generation was still current.
+
+    ``False`` fences a stale or discarded processor.  Callers must stop before
+    emitting derived side effects such as webhooks or integration fanout.
+    """
     _require_status(
         conversation_data,
         ConversationStatus.processing,
@@ -100,7 +104,7 @@ def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) 
         if status == ConversationStatus.processing.value
         else {ConversationStatus.processing.value, ConversationStatus.merging.value}
     )
-    conversations_db._persist_processing_result_with_lifecycle(
+    return conversations_db._persist_processing_result_with_lifecycle(
         uid,
         conversation_data,
         expected_statuses=expected,

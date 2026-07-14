@@ -1,9 +1,11 @@
 from utils.transcribe_decisions import (
     ConversationLifecycleAction,
+    RecordingSessionReconnectAction,
     TARGET_SAMPLE_RATE,
     USER_SELF_PERSON_ID,
     decide_existing_conversation_action,
     decide_lifecycle_action,
+    decide_recording_session_reconnect_action,
     decide_multi_channel_mix,
     decide_multi_channel_stt_send,
     decide_stt_buffer_flush,
@@ -246,6 +248,18 @@ def test_recording_session_identity_retries_and_rollovers_are_distinct():
         )
         == 'rollover-server-id'
     )
+
+
+def test_terminal_recording_session_reconnect_rolls_before_accepting_audio():
+    assert (
+        decide_recording_session_reconnect_action(status='in_progress', in_progress_status='in_progress')
+        == RecordingSessionReconnectAction.resume_current
+    )
+    for terminal_status in ('processing', 'completed', 'failed', None):
+        assert (
+            decide_recording_session_reconnect_action(status=terminal_status, in_progress_status='in_progress')
+            == RecordingSessionReconnectAction.replay_terminal_and_rollover
+        )
 
 
 def test_delayed_finalizer_keeps_the_pre_rollover_recording_binding():

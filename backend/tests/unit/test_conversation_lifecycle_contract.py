@@ -166,7 +166,7 @@ def test_discard_fences_a_stale_processing_result_and_completion(lifecycle_store
         title='user-kept terminal state',
     )
 
-    lifecycle_service.persist_processed_conversation(
+    persisted = lifecycle_service.persist_processed_conversation(
         'uid',
         {
             'id': 'conversation',
@@ -177,6 +177,7 @@ def test_discard_fences_a_stale_processing_result_and_completion(lifecycle_store
         },
     )
 
+    assert persisted is False
     assert lifecycle_service.complete('uid', 'conversation') is False
     assert lifecycle_store.conversation('uid', 'conversation') == {
         'status': ConversationStatus.processing.value,

@@ -66,6 +66,21 @@ async def finalize_persisted_conversation(
             conversation = await run_blocking(
                 postprocess_executor, process_conversation, uid, resolved_language, conversation
             )
+        # The processor works from an in-memory snapshot. Re-read the durable
+        # row before fanout so a concurrent discard or newer terminal generation
+        # that fenced its final write cannot emit integrations from stale data.
+        durable_result = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
+        if (
+            not durable_result
+            or durable_result.get('discarded')
+            or durable_result.get('status') != ConversationStatus.completed.value
+        ):
+            logger.info(
+                'persisted conversation finalization fenced before fanout uid=%s conversation=%s',
+                uid,
+                conversation_id,
+            )
+            return
         fanout = await run_blocking(
             db_executor,
             lifecycle_service.claim_finalization_fanout,

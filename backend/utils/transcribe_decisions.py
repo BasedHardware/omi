@@ -30,6 +30,11 @@ class ConversationLifecycleAction(str, Enum):
     process_and_create_new = 'process_and_create_new'
 
 
+class RecordingSessionReconnectAction(str, Enum):
+    resume_current = 'resume_current'
+    replay_terminal_and_rollover = 'replay_terminal_and_rollover'
+
+
 @dataclass(frozen=True)
 class CodecFrameDecision:
     codec: str
@@ -198,6 +203,20 @@ def select_recording_session_id(
     if rollover:
         return generated_id
     return current_recording_session_id or client_conversation_id or generated_id
+
+
+def decide_recording_session_reconnect_action(
+    *, status: Any, in_progress_status: Any
+) -> RecordingSessionReconnectAction:
+    """Choose whether a reconnect may accept audio for an existing binding.
+
+    Only an in-progress conversation can be resumed. A terminal binding is
+    replayed to the client, then immediately rolled to a fresh generation so
+    bytes received before the next lifecycle tick cannot mutate terminal data.
+    """
+    if status == in_progress_status:
+        return RecordingSessionReconnectAction.resume_current
+    return RecordingSessionReconnectAction.replay_terminal_and_rollover
 
 
 def recording_session_id_for_lifecycle_event(

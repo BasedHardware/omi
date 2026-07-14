@@ -1168,7 +1168,16 @@ def process_conversation(
             logger.error(f"Error creating audio files: {e}")
 
     conversation.status = ConversationStatus.completed
-    lifecycle_service.persist_processed_conversation(uid, conversation.dict())
+    persisted = lifecycle_service.persist_processed_conversation(uid, conversation.dict())
+    if not persisted:
+        # A discard or a newer terminal lifecycle generation won the transaction.
+        # Do not let this stale in-memory result schedule any derived write or
+        # notification; the durable finalizer will also observe the terminal row
+        # before claiming integration fanout.
+        logger.info(
+            'processing result fenced before completion side effects uid=%s conversation=%s', uid, conversation.id
+        )
+        return conversation
 
     # Update folder conversation count after conversation is saved
     if assigned_folder_id:
