@@ -16,6 +16,7 @@ import { APP_BG_HEX, WCO_SYMBOL_HEX } from '../shared/chrome'
 import iconPath from '../../resources/icon.png?asset'
 import { listCaptureSources } from './ipc/capture'
 import { isAllowedExternalScheme } from './externalUrl'
+import { installContextMenu } from './contextMenu'
 import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
 import {
   registerOmiListenHandlers,
@@ -349,6 +350,11 @@ function createWindow(): BrowserWindow {
       backgroundThrottling: false
     }
   })
+
+  // Windows' standard right-click editing menu (native, so Narrator/UIA see a real
+  // menu). Electron ships no default context menu — without this, right-clicking
+  // anywhere in the app does nothing.
+  installContextMenu(mainWindow)
 
   // NOTE: the main window is intentionally NOT content-protected. We used to call
   // setContentProtection(true) here (Windows WDA_EXCLUDEFROMCAPTURE) so Rewind/chat
