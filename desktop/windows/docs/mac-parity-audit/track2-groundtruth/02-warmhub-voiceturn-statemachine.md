@@ -1,5 +1,26 @@
 # Ground truth: warm-hub / VoiceTurn event-sourced reducer (PR #9370 port target)
 
+> ## ⚠️ SUPERSEDED — do not build from this file
+>
+> **The authoritative A5 spec is [`02b-a5-port-plan.md`](./02b-a5-port-plan.md).** This
+> document is directionally sound (effects-as-data, FIFO drain, leases, warm-wait
+> buffering, deadline values, terminal-reason list, `terminate()` ordering, the barge-in
+> hub-handoff exception, the 256-entry timeline all verified correct) but it contains
+> **nine errors**, one of which silently breaks the port. It is kept, un-deleted, only as
+> background reading. Where this file and the Swift disagree, **the Swift wins**.
+>
+> | # | This doc says | Swift / Windows reality |
+> |---|---|---|
+> | 1 | `VoiceTurnEvent` has **25 cases** | **31 cases** (`VoiceTurnStateMachine.swift:241–336`) — the doc's own list already has 31; only the count is wrong |
+> | 2 | Fencing section never mentions the **nil-identity rule** | `if let expected = turn.sessionID, sessionID != expected { stale }` (`:585`, `:589`, `:607`, `:611`) — once a turn knows an ID, an event carrying **`nil` is ALSO STALE**. **The biggest trap:** the natural TS port inverts it. See `02b` §A.5 |
+> | 3 | `hubCommitAccepted` valid from `.finalizing` / deferred `.awaitingResponse` | …**and** requires `routeMatchesHub(turn.route)` (`:514`), which is true for `.hub(_)` **and `.hubWarmWait`** (`:783`) — a commit racing `hubReady` is legitimate |
+> | 4 | Omits two `VoiceTurn` fields | `providerFinished: Bool` (`:174`) and `deadlines: Set<VoiceTurnDeadline>` (`:175`) are stored on the turn and load-bearing — drop either and the turn never terminates, or terminates twice |
+> | 5 | Omits that a **terminal** turn still accepts one event | `:420–428`: `deadlineFired(.hintVisibility)` clears the hint (no resurrection); `finish`/`cancel` increment `duplicateTerminalCount` — **not** stale |
+> | 6 | Omits `toolStarted` from `.playing` | `:623–630`: it moves to `.awaitingTools` **even while playing**, keeping `activeLease`; `toolFinished` restores `.playing(lane)` |
+> | 7 | Windows needs new **system-wide PTT hotkey wiring** | **Already ships** — `main/bar/gesture.ts` (`SummonGesture`) is *more* defensive than Mac's. A5 is the turn model + hub route, **not** the gesture |
+> | 8 | `lib/ptt/*` stays untouched as a peer machine | It stays as the **cascade transport**, but subordinate — the reducer is authoritative (Mac derives `PTTState` via `legacyState(for: phase)`). Two peer machines is the exact bug class this port kills |
+> | 9 | Route case written `hub(sessionID:)` as if required | `case hub(sessionID: VoiceSessionID?)` (`:77`) — **optional**; the shipped call emits `.hub(sessionID: nil)` when the hub is already active |
+
 Source: Mac frozen tag v0.12.72, `desktop/macos/Desktop/Sources/FloatingControlBar/`.
 All line numbers below refer to that tag as checked out at
 `C:\Users\chris\projects\omi\.worktrees\mac-ref\desktop\macos\Desktop\Sources\FloatingControlBar\`.
