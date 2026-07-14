@@ -245,14 +245,6 @@ class CaptureController extends ChangeNotifier
 
   void updateExternalActions(CaptureExternalActions? actions) {
     externalActions = actions ?? const NoopCaptureExternalActions();
-
-    // Queue the startup pass after provider wiring. The coordinator retains
-    // this wake until SyncProvider has attached the production drain seams.
-    Future.delayed(
-      const Duration(seconds: 5),
-      () => RecordingTransferCoordinator.instance.wake(WakeTrigger.startup),
-    );
-
     notifyListeners();
   }
 
