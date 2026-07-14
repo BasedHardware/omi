@@ -127,6 +127,9 @@ struct OnboardingStepScaffold<Content: View>: View {
             .padding(.horizontal, OmiSpacing.page)
             .padding(.vertical, OmiSpacing.section)
           }
+          // Only scroll when content genuinely overflows — no elastic bounce
+          // on steps (e.g. the permission steps) whose content already fits.
+          .scrollBounceBehavior(.basedOnSize)
         }
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -151,6 +154,9 @@ struct OnboardingStepScaffold<Content: View>: View {
         .padding(.horizontal, OmiSpacing.page)
         .padding(.vertical, OmiSpacing.section)
       }
+      // Only scroll when content genuinely overflows — no elastic bounce on
+      // steps (e.g. the permission steps) whose content already fits.
+      .scrollBounceBehavior(.basedOnSize)
     }
     .background(OmiColors.backgroundPrimary)
   }
