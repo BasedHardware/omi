@@ -4,14 +4,15 @@ import { Check, Loader2, Pencil, Star, Trash2 } from 'lucide-react'
 import type { ConversationRow } from '../../lib/pageCache'
 import type { ConversationFolder } from '../../../../shared/types'
 import { isCloudBacked } from '../../lib/conversations/filtering'
+import { macPurple } from '../../lib/macPalette'
 import { MoveToFolderMenu } from './MoveToFolderMenu'
 
 // Selected-row tint (Track 4 ruling — purple ports as-is). Applied inline so it
 // beats the component-layer surface background AND the hover background, i.e. a
 // selected row stays unmistakably purple whether or not the pointer is on it.
 const SELECTED_TINT: React.CSSProperties = {
-  backgroundColor: 'rgba(139, 92, 246, 0.22)',
-  borderColor: 'rgba(139, 92, 246, 0.55)'
+  backgroundColor: macPurple('0.22'),
+  borderColor: macPurple('0.55')
 }
 
 // Placeholder previews minted upstream when a conversation has no text yet —

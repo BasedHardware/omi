@@ -2,6 +2,7 @@ import { Pencil, Plus, Star } from 'lucide-react'
 import type { ConversationFolder } from '../../../../shared/types'
 import type { FolderFilter } from '../../lib/conversations/filtering'
 import { DEFAULT_FOLDER_COLOR } from './folderColors'
+import { macPurple } from '../../lib/macPalette'
 
 // Horizontal folder strip: fixed "All" + "Starred" chips, one chip per folder,
 // then a "+" create button. Selected chip = textPrimary@0.12 fill + @0.3 stroke
@@ -24,7 +25,7 @@ function CountBadge({ n }: { n: number }): React.JSX.Element | null {
   return (
     <span
       className="ml-0.5 rounded-full px-1.5 py-px text-[10px] font-semibold tabular-nums text-white"
-      style={{ backgroundColor: 'rgba(139, 92, 246, 0.30)' }}
+      style={{ backgroundColor: macPurple('0.30') }}
     >
       {n}
     </span>
