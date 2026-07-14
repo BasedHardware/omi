@@ -1350,10 +1350,19 @@ export type RewindCaptureDirective = {
 // (OcrLine — per-line OCR box, persisted as rewind_frames.ocr_lines_json — is
 // already defined above with the OCR helper types.)
 
-/** One semantic-search vector per rewind frame (rewind_embeddings row). `vec` is
- *  the raw BLOB — a Uint8Array from better-sqlite3 (Buffer is a subclass). */
+/** Maps a rewind frame to the hash of its OCR content (rewind_embeddings row).
+ *  Many frames share one hash — consecutive screenshots of a static screen have
+ *  byte-identical text — and the vector is stored once per hash, not per frame. */
 export type RewindEmbeddingRow = {
   frameId: number
+  hash: string
+}
+
+/** The stored vector for one unique piece of content (rewind_embedding_vectors
+ *  row). `vec` is the raw BLOB — a Uint8Array from better-sqlite3 (Buffer is a
+ *  subclass) — holding L2-normalized Float32s. */
+export type RewindEmbeddingVectorRow = {
+  hash: string
   dim: number
   model: string
   vec: Uint8Array

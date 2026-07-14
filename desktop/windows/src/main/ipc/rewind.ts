@@ -36,7 +36,7 @@ async function vectorHits(query: string): Promise<VectorHit[]> {
   try {
     const vec = await embedRewindQuery(query)
     if (!vec) return []
-    const scored = searchRewindEmbeddings(vec, VECTOR_TOP_K)
+    const scored = await searchRewindEmbeddings(vec, VECTOR_TOP_K)
     const frames = rewindFramesByIds(scored.map((s) => s.frameId))
     const byId = new Map(frames.map((f) => [f.id, f]))
     return scored
@@ -56,14 +56,18 @@ export function registerRewindHandlers(): void {
     listRewindFrames(from, to)
   )
   ipcMain.handle('rewind:dayBounds', async () => rewindDayBounds())
-  // Hybrid search: keyword (FTS5/BM25) and semantic (Gemini vectors) run in
-  // parallel, then merge with FTS leading and vectors adding recall only —
-  // see rewind/vectorSearchMerge.ts for the contract.
+  // Hybrid search: keyword (FTS5/BM25) then semantic (Gemini vectors), merged with
+  // FTS leading and vectors adding recall only — see rewind/vectorSearchMerge.ts.
+  // The two legs run in sequence, not in parallel: better-sqlite3 is synchronous,
+  // so the FTS query occupies the thread outright and there is nothing for a
+  // concurrent leg to interleave with. (A Promise.all here would have LOOKED
+  // parallel while doing exactly this.) The vector leg is the slow one and it does
+  // yield — see searchRewindEmbeddings.
   ipcMain.handle('rewind:search', async (_e, query: string) => {
     const q = query.trim()
     if (!q) return []
-    const [fts, vector] = await Promise.all([Promise.resolve(searchRewindFrames(q)), vectorHits(q)])
-    return groupFrames(mergeRewindSearchResults(fts, vector), q)
+    const fts = searchRewindFrames(q)
+    return groupFrames(mergeRewindSearchResults(fts, await vectorHits(q)), q)
   })
   // Relay of the renderer's Firebase session — the embedding indexer and the
   // query embedder are inert without it (the token only exists in the renderer).

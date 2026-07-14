@@ -18,6 +18,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { _electron as electron } from 'playwright'
 import { createServer } from 'node:http'
+import { createHash } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -36,6 +37,9 @@ const DOC_A = 'gradient descent optimizer learning rate schedule'
 const DOC_B = 'Q3 quarterly revenue projections for the board deck'
 // Frame C: unrelated to both, and semantically orthogonal — must not appear.
 const DOC_C = 'chocolate chip cookie recipe with brown butter'
+// Frame E: OLD (older than the retention window we set). Its vector is derived
+// from the user's screen, so retention must delete it along with the frame.
+const DOC_E = 'expired private banking password reset page'
 const QUERY = 'quarterly revenue projections'
 
 /** A 3072-dim one-hot unit vector — already normalized, like the real API's output. */
@@ -52,6 +56,7 @@ function vectorForText(text) {
   if (text === DOC_A) return basisVector(0)
   if (text === DOC_B) return basisVector(1)
   if (text === DOC_C) return basisVector(2)
+  if (text === DOC_E) return basisVector(3)
   if (text === QUERY) return basisVector(0) // == DOC_A
   return basisVector(7) // anything else: orthogonal to all of the above
 }
@@ -130,17 +135,43 @@ function seedDb(dbPath) {
   insert.run(1, now - 30 * 60_000, 'Notes', 'ml notes', DOC_A, 'C:\\f\\1.jpg')
   insert.run(2, now - 20 * 60_000, 'Slides', 'board deck', DOC_B, 'C:\\f\\2.jpg')
   insert.run(3, now - 10 * 60_000, 'Browser', 'recipes', DOC_C, 'C:\\f\\3.jpg')
+  // Frame 4 is a re-screenshot of frame 2's window: byte-identical OCR text. It
+  // must cost ONE API item and ONE stored vector between them, while both frames
+  // stay independently findable.
+  insert.run(4, now - 5 * 60_000, 'Slides', 'board deck', DOC_B, 'C:\\f\\4.jpg')
+  // Frame 5 is THREE DAYS old — past the 1-day retention we set below.
+  insert.run(5, now - 3 * 24 * 60 * 60_000, 'Bank', 'reset', DOC_E, 'C:\\f\\5.jpg')
   db.close()
 }
 
-/** Read the vectors the app persisted (after it has exited). */
+/** Read what the app persisted (after it has exited): one mapping row per frame,
+ *  joined to the single vector stored for that frame's content. */
 function storedEmbeddings(dbPath) {
   const db = new DatabaseSync(dbPath)
   const rows = db
-    .prepare('SELECT frame_id, dim, model, vec FROM rewind_embeddings ORDER BY frame_id')
+    .prepare(
+      `SELECT e.frame_id AS frame_id, e.hash AS hash, v.dim AS dim, v.model AS model, v.vec AS vec
+         FROM rewind_embeddings e
+         JOIN rewind_embedding_vectors v ON v.hash = e.hash
+        ORDER BY e.frame_id`
+    )
     .all()
+  const vectorCount = db.prepare('SELECT COUNT(*) AS n FROM rewind_embedding_vectors').get().n
   db.close()
-  return rows
+  return { rows, vectorCount }
+}
+
+/** Every vector hash still in the store (after the app has exited). */
+function orphanHashes(dbPath) {
+  const db = new DatabaseSync(dbPath)
+  const rows = db.prepare('SELECT hash FROM rewind_embedding_vectors').all()
+  db.close()
+  return rows.map((r) => r.hash)
+}
+
+/** The app's content key: first 16 bytes of SHA-256, hex (see embedVector.ts). */
+function sha256_16(text) {
+  return createHash('sha256').update(text, 'utf8').digest('hex').slice(0, 32)
 }
 
 const until = async (label, fn, timeoutMs = 30_000) => {
@@ -201,17 +232,25 @@ test('embeds seeded frames via the proxy, then merges vector recall into FTS sea
   assert.equal(batchCall.url, `/v1/proxy/gemini/models/${MODEL}:batchEmbedContents`)
   assert.equal(batchCall.auth, 'Bearer e2e-token', 'sends the relayed Firebase token')
   const sent = batchCall.payload.requests
-  assert.equal(sent.length, 3, 'all three seeded frames in one batch')
   for (const r of sent) {
     assert.equal(r.model, `models/${MODEL}`)
     assert.equal(r.taskType, 'RETRIEVAL_DOCUMENT', 'stored passages, not a query')
   }
-  assert.deepEqual(sent.map((r) => r.content.parts[0].text).sort(), [DOC_A, DOC_B, DOC_C].sort())
+  // FIVE frames were seeded but only FOUR distinct texts exist — frames 2 and 4
+  // carry byte-identical OCR. The duplicate is deduped away BEFORE the request,
+  // which is the ~20x API saving in miniature.
+  assert.deepEqual(
+    sent.map((r) => r.content.parts[0].text).sort(),
+    [DOC_A, DOC_B, DOC_C, DOC_E].sort(),
+    'identical OCR text is sent to the API exactly once'
+  )
 
   // --- Hybrid search: FTS leads, the semantic hit is added. ---
+  // Frames 2 and 4 both contain the query's words, so they are the KEYWORD hits.
+  // Frame 1 shares no words with the query at all.
   const groups = await until('search to return the semantic hit', async () => {
     const g = await win.evaluate((q) => window.omi.rewindSearch(q), QUERY)
-    return g.length >= 2 ? g : null
+    return g.some((x) => x.representative.id === 1) ? g : null
   })
 
   const queryCall = stub.calls.find((c) => c.url.endsWith(':embedContent'))
@@ -219,27 +258,56 @@ test('embeds seeded frames via the proxy, then merges vector recall into FTS sea
   assert.equal(queryCall.payload.content.parts[0].text, QUERY)
 
   const frameIds = groups.map((g) => g.representative.id)
-  // Frame 2 is the keyword hit and MUST lead. Frame 1 shares no words with the
-  // query at all — it is here purely because its vector matched, which is the
-  // whole point of the feature.
-  assert.equal(frameIds[0], 2, 'FTS result leads')
-  assert.ok(frameIds.includes(1), 'vector recall added the frame FTS could not find')
+  const ftsIds = [2, 4]
+  // Every keyword hit leads; the semantic-only frame is appended AFTER them and
+  // never displaces one — that is the whole merge contract.
+  assert.deepEqual(frameIds.slice(0, 2).sort(), ftsIds, 'FTS results lead')
+  assert.equal(frameIds[frameIds.length - 1], 1, 'vector recall is appended, not promoted')
+  // Frame 1 is here PURELY because its vector matched — the point of the feature.
   assert.ok(!frameIds.includes(3), 'the orthogonal frame stays out (below the 0.5 floor)')
 
   // --- Vector failure is non-fatal: keyword results must still render. ---
   stub.setFailEmbedContent(true)
   const degraded = await win.evaluate((q) => window.omi.rewindSearch(q), QUERY)
-  assert.equal(degraded.length, 1, 'degrades to keyword-only instead of erroring')
-  assert.equal(degraded[0].representative.id, 2)
+  assert.deepEqual(
+    degraded.map((g) => g.representative.id).sort(),
+    ftsIds,
+    'degrades to keyword-only instead of erroring'
+  )
+
+  // --- PRIVACY: retention must delete the vectors, not just the frames. ---
+  // Drives the REAL retention path (rewind:setSettings -> rewind:pruneNow ->
+  // deleteRewindFramesOlderThan) through the app, so this covers db.ts itself and
+  // not a replica of its SQL. A vector is derived from the user's screen: if it
+  // outlives its frame, "delete my history" silently did not.
+  const pruned = await win.evaluate(async () => {
+    const s = await window.omi.rewindGetSettings()
+    await window.omi.rewindSetSettings({ ...s, retentionDays: 1 })
+    return window.omi.rewindPruneNow()
+  })
+  assert.equal(pruned, 1, 'the 3-day-old frame was pruned')
 
   await app.close()
 
-  // --- Vectors were really persisted: one normalized row per frame. ---
-  const rows = storedEmbeddings(dbPath)
-  assert.equal(rows.length, 3, 'a vector row per seeded frame')
+  // --- Vectors were really persisted, deduped, and pruned. ---
+  const { rows, vectorCount } = storedEmbeddings(dbPath)
+  assert.equal(rows.length, 4, 'every surviving frame is mapped to its content')
   for (const row of rows) {
     assert.equal(row.dim, EMBED_DIM)
     assert.equal(row.model, MODEL)
     assert.equal(row.vec.byteLength, EMBED_DIM * 4, '12288-byte Float32 BLOB')
   }
+  // Frames 2 and 4 carry byte-identical OCR text, so they share ONE stored vector:
+  // 4 surviving frames, 3 unique contents. A 12KB vector per frame would instead
+  // amplify the store by the duplicate ratio.
+  assert.equal(vectorCount, 3, 'duplicate content stored exactly one vector')
+  const dupHashes = rows.filter((r) => r.frame_id === 2 || r.frame_id === 4).map((r) => r.hash)
+  assert.equal(dupHashes[0], dupHashes[1], 'the duplicate frames point at the same vector')
+
+  // The pruned frame's mapping AND its vector are gone — no orphan left behind.
+  assert.ok(!rows.some((r) => r.frame_id === 5), 'the pruned frame has no embedding row')
+  assert.ok(
+    !orphanHashes(dbPath).includes(sha256_16(DOC_E)),
+    'the pruned screen content left NO vector behind'
+  )
 })

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { contentHash, dot, l2Normalize, topKBySimilarity, EMBED_DIM } from './embedVector'
+import {
+  contentHash,
+  dot,
+  l2Normalize,
+  scanTopKBySimilarity,
+  EMBED_DIM,
+  type VectorRow
+} from './embedVector'
 import { bufferToVector, vectorToBuffer } from '../ipc/taskEmbeddingVector'
 
 describe('l2Normalize', () => {
@@ -51,37 +58,88 @@ describe('blob round-trip', () => {
   })
 })
 
-describe('topKBySimilarity', () => {
-  const entry = (frameId: number, vec: number[]): { frameId: number; vec: Float32Array } => ({
-    frameId,
+describe('scanTopKBySimilarity', () => {
+  const row = (hash: string, vec: number[]): VectorRow => ({
+    hash,
     vec: l2Normalize(Float32Array.from(vec))
   })
   const query = l2Normalize(Float32Array.from([1, 0]))
 
-  it('returns the most similar entries, strongest first', () => {
-    const top = topKBySimilarity([entry(1, [0, 1]), entry(2, [1, 0]), entry(3, [1, 1])], query, 2)
-    expect(top.map((t) => t.frameId)).toEqual([2, 3]) // exact match, then 45 degrees
+  /** Serve `rows` as pages, recording every yield between them. */
+  const pager = (rows: VectorRow[], yields: string[]) => ({
+    fetchChunk: (offset: number, limit: number) => rows.slice(offset, offset + limit),
+    yieldToEventLoop: async () => {
+      yields.push('yield')
+    }
+  })
+
+  const scan = async (rows: VectorRow[], limit: number, chunk = 2, yields: string[] = []) => {
+    const p = pager(rows, yields)
+    return scanTopKBySimilarity(p.fetchChunk, query, limit, p.yieldToEventLoop, chunk)
+  }
+
+  it('returns the most similar entries, strongest first', async () => {
+    const top = await scan([row('a', [0, 1]), row('b', [1, 0]), row('c', [1, 1])], 2)
+    expect(top.map((t) => t.hash)).toEqual(['b', 'c']) // exact match, then 45 degrees
     expect(top[0].similarity).toBeCloseTo(1, 6)
     expect(top[1].similarity).toBeCloseTo(Math.SQRT1_2, 6)
   })
 
-  it('keeps the best K when there are more candidates than slots', () => {
-    const entries = Array.from({ length: 50 }, (_, i) => entry(i, [i, 100 - i]))
-    const top = topKBySimilarity(entries, query, 3)
-    expect(top.map((t) => t.frameId)).toEqual([49, 48, 47]) // most x-aligned
+  it('keeps the best K when there are more candidates than slots', async () => {
+    const rows = Array.from({ length: 50 }, (_, i) => row(`h${i}`, [i, 100 - i]))
+    const top = await scan(rows, 3)
+    expect(top.map((t) => t.hash)).toEqual(['h49', 'h48', 'h47']) // most x-aligned
   })
 
-  it('handles fewer candidates than K, and an empty scan', () => {
-    expect(topKBySimilarity([entry(1, [1, 0])], query, 10)).toHaveLength(1)
-    expect(topKBySimilarity([], query, 5)).toEqual([])
-    expect(topKBySimilarity([entry(1, [1, 0])], query, 0)).toEqual([])
+  // C2: better-sqlite3 is synchronous, so a single scan over every vector would
+  // freeze the main process. The scan MUST page and yield between pages — this is
+  // the assertion that the freeze is structurally impossible, not merely unlikely.
+  it('reads in bounded pages and yields the event loop between them', async () => {
+    const yields: string[] = []
+    const rows = Array.from({ length: 10 }, (_, i) => row(`h${i}`, [i, 1]))
+    const pages: number[] = []
+    const top = await scanTopKBySimilarity(
+      (offset, limit) => {
+        pages.push(limit)
+        return rows.slice(offset, offset + limit)
+      },
+      query,
+      3,
+      async () => {
+        yields.push('yield')
+      },
+      2
+    )
+    expect(pages.every((p) => p === 2)).toBe(true) // never asks for the whole table
+    expect(yields.length).toBeGreaterThanOrEqual(4) // yielded between pages
+    expect(top).toHaveLength(3) // and still ranked everything correctly
+    expect(top[0].hash).toBe('h9')
+  })
+
+  it('stops at a short page instead of scanning forever', async () => {
+    const yields: string[] = []
+    // 4 rows with a page size of 2: the second page is full, the third is empty
+    // and ends the scan. A bug here would loop on an infinite tail of empty pages.
+    const top = await scan(
+      [row('a', [1, 0]), row('b', [0, 1]), row('c', [1, 1]), row('d', [2, 0])],
+      4,
+      2,
+      yields
+    )
+    expect(top).toHaveLength(4)
+  })
+
+  it('handles fewer candidates than K, and an empty store', async () => {
+    expect(await scan([row('a', [1, 0])], 10)).toHaveLength(1)
+    expect(await scan([], 5)).toEqual([])
+    expect(await scan([row('a', [1, 0])], 0)).toEqual([])
   })
 
   // A vector written by a different model must not be ranked against this query.
-  it('scores a wrong-dimension vector 0 instead of matching on a prefix', () => {
-    const top = topKBySimilarity([entry(1, [1, 0, 0]), entry(2, [1, 0])], query, 2)
-    expect(top[0].frameId).toBe(2)
-    expect(top[1]).toEqual({ frameId: 1, similarity: 0 })
+  it('scores a wrong-dimension vector 0 instead of matching on a prefix', async () => {
+    const top = await scan([row('a', [1, 0, 0]), row('b', [1, 0])], 2)
+    expect(top[0].hash).toBe('b')
+    expect(top[1]).toEqual({ hash: 'a', similarity: 0 })
   })
 })
 

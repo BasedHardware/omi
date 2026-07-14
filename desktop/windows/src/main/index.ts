@@ -301,6 +301,7 @@ import {
   listPendingVoiceTurns,
   markVoiceTurnAcked,
   recordVoiceTurnFailure,
+  pruneOrphanedRewindEmbeddings,
   wipeUserData
 } from './ipc/db'
 
@@ -811,6 +812,15 @@ app.whenReady().then(async () => {
     // and the launch backfill only move once the renderer relays a Firebase
     // session (see rewind/embeddingService.ts).
     startRewindEmbedding()
+    // Embeddings are derived from screen content, so any that outlived their frame
+    // are data the user asked us to forget. Retention deletes them inline now; this
+    // sweeps up anything an earlier build left behind. No-op on a healthy database.
+    try {
+      const dropped = pruneOrphanedRewindEmbeddings()
+      if (dropped > 0) console.log(`[rewind-embed] dropped ${dropped} orphaned embedding(s)`)
+    } catch (e) {
+      console.warn(`[rewind-embed] orphan sweep failed: ${(e as Error).message}`)
+    }
     startRewindRetention()
     // Delete JPEGs orphaned by a crash between the file write and the DB insert
     // (Windows-specific — frames are per-file). Startup pass + every 6h.

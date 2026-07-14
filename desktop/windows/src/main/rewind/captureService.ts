@@ -6,7 +6,8 @@ import { averageHash } from './frameHash'
 import { shouldCaptureFrame } from './captureDecision'
 import { rewindFramePath } from './paths'
 import { helperProcess } from '../ocr/helperProcess'
-import { insertRewindFrame, setRewindFrameOcr } from '../ipc/db'
+import { insertRewindFrame } from '../ipc/db'
+import { persistFrameOcr } from './ocrPersist'
 import { setCurrentScreen } from './currentScreen'
 import { getPersistedRewindSettings, persistRewindSettings } from './rewindSettings'
 import { startCaptureDirective, setBaseCaptureInterval } from './captureDirective'
@@ -63,9 +64,13 @@ async function refreshCurrentScreen(frameId: number, jpeg: Buffer): Promise<void
     const res = await helperProcess.ocr(jpeg)
     if (res.ok) {
       setCurrentScreen(res.fullText)
-      // Persist per-line boxes (Track 4) alongside the flattened text so the
-      // search highlight overlay has bounding boxes without re-OCR.
-      setRewindFrameOcr(frameId, res.fullText, JSON.stringify(res.lines))
+      // Persist per-line boxes (Track 4) alongside the flattened text so the search
+      // highlight overlay has bounding boxes without re-OCR, and queue the text for
+      // semantic indexing. This is the HOT path: it marks the frame indexed=1, so
+      // the OCR backlog sweep never revisits it — if this did not enqueue, almost
+      // nothing would ever be embedded. persistFrameOcr fuses the two so they
+      // cannot drift apart again.
+      persistFrameOcr(frameId, res.fullText, res.lines)
     }
   } catch {
     /* best-effort: keep the last good cached value */

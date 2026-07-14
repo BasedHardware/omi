@@ -20,48 +20,64 @@ export const EMBED_FLUSH_INTERVAL_MS = 60_000
 /** How many recently-embedded content hashes to remember across batches. */
 export const RECENT_HASH_CACHE_SIZE = 5000
 
+/**
+ * Shortest OCR text worth embedding. A frame whose entire screen text is "OK" or
+ * "1" carries no retrievable meaning, but still costs an API item and a 12KB
+ * vector. NOTE: this floor is OURS — macOS has no such threshold. It only ever
+ * suppresses content that could not have been usefully retrieved anyway, and the
+ * frame stays keyword-searchable regardless.
+ */
+export const MIN_EMBED_TEXT_LEN = 10
+
+/** True when a frame's OCR text carries enough content to be worth a vector. */
+export function isEmbeddableText(text: string): boolean {
+  return text.trim().length >= MIN_EMBED_TEXT_LEN
+}
+
 /** One frame waiting to be embedded. */
 export type PendingEmbed = { frameId: number; text: string; hash: string; queuedAt: number }
 
 /**
- * Bounded LRU of content-hash -> the frame whose row already holds that vector.
- * Storing the frame id (not the vector) is deliberate: 5000 x 12KB of vectors
- * would be ~60MB resident, whereas a cache hit can copy the vector straight from
- * the twin's already-persisted row for the cost of one indexed SELECT.
+ * Bounded LRU set of content hashes whose vector is already stored. Holding the
+ * hashes (not the vectors) is what keeps this cheap: 5000 x 12KB of vectors would
+ * be ~60MB resident, whereas a hit just tells the caller to write a mapping row.
  */
 export class RecentHashCache {
-  private readonly map = new Map<string, number>()
+  private readonly hashes = new Map<string, true>()
 
   constructor(private readonly capacity: number = RECENT_HASH_CACHE_SIZE) {}
 
-  /** The frame id previously embedded for this content, or undefined. Refreshes
-   *  recency, so hot content is not evicted by a burst of one-off screens. */
-  get(hash: string): number | undefined {
-    const frameId = this.map.get(hash)
-    if (frameId === undefined) return undefined
-    this.map.delete(hash)
-    this.map.set(hash, frameId)
-    return frameId
+  /** True when this content was embedded recently. Refreshes recency, so hot
+   *  content is not evicted by a burst of one-off screens. */
+  has(hash: string): boolean {
+    if (!this.hashes.has(hash)) return false
+    this.hashes.delete(hash)
+    this.hashes.set(hash, true)
+    return true
   }
 
-  set(hash: string, frameId: number): void {
-    this.map.delete(hash)
-    this.map.set(hash, frameId)
+  add(hash: string): void {
+    this.hashes.delete(hash)
+    this.hashes.set(hash, true)
     // Map preserves insertion order, so the first key is the least recently used.
-    while (this.map.size > this.capacity) {
-      const oldest = this.map.keys().next()
+    while (this.hashes.size > this.capacity) {
+      const oldest = this.hashes.keys().next()
       if (oldest.done) break
-      this.map.delete(oldest.value)
+      this.hashes.delete(oldest.value)
     }
   }
 
-  /** Drop a hash whose cached frame turned out to be unusable (row missing). */
+  /** Drop a hash whose vector turned out to be gone (retention pruned it). */
   delete(hash: string): void {
-    this.map.delete(hash)
+    this.hashes.delete(hash)
+  }
+
+  clear(): void {
+    this.hashes.clear()
   }
 
   get size(): number {
-    return this.map.size
+    return this.hashes.size
   }
 }
 
@@ -105,22 +121,22 @@ export class EmbedQueue {
 /** Unique content that must be sent to the embedding API, with every frame that shares it. */
 export type EmbedGroup = { hash: string; text: string; frameIds: number[] }
 
-/** Content whose vector already exists on `sourceFrameId` — copy, don't re-embed.
- *  Carries `text` so the caller can fall back to a real embed if that row turns
- *  out to be gone (retention can prune the twin between cache write and flush). */
-export type CopyGroup = EmbedGroup & { sourceFrameId: number }
+/** Content whose vector is already stored — link to it, don't re-embed. Carries
+ *  `text` so the caller can fall back to a real embed if that vector turns out to
+ *  be gone (retention can prune it between the cache write and the flush). */
+export type CopyGroup = EmbedGroup
 
 export type EmbedBatchPlan = { toEmbed: EmbedGroup[]; toCopy: CopyGroup[] }
 
 /**
  * Collapse a batch into the minimum set of API calls: group frames by content
  * hash (dedup within the batch), then split off the groups whose content was
- * embedded recently (dedup against the cache) so their vector can be copied from
- * the earlier frame's row.
+ * embedded recently (dedup against the cache) so they can be linked to the vector
+ * already stored for that content.
  *
- * Pure: the cache is only read here. Hashes are recorded (in `noteEmbedded`)
- * once a vector is actually persisted, so a failed batch does not poison the
- * cache with a hash that has no row behind it.
+ * Pure: the cache is only read here. A hash is recorded only once its vector is
+ * actually persisted (the caller stores before caching), so a cached hash always
+ * has a row behind it and a failed batch never poisons the cache.
  */
 export function planEmbedBatch(items: PendingEmbed[], cache: RecentHashCache): EmbedBatchPlan {
   const byHash = new Map<string, EmbedGroup>()
@@ -133,14 +149,8 @@ export function planEmbedBatch(items: PendingEmbed[], cache: RecentHashCache): E
   const toEmbed: EmbedGroup[] = []
   const toCopy: CopyGroup[] = []
   for (const group of byHash.values()) {
-    const sourceFrameId = cache.get(group.hash)
-    // A cached source that is itself in this batch is not yet persisted — treat
-    // it as fresh work rather than copying from a row that may not exist.
-    if (sourceFrameId !== undefined && !group.frameIds.includes(sourceFrameId)) {
-      toCopy.push({ ...group, sourceFrameId })
-    } else {
-      toEmbed.push(group)
-    }
+    if (cache.has(group.hash)) toCopy.push(group)
+    else toEmbed.push(group)
   }
   return { toEmbed, toCopy }
 }

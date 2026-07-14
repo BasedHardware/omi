@@ -69,7 +69,8 @@ async function post(
       if (res.ok) return (await res.json()) as Record<string, unknown>
       if (res.status === 429 || res.status === 503) {
         lastError = `status ${res.status}`
-        await sleep(400 * (attempt + 1))
+        // No point sleeping after the last attempt — we are about to throw.
+        if (attempt < MAX_RETRIES) await sleep(400 * (attempt + 1))
         continue
       }
       throw new Error(`embedding proxy request failed (status ${res.status})`)

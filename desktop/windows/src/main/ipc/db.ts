@@ -21,7 +21,7 @@ import {
   deleteConversationFolderOn,
   type ConversationFoldersDb
 } from './conversationFolders'
-import { topKBySimilarity, type ScoredFrame } from '../rewind/embedVector'
+import { scanTopKBySimilarity } from '../rewind/embedVector'
 import type {
   AiUserProfileInput,
   AiUserProfileRecord,
@@ -233,9 +233,25 @@ function get(): Database.Database {
       VALUES (new.id, new.ocr_text, new.window_title, new.app);
     END;
 
-    -- --- Track 4: Rewind embeddings (semantic-search vectors, one per frame) ---
+    -- --- Track 4: Rewind embeddings (semantic search) ---
+    -- Two tables, because consecutive screenshots of a mostly-static screen carry
+    -- BYTE-IDENTICAL OCR text: rewind_embeddings maps each frame to its content
+    -- hash (~8 bytes), and rewind_embedding_vectors stores ONE 12KB vector per
+    -- unique hash. Storing a vector per frame instead would amplify the store by
+    -- the duplicate ratio (~20x, the same ratio that makes the API dedup worth
+    -- doing) while every duplicate frame stays equally findable either way.
+    --
+    -- The dim/model/vec/created_at columns below are LEGACY: the table shipped in
+    -- PR0 with that shape and nothing ever wrote to it. New databases get the
+    -- 2-column form; a database created by PR0 keeps the unused nullable columns
+    -- and gains a hash column via ensureColumn (see ensureSchema).
     CREATE TABLE IF NOT EXISTS rewind_embeddings (
       frame_id INTEGER PRIMARY KEY,
+      hash TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_rewind_embeddings_hash ON rewind_embeddings(hash);
+    CREATE TABLE IF NOT EXISTS rewind_embedding_vectors (
+      hash TEXT PRIMARY KEY,
       dim INTEGER,
       model TEXT,
       vec BLOB,
@@ -379,6 +395,10 @@ function get(): Database.Database {
   // Conversation starring + folder assignment (local mirror of the cloud fields).
   ensureColumn(db, 'local_conversation', 'starred', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn(db, 'local_conversation', 'folder_id', 'TEXT')
+  // Content hash for a database created by PR0's vector-per-frame shape. Nothing
+  // ever wrote to that table, so there is no data to migrate — only the column to
+  // add; its legacy dim/model/vec/created_at columns stay behind, unused.
+  ensureColumn(db, 'rewind_embeddings', 'hash', 'TEXT')
   // Versioned migrations (PRAGMA user_version) — everything beyond the additive
   // baseline above. Ordered + exactly-once; see dbMigrations.ts.
   runMigrations(db)
@@ -1123,76 +1143,177 @@ export function deleteRewindFramesOlderThan(cutoffTs: number): RewindFrame[] {
   const pruneOlderThan = d.transaction((cutoff: number) => {
     const doomed = select.all(cutoff) as RewindFrame[]
     del.run(cutoff)
+    // Embeddings are DERIVED FROM THE USER'S SCREEN CONTENT, so retention has to
+    // reach them too — there is no FK/CASCADE here (foreign_keys is off), and a
+    // vector that outlives its frame is exactly the data the user asked us to
+    // forget. Same transaction as the frame delete: retention is all-or-nothing.
+    dropOrphanedEmbeddingsOn(d)
     return doomed // caller deletes the image files
   })
   return pruneOlderThan(cutoffTs)
 }
 
-// --- Track 4: Rewind semantic search (rewind_embeddings) ---
-// One L2-normalized Float32 vector per frame. Because the vectors are stored
-// normalized, a dot product IS the cosine similarity — see rewind/embedVector.ts.
+// --- Track 4: Rewind semantic search ---
+// Frame -> content hash -> ONE L2-normalized Float32 vector per unique hash.
+// Because the vectors are stored normalized, a dot product IS the cosine
+// similarity — see rewind/embedVector.ts.
 
-/** Frames that have OCR text but no embedding yet, newest first (the frames a
- *  user is most likely to search for). Drives both the live indexer's catch-up
- *  and the launch backfill; the LEFT JOIN is what makes the backfill inherently
- *  resumable — a persisted vector is never re-fetched. */
-export function rewindFramesNeedingEmbedding(limit: number): RewindFrame[] {
-  return timed(
-    'rewindFramesNeedingEmbedding',
-    () =>
-      get()
-        .prepare(
-          `SELECT ${REWIND_COLUMNS_QUALIFIED} FROM rewind_frames
-             LEFT JOIN rewind_embeddings ON rewind_embeddings.frame_id = rewind_frames.id
-            WHERE rewind_frames.indexed = 1
-              AND rewind_frames.ocr_text IS NOT NULL AND rewind_frames.ocr_text != ''
-              AND rewind_embeddings.frame_id IS NULL
-            ORDER BY rewind_frames.ts DESC
-            LIMIT ?`
-        )
-        .all(limit) as RewindFrame[]
-  )
-}
-
-/** Store (or replace) a frame's vector. */
-export function upsertRewindEmbedding(frameId: number, vec: Float32Array, model: string): void {
-  get()
-    .prepare(
-      `INSERT INTO rewind_embeddings (frame_id, dim, model, vec, created_at)
-       VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(frame_id) DO UPDATE SET
-         dim = excluded.dim, model = excluded.model, vec = excluded.vec, created_at = excluded.created_at`
-    )
-    .run(frameId, vec.length, model, vectorToBuffer(vec), Date.now())
-}
-
-/** A frame's stored vector, or null when it has none (or the row is unusable). */
-export function getRewindEmbedding(frameId: number): Float32Array | null {
-  const row = get().prepare('SELECT vec FROM rewind_embeddings WHERE frame_id = ?').get(frameId) as
-    | { vec: Uint8Array }
-    | undefined
-  if (!row?.vec?.byteLength) return null
-  return bufferToVector(row.vec)
+/** Delete embedding rows whose frame is gone, then any vector no frame references.
+ *  Ordered: the mapping is cleared first so the vector GC sees the truth. */
+function dropOrphanedEmbeddingsOn(d: Database.Database): void {
+  d.prepare(
+    'DELETE FROM rewind_embeddings WHERE frame_id NOT IN (SELECT id FROM rewind_frames)'
+  ).run()
+  d.prepare(
+    `DELETE FROM rewind_embedding_vectors
+      WHERE hash NOT IN (SELECT hash FROM rewind_embeddings WHERE hash IS NOT NULL)`
+  ).run()
 }
 
 /**
- * Brute-force k-NN over the stored vectors: the top `limit` frames by cosine
- * similarity to `query`, strongest first. Rows are streamed (not materialized)
- * straight into the ranking — see `topKBySimilarity`. Vectors of a different
- * dimension (a model change) score 0 and drop out naturally.
+ * One-time sweep for embeddings left behind by a frame delete that did not clean
+ * them up — i.e. anything an earlier build of this feature already accumulated,
+ * plus the (rare) frames dropped outside `deleteRewindFramesOlderThan`. Runs at
+ * startup; a no-op on a healthy database.
  */
-export function searchRewindEmbeddings(query: Float32Array, limit: number): ScoredFrame[] {
-  return timed('searchRewindEmbeddings', () => {
-    const rows = get()
-      .prepare('SELECT frame_id, vec FROM rewind_embeddings')
-      .iterate() as IterableIterator<{ frame_id: number; vec: Uint8Array }>
-    function* vectors(): Generator<{ frameId: number; vec: Float32Array }> {
-      for (const row of rows) {
-        if (row.vec?.byteLength) yield { frameId: row.frame_id, vec: bufferToVector(row.vec) }
-      }
-    }
-    return topKBySimilarity(vectors(), query, limit)
+export function pruneOrphanedRewindEmbeddings(): number {
+  const d = get()
+  const before = (d.prepare('SELECT COUNT(*) AS n FROM rewind_embeddings').get() as { n: number }).n
+  d.transaction(() => dropOrphanedEmbeddingsOn(d))()
+  const after = (d.prepare('SELECT COUNT(*) AS n FROM rewind_embeddings').get() as { n: number }).n
+  return before - after
+}
+
+/** Frames that have OCR text but no embedding yet, newest first (the frames a
+ *  user is most likely to search for). `excludeIds` drops frames the caller has
+ *  already given up on this launch — without it, a batch that failed would be
+ *  handed back forever and the sweep could never advance past it. */
+export function rewindFramesNeedingEmbedding(
+  limit: number,
+  excludeIds: number[] = []
+): RewindFrame[] {
+  return timed('rewindFramesNeedingEmbedding', () => {
+    const notIn = excludeIds.length
+      ? `AND rewind_frames.id NOT IN (${excludeIds.map(() => '?').join(',')})`
+      : ''
+    return get()
+      .prepare(
+        `SELECT ${REWIND_COLUMNS_QUALIFIED} FROM rewind_frames
+           LEFT JOIN rewind_embeddings ON rewind_embeddings.frame_id = rewind_frames.id
+          WHERE rewind_frames.indexed = 1
+            AND rewind_frames.ocr_text IS NOT NULL AND rewind_frames.ocr_text != ''
+            AND rewind_embeddings.frame_id IS NULL
+            ${notIn}
+          ORDER BY rewind_frames.ts DESC
+          LIMIT ?`
+      )
+      .all(...excludeIds, limit) as RewindFrame[]
   })
+}
+
+/**
+ * Point a frame at its content's vector, storing that vector only if this is the
+ * first frame to carry the content. Duplicate frames therefore cost one small
+ * mapping row instead of another 12KB copy, while staying just as findable.
+ */
+export function upsertRewindEmbedding(
+  frameId: number,
+  hash: string,
+  vec: Float32Array,
+  model: string
+): void {
+  const d = get()
+  d.transaction(() => {
+    d.prepare(
+      `INSERT INTO rewind_embedding_vectors (hash, dim, model, vec, created_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(hash) DO UPDATE SET
+         dim = excluded.dim, model = excluded.model, vec = excluded.vec, created_at = excluded.created_at`
+    ).run(hash, vec.length, model, vectorToBuffer(vec), Date.now())
+    d.prepare(
+      `INSERT INTO rewind_embeddings (frame_id, hash) VALUES (?, ?)
+       ON CONFLICT(frame_id) DO UPDATE SET hash = excluded.hash`
+    ).run(frameId, hash)
+  })()
+}
+
+/** Map a frame to the content's vector WITHOUT re-storing the vector — the
+ *  cache-hit path, when an identical screen was embedded earlier. Returns false
+ *  when that vector is gone (retention pruned it), so the caller re-embeds. */
+export function linkRewindEmbedding(frameId: number, hash: string): boolean {
+  const d = get()
+  const exists = d
+    .prepare('SELECT 1 AS ok FROM rewind_embedding_vectors WHERE hash = ?')
+    .get(hash) as { ok: number } | undefined
+  if (!exists) return false
+  d.prepare(
+    `INSERT INTO rewind_embeddings (frame_id, hash) VALUES (?, ?)
+     ON CONFLICT(frame_id) DO UPDATE SET hash = excluded.hash`
+  ).run(frameId, hash)
+  return true
+}
+
+/** True when a vector is already stored for this content. */
+export function rewindEmbeddingVectorExists(hash: string): boolean {
+  return (
+    get().prepare('SELECT 1 AS ok FROM rewind_embedding_vectors WHERE hash = ?').get(hash) !==
+    undefined
+  )
+}
+
+/**
+ * Rank stored content against `query` and return the matching frames, strongest
+ * first — WITHOUT blocking the main process.
+ *
+ * better-sqlite3 is synchronous, so scanning every vector in one statement would
+ * hold the main thread (and thus IPC, capture ingestion and the UI) for the whole
+ * scan. The scan is therefore paged and yields between pages; see
+ * `scanTopKBySimilarity`. The candidate set is bounded by retention: only content
+ * some live frame still references is scanned, and retention deletes the rest.
+ */
+export async function searchRewindEmbeddings(
+  query: Float32Array,
+  limit: number
+): Promise<{ frameId: number; similarity: number }[]> {
+  const d = get()
+  // EXISTS against idx_rewind_embeddings_hash: skips vectors no live frame points
+  // at, so an orphan that slipped through can't cost us a similarity computation.
+  const page = d.prepare(
+    `SELECT v.hash AS hash, v.vec AS vec FROM rewind_embedding_vectors v
+      WHERE EXISTS (SELECT 1 FROM rewind_embeddings e WHERE e.hash = v.hash)
+      ORDER BY v.hash
+      LIMIT ? OFFSET ?`
+  )
+
+  const scored = await scanTopKBySimilarity(
+    (offset, size) =>
+      (page.all(size, offset) as { hash: string; vec: Uint8Array }[])
+        .filter((r) => r.vec?.byteLength)
+        .map((r) => ({ hash: r.hash, vec: bufferToVector(r.vec) })),
+    query,
+    limit,
+    () => new Promise<void>((resolve) => setImmediate(resolve))
+  )
+  if (scored.length === 0) return []
+
+  // Expand each winning hash back to the frames that carry that content. One
+  // hash can name many frames (that is the whole point of the dedup), so the
+  // result is capped at `limit` frames, strongest first then newest first.
+  const placeholders = scored.map(() => '?').join(',')
+  const rows = d
+    .prepare(
+      `SELECT e.frame_id AS frameId, e.hash AS hash, f.ts AS ts FROM rewind_embeddings e
+         JOIN rewind_frames f ON f.id = e.frame_id
+        WHERE e.hash IN (${placeholders})`
+    )
+    .all(...scored.map((s) => s.hash)) as { frameId: number; hash: string; ts: number }[]
+
+  const similarityByHash = new Map(scored.map((s) => [s.hash, s.similarity]))
+  return rows
+    .map((r) => ({ frameId: r.frameId, similarity: similarityByHash.get(r.hash) ?? 0, ts: r.ts }))
+    .sort((a, b) => b.similarity - a.similarity || b.ts - a.ts)
+    .slice(0, limit)
+    .map(({ frameId, similarity }) => ({ frameId, similarity }))
 }
 
 /** Hydrate frames by id, in the given order (ids with no row are skipped). */

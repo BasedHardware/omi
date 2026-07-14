@@ -33,7 +33,9 @@ export function mergeRewindSearchResults(fts: RewindFrame[], vector: VectorHit[]
 
   const additive = vector
     .filter((hit) => hit.similarity > VECTOR_SIM_THRESHOLD)
-    .filter((hit) => hit.frame.id == null || !seen.has(hit.frame.id))
+    // An id-less frame can't be checked against the FTS set, so it can't be
+    // proven to be new — keep it out rather than risk a duplicate row in the UI.
+    .filter((hit) => hit.frame.id != null && !seen.has(hit.frame.id))
     .sort((a, b) => b.similarity - a.similarity || b.frame.ts - a.frame.ts)
     .map((hit) => hit.frame)
 

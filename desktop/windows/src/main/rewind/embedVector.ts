@@ -50,33 +50,76 @@ export function contentHash(text: string): string {
   return createHash('sha256').update(text, 'utf8').digest('hex').slice(0, 32)
 }
 
-/** One candidate in a similarity scan. */
-export type ScoredFrame = { frameId: number; similarity: number }
+/** One scored candidate: a content hash and its similarity to the query. */
+export type ScoredHash = { hash: string; similarity: number }
+
+/** One row of the vector store: a unique content hash and its vector. */
+export type VectorRow = { hash: string; vec: Float32Array }
+
+/** How many vector rows to read per chunk before yielding the event loop. */
+export const VECTOR_SCAN_CHUNK = 200
 
 /**
- * The `limit` most similar entries, strongest first.
+ * Running top-K accumulator, kept sorted weakest-first so `entries[0]` is always
+ * the one a new candidate must beat.
  *
- * Takes an *iterable* and keeps only the running top-K rather than materializing
- * every candidate: a vector is 12KB, so loading a few thousand frames at once
- * would cost tens of MB on every search. The caller streams rows straight out of
- * SQLite into this.
+ * It is an incremental object rather than a fold over an iterable because the
+ * scan that feeds it is chunked and *awaits* between chunks (see
+ * `scanTopKBySimilarity`) — the state has to survive those suspension points.
+ * Only K entries are ever retained: a vector is 12KB, so materializing the whole
+ * store to rank it would cost tens of MB per search.
  */
-export function topKBySimilarity(
-  entries: Iterable<{ frameId: number; vec: Float32Array }>,
-  query: Float32Array,
-  limit: number
-): ScoredFrame[] {
-  if (limit <= 0) return []
-  const top: ScoredFrame[] = [] // kept sorted weakest-first, so top[0] is the one to beat
-  for (const entry of entries) {
-    const similarity = dot(query, entry.vec)
-    if (top.length < limit) {
-      top.push({ frameId: entry.frameId, similarity })
-      top.sort((a, b) => a.similarity - b.similarity)
-    } else if (similarity > top[0].similarity) {
-      top[0] = { frameId: entry.frameId, similarity }
-      top.sort((a, b) => a.similarity - b.similarity)
+export class TopKSimilar {
+  private readonly entries: ScoredHash[] = []
+
+  constructor(
+    private readonly query: Float32Array,
+    private readonly limit: number
+  ) {}
+
+  push(row: VectorRow): void {
+    if (this.limit <= 0) return
+    const similarity = dot(this.query, row.vec)
+    if (this.entries.length < this.limit) {
+      this.entries.push({ hash: row.hash, similarity })
+      this.entries.sort((a, b) => a.similarity - b.similarity)
+    } else if (similarity > this.entries[0].similarity) {
+      this.entries[0] = { hash: row.hash, similarity }
+      this.entries.sort((a, b) => a.similarity - b.similarity)
     }
   }
-  return top.reverse()
+
+  /** The retained candidates, strongest first. */
+  results(): ScoredHash[] {
+    return [...this.entries].reverse()
+  }
+}
+
+/**
+ * Rank the whole vector store against `query` WITHOUT blocking the main process.
+ *
+ * better-sqlite3 is synchronous, so a single `SELECT` over every vector would
+ * hold the main thread for the entire scan — freezing IPC, capture ingestion and
+ * the UI for as long as it takes. Instead the caller hands us a `fetchChunk` that
+ * reads a bounded page of rows, and we `await yieldToEventLoop()` between pages.
+ * Each individual page is short; the app stays responsive no matter how large the
+ * store grows, which makes the freeze structurally impossible rather than merely
+ * unlikely.
+ */
+export async function scanTopKBySimilarity(
+  fetchChunk: (offset: number, limit: number) => VectorRow[],
+  query: Float32Array,
+  limit: number,
+  yieldToEventLoop: () => Promise<void>,
+  chunkSize: number = VECTOR_SCAN_CHUNK
+): Promise<ScoredHash[]> {
+  const top = new TopKSimilar(query, limit)
+  if (limit <= 0) return []
+  for (let offset = 0; ; offset += chunkSize) {
+    const rows = fetchChunk(offset, chunkSize)
+    for (const row of rows) top.push(row)
+    if (rows.length < chunkSize) break // short page == end of the store
+    await yieldToEventLoop()
+  }
+  return top.results()
 }

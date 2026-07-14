@@ -4,6 +4,7 @@ import {
   EMBED_FLUSH_INTERVAL_MS,
   EmbedQueue,
   RecentHashCache,
+  isEmbeddableText,
   planEmbedBatch,
   type PendingEmbed
 } from './embedQueue'
@@ -74,23 +75,40 @@ describe('EmbedQueue flush trigger', () => {
 describe('RecentHashCache', () => {
   it('evicts the least recently used entry past capacity', () => {
     const cache = new RecentHashCache(2)
-    cache.set('a', 1)
-    cache.set('b', 2)
-    cache.set('c', 3)
+    cache.add('a')
+    cache.add('b')
+    cache.add('c')
     expect(cache.size).toBe(2)
-    expect(cache.get('a')).toBeUndefined() // evicted
-    expect(cache.get('b')).toBe(2)
-    expect(cache.get('c')).toBe(3)
+    expect(cache.has('a')).toBe(false) // evicted
+    expect(cache.has('b')).toBe(true)
+    expect(cache.has('c')).toBe(true)
   })
 
   it('a read refreshes recency, so hot content survives a burst', () => {
     const cache = new RecentHashCache(2)
-    cache.set('a', 1)
-    cache.set('b', 2)
-    cache.get('a') // 'a' is now the most recently used, so 'b' is next out
-    cache.set('c', 3)
-    expect(cache.get('a')).toBe(1)
-    expect(cache.get('b')).toBeUndefined()
+    cache.add('a')
+    cache.add('b')
+    cache.has('a') // 'a' is now the most recently used, so 'b' is next out
+    cache.add('c')
+    expect(cache.has('a')).toBe(true)
+    expect(cache.has('b')).toBe(false)
+  })
+
+  it('forgets a hash whose vector was pruned', () => {
+    const cache = new RecentHashCache()
+    cache.add('a')
+    cache.delete('a')
+    expect(cache.has('a')).toBe(false)
+  })
+})
+
+describe('isEmbeddableText', () => {
+  // Our addition, not Mac's: a screen whose entire text is "OK" costs an API item
+  // and a 12KB vector while carrying nothing anyone could retrieve.
+  it('rejects trivially short text and accepts real content', () => {
+    expect(isEmbeddableText('OK')).toBe(false)
+    expect(isEmbeddableText('   ')).toBe(false)
+    expect(isEmbeddableText('quarterly revenue projections')).toBe(true)
   })
 })
 
@@ -105,32 +123,33 @@ describe('planEmbedBatch', () => {
     expect(toCopy).toEqual([])
     expect(toEmbed).toHaveLength(2)
     const shared = toEmbed.find((g) => g.text === 'same screen')
-    // One call, but BOTH frames get a row — dedup saves the call, not the row.
+    // One call, but BOTH frames stay findable — dedup saves the call, not the frame.
     expect(shared?.frameIds).toEqual([1, 2])
   })
 
-  it('copies rather than re-embeds content seen in an earlier batch', () => {
+  it('links rather than re-embeds content seen in an earlier batch', () => {
     const cache = new RecentHashCache()
-    cache.set(contentHash('seen before'), 42)
+    cache.add(contentHash('seen before'))
     const { toEmbed, toCopy } = planEmbedBatch(
       [item(7, 'seen before'), item(8, 'brand new')],
       cache
     )
     expect(toEmbed.map((g) => g.text)).toEqual(['brand new'])
     expect(toCopy).toHaveLength(1)
-    expect(toCopy[0].sourceFrameId).toBe(42)
     expect(toCopy[0].frameIds).toEqual([7])
-    expect(toCopy[0].text).toBe('seen before') // carried, so a missing row can re-embed
+    expect(toCopy[0].text).toBe('seen before') // carried, so a pruned vector can re-embed
   })
 
-  // A cache entry pointing at a frame that is itself still in this batch has no
-  // persisted row to copy from yet.
-  it('embeds instead of copying when the cached source is in the same batch', () => {
+  // Regression: an earlier version skipped the link when the cached hash had been
+  // first seen on a frame in this same batch, turning a free link into a PAID
+  // second API call for the same content. A cached hash always has a stored
+  // vector (the caller stores before caching), so there is nothing to guard.
+  it('links every frame carrying already-embedded content, never re-paying', () => {
     const cache = new RecentHashCache()
-    cache.set(contentHash('text'), 5)
+    cache.add(contentHash('text'))
     const { toEmbed, toCopy } = planEmbedBatch([item(5, 'text'), item(6, 'text')], cache)
-    expect(toCopy).toEqual([])
-    expect(toEmbed).toHaveLength(1)
-    expect(toEmbed[0].frameIds).toEqual([5, 6])
+    expect(toEmbed).toEqual([])
+    expect(toCopy).toHaveLength(1)
+    expect(toCopy[0].frameIds).toEqual([5, 6])
   })
 })
