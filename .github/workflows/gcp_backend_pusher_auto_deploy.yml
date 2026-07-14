@@ -62,6 +62,12 @@ jobs:
           location: ${{ env.REGION }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
+      - name: Preflight pusher ConfigMap and Secret references
+        run: |
+          python3 -m pip install -q pyyaml
+          python3 backend/scripts/verify_pusher_config_references.py \
+            --environment ${{ vars.ENV }} --namespace ${{ vars.ENV }}-omi-backend
+
       - name: Deploy Pusher to GKE cluster using Helm
         run: |
           helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml --set-string "image.tag=${GITHUB_SHA::7}"
