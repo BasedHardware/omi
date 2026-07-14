@@ -76,6 +76,9 @@ describe('AppChrome — PageChromeBar', () => {
   })
 
   it('shows the Home pill on Settings (macOS gives Settings the chrome bar too)', () => {
+    // Settings ALSO keeps its own rail "Back" control. They are not duplicates:
+    // macOS ships both — the pill goes Home, Back goes to the page you came FROM
+    // (SettingsSidebar.swift:478-499 + DesktopHomeView.swift:855-862).
     renderAt('/settings')
     expect(homePill()).not.toBeNull()
   })
