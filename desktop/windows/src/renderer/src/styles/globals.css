@@ -132,7 +132,7 @@
     --home-panel: #0c0c0d;
     --home-tile: #141416;
     --home-tile-hover: #1d1a24; /* intentionally leans violet (R/G/B not equal) */
-    --home-ink: #f0ebe3;        /* warm off-white primary text */
+    --home-ink: #f0ebe3; /* warm off-white primary text */
     --home-secondary: #c7c3b9;
     --home-muted: #7d786e;
     --home-faint: #5c5954;
@@ -392,7 +392,13 @@
 
   .focus-ring:focus-visible {
     border-color: rgba(255, 255, 255, 0.25);
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+    /* Offset double-ring: a bg-primary spacer then a bright hairline, so the
+       indicator reads on ANY fill (white primary button, accent toggle track,
+       raised pill) and clears the ≥3:1 focus-contrast bar even on borderless
+       controls. Kept to box-shadow only (no layout/paint of `outline`). */
+    box-shadow:
+      0 0 0 2px var(--bg-primary),
+      0 0 0 4px rgba(255, 255, 255, 0.55);
   }
 
   .skeleton {

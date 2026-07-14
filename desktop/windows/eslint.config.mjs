@@ -50,7 +50,7 @@ export default defineConfig(
   {
     // Diagnostic scripts and test files don't benefit from explicit return-type
     // annotations; the strictness is noise there.
-    files: ['scripts/**/*.{ts,js,mjs,cjs}', '**/*.test.{ts,tsx,mjs}'],
+    files: ['scripts/**/*.{ts,js,mjs,cjs}', 'tests/**/*.{ts,js,mjs,cjs}', '**/*.test.{ts,tsx,mjs}'],
     rules: {
       '@typescript-eslint/explicit-function-return-type': 'off'
     }
