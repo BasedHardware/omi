@@ -183,35 +183,33 @@ def validate_lock(name: str, text: str, contract: LockContract) -> list[str]:
     return errors
 
 
-def auto_deploy_acceptance_is_eligible(deploy_result: str) -> bool:
-    """Model the integrated acceptance job's `needs: deploy` success guard."""
-
-    return deploy_result == "success"
-
-
 def validate_auto_deploy_acceptance(text: str) -> list[str]:
-    """Keep acceptance inside the source deploy workflow's mutation lock."""
+    """Keep exact candidate acceptance in the locked deploy job before promotion."""
 
-    block = job_block(text, "verify")
+    block = job_block(text, "deploy")
     if block is None:
-        return ["gcp_backend_auto_dev.yml: missing integrated verify job"]
+        return ["gcp_backend_auto_dev.yml: missing deploy job"]
     required_markers = (
-        "needs: deploy",
-        "if: needs.deploy.result == 'success'",
+        "Capture exact no-traffic candidate URLs",
         "backend/scripts/verify_dev_backend_deployment.py",
+        "backend/scripts/run_dev_candidate_acceptance.py",
+        "--candidate",
         '--commit-sha "${{ github.sha }}"',
         '--deploy-run-id "${{ github.run_id }}"',
         '--deploy-run-attempt "${{ github.run_attempt }}"',
+        "Shift Cloud Run traffic to validated revisions",
     )
     errors = [
-        f"gcp_backend_auto_dev.yml: integrated verify job missing {marker!r}"
+        f"gcp_backend_auto_dev.yml: candidate acceptance missing {marker!r}"
         for marker in required_markers
         if not any(marker in line for line in block)
     ]
-    if any("concurrency:" in line for line in block):
-        errors.append(
-            "gcp_backend_auto_dev.yml: integrated verify must inherit the workflow mutation lock"
-        )
+    smoke_index = next((index for index, line in enumerate(block) if "run_dev_candidate_acceptance.py" in line), -1)
+    promotion_index = next((index for index, line in enumerate(block) if "Shift Cloud Run traffic" in line), -1)
+    if smoke_index >= promotion_index:
+        errors.append("gcp_backend_auto_dev.yml: candidate acceptance must run before traffic promotion")
+    if job_block(text, "verify") is not None:
+        errors.append("gcp_backend_auto_dev.yml: candidate acceptance must not run in a post-promotion verify job")
     return errors
 
 
@@ -464,29 +462,23 @@ jobs:
     ):
         raise PolicyError("cancel-in-progress: true satisfied the deploy contract")
 
-    integrated_acceptance = """name: fixture
+    in_deploy_acceptance = """name: fixture
 jobs:
   deploy:
-    runs-on: ubuntu-latest
-  verify:
-    needs: deploy
-    if: needs.deploy.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - run: >-
           python3 backend/scripts/verify_dev_backend_deployment.py
+          --candidate
           --commit-sha "${{ github.sha }}"
           --deploy-run-id "${{ github.run_id }}"
           --deploy-run-attempt "${{ github.run_attempt }}"
+      - name: Capture exact no-traffic candidate URLs
+      - run: python3 backend/scripts/run_dev_candidate_acceptance.py
+      - name: Shift Cloud Run traffic to validated revisions
 """
-    if validate_auto_deploy_acceptance(integrated_acceptance):
-        raise PolicyError("valid integrated acceptance job was rejected")
-    if auto_deploy_acceptance_is_eligible("cancelled"):
-        raise PolicyError("cancelled deployment made integrated acceptance eligible")
-    if not auto_deploy_acceptance_is_eligible("success"):
-        raise PolicyError(
-            "successful deployment did not make integrated acceptance eligible"
-        )
+    if validate_auto_deploy_acceptance(in_deploy_acceptance):
+        raise PolicyError("valid in-deploy candidate acceptance was rejected")
 
     pusher_deploy = """name: fixture
 jobs:

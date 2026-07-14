@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -138,6 +138,18 @@ jobs:
         self.assertIn("exception FAKE_RUNTIME_CONFIG is missing reason", errors)
         self.assertIn("exception FAKE_RUNTIME_CONFIG is missing expires", errors)
         self.assertIn("exception FAKE_RUNTIME_CONFIG is missing allowed_sources", errors)
+
+    def test_current_tree_paths_use_git_posix_separators(self) -> None:
+        windows_path = PureWindowsPath(r"C:\repo\.github\workflows\deploy.yml")
+        windows_root = PureWindowsPath(r"C:\repo")
+        posix_path = PurePosixPath("/repo/.github/workflows/deploy.yml")
+        posix_root = PurePosixPath("/repo")
+
+        self.assertEqual(CHECKER.repository_relative_path(windows_path, windows_root), ".github/workflows/deploy.yml")
+        self.assertEqual(
+            CHECKER.repository_relative_path(windows_path, windows_root),
+            CHECKER.repository_relative_path(posix_path, posix_root),
+        )
 
 
 if __name__ == "__main__":
