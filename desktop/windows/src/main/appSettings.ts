@@ -40,6 +40,27 @@ export type AppSettings = {
    *  dossier would cost the user with no benefit and no off-switch. The PR that
    *  adds the consumer flips this default on. */
   aiProfileEnabled: boolean
+  /** Track 3 (focus halo): whether the Focus assistant may draw its glowing ring
+   *  around the active window (red when it judges the user distracted, green when
+   *  they refocus). Default ON — it only ever appears in response to a Focus
+   *  verdict, which is itself gated, and it is click-through, so it costs nothing
+   *  when Focus is idle. Mirrors Mac's `assistantsGlowOverlayEnabled`. */
+  glowOverlayEnabled: boolean
+  /** Track 3 (proactive framework): master switch for the whole screen-analysis
+   *  loop. Default ON, mirroring Mac's `screenAnalysisEnabled`. It is not a
+   *  per-frame gate — when off, the coordinator's tick timer does not run at all,
+   *  so no frame is ever read. */
+  screenAnalysisEnabled: boolean
+  /** Track 3: master switch for proactive notifications, mirroring Mac's
+   *  `notifications_enabled`. Default ON. Separate from `notificationFrequency`
+   *  because a functional notification may bypass this gate
+   *  (`respectFrequency: false`) while never bypassing snooze. */
+  notificationsEnabled: boolean
+  /** Track 3: how often a proactive assistant may interrupt, 0–5 →
+   *  [off, 60m, 30m, 10m, 3m, no throttle]. Default 0 = Off: assistants that
+   *  reach the throttle stay silent until the user opts in, which is Mac's
+   *  post-migration default (`NotificationService.defaultFrequencyLevel`). */
+  notificationFrequency: number
 }
 
 const MEETING_MODES: MeetingMode[] = ['off', 'ask', 'auto']
@@ -68,6 +89,16 @@ function sanitizeMeeting(raw: Partial<MeetingSettings> | null | undefined): Meet
   return { mode, endGraceMinutes: grace, perApp, firstRunToastShown: r.firstRunToastShown === true }
 }
 
+// Anything that is not a valid level reads as 0 = Off — NOT as the nearest level.
+// Clamping (Mac's behavior) would map a corrupt file or a backend settings-sync
+// sending `notification_frequency: 10` onto level 5, which is "no throttle": a
+// user whose default was Off would start getting unthrottled proactive toasts.
+// Junk must always fail quiet, never loud.
+function sanitizeFrequency(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isInteger(raw) || raw < 0 || raw > 5) return 0
+  return raw
+}
+
 // Coerce a partial/untrusted object into fully-valid settings. Passing null/
 // undefined yields the defaults, so defaults live in exactly one place.
 export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined): AppSettings {
@@ -93,7 +124,11 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
       typeof r.lastShownChangelogVersion === 'string' ? r.lastShownChangelogVersion : null,
     // Opt-IN (=== true), unlike the other flags' opt-out (!== false) — see the
     // AppSettings field comment.
-    aiProfileEnabled: r.aiProfileEnabled === true
+    aiProfileEnabled: r.aiProfileEnabled === true,
+    glowOverlayEnabled: r.glowOverlayEnabled !== false,
+    screenAnalysisEnabled: r.screenAnalysisEnabled !== false,
+    notificationsEnabled: r.notificationsEnabled !== false,
+    notificationFrequency: sanitizeFrequency(r.notificationFrequency)
   }
 }
 
@@ -121,6 +156,19 @@ export function getAppSettings(): AppSettings {
   return cache
 }
 
+// Subscribers notified after every write. This exists so a feature whose master
+// toggle lives here can re-arm itself when the toggle flips (the proactive
+// coordinator's loop, which otherwise could only ever be turned OFF at runtime —
+// turning it back on would need an app restart). Listeners must not throw.
+type SettingsListener = (settings: AppSettings) => void
+const listeners = new Set<SettingsListener>()
+
+/** Subscribe to settings writes. Returns an unsubscribe function. */
+export function onAppSettingsChanged(listener: SettingsListener): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
+
 // Merge a patch over the current settings, update the cache, and persist. Returns
 // the written value.
 export function setAppSettings(patch: Partial<AppSettings>): AppSettings {
@@ -131,10 +179,19 @@ export function setAppSettings(patch: Partial<AppSettings>): AppSettings {
   } catch (e) {
     console.warn('[app-settings] failed to persist:', e)
   }
+  // A listener blowing up must not lose the caller its write.
+  for (const l of listeners) {
+    try {
+      l(next)
+    } catch (e) {
+      console.warn('[app-settings] listener failed:', e)
+    }
+  }
   return next
 }
 
 /** Test-only: drop the in-memory cache so the next read comes from disk. */
 export function _resetForTests(): void {
   cache = null
+  listeners.clear()
 }

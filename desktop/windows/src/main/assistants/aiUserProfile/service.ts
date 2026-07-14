@@ -6,10 +6,11 @@
 // TOKEN MODEL (Windows-specific): unlike macOS, the Firebase auth token lives in
 // the RENDERER, not the main process. So this service can't mint its own token —
 // the renderer supplies a session ({apiBase, desktopApiBase, token}) via IPC
-// (same pattern as memories:bulkDelete / memoryExport:notion). We cache the last
-// session so the daily background timer can reuse it; a missing/expired session
-// makes background generation a soft no-op that defers to the next
-// renderer-driven trigger. See docs note in index.ts wiring.
+// (same pattern as memories:bulkDelete / memoryExport:notion). The session (plus
+// its staleness epoch and abort signal) is now held by the SHARED
+// `core/session.ts` — every main-side assistant reads the same one. A
+// missing/expired session makes background generation a soft no-op that defers
+// to the next renderer-driven trigger. See docs note in index.ts wiring.
 import { net } from 'electron'
 import {
   deleteAiUserProfile,
@@ -24,6 +25,13 @@ import { getAppSettings } from '../../appSettings'
 import type { AiUserProfileRecord } from '../../../shared/types'
 import { shouldGenerate, type ChatMessage } from './synthesis'
 import {
+  getAbortSignal,
+  getBackendSession,
+  getSessionEpoch,
+  setBackendSession,
+  type BackendSession
+} from '../core/session'
+import {
   AuthExpiredError,
   HttpError,
   describeError,
@@ -32,15 +40,9 @@ import {
   type SourceFetchers
 } from './orchestrate'
 
-/** Credentials the renderer hands the main process to reach the backend. */
-export type AiProfileSession = {
-  /** Python backend base (VITE_OMI_API_BASE) — data sources + ai-profile sync. */
-  apiBase: string
-  /** Rust desktop backend base (VITE_OMI_DESKTOP_API_BASE) — chat/completions. */
-  desktopApiBase: string
-  /** Fresh Firebase ID token. */
-  token: string
-}
+/** Credentials the renderer hands the main process to reach the backend.
+ *  Now just the shared session — the alias keeps the IPC layer's import stable. */
+export type AiProfileSession = BackendSession
 
 // ModelQoS.Claude.synthesis on desktop — the cheap synthesis tier Windows
 // already uses for memory-log/calendar/gmail import (src/renderer/.../memoryExtract.ts).
@@ -62,59 +64,29 @@ const LLM_TIMEOUT_MS = 60_000
 // ceiling the 6h timer alone used to give.
 const MIN_ATTEMPT_INTERVAL_MS = 6 * 60 * 60 * 1000
 
-let cachedSession: AiProfileSession | null = null
 let isGenerating = false
 let timer: ReturnType<typeof setInterval> | null = null
-
-// Monotonic id for the current session. Bumped on EVERY configureAiProfileSession
-// call (including null/sign-out). A generation captures it at entry and discards
-// its result if it has moved — see OrchestratorDeps.isStale. A same-user token
-// refresh also bumps it, so a refresh landing inside a 10–90s generation discards
-// that run (it retries on the next due check). That is the deliberate trade: main
-// receives only {bases, token} and cannot tell "same user, new token" from "new
-// user", so it fails safe toward never writing a departed session's data.
-let sessionEpoch = 0
-// Aborts the in-flight generation's HTTP/LLM work on sign-out, so it dies
-// promptly instead of running to completion against a signed-out session.
-let abortController: AbortController | null = null
 // Start time of the last generation ATTEMPT (any outcome). null = never tried.
 let lastAttemptAt: number | null = null
 
-/** Set/refresh (or clear, on null) the cached backend session. Called by the
- *  IPC layer whenever the renderer provides fresh credentials.
+/** Relay a session from the renderer. Called by the IPC layer whenever fresh
+ *  credentials arrive (sign-in, hourly id-token refresh, sign-out → null).
  *
- *  A NON-null session also kicks a `runIfDue()` — this closes the startup race:
- *  `maybeGenerateOnStartup` runs at app-ready, finds no session yet (the token
- *  lives in the renderer, which signs in later) and defers, after which nothing
- *  would re-check for up to 6h. Re-checking the moment credentials arrive means
- *  a >24h-old profile regenerates right after sign-in instead of hours later.
+ *  Beyond storing it (the shared `core/session` owns the cache, the staleness
+ *  epoch, and the abort signal), a NON-null session kicks a `runIfDue()` — this
+ *  closes the startup race: `maybeGenerateOnStartup` runs at app-ready, finds no
+ *  session yet (the token lives in the renderer, which signs in later) and
+ *  defers, after which nothing would re-check for up to 6h. Re-checking the
+ *  moment credentials arrive means a >24h-old profile regenerates right after
+ *  sign-in instead of hours later.
  *
- *  This is NOT a "generate on every push": the renderer relays a session on
- *  every Firebase id-token refresh (~hourly), but `runIfDue` gates on
+ *  This is NOT a "generate on every push": `runIfDue` gates on
  *  `shouldGenerate(latest.generatedAt, now)`, so the cadence stays ≤1/day. It is
  *  fire-and-forget by construction (runIfDue kicks generation without awaiting),
- *  so the setSession IPC returns immediately rather than blocking the renderer
- *  on a multi-second generation. */
-/** Cache a session and invalidate anything in flight for the previous one.
- *  Deliberately does NOT kick a due-check — generateNow(session) reuses this and
- *  must not re-enter itself through runIfDue. */
-function setSession(session: AiProfileSession | null): void {
-  // Bump FIRST: any generation already in flight belongs to the previous session
-  // and must now be treated as stale (it re-reads this at each write).
-  sessionEpoch += 1
-  cachedSession = session
-
-  // Kill the in-flight generation's network/LLM work. Critical on sign-out (it
-  // would otherwise keep fetching and synthesizing for 10–90s against a session
-  // the user just ended, with requests still carrying their token). Also correct
-  // on a plain token refresh: the epoch bump above has already doomed that run's
-  // result, so letting it finish would burn an LLM call for output nobody can use.
-  abortController?.abort()
-  abortController = session ? new AbortController() : null
-}
-
+ *  so the IPC returns immediately rather than blocking the renderer on a
+ *  multi-second generation. */
 export function configureAiProfileSession(session: AiProfileSession | null): void {
-  setSession(session)
+  setBackendSession(session)
   if (!session) return
   // Caching the session must never fail because a due-check threw — the IPC
   // handler's whole job is to store credentials.
@@ -349,19 +321,19 @@ async function syncToBackend(
 /** Generate a new profile now. Uses the provided session, else the cached one.
  *  Throws if no session is available or if there is no data to synthesize. */
 export async function generateNow(session?: AiProfileSession): Promise<AiUserProfileRecord> {
-  // setSession (not configureAiProfileSession) — a due-check here would re-enter
-  // generateNow via runIfDue.
-  if (session) setSession(session)
-  const active = cachedSession
+  // setBackendSession (not configureAiProfileSession) — a due-check here would
+  // re-enter generateNow via runIfDue.
+  if (session) setBackendSession(session)
+  const active = getBackendSession()
   if (!active) throw new Error('AI profile: no backend session available')
   if (isGenerating) throw new Error('AI profile: generation already in progress')
 
   // Pin the session this run belongs to. Every write is gated on the epoch still
   // matching, so a sign-out (or user switch) mid-generation discards the result
   // instead of writing the departed user's dossier back into the wiped DB.
-  const startEpoch = sessionEpoch
-  const signal = abortController?.signal
-  const isStale = (): boolean => sessionEpoch !== startEpoch
+  const startEpoch = getSessionEpoch()
+  const signal = getAbortSignal()
+  const isStale = (): boolean => getSessionEpoch() !== startEpoch
 
   isGenerating = true
   try {
@@ -391,7 +363,8 @@ export function getLatestProfileText(): string | null {
  *  (using the cached session, if any). */
 export async function editProfileText(id: number, text: string): Promise<void> {
   updateAiUserProfileText(id, text)
-  if (!cachedSession) return
+  const active = getBackendSession()
+  if (!active) return
   // Look the record up (no getById in db.ts) to preserve its original
   // generatedAt on the backend.
   const record = listAiUserProfiles(50).find((r) => r.id === id)
@@ -400,7 +373,7 @@ export async function editProfileText(id: number, text: string): Promise<void> {
   // stored item count (see syncToBackend / update_ai_user_profile). Sending an
   // approximation here would clobber the true count with a smaller wrong value.
   // A sync failure keeps the already-applied local edit (fail-open, degraded).
-  void syncToBackend(cachedSession, id, text, record.generatedAt).catch((e) =>
+  void syncToBackend(active, id, text, record.generatedAt).catch((e) =>
     warnDegraded('backend_sync_failed', { op: 'edit', error: describeError(e) })
   )
 }
@@ -436,7 +409,7 @@ function runIfDue(): void {
 
   const latest = latestAiUserProfile()
   if (!shouldGenerate(latest?.generatedAt ?? null, now)) return
-  if (!cachedSession) {
+  if (!getBackendSession()) {
     // Soft no-op: no throw, no lost local row, just defer to the next tick
     // (or the next session push, whichever comes first). Deliberately does NOT
     // consume an attempt — nothing was tried.

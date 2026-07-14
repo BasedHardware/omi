@@ -454,6 +454,59 @@ export type OmiBarApi = {
   setContentProtection: (enabled: boolean) => Promise<boolean>
 }
 
+// --- Halo overlay (main/glow/*) -----------------------------------------------
+//
+// The halo is a GENERIC capability: "draw a soft glowing ring around the user's
+// active window". The window, geometry, gates, park pattern and follow-tick know
+// nothing about WHY it is being drawn — the caller picks an appearance. Focus is
+// simply the first caller; a recording indicator or a listening cue would be a new
+// preset (a data change), not a change to any of the machinery.
+
+/** How a halo LOOKS — colour-agnostic. `hues` are three neighbouring tones as
+ *  space-separated RGB channels ("239 68 68"); the ring cross-fades between them
+ *  so it breathes. `intensity` is the envelope's peak opacity. */
+export type GlowPaint = {
+  hues: [string, string, string]
+  intensity: number
+}
+
+/** Named appearances. Adding one is a data change in main/glow/glowPresets.ts —
+ *  no window, geometry or renderer code moves. */
+export type GlowPresetName = 'distracted' | 'focused'
+
+/** One halo run. `pad` (the ring's inset inside the overlay window), `overlap`
+ *  (how far the ring is pulled INSIDE the target's edge) and `radius` (0 when the
+ *  target's own corners are square — Win11 doesn't round maximized or snapped
+ *  windows) are computed in main from the target's real geometry, so the renderer
+ *  never guesses. `maximized` tells the ring that its outward glow is
+ *  off-screen/under the taskbar and only its inset layers will be visible.
+ *  `token` is echoed back via `showAck` once the ring has painted. */
+export type GlowShowPayload = {
+  paint: GlowPaint
+  runId: number
+  token: number
+  pad: number
+  overlap: number
+  radius: number
+  maximized: boolean
+}
+
+/** Renderer bridge for the halo window (see main/glow/glowWindow.ts). */
+export type OmiGlowApi = {
+  /** The halo renderer has mounted — flush any deferred show. */
+  ready: () => void
+  /** Paint acknowledgement: the ring's first frame is composited, so main may
+   *  unpark the window without flashing the previous (stale) frame. */
+  showAck: (token: number) => void
+  /** Draw a halo around the active window in the named appearance. This is the
+   *  Focus assistant's entry point (and today, the dev/QA trigger). */
+  trigger: (preset: GlowPresetName) => void
+  dismiss: () => void
+  getCurrent: () => Promise<{ preset: GlowPresetName; runId: number } | null>
+  onShow: (cb: (p: GlowShowPayload) => void) => () => void
+  onHide: (cb: () => void) => () => void
+}
+
 /** Listening state the renderer reports to the tray (drives icon/tooltip/menu).
  *  Mirrors the main-process TrayState in main/trayState.ts. */
 export type TrayListeningState = 'idle' | 'listening' | 'paused'
