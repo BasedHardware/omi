@@ -52,6 +52,16 @@ checks:
     triggers: ["all"]
     lanes: ["local", "ci"]
     reason: "new deferred-work markers must cite a tracking issue"
+  - id: deployment-secret-boundary
+    command: ["python3", ".github/scripts/check_deployment_secret_boundary.py", "--base", "{base}"]
+    triggers: [".github/workflows/**/*.yml", ".github/workflows/**/*.yaml", ".github/scripts/check_deployment_secret_boundary.py", ".github/scripts/test_check_deployment_secret_boundary.py", "backend/charts/*/*_values.yaml", "backend/deploy/runtime_env.yaml", "config/deployment-setting-classification.json"]
+    lanes: ["local", "ci"]
+    reason: "new or changed deployment bindings must use a checked-in secret, config, or public-build classification"
+  - id: deployment-secret-boundary-fixtures
+    command: ["python3", ".github/scripts/test_check_deployment_secret_boundary.py"]
+    triggers: [".github/scripts/check_deployment_secret_boundary.py", ".github/scripts/test_check_deployment_secret_boundary.py"]
+    lanes: ["local", "ci"]
+    reason: "deployment secret-boundary fake-name fixtures must remain executable"
   - id: backend-async-blockers
     command: ["python3", "backend/scripts/scan_async_blockers.py", "--dirs", "backend/routers", "backend/utils", "backend/agent-proxy", "backend/dependencies.py", "--diff-base", "{base}", "--fail-on", "high_network_io,async_helpers_with_blocking,time_sleep,mixed_await_sync_db,no_await_should_be_def,unmanaged_thread_offload"]
     triggers: ["backend/**/*.py", "backend/agent-proxy/**", "backend/scripts/scan_async_blockers.py"]
