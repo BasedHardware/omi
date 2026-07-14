@@ -75,7 +75,30 @@ describe('HomeHub — stage machine', () => {
   it('rests on the hub, showing the wordmark', () => {
     renderHub()
     expect(mode()).toBe('hub')
-    expect(screen.getByText('omi')).not.toBeNull()
+    // "omi." — with the period, as on Mac (DashboardPage.swift:738).
+    expect(screen.getByText('omi.')).not.toBeNull()
+  })
+
+  it('docks the cluster with NOTHING between the wordmark and the stat ribbon', () => {
+    // Mac's hub stage is wordmark → flexible gap → ribbon → ask bar → suggestions
+    // (DashboardPage.swift:678-702). An earlier build wedged two 160px legacy
+    // widget cards in above the ribbon, which pushed the ask bar off the bottom of
+    // a short window. There is no slot there — keep it empty.
+    renderHub()
+    const stage = document.querySelector('[data-testid="hub-stage"]') as HTMLElement
+    const cluster = stage.querySelector('[data-testid="hub-cluster"]') as HTMLElement
+    expect(cluster).not.toBeNull()
+
+    // The stage's only element children are: spacer, wordmark, spacer, cluster.
+    // Anything else is a widget that does not exist on Mac.
+    const wordmark = stage.querySelector('h1') as HTMLElement
+    const kids = [...stage.children]
+    expect(kids).toHaveLength(4)
+    expect(kids[1]).toBe(wordmark)
+    expect(kids[3]).toBe(cluster)
+
+    // And the cluster leads with the ribbon — the ask bar is never pushed down.
+    expect(cluster.textContent).toMatch(/Conversations/)
   })
 
   it('moves to chat and sends through the SHARED chat engine on submit', () => {

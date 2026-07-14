@@ -4,7 +4,8 @@ import { HUB_SUGGESTIONS } from './hubPrompts'
 
 export function HubSuggestions({ onPick }: { onPick: (text: string) => void }): React.JSX.Element {
   return (
-    <div className="flex w-full flex-col gap-1.5">
+    // VStack(spacing: 8) on Mac (DashboardPage.swift:961).
+    <div className="flex w-full flex-col gap-2">
       {HUB_SUGGESTIONS.map((text) => (
         <button
           key={text}

@@ -2,8 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppState } from '../../../state/appState'
 import { cn } from '../../../lib/utils'
 import { HomeCanvasBackground } from '../HomeCanvasBackground'
-import { QuickTaskWidget } from '../QuickTaskWidget'
-import { QuickGoalsWidget } from '../QuickGoalsWidget'
 import { HubHeader } from './HubHeader'
 import { HubAskBar } from './HubAskBar'
 import { HubSuggestions } from './HubSuggestions'
@@ -24,6 +22,10 @@ const STAGE_MAX = 1360
 const ASK_MAX_HUB = 980
 const ASK_MAX_PANEL = 1280
 const PANEL_HEIGHT = 'clamp(440px, 100vh - 132px, 640px)'
+// Mac's layout constant for the wordmark's occupied height (DashboardPage.swift:669) —
+// its 58px glyphs plus the glow's optical room. Used to place the wordmark at the
+// stage's true vertical centre, exactly as Mac does.
+const WORDMARK_H = 76
 
 export function HomeHub(): React.JSX.Element {
   const { chat } = useAppState()
@@ -97,9 +99,16 @@ export function HomeHub(): React.JSX.Element {
           <HubHeader />
         </div>
 
+        {/* Mac's cluster sits on a stage that is always tall enough for it. A Windows
+            window can be dragged down to minHeight 600 (main/index.ts), where the
+            wordmark + widgets + ribbon + ask bar + 3 suggestions do NOT fit — and an
+            overflow-hidden stage silently cut the ASK BAR, the screen's primary
+            control, off the bottom. So the stage is split: the ask bar and its
+            suggestions are PINNED (they can never leave the viewport, at any window
+            size), and the lead-in above them collapses and then scrolls. */}
         <div
           ref={stageRef}
-          className="flex min-h-0 flex-1 flex-col items-center pt-[74px]"
+          className="flex min-h-0 flex-1 flex-col items-center pt-[clamp(20px,7vh,74px)]"
           data-testid="hub-stage"
           data-mode={mode}
         >
@@ -115,33 +124,44 @@ export function HomeHub(): React.JSX.Element {
             </StagePanel>
           ) : (
             <>
+              {/* Mac's homeHubStage (DashboardPage.swift:664-704) is exactly three
+                  things: a top spacer, the wordmark, and a flexible gap — with the
+                  cluster (ribbon → ask bar → suggestions) docked at the bottom.
+                  Nothing sits between the wordmark and the ribbon.
+
+                  The top spacer's height is Mac's `topInset`:
+                      min( (contentH - wordmark) / 2,           ← true stage centre
+                           contentH - wordmark - cluster - 24 ) ← lifted so it can't collide
+                  which flexbox reproduces without measuring: give the spacer a basis of
+                  the true-centre value and let it SHRINK (it is the only shrinkable
+                  item), so a short window eats the lead-in first and the cluster keeps
+                  its full height. The wordmark rides down to the centre in a tall
+                  window and lifts toward the cluster in a short one — which is why Mac
+                  never needs to scroll this screen, and neither do we. */}
+              <div
+                className="w-full shrink"
+                style={{ flexBasis: `calc((100% - ${WORDMARK_H}px) / 2)`, minHeight: 0 }}
+                aria-hidden
+              />
+
               {/* Mac hides the wordmark when its `recommendations` array is non-empty.
                   Windows has no recommendations source at all, so that branch is
-                  unreachable and the wordmark renders unconditionally. It is NOT keyed
-                  to the widgets below — they are not recommendations. */}
+                  unreachable and the wordmark renders unconditionally. */}
               <h1
-                className="select-none font-display text-[58px] font-bold lowercase leading-none text-home-ink"
+                className="shrink-0 select-none font-display text-[58px] font-bold lowercase leading-none text-home-ink"
                 style={{ textShadow: '0 0 26px rgb(var(--home-stage-glow-rgb) / 0.46)' }}
               >
-                omi
+                omi.
               </h1>
 
-              <div className="min-h-[24px] flex-1" />
+              {/* Mac: Spacer(minLength: 24) — absorbs the slack, docking the cluster. */}
+              <div className="min-h-[24px] w-full shrink-0 grow" aria-hidden />
 
-              <div className="flex w-full flex-col items-center" style={{ maxWidth: ASK_MAX_HUB }}>
-                {/* Mac fills these two cluster slots with WhatMattersNow and
-                    FocusedGoals. Neither exists on Windows yet — Track 3 adds them —
-                    so the Hub mounts the two widgets the legacy Home already renders,
-                    which are their Windows content. They are mounted AS-IS: the
-                    palette pass onto home.* rides with the Track 3 swap, not this PR.
-                    Dropping them would silently take tasks and goals off the default
-                    screen the day the Hub ships. */}
-                <div className="mb-2.5 w-full">
-                  <QuickTaskWidget />
-                </div>
-                <div className="mb-2.5 w-full">
-                  <QuickGoalsWidget />
-                </div>
+              <div
+                className="flex w-full shrink-0 flex-col items-center"
+                style={{ maxWidth: ASK_MAX_HUB }}
+                data-testid="hub-cluster"
+              >
                 <div className="mb-[14px] w-full">
                   <HubStatRibbon counts={stats} />
                 </div>
@@ -176,7 +196,7 @@ function StagePanel({ children }: { children: React.ReactNode }): React.JSX.Elem
   return (
     <div
       className={cn(
-        'w-full origin-top transition-[transform,opacity] duration-[460ms]',
+        'w-full shrink-0 origin-top transition-[transform,opacity] duration-[460ms]',
         'ease-[cubic-bezier(0.22,1,0.36,1)]',
         entered
           ? 'translate-y-0 scale-100 opacity-100'

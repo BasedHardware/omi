@@ -46,8 +46,23 @@ export function HubChatPanel(props: {
       }}
     >
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
-        <div ref={contentRef} className="flex flex-col gap-3">
-          <ChatMessages messages={messages} sending={sending} variant="main" />
+        <div ref={contentRef} className="flex min-h-full flex-col gap-3">
+          {messages.length === 0 && !sending ? (
+            // The panel opens on ask-bar FOCUS (Mac does this: clicking the bar
+            // reveals the inline chat). On Mac the thread persists, so it almost
+            // always has something in it — but Windows defaults chatHistoryMode to
+            // 'per-launch', so on a fresh launch the very same transition would
+            // otherwise reveal a large, empty, glowing box. Give the empty thread
+            // something to say instead of rendering a void.
+            <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
+              <p className="text-[15px] font-medium text-home-ink">Ask omi anything</p>
+              <p className="max-w-sm text-[13px] text-home-muted">
+                It can see your conversations, tasks, memories, and screen history.
+              </p>
+            </div>
+          ) : (
+            <ChatMessages messages={messages} sending={sending} variant="main" />
+          )}
         </div>
       </div>
       <div className="pt-[22px]">{children}</div>
