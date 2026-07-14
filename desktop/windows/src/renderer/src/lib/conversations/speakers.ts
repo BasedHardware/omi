@@ -3,18 +3,18 @@
 // no network — so the color/initial/segment-id rules are unit-testable on their
 // own.
 //
-// The colors themselves live in ONE place — components/conversations/speakerPalette.ts.
+// The colors themselves live in ONE place — lib/macPalette.ts.
 // Import them from there; never re-declare a hex inline and never promote one to a
 // global token (see that module's header for why).
 
 import type { Person, TranscriptSegment } from '../omiApi.generated'
 import {
   AVATAR_PERSON,
-  AVATAR_USER,
   AVATAR_UNNAMED,
+  AVATAR_USER,
   SPEAKER_COLORS,
   USER_BUBBLE
-} from '../../components/conversations/speakerPalette'
+} from '../macPalette'
 
 /**
  * Pull the numeric speaker index out of a segment's speaker string:

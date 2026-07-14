@@ -13,12 +13,13 @@ import {
   lineTextMatches,
   normalizedBoxToRect
 } from '../../lib/rewindOverlay'
+import { MAC_PURPLE, macPurple } from '../../lib/macPalette'
 
 // Purple search-highlight per the Track 4 UI ruling (Mac ports its purple as-is
 // for the Rewind bounding-box overlay — a deliberate exception to the
 // otherwise de-purpled Rewind surface).
-const HIGHLIGHT_STROKE = '#8B5CF6'
-const HIGHLIGHT_FILL = 'rgba(139, 92, 246, 0.2)'
+const HIGHLIGHT_STROKE = MAC_PURPLE
+const HIGHLIGHT_FILL = macPurple('0.2')
 
 export function RewindPlayer({
   frames,

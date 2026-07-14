@@ -9,7 +9,7 @@ import {
 } from '../../lib/conversations/speakers'
 import { toast } from '../../lib/toast'
 import { ModalShell } from './ModalShell'
-import { AVATAR_UNNAMED } from './speakerPalette'
+import { AVATAR_UNNAMED } from '../../lib/macPalette'
 
 // Mac's NameSpeakerSheet (NameSpeakerSheet.swift), rendered as a centered Windows
 // modal per the Track 4 ruling. Mac's sheet is a fixed 400x450 whose height is

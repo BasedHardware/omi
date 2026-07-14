@@ -6,7 +6,7 @@ import {
   AVATAR_USER,
   SPEAKER_COLORS,
   USER_BUBBLE
-} from '../../components/conversations/speakerPalette'
+} from '../macPalette'
 import {
   avatarFill,
   avatarInitial,
