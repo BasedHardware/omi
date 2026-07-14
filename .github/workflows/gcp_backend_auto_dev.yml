@@ -41,14 +41,6 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Set up Node for Firebase index deployment
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: Install locked Firebase tooling
-        run: npm ci --ignore-scripts
-
       - name: Verify serving sync ledger fence mode before deploy
         env:
           SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
@@ -61,7 +53,8 @@ jobs:
       - name: Reconcile generated Firestore indexes before backend deploy
         run: |
           python3 backend/scripts/reconcile_firestore_indexes.py \
-            --project "${{ vars.GCP_PROJECT_ID }}"
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --provision-missing
 
       - name: Login to GCR
         run: gcloud auth configure-docker

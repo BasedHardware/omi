@@ -305,6 +305,19 @@ def test_dev_deploy_invokes_legacy_binding_migration_only_for_dev_services() -> 
     assert '--check-runtime-bindings' not in production_workflow.read_text(encoding='utf-8')
 
 
+def test_dev_deploy_uses_manifest_derived_gcloud_index_provisioning_only() -> None:
+    workflow = BACKEND_DIR.parent / '.github/workflows/gcp_backend_auto_dev.yml'
+    production_workflow = BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml'
+    text = workflow.read_text(encoding='utf-8')
+
+    assert 'environment: development' in text
+    assert 'backend/scripts/reconcile_firestore_indexes.py' in text
+    assert '--provision-missing' in text
+    assert 'firebase' not in text
+    assert 'setup-node' not in text
+    assert '--provision-missing' not in production_workflow.read_text(encoding='utf-8')
+
+
 def test_expectation_binds_commit_to_deploy_run_revision_and_image() -> None:
     expectation = _expectation()
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deploy the generated Firestore index manifest and wait until every index is READY."""
+"""Reconcile the generated Firestore index manifest and wait for READY indexes."""
 
 from __future__ import annotations
 
@@ -23,6 +23,16 @@ DEFAULT_POLL_INTERVAL_SECONDS = 10.0
 
 IndexSignature = tuple[str, str, tuple[tuple[str, str], ...]]
 CommandRunner = Callable[..., Any]
+
+_GCLOUD_QUERY_SCOPES = {
+    'COLLECTION': 'collection',
+    'COLLECTION_GROUP': 'collection-group',
+}
+_GCLOUD_FIELD_CONFIGS = {
+    'ASCENDING': 'order=ascending',
+    'DESCENDING': 'order=descending',
+    'CONTAINS': 'array-config=contains',
+}
 
 
 def _collection_group_from_resource_name(index: Mapping[str, Any]) -> str:
@@ -94,10 +104,41 @@ def deploy_indexes(*, project: str, manifest_path: Path, runner: CommandRunner =
         raise RuntimeError('Firebase index deployment failed')
 
 
+def gcloud_create_index_command(*, project: str, database: str, signature: IndexSignature) -> list[str]:
+    """Build the Firestore Admin API create command for one manifest signature."""
+
+    collection_group, query_scope, fields = signature
+    try:
+        gcloud_query_scope = _GCLOUD_QUERY_SCOPES[query_scope]
+    except KeyError as exc:
+        raise ValueError(f'unsupported Firestore query scope for gcloud provisioning: {query_scope!r}') from exc
+    command = [
+        'gcloud',
+        'firestore',
+        'indexes',
+        'composite',
+        'create',
+        f'--project={project}',
+        f'--database={database}',
+        f'--collection-group={collection_group}',
+        f'--query-scope={gcloud_query_scope}',
+    ]
+    for field_path, direction in fields:
+        try:
+            field_config = _GCLOUD_FIELD_CONFIGS[direction]
+        except KeyError as exc:
+            raise ValueError(
+                f'unsupported Firestore field configuration for gcloud provisioning: {direction!r}'
+            ) from exc
+        command.append(f'--field-config=field-path={field_path},{field_config}')
+    return [*command, '--quiet']
+
+
 def list_live_indexes(
     *,
     project: str,
     database: str,
+    include_implicit_document_id_alias: bool = True,
     runner: CommandRunner = subprocess.run,
 ) -> dict[IndexSignature, str]:
     command = [
@@ -129,8 +170,13 @@ def list_live_indexes(
             continue
         state = index.get('state')
         states[signature] = state if isinstance(state, str) else 'UNKNOWN'
+        # Firestore Admin API output includes the implicit terminal document-ID
+        # order for ordinary indexes. Preserve the historic compatibility alias
+        # outside dev provisioning, but never let it prove an exact manifest
+        # signature before a create-and-wait reconciliation.
         if (
-            len(signature[2]) > 1
+            include_implicit_document_id_alias
+            and len(signature[2]) > 1
             and signature[2][-1][0] == '__name__'
             and signature[2][-1][1] == signature[2][-2][1]
             and signature[2][-1][1] in {'ASCENDING', 'DESCENDING'}
@@ -145,6 +191,47 @@ def format_signature(signature: IndexSignature) -> str:
     return f'{query_scope}/{collection_group} ({field_text})'
 
 
+def missing_index_signatures(
+    *,
+    expected: Iterable[IndexSignature],
+    states: Mapping[IndexSignature, str],
+) -> set[IndexSignature]:
+    """Return manifest requirements absent from the Firestore Admin API inventory."""
+
+    return set(expected).difference(states)
+
+
+def provision_missing_indexes(
+    *,
+    expected: Iterable[IndexSignature],
+    project: str,
+    database: str,
+    runner: CommandRunner = subprocess.run,
+) -> set[IndexSignature]:
+    """Create only manifest entries absent from the live Firestore inventory."""
+
+    missing = missing_index_signatures(
+        expected=expected,
+        states=list_live_indexes(
+            project=project,
+            database=database,
+            include_implicit_document_id_alias=False,
+            runner=runner,
+        ),
+    )
+    for signature in sorted(missing):
+        result = runner(
+            gcloud_create_index_command(project=project, database=database, signature=signature),
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f'Firestore composite-index provisioning failed: {format_signature(signature)}')
+    return missing
+
+
 def wait_for_indexes(
     *,
     expected: Iterable[IndexSignature],
@@ -152,6 +239,7 @@ def wait_for_indexes(
     database: str,
     timeout_seconds: float,
     poll_interval_seconds: float,
+    include_implicit_document_id_alias: bool = True,
     runner: CommandRunner = subprocess.run,
     sleep: Callable[[float], None] = time.sleep,
     monotonic: Callable[[], float] = time.monotonic,
@@ -163,7 +251,12 @@ def wait_for_indexes(
     expected_set = set(expected)
     deadline = monotonic() + timeout_seconds
     while True:
-        states = list_live_indexes(project=project, database=database, runner=runner)
+        states = list_live_indexes(
+            project=project,
+            database=database,
+            include_implicit_document_id_alias=include_implicit_document_id_alias,
+            runner=runner,
+        )
         pending = {
             signature: states.get(signature, 'MISSING')
             for signature in expected_set
@@ -187,18 +280,39 @@ def reconcile(
     manifest_path: Path,
     timeout_seconds: float,
     poll_interval_seconds: float,
+    provision_missing: bool = False,
+    dry_run: bool = False,
     runner: CommandRunner = subprocess.run,
     sleep: Callable[[float], None] = time.sleep,
     monotonic: Callable[[], float] = time.monotonic,
 ) -> None:
     manifest = verify_manifest_source(manifest_path)
-    deploy_indexes(project=project, manifest_path=manifest_path, runner=runner)
+    expected = expected_index_signatures(manifest)
+    if dry_run:
+        states = list_live_indexes(
+            project=project,
+            database=database,
+            include_implicit_document_id_alias=not provision_missing,
+            runner=runner,
+        )
+        missing = missing_index_signatures(expected=expected, states=states)
+        if provision_missing:
+            for signature in sorted(missing):
+                print(f'Firestore index provisioning dry run: would create {format_signature(signature)}')
+        else:
+            print('Firestore index deployment dry run: would deploy the generated Firebase manifest')
+        return
+    if provision_missing:
+        provision_missing_indexes(expected=expected, project=project, database=database, runner=runner)
+    else:
+        deploy_indexes(project=project, manifest_path=manifest_path, runner=runner)
     wait_for_indexes(
-        expected=expected_index_signatures(manifest),
+        expected=expected,
         project=project,
         database=database,
         timeout_seconds=timeout_seconds,
         poll_interval_seconds=poll_interval_seconds,
+        include_implicit_document_id_alias=not provision_missing,
         runner=runner,
         sleep=sleep,
         monotonic=monotonic,
@@ -212,6 +326,14 @@ def main() -> int:
     parser.add_argument('--manifest', type=Path, default=ROOT / 'firestore.indexes.json')
     parser.add_argument('--timeout-seconds', type=float, default=DEFAULT_TIMEOUT_SECONDS)
     parser.add_argument('--poll-interval-seconds', type=float, default=DEFAULT_POLL_INTERVAL_SECONDS)
+    parser.add_argument(
+        '--provision-missing',
+        action='store_true',
+        help='create manifest entries missing from the Firestore Admin API inventory with gcloud',
+    )
+    parser.add_argument(
+        '--dry-run', action='store_true', help='validate the manifest and print the no-write reconciliation plan'
+    )
     args = parser.parse_args()
     try:
         reconcile(
@@ -220,6 +342,8 @@ def main() -> int:
             manifest_path=args.manifest.resolve(),
             timeout_seconds=args.timeout_seconds,
             poll_interval_seconds=args.poll_interval_seconds,
+            provision_missing=args.provision_missing,
+            dry_run=args.dry_run,
         )
     except (OSError, RuntimeError, ValueError) as exc:
         print(f'ERROR: {exc}', file=sys.stderr)
