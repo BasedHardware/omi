@@ -62,6 +62,10 @@ jobs:
           location: ${{ env.REGION }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
+      - name: Require non-secret backend runtime config
+        run: |
+          kubectl -n ${{ vars.ENV }}-omi-backend get configmap ${{ vars.ENV }}-omi-backend-config >/dev/null
+
       - name: Deploy Pusher to GKE cluster using Helm
         run: |
           helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml --set-string "image.tag=${GITHUB_SHA::7}"
