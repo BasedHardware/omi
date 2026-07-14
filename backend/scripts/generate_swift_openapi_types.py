@@ -206,7 +206,7 @@ def _render_enum(name: str, schema: dict[str, Any]) -> str:
     lines.append('  case _unknown = "__unknown__"')
     lines.append('  public init(from decoder: Decoder) throws {')
     lines.append('    let c = try decoder.singleValueContainer()')
-    lines.append(f'    let raw = try c.decode(String.self)')
+    lines.append('    let raw = try c.decode(String.self)')
     lines.append(f'    self = {name}(rawValue: raw) ?? ._unknown')
     lines.append('  }')
     lines.append('}')
@@ -494,7 +494,7 @@ def _render_patch_struct(name: str, schema: dict[str, Any]) -> str:
     lines.append('    var c = encoder.container(keyedBy: CodingKeys.self)')
     for swift_name, _, _ in fields:
         lines.append(f'    switch {swift_name} {{')
-        lines.append(f'    case .omitted: break')
+        lines.append('    case .omitted: break')
         lines.append(f'    case .value(let value): try c.encode(value, forKey: .{swift_name})')
         lines.append(f'    case .null: try c.encodeNil(forKey: .{swift_name})')
         lines.append('    }')
