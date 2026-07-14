@@ -411,6 +411,11 @@ export type BarChatState = {
  *  in main/bar/window.ts). */
 export type BarShowPayload = { mode: BarMode; reveal: BarReveal; token: number }
 
+/** A bar send blocked by the chat usage limit, relayed to the main window (which
+ *  owns the shared usage-limit modal and the TTS voice). `spoken` = the blocked
+ *  turn came from PTT, so the limit line is answered aloud (Mac speaks it). */
+export type BarUsageLimitPayload = { message: string; spoken: boolean }
+
 /** Renderer bridge for the top-edge bar window (see main/bar/window.ts). */
 export type OmiBarApi = {
   /** The bar renderer has mounted + measured — flush any deferred first show. */
@@ -437,6 +442,12 @@ export type OmiBarApi = {
    *  The reply plays in the MAIN window (useChat → voiceController), so this hops
    *  over the bar→main bridge; ChatBridgeHost calls interruptCurrentResponse. */
   interruptTts: () => void
+  /** A bar send was refused by the chat usage limit. The shared UsageLimitPopup
+   *  and TTS playback both live in the MAIN window, so the bar hops over the
+   *  bridge; ChatBridgeHost raises the popup (and speaks `message` for a voice
+   *  turn). Mac parity: the modal always shows on the main window, even when the
+   *  block came from the floating bar. */
+  notifyUsageLimit: (payload: BarUsageLimitPayload) => void
   /** Ask the main window to (re)broadcast the current chat state — called on
    *  mount / each reveal so the bar shows the ongoing thread. */
   requestChatState: () => void
@@ -824,6 +835,10 @@ export type OmiBridgeApi = {
   /** A bar PTT hold started — the main window barge-in: ChatBridgeHost calls
    *  voiceController.interruptCurrentResponse(). Main-window renderer only. */
   onBarChatInterrupt: (cb: () => void) => () => void
+  /** A bar send was refused by the chat usage limit — ChatBridgeHost raises the
+   *  shared UsageLimitPopup here (and speaks the line for a voice turn).
+   *  Main-window renderer only. */
+  onBarUsageLimit: (cb: (payload: BarUsageLimitPayload) => void) => () => void
   /** The bar (re)requested current chat state — ChatBridgeHost publishes now. */
   onBarRequestChatState: (cb: () => void) => () => void
   /** Broadcast the projected chat state to the bar (history + streaming + status). */

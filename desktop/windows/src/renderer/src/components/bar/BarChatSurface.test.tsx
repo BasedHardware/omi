@@ -3,7 +3,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { render, cleanup, fireEvent, screen } from '@testing-library/react'
+import { useState } from 'react'
+import { render, cleanup, fireEvent, screen, act } from '@testing-library/react'
 import { BarChatSurface, type BarChatSurfaceProps } from './BarChatSurface'
 import type { BarChatState } from '../../../../shared/types'
 
@@ -42,7 +43,7 @@ function renderSurface(overrides: Partial<BarChatSurfaceProps> = {}): BarChatSur
     onClose: vi.fn(),
     draft: '',
     setDraft: vi.fn(),
-    onSubmit: vi.fn(),
+    onSubmit: vi.fn(async () => null),
     pttKeyDown: vi.fn(() => false),
     pttKeyUp: vi.fn(() => false),
     recording: false,
@@ -52,6 +53,39 @@ function renderSurface(overrides: Partial<BarChatSurfaceProps> = {}): BarChatSur
   }
   render(<BarChatSurface {...props} />)
   return props
+}
+
+/** The surface wired to REAL draft state (renderSurface's setDraft is a spy, so the
+ *  input never actually changes there). A submit's clear, the user's next keystrokes
+ *  and a late restore all land in the same live input — the only way to exercise the
+ *  ordering between two in-flight sends. */
+function renderLiveSurface(
+  onSubmit: (text: string) => Promise<string | null>
+): HTMLTextAreaElement {
+  function Harness(): React.JSX.Element {
+    const [draft, setDraft] = useState('')
+    return (
+      <BarChatSurface
+        chat={baseChat}
+        agents={[]}
+        view="conversation"
+        conversationTitle="Omi Chat"
+        onOpenConversation={vi.fn()}
+        onBack={vi.fn()}
+        onClose={vi.fn()}
+        draft={draft}
+        setDraft={setDraft}
+        onSubmit={onSubmit}
+        pttKeyDown={vi.fn(() => false)}
+        pttKeyUp={vi.fn(() => false)}
+        recording={false}
+        transcribing={false}
+        maxListHeight={300}
+      />
+    )
+  }
+  render(<Harness />)
+  return screen.getByPlaceholderText(/Ask Omi/i) as HTMLTextAreaElement
 }
 
 afterEach(() => cleanup())
@@ -126,6 +160,63 @@ describe('BarChatSurface', () => {
     expect(props.setDraft).toHaveBeenCalledWith('')
   })
 
+  it('conversation: an IN-QUOTA send clears the input and leaves it cleared (no restore)', async () => {
+    const props = renderSurface({ view: 'conversation', draft: 'hello there' })
+    fireEvent.keyDown(screen.getByPlaceholderText(/Ask Omi/i), { key: 'Enter' })
+    await vi.waitFor(() => expect(props.onSubmit).toHaveBeenCalled())
+    // The only draft write is the immediate clear — normal typing is untouched.
+    expect(props.setDraft).toHaveBeenCalledTimes(1)
+    expect(props.setDraft).toHaveBeenCalledWith('')
+  })
+
+  it('conversation: a BLOCKED send RESTORES the draft — the usage limit must not eat the question', async () => {
+    // Regression: the input was cleared before the send, and a send refused by the
+    // usage limit never reaches the transcript — so the user's typed question just
+    // vanished behind the amber notice and had to be retyped.
+    const onSubmit = vi.fn(async () => "You've reached your monthly free message limit.")
+    const props = renderSurface({ view: 'conversation', draft: 'what is on my calendar', onSubmit })
+    fireEvent.keyDown(screen.getByPlaceholderText(/Ask Omi/i), { key: 'Enter' })
+
+    await vi.waitFor(() => expect(props.setDraft).toHaveBeenCalledTimes(2))
+    expect(props.setDraft).toHaveBeenNthCalledWith(1, '')
+    const restore = vi.mocked(props.setDraft).mock.calls[1][0] as (c: string) => string
+    expect(restore('')).toBe('what is on my calendar')
+    // …but never clobber text the user typed while the check was in flight.
+    expect(restore('a new question')).toBe('a new question')
+  })
+
+  it('conversation: a SUPERSEDED blocked send never resurrects itself over the newer question', async () => {
+    // Nothing disables the textarea while a check is in flight (only the Send
+    // BUTTON is), so Enter can fire a second send while the first cold-start quota
+    // probe is still awaiting — both then refuse. The restore must belong to the
+    // LAST submit: an "current is empty ⇒ restore" test alone would put the stale
+    // first question back (it lands into the input the second submit just cleared)
+    // and then the second restore, seeing non-empty text, would keep it — losing
+    // the question the user actually asked last.
+    const blocked = "You've reached your monthly free message limit."
+    const resolvers: ((notice: string | null) => void)[] = []
+    const onSubmit = vi.fn(() => new Promise<string | null>((resolve) => resolvers.push(resolve)))
+    const input = renderLiveSurface(onSubmit)
+
+    fireEvent.change(input, { target: { value: 'first question' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(input.value).toBe('')
+    fireEvent.change(input, { target: { value: 'second question' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(input.value).toBe('')
+    expect(onSubmit).toHaveBeenNthCalledWith(1, 'first question')
+    expect(onSubmit).toHaveBeenNthCalledWith(2, 'second question')
+
+    // Both sends were awaiting the same deduped cold-start sync, so they refuse in
+    // submit order.
+    await act(async () => {
+      resolvers[0](blocked)
+      resolvers[1](blocked)
+    })
+
+    expect(input.value).toBe('second question')
+  })
+
   it('conversation: an empty thread invites instead of dead-ending', () => {
     renderSurface({ view: 'conversation', chat: { messages: [], sending: false, status: 'idle' } })
     expect(screen.getByText(/Ask Omi anything/i)).toBeTruthy()
@@ -161,7 +252,10 @@ describe('BarChatSurface', () => {
     // top"). overflow:clip clips identically but is NOT scrollable, so the content
     // stays seated and the box reveals it top-down. If this regresses to hidden/
     // auto/scroll the slide returns — so pin clip.
-    const css = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'bar.css'), 'utf8')
+    const css = readFileSync(
+      path.join(path.dirname(fileURLToPath(import.meta.url)), 'bar.css'),
+      'utf8'
+    )
     const body = css.match(/\.bar-surface\s*\{([^}]*)\}/)?.[1] ?? ''
     const overflow = body.match(/(?:^|[^-])overflow:\s*([a-z]+)/)?.[1]
     expect(overflow).toBe('clip')
