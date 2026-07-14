@@ -47,7 +47,7 @@ from utils.apps import get_available_app_by_id
 from utils.conversation_helpers import extract_memory_ids
 from utils.chat import (
     acquire_chat_session,
-    build_stream_error_reply,
+    emit_stream_error_fallback,
     initial_message_util,
     process_voice_message_segment,
     process_voice_message_segment_stream,
@@ -409,15 +409,9 @@ def send_message(
                         answered = True
 
             if not answered:
-                # Pipeline failed mid-stream (raw error already logged in
-                # execute_*_chat_stream). Emit a graceful fallback so every
-                # client renders real text instead of a blank bubble.
-                logger.error(
-                    'Chat stream ended without an answer for uid=%s (error=%s)', uid, bool(callback_data.get('error'))
+                yield await emit_stream_error_fallback(
+                    uid, app_id_from_app, chat_session, label='chat', error_recorded=bool(callback_data.get('error'))
                 )
-                fallback = await run_blocking(db_executor, build_stream_error_reply, uid, app_id_from_app, chat_session)
-                encoded_response = base64.b64encode(bytes(fallback.model_dump_json(), 'utf-8')).decode('utf-8')
-                yield f"done: {encoded_response}\n\n"
         finally:
             reset_usage_context(usage_token)
 

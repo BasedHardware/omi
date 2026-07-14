@@ -20,6 +20,7 @@ from utils.conversations.factory import deserialize_conversation
 from utils.llm.chat import initial_chat_message
 from utils.llm.persona import initial_persona_chat_message
 from utils.notifications import send_notification
+from utils.observability.fallback import record_fallback
 from utils.other.storage import get_syncing_file_temporal_signed_url, schedule_syncing_temporal_file_deletion
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
 from utils.stt.pre_recorded import (
@@ -330,6 +331,38 @@ def build_stream_error_reply(
     return ResponseMessage(**ai_message.model_dump(), ask_for_nps=False)
 
 
+async def emit_stream_error_fallback(
+    uid: str,
+    app_id: Optional[str],
+    chat_session: Optional[ChatSession],
+    *,
+    label: str,
+    error_recorded: bool,
+) -> str:
+    """Build the SSE ``done:`` frame for a chat stream that ended without an answer.
+
+    The pipeline failed mid-stream (raw error already logged in
+    ``execute_*_chat_stream``); this emits a graceful fallback so every client
+    renders real text instead of a blank bubble. ``label`` distinguishes the
+    calling surface (e.g. ``'chat'`` / ``'voice_chat'``) in server-side logs.
+
+    This is a fail-open correctness degrade (real LLM answer -> canned text), so
+    it records the shared fallback metric. Returns the full ``"done: ...\\n\\n"``
+    frame; the reply is persisted inside ``build_stream_error_reply``.
+    """
+    logger.error('%s stream ended without an answer for uid=%s (error=%s)', label, uid, error_recorded)
+    record_fallback(
+        component='other',
+        from_mode='llm_answer',
+        to_mode='canned_reply',
+        reason='other',
+        outcome='degraded',
+    )
+    fallback = await run_blocking(db_executor, build_stream_error_reply, uid, app_id, chat_session)
+    encoded_response = base64.b64encode(bytes(fallback.model_dump_json(), 'utf-8')).decode('utf-8')
+    return f"done: {encoded_response}\n\n"
+
+
 async def process_voice_message_segment_stream(
     path: str,
     uid: str,
@@ -460,15 +493,9 @@ async def process_voice_message_segment_stream(
                     send_chat_message_notification(uid, "omi", "omi", ai_message.text, ai_message.id)
 
         if not answered:
-            # Pipeline failed mid-stream (raw error already logged in
-            # execute_*_chat_stream). Emit a graceful fallback so the client
-            # renders real text instead of a blank bubble.
-            logger.error(
-                'Voice chat stream ended without an answer for uid=%s (error=%s)', uid, bool(callback_data.get('error'))
+            yield await emit_stream_error_fallback(
+                uid, app_id, chat_session, label='voice_chat', error_recorded=bool(callback_data.get('error'))
             )
-            fallback = await run_blocking(db_executor, build_stream_error_reply, uid, app_id, chat_session)
-            data = base64.b64encode(bytes(fallback.model_dump_json(), 'utf-8')).decode('utf-8')
-            yield f"done: {data}\n\n"
     finally:
         reset_usage_context(usage_token)
 
