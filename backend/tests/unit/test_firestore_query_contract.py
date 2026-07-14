@@ -138,6 +138,7 @@ def test_generated_firestore_manifest_matches_the_checked_in_contract():
         'fields': [
             {'fieldPath': 'account_generation', 'order': 'ASCENDING'},
             {'fieldPath': 'expires_at', 'order': 'ASCENDING'},
+            {'fieldPath': '__name__', 'order': 'ASCENDING'},
         ],
     }
 
