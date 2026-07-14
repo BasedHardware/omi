@@ -21,16 +21,26 @@ import OmiSupport
 /// Safe, non-sensitive classification for realtime WebSocket teardown messages.
 ///
 /// Gemini can idle-close warm sessions with WebSocket 1008 after the socket has
-/// lived for a while. That path is expected and should re-warm quietly rather
-/// than page Sentry as a production error. Fast 1008 closes are different: they
-/// usually mean provider policy/auth/config rejection and should still be
-/// reported, but with a stable category instead of raw provider text.
+/// lived for a while, and OpenAI has a known maximum-session-duration close.
+/// Both expected lifecycle paths should re-warm quietly rather than page Sentry
+/// as production errors. Fast 1008 closes are different: they usually mean
+/// provider policy/auth/config rejection and should still be reported, but with
+/// a stable category instead of raw provider text.
 enum RealtimeHubCloseCategory: String {
   case expectedIdleTeardown = "expected_idle_teardown"
+  case expectedSessionRotation = "expected_session_rotation"
   case providerAuthFailed = "provider_auth_failed"
   case providerQuotaExceeded = "provider_quota_exceeded"
   case providerPolicyCloseFast = "provider_policy_close_fast"
   case providerTransient = "provider_transient"
+}
+
+/// The controller owns transport replacement, while the voice-turn reducer owns
+/// any active logical turn. Keeping this plan typed prevents provider-close text
+/// from leaking into lifecycle decisions outside the classifier boundary.
+enum RealtimeHubSessionRotationPlan: Equatable {
+  case rewarmIdleTransport
+  case terminateActiveTurnAndRewarm
 }
 
 enum RealtimeHubCloseClassifier {
@@ -43,6 +53,12 @@ enum RealtimeHubCloseClassifier {
     provider: RealtimeHubProvider = .openai
   ) -> RealtimeHubCloseCategory? {
     let lower = message.lowercased()
+    if provider == .openai,
+      lower.contains("your session hit the maximum duration")
+      && lower.contains("60 minutes")
+    {
+      return .expectedSessionRotation
+    }
     guard lower.contains("websocket closed (1008)") else { return nil }
     if CredentialHealthManager.classifyProviderClose(
       message: message,
@@ -60,8 +76,20 @@ enum RealtimeHubCloseClassifier {
     return .providerPolicyCloseFast
   }
 
+  static func sessionRotationPlan(
+    for category: RealtimeHubCloseCategory?,
+    hasActiveTurn: Bool
+  ) -> RealtimeHubSessionRotationPlan? {
+    guard category == .expectedSessionRotation else { return nil }
+    return hasActiveTurn ? .terminateActiveTurnAndRewarm : .rewarmIdleTransport
+  }
+
+  static func isExpectedLifecycleClose(_ category: RealtimeHubCloseCategory?) -> Bool {
+    category == .expectedIdleTeardown || category == .expectedSessionRotation
+  }
+
   static func shouldReportToSentry(_ category: RealtimeHubCloseCategory?) -> Bool {
-    category != .expectedIdleTeardown
+    !isExpectedLifecycleClose(category)
   }
 }
 
@@ -4595,7 +4623,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     let fingerprint = provider.flatMap { APIKeyService.byokKey($0.byokProvider) }.map(
       APIKeyService.byokFingerprint)
     var credentialFailureClass: CredentialFailureClass?
-    if let provider, closeCategory != .expectedIdleTeardown {
+    if let provider, !RealtimeHubCloseClassifier.isExpectedLifecycleClose(closeCategory) {
       var failureClass = CredentialHealthManager.classifyProviderClose(
         message: message, provider: provider)
       if authMode == .managed, case .providerAuthFailed = failureClass {
@@ -4612,6 +4640,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     let categoryText = closeCategory.map { " category=\($0.rawValue)" } ?? ""
     let shouldRedactProviderMessage: Bool = {
       if closeCategory == .providerPolicyCloseFast { return true }
+      if closeCategory == .expectedSessionRotation { return true }
       if case .providerAuthFailed = credentialFailureClass { return true }
       if case .providerQuotaExceeded = credentialFailureClass { return true }
       return false
@@ -4628,8 +4657,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       logError("RealtimeHub: session error —\(categoryText) provider=\(providerTag)\(safeMessage)")
     } else {
       log(
-        "RealtimeHub: session closed —\(categoryText) provider=\(providerTag) aliveFor=\(Int(aliveFor))s \(message)"
+        "RealtimeHub: session closed —\(categoryText) provider=\(providerTag) aliveFor=\(Int(aliveFor))s\(safeMessage)"
       )
+    }
+    if let sessionRotationPlan = RealtimeHubCloseClassifier.sessionRotationPlan(
+      for: closeCategory,
+      hasActiveTurn: hasActiveTurn)
+    {
+      recoverFromExpectedSessionRotation(sessionRotationPlan, activeTurn: activeTurn)
+      return
     }
     if replacementAudioBuffer != nil, let failedProvider = provider {
       let replacementFailoverReason = failoverReason(for: credentialFailureClass)
@@ -4646,15 +4682,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       return
     }
     if ownsActiveHubTurn {
-      // The reply is dead — stop only output owned by this hub turn. A warm
-      // background socket must never terminate a Deepgram/Omni fallback turn.
-      pcmPlayer?.stop()
-      realtimePlaybackEpoch += 1
-      FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
-      if let turnID = activeTurn?.id {
-        VoiceTurnCoordinator.shared.send(.finish(turnID: turnID, reason: .providerFailed))
-      }
-      exitVoiceUI(clearResponseGlow: true)
+      terminateActiveHubTurn(activeTurn)
     }
     teardownSession()
     // Provider switching changes the user's voice identity and can fragment model-local
@@ -4689,6 +4717,35 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       self.reconnectPending = false
       if self.session == nil { self.ensureWarm() }
     }
+  }
+
+  /// OpenAI limits realtime sessions to sixty minutes. Rotation is a normal
+  /// transport lifecycle event: keep the provider choice, replace the retired
+  /// socket immediately, and let the reducer terminalize an interrupted turn.
+  private func recoverFromExpectedSessionRotation(
+    _ plan: RealtimeHubSessionRotationPlan,
+    activeTurn: VoiceTurn?
+  ) {
+    if plan == .terminateActiveTurnAndRewarm {
+      terminateActiveHubTurn(activeTurn)
+    }
+    teardownSession()
+    hubReconnectStrikes = 0
+    reconnectPending = false
+    ensureWarm()
+  }
+
+  /// A warm background socket must never terminate a Deepgram/Omni fallback
+  /// turn. The reducer deduplicates repeated terminal events, keeping the UI in
+  /// a single actionable terminal projection when transport callbacks race.
+  private func terminateActiveHubTurn(_ activeTurn: VoiceTurn?) {
+    pcmPlayer?.stop()
+    realtimePlaybackEpoch += 1
+    FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
+    if let turnID = activeTurn?.id {
+      VoiceTurnCoordinator.shared.send(.finish(turnID: turnID, reason: .providerFailed))
+    }
+    exitVoiceUI(clearResponseGlow: true)
   }
 
   /// Return the floating bar from its PTT voice state to compact after a hub turn.
