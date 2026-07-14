@@ -9621,4 +9621,25 @@ class AppLocalizationsTe extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Ray-Ban Meta కు కనెక్ట్ చేయడంలో లోపం: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'పరికర నిల్వ';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% నిండింది';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$total లో $used ఉపయోగించబడింది';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free ఖాళీ';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'పరికరం దాదాపు నిండిపోయింది — స్థలాన్ని ఖాళీ చేయడానికి సింక్ చేయండి.';
 }

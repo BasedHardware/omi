@@ -3143,5 +3143,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Enhetslagring",
+    "deviceStoragePercentFull": "{percent}% fullt",
+    "deviceStorageUsedOfTotal": "{used} av {total} brukt",
+    "deviceStorageFree": "{free} ledig",
+    "deviceStorageNearlyFull": "Enheten er nesten full — synkroniser for å frigjøre plass."
 }

@@ -552,6 +552,45 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  it.each(["background_agent", "delegated_agent"])(
+    "treats semantic %s surface hints as cross-surface child discovery",
+    async (surfaceKind) => {
+      const { store, kernel } = createKernelHarness(newDatabasePath());
+      const child = await kernel.executeRun({
+        ...baseRunInput,
+        requestId: `request-${surfaceKind}`,
+        surfaceKind: "floating_bar",
+        executionRole: "leaf",
+        externalRefKind: "pill",
+        externalRefId: `child-${surfaceKind}`,
+      });
+      const coordinator = await kernel.executeRun({
+        ...baseRunInput,
+        requestId: `request-${surfaceKind}-coordinator`,
+        surfaceKind: "main_chat",
+        externalRefKind: "chat",
+        externalRefId: `coordinator-${surfaceKind}`,
+      });
+
+      expect(coordinator.session.executionRole).toBe("coordinator");
+
+      const listed = parseToolResult(
+        await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+          ownerId: "owner",
+          surfaceKind,
+          limit: 1,
+        }),
+      );
+
+      expect(listed.ok).toBe(true);
+      expect(listed.sessions).toHaveLength(1);
+      expect(listed.sessions[0].session.surfaceKind).toBe("floating_bar");
+      expect(listed.sessions[0].latestRun.runId).toBe(child.run.runId);
+      expect(listed.sessions[0].latestRun.finalText).toBe(child.run.finalText);
+      store.close();
+    },
+  );
+
   it("rejects unknown coordinator bundles at the control-tool boundary", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const result = parseToolResult(
@@ -915,6 +954,52 @@ describe("agent control tools", () => {
     });
     expect(inspected.attempts[0].attemptId).toBe(result.attempt.attemptId);
     expect(inspected.events.map((event: any) => event.type)).toContain("run.succeeded");
+    store.close();
+  });
+
+  it("keeps session lists bounded and excludes persisted surface context", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const surfaceContextSentinel = "SENSITIVE_CONTEXT_SENTINEL".repeat(20_000);
+    await kernel.executeRun({
+      ...baseRunInput,
+      surfaceContextJson: JSON.stringify({ rendered: surfaceContextSentinel }),
+      prompt: "p".repeat(4_000),
+    });
+
+    const raw = await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+      ownerId: "owner",
+    });
+    const listed = parseToolResult(raw);
+
+    expect(Buffer.byteLength(raw, "utf8")).toBeLessThan(64 * 1024);
+    expect(raw).not.toContain("SENSITIVE_CONTEXT_SENTINEL");
+    expect(listed.sessions[0].latestRun.input.prompt).toContain("[truncated]");
+    expect(listed.sessions[0].latestRun.input).not.toHaveProperty("surfaceContextJson");
+    store.close();
+  });
+
+  it("keeps the aggregate default session list within the realtime provider budget", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    for (let index = 0; index < 60; index += 1) {
+      await kernel.executeRun({
+        ...baseRunInput,
+        externalRefId: `task-${index}`,
+        requestId: `request-${index}`,
+        prompt: `${index}-${"p".repeat(4_000)}`,
+      });
+    }
+
+    const raw = await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+      ownerId: "owner",
+    });
+    const listed = parseToolResult(raw);
+
+    expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(8 * 1024);
+    expect(listed.fetched_session_count).toBe(50);
+    expect(listed.returned_session_count).toBeLessThan(listed.fetched_session_count);
+    expect(listed.truncated).toBe(true);
+    expect(listed.sessions).toHaveLength(listed.returned_session_count);
+    expect(listed.task_agents).toHaveLength(listed.returned_session_count);
     store.close();
   });
 
@@ -1738,7 +1823,7 @@ describe("agent control tools", () => {
       sessionId: spawned.session.sessionId,
       parentRunId: null,
       mode: "act",
-      status: "queued",
+      status: "starting",
     });
     store.close();
   });
@@ -2240,6 +2325,16 @@ describe("agent control tools", () => {
         defaultAdapterId: provider,
         providerBoundary: `local_user:${provider}`,
       });
+      const listed = parseToolResult(
+        await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", { ownerId: "owner" }),
+      );
+      expect(listed.floating_agent_pills).toContainEqual(
+        expect.objectContaining({
+          sessionId: spawned.session.sessionId,
+          runId: spawned.run.runId,
+          provider,
+        }),
+      );
       expect(adapter.executed).toHaveLength(1);
       store.close();
     }
@@ -2276,6 +2371,81 @@ describe("agent control tools", () => {
         providerBoundary: `local_user:${provider}`,
       });
       expect(adapter.executed).toHaveLength(1);
+      store.close();
+    }
+  });
+
+  it("keeps an explicit realtime local provider on its own adapter and model profile", async () => {
+    for (const provider of ["hermes", "openclaw"] as const) {
+      const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), provider);
+      const surface = {
+        surfaceKind: "realtime_voice",
+        externalRefKind: "chat",
+        externalRefId: `voice-${provider}`,
+      };
+      const coordinator = kernel.resolveSurfaceSession({
+        ownerId: "owner",
+        surfaceRef: surface,
+        defaultAdapterId: "pi-mono",
+        modelProfile: "omi-sonnet",
+        providerBoundary: "managed_cloud",
+        executionRole: "coordinator",
+      });
+      const parentRun = store.insertRun({
+        sessionId: coordinator.agentSessionId,
+        clientId: "realtime",
+        requestId: `voice-parent-${provider}`,
+        status: "running",
+        mode: "act",
+      });
+      const spawned = parseToolResult(
+        await handleAgentControlToolCall(
+          {
+            ...ownerContext(kernel),
+            defaultAdapterId: "pi-mono",
+            providerBoundary: "managed_cloud",
+            callerSessionId: coordinator.agentSessionId,
+            executionRole: "coordinator",
+            authorizedCallerRunId: parentRun.runId,
+            authorizedProducerJournal: {
+              schemaVersion: 1,
+              surface,
+              continuityKey: `voice-provider-model-${provider}`,
+              pillId: `pill-provider-model-${provider}`,
+              userText: `Ask ${provider} for a summary`,
+              assistantText: `Starting ${provider}`,
+              objective: `Run this with ${provider}`,
+              title: `Ask ${provider}`,
+            },
+          },
+          "spawn_agent",
+          {
+            objective: `Run this with ${provider}`,
+            provider,
+            visible: true,
+            externalRefId: `pill-provider-model-${provider}`,
+            requestId: `voice-${provider}-spawn`,
+            clientId: "realtime",
+            ownerId: "owner",
+          },
+        ),
+      );
+
+      await waitUntil(() => store.getRow(
+        "SELECT status FROM runs WHERE run_id = ?",
+        [spawned.run.runId],
+      ).status === "succeeded");
+      expect(spawned.session).toMatchObject({
+        defaultAdapterId: provider,
+        providerBoundary: `local_user:${provider}`,
+        modelProfile: null,
+      });
+      expect(kernel.sessionExecutionProfile(spawned.session.sessionId, "owner")).toMatchObject({
+        adapterId: provider,
+        credentialScope: "local_user",
+        modelProfile: null,
+      });
+      expect(adapter.opened.at(-1)?.model).toBeUndefined();
       store.close();
     }
   });
@@ -2968,7 +3138,7 @@ describe("agent control tools", () => {
     expect(spawned.ok).toBe(true);
     expect(spawned.result).toBeUndefined();
     expect(spawned.session.sessionId).not.toBe(parent.session.sessionId);
-    expect(spawned.run.status).toBe("queued");
+    expect(spawned.run.status).toBe("starting");
     expect(buildMcpServers).toHaveBeenCalledWith("act", undefined, undefined, {
       ownerId: "owner",
       requestId: "delegate-spawn-1",

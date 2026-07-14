@@ -26,6 +26,27 @@ PUSHER_SESSION_DEGRADED = Gauge(
     'Number of sessions currently in degraded mode (pusher unavailable)',
 )
 
+LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS = Gauge(
+    'listen_finalization_oldest_nonterminal_age_seconds',
+    'Age of the oldest queued, leased, or blocked listen finalization job',
+)
+
+LISTEN_FINALIZATION_JOB_STATUS = Gauge(
+    'listen_finalization_jobs',
+    'Current durable listen finalization job count by non-success status',
+    ['status'],
+)
+
+LISTEN_FINALIZATION_RETRIES_TOTAL = Counter(
+    'listen_finalization_retries_total',
+    'Durable listen finalization jobs replayed by the reconciler',
+)
+
+LISTEN_FINALIZATION_DEAD_LETTER_TOTAL = Counter(
+    'listen_finalization_dead_letter_total',
+    'Listen finalization jobs terminalized after their final Cloud Tasks attempt',
+)
+
 LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS = Counter(
     'llm_gateway_chat_extraction_requests_total',
     'LLM gateway routing outcomes by feature (serving, fallback, direct_exception, shadow)',

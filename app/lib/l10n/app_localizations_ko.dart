@@ -9417,4 +9417,25 @@ class AppLocalizationsKo extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Ray-Ban Meta 연결 오류: $error';
   }
+
+  @override
+  String get deviceStorageTitle => '기기 저장 공간';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% 사용 중';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$total 중 $used 사용';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free 남음';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => '기기가 거의 가득 찼습니다 — 동기화하여 공간을 확보하세요.';
 }

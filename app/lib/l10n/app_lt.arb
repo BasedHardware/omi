@@ -3143,5 +3143,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Įrenginio saugykla",
+    "deviceStoragePercentFull": "užpildyta {percent}%",
+    "deviceStorageUsedOfTotal": "panaudota {used} iš {total}",
+    "deviceStorageFree": "{free} laisva",
+    "deviceStorageNearlyFull": "Įrenginys beveik pilnas — sinchronizuokite, kad atlaisvintumėte vietos."
 }

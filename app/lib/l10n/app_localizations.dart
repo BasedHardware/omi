@@ -17852,6 +17852,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error connecting to Ray-Ban Meta: {error}'**
   String errorConnectingRayBanMeta(String error);
+
+  /// Title of the on-device storage usage card on the Auto Sync page
+  ///
+  /// In en, this message translates to:
+  /// **'Device Storage'**
+  String get deviceStorageTitle;
+
+  /// Percentage of on-device storage used
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}% full'**
+  String deviceStoragePercentFull(int percent);
+
+  /// Used vs total on-device storage, e.g. 338 MB of 469 MB used
+  ///
+  /// In en, this message translates to:
+  /// **'{used} of {total} used'**
+  String deviceStorageUsedOfTotal(String used, String total);
+
+  /// Amount of free on-device storage, e.g. 131 MB free
+  ///
+  /// In en, this message translates to:
+  /// **'{free} free'**
+  String deviceStorageFree(String free);
+
+  /// Warning shown when on-device storage is 95% or more full
+  ///
+  /// In en, this message translates to:
+  /// **'Device nearly full — sync to free space.'**
+  String get deviceStorageNearlyFull;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

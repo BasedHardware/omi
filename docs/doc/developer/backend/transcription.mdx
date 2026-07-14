@@ -217,32 +217,35 @@ activates the client's existing reconnect or local-recovery path.
 
 ## Production transcription candidate gate
 
-The manual production backend workflow deploys a no-traffic, uniquely tagged
-`backend` candidate and proves the real
-`/v2/voice-message/transcribe` route before shifting any Cloud Run traffic. The
-tag resolver requires the exact candidate revision recorded in Cloud Run
-`status.traffic`; it cannot accidentally exercise the current serving revision
-or the latest-created revision. The full-route probe requires HTTP 200,
-`outcome=success`, the exact normalized known-audio phrase, and the configured
-provider/model identity. It emits only redacted booleans and status codes.
+The manual backend workflow deploys a no-traffic, uniquely tagged `backend`
+candidate and proves the real `/v2/voice-message/transcribe` route before
+shifting any Cloud Run traffic. The same path runs for an explicit development
+deployment first, which is the required identity-and-route dry run before a
+production release. The tag resolver requires the exact candidate revision
+recorded in Cloud Run `status.traffic`; it cannot accidentally exercise the
+current serving revision or latest-created revision.
 
-Configure these protected production-environment values before the first gated
-deploy; missing configuration fails the deploy before promotion:
+`backend/testing/release_fixtures/transcription-release-probe.wav` and its
+versioned JSON manifest provide the known audio, language, expected transcript,
+SHA-256 digest, and CC-BY-4.0 LibriSpeech provenance. The gate requires HTTP
+200, `outcome=success`, and the exact normalized transcript. It intentionally
+does not assert provider or model identity: this is a semantic capability gate,
+not an unreviewed routing-policy setting.
 
-| Value | GitHub protection | Purpose |
-| --- | --- | --- |
-| `OMI_TRANSCRIPTION_SYNTHETIC_AUDIO_URL` | Secret | Protected known-audio fixture URL |
-| `OMI_TRANSCRIPTION_SYNTHETIC_BEARER_TOKEN` | Secret | Test account bearer token |
-| `OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_PHRASE` | Secret | Exact expected normalized text |
-| `OMI_TRANSCRIPTION_SYNTHETIC_LANGUAGE` | Environment variable | Language submitted in the real multipart request |
-| `OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_PROVIDER` | Environment variable | Expected selected provider |
-| `OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_MODEL` | Environment variable | Expected selected model |
+The shared `transcription-release-candidate-probe` action uses the existing
+authenticated deploy identity to read the existing `FIREBASE_API_KEY` Secret
+Manager secret, sign a five-minute Firebase custom token for the dedicated
+non-human `omi-release-probe` UID, and exchange it immediately for an ID token.
+It writes that token only to an owner-only temporary runner file, never exposes
+it through workflow outputs or evidence, and deletes it at step exit. The
+workflow makes no IAM changes: the existing deploy identity must be reviewed to
+have only the Secret Manager read and `iam.serviceAccounts.signJwt` access this
+action needs. Missing access fails closed before promotion. Reports contain only
+redacted booleans and status codes.
 
-The Cloud Run candidate itself makes the private VPC hop to Parakeet. A direct
-Parakeet probe remains an optional diagnostic for a VPC-connected runner; it is
-not the production promotion authority. After a passing or failed candidate
-gate, the workflow removes its temporary tag; a failed gate never shifts
-traffic.
+The Cloud Run candidate itself makes the private VPC hop to Parakeet. After a
+passing or failed candidate gate, the workflow removes its temporary tag; a
+failed gate never shifts traffic.
 
 ## Deepgram Configuration
 

@@ -15,6 +15,13 @@ struct KernelVoiceContextSnapshot: Equatable, Sendable {
   let context: String
   let freshnessIdentity: String
   let turnIDs: Set<String>
+
+  /// `.empty` is a transport/bridge failure sentinel, not a valid blank
+  /// conversation. A valid new conversation may render no text, but it still
+  /// has a kernel session and a deterministic freshness identity.
+  var isResolved: Bool {
+    !sessionId.isEmpty && !freshnessIdentity.isEmpty
+  }
 }
 
 struct KernelAutomationTurnRange: Equatable, Sendable {
@@ -59,7 +66,7 @@ enum KernelAgentLifecycleMutation {
       .filter({ turn in
         let blocks = ChatContentBlockCodec.decode(turn.contentBlocksJSON) ?? []
         return blocks.contains { block in
-          guard case .agentSpawn(_, let spawnPillID, _, let spawnRunID, _, _) = block else {
+          guard case .agentSpawn(_, let spawnPillID, _, let spawnRunID, _, _, _) = block else {
             return false
           }
           if spawnPillID == pillID { return true }

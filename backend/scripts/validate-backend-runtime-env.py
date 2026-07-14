@@ -42,6 +42,11 @@ _NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_ENV = frozenset(
 _NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_SECRETS = frozenset({'TYPESENSE_HOST', 'TYPESENSE_API_KEY'})
 _SYNC_LEDGER_FENCE_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill')
 _SYNC_LEDGER_FENCE_MODES = frozenset({'legacy', 'standby', 'active'})
+_MEMORY_MAINTENANCE_DEV_REQUIRED_FLAGS = {
+    '--task-timeout': '3600s',
+    '--cpu': '2',
+    '--memory': '2Gi',
+}
 
 
 def _as_config_dict(value: object) -> ConfigDict | None:
@@ -322,7 +327,7 @@ def _manifest_env_binding_is_configured(env_map: ConfigDict, secrets_map: Config
     if entry is not None:
         if 'value' in entry:
             return bool(str(entry['value']).strip())
-        if 'secret' in entry or 'env_var' in entry:
+        if 'secret' in entry or 'env_var' in entry or 'config_map' in entry:
             return True
     secret_entry = _as_config_dict(secrets_map.get(key))
     return secret_entry is not None and bool(str(secret_entry.get('secret', '')).strip())
@@ -460,6 +465,20 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
 
     job_env = _as_config_dict(job.get('env')) or {}
     job_secrets = _as_config_dict(job.get('secrets')) or {}
+    if env == 'dev':
+        job_flags = _as_config_dict(job.get('flags')) or {}
+        for flag_name, expected_value in _MEMORY_MAINTENANCE_DEV_REQUIRED_FLAGS.items():
+            actual_entry = job_flags.get(flag_name)
+            if actual_entry is None:
+                errors.append(ValidationError(scope, f'missing required dev Cloud Run flag {flag_name}'))
+                continue
+            if _expected_flag_value(actual_entry) != expected_value:
+                errors.append(
+                    ValidationError(
+                        scope,
+                        f'dev Cloud Run flag {flag_name} must be {expected_value!r}',
+                    )
+                )
     for required_env in (
         'MEMORY_MODE',
         'MEMORY_ENABLED_USERS',
@@ -608,6 +627,7 @@ def _validate_gke(env_config: ConfigDict, *, strict_provisional: bool) -> list[V
                 expected=service_config.get('env', {}),
                 actual=actual_env,
                 strict_provisional=strict_provisional,
+                config_maps=_config_map_names(values.get('envFrom', [])),
             )
         )
     return errors
@@ -745,6 +765,14 @@ def _validate_cloud_run_workflows(
                 actual=actual_secrets,
             )
         )
+        errors.extend(
+            _validate_workflow_flags(
+                scope=f'cloud_run_workflow/{job}',
+                expected=_as_config_dict(job_config.get('flags')) or {},
+                actual=_substitute_values(job_state.get('flags', {}), variables=workflow_vars),
+                strict_provisional=strict_provisional,
+            )
+        )
     return errors
 
 
@@ -819,9 +847,16 @@ def _validate_env_entries(
     expected: ConfigDict,
     actual: EnvEntryMap,
     strict_provisional: bool,
+    config_maps: set[str] | None = None,
 ) -> list[ValidationError]:
     errors: list[ValidationError] = []
     for name, expected_entry in expected.items():
+        if 'config_map' in expected_entry:
+            config_map = _as_config_dict(expected_entry['config_map']) or {}
+            expected_name = config_map.get('name')
+            if not isinstance(expected_name, str) or expected_name not in (config_maps or set()):
+                errors.append(ValidationError(scope, f'env {name} must come from ConfigMap {expected_name!r}'))
+            continue
         actual_entry = actual.get(name)
         if actual_entry is None:
             if _is_provisional(expected_entry) and not strict_provisional:
@@ -880,6 +915,17 @@ def _env_entries_by_name(raw_env: object) -> EnvEntryMap:
         if entry_dict is not None and isinstance(entry_dict.get('name'), str):
             result[entry_dict['name']] = entry_dict
     return result
+
+
+def _config_map_names(raw_env_from: object) -> set[str]:
+    entries = _as_config_list(raw_env_from) or []
+    names: set[str] = set()
+    for entry in entries:
+        config_map_ref = _as_config_dict((_as_config_dict(entry) or {}).get('configMapRef'))
+        name = config_map_ref.get('name') if config_map_ref is not None else None
+        if isinstance(name, str):
+            names.add(name)
+    return names
 
 
 def _literal_env_entries_by_name(raw_env: object, *, variables: StringMap | None = None) -> EnvEntryMap:
@@ -1098,6 +1144,7 @@ def _rendered_runtime_env_outputs(workflow: ConfigDict, *, env: str, manifest: C
             if job_config is None:
                 continue
             output_prefix = job.replace('-', '_')
+            outputs[f'{output_prefix}_flags'] = _render_cloud_run_flags(job_config.get('flags', {}))
             outputs[f'{output_prefix}_env_vars'] = _render_cloud_run_env_vars(job_config.get('env', {}))
             outputs[f'{output_prefix}_secrets'] = _render_cloud_run_secrets(job_config.get('secrets', {}))
     return outputs

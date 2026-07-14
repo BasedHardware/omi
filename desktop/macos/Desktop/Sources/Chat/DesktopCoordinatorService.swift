@@ -72,6 +72,7 @@ struct DesktopCoordinatorSessionProjection: Codable {
   let runStatus: String?
   let runMode: String?
   let attemptId: String?
+  let provider: String?
   let updatedAt: String?
   let source: String
 }
@@ -233,6 +234,7 @@ struct DesktopCoordinatorAgentRunInspection: Codable {
   let sessionId: String?
   let runId: String?
   let attemptId: String?
+  let provider: String?
   let status: String
   let finalText: String?
   let errorMessage: String?
@@ -790,6 +792,7 @@ final class DesktopCoordinatorService {
         runStatus: stringValue(selectedRun["status"]),
         runMode: stringValue(selectedRun["mode"]),
         attemptId: stringValue(selectedAttempt["attemptId"]),
+        provider: stringValue((session["metadata"] as? [String: Any])?["provider"]),
         updatedAt: stringValue(session["updatedAt"]) ?? stringValue(selectedRun["updatedAt"]),
         source: "runtime_control_tool:list_agent_sessions"
       )
@@ -1040,10 +1043,10 @@ final class DesktopCoordinatorService {
 
   private func parseInspectedRun(from raw: String) -> DesktopCoordinatorAgentRunInspection {
     guard let object = jsonObject(from: raw) else {
-      return DesktopCoordinatorAgentRunInspection(sessionId: nil, runId: nil, attemptId: nil, status: "failed", finalText: nil, errorMessage: "Unable to inspect agent run: invalid runtime response", artifacts: [])
+      return DesktopCoordinatorAgentRunInspection(sessionId: nil, runId: nil, attemptId: nil, provider: nil, status: "failed", finalText: nil, errorMessage: "Unable to inspect agent run: invalid runtime response", artifacts: [])
     }
     if object["ok"] as? Bool == false {
-      return DesktopCoordinatorAgentRunInspection(sessionId: nil, runId: nil, attemptId: nil, status: "failed", finalText: nil, errorMessage: runtimeErrorMessage(from: object) ?? "Unable to inspect agent run", artifacts: [])
+      return DesktopCoordinatorAgentRunInspection(sessionId: nil, runId: nil, attemptId: nil, provider: nil, status: "failed", finalText: nil, errorMessage: runtimeErrorMessage(from: object) ?? "Unable to inspect agent run", artifacts: [])
     }
     let session = object["session"] as? [String: Any] ?? [:]
     let run = object["run"] as? [String: Any] ?? [:]
@@ -1053,6 +1056,7 @@ final class DesktopCoordinatorService {
       sessionId: stringValue(session["sessionId"]),
       runId: stringValue(run["runId"]),
       attemptId: stringValue(attempt["attemptId"]) ?? stringValue(run["attemptId"]) ?? stringValue(object["attemptId"]),
+      provider: stringValue((session["metadata"] as? [String: Any])?["provider"]),
       status: stringValue(run["status"]) ?? stringValue(object["terminalStatus"]) ?? "unknown",
       finalText: stringValue(run["finalText"]) ?? stringValue(result["text"]) ?? stringValue(object["text"]),
       errorMessage: stringValue(run["errorMessage"]) ?? runtimeErrorMessage(from: object),

@@ -320,7 +320,8 @@
     "promptSnippet": "list_agent_sessions - List Omi-managed agent sessions and active runs",
     "promptGuidelines": [
       "Use for current or recent kernel-backed Omi agents/subagents across chat, PTT/realtime, task chat, and floating-bar pills.",
-      "Returns task_agents and floating_agent_pills alongside canonical session summaries."
+      "Returns task_agents and floating_agent_pills alongside canonical session summaries.",
+      "For a prior child agent's final answer, do not infer run completion from session status or restrict discovery to status='open'. List recent sessions, then call get_agent_run with the returned runId and answer from run.finalText without exposing the internal id."
     ],
     "latency": "fast local",
     "inputSchema": {
@@ -340,7 +341,7 @@
         },
         "surfaceKind": {
           "type": "string",
-          "description": "Filter to a canonical surface kind.",
+          "description": "Optional surface hint. background_agent and delegated_agent discover recent child sessions across concrete surfaces.",
           "enum": [
             "main_chat",
             "task_chat",
@@ -380,7 +381,7 @@
         },
         "surfaceKind": {
           "type": "string",
-          "description": "Filter to a canonical surface kind.",
+          "description": "Optional surface hint. background_agent and delegated_agent discover recent child sessions across concrete surfaces.",
           "enum": [
             "main_chat",
             "task_chat",
@@ -425,7 +426,7 @@
       ]
     },
     "voice": {
-      "realtimeDescription": "List canonical Omi-managed agent sessions/runs across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. Use when the user asks what canonical agents or subagents are active, recent, failed, or manageable.",
+      "realtimeDescription": "List canonical Omi-managed agents and subagents, including their sessions/runs, across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. For a prior child agent's final answer, do not infer run completion from session status or restrict discovery to status='open'. List recent sessions, then inspect the returned run with get_agent_run. Keep internal ids out of the user-visible response.",
       "schemaOverride": {
         "type": "object",
         "properties": {
@@ -449,7 +450,7 @@
               "floating_bar",
               "floating_pill"
             ],
-            "description": "Optional canonical surface filter."
+            "description": "Optional surface hint. background_agent and delegated_agent discover recent child sessions across concrete surfaces."
           },
           "limit": {
             "type": "number",
@@ -480,7 +481,8 @@
     "promptSnippet": "get_agent_run - Inspect one Omi agent run",
     "promptGuidelines": [
       "Use a runId from list_agent_sessions or a correlated Omi result.",
-      "Returns the run, attempts, adapter bindings, events, and artifact metadata."
+      "Returns the run, attempts, adapter bindings, events, and artifact metadata.",
+      "For a completed child, use run.finalText to answer the user and keep the internal runId out of the user-visible response."
     ],
     "latency": "fast local",
     "inputSchema": {
@@ -555,7 +557,7 @@
       ]
     },
     "voice": {
-      "realtimeDescription": "Inspect one canonical Omi-managed agent run. Prefer an agentRef from list_agent_sessions.",
+      "realtimeDescription": "Inspect one canonical Omi-managed agent run. Prefer an agentRef or runId from list_agent_sessions. For a completed child, answer from run.finalText and do not expose the internal id.",
       "schemaOverride": {
         "type": "object",
         "properties": {
@@ -3888,10 +3890,11 @@
   {
     "name": "request_permission",
     "label": "Request Permission",
-    "description": "Open the native macOS permission prompt or Settings pane for one required permission after the user explicitly asks for it.",
+    "description": "Open the native macOS permission prompt or Settings pane for one required permission after the user explicitly asks for it. Screen share, screen sharing, and screen-share mean screen_recording.",
     "promptSnippet": "request_permission - Request a macOS permission",
     "promptGuidelines": [
-      "Call only when the current user message explicitly requests one named permission, or clearly affirms your immediately preceding missing-permission request.",
+      "Call only when the current user message explicitly requests one named permission, clearly affirms your immediately preceding one-permission request, or directly says to request it/that permission.",
+      "Treat screen share, screen sharing, and screen-share as the screen_recording permission type.",
       "For generic or multi-permission requests, ask the user which permission they want to grant.",
       "Use strict permission types only. Do not invent permission names.",
       "After requesting, explain any returned requires_restart or pending status."
@@ -3947,15 +3950,16 @@
     ],
     "capabilityDoc": {
       "title": "Request Permission",
-      "summary": "Open or guide the user through granting a required macOS permission.",
+      "summary": "Open or guide the user through granting a required macOS permission. Screen sharing is the macOS Screen Recording permission.",
       "bullets": [
-        "Call only when the current user message names one permission or clearly affirms your immediately preceding permission request.",
+        "Call only when the current user message names one permission, clearly affirms your immediately preceding one-permission request, or directly says to request it/that permission.",
+        "Treat screen share, screen sharing, and screen-share as the screen_recording permission type.",
         "Ask the user to choose when their request is generic or names multiple permissions.",
         "The user must still complete the native macOS prompt or Settings toggle."
       ]
     },
     "voice": {
-      "realtimeDescription": "Request Omi's macOS permission through the kernel-authorized native executor by opening the native prompt or relevant System Settings pane. Supports Screen Recording, microphone, notifications, Accessibility, Automation, and Full Disk Access."
+      "realtimeDescription": "Request Omi's macOS permission through the kernel-authorized native executor by opening the native prompt or relevant System Settings pane. Screen share, screen sharing, and screen-share mean Screen Recording. Supports Screen Recording, microphone, notifications, Accessibility, Automation, and Full Disk Access."
     }
   },
   {

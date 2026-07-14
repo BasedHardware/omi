@@ -4,6 +4,27 @@ import XCTest
 
 @MainActor
 final class FloatingControlBarStateTests: XCTestCase {
+    func testChatPTTOverlayShowsReducerOwnedRecordingAndHintState() {
+        XCTAssertTrue(
+            FloatingChatPTTOverlayPolicy.shouldShow(
+                showingAIConversation: true,
+                isVoiceListening: true
+            )
+        )
+        XCTAssertFalse(
+            FloatingChatPTTOverlayPolicy.shouldShow(
+                showingAIConversation: false,
+                isVoiceListening: true
+            )
+        )
+        XCTAssertFalse(
+            FloatingChatPTTOverlayPolicy.shouldShow(
+                showingAIConversation: true,
+                isVoiceListening: false
+            )
+        )
+    }
+
     func testNotchHoverMenuVisibilityIsSingleGatedState() {
         let state = FloatingControlBarState()
         state.usesNotchIsland = true
@@ -225,6 +246,72 @@ final class FloatingControlBarStateTests: XCTestCase {
         // Mutating provider message text is reflected without copying into state.
         provider.messages[3].text = "Sure — updated."
         XCTAssertEqual(state.currentAIMessage(from: provider)?.text, "Sure — updated.")
+    }
+
+    func testViewportProjectsOneTerminalSubagentRowForCurrentAndArchivedChat() throws {
+        let state = FloatingControlBarState()
+        let provider = ChatProvider()
+        let pillID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000123"))
+        let answer = ChatMessage(
+            id: "subagent-answer",
+            clientTurnId: "turn-1",
+            text: "",
+            sender: .ai,
+            contentBlocks: [
+                .toolCall(
+                    id: "spawn-tool",
+                    name: "spawn_agent",
+                    status: .completed,
+                    output: "id: \(pillID.uuidString)\nrunId: run-1"
+                ),
+                .agentSpawn(
+                    id: "spawn-block",
+                    pillId: pillID,
+                    sessionId: "session-1",
+                    runId: "run-1",
+                    title: "Sleep agent",
+                    objective: "Sleep for five seconds"
+                ),
+                .agentCompletion(
+                    id: "completion-block",
+                    pillId: pillID,
+                    sessionId: "session-1",
+                    runId: "run-1",
+                    title: "Sleep agent",
+                    promptSnippet: "Sleep for five seconds",
+                    output: "Done.",
+                    status: "completed"
+                ),
+            ]
+        )
+        provider.messages = [answer]
+
+        state.bindAnswerMessage(answer)
+        let current = try XCTUnwrap(state.currentAIMessage(from: provider))
+        let currentGroups = ContentBlockGroup.visibleChatGroups(
+            current.contentBlocks,
+            isStreaming: current.isStreaming
+        )
+        XCTAssertEqual(currentGroups.count, 1)
+        guard case .agentCompletion(_, let currentPillID, _, let currentRunID, _, _, _, _) = currentGroups[0] else {
+            return XCTFail("current floating response must contain one terminal subagent row")
+        }
+        XCTAssertEqual(currentPillID, pillID)
+        XCTAssertEqual(currentRunID, "run-1")
+
+        state.archiveCurrentExchange(using: provider)
+        let history = state.derivedChatHistory(from: provider)
+        let historyMessage = try XCTUnwrap(history.first?.aiMessage)
+        let historyGroups = ContentBlockGroup.visibleChatGroups(
+            historyMessage.contentBlocks,
+            isStreaming: historyMessage.isStreaming
+        )
+        XCTAssertEqual(historyGroups.count, 1)
+        guard case .agentCompletion(_, let historyPillID, _, let historyRunID, _, _, _, _) = historyGroups[0] else {
+            return XCTFail("archived floating response must contain one terminal subagent row")
+        }
+        XCTAssertEqual(historyPillID, pillID)
+        XCTAssertEqual(historyRunID, "run-1")
     }
 
     /// Close/restore uses activity + viewport anchors, not copied transcript text.

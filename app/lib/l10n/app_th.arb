@@ -3143,5 +3143,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "ที่จัดเก็บของอุปกรณ์",
+    "deviceStoragePercentFull": "เต็ม {percent}%",
+    "deviceStorageUsedOfTotal": "ใช้ไป {used} จาก {total}",
+    "deviceStorageFree": "ว่าง {free}",
+    "deviceStorageNearlyFull": "อุปกรณ์เกือบเต็มแล้ว — ซิงค์เพื่อเพิ่มพื้นที่ว่าง"
 }

@@ -57,6 +57,11 @@ def test_network_flags_still_required(monkeypatch):
 def test_render_dev_emits_memory_maintenance_job_outputs(capsys, monkeypatch):
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-dev-vpc-1')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-us-central1-dev-vpc-1-subnet-1')
+    monkeypatch.setenv('GOOGLE_CLIENT_ID', 'fake-google-client-id')
+    monkeypatch.setenv('STT_PRERECORDED_MODEL', 'dg-nova-3')
+    monkeypatch.setenv('MCP_OAUTH_CLAUDE_CLIENT_ID', 'fake-claude-client-id')
+    monkeypatch.setenv('MCP_OAUTH_CLAUDE_CLIENT_NAME', 'Claude')
+    monkeypatch.setenv('MCP_OAUTH_CLAUDE_REDIRECT_URIS', 'https://claude.example/callback')
     monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'http://172.16.63.232')
     monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'dev'])
     rc = _MODULE['main']()
@@ -69,6 +74,13 @@ def test_render_dev_emits_memory_maintenance_job_outputs(capsys, monkeypatch):
     assert 'MEMORY_CANONICAL_CONSOLIDATION_ENABLED=true' in memory_env
     assert 'MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23' in memory_env
     assert 'MEMORY_MODE=read' in memory_env
+    assert 'TYPESENSE_HOST_PORT=443' in memory_env
+
+    flags_marker = '__BACKEND_RUNTIME_ENV_memory_maintenance_job_flags__'
+    flags_start = out.index(f'memory_maintenance_job_flags<<{flags_marker}')
+    flags_body_start = out.index('\n', flags_start) + 1
+    flags_body_end = out.index(flags_marker, flags_body_start)
+    assert out[flags_body_start:flags_body_end].strip() == '--task-timeout=3600s --cpu=2 --memory=2Gi'
 
     assert 'memory_maintenance_job_secrets<<' in out
     assert 'OPENAI_API_KEY=OPENAI_API_KEY:latest' in out
@@ -111,6 +123,11 @@ def test_render_dev_emits_memory_maintenance_job_outputs(capsys, monkeypatch):
 def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypatch):
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-prod-vpc')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-prod-subnet')
+    monkeypatch.setenv('GOOGLE_CLIENT_ID', 'fake-google-client-id')
+    monkeypatch.setenv('STT_PRERECORDED_MODEL', 'dg-nova-3')
+    monkeypatch.setenv('MCP_OAUTH_CLAUDE_CLIENT_ID', 'fake-claude-client-id')
+    monkeypatch.setenv('MCP_OAUTH_CLAUDE_CLIENT_NAME', 'Claude')
+    monkeypatch.setenv('MCP_OAUTH_CLAUDE_REDIRECT_URIS', 'https://claude.example/callback')
     monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'prod'])
     rc = _MODULE['main']()
     assert rc == 0
@@ -164,7 +181,10 @@ def test_memory_maintenance_job_workflow_passes_vpc_vars_and_checkout_sha():
     assert 'memory_maintenance_job_secrets' in text
     assert 'CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}' in text
     assert 'CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}' in text
-    assert 'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }}' in text
+    assert (
+        'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} '
+        '${{ steps.runtime-env.outputs.memory_maintenance_job_flags }}'
+    ) in text
     assert "id-token: 'write'" not in text
     assert 'git rev-parse --short=7 HEAD' in text
     assert 'short_sha=${GITHUB_SHA::7}' not in text

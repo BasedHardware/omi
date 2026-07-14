@@ -333,6 +333,13 @@ private struct DesktopAutomationHealth: Codable {
   let bundleIdentifier: String
   let bridgePort: UInt16
   let requiresAuth: Bool
+  let backendEnvironment: String
+  let pythonBackendURL: String
+  let rustBackendURL: String
+  let agentRuntimeRunning: Bool
+  let agentRuntimeExpectedProtocolVersion: Int
+  let agentRuntimeProtocolVersion: Int?
+  let agentRuntimeVersion: String?
 }
 
 struct DesktopAutomationRouteTrace: Codable {
@@ -3546,13 +3553,22 @@ final class DesktopAutomationBridge {
         statusCode: 403)
     }
     if request.method == "GET", request.path == "/health", request.headers["authorization"] == nil {
+      let runtime = await AgentRuntimeProcess.shared.diagnosticsSnapshot()
       return jsonResponse(
         DesktopAutomationHealth(
           ok: true,
           name: "omi-desktop-automation",
           bundleIdentifier: Bundle.main.bundleIdentifier ?? "unknown",
           bridgePort: DesktopAutomationLaunchOptions.port,
-          requiresAuth: true
+          requiresAuth: true,
+          backendEnvironment: DesktopBackendEnvironment.shouldUseDevelopmentBackends
+            ? "development" : "production",
+          pythonBackendURL: DesktopBackendEnvironment.pythonBaseURL(),
+          rustBackendURL: DesktopBackendEnvironment.rustBackendURL(),
+          agentRuntimeRunning: runtime.running,
+          agentRuntimeExpectedProtocolVersion: AgentRuntimeProcess.expectedProtocolVersion,
+          agentRuntimeProtocolVersion: runtime.protocolVersion,
+          agentRuntimeVersion: runtime.runtimeVersion
         )
       )
     }

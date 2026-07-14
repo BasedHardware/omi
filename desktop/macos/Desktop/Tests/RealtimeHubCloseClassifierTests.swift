@@ -22,6 +22,44 @@ final class RealtimeHubCloseClassifierTests: XCTestCase {
     XCTAssertTrue(RealtimeHubCloseClassifier.shouldReportToSentry(category))
   }
 
+  func testClassifiesOpenAIMaximumDurationAsExpectedSessionRotation() {
+    let category = RealtimeHubCloseClassifier.category(
+      message: "Your session hit the maximum duration of 60 minutes.",
+      aliveFor: 60 * 60,
+      provider: .openai)
+
+    XCTAssertEqual(category, .expectedSessionRotation)
+    XCTAssertEqual(
+      RealtimeHubCloseClassifier.sessionRotationPlan(
+        for: category,
+        hasActiveTurn: false),
+      .rewarmIdleTransport)
+    XCTAssertFalse(RealtimeHubCloseClassifier.shouldReportToSentry(category))
+  }
+
+  func testOpenAISessionRotationDuringTurnRequiresReducerOwnedTerminalization() {
+    let category = RealtimeHubCloseClassifier.category(
+      message: "Your session hit the maximum duration of 60 minutes.",
+      aliveFor: 60 * 60,
+      hasActiveTurn: true,
+      provider: .openai)
+
+    XCTAssertEqual(
+      RealtimeHubCloseClassifier.sessionRotationPlan(
+        for: category,
+        hasActiveTurn: true),
+      .terminateActiveTurnAndRewarm)
+  }
+
+  func testDoesNotClassifyMaximumDurationForAnotherProvider() {
+    let category = RealtimeHubCloseClassifier.category(
+      message: "Your session hit the maximum duration of 60 minutes.",
+      aliveFor: 60 * 60,
+      provider: .gemini)
+
+    XCTAssertNil(category)
+  }
+
   func testClassifiesFastWebSocket1008AsProviderPolicyClose() {
     let category = RealtimeHubCloseClassifier.category(
       message: "WebSocket closed (1008) policy violation",

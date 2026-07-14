@@ -48,6 +48,7 @@ def test_workflow_contract_sources_select_adjacent_tests():
         "backend/routers/transcribe.py": "tests/unit/test_listen_pipeline.py",
         "backend/config/prerecorded_stt.py": "tests/unit/test_parakeet_prerecorded.py",
         "backend/scripts/validate-backend-runtime-env.py": "tests/unit/test_backend_runtime_env_validator.py",
+        "backend/scripts/firebase_release_probe_token.py": "tests/unit/test_firebase_release_probe_token.py",
         "backend/charts/pusher/templates/deployment.yaml": "tests/unit/test_rendered_deployment_contract.py",
         "backend/scripts/validate_rendered_deployment_contract.py": "tests/unit/test_rendered_deployment_contract.py",
         ".github/workflows/gcp_backend_auto_dev.yml": "tests/unit/test_verify_dev_backend_deployment.py",
@@ -173,6 +174,14 @@ def test_every_external_workflow_contract_source_triggers_backend_unit_workflow(
     }
 
     assert missing == set()
+
+
+def test_static_backend_unit_workflow_uses_ci_duration_sanity_ceiling():
+    """Static tripwire: local pre-push is strict; PR CI only blocks pathological CPU cost."""
+    workflow_text = (BACKEND_DIR.parent / ".github/workflows/backend-unit-tests.yml").read_text(encoding="utf-8")
+
+    assert 'BACKEND_FAST_UNIT_WARN_SECONDS: "0.1"' in workflow_text
+    assert 'BACKEND_FAST_UNIT_FAIL_SECONDS: "1.0"' in workflow_text
 
 
 def test_backend_test_runner_defaults_python_to_utf8():

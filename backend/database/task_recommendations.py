@@ -11,6 +11,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from pydantic import ValidationError
 
 from database._client import get_firestore_client
+from database.firestore_index_registry import ACTIVE_ATTENTION_OVERRIDE_QUERY
 from models.task_recommendation import (
     DecisionRecord,
     FeedbackCreate,
@@ -519,11 +520,10 @@ def list_active_override_dedupe_keys(
     account_generation: int = 0,
     firestore_client: Any = None,
 ) -> set[str]:
-    query = (
-        _user_ref(uid, firestore_client=firestore_client)
-        .collection(ATTENTION_OVERRIDES_COLLECTION)
-        .where('account_generation', '==', account_generation)
-        .where('expires_at', '>', now)
+    query = ACTIVE_ATTENTION_OVERRIDE_QUERY.build(
+        _user_ref(uid, firestore_client=firestore_client).collection(ATTENTION_OVERRIDES_COLLECTION),
+        {'account_generation': account_generation, 'now': now},
+        field_filter_factory=FieldFilter,
     )
     return {
         str(payload['dedupe_key'])

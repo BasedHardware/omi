@@ -3112,5 +3112,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Памет на устройството",
+    "deviceStoragePercentFull": "{percent}% запълнена",
+    "deviceStorageUsedOfTotal": "{used} от {total} използвани",
+    "deviceStorageFree": "{free} свободни",
+    "deviceStorageNearlyFull": "Устройството е почти пълно — синхронизирайте, за да освободите място."
 }

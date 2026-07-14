@@ -266,20 +266,11 @@ jobs:
 
       - name: Gate the tagged candidate through the full transcription route
         if: steps.activation-plan.outputs.probe == 'true'
-        env:
-          CANDIDATE_PROBE_URL: ${{ steps.prepare.outputs.candidate_probe_url }}
-          OMI_TRANSCRIPTION_SYNTHETIC_AUDIO_URL: ${{ secrets.OMI_TRANSCRIPTION_SYNTHETIC_AUDIO_URL }}
-          OMI_TRANSCRIPTION_SYNTHETIC_BEARER_TOKEN: ${{ secrets.OMI_TRANSCRIPTION_SYNTHETIC_BEARER_TOKEN }}
-          OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_PHRASE: ${{ secrets.OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_PHRASE }}
-          OMI_TRANSCRIPTION_SYNTHETIC_LANGUAGE: ${{ vars.OMI_TRANSCRIPTION_SYNTHETIC_LANGUAGE }}
-          OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_MODEL: ${{ vars.OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_MODEL }}
-          OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_PROVIDER: ${{ vars.OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_PROVIDER }}
-        run: |
-          set -euo pipefail
-          python3 backend/scripts/transcription_capability_probe.py \
-            --candidate-api-url "$CANDIDATE_PROBE_URL" \
-            --require-route-identity \
-            --json-only | tee "$RUNNER_TEMP/transcription-capability-probe.json"
+        uses: ./.github/actions/transcription-release-candidate-probe
+        with:
+          candidate_api_url: ${{ steps.prepare.outputs.candidate_probe_url }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          evidence_path: ${{ runner.temp }}/transcription-capability-probe.json
 
       - name: Record protected full-route probe proof
         if: steps.activation-plan.outputs.probe == 'true'

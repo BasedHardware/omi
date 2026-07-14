@@ -825,7 +825,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
           return text
         case .discoveryCard(_, let title, let summary, _):
           return "\(title). \(summary)"
-        case .agentSpawn(_, _, _, _, let title, let objective):
+        case .agentSpawn(_, _, _, _, let title, let objective, _):
           return "\(title). \(objective)"
         case .agentCompletion(_, _, _, _, let title, _, let output, _):
           return "\(title). \(output)"

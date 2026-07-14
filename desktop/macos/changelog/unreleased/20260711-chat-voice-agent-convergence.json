@@ -1,3 +1,0 @@
-{
-  "change": "Made chat, push-to-talk, task chat, and background agents share one reliable conversation and execution lifecycle across rapid turns and restarts"
-}

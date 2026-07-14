@@ -185,6 +185,11 @@ pub struct AnthropicRequest {
     pub tools: Option<Vec<AnthropicToolDef>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<serde_json::Value>,
+    /// Gateway-owned execution metadata. A public-web turn may use Anthropic's
+    /// long-running server tool and therefore needs internal pause-turn
+    /// continuation before an OpenAI-compatible response is emitted.
+    #[serde(skip)]
+    pub requires_public_web: bool,
 }
 
 /// A tool definition in an Anthropic request: either a client-executed custom
@@ -427,9 +432,9 @@ pub fn map_stop_reason(anthropic_reason: Option<&str>) -> Option<String> {
         "max_tokens" => "length".to_string(),
         "tool_use" => "tool_calls".to_string(),
         "stop_sequence" => "stop".to_string(),
-        // Long-running server tools (web search) can pause the turn. The proxy
-        // cannot resume it — the OpenAI client never saw the server tool blocks
-        // — so terminate cleanly instead of leaking an unknown finish_reason.
+        // Defensive fallback only: public-web turns are resumed at the gateway
+        // before translation. Keep an OpenAI-compatible value if a future
+        // non-public stream unexpectedly reaches this mapping.
         "pause_turn" => "stop".to_string(),
         other => other.to_string(),
     })

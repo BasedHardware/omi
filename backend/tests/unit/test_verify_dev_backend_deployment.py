@@ -1,6 +1,27 @@
 from __future__ import annotations
 
+import importlib.util
+import json
+from pathlib import Path
+import sys
+from types import SimpleNamespace
+
+import pytest
+
 from scripts import verify_dev_backend_deployment as verifier
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+PREFLIGHT_SCRIPT = BACKEND_DIR / 'scripts' / 'preflight-cloud-run-deploy.py'
+
+
+def _load_preflight():
+    spec = importlib.util.spec_from_file_location('preflight_cloud_run_deploy', PREFLIGHT_SCRIPT)
+    assert spec is not None
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def _expectation() -> verifier.DeploymentExpectation:
@@ -68,6 +89,215 @@ def _documents(expectation: verifier.DeploymentExpectation) -> dict:
         }
     )
     return documents
+
+
+def test_dev_deploy_migrates_only_exact_legacy_google_client_id_secrets_without_traffic() -> None:
+    preflight = _load_preflight()
+    legacy_service = {
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [
+                        {
+                            'env': [
+                                {
+                                    'name': 'GOOGLE_CLIENT_ID',
+                                    'valueFrom': {'secretKeyRef': {'name': 'GOOGLE_CLIENT_ID', 'key': 'latest'}},
+                                },
+                                {
+                                    'name': 'STT_PRERECORDED_MODEL',
+                                    'valueFrom': {'secretKeyRef': {'name': 'STT_PRERECORDED_MODEL', 'key': 'latest'}},
+                                },
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
+    }
+    literal_service = {
+        'spec': {'template': {'spec': {'containers': [{'env': [{'name': 'GOOGLE_CLIENT_ID', 'value': 'public'}]}]}}}
+    }
+    commands: list[list[str]] = []
+
+    def runner(command: list[str], **_kwargs):
+        commands.append(command)
+        if command[:4] == ['gcloud', 'run', 'services', 'describe']:
+            service = command[4]
+            document = legacy_service if service == 'backend' else literal_service
+            return SimpleNamespace(stdout=json.dumps(document))
+        return SimpleNamespace(stdout='')
+
+    migrated = preflight.migrate_legacy_public_bindings(
+        services=('backend', 'backend-sync'),
+        env='dev',
+        project='based-hardware-dev',
+        region='us-central1',
+        runner=runner,
+    )
+
+    assert migrated == ['backend']
+    assert commands == [
+        [
+            'gcloud',
+            'run',
+            'services',
+            'describe',
+            'backend',
+            '--project=based-hardware-dev',
+            '--region=us-central1',
+            '--format=json',
+        ],
+        [
+            'gcloud',
+            'run',
+            'services',
+            'update',
+            'backend',
+            '--project=based-hardware-dev',
+            '--region=us-central1',
+            '--remove-secrets=GOOGLE_CLIENT_ID,STT_PRERECORDED_MODEL',
+            '--no-traffic',
+            '--quiet',
+        ],
+        [
+            'gcloud',
+            'run',
+            'services',
+            'describe',
+            'backend-sync',
+            '--project=based-hardware-dev',
+            '--region=us-central1',
+            '--format=json',
+        ],
+    ]
+
+
+def test_legacy_binding_migration_is_idempotent_after_removal() -> None:
+    preflight = _load_preflight()
+    state = {'legacy': True}
+    updates: list[list[str]] = []
+
+    def runner(command: list[str], **_kwargs):
+        if command[:4] == ['gcloud', 'run', 'services', 'describe']:
+            entry = (
+                {'name': 'GOOGLE_CLIENT_ID', 'valueFrom': {'secretKeyRef': {'name': 'GOOGLE_CLIENT_ID'}}}
+                if state['legacy']
+                else {'name': 'GOOGLE_CLIENT_ID', 'value': 'public'}
+            )
+            document = {
+                'spec': {
+                    'template': {
+                        'spec': {
+                            'containers': [
+                                {'env': [entry]},
+                            ]
+                        }
+                    }
+                }
+            }
+            return SimpleNamespace(stdout=json.dumps(document))
+        updates.append(command)
+        state['legacy'] = False
+        return SimpleNamespace(stdout='')
+
+    first = preflight.migrate_legacy_public_bindings(
+        services=('backend',), env='dev', project='based-hardware-dev', region='us-central1', runner=runner
+    )
+    second = preflight.migrate_legacy_public_bindings(
+        services=('backend',), env='dev', project='based-hardware-dev', region='us-central1', runner=runner
+    )
+
+    assert first == ['backend']
+    assert second == []
+    assert updates == [
+        [
+            'gcloud',
+            'run',
+            'services',
+            'update',
+            'backend',
+            '--project=based-hardware-dev',
+            '--region=us-central1',
+            '--remove-secrets=GOOGLE_CLIENT_ID',
+            '--no-traffic',
+            '--quiet',
+        ]
+    ]
+
+
+def test_legacy_binding_migration_rejects_multi_container_services_without_mutation() -> None:
+    preflight = _load_preflight()
+    commands: list[list[str]] = []
+    multi_container_service = {
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [
+                        {'env': []},
+                        {
+                            'env': [
+                                {
+                                    'name': 'GOOGLE_CLIENT_ID',
+                                    'valueFrom': {'secretKeyRef': {'name': 'GOOGLE_CLIENT_ID'}},
+                                }
+                            ]
+                        },
+                    ]
+                }
+            }
+        }
+    }
+
+    def runner(command: list[str], **_kwargs):
+        commands.append(command)
+        return SimpleNamespace(stdout=json.dumps(multi_container_service))
+
+    with pytest.raises(ValueError, match='exactly one container'):
+        preflight.migrate_legacy_public_bindings(
+            services=('backend',), env='dev', project='based-hardware-dev', region='us-central1', runner=runner
+        )
+
+    assert commands == [
+        [
+            'gcloud',
+            'run',
+            'services',
+            'describe',
+            'backend',
+            '--project=based-hardware-dev',
+            '--region=us-central1',
+            '--format=json',
+        ]
+    ]
+
+
+def test_legacy_binding_migration_rejects_non_dev_projects_without_gcloud_calls() -> None:
+    preflight = _load_preflight()
+    calls: list[list[str]] = []
+
+    with pytest.raises(ValueError, match='development-only'):
+        preflight.migrate_legacy_public_bindings(
+            services=('backend',),
+            env='prod',
+            project='based-hardware',
+            region='us-central1',
+            runner=lambda command, **_kwargs: calls.append(command),
+        )
+
+    assert calls == []
+
+
+def test_dev_deploy_invokes_legacy_binding_migration_only_for_dev_services() -> None:
+    workflow = BACKEND_DIR.parent / '.github/workflows/gcp_backend_auto_dev.yml'
+    text = workflow.read_text(encoding='utf-8')
+
+    assert 'environment: development' in text
+    assert 'backend/scripts/preflight-cloud-run-deploy.py' in text
+    assert text.count('--migrate-legacy-public-binding') == 4
+    for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        assert f'--migrate-legacy-public-binding {service}' in text
+    assert text.index('migrate-legacy-public-binding') < text.index('Deploy ${{ env.SERVICE }} to Cloud Run')
 
 
 def test_expectation_binds_commit_to_deploy_run_revision_and_image() -> None:

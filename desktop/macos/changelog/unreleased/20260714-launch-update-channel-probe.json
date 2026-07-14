@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the app freezing for several seconds on its first launch when the network was slow, and stopped a slow first launch from pinning beta installs to the stable update channel"
+}

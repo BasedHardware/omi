@@ -1,3 +1,0 @@
-{
-  "change": "Fixed Tasks showing hundreds of stale tasks that were already completed or removed on other devices — the desktop list now converges to match mobile, including when all tasks are done"
-}
