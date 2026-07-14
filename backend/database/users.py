@@ -3,11 +3,13 @@ from typing import Optional
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
+from pydantic import ValidationError
 
 from ._client import db, document_id_from_seed
 from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
 from database.redis_db import try_acquire_client_device_write_lock, try_acquire_user_platform_write_lock
 from models.users import Subscription, PlanLimits, PlanType, SubscriptionStatus
+from models.other import Person
 from utils.subscription import get_default_basic_subscription
 import logging
 
@@ -672,6 +674,13 @@ def get_people_by_ids(uid: str, person_ids: list[str]):
         if doc.exists:
             data = doc.to_dict()
             data.setdefault('id', doc.id)
+            try:
+                # Validate at the boundary: every caller builds Person(**p) from these dicts, so a
+                # legacy or partial doc (e.g. missing name) would 500 the read. Skip it instead.
+                Person(**data)
+            except ValidationError as e:
+                logger.warning('Skipping malformed person doc %s: %s', doc.id, e)
+                continue
             all_people.append(data)
     return all_people
 
