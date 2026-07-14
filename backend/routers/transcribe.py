@@ -1024,11 +1024,21 @@ async def _stream_handler(
         )
         binding = await run_blocking(
             db_executor,
-            lifecycle_service.open_recording_session,
+            lifecycle_service.open_live_recording_session,
             uid,
             recording_session_id,
             proposed_conversation_id,
         )
+        if binding['requires_rollover']:
+            logger.info(
+                'Rolling over missing durable recording session %s conversation=%s uid=%s listen=%s',
+                recording_session_id,
+                binding['conversation_id'],
+                uid,
+                session_id,
+            )
+            await _create_new_in_progress_conversation(rollover=True)
+            return
         new_conversation_id = binding['conversation_id']
         recording_session_ids_by_conversation[new_conversation_id] = recording_session_id
         existing_conversation = await run_blocking(
@@ -1164,6 +1174,18 @@ async def _stream_handler(
                 return await _schedule_conversation_finalization(conversation_id)
             else:
                 logger.info(f'Clean up the conversation {conversation_id}, reason: no content {uid} {session_id}')
+                event_recording_session_id = recording_session_id_for_lifecycle_event(
+                    recording_session_ids_by_conversation,
+                    conversation_id,
+                )
+                if event_recording_session_id:
+                    await run_blocking(
+                        db_executor,
+                        lifecycle_service.tombstone_recording_session,
+                        uid,
+                        event_recording_session_id,
+                        conversation_id,
+                    )
                 conversations_db.delete_conversation(uid, conversation_id)
                 return True
         return False
@@ -1195,11 +1217,14 @@ async def _stream_handler(
             resuming_conversation_id: str = existing_conversation['id']
             binding = await run_blocking(
                 db_executor,
-                lifecycle_service.open_recording_session,
+                lifecycle_service.open_live_recording_session,
                 uid,
                 recording_session_id,
                 resuming_conversation_id,
             )
+            if binding['requires_rollover']:
+                await _create_new_in_progress_conversation(rollover=True)
+                return None
             if binding['conversation_id'] != resuming_conversation_id:
                 raise lifecycle_service.LifecycleTransitionError(
                     f'recording session {recording_session_id} cannot rebind legacy conversation {resuming_conversation_id}'

@@ -130,6 +130,51 @@ def test_completed_retry_returns_its_canonical_terminal_envelope(recording_store
     assert len(recording_store.documents) == 2
 
 
+def test_empty_recording_tombstone_forces_a_fresh_live_generation(recording_store, monkeypatch):
+    monkeypatch.setattr(lifecycle_service, 'recording_session_mode', lambda: 'enforce')
+    monkeypatch.setattr(lifecycle_service.conversations_db, 'get_conversation', lambda *_: None)
+    lifecycle_service.open_recording_session(
+        'uid', 'recording-old', 'conversation-old', firestore_client=recording_store
+    )
+
+    tombstone = lifecycle_service.tombstone_recording_session(
+        'uid', 'recording-old', 'conversation-old', firestore_client=recording_store
+    )
+    reconnect = lifecycle_service.open_live_recording_session(
+        'uid', 'recording-old', 'conversation-old', firestore_client=recording_store
+    )
+    fresh = lifecycle_service.open_live_recording_session(
+        'uid', 'recording-new', 'conversation-new', firestore_client=recording_store
+    )
+    original = recording_sessions.get_recording_session('uid', 'recording-old', firestore_client=recording_store)
+
+    assert tombstone is not None
+    assert tombstone['lifecycle_phase'] == 'discarded'
+    assert reconnect['requires_rollover'] is True
+    assert fresh['requires_rollover'] is False
+    assert fresh['conversation_id'] == 'conversation-new'
+    assert fresh['conversation_id'] != reconnect['conversation_id']
+    assert original is not None
+    assert original['lifecycle_phase'] == 'discarded'
+
+
+def test_missing_active_binding_is_tombstoned_before_rollover(recording_store, monkeypatch):
+    monkeypatch.setattr(lifecycle_service, 'recording_session_mode', lambda: 'enforce')
+    monkeypatch.setattr(lifecycle_service.conversations_db, 'get_conversation', lambda *_: None)
+    lifecycle_service.open_recording_session(
+        'uid', 'recording-old', 'conversation-old', firestore_client=recording_store
+    )
+
+    reconnect = lifecycle_service.open_live_recording_session(
+        'uid', 'recording-old', 'conversation-old', firestore_client=recording_store
+    )
+    original = recording_sessions.get_recording_session('uid', 'recording-old', firestore_client=recording_store)
+
+    assert reconnect['requires_rollover'] is True
+    assert original is not None
+    assert original['lifecycle_phase'] == 'discarded'
+
+
 def test_conflicting_retry_returns_the_original_conversation(recording_store):
     recording_sessions.create_or_get_recording_session(
         'uid', 'session', 'first-conversation', firestore_client=recording_store

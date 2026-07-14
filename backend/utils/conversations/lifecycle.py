@@ -46,6 +46,7 @@ class LifecycleTransitionError(ValueError):
 
 
 RECORDING_SESSION_MODES = frozenset({'shadow', 'dual_write', 'enforce'})
+_TERMINAL_RECORDING_SESSION_PHASES = frozenset({'completed', 'failed', 'discarded'})
 
 
 def recording_session_mode() -> str:
@@ -353,6 +354,64 @@ def record_recording_session_event(
             'lifecycle_sequence': None,
         }
     return None
+
+
+def tombstone_recording_session(
+    uid: str,
+    recording_session_id: str,
+    conversation_id: str,
+    *,
+    firestore_client: Any = None,
+) -> dict[str, Any] | None:
+    """Terminally close an empty listen generation before its row is deleted."""
+    return record_recording_session_event(
+        uid,
+        recording_session_id,
+        conversation_id,
+        'discarded',
+        firestore_client=firestore_client,
+    )
+
+
+def open_live_recording_session(
+    uid: str,
+    recording_session_id: str,
+    proposed_conversation_id: str,
+    *,
+    firestore_client: Any = None,
+) -> dict[str, Any]:
+    """Open a live binding or require a fresh generation for a missing old row.
+
+    A recording-session document can outlive a deliberately deleted empty
+    conversation. Such a binding is a tombstone, never an authority to create
+    the old conversation ID again.
+    """
+    existing = recording_sessions_db.get_recording_session(
+        uid,
+        recording_session_id,
+        firestore_client=firestore_client,
+    )
+    binding = open_recording_session(
+        uid,
+        recording_session_id,
+        proposed_conversation_id,
+        firestore_client=firestore_client,
+    )
+    if existing is None:
+        return dict(binding) | {'requires_rollover': False}
+
+    conversation = conversations_db.get_conversation(uid, existing['conversation_id'])
+    if conversation is not None:
+        return dict(binding) | {'requires_rollover': False}
+
+    if existing['lifecycle_phase'] not in _TERMINAL_RECORDING_SESSION_PHASES:
+        tombstone_recording_session(
+            uid,
+            recording_session_id,
+            existing['conversation_id'],
+            firestore_client=firestore_client,
+        )
+    return dict(binding) | {'requires_rollover': True}
 
 
 def _finalization_decision_state(conversation: Mapping[str, Any], conversation_id: str) -> FinalizationDecisionState:

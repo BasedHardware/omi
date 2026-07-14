@@ -135,6 +135,24 @@ def create_or_get_recording_session(
     )
 
 
+def get_recording_session(
+    uid: str,
+    recording_session_id: str,
+    *,
+    firestore_client: Any = None,
+) -> RecordingSessionBinding | None:
+    """Read the canonical binding without proposing or mutating an identity."""
+    if not uid or not recording_session_id:
+        raise ValueError('uid and recording_session_id are required')
+    snapshot = _session_ref(_client(firestore_client), uid, recording_session_id).get()
+    if not getattr(snapshot, 'exists', False):
+        return None
+    data = snapshot.to_dict() or {}
+    if data.get('uid') != uid or data.get('recording_session_id') != recording_session_id:
+        raise ValueError('recording session identity does not match its document binding')
+    return _binding(data, recording_session_id, mapping_conflict=False)
+
+
 def _record_lifecycle_event_txn(
     transaction: Any,
     session_ref: Any,
