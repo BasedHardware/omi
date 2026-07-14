@@ -37,6 +37,11 @@ checks:
     triggers: ["all"]
     lanes: ["local", "ci"]
     reason: "repository-wide desktop changelog schema contract"
+  - id: desktop-changelog-encoding-contract
+    command: ["python3", ".github/scripts/test_desktop_changelog.py"]
+    triggers: [".github/scripts/desktop-changelog.py", ".github/scripts/test_desktop_changelog.py"]
+    lanes: ["local", "ci"]
+    reason: "desktop changelog JSON uses UTF-8 across host locales"
   - id: desktop-changelog-entry
     command: ["python3", ".github/scripts/check-desktop-changelog.py", "--base", "{base}", "--head", "{head}", "{skip_changelog}"]
     triggers: ["desktop/macos/**"]

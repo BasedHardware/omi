@@ -24,14 +24,16 @@ class ChangelogError(Exception):
 
 def read_json(path: Path) -> object:
     try:
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise ChangelogError(f"{path} is not valid JSON: {exc}") from exc
 
 
 def write_json(path: Path, data: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    path.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
 
 
 def normalize_changes(raw: object, path: Path) -> list[str]:
