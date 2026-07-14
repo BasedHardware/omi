@@ -106,6 +106,12 @@ import {
 import { getAppSettings, setAppSettings } from './appSettings'
 import { showBestEffortNotification } from './notify'
 
+// Default main-window content size. Single source of truth for both window
+// creation and the Settings → Font Size "Reset Window Size" affordance
+// (window:resetSize), so the two can never drift.
+const DEFAULT_WINDOW_WIDTH = 1280
+const DEFAULT_WINDOW_HEIGHT = 820
+
 // THE main window — single module-level owner. Everything that outlives the
 // whenReady scope (tray menu, updater, shortcuts, second-instance handoff,
 // activate) reads through this variable so a re-created window can never leave
@@ -303,8 +309,8 @@ function createWindow(): BrowserWindow {
   const mica = supportsMica()
   const mainWindow = new BrowserWindow({
     title: 'omi',
-    width: 1280,
-    height: 820,
+    width: DEFAULT_WINDOW_WIDTH,
+    height: DEFAULT_WINDOW_HEIGHT,
     minWidth: 500,
     minHeight: 600,
     show: false,
@@ -826,6 +832,17 @@ app.whenReady().then(async () => {
       return
     }
     app.setLoginItemSettings({ openAtLogin: !!enabled, path: process.execPath, args: ['--hidden'] })
+  })
+
+  // Settings → Font Size "Reset Window Size": restore the main window to its
+  // default content size and re-center it (macOS resetWindowToDefaultSize parity).
+  ipcMain.handle('window:resetSize', () => {
+    withMainWindow((win) => {
+      if (win.isMaximized()) win.unmaximize()
+      if (win.isFullScreen()) win.setFullScreen(false)
+      win.setContentSize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT)
+      win.center()
+    })
   })
 
   // Record-chord get/rebind. Rebinds persist and never throw on a conflict — a

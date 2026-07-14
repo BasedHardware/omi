@@ -799,6 +799,10 @@ export type OmiBridgeApi = {
   byokClearAll: () => Promise<void>
   /** True only when all four providers have a key (backend all-or-nothing). */
   byokIsActive: () => Promise<boolean>
+  // --- Track 6 (UI surfaces) additions ---
+  /** Settings → General → Font Size "Reset Window Size": restore the main window
+   *  to its default content size (1280×820) and re-center it. */
+  resetWindowSize: () => Promise<void>
 }
 
 // --- Coding agents ---
