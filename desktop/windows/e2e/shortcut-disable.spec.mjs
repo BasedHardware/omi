@@ -7,9 +7,12 @@
 //  - the Off chip renders on the Record card and NOT on the Summon card,
 //  - clicking Off flips the persisted `enabled` state (read back through
 //    window.omi.getRecordHotkey()) and shows the "off" note,
-//  - the disabled state survives a reload.
-// Hermetic: OMI_E2E_FAKE_AUTH boots an offline authed shell (no network). Each
-// launch gets its own throwaway --user-data-dir; screenshots → .playwright-mcp/.
+//  - the disabled state survives a renderer reload AND a real relaunch (a second
+//    Electron process on the same profile — the read-from-disk → never-register
+//    path, which page.reload() cannot reach).
+// Hermetic: OMI_E2E_FAKE_AUTH boots an offline authed shell (no network). One
+// throwaway --user-data-dir per test (shared by its relaunches, removed once at the
+// end); screenshots → .playwright-mcp/.
 //
 // Run after a build: node --test e2e/shortcut-disable.spec.mjs
 import { describe, test } from 'node:test'
@@ -35,22 +38,35 @@ const baseEnv = {
 const SECONDARY_HASHES = ['#/bar', '#/insight-toast', '#/capture']
 const isSecondary = (u) => SECONDARY_HASHES.some((h) => u.includes(h))
 
-async function launch(extraArgs = []) {
-  const dir = mkdtempSync(path.join(tmpdir(), 'omi-shortcut-e2e-'))
-  const app = await electron.launch({ args: [mainEntry, `--user-data-dir=${dir}`, ...extraArgs], env: baseEnv })
-  const cleanup = async () => {
+// `userDataDir` is a parameter (not minted per launch) so a test can RELAUNCH a
+// second Electron process against the SAME profile — the only way to exercise the
+// real persistence path (read settings from disk → don't register the chord at
+// startup). page.reload() only reloads the renderer; main's process state survives.
+async function launch(userDataDir, extraArgs = []) {
+  const app = await electron.launch({
+    args: [mainEntry, `--user-data-dir=${userDataDir}`, ...extraArgs],
+    env: baseEnv
+  })
+  const close = async () => {
     try {
       await app.close()
     } catch {
       /* already closed */
     }
-    try {
-      rmSync(dir, { recursive: true, force: true })
-    } catch {
-      /* best-effort */
-    }
   }
-  return { app, cleanup }
+  return { app, close }
+}
+
+function makeUserDataDir() {
+  return mkdtempSync(path.join(tmpdir(), 'omi-shortcut-e2e-'))
+}
+
+function removeUserDataDir(dir) {
+  try {
+    rmSync(dir, { recursive: true, force: true })
+  } catch {
+    /* best-effort */
+  }
 }
 
 async function mainPage(app) {
@@ -92,8 +108,25 @@ const recordEnabled = (page) =>
 describe('Shortcuts — Record hotkey Off chip', () => {
   test('Off disables only the Record chord and persists', async (t) => {
     mkdirSync(shotsDir, { recursive: true })
-    const { app, cleanup } = await launch()
-    t.after(cleanup)
+    // ONE profile dir, shared by the first app and the relaunched one below. A
+    // single teardown hook closes every instance still running, THEN removes the
+    // dir (order matters — Windows won't delete a profile a live process holds).
+    const userDataDir = makeUserDataDir()
+    const running = new Set()
+    t.after(async () => {
+      for (const close of running) await close()
+      removeUserDataDir(userDataDir)
+    })
+    const track = ({ app, close }) => {
+      const done = async () => {
+        await close()
+        running.delete(done)
+      }
+      running.add(done)
+      return { app, close: done }
+    }
+
+    const { app, close } = track(await launch(userDataDir))
     const page = await mainPage(app)
 
     const panel = await openShortcuts(page)
@@ -130,16 +163,43 @@ describe('Shortcuts — Record hotkey Off chip', () => {
     await panel.getByText(/off/i).first().waitFor({ state: 'visible', timeout: 3000 })
     await page.screenshot({ path: path.join(shotsDir, 'shortcuts-record-off.png') })
 
-    // Persist across reload.
+    // Persist across a renderer reload (main's in-memory state survives here).
     await page.reload()
     await mainPage(app)
     assert.equal(await recordEnabled(page), false, 'disabled state persisted across reload')
-    const panel2 = await openShortcuts(page)
+
+    // …and across a REAL relaunch: a brand-new Electron process on the SAME
+    // --user-data-dir must read `recordHotkeyEnabled: false` back off disk and NOT
+    // register the chord at startup. This is the persistence path the reload above
+    // cannot reach (main's module state + appSettings cache outlive page.reload()).
+    await close()
+
+    const relaunched = track(await launch(userDataDir))
+    const page2 = await mainPage(relaunched.app)
+    assert.equal(
+      await recordEnabled(page2),
+      false,
+      'disabled state read back from disk on a fresh process'
+    )
+    const panel2 = await openShortcuts(page2)
+    const recordCard2 = cardFor(panel2, 'Record hotkey')
+    const off2 = recordCard2.getByRole('button', { name: 'Off', exact: true })
+    await off2.waitFor({ state: 'visible', timeout: 8000 })
+    // The Off chip renders SELECTED (Chip's selected styling) on the fresh process.
+    assert.match(
+      (await off2.getAttribute('class')) ?? '',
+      /bg-white\/\[0\.08\]/,
+      'Off chip is selected after relaunch'
+    )
+    await panel2
+      .getByText('Recording shortcut is off.')
+      .waitFor({ state: 'visible', timeout: 3000 })
+    await page2.screenshot({ path: path.join(shotsDir, 'shortcuts-record-off-relaunch.png') })
 
     // Re-enable by clicking the Record card's Default chip → state → enabled.
-    await cardFor(panel2, 'Record hotkey').getByRole('button', { name: /Default/ }).click()
+    await recordCard2.getByRole('button', { name: /Default/ }).click()
     await new Promise((r) => setTimeout(r, 250))
-    assert.equal(await recordEnabled(page), true, 're-enabled by selecting Default')
-    await page.screenshot({ path: path.join(shotsDir, 'shortcuts-record-reenabled.png') })
+    assert.equal(await recordEnabled(page2), true, 're-enabled by selecting Default')
+    await page2.screenshot({ path: path.join(shotsDir, 'shortcuts-record-reenabled.png') })
   })
 })

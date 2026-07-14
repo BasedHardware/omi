@@ -27,7 +27,7 @@
 //
 // Deliberately NOT built — no Windows machinery for any of these (all macOS-only):
 // double-tap-to-lock, PTT sound cues, and mute-audio-while-talking.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Keyboard, MessageSquareText } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { RecordHotkeyState } from '../../../../../shared/types'
@@ -115,14 +115,22 @@ function ShortcutCard(props: {
   const [registered, setRegistered] = useState(true)
   const [enabled, setEnabled] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // Set as soon as the user picks a chip / records a chord. The mount `load()` is
+  // async, so a fast click whose commit resolves FIRST would otherwise be undone
+  // by the (now stale) load result — ignore the load once the user has acted.
+  const acted = useRef(false)
 
   useEffect(() => {
+    let unmounted = false
     void load().then((h) => {
-      if (!h) return
+      if (unmounted || acted.current || !h) return
       setAccel(h.accelerator)
       setRegistered(h.registered)
       setEnabled(h.enabled !== false)
     })
+    return () => {
+      unmounted = true
+    }
     // Mount-only: `load` is a stable inline closure per card.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -134,17 +142,16 @@ function ShortcutCard(props: {
     suspend: () => window.omi?.suspendShortcutCapture?.(),
     resume: () => window.omi?.resumeShortcutCapture?.(),
     commit: async (next) => {
+      acted.current = true
       const res = await commit(next)
-      // Record card: recording a custom chord is an explicit intent to enable it,
-      // even on an OS conflict (registered=false). The hook only calls onCommitted
-      // on ok, so reflect the enable here so a conflict from the "Off" state still
-      // turns the card on (with the amber warning). Summon has no onSetEnabled →
-      // untouched.
-      if (onSetEnabled && !res?.ok) {
-        setAccel(next)
-        setRegistered(!!res?.registered)
-        setEnabled(true)
-      }
+      // Record card (intent model): a declined OS claim is still a SUCCESSFUL
+      // commit — main persisted `next` and released the old chord. Report ok so
+      // the hook takes its onCommitted path and the single canonical !registered
+      // note ("held by another app") renders, rather than CHORD_IN_USE_MESSAGE
+      // ("try another"), which reads as "nothing was applied" — and which a
+      // re-opened Settings would then contradict. Summon (no onSetEnabled) keeps
+      // the rollback semantics: ok:false there really does mean nothing changed.
+      if (onSetEnabled) return { ok: true, registered: !!res?.registered }
       return { ok: !!res?.ok, registered: !!res?.registered }
     },
     onCommitted: (next, result) => {
@@ -161,6 +168,7 @@ function ShortcutCard(props: {
   // AND enabled — a click while "Off" must still re-enable at the default).
   const selectDefault = async (): Promise<void> => {
     if (enabled && accel === defaultAccel) return
+    acted.current = true
     setError(null)
     const res = await commit(defaultAccel)
     if (res?.ok) {
@@ -184,6 +192,7 @@ function ShortcutCard(props: {
   // Clicking the "Off" chip fully disables the chord (Record card only).
   const selectOff = async (): Promise<void> => {
     if (!onSetEnabled || !enabled) return
+    acted.current = true
     setError(null)
     const res = await onSetEnabled(false)
     setEnabled(res.enabled === true)

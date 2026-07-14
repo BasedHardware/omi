@@ -115,4 +115,34 @@ describe('ShortcutsTab', () => {
     await waitFor(() => expect(screen.getByText(/held by another app/)).toBeTruthy())
     expect(screen.queryByText('Recording shortcut is off.')).toBeNull()
   })
+
+  // Regression: recording a CUSTOM record chord the OS declines. Main commits and
+  // persists it anyway (intent model, no rollback), so the card must show the same
+  // canonical conflict note a fresh load shows — never "try another", which implies
+  // nothing was applied while the old working chord has in fact been released.
+  it('a declined custom record chord shows "held by another app", not "try another"', async () => {
+    setRecordHotkey.mockResolvedValue({ ok: false, registered: false })
+    renderTab()
+    // Record is the second card → its Custom chip is the second "Custom…".
+    await waitFor(() => expect(screen.getAllByText('Custom…').length).toBe(2))
+    fireEvent.click(screen.getAllByText('Custom…')[1])
+    fireEvent.keyDown(window, { key: 'j', ctrlKey: true })
+    await waitFor(() => expect(setRecordHotkey).toHaveBeenCalledWith('CommandOrControl+J'))
+
+    await waitFor(() => expect(screen.getByText(/held by another app/)).toBeTruthy())
+    expect(screen.queryByText(/try another/)).toBeNull()
+  })
+
+  // The Summon card keeps rollback semantics: ok:false there means main really did
+  // NOT rebind, so "try another" (nothing applied) is the correct copy.
+  it('a declined custom summon chord still shows "try another" (rollback semantics)', async () => {
+    setSummonHotkey.mockResolvedValue({ ok: false, registered: false })
+    renderTab()
+    await waitFor(() => expect(screen.getAllByText('Custom…').length).toBe(2))
+    fireEvent.click(screen.getAllByText('Custom…')[0])
+    fireEvent.keyDown(window, { key: 'j', ctrlKey: true })
+    await waitFor(() => expect(setSummonHotkey).toHaveBeenCalledWith('CommandOrControl+J'))
+
+    await waitFor(() => expect(screen.getByText(/try another/)).toBeTruthy())
+  })
 })

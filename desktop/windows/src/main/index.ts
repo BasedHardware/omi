@@ -834,16 +834,20 @@ app.whenReady().then(async () => {
   // window if it was hidden, so a global hotkey both starts capture AND brings Omi
   // to the front.
   // Always create the slot (so getRecordShortcut + a later enable work); when the
-  // user has turned the chord off, immediately release it so the OS never claims
-  // Ctrl+Space. register() sets the slot's handler, which a later resume re-uses.
+  // user has turned the chord off, `claim: false` attaches the handler WITHOUT
+  // registering — the OS never claims Ctrl+Space, not even for an instant (the
+  // whole point of Off is to free it for the IME). A later enable resumes the slot,
+  // whose handler is already attached.
   recordShortcutEnabled = getAppSettings().recordHotkeyEnabled !== false
-  const recordState = registerRecordShortcut(getAppSettings().recordHotkey, () => {
-    surfaceMainWindow()
-    withMainWindow((w) => w.webContents.send('recorder:hotkey', 'mic'))
-  })
-  if (!recordShortcutEnabled) {
-    suspendRecordShortcut()
-  } else if (!recordState.registered) {
+  const recordState = registerRecordShortcut(
+    getAppSettings().recordHotkey,
+    () => {
+      surfaceMainWindow()
+      withMainWindow((w) => w.webContents.send('recorder:hotkey', 'mic'))
+    },
+    { claim: recordShortcutEnabled }
+  )
+  if (recordShortcutEnabled && !recordState.registered) {
     console.warn(`[shortcut] record chord "${recordState.accelerator}" is unavailable (in use?)`)
   }
 

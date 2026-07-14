@@ -22,8 +22,8 @@ vi.mock('electron', () => ({
 import {
   createShortcutSlot,
   registerRecordShortcut,
-  setRecordAccelerator,
   setRecordAcceleratorForced,
+  resumeRecordShortcut,
   getRecordShortcut,
   __resetRecordShortcutForTests,
   DEFAULT_RECORD_HOTKEY
@@ -138,16 +138,27 @@ describe('record shortcut', () => {
     expect(getRecordShortcut().registered).toBe(false)
   })
 
-  it('rebinds the record chord and never throws on a conflict', () => {
-    registerRecordShortcut('Ctrl+Space', () => {})
-    expect(setRecordAccelerator('Ctrl+Shift+O')).toEqual({
+  // Regression: a chord the user turned OFF must never be claimed at launch — not
+  // even claimed-then-released. Someone who disabled Record to free Ctrl+Space for
+  // the IME would otherwise have Omi grab it for an instant on every boot.
+  it('claim:false attaches the handler without ever registering the chord', () => {
+    const fired: number[] = []
+    const state = registerRecordShortcut('Ctrl+Space', () => fired.push(1), { claim: false })
+
+    expect(state).toEqual({ accelerator: 'Ctrl+Space', registered: false })
+    expect(registered.has('Ctrl+Space')).toBe(false)
+
+    // The handler IS attached, so a later enable (resume) claims it straight away.
+    resumeRecordShortcut()
+    expect(getRecordShortcut()).toEqual({ accelerator: 'Ctrl+Space', registered: true })
+  })
+
+  it('a forced rebind of a never-claimed (off) chord still commits', () => {
+    registerRecordShortcut('Ctrl+Space', () => {}, { claim: false })
+    expect(setRecordAcceleratorForced('Ctrl+Shift+O')).toEqual({
       accelerator: 'Ctrl+Shift+O',
       registered: true
     })
-    taken.add('Ctrl+Alt+P')
-    const rolledBack = setRecordAccelerator('Ctrl+Alt+P')
-    expect(rolledBack.registered).toBe(false)
-    expect(rolledBack.accelerator).toBe('Ctrl+Shift+O') // previous binding kept
   })
 
   // Regression: the Record intent model. User is on a custom chord, picks
