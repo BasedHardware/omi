@@ -138,6 +138,8 @@ def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypa
     assert 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=false' in job_env
     assert 'MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23' not in job_env
 
+    assert 'DESKTOP_PREVIEW_PUBLISH_KEY=DESKTOP_PREVIEW_PUBLISH_KEY:latest' in _job_secret_lines(out, 'backend')
+
     notifications_env = _job_env_block(out, 'notifications_job')
     assert 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED' not in notifications_env
 
