@@ -899,9 +899,6 @@ struct DashboardPage: View {
             .padding(.horizontal, OmiSpacing.sm)
             .padding(.vertical, OmiSpacing.xs)
 
-            dashboardChatErrorCard
-                .padding(.horizontal, OmiSpacing.md)
-                .padding(.bottom, OmiSpacing.sm)
         }
         // Barely-there card so the chat reads as a bounded surface while still
         // dissolving into the ambient Home canvas.

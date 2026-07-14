@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 
 @testable import Omi_Computer
@@ -137,6 +138,28 @@ final class RealtimeHubSessionInputLifecycleTests: XCTestCase {
     session.abandonInputTurn()
     buffered = await session.inputLifecycleSnapshot()
     XCTAssertEqual(buffered.pendingVideoFrameCount, 0)
+  }
+
+  func testGeminiScreenshotToolResultCarriesPixelsInsideTheMatchingFunctionResponse() {
+    let wire = RealtimeHubSession.geminiToolResponse(
+      callId: "call-1",
+      name: "screenshot",
+      output: "Live screenshot captured just now.",
+      image: Data([1, 2, 3]))
+    let toolResponse = wire["toolResponse"] as? [String: Any]
+    let responses = toolResponse?["functionResponses"] as? [[String: Any]]
+    let response = try? XCTUnwrap(responses?.first)
+    let body = response?["response"] as? [String: Any]
+    let imageReference = body?["image"] as? [String: String]
+    let parts = response?["parts"] as? [[String: Any]]
+    let inlineData = parts?.first?["inlineData"] as? [String: String]
+
+    XCTAssertEqual(response?["id"] as? String, "call-1")
+    XCTAssertEqual(response?["name"] as? String, "screenshot")
+    XCTAssertEqual(imageReference?["$ref"], "live-screenshot.jpg")
+    XCTAssertEqual(inlineData?["mimeType"], "image/jpeg")
+    XCTAssertEqual(inlineData?["data"], "AQID")
+    XCTAssertEqual(inlineData?["displayName"], "live-screenshot.jpg")
   }
 
   func testOpenAIOnlyNeedsTransportReadiness() async {

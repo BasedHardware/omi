@@ -1567,6 +1567,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var prefetchedVoiceContextOwnerScope: RealtimeHubOwnerScope?
   /// Typed snapshot identity baked into the current warm session's instructions.
   private var sessionVoiceContextFreshnessIdentity = ""
+  /// Fresh screenshots are held only between the kernel-authorized execution and the matching
+  /// provider tool result. They never become ambient session context.
+  private var authorizedRealtimeScreenshotImages: [String: Data] = [:]
   private var voiceContextPrefetchTask: Task<Void, Never>?
   private var voiceContextRefreshGeneration: UInt64 = 0
   private var turnPreparationTask: Task<Void, Never>?
@@ -4417,7 +4420,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   /// Mic chunk (16 kHz PCM16 mono) → resample to the provider's rate → session.
   func feedAudio(_ pcm16k: Data, turnID requestedTurnID: VoiceTurnID? = nil) {
-    if discardMismatchedSessionIfNeeded() { ensureWarm() }
+    // A first PTT can be buffering while its context-fresh session reconnects. Reconciliation
+    // tears a session down and clears that buffer, so it is safe only when no turn owns audio.
+    if VoiceTurnCoordinator.shared.activeTurnID == nil,
+      discardMismatchedSessionIfNeeded()
+    {
+      ensureWarm()
+    }
     if let requestedTurnID {
       guard requestedTurnID == VoiceTurnCoordinator.shared.activeTurnID,
         VoiceAudioIngressOwnership.accepts(
@@ -4520,7 +4529,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   /// PTT-up: end the turn; the model now responds (and may call tools).
   func commitTurn() -> RealtimeHubCommitResult {
-    if discardMismatchedSessionIfNeeded() { ensureWarm() }
+    // Preserve a context-fresh reconnect buffer through PTT-up; its deferred commit is drained
+    // by finishContextFreshInputOnCurrentSession once the replacement socket is ready.
+    if VoiceTurnCoordinator.shared.activeTurnID == nil,
+      discardMismatchedSessionIfNeeded()
+    {
+      ensureWarm()
+    }
     guard let turnID = VoiceTurnCoordinator.shared.activeTurnID,
       VoiceTurnCoordinator.shared.requireCurrentOwner(for: turnID) != nil
     else {
@@ -4541,9 +4556,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
     if let pending = replacementAudioBuffer {
       VoiceTurnCoordinator.shared.send(.hubCommitDeferredForReplacement(turnID: turnID))
-      guard VoiceTurnCoordinator.shared.activeTurn?.id == turnID,
-        VoiceTurnCoordinator.shared.activeTurn?.hubCommitPending == true
-      else { return .rejectedNoSession }
       prepareAcceptedCommit()
       log(
         "RealtimeHub[\(providerTag)]: barge-in replacement not ready at commit — "
@@ -4553,9 +4565,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
     if let pending = reconnectAudioBuffer {
       VoiceTurnCoordinator.shared.send(.hubCommitDeferred(turnID: turnID))
-      guard VoiceTurnCoordinator.shared.activeTurn?.id == turnID,
-        VoiceTurnCoordinator.shared.activeTurn?.hubCommitPending == true
-      else { return .rejectedNoSession }
       prepareAcceptedCommit(preservingContextPreparation: true)
       log(
         "RealtimeHub[\(providerTag)]: session reconnect not ready at commit — "
@@ -4653,7 +4662,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   private func screenshotToolResultTextForCurrentProvider(capturedBytes: Int?) -> String {
-    capturedBytes == nil ? "Could not capture the screen." : "Screen captured."
+    RealtimeHubTools.screenshotToolResult(capturedBytes: capturedBytes)
   }
 
   /// Await a task's value with a REAL deadline on return time. A plain withTaskGroup
@@ -4822,6 +4831,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     callId: String,
     name: String,
     output: String,
+    image: Data? = nil,
     expectedTurnEpoch: Int? = nil
   ) {
     guard isCurrentSession(source) else {
@@ -4873,7 +4883,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       "RealtimeHub[\(providerTag)]: tool result \(name) raw_bytes=\(providerResult.originalByteCount) "
         + "provider_bytes=\(providerResult.output.utf8.count) oversized=\(providerResult.wasOversized)"
     )
-    source.sendToolResult(callId: callId, name: name, output: providerResult.output)
+    source.sendToolResult(
+      callId: callId,
+      name: name,
+      output: providerResult.output,
+      image: image)
   }
 
   @discardableResult
@@ -5046,7 +5060,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           sourceObjectID: ObjectIdentifier(source),
           turnEpoch: expectedTurnEpoch)
         self.authorizedRealtimeInvocations[invocationID] = invocation
-        defer { self.authorizedRealtimeInvocations.removeValue(forKey: invocationID) }
+        defer {
+          self.authorizedRealtimeInvocations.removeValue(forKey: invocationID)
+          self.authorizedRealtimeScreenshotImages.removeValue(forKey: invocationID)
+        }
         let output = try await AgentRuntimeProcess.shared.invokeExternalSurfaceTool(
           clientId: Self.externalRunClientID,
           harnessMode: Self.externalRunHarnessMode,
@@ -5115,11 +5132,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
             return
           }
         }
+        let screenshotImage = self.authorizedRealtimeScreenshotImages.removeValue(
+          forKey: invocationID)
         self.sendToolResultIfCurrent(
           source: source,
           callId: callId,
           name: name,
           output: output,
+          image: screenshotImage,
           expectedTurnEpoch: expectedTurnEpoch)
       } catch {
         let code = (error as? ExternalSurfaceAuthorityError)?.code
@@ -5230,15 +5250,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       }
       let shot = captureResult[0]
       if let shot {
-        guard Self.performOwnerBoundPhysicalEffect(
-          expectedOwnerID: command.ownerID,
-          effect: {
-            self.session?.injectImage(shot)
-            return true
-          }) == true
-        else {
-          return .failed(Self.authorizedRealtimeOwnerChangedError())
-        }
+        // The provider receives this only inside the matching tool response. In particular,
+        // Gemini must not race a separate realtime video frame against an unblocked function.
+        authorizedRealtimeScreenshotImages[command.invocationID] = shot
       }
       return .succeeded(screenshotToolResultTextForCurrentProvider(capturedBytes: shot?.count))
 

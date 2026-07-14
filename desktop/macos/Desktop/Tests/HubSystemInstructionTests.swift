@@ -14,6 +14,19 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertFalse(instr.contains("Always reply in English"))
         XCTAssertTrue(instr.contains(DesktopCapabilityRegistry.realtimeSelfModelPrompt))
         XCTAssertTrue(instr.contains("kernel makes the authoritative route"))
+        XCTAssertTrue(instr.contains("image attached to its result"))
+        XCTAssertTrue(instr.contains("source of truth for any current-screen question"))
+    }
+
+    func testLiveScreenshotResultSupersedesConflictingWarmScreenContext() {
+        XCTAssertEqual(
+            RealtimeHubTools.screenshotToolResult(capturedBytes: 1),
+            "Live screenshot captured just now. The attached image is authoritative for the current screen; disregard any conflicting screen summaries, OCR, or earlier screen descriptions."
+        )
+        XCTAssertEqual(
+            RealtimeHubTools.screenshotToolResult(capturedBytes: nil),
+            "Could not capture the screen."
+        )
     }
 
     func testInstructionDoesNotOwnSemanticSelectionOrRoutingPolicy() {
