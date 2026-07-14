@@ -560,7 +560,19 @@ describe("agent control tools", () => {
         ...baseRunInput,
         requestId: `request-${surfaceKind}`,
         surfaceKind: "floating_bar",
+        executionRole: "leaf",
+        externalRefKind: "pill",
+        externalRefId: `child-${surfaceKind}`,
       });
+      const coordinator = await kernel.executeRun({
+        ...baseRunInput,
+        requestId: `request-${surfaceKind}-coordinator`,
+        surfaceKind: "main_chat",
+        externalRefKind: "chat",
+        externalRefId: `coordinator-${surfaceKind}`,
+      });
+
+      expect(coordinator.session.executionRole).toBe("coordinator");
 
       const listed = parseToolResult(
         await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
