@@ -30,7 +30,8 @@ import type {
   CodingAgentEvent,
   CodingAgentId,
   CodingAgentRunArgs,
-  VoiceTurnOutboxInput
+  VoiceTurnOutboxInput,
+  AiUserProfileRecord
 } from '../shared/types'
 import type { ByokProvider } from '../shared/byok'
 import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
@@ -136,6 +137,16 @@ const omi: OmiBridgeApi = {
   googleCalendarFetchNew: () => ipcRenderer.invoke('integrations:google:calendarFetchNew'),
   googleMarkProcessed: (source: GoogleSource, ids: string[]) =>
     ipcRenderer.invoke('integrations:google:markProcessed', source, ids),
+  // --- Track 3 (AI user profile) ---
+  aiProfileSetSession: (
+    session: { apiBase: string; desktopApiBase: string; token: string } | null
+  ) => ipcRenderer.invoke('aiProfile:setSession', session),
+  aiProfileGenerateNow: (session?: { apiBase: string; desktopApiBase: string; token: string }) =>
+    ipcRenderer.invoke('aiProfile:generateNow', session) as Promise<AiUserProfileRecord>,
+  aiProfileGetLatest: () => ipcRenderer.invoke('aiProfile:getLatest') as Promise<string | null>,
+  aiProfileEdit: (id: number, text: string) => ipcRenderer.invoke('aiProfile:edit', id, text),
+  aiProfileDelete: (id: number) => ipcRenderer.invoke('aiProfile:delete', id),
+  aiProfileDeleteAll: () => ipcRenderer.invoke('aiProfile:deleteAll'),
   memoriesBulkDelete: (args: { baseURL: string; token: string; ids: string[] }) =>
     ipcRenderer.invoke('memories:bulkDelete', args),
   onMemoriesDeleteProgress: (

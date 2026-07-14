@@ -596,6 +596,22 @@ export type OmiBridgeApi = {
   onMemoriesDeleteProgress: (
     cb: (p: { deleted: number; failed: number; total: number; done: boolean }) => void
   ) => () => void
+  // --- Track 3 (AI user profile) ---
+  // Once-daily synthesized "about the user" doc, generated + stored + synced in
+  // the main process. The renderer pushes a session (Firebase token + base URLs)
+  // since the token lives renderer-side, and drives generation.
+  aiProfileSetSession: (
+    session: { apiBase: string; desktopApiBase: string; token: string } | null
+  ) => Promise<void>
+  aiProfileGenerateNow: (session?: {
+    apiBase: string
+    desktopApiBase: string
+    token: string
+  }) => Promise<AiUserProfileRecord>
+  aiProfileGetLatest: () => Promise<string | null>
+  aiProfileEdit: (id: number, text: string) => Promise<void>
+  aiProfileDelete: (id: number) => Promise<void>
+  aiProfileDeleteAll: () => Promise<void>
   // Memory import (3b): parse a pasted ChatGPT/Claude dump into memory strings.
   // The renderer POSTs them to /v3/memories itself (it holds the auth token).
   memoryImportParse: (dump: string) => Promise<string[]>

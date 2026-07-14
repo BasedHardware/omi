@@ -83,6 +83,8 @@ import {
   stopAutomationTargetTracker
 } from './automation/foregroundTarget'
 import { registerScreenSynthHandlers } from './ipc/screenSynth'
+import { registerAiUserProfileHandlers } from './ipc/aiUserProfile'
+import { maybeGenerateOnStartup as maybeGenerateAiProfileOnStartup } from './assistants/aiUserProfile/service'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
 import { startRewindOcr } from './rewind/ocrService'
@@ -642,6 +644,11 @@ app.whenReady().then(async () => {
   registerCodingAgentHandlers()
   // BYOK key management IPC (encrypted-at-rest provider keys for Settings).
   registerByokHandlers()
+  // Track 3 (AI user profile): once-daily synthesized "about the user" doc that
+  // grounds other AI pipelines. Cheap handler registration; the renderer pushes
+  // a session (Firebase token + base URLs) and drives generation. The background
+  // startup check + daily timer are wired at ready-to-show below.
+  registerAiUserProfileHandlers()
 
   // `win` is this launch's instance for one-shot wiring below (ready-to-show,
   // bench); long-lived consumers read the module-level `mainWindow` instead.
@@ -773,6 +780,10 @@ app.whenReady().then(async () => {
     // auto-capture via the capture window. No-op off-Windows; 'off' mode keeps
     // the machine latched silent.
     startMeetingMonitor({ getCaptureWc })
+    // Track 3 (AI user profile): run the >24h startup check + start the daily
+    // timer. No-ops until the renderer has pushed a session (Firebase token lives
+    // renderer-side) and is gated on the aiProfileEnabled setting.
+    maybeGenerateAiProfileOnStartup()
   })
 
   // Bar (replaces the old floating overlay): wire IPC + the global summon
