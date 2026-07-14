@@ -167,6 +167,10 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var requiresHoverReset: Bool = false
     @Published var currentNotification: FloatingBarNotification? = nil
 
+    /// Onboarding-only: pulse a glowing border on the bar so first-run users
+    /// notice it. Cleared automatically once they start typing.
+    @Published var onboardingBarGlow: Bool = false
+
     // AI conversation chrome (not transcript content)
     @Published var showingAIConversation: Bool = false
     @Published var showingAIResponse: Bool = false
