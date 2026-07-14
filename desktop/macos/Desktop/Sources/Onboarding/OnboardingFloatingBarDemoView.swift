@@ -16,6 +16,11 @@ struct OnboardingFloatingBarDemoView: View {
     @ObservedObject private var shortcutSettings = ShortcutSettings.shared
     @State private var barActivated = false
     @State private var showContinue = false
+    /// Shortcut tokens (e.g. "⌘", "O") currently held down, so their keycaps
+    /// light up while pressed and turn off on release.
+    @State private var pressedTokens: Set<String> = []
+    @State private var mainKeyDown = false
+    @State private var keyLightMonitor: Any?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -88,7 +93,7 @@ struct OnboardingFloatingBarDemoView: View {
                                         .font(.system(size: 15, weight: .medium))
                                         .foregroundColor(OmiColors.textTertiary)
                                 }
-                                keyCap(symbol)
+                                keyCap(symbol, isPressed: pressedTokens.contains(symbol))
                             }
                         }
 
@@ -140,8 +145,10 @@ struct OnboardingFloatingBarDemoView: View {
             // Use the same global shortcut flow as the normal app so onboarding
             // behaves like production when the user presses Cmd+Enter.
             GlobalShortcutManager.shared.registerShortcuts()
+            installKeyLightMonitor()
         }
         .onDisappear {
+            removeKeyLightMonitor()
             FloatingControlBarManager.shared.barState?.onboardingBarGlow = false
             // Close the AI conversation panel on the floating bar so the next step starts clean
             if FloatingControlBarManager.shared.barState?.showingAIConversation == true {
@@ -189,21 +196,78 @@ struct OnboardingFloatingBarDemoView: View {
 
     // MARK: - Key Cap
 
-    private func keyCap(_ key: String) -> some View {
+    private func keyCap(_ key: String, isPressed: Bool = false) -> some View {
         Text(key)
             .font(.system(size: 15, weight: .medium, design: .rounded))
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(isPressed ? .black : OmiColors.textPrimary)
             .padding(.horizontal, OmiSpacing.md)
             .padding(.vertical, OmiSpacing.sm)
             .background(
                 RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-                    .fill(OmiColors.backgroundTertiary)
+                    .fill(isPressed ? Color.white : OmiColors.backgroundTertiary)
                     .overlay(
                         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-                            .stroke(OmiColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
+                            .stroke(
+                                isPressed ? Color.white : OmiColors.backgroundQuaternary.opacity(0.5),
+                                lineWidth: 1
+                            )
                     )
-                    .shadow(color: .black.opacity(0.2), radius: 1, x: 0, y: 1)
+                    .shadow(
+                        color: isPressed ? Color.white.opacity(0.5) : .black.opacity(0.2),
+                        radius: isPressed ? 8 : 1,
+                        x: 0,
+                        y: isPressed ? 0 : 1
+                    )
             )
+            .animation(.easeOut(duration: 0.08), value: isPressed)
+    }
+
+    // MARK: - Live key highlighting
+
+    /// Watches modifier + key events so the on-screen keycaps light up while the
+    /// matching key is physically held and turn off on release.
+    private func installKeyLightMonitor() {
+        guard keyLightMonitor == nil else { return }
+        keyLightMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.flagsChanged, .keyDown, .keyUp]
+        ) { event in
+            updatePressedTokens(from: event)
+            return event
+        }
+    }
+
+    private func removeKeyLightMonitor() {
+        if let keyLightMonitor {
+            NSEvent.removeMonitor(keyLightMonitor)
+        }
+        keyLightMonitor = nil
+        pressedTokens = []
+        mainKeyDown = false
+    }
+
+    private func updatePressedTokens(from event: NSEvent) {
+        let shortcut = shortcutSettings.askOmiShortcut
+        // Held modifiers, derived live from the event's flags.
+        let liveFlags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        var tokens = Set(ShortcutSettings.KeyboardShortcut.modifierTokens(for: liveFlags))
+
+        // The non-modifier key (e.g. "O", "↩"): track its own down/up.
+        if let keyCode = shortcut.keyCode, let keyDisplay = shortcut.keyDisplay {
+            switch event.type {
+            case .keyDown where event.keyCode == keyCode:
+                mainKeyDown = true
+            case .keyUp where event.keyCode == keyCode:
+                mainKeyDown = false
+            default:
+                break
+            }
+            if mainKeyDown {
+                tokens.insert(keyDisplay)
+            }
+        }
+
+        // Only light caps that belong to this shortcut.
+        pressedTokens = tokens.intersection(Set(shortcut.displayTokens))
     }
 }
 
