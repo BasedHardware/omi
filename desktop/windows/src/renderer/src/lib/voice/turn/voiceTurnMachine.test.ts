@@ -868,4 +868,56 @@ describe('VoiceTurnReducer', () => {
     const cancels = finalized.effects.filter((e) => e.kind === 'cancelDeadline')
     expect(cancels).toEqual([{ kind: 'cancelDeadline', turnID, deadline: 'captureStart' }])
   })
+
+  // Swift's `terminate()` binds `guard var turn = model.turn` — the MUTATED model,
+  // NOT the pre-event snapshot every other guard reads. `playbackDrained` nulls
+  // `activeLease` BEFORE calling terminate, so a successful drain must emit NO
+  // `stopPlayback` — the lease already drained itself; stopping it again would
+  // tear down the next turn's playback. A port that snapshots the lease pre-event
+  // (the natural reading of the "guards read pre-event" rule) emits a spurious
+  // one. No Swift reducer test pins this; pinned here.
+  it('successfulPlaybackDrainTerminatesWithoutEmittingStopPlayback', () => {
+    const { model: starting, turnID, sessionID, responseID } = awaitingHubResponse()
+    let model = reduce(starting, {
+      type: 'providerResponseStarted',
+      turnID,
+      sessionID,
+      responseID
+    }).model
+    const activeLease = lease(turnID, 'nativeRealtime')
+    model = reduce(model, { type: 'playbackStarted', turnID, lease: activeLease }).model
+    model = reduce(model, { type: 'providerTurnFinished', turnID, sessionID, responseID }).model
+
+    const drained = reduce(model, { type: 'playbackDrained', turnID, leaseID: activeLease.id })
+
+    expect(drained.model.turn?.phase).toEqual({ kind: 'terminal', reason: 'success' })
+    expect(drained.effects.filter((e) => e.kind === 'stopPlayback')).toEqual([])
+
+    // Control: a lease that is STILL active at terminate time DOES get stopped.
+    const cancelled = reduce(model, { type: 'cancel', turnID, reason: 'cancelled' })
+    expect(cancelled.effects).toContainEqual({
+      kind: 'stopPlayback',
+      turnID,
+      leaseID: activeLease.id
+    })
+  })
+
+  // Effect emission ORDER inside terminate() is load-bearing: `stopCapture` must
+  // precede `cancelHub`, or a trailing PCM chunk can revive the socket the
+  // reducer just asked the host to tear down. Order is invisible to
+  // `toContainEqual`, so it needs its own assertion.
+  it('terminateEmitsStopCaptureBeforeCancelHub', () => {
+    const turnID = newTurnID()
+    const captureID = capture(11)
+    let model = reduce(IDLE, { type: 'start', turnID, intent: 'hold' }).model
+    model = reduce(model, { type: 'captureStarted', turnID, captureID }).model
+    model = reduce(model, { type: 'selectRoute', turnID, route: hub(newSessionID()) }).model
+
+    const cancelled = reduce(model, { type: 'cancel', turnID, reason: 'cancelled' })
+
+    const order = cancelled.effects
+      .map((e) => e.kind)
+      .filter((k) => k === 'stopCapture' || k === 'cancelHub')
+    expect(order).toEqual(['stopCapture', 'cancelHub'])
+  })
 })
