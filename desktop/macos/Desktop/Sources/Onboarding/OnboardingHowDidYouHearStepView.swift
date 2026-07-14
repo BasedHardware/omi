@@ -8,7 +8,7 @@ struct OnboardingHowDidYouHearStepView: View {
   let onContinue: () -> Void
   let onForceComplete: (() -> Void)?
 
-  @State private var selectedSource: String?
+  @AppStorage("onboardingHowDidYouHearSource") private var selectedSource: String = ""
   @State private var shuffledSources: [String] = []
 
   private static let sources = [
@@ -45,6 +45,8 @@ struct OnboardingHowDidYouHearStepView: View {
             ) {
               selectedSource = source
               AnalyticsManager.shared.onboardingHowDidYouHear(source: source)
+              // Answering auto-advances; the saved selection is restored (and
+              // shown pre-selected) if the user comes back to this step.
               DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                 onContinue()
               }
