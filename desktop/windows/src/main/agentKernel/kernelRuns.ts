@@ -127,8 +127,7 @@ export class KernelRuns extends KernelCore {
       externalRefKind: input.childExternalRefKind,
       externalRefId: input.childExternalRefId,
       title: input.childTitle ?? `Delegated: ${input.objective.slice(0, 80)}`,
-      defaultAdapterId:
-        input.defaultAdapterId ?? input.adapterId ?? parentSession.defaultAdapterId,
+      defaultAdapterId: input.defaultAdapterId ?? input.adapterId ?? parentSession.defaultAdapterId,
       adapterId: input.adapterId ?? input.defaultAdapterId ?? parentSession.defaultAdapterId,
       clientId: input.clientId,
       requestId: input.requestId,

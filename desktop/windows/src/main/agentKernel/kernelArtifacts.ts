@@ -6,11 +6,7 @@
 // adapter-capacity predicates the callers use before dispatching work.
 
 import { KernelRuns } from './kernelRuns'
-import {
-  boundedLimit,
-  desktopArtifactDeliveryFromRow,
-  placeholders
-} from './kernelSupport'
+import { boundedLimit, desktopArtifactDeliveryFromRow, placeholders } from './kernelSupport'
 import type { AgentArtifact, DesktopArtifactDelivery, NewDesktopArtifactDelivery } from './types'
 import type {
   GetRunInput,

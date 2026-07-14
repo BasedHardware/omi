@@ -110,7 +110,9 @@ function requiresExplicitPolicy(snippet: DesktopContextSnippetInput): boolean {
   return tier === 'sensitive'
 }
 
-function policyDecisionForSnippet(snippet: DesktopContextSnippetInput): DesktopContextPolicyDecision {
+function policyDecisionForSnippet(
+  snippet: DesktopContextSnippetInput
+): DesktopContextPolicyDecision {
   if (!requiresExplicitPolicy(snippet)) return 'allowed'
   if (snippet.policyDecision === 'dispatch_created' && snippet.dispatchId) return 'dispatch_created'
   throw new Error(

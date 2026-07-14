@@ -160,8 +160,10 @@ export interface DesktopActionQueueInput {
   limit?: number
 }
 
-export interface DesktopContextPacketPersistInput
-  extends Omit<DesktopContextPacketBuildInput, 'ownerId'> {
+export interface DesktopContextPacketPersistInput extends Omit<
+  DesktopContextPacketBuildInput,
+  'ownerId'
+> {
   ownerId?: string
 }
 

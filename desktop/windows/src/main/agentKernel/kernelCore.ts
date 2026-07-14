@@ -29,11 +29,16 @@ import { AdapterRegistry } from './adapterRegistry'
 import { failureFromError, type RuntimeFailure } from '../codingAgent/failures'
 import { generateAgentId } from './store'
 import { resolveSurfaceSession, type SurfaceRef } from './surfaceSession'
-import { advanceBindingTurnDelivery, appendConversationTurn, conversationIdForSession } from './conversationTurns'
+import {
+  advanceBindingTurnDelivery,
+  appendConversationTurn,
+  conversationIdForSession
+} from './conversationTurns'
 import {
   acknowledgeCompletionDelta,
   assembleTurnContext,
-  bindingCarriesNativeHistory
+  bindingCarriesNativeHistory,
+  type TurnContextServices
 } from './turnContext'
 import type {
   AdapterBinding,
@@ -55,7 +60,10 @@ import type {
   RunStatus
 } from './types'
 import type { QueueRunInput } from './desktopActionQueue'
-import type { BuiltDesktopContextPacket, DesktopContextPacketBuildInput } from './desktopContextPacket'
+import type {
+  BuiltDesktopContextPacket,
+  DesktopContextPacketBuildInput
+} from './desktopContextPacket'
 import type {
   DesktopIntentRoute,
   DesktopIntentRouteInput,
@@ -157,7 +165,10 @@ export class KernelCore {
     return () => this.subscribers.delete(subscriber)
   }
 
-  protected createAcceptedRun(input: ExecuteAgentRunInput): { session: AgentSession; run: AgentRun } {
+  protected createAcceptedRun(input: ExecuteAgentRunInput): {
+    session: AgentSession
+    run: AgentRun
+  } {
     return this.withTransaction(() => {
       const session = this.resolveSession(input)
       resolveAdapterWithinBoundary({
@@ -329,7 +340,13 @@ export class KernelCore {
           continue
         }
         if (
-          await this.tryRecoverAttempt(input, attempt, error, 'binding_failed', attemptNo < maxAttempts)
+          await this.tryRecoverAttempt(
+            input,
+            attempt,
+            error,
+            'binding_failed',
+            attemptNo < maxAttempts
+          )
         ) {
           retryReason = 'recoverable_error'
           resumeFromAttemptId = attempt.attemptId
@@ -341,7 +358,13 @@ export class KernelCore {
           adapterId: attempt.adapterId,
           retryable: false
         })
-        this.failAttemptBeforeExecution(attempt, 'binding_failed', failure.userMessage, false, failure)
+        this.failAttemptBeforeExecution(
+          attempt,
+          'binding_failed',
+          failure.userMessage,
+          false,
+          failure
+        )
         break
       }
 
@@ -561,7 +584,7 @@ export class KernelCore {
    * as-is; the recursion is real and resolves at construction time because only a
    * fully-built AgentRuntimeKernel is ever instantiated.
    */
-  protected turnContextServices() {
+  protected turnContextServices(): TurnContextServices {
     const host = this as unknown as KernelCore & {
       persistDesktopContextPacket(
         packetInput: DesktopContextPacketBuildInput
@@ -712,7 +735,10 @@ export class KernelCore {
     markRunning = true
   ): Promise<DelegateAgentResult> {
     if (markRunning) {
-      created = { ...created, delegation: this.updateDelegationStatus(created.delegation, 'running') }
+      created = {
+        ...created,
+        delegation: this.updateDelegationStatus(created.delegation, 'running')
+      }
     }
     const result = await this.executeAcceptedRun(childRunInput, {
       session: created.session,
@@ -959,7 +985,11 @@ export class KernelCore {
     adapter: RuntimeAdapter
     attempt: RunAttempt
     adapterId: string
-  }): Promise<{ binding: AdapterBinding; handle: AdapterBindingHandle; replacesBindingId?: string }> {
+  }): Promise<{
+    binding: AdapterBinding
+    handle: AdapterBindingHandle
+    replacesBindingId?: string
+  }> {
     const active = this.readActiveBinding(input.session.sessionId, input.adapterId)
     if (active) {
       const handle = await this.resumeOrReplaceBinding(active, input)
@@ -1007,7 +1037,10 @@ export class KernelCore {
       return false
     }
     const requestedSystemPromptHash = stableHash(input.input.systemPrompt)
-    if (binding.systemPromptHash !== null && binding.systemPromptHash !== requestedSystemPromptHash) {
+    if (
+      binding.systemPromptHash !== null &&
+      binding.systemPromptHash !== requestedSystemPromptHash
+    ) {
       return false
     }
     const metadata = parseJsonObject(binding.metadataJson)
@@ -1033,7 +1066,11 @@ export class KernelCore {
   ): Promise<AdapterBindingHandle & { replacesBindingId?: string }> {
     if (!this.isBindingCompatible(binding, input)) {
       this.markBindingStale(binding, input.attempt, 'binding_context_changed')
-      const opened = await this.openNewBinding(input, binding.bindingGeneration + 1, binding.bindingId)
+      const opened = await this.openNewBinding(
+        input,
+        binding.bindingGeneration + 1,
+        binding.bindingId
+      )
       return { ...opened.handle, replacesBindingId: opened.replacesBindingId }
     }
     const canUseProcessLocalBinding =
@@ -1045,7 +1082,11 @@ export class KernelCore {
       (!input.adapter.capabilities.supportsNativeResume && !canUseProcessLocalBinding)
     ) {
       this.markBindingStale(binding, input.attempt, 'binding_not_resumable')
-      const opened = await this.openNewBinding(input, binding.bindingGeneration + 1, binding.bindingId)
+      const opened = await this.openNewBinding(
+        input,
+        binding.bindingGeneration + 1,
+        binding.bindingId
+      )
       return { ...opened.handle, replacesBindingId: opened.replacesBindingId }
     }
     try {
@@ -1111,7 +1152,11 @@ export class KernelCore {
     },
     generation: number,
     replacesBindingId: string | null
-  ): Promise<{ binding: AdapterBinding; handle: AdapterBindingHandle; replacesBindingId?: string }> {
+  ): Promise<{
+    binding: AdapterBinding
+    handle: AdapterBindingHandle
+    replacesBindingId?: string
+  }> {
     const opened = await input.adapter.openBinding({
       sessionId: input.session.sessionId,
       cwd: input.input.cwd ?? input.session.defaultCwd ?? process.cwd(),
@@ -1263,7 +1308,8 @@ export class KernelCore {
         status,
         finalText: result.text,
         result,
-        errorCode: status === 'failed' ? (result.failure?.code ?? 'adapter_execution_failed') : null,
+        errorCode:
+          status === 'failed' ? (result.failure?.code ?? 'adapter_execution_failed') : null,
         errorMessage: status === 'failed' ? (result.failure?.userMessage ?? null) : null,
         failure: result.failure
       })
@@ -1716,7 +1762,12 @@ export class KernelCore {
     const current = new Promise<void>((resolve) => {
       release = resolve
     })
-    const tail = previous ? previous.then(() => current, () => current) : current
+    const tail = previous
+      ? previous.then(
+          () => current,
+          () => current
+        )
+      : current
     this.bindingResolutionLocks.set(key, tail)
     try {
       if (previous) {
@@ -2021,8 +2072,7 @@ export class KernelCore {
         updatedAtMs: numberValue(row.updated_at_ms),
         createdAtMs: numberValue(row.created_at_ms),
         visibleUserGoal: true,
-        reusable:
-          stringValue(row.status) === 'succeeded' || stringValue(row.status) === 'cancelled'
+        reusable: stringValue(row.status) === 'succeeded' || stringValue(row.status) === 'cancelled'
       }))
   }
 
@@ -2047,7 +2097,9 @@ export class KernelCore {
     )
     return rows.map((row) => {
       const candidateTaskId =
-        nullableString(row.external_ref_kind) === 'task' ? nullableString(row.external_ref_id) : null
+        nullableString(row.external_ref_kind) === 'task'
+          ? nullableString(row.external_ref_id)
+          : null
       const runStatus = nullableString(row.run_status)
       const runUpdatedAtMs = numberValue(row.run_updated_at_ms)
       const staleAfterMs = 30 * 60 * 1000
@@ -2132,6 +2184,13 @@ export class KernelCore {
   }
 
   protected updateBinding(bindingId: string, patch: Partial<AdapterBinding>): void {
-    updateByColumns(this.store, 'adapter_bindings', 'binding_id', bindingId, bindingColumnMap, patch)
+    updateByColumns(
+      this.store,
+      'adapter_bindings',
+      'binding_id',
+      bindingId,
+      bindingColumnMap,
+      patch
+    )
   }
 }

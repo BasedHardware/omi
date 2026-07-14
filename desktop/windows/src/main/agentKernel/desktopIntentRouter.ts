@@ -67,10 +67,13 @@ function isLongRunning(utterance: string): boolean {
   )
 }
 
-function chooseCandidate(input: DesktopIntentRouteInput): DesktopIntentSessionCandidate | undefined {
+function chooseCandidate(
+  input: DesktopIntentRouteInput
+): DesktopIntentSessionCandidate | undefined {
   const longRunningNewWork = isLongRunning(input.utterance)
   const candidates = [...(input.sessionCandidates ?? [])].sort(
-    (left, right) => right.relevance - left.relevance || right.lastActivityAtMs - left.lastActivityAtMs
+    (left, right) =>
+      right.relevance - left.relevance || right.lastActivityAtMs - left.lastActivityAtMs
   )
   return candidates.find((candidate) => {
     if (candidate.relevance < 0.55) return false
@@ -87,8 +90,7 @@ export function routeDesktopIntent(input: DesktopIntentRouteInput): DesktopInten
       intent: 'dispatch',
       dispatchId: dispatchItem.subjectId,
       queueItemId: dispatchItem.itemId,
-      explanation:
-        'A pending dispatch must be resolved before routing additional local agent work.'
+      explanation: 'A pending dispatch must be resolved before routing additional local agent work.'
     }
   }
   if (isExternalSendAmbiguous(input.utterance)) {

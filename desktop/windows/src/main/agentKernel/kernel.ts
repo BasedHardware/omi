@@ -23,14 +23,8 @@
 //     main, so there is no subprocess protocol at all.
 
 import { KernelSessions } from './kernelSessions'
-import {
-  buildDesktopActionQueue,
-  type DesktopActionQueueItem
-} from './desktopActionQueue'
-import {
-  buildDesktopContextPacket,
-  type BuiltDesktopContextPacket
-} from './desktopContextPacket'
+import { buildDesktopActionQueue, type DesktopActionQueueItem } from './desktopActionQueue'
+import { buildDesktopContextPacket, type BuiltDesktopContextPacket } from './desktopContextPacket'
 import {
   routeDesktopIntent,
   type DesktopIntentRoute,
@@ -55,9 +49,7 @@ import type {
 const DEFAULT_OWNER_ID = 'desktop-local-user'
 
 export class AgentRuntimeKernel extends KernelSessions {
-  persistDesktopContextPacket(
-    input: DesktopContextPacketPersistInput
-  ): BuiltDesktopContextPacket {
+  persistDesktopContextPacket(input: DesktopContextPacketPersistInput): BuiltDesktopContextPacket {
     const ownerId = input.ownerId ?? DEFAULT_OWNER_ID
     this.validateSensitiveContextDispatches({ ...input, ownerId })
     const built = buildDesktopContextPacket({ ...input, ownerId })
@@ -120,9 +112,7 @@ export class AgentRuntimeKernel extends KernelSessions {
     return this.readDesktopAttentionOverrides(ownerId)
   }
 
-  setDesktopAttentionOverride(
-    input: SetDesktopAttentionOverrideInput
-  ): DesktopAttentionOverride {
+  setDesktopAttentionOverride(input: SetDesktopAttentionOverrideInput): DesktopAttentionOverride {
     return this.store.upsertDesktopAttentionOverride({
       ownerId: input.ownerId,
       subjectKind: input.subjectKind,

@@ -246,9 +246,7 @@ export class KernelSessions extends KernelArtifacts {
           updatedAtMs: now
         })
         this.appendEvent({
-          sessionId: String(
-            rows.find((row) => String(row.binding_id) === bindingId)?.session_id
-          ),
+          sessionId: String(rows.find((row) => String(row.binding_id) === bindingId)?.session_id),
           runId: null,
           attemptId: null,
           type: 'binding.stale',

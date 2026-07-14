@@ -692,7 +692,9 @@ export function deliveryToQueueInput(
   }
 }
 
-export function memoryCandidateToQueueInput(candidate: DesktopMemoryCandidate): QueueCandidateInput {
+export function memoryCandidateToQueueInput(
+  candidate: DesktopMemoryCandidate
+): QueueCandidateInput {
   return {
     candidateId: candidate.candidateId,
     ownerId: candidate.ownerId,

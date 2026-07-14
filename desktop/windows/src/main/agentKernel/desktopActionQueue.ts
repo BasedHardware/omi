@@ -282,7 +282,9 @@ export function buildDesktopActionQueue(
 }
 
 function compareQueueItems(left: DesktopActionQueueItem, right: DesktopActionQueueItem): number {
-  return left.rank - right.rank || right.priority - left.priority || right.createdAtMs - left.createdAtMs
+  return (
+    left.rank - right.rank || right.priority - left.priority || right.createdAtMs - left.createdAtMs
+  )
 }
 
 function isCoveredByNewerSuccessfulRun(
