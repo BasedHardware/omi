@@ -5,9 +5,30 @@ from __future__ import annotations
 import os
 import stat
 from pathlib import Path
+from typing import BinaryIO
 
+import pytest
+
+from omi_cli import _secure_file
 from omi_cli import config as cfg
 from omi_cli.main import app
+
+
+def _assert_owner_only_descriptor(handle: BinaryIO) -> None:
+    if os.name == "nt":
+        import msvcrt  # type: ignore[import-not-found]
+
+        windows_handle = msvcrt.get_osfhandle(handle.fileno())
+        assert _secure_file._windows_dacl_sddl(windows_handle) == "D:P(A;;FA;;;OW)"
+        return
+
+    mode = stat.S_IMODE(os.fstat(handle.fileno()).st_mode)
+    assert mode == 0o600
+
+
+def _assert_owner_only(path: Path) -> None:
+    with path.open("rb") as handle:
+        _assert_owner_only_descriptor(handle)
 
 
 def test_default_config_path_honors_env(monkeypatch, tmp_path: Path) -> None:
@@ -55,22 +76,29 @@ def test_save_creates_file_with_secure_perms(config_path: Path) -> None:
     config.set_profile(profile)
     cfg.save(config)
 
-    mode = stat.S_IMODE(os.stat(config_path).st_mode)
-    # Owner read/write only — credentials are inside.
-    assert mode == 0o600
+    _assert_owner_only(config_path)
 
 
 def test_save_does_not_leave_world_readable_window(monkeypatch, config_path: Path) -> None:
     """TOCTOU regression test (Greptile P1).
 
-    Force a permissive umask, save the config, and assert that *neither* the
-    final file nor any leftover temp file is world-readable. Earlier versions
-    of ``save()`` created the temp with default umask perms (~0o644) before
-    chmodding to 0o600 — that left a window where another local user could
-    read bearer credentials.
+    Force a permissive umask, inspect the temp file when serialization starts,
+    and assert that neither it nor the final file is accessible to other users.
+    Earlier versions created the temp with inherited/default permissions before
+    tightening them, which exposed bearer credentials during serialization.
     """
-    # Force a permissive umask. If save() relied on umask alone, the file would
-    # be created at 0o666 by default and the test would fail.
+    tmp = config_path.with_suffix(config_path.suffix + ".tmp")
+    original_dump = cfg.tomli_w.dump
+    checked_during_write = False
+
+    def dump_after_permission_check(payload, handle) -> None:
+        nonlocal checked_during_write
+        _assert_owner_only_descriptor(handle)
+        checked_during_write = True
+        original_dump(payload, handle)
+
+    monkeypatch.setattr(cfg.tomli_w, "dump", dump_after_permission_check)
+
     old_umask = os.umask(0o000)
     try:
         config = cfg.load()
@@ -82,13 +110,25 @@ def test_save_does_not_leave_world_readable_window(monkeypatch, config_path: Pat
     finally:
         os.umask(old_umask)
 
-    # Final file is owner-only.
-    mode = stat.S_IMODE(os.stat(config_path).st_mode)
-    assert mode == 0o600
-
-    # No leftover temp file with relaxed perms.
-    tmp = config_path.with_suffix(config_path.suffix + ".tmp")
+    assert checked_during_write
+    _assert_owner_only(config_path)
     assert not tmp.exists()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows DACL enforcement only")
+def test_save_fails_closed_when_windows_dacl_verification_fails(monkeypatch, config_path: Path) -> None:
+    monkeypatch.setattr(_secure_file, "_windows_dacl_sddl", lambda _handle: "D:")
+    config = cfg.load()
+    profile = config.get_profile()
+    profile.auth_method = "api_key"
+    profile.api_key = "omi_dev_secret"
+    config.set_profile(profile)
+
+    with pytest.raises(PermissionError, match="did not enforce owner-only"):
+        cfg.save(config)
+
+    assert not config_path.exists()
+    assert not config_path.with_suffix(config_path.suffix + ".tmp").exists()
 
 
 def test_save_overwrites_stale_temp_file(config_path: Path) -> None:
