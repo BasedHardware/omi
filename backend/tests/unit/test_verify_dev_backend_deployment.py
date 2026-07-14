@@ -290,6 +290,7 @@ def test_legacy_binding_migration_rejects_non_dev_projects_without_gcloud_calls(
 
 def test_dev_deploy_invokes_legacy_binding_migration_only_for_dev_services() -> None:
     workflow = BACKEND_DIR.parent / '.github/workflows/gcp_backend_auto_dev.yml'
+    production_workflow = BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml'
     text = workflow.read_text(encoding='utf-8')
 
     assert 'environment: development' in text
@@ -298,6 +299,10 @@ def test_dev_deploy_invokes_legacy_binding_migration_only_for_dev_services() -> 
     for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
         assert f'--migrate-legacy-public-binding {service}' in text
     assert text.index('migrate-legacy-public-binding') < text.index('Deploy ${{ env.SERVICE }} to Cloud Run')
+    assert '--check-runtime-bindings' in text
+    assert text.index('migrate-legacy-public-binding') < text.index('--check-runtime-bindings')
+    assert text.index('--check-runtime-bindings') < text.index('Deploy ${{ env.SERVICE }} to Cloud Run')
+    assert '--check-runtime-bindings' not in production_workflow.read_text(encoding='utf-8')
 
 
 def test_expectation_binds_commit_to_deploy_run_revision_and_image() -> None:

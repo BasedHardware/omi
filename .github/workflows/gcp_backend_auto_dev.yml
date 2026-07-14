@@ -130,6 +130,14 @@ jobs:
           --migrate-legacy-public-binding backend-sync-backfill
           --migrate-legacy-public-binding backend-integration
 
+      - name: Check development Cloud Run runtime bindings
+        run: >-
+          python3 backend/scripts/preflight-cloud-run-deploy.py
+          --env dev
+          --project="${{ vars.GCP_PROJECT_ID }}"
+          --region="${{ env.REGION }}"
+          --check-runtime-bindings
+
       - name: Deploy ${{ env.SERVICE }} to Cloud Run
         id: deploy-backend
         uses: google-github-actions/deploy-cloudrun@v2
