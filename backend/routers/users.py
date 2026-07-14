@@ -352,6 +352,12 @@ async def run_account_deletion_wipe(
         logger.warning('account_deletion handler: dropping job-ID payload with legacy sync audience')
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'legacy_audience_for_job_id'})
 
+    if payload_kind == 'legacy_uid' and task_authentication.audience != 'legacy_sync':
+        logger.warning('account_deletion handler: dropping legacy uid payload with non-legacy audience')
+        return JSONResponse(
+            status_code=200, content={'status': 'dropped', 'reason': 'legacy_uid_requires_legacy_audience'}
+        )
+
     try:
         resolution = await run_blocking(db_executor, resolution_fn, resolution_arg)
     except Exception as e:

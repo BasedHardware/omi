@@ -589,6 +589,50 @@ def test_reconcile_pending_deletion_wipes_enqueues_cloud_tasks(monkeypatch):
     submit.assert_not_called()
 
 
+def test_reconcile_pending_deletion_wipes_backfills_missing_job_id(monkeypatch):
+    pending = [{'uid': 'uid1', 'wipe_status': 'pending'}]
+    monkeypatch.setattr(account_deletion.users_db, 'get_pending_deletion_wipes', lambda limit=100: pending)
+    monkeypatch.setattr(account_deletion.users_db, 'claim_deletion_wipe', lambda uid: uid)
+    ensure = MagicMock(return_value='job-recovered')
+    monkeypatch.setattr(account_deletion.users_db, 'ensure_deletion_wipe_job_id', ensure)
+    monkeypatch.setattr(account_deletion, 'is_account_deletion_dispatch_enabled', MagicMock(return_value=True))
+    enqueue = MagicMock()
+    monkeypatch.setattr(account_deletion, 'enqueue_account_deletion_wipe', enqueue)
+    submit = MagicMock()
+    monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
+
+    result = account_deletion.reconcile_pending_deletion_wipes()
+
+    assert result == {'requeued': 1, 'skipped': 0}
+    ensure.assert_called_once_with('uid1')
+    enqueue.assert_called_once_with('job-recovered')
+    submit.assert_not_called()
+
+
+def test_reconcile_pending_deletion_wipes_marks_failed_when_job_id_recovery_fails(monkeypatch):
+    pending = [{'uid': 'uid1', 'wipe_status': 'pending'}]
+    monkeypatch.setattr(account_deletion.users_db, 'get_pending_deletion_wipes', lambda limit=100: pending)
+    monkeypatch.setattr(account_deletion.users_db, 'claim_deletion_wipe', lambda uid: uid)
+    monkeypatch.setattr(
+        account_deletion.users_db,
+        'ensure_deletion_wipe_job_id',
+        MagicMock(side_effect=Exception('job id backfill down')),
+    )
+    monkeypatch.setattr(account_deletion, 'is_account_deletion_dispatch_enabled', MagicMock(return_value=True))
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_failed', MagicMock())
+    enqueue = MagicMock()
+    monkeypatch.setattr(account_deletion, 'enqueue_account_deletion_wipe', enqueue)
+    submit = MagicMock()
+    monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
+
+    result = account_deletion.reconcile_pending_deletion_wipes()
+
+    assert result == {'requeued': 0, 'skipped': 1}
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
+    enqueue.assert_not_called()
+    submit.assert_not_called()
+
+
 def test_reconcile_pending_deletion_wipes_skips_cloud_enqueue_failure(monkeypatch):
     pending = [{'uid': 'uid1', 'wipe_status': 'failed', 'wipe_job_id': 'job-1'}]
     monkeypatch.setattr(account_deletion.users_db, 'get_pending_deletion_wipes', lambda limit=100: pending)

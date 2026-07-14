@@ -209,6 +209,22 @@ def test_run_account_deletion_wipe_drops_job_id_with_legacy_sync_audience_withou
     assert json.loads(response.body) == {'status': 'dropped', 'reason': 'legacy_audience_for_job_id'}
 
 
+def test_run_account_deletion_wipe_drops_legacy_uid_with_account_deletion_audience_without_mutation(monkeypatch):
+    async def run_blocking(*_args):
+        raise AssertionError('account_deletion audience must not resolve or mutate a legacy uid payload')
+
+    monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
+
+    response = asyncio.run(
+        users_router.run_account_deletion_wipe(
+            _FakeRequest({'uid': 'legacy-uid'}), task_authentication=_task_auth(audience='account_deletion')
+        )
+    )
+
+    assert response.status_code == 200
+    assert json.loads(response.body) == {'status': 'dropped', 'reason': 'legacy_uid_requires_legacy_audience'}
+
+
 def test_persisted_wipe_recovers_after_enqueue_crash_and_handler_runs_once(monkeypatch):
     """The durable marker bridges a lost enqueue acknowledgement without a duplicate wipe."""
     service_globals = users_router.start_account_deletion.__globals__
