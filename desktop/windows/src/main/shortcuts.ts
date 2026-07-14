@@ -20,6 +20,11 @@ export interface ShortcutSlot {
   unregister(accelerator?: string): void
   /** Rebind to a new accelerator, rolling back to the previous one if it is taken. */
   setAccelerator(accelerator: string): boolean
+  /** Like setAccelerator but WITHOUT rollback: commit to `accelerator` as the
+   *  current binding even if the OS can't claim it (registered=false). For the
+   *  Record chord's intent model, where the user's exact choice is honored and a
+   *  conflict is surfaced as a warning rather than silently reverted. */
+  forceAccelerator(accelerator: string): boolean
   /** Temporarily release the accelerator (e.g. to record raw keys). Idempotent. */
   suspend(): void
   /** Re-claim the accelerator after a suspend. */
@@ -81,6 +86,16 @@ export function createShortcutSlot(defaultAccelerator: string): ShortcutSlot {
       tryRegister(previous)
       return false
     },
+    forceAccelerator(accelerator) {
+      if (accelerator === currentAccelerator && globalShortcut.isRegistered(accelerator)) {
+        return true
+      }
+      unregister(currentAccelerator)
+      // Commit the requested chord as current regardless of OS acceptance; a
+      // failed claim just means registered=false (the caller surfaces the conflict).
+      currentAccelerator = accelerator
+      return tryRegister(accelerator)
+    },
     suspend() {
       unregister(currentAccelerator)
     },
@@ -125,6 +140,15 @@ export function setRecordAccelerator(accelerator: string): RecordShortcutState {
   if (!recordSlot) return { accelerator, registered: false }
   const ok = recordSlot.setAccelerator(accelerator)
   return { accelerator: recordSlot.getAccelerator(), registered: ok }
+}
+
+/** Rebind the record chord honoring the user's exact choice (no rollback). A
+ *  conflict persists the requested chord with registered=false so the UI can warn,
+ *  and a later relaunch re-attempts it once the conflicting app releases it. */
+export function setRecordAcceleratorForced(accelerator: string): RecordShortcutState {
+  if (!recordSlot) return { accelerator, registered: false }
+  const registered = recordSlot.forceAccelerator(accelerator)
+  return { accelerator: recordSlot.getAccelerator(), registered }
 }
 
 export function getRecordShortcut(): RecordShortcutState {

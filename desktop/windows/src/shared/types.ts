@@ -462,8 +462,9 @@ export type TrayListeningState = 'idle' | 'listening' | 'paused'
  *  is whether the chord is registered at all: the Record card (only) lets the user
  *  turn it fully off (default Ctrl+Space collides with the Windows IME switch), and
  *  main leaves it unregistered while off. The summon path reuses this shape and
- *  does not populate `enabled` (its card has no Off affordance). */
-export type RecordHotkeyState = { accelerator: string; registered: boolean; enabled: boolean }
+ *  does not populate `enabled` (its card has no Off affordance) — hence optional;
+ *  consumers must treat `undefined` as enabled (`enabled !== false`). */
+export type RecordHotkeyState = { accelerator: string; registered: boolean; enabled?: boolean }
 
 /** Outcome of a manual "check for updates" from Settings → About.
  *  - `unsupported`: the updater is inert (unpackaged dev build) — updates install

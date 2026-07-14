@@ -23,6 +23,7 @@ import {
   createShortcutSlot,
   registerRecordShortcut,
   setRecordAccelerator,
+  setRecordAcceleratorForced,
   getRecordShortcut,
   __resetRecordShortcutForTests,
   DEFAULT_RECORD_HOTKEY
@@ -77,6 +78,31 @@ describe('createShortcutSlot', () => {
     expect(registered.has('Ctrl+O')).toBe(false)
   })
 
+  it('forceAccelerator commits the requested chord without rolling back when it is taken', () => {
+    const slot = createShortcutSlot('Ctrl+J')
+    slot.register(() => {})
+    taken.add('Ctrl+Space')
+    // The intent model: honor the user's exact choice even when the OS declines.
+    expect(slot.forceAccelerator('Ctrl+Space')).toBe(false)
+    expect(slot.getAccelerator()).toBe('Ctrl+Space') // NOT rolled back to Ctrl+J
+    expect(slot.isRegistered()).toBe(false)
+    expect(registered.has('Ctrl+J')).toBe(false) // the old chord is released
+    // Contrast: setAccelerator rolls back to the previous binding.
+    const rollbackSlot = createShortcutSlot('Ctrl+J')
+    rollbackSlot.register(() => {})
+    expect(rollbackSlot.setAccelerator('Ctrl+Space')).toBe(false)
+    expect(rollbackSlot.getAccelerator()).toBe('Ctrl+J')
+  })
+
+  it('forceAccelerator claims an available chord like setAccelerator', () => {
+    const slot = createShortcutSlot('Ctrl+J')
+    slot.register(() => {})
+    expect(slot.forceAccelerator('Ctrl+K')).toBe(true)
+    expect(slot.getAccelerator()).toBe('Ctrl+K')
+    expect(registered.has('Ctrl+K')).toBe(true)
+    expect(registered.has('Ctrl+J')).toBe(false)
+  })
+
   it('suspend releases the accelerator; resume re-claims it', () => {
     const slot = createShortcutSlot('Shift+Space')
     slot.register(() => {})
@@ -122,5 +148,31 @@ describe('record shortcut', () => {
     const rolledBack = setRecordAccelerator('Ctrl+Alt+P')
     expect(rolledBack.registered).toBe(false)
     expect(rolledBack.accelerator).toBe('Ctrl+Shift+O') // previous binding kept
+  })
+
+  // Regression: the Record intent model. User is on a custom chord, picks
+  // "Default" while the IME holds Ctrl+Space. The requested chord must become the
+  // current + persisted one with registered=false (the card shows the conflict
+  // warning); a rollback would leave Ctrl+Shift+R live while the UI claimed
+  // Ctrl+Space, and would re-register the stale chord on the next launch.
+  it('a conflicted forced rebind keeps the REQUESTED chord instead of rolling back', () => {
+    registerRecordShortcut('Ctrl+Shift+R', () => {})
+    taken.add('Ctrl+Space')
+
+    const next = setRecordAcceleratorForced('Ctrl+Space')
+
+    expect(next).toEqual({ accelerator: 'Ctrl+Space', registered: false })
+    expect(getRecordShortcut()).toEqual({ accelerator: 'Ctrl+Space', registered: false })
+    expect(registered.has('Ctrl+Shift+R')).toBe(false) // old chord released, not restored
+  })
+
+  it('a forced rebind to a free chord registers it', () => {
+    registerRecordShortcut('Ctrl+Shift+R', () => {})
+    expect(setRecordAcceleratorForced('Ctrl+Space')).toEqual({
+      accelerator: 'Ctrl+Space',
+      registered: true
+    })
+    expect(registered.has('Ctrl+Space')).toBe(true)
+    expect(registered.has('Ctrl+Shift+R')).toBe(false)
   })
 })

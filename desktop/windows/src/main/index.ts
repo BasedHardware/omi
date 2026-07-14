@@ -102,7 +102,7 @@ import { createTray, updateTrayState, destroyTray, isTrayCreated } from './tray'
 import { initAutoUpdater, getPendingUpdate, checkForUpdatesNow } from './updater'
 import {
   registerRecordShortcut,
-  setRecordAccelerator,
+  setRecordAcceleratorForced,
   getRecordShortcut,
   suspendRecordShortcut,
   resumeRecordShortcut
@@ -911,7 +911,10 @@ app.whenReady().then(async () => {
     if (typeof accelerator !== 'string' || !accelerator.trim()) {
       return { ok: false, registered: getRecordShortcut().registered }
     }
-    const next = setRecordAccelerator(accelerator.trim())
+    // Forced (no rollback): the user's exact choice becomes the current chord even
+    // when the OS can't claim it, so what we persist and show always matches what
+    // they picked (a rollback would leave the old chord live under a new label).
+    const next = setRecordAcceleratorForced(accelerator.trim())
     // Selecting a binding (Default/Custom) is an explicit intent to enable the
     // chord, independent of whether the OS could claim it right now — a conflict
     // (registered=false) surfaces as the card's "held by another app" warning, it

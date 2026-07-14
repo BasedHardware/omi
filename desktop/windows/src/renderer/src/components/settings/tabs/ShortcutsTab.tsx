@@ -107,7 +107,7 @@ function ShortcutCard(props: {
   onCommitted?: (accelerator: string) => void
   /** When provided, the card renders an "Off" chip that fully disables the chord
    *  (Record card only; Summon omits it — it's coupled to push-to-talk). */
-  onSetEnabled?: (enabled: boolean) => Promise<{ registered: boolean; enabled: boolean }>
+  onSetEnabled?: (enabled: boolean) => Promise<RecordHotkeyState>
 }): React.JSX.Element {
   const { icon, title, subtitle, keywords, defaultAccel, load, commit, onCommitted, onSetEnabled } =
     props
