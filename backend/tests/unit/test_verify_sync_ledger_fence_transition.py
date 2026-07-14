@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Sequence
 
 import pytest
 
 from scripts import verify_sync_ledger_fence_transition as verifier
+
+TAGGED_CANDIDATE_STATUS_FIXTURE = (
+    Path(__file__).parent / 'fixtures' / 'cloud_run' / 'backend_status_tagged_candidate_no_percent.json'
+)
 
 
 class FakeCloudRunner:
@@ -70,6 +75,10 @@ def _config(desired_mode: str) -> verifier.TransitionVerificationConfig:
     )
 
 
+def _tagged_candidate_status_fixture() -> dict:
+    return json.loads(TAGGED_CANDIDATE_STATUS_FIXTURE.read_text(encoding='utf-8'))
+
+
 def test_uses_positive_status_traffic_not_latest_created_or_service_template() -> None:
     runner = _runner(modes={service: 'active' for service in verifier.SERVICES})
 
@@ -94,6 +103,71 @@ def test_rejects_split_positive_traffic_before_describing_a_revision() -> None:
     ]
 
     with pytest.raises(verifier.FenceTransitionVerificationError, match='splits positive traffic'):
+        verifier.verify_transition(_config('active'), runner=runner)
+
+    assert not any(command[:4] == ['gcloud', 'run', 'revisions', 'describe'] for command in runner.commands)
+
+
+def test_ignores_complete_tag_only_candidate_before_serving_traffic() -> None:
+    runner = _runner(modes={service: 'active' for service in verifier.SERVICES})
+    runner.service_documents['backend'] = _tagged_candidate_status_fixture()
+
+    result = verifier.verify_transition(_config('active'), runner=runner)
+
+    assert result.serving_revisions[0].revision == 'backend-serving'
+    described_revisions = [
+        command[4] for command in runner.commands if command[:4] == ['gcloud', 'run', 'revisions', 'describe']
+    ]
+    assert 'backend-candidate' not in described_revisions
+    assert described_revisions == [f'{service}-serving' for service in verifier.SERVICES]
+
+
+def test_rejects_malformed_tag_only_target_before_describing_a_revision() -> None:
+    runner = _runner(modes={service: 'active' for service in verifier.SERVICES})
+    runner.service_documents['backend']['status']['traffic'] = [
+        {'revisionName': 'backend-candidate', 'tag': 'candidate'},
+        {'revisionName': 'backend-serving', 'percent': 100},
+    ]
+
+    with pytest.raises(verifier.FenceTransitionVerificationError, match='malformed tag-only'):
+        verifier.verify_transition(_config('active'), runner=runner)
+
+    assert not any(command[:4] == ['gcloud', 'run', 'revisions', 'describe'] for command in runner.commands)
+
+
+@pytest.mark.parametrize(
+    ('traffic', 'error'),
+    [
+        (
+            [
+                {'revisionName': 'backend-candidate', 'tag': 'candidate', 'url': 'https://candidate.example.test'},
+                {'revisionName': 'backend-serving', 'percent': '100.0'},
+            ],
+            'non-integer Cloud Run traffic percentage',
+        ),
+        (
+            [
+                {'revisionName': 'backend-candidate', 'tag': 'candidate', 'url': 'https://candidate.example.test'},
+                {'revisionName': 'backend-serving', 'percent': 50},
+                {'revisionName': 'backend-serving', 'percent': 50},
+            ],
+            'ambiguous positive traffic entries',
+        ),
+        (
+            [
+                {'revisionName': 'backend-candidate', 'tag': 'candidate', 'url': 'https://candidate.example.test'},
+                {'revisionName': 'backend-serving', 'percent': 99},
+                {'revisionName': 'backend-stale', 'percent': 1},
+            ],
+            'splits positive traffic',
+        ),
+    ],
+)
+def test_tag_only_candidate_does_not_relax_serving_traffic_validation(traffic: list[dict], error: str) -> None:
+    runner = _runner(modes={service: 'active' for service in verifier.SERVICES})
+    runner.service_documents['backend']['status']['traffic'] = traffic
+
+    with pytest.raises(verifier.FenceTransitionVerificationError, match=error):
         verifier.verify_transition(_config('active'), runner=runner)
 
     assert not any(command[:4] == ['gcloud', 'run', 'revisions', 'describe'] for command in runner.commands)
