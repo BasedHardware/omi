@@ -334,6 +334,7 @@ struct ProofFirstDashboardView<ConnectDataContent: View>: View {
             connectDataContent
               .padding(.top, 82)
               .frame(width: proxy.size.width, height: proxy.size.height)
+              .clipped()
               .id(ProofFirstDashboardPage.connectData)
 
             FeaturesDashboardPage(onOpenShortcutSettings: onOpenShortcutSettings)
