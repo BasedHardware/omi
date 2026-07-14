@@ -10,6 +10,10 @@ from google.cloud.firestore_v1 import transactional  # type: ignore[reportUnknow
 from database import projection_repair
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from models.memories import confidence_fields_for_evidence
+from models.memory_state_head import (
+    trusted_memory_state_head_fields_from_control,
+    trusted_memory_state_head_fields_from_state,
+)
 from ._client import db
 
 T = TypeVar("T")
@@ -40,6 +44,7 @@ def _typed_doc(doc: Any) -> Dict[str, Any]:
 users_collection = 'users'
 memory_state_collection = 'memory_state'
 memory_state_document = 'head'
+memory_apply_control_document = 'apply_control'
 memory_commits_collection = 'memory_commits'
 
 
@@ -48,6 +53,39 @@ class HeadConflict(Exception):
         super().__init__(f"Memory ledger head moved from {expected_parent} to {current_head}")
         self.expected_parent = expected_parent
         self.current_head = current_head
+
+
+def _state_head_write_payload(
+    *,
+    transaction: Any,
+    user_ref: Any,
+    uid: str,
+    state: Dict[str, Any],
+    commit: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Keep canonical trusted fields when the legacy ledger advances its own head.
+
+    The legacy ledger's ``current_head_commit_id`` is independent from the
+    canonical apply stream's ``head_commit_id``.  Older ledger writes replaced
+    the shared document and erased the canonical fields.  If an old write has
+    already clobbered them, repair only from the transactional canonical control
+    record; do not fabricate a trusted generation.
+    """
+    trusted_fields = trusted_memory_state_head_fields_from_state(state, uid=uid)
+    if trusted_fields is None:
+        control_ref = user_ref.collection(memory_state_collection).document(memory_apply_control_document)
+        control_snapshot = control_ref.get(transaction=transaction)
+        control = _typed_doc(control_snapshot) if control_snapshot.exists else {}
+        trusted_fields = trusted_memory_state_head_fields_from_control(control, uid=uid)
+
+    payload = {
+        'current_head_commit_id': commit['commit_id'],
+        'projection_version': 1,
+        'updated_at': commit['commit_time'],
+    }
+    if trusted_fields is not None:
+        payload.update(trusted_fields)
+    return payload
 
 
 def mutation(mutation_type: str, **payload: Any) -> Dict[str, Any]:
@@ -288,11 +326,13 @@ def _append_commit_transaction(
     transaction.set(commit_ref, commit)
     transaction.set(
         state_ref,
-        {
-            'current_head_commit_id': commit['commit_id'],
-            'projection_version': 1,
-            'updated_at': commit['commit_time'],
-        },
+        _state_head_write_payload(
+            transaction=transaction,
+            user_ref=user_ref,
+            uid=uid,
+            state=state,
+            commit=commit,
+        ),
     )
     return {'commit': commit, 'applied': True}
 
@@ -334,11 +374,13 @@ def _append_commit_with_builder_transaction(
     transaction.set(commit_ref, commit)
     transaction.set(
         state_ref,
-        {
-            'current_head_commit_id': commit['commit_id'],
-            'projection_version': 1,
-            'updated_at': commit['commit_time'],
-        },
+        _state_head_write_payload(
+            transaction=transaction,
+            user_ref=user_ref,
+            uid=uid,
+            state=state,
+            commit=commit,
+        ),
     )
     return {'commit': commit, 'applied': True}
 
