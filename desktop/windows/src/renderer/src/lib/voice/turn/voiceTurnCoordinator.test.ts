@@ -499,6 +499,30 @@ describe('VoiceTurnCoordinator — production scheduler', () => {
     expect(coordinator.model.turn?.phase).toEqual({ kind: 'terminal', reason: 'captureFailed' })
   })
 
+  it('re-arming a held deadline cancels the prior handle', () => {
+    // `hintChanged` re-schedules `hintVisibility` on every hint. If the coordinator
+    // kept the old handle, it would fire 2s after the FIRST hint — clearing the
+    // second hint early and delivering a `deadlineFired` the reducer counts stale.
+    vi.useFakeTimers()
+    const coordinator = new VoiceTurnCoordinator({
+      scheduler: timeoutVoiceTurnScheduler,
+      mintTurnID: newTurnID
+    })
+    const turnID = coordinator.begin('hold')
+    coordinator.send({ type: 'captureStarted', turnID, captureID: capture(3) })
+    coordinator.send({ type: 'hintChanged', turnID, text: 'first' })
+
+    vi.advanceTimersByTime(1500)
+    coordinator.send({ type: 'hintChanged', turnID, text: 'second' })
+    vi.advanceTimersByTime(1500) // the first handle's 2s window has now elapsed
+
+    expect(coordinator.projection.hint).toBe('second')
+    expect(coordinator.model.staleEventCount).toBe(0)
+
+    vi.advanceTimersByTime(500) // 2s after the second hint
+    expect(coordinator.projection.hint).toBe('')
+  })
+
   it('a cancelled deadline never fires', () => {
     vi.useFakeTimers()
     const coordinator = new VoiceTurnCoordinator({

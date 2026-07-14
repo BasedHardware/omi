@@ -2,9 +2,16 @@
 //
 // It owns everything the reducer deliberately does not: ID minting, the clock,
 // deadline timers, the diagnostics timeline, and effect delivery. It performs no
-// I/O of its own beyond timers — every effect (including the ones it consumes to
-// arm/cancel timers) is forwarded to the injected `effectHandler`, which is where
-// PR-5/PR-6 plug in the real capture / hub / playback transports.
+// I/O of its own beyond timers — the real capture / hub / playback transports are
+// driven by the injected `effectHandler`, which PR-5/PR-6 supply.
+//
+// Effect-forwarding deviation (port plan §B.3): macOS CONSUMES the three timer
+// effects — `VoiceTurnCoordinator.swift:222-227` arms/cancels the timer and does
+// not call `effectHandler` for them; only the remaining effects reach the host.
+// Here EVERY effect is forwarded, timer effects included. That is a superset, so
+// a host must tolerate `scheduleDeadline` / `cancelDeadline` / `cancelAllDeadlines`
+// arriving — never `assertNever` on the effect kind, or a timer will throw out of
+// `send()`.
 //
 // Port notes (the traps a "natural" TS translation gets wrong):
 //   * `send()` is FIFO and NON-REENTRANT. An event dispatched from inside an
@@ -330,8 +337,9 @@ export class VoiceTurnCoordinator {
     return this.model.turn?.route ?? { kind: 'undecided' }
   }
 
-  /** Timers + diagnostics only. State transitions are the reducer's job, and
-   *  EVERY effect is forwarded to the host regardless. */
+  /** Timers + diagnostics only. State transitions are the reducer's job. Every
+   *  effect is then forwarded to the host — including the three timer effects,
+   *  which macOS consumes instead (see the deviation note at the top). */
   private process(effects: VoiceTurnEffect[]): void {
     for (const effect of effects) {
       switch (effect.kind) {
