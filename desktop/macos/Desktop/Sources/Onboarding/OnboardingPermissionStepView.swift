@@ -98,6 +98,7 @@ struct OnboardingPermissionStepView: View {
           if isGranted {
             Button("Continue", action: onContinue)
               .buttonStyle(OmiButtonStyle(.primary))
+              .keyboardShortcut(.defaultAction)
           } else {
             Button(isRequesting ? "Waiting for macOS…" : primaryActionLabel) {
               Task {

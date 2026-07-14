@@ -3,6 +3,8 @@ import OmiTheme
 
 /// Onboarding step explaining that omi auto-creates tasks.
 struct OnboardingTasksStepView: View {
+    var stepIndex: Int
+    var totalSteps: Int
     var onComplete: () -> Void
     var onSkip: (() -> Void)? = nil
     var onForceComplete: (() -> Void)?
@@ -28,6 +30,10 @@ struct OnboardingTasksStepView: View {
 
             Divider()
                 .background(OmiColors.backgroundTertiary)
+
+            OnboardingProgressDots(stepIndex: stepIndex, totalSteps: totalSteps)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.top, OmiSpacing.xl)
 
             Spacer()
 
