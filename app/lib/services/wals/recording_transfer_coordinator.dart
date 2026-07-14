@@ -169,6 +169,11 @@ class RecordingTransferCoordinator {
   /// Coalesces concurrent events into a single extra serial pass. Five wakes
   /// during one pass therefore run at most two passes and never parallel drains.
   Future<void> wake(WakeTrigger trigger) {
+    // Recovery is foreground-only. Persisted WAL state is recovered by the
+    // foreground wake, so background connectivity/device callbacks must not
+    // start discovery or a whole-WAL drain.
+    if (!_foreground) return Future.value();
+
     if (!_configured) {
       _wakeBeforeConfigured = _preferWake(_wakeBeforeConfigured, trigger);
       return Future.value();

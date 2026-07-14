@@ -25,6 +25,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   final IWalService? _walServiceOverride;
   final SyncUploadGate _uploadGate;
   final bool _startBackgroundSync;
+  final Future<void> Function(LocalWalSyncImpl phone) _waitForWalReady;
+  final Future<void> Function() _startRecovery;
 
   /// Completes after WAL loading and startup fair-use reconciliation finish.
   @visibleForTesting
@@ -293,9 +295,13 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     IWalService? walService,
     SyncUploadGate? uploadGate,
     @visibleForTesting bool startBackgroundSync = true,
+    @visibleForTesting Future<void> Function(LocalWalSyncImpl phone)? waitForWalReady,
+    @visibleForTesting Future<void> Function()? startRecovery,
   })  : _walServiceOverride = walService,
         _uploadGate = uploadGate ?? SyncUploadGate.instance,
-        _startBackgroundSync = startBackgroundSync {
+        _startBackgroundSync = startBackgroundSync,
+        _waitForWalReady = waitForWalReady ?? ((phone) => phone.walReady),
+        _startRecovery = startRecovery ?? (() => RecordingTransferCoordinator.instance.wake(WakeTrigger.startup)) {
     _walService.subscribe(this, this);
     _audioPlayerUtils.addListener(_onAudioPlayerStateChanged);
     _freshRateLimitWasActive = SyncRateLimiter.instance.isLimitedForLane('fresh');
@@ -311,7 +317,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       await _uploadGate.reconcileFairUseStatus();
       if (_isDisposed) return;
       if (_startBackgroundSync) {
-        _attachTransferCoordinator();
+        await _attachTransferCoordinator();
       }
     } catch (error, stackTrace) {
       Logger.error('SyncProvider: initialization failed: $error\n$stackTrace');
@@ -332,12 +338,13 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     }
   }
 
-  /// Wire presentation seams into the single recording-recovery owner. The
-  /// coordinator retains a startup wake if CaptureController emitted it before
-  /// provider initialization completed.
-  void _attachTransferCoordinator() {
+  /// Wait for persisted WALs before attaching the single recovery owner, so
+  /// its sole startup wake cannot race an empty in-memory inventory.
+  Future<void> _attachTransferCoordinator() async {
     try {
       final phone = _walService.getSyncs().phone;
+      await _waitForWalReady(phone);
+      if (_isDisposed) return;
       SyncReconciler.instance.attach(phone, _onReconciledConversations);
       RecordingTransferCoordinator.instance.configure(
         reconcile: SyncReconciler.instance.poke,
@@ -349,7 +356,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         connectivityChanges: ConnectivityService().onConnectionChange,
         initiallyConnected: ConnectivityService().isConnected,
       );
-      unawaited(RecordingTransferCoordinator.instance.wake(WakeTrigger.startup));
+      unawaited(_startRecovery());
     } catch (e) {
       Logger.debug('SyncProvider: attach recording transfer coordinator failed: $e');
     }

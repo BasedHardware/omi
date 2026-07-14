@@ -78,6 +78,25 @@ void main() {
       expect(harness.coordinator.nextCooldownAt, isNull);
     });
 
+    test('background recovery wakes wait for the foreground before draining', () async {
+      final harness = _TransferHarness();
+      addTearDown(harness.dispose);
+
+      harness.coordinator.setForeground(false);
+      harness.connectivity.add(false);
+      harness.connectivity.add(true);
+      await _settle();
+
+      expect(harness.reconcilePasses, 0);
+      expect(harness.drainPasses, 0);
+
+      harness.coordinator.setForeground(true);
+      await harness.coordinator.wake(WakeTrigger.foregrounded);
+
+      expect(harness.reconcilePasses, 1);
+      expect(harness.drainPasses, 1);
+    });
+
     test('startup resumes a pending backlog once without loss or duplication', () async {
       final sharedBacklog = <String>['pending-wal'];
       final drainedWalIds = <String>[];
