@@ -45,6 +45,11 @@ type Options = {
   restoreDraft: (snapshot: string) => void
   /** Current draft, read at key-down on the window-level (unfocused) hold path. */
   getDraft: () => string
+  /** Fires at the start of every new PTT hold (once the hold threshold is
+   *  crossed and capture begins) — the barge-in seam. macOS calls
+   *  FloatingBarVoicePlaybackService.interruptCurrentResponse() at exactly this
+   *  point so a new hold cuts off Omi's still-playing spoken reply. */
+  onHoldStart?: () => void
 }
 
 export type PushToTalk = {
@@ -357,6 +362,10 @@ export function usePushToTalk(opts: Options): PushToTalk {
   }
 
   const startHold = (): void => {
+    // Barge-in: a new hold interrupts Omi's still-playing spoken reply at
+    // hold-start (macOS PushToTalkManager.startListening → interruptCurrentResponse),
+    // before mic capture begins. Safe no-op when nothing is playing.
+    optsRef.current.onHoldStart?.()
     // A prior job still pre-release can't coexist with a new hold (only possible
     // via focus glitches); one already transcribing keeps running in the
     // background and commits on its own — the new hold never kills it.

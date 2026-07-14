@@ -11,14 +11,17 @@ export const MAX_TTS_CHARS = 4096
 
 export async function synthesizeTts(
   text: string,
-  voiceId: string = DEFAULT_TTS_VOICE
+  voiceId: string = DEFAULT_TTS_VOICE,
+  // A barge-in / superseding reply aborts the in-flight chunk fetch so the
+  // pending speakText resolves promptly (see voiceController.interruptCurrentResponse).
+  signal?: AbortSignal
 ): Promise<Blob> {
   const trimmed = text.trim().slice(0, MAX_TTS_CHARS)
   if (!trimmed) throw new Error('tts: text is required')
   const res = await desktopApi.post<ArrayBuffer>(
     '/v1/tts/synthesize',
     { text: trimmed, voice_id: voiceId },
-    { responseType: 'arraybuffer', timeout: 45_000 }
+    { responseType: 'arraybuffer', timeout: 45_000, signal }
   )
   return new Blob([res.data], { type: 'audio/mpeg' })
 }

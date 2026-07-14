@@ -72,6 +72,12 @@ export function BarApp(): React.JSX.Element {
   const [sliding, setSliding] = useState<'in' | 'out'>('out')
   const [genesisNonce, setGenesisNonce] = useState(0)
   const [continuous, setContinuous] = useState(() => !!getPreferences().continuousRecording)
+  // Speak replies to TYPED bar questions too (macOS
+  // floatingBarTypedQuestionVoiceAnswersEnabled, default off). PTT/voice replies
+  // are always spoken regardless; this only governs typed submits below.
+  const [typedVoice, setTypedVoice] = useState(
+    () => !!getPreferences().floatingBarTypedVoiceEnabled
+  )
   const [chat, setChat] = useState<BarChatState>(EMPTY_CHAT)
   // Connected coding agents (shared fetch with Settings → Agents).
   const { agents } = useCodingAgents()
@@ -102,6 +108,7 @@ export function BarApp(): React.JSX.Element {
   }, [])
 
   useEffect(() => onPreferencesChange((p) => setContinuous(!!p.continuousRecording)), [])
+  useEffect(() => onPreferencesChange((p) => setTypedVoice(!!p.floatingBarTypedVoiceEnabled)), [])
   useEffect(() => {
     let active = true
     void auth.authStateReady().then(() => {
@@ -137,6 +144,10 @@ export function BarApp(): React.JSX.Element {
   // --- push-to-talk (always mounted; drives the orb + voice sends) ------------
   const ptt = usePushToTalk({
     onCommit: (text) => sendFromBar(text, true),
+    // Barge-in: a new PTT hold cuts off Omi's still-playing spoken reply. The
+    // reply plays in the MAIN window (useChat → voiceController), so hop over the
+    // bar→main bridge; ChatBridgeHost calls interruptCurrentResponse there.
+    onHoldStart: () => window.omiBar.interruptTts(),
     // No transcript text in the bar — the orb is the sole status indicator.
     onTranscript: () => {},
     // Fires on every completed hold capture (drives the onboarding voice step).
@@ -374,7 +385,7 @@ export function BarApp(): React.JSX.Element {
                     onClose={() => window.omiOverlay.hide()}
                     draft={draft}
                     setDraft={setDraft}
-                    onSubmit={(text) => sendFromBar(text, false)}
+                    onSubmit={(text) => sendFromBar(text, typedVoice)}
                     pttKeyDown={ptt.onKeyDown}
                     pttKeyUp={ptt.onKeyUp}
                     recording={ptt.recording}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useAppState } from '../../state/appState'
+import { interruptCurrentResponse } from '../../lib/voice/voiceController'
 import type { BarChatState, BarChatStatus } from '../../../../shared/types'
 
 // The main-window half of the bar↔main chat bridge. The bar is a VIEWPORT over
@@ -102,6 +103,13 @@ export function ChatBridgeHost(): null {
   useEffect(() => {
     return window.omi?.onBarRequestChatState?.(() => publish())
   }, [publish])
+
+  // Barge-in: a bar PTT hold started → stop Omi's still-playing spoken reply.
+  // Playback lives here (main window) in the voiceController singleton useChat
+  // speaks through, so this is the surface that can actually interrupt it.
+  useEffect(() => {
+    return window.omi?.onBarChatInterrupt?.(() => interruptCurrentResponse())
+  }, [])
 
   // Throttled broadcast on every state change (leading + trailing at 50ms).
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)

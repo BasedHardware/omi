@@ -82,6 +82,11 @@ export type Preferences = {
   // AudioSessionHost); PTT is passthrough regardless. Undefined = enabled
   // (gated), the macOS-faithful default. Set false to send all audio ungated.
   vadGateEnabled?: boolean
+  // Speak Omi's reply to TYPED floating-bar questions too (macOS
+  // shortcut_floatingBarTypedQuestionVoiceAnswersEnabled). Undefined = off
+  // (opt-in), matching macOS's default: PTT/voice-originated replies are always
+  // spoken; a typed bar question is spoken only when this is true.
+  floatingBarTypedVoiceEnabled?: boolean
   // Launch commands for the external coding agents (OpenClaw/Hermes/Codex).
   // Set in Settings → Agents; undefined = not connected (the matching
   // OMI_*_ADAPTER_COMMAND env var still works as a power-user override).
