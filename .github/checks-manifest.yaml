@@ -122,6 +122,11 @@ checks:
     triggers: ["desktop/macos/Desktop/Sources/FloatingControlBar/**/*.swift", "desktop/macos/scripts/check-async-after-ratchet.py"]
     lanes: ["local", "ci"]
     reason: "floating control bar timing surfaces changed"
+  - id: desktop-hub-controller-ratchet
+    command: ["python3", "desktop/macos/scripts/check-hub-controller-ratchet.py"]
+    triggers: ["desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift", "desktop/macos/scripts/check-hub-controller-ratchet.py"]
+    lanes: ["local", "ci"]
+    reason: "realtime hub ownership/line-count anti-regrowth ratchet"
   - id: desktop-auth-session-ratchet
     command: ["python3", ".github/scripts/check_desktop_auth_session.py"]
     triggers: ["desktop/macos/Desktop/Sources/APIClient.swift", "desktop/macos/Desktop/Sources/AuthService.swift", "desktop/macos/Desktop/Sources/AuthSessionCoordinator.swift", "desktop/macos/Desktop/Sources/DesktopKeychainStore.swift", "desktop/macos/Desktop/Sources/OmiApp.swift", "desktop/macos/Desktop/Sources/Auth/**/*.swift", ".github/scripts/check_desktop_auth_session.py"]
@@ -144,7 +149,7 @@ checks:
     reason: "#9688 gates adapter lifecycle fixtures and artifact-backed bounded tool-result delivery"
   - id: desktop-spawn-receipt-fixtures-v1
     command: ["bash", "desktop/macos/scripts/check-spawn-receipt-fixtures.sh"]
-    triggers: ["desktop/macos/agent/src/runtime/agent-spawn-journal.ts", "desktop/macos/agent/fixtures/spawn-receipt/**", "desktop/macos/agent/tests/spawn-receipt-fixtures.test.ts", "desktop/macos/scripts/check-spawn-receipt-fixtures.sh", "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift", "desktop/macos/Desktop/Tests/RealtimeHubSpawnAgentTests.swift"]
+    triggers: ["desktop/macos/agent/src/runtime/agent-spawn-journal.ts", "desktop/macos/agent/fixtures/spawn-receipt/**", "desktop/macos/agent/tests/spawn-receipt-fixtures.test.ts", "desktop/macos/scripts/check-spawn-receipt-fixtures.sh", "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeSpawnReceipt.swift", "desktop/macos/Desktop/Tests/RealtimeHubSpawnAgentTests.swift"]
     lanes: ["local", "ci"]
     reason: "cross-language realtime spawn receipt producer/consumer contract"
 
