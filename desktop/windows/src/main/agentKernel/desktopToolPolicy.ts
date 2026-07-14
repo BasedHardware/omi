@@ -18,17 +18,29 @@
 // policies) — they intentionally differ from the narrow control-tool-only family
 // in ./controlToolManifest. See that file's header.
 //
-// PORT NOTE — product ("omi") tools. macOS resolves a non-control tool name
-// through omi-tool-manifest.ts (~31 product tools: execute_sql, capture_screen,
-// request_permission, …). That manifest is owned by other tracks and is not
-// ported here, so `descriptorFromToolName` resolves control tools only. An
-// unrecognized tool name therefore falls through to `descriptorFromBundles`,
-// exactly as it does on macOS for a name absent from both manifests — with no
-// requested bundles that is a deny ("No coordinator capability bundle was
-// declared."), which is both faithful and the safe direction. The product-tool
-// bundle mapping itself is ported verbatim below and exported
+// PORT NOTE — product ("omi") tools, and why an unknown tool name FAILS CLOSED.
+// macOS resolves a non-control tool name through omi-tool-manifest.ts (~31
+// product tools: execute_sql, capture_screen, request_permission, …) and derives
+// that tool's IMPLIED bundles from it. That manifest is owned by other tracks and
+// is not ported here, so `descriptorFromToolName` resolves control tools only —
+// which means Windows CANNOT know what an unrecognized name implies.
+//
+// Falling through to `descriptorFromBundles(requestedBundles)` in that case would
+// WEAKEN a deny: a caller could name a write/sensitive product tool while
+// declaring only benign bundles, and be judged solely on its own declaration.
+// Concretely, `complete_task` + `[desktop.context.local_read]` implies
+// `desktop.tasks.readwrite` on macOS → required-but-not-selected → deny; through
+// a bundles-only fall-through it would resolve benign → allow. So a SUPPLIED
+// toolName that is not a known control tool is denied outright. (Only a request
+// with no toolName at all is judged on its bundles.)
+//
+// The product-tool bundle mapping is ported verbatim below and exported
 // (`bundlesForOmiTool` / `descriptorFromOmiTool`) so the track that lands those
-// tools inherits this policy instead of re-deriving it.
+// tools inherits this policy instead of re-deriving it. WHEN THAT MANIFEST LANDS:
+// wire it in `descriptorFromToolName` as
+//   controlDescriptor(name) ?? descriptorFromOmiTool(productManifestEntry(name))
+// and relax the fail-closed branch in `evaluateDesktopToolPolicy` to fire only
+// for names absent from BOTH manifests.
 
 import { agentControlCapabilityManifest } from './controlToolManifest'
 
@@ -209,6 +221,24 @@ function descriptorFromToolName(toolName: string): DesktopToolDescriptor | undef
   return controlDescriptor(toolName)
 }
 
+/**
+ * The descriptor reported for a tool name we cannot resolve. It claims NO
+ * bundles: we genuinely do not know what the tool requires, and saying
+ * "requires exactly what the caller declared" is the under-declaration bug this
+ * fails closed against.
+ */
+function unresolvedToolDescriptor(toolName: string): DesktopToolDescriptor {
+  return {
+    name: toolName,
+    bundles: [],
+    riskTier: 'high',
+    privacyTier: 'sensitive',
+    approvalPolicy: 'deny',
+    readOnly: false,
+    destructive: false
+  }
+}
+
 function descriptorFromBundles(
   bundles: readonly DesktopCoordinatorBundle[]
 ): DesktopToolDescriptor {
@@ -261,10 +291,22 @@ function hasAllowGrant(
 export function evaluateDesktopToolPolicy(
   request: DesktopToolPolicyRequest
 ): DesktopToolPolicyResult {
-  const descriptor = request.toolName
-    ? (descriptorFromToolName(request.toolName) ??
-      descriptorFromBundles(request.requestedBundles ?? []))
-    : descriptorFromBundles(request.requestedBundles ?? [])
+  const namedDescriptor = request.toolName ? descriptorFromToolName(request.toolName) : undefined
+
+  // FAIL CLOSED on a supplied-but-unresolvable tool name. Deriving a descriptor
+  // from `requestedBundles` here would let a caller under-declare its bundles
+  // while naming a write/sensitive tool and be judged on its own declaration.
+  // See the product-tool port note in the file header.
+  if (request.toolName && !namedDescriptor) {
+    return {
+      decision: 'deny',
+      descriptor: unresolvedToolDescriptor(request.toolName),
+      requiredBundles: [],
+      reason: `Unknown tool "${request.toolName}": its required capability bundles cannot be resolved, so it is not judged on the bundles the caller declared.`
+    }
+  }
+
+  const descriptor = namedDescriptor ?? descriptorFromBundles(request.requestedBundles ?? [])
   const requiredBundles = [
     ...new Set([...(descriptor.bundles ?? []), ...(request.requestedBundles ?? [])])
   ]

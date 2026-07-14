@@ -221,14 +221,17 @@ describe('trusted-direct-control-only tools', () => {
     }
   )
 
-  it.each(TRUSTED_ONLY)('rejects an untrusted caller of %s BEFORE any kernel work', async (name) => {
-    const { kernel, store } = newKernel()
-    const before = store.allRows('SELECT COUNT(*) AS n FROM sessions')[0].n
-    await call(untrustedCoordinatorContext(kernel), name, validInput[name])
-    const after = store.allRows('SELECT COUNT(*) AS n FROM sessions')[0].n
-    // In particular, a denied spawn_background_agent must not have created a session.
-    expect(after).toBe(before)
-  })
+  it.each(TRUSTED_ONLY)(
+    'rejects an untrusted caller of %s BEFORE any kernel work',
+    async (name) => {
+      const { kernel, store } = newKernel()
+      const before = store.allRows('SELECT COUNT(*) AS n FROM sessions')[0].n
+      await call(untrustedCoordinatorContext(kernel), name, validInput[name])
+      const after = store.allRows('SELECT COUNT(*) AS n FROM sessions')[0].n
+      // In particular, a denied spawn_background_agent must not have created a session.
+      expect(after).toBe(before)
+    }
+  )
 
   it.each(TRUSTED_ONLY)('lets trusted direct control PAST the gate for %s', async (name) => {
     const { kernel } = newKernel()

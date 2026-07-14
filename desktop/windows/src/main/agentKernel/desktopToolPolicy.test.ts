@@ -32,14 +32,46 @@ describe('evaluateDesktopToolPolicy — deny by default', () => {
     expect(result.reason).toBe('No coordinator capability bundle was declared.')
   })
 
-  it('denies an unknown tool name — it resolves to zero bundles, not to an allow', () => {
+  it('denies an unknown tool name — it is never resolved from the caller-declared bundles', () => {
     const result = evaluateDesktopToolPolicy({
       toolName: 'definitely_not_a_tool',
       selectedBundles: ['desktop.agent_control.read'],
       nowMs: NOW
     })
     expect(result.decision).toBe('deny')
-    expect(result.reason).toBe('No coordinator capability bundle was declared.')
+    expect(result.reason).toMatch(/^Unknown tool "definitely_not_a_tool"/)
+    // We do not know what it requires, so we claim nothing about it.
+    expect(result.requiredBundles).toEqual([])
+    expect(result.descriptor.bundles).toEqual([])
+  })
+
+  // The product-tool under-declaration attack. `complete_task` is a real macOS
+  // product tool that IMPLIES desktop.tasks.readwrite (see TASK_WRITE_TOOLS /
+  // bundlesForOmiTool). Windows has no product-tool manifest to resolve it, so it
+  // must NOT be waved through on the benign bundles the caller chose to declare.
+  it('denies a product tool that under-declares its bundles, rather than trusting the declaration', () => {
+    const result = evaluateDesktopToolPolicy({
+      toolName: 'complete_task',
+      requestedBundles: ['desktop.context.local_read'],
+      selectedBundles: ['desktop.context.local_read'],
+      nowMs: NOW
+    })
+    // Requested == selected and both are benign, so a bundles-only fall-through
+    // would have said "allow". The tool actually implies desktop.tasks.readwrite.
+    expect(result.decision).toBe('deny')
+    expect(result.reason).toMatch(/^Unknown tool "complete_task"/)
+  })
+
+  it('the implied-bundle mapping the fail-closed branch protects is still the macOS one', () => {
+    // When the product-tool manifest lands, complete_task resolves through this
+    // and the deny above becomes a required-but-not-selected deny instead.
+    expect(
+      bundlesForOmiTool({
+        name: 'complete_task',
+        executor: { kind: 'swiftTool' },
+        annotations: {}
+      })
+    ).toEqual(['desktop.tasks.readwrite'])
   })
 
   it('denies when a required bundle was not selected, and names the missing bundles', () => {
