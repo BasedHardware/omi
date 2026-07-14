@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -30,6 +30,14 @@ POLICY = {
     },
     "exceptions": {},
 }
+
+
+class RepositoryPathFixture(unittest.TestCase):
+    def test_windows_repository_paths_use_git_separators(self) -> None:
+        root = PureWindowsPath("C:/omi")
+        path = root / ".github" / "workflows" / "deploy.yml"
+
+        self.assertEqual(CHECKER._repository_relative_path(path, root), ".github/workflows/deploy.yml")
 
 
 def git_environment() -> dict[str, str]:
@@ -90,7 +98,9 @@ jobs:
     def test_rejects_public_build_setting_from_github_secret(self) -> None:
         self.write(".github/workflows/deploy.yml", "BUILD: ${{ secrets.FAKE_PUBLIC_BUILD }}\n")
 
-        self.assertIn("public_build setting FAKE_PUBLIC_BUILD must use vars.FAKE_PUBLIC_BUILD", "\n".join(self.errors()))
+        self.assertIn(
+            "public_build setting FAKE_PUBLIC_BUILD must use vars.FAKE_PUBLIC_BUILD", "\n".join(self.errors())
+        )
 
     def test_rejects_config_external_secret_mapping(self) -> None:
         self.write(
@@ -102,12 +112,17 @@ jobs:
 """,
         )
 
-        self.assertIn("external_secret binding FAKE_RUNTIME_CONFIG is config; expected secret", "\n".join(self.errors()))
+        self.assertIn(
+            "external_secret binding FAKE_RUNTIME_CONFIG is config; expected secret", "\n".join(self.errors())
+        )
 
     def test_rejects_secret_from_github_variable(self) -> None:
         self.write(".github/workflows/deploy.yml", "TOKEN: ${{ vars.FAKE_SERVER_SECRET }}\n")
 
-        self.assertIn("github_vars binding FAKE_SERVER_SECRET is secret; expected config or public_build", "\n".join(self.errors()))
+        self.assertIn(
+            "github_vars binding FAKE_SERVER_SECRET is secret; expected config or public_build",
+            "\n".join(self.errors()),
+        )
 
     def test_rejects_config_loaded_from_secret_manager(self) -> None:
         self.write(
@@ -133,7 +148,9 @@ jobs:
         policy["exceptions"] = {"FAKE_RUNTIME_CONFIG": {"owner": "platform"}}
         self.write("config/deployment-setting-classification.json", json.dumps(policy))
 
-        errors = CHECKER.validate_policy(CHECKER.load_policy(self.root / "config/deployment-setting-classification.json"))
+        errors = CHECKER.validate_policy(
+            CHECKER.load_policy(self.root / "config/deployment-setting-classification.json")
+        )
 
         self.assertIn("exception FAKE_RUNTIME_CONFIG is missing reason", errors)
         self.assertIn("exception FAKE_RUNTIME_CONFIG is missing expires", errors)
