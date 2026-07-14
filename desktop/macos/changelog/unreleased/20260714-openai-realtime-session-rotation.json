@@ -1,3 +1,0 @@
-{
-  "change": "Fixed voice sessions reconnecting after OpenAI's 60-minute realtime limit"
-}

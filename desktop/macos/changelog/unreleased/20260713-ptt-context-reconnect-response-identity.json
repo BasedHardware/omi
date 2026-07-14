@@ -1,3 +1,0 @@
-{
-  "change": "Fixed push-to-talk replies being dropped after a context-refresh reconnect, including repeated and first-turn attempts."
-}

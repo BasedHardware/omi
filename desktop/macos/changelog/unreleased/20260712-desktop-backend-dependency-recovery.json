@@ -1,3 +1,0 @@
-{
-  "change": "Improved desktop chat and voice reliability by recovering stale backend connections and returning faster, clearer provider timeout errors"
-}

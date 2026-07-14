@@ -1,3 +1,0 @@
-{
-  "change": "Fixed physical push-to-talk releases that could discard a valid recording, and kept the recording state visible while chat is open."
-}

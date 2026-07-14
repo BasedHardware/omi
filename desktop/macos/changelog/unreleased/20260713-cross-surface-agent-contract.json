@@ -1,3 +1,0 @@
-{
-  "change": "Hardened shared chat and push-to-talk continuity across reconnects and provider failures, with truthful compact background-agent lifecycle receipts and QA runtime diagnostics"
-}

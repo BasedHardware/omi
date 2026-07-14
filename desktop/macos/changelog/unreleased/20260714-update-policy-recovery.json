@@ -1,3 +1,0 @@
-{
-  "change": "Fixed macOS update recovery so a broken update notice or failed policy check still gives you a working stable download path."
-}

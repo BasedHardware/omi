@@ -1,3 +1,0 @@
-{
-  "change": "Fixed consecutive push-to-talk turns that could wait forever for a missing provider transcript before running an already-authorized tool"
-}
