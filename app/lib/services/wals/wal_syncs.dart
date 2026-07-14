@@ -252,6 +252,7 @@ class WalSyncs implements IWalSync {
           (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
         ),
       );
+      resp.localUploadFailures += preDrainResult.localUploadFailures;
     }
 
     // Phase 0: New offline storage sync, gated by firmware version.
@@ -335,6 +336,7 @@ class WalSyncs implements IWalSync {
           (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
         ),
       );
+      resp.localUploadFailures += partialRes.localUploadFailures;
     }
 
     DebugLogManager.logEvent('sync_completed', {
