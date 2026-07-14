@@ -34,7 +34,7 @@ import { createGoal } from '../lib/goals'
 // only changes onboarding.
 import { BrainGraph } from '../components/graph/BrainGraph'
 import {
-  resetOnboardingGraph,
+  initOnboardingGraph,
   addUserNode,
   addLanguageNode,
   useOnboardingGraph
@@ -50,10 +50,18 @@ export function Onboarding(): React.JSX.Element {
   )
   const prefs = getPreferences()
 
-  // First onboarding mount clears any prior local graph so the reveal starts
-  // empty (mirrors the macOS "clear graph on first onboarding start").
+  // A FRESH onboarding start clears any prior local graph so the reveal begins
+  // empty (mirrors the macOS "clear graph on first onboarding start"); a RESUME
+  // hydrates the persisted one instead. Onboarding re-mounts whenever the
+  // renderer reloads (the main process reloads a crashed renderer) or the app is
+  // relaunched mid-wizard, and it comes back at the saved step — clearing on
+  // those mounts wiped the `user` node written by the name step, which took the
+  // user off their own map and orphaned every edge (they all anchor at `user`),
+  // leaving a map of unconnected dots. Reads prefs directly so this stays a
+  // mount-only effect.
   useEffect(() => {
-    void resetOnboardingGraph()
+    const p = getPreferences()
+    void initOnboardingGraph(clampOnboardingStep(p.onboardingStep, TOTAL_STEPS), p.displayName)
   }, [])
 
   // Persist the current step so a quit-and-relaunch resumes here. Cleared when

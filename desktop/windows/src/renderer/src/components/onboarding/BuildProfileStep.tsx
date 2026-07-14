@@ -4,6 +4,7 @@ import { OrbitScanner } from './OrbitScanner'
 import { runAppIndexing } from '../../lib/appMemories'
 import { rankApps } from '../../lib/appSelection'
 import { addAppNodes } from '../../lib/onboardingGraph'
+import type { FileIndexStatus } from '../../../../shared/types'
 
 type BuildProfileStepProps = {
   stepIndex: number
@@ -77,7 +78,7 @@ async function runScan(): Promise<number> {
   const api = window.omi as { indexFilesScan?: typeof window.omi.indexFilesScan }
   if (api.indexFilesScan) {
     try {
-      const status = await window.omi.indexFilesScan()
+      const status = await ensureIndexed()
       try {
         const apps = await window.omi.indexFilesApps(200)
         await addAppNodes(rankApps(apps).map((a) => ({ name: a.name })))
@@ -92,4 +93,34 @@ async function runScan(): Promise<number> {
   }
   await new Promise((resolve) => setTimeout(resolve, 1500))
   return 0
+}
+
+// How long we're willing to wait on an index that a previous mount started.
+const SCAN_POLL_MS = 500
+const SCAN_WAIT_MAX_MS = 3 * 60_000
+
+/**
+ * The index is a full walk of the user's disk, and it lives in the MAIN process
+ * — so it outlives this component. This step remounts on every renderer reload
+ * (the main process reloads a crashed renderer) and on a relaunch that resumes
+ * onboarding here, and blindly calling `indexFilesScan()` again is exactly the
+ * "it scanned twice" the user sees. Reuse a finished index; wait out one that is
+ * still running (a second call would return the *incomplete* count — the main
+ * process drops re-entrant scans — and we'd report "0 files indexed").
+ */
+async function ensureIndexed(): Promise<FileIndexStatus> {
+  const status = await window.omi.indexFilesStatus()
+  if (status.running) return waitForRunningScan()
+  if (status.filesIndexed > 0) return status
+  return window.omi.indexFilesScan()
+}
+
+async function waitForRunningScan(): Promise<FileIndexStatus> {
+  const deadline = Date.now() + SCAN_WAIT_MAX_MS
+  let status = await window.omi.indexFilesStatus()
+  while (status.running && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, SCAN_POLL_MS))
+    status = await window.omi.indexFilesStatus()
+  }
+  return status
 }

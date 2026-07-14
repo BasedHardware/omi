@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import type { KnowledgeGraph } from '../../../shared/types'
 import {
   resetOnboardingGraph,
+  initOnboardingGraph,
   addUserNode,
   addLanguageNode,
   addAppNodes,
@@ -66,5 +67,47 @@ describe('onboardingGraph', () => {
     await addUserNode('Ander')
     await resetOnboardingGraph()
     expect(getOnboardingGraph().nodes).toEqual([])
+  })
+
+  // Regression: onboarding re-mounts on every renderer reload (the main process
+  // reloads a crashed renderer) and on a relaunch, resuming at the saved step.
+  // Clearing the graph on those mounts deleted the `user` node written by the
+  // name step — and every edge anchors at `user`, so the map lost the user's own
+  // node and BrainGraph (which only draws an edge when BOTH endpoints exist)
+  // rendered nothing but unconnected dots.
+  describe('initOnboardingGraph', () => {
+    it('clears the store on a FRESH start (step 0)', async () => {
+      await addUserNode('Stale')
+      await addAppNodes([{ name: 'Slack' }])
+      await initOnboardingGraph(0, 'Ander')
+      expect(getOnboardingGraph()).toEqual({ nodes: [], edges: [] })
+    })
+
+    it('does NOT clear on a RESUME — the user node and its edges survive', async () => {
+      await addUserNode('Ander')
+      await addLanguageNode('en', 'English')
+      await addAppNodes([{ name: 'Slack' }])
+
+      await initOnboardingGraph(6, 'Ander')
+
+      const g = getOnboardingGraph()
+      expect(g.nodes.map((n) => n.id).sort()).toEqual(['app_slack', 'language_en', 'user'])
+      // Every edge still has both endpoints present — this is exactly what
+      // BrainGraph filters on before it draws a line.
+      const ids = new Set(g.nodes.map((n) => n.id))
+      expect(g.edges.length).toBe(2)
+      expect(g.edges.every((e) => ids.has(e.sourceId) && ids.has(e.targetId))).toBe(true)
+    })
+
+    it('re-adds a missing user node on resume so centerNodeId="user" resolves', async () => {
+      // App nodes present, user node lost (e.g. an older build cleared it).
+      await addAppNodes([{ name: 'Slack' }])
+      await initOnboardingGraph(6, 'Ander')
+
+      const g = getOnboardingGraph()
+      expect(g.nodes.find((n) => n.id === 'user')?.label).toBe('Ander')
+      const ids = new Set(g.nodes.map((n) => n.id))
+      expect(g.edges.every((e) => ids.has(e.sourceId) && ids.has(e.targetId))).toBe(true)
+    })
   })
 })
