@@ -8,7 +8,8 @@ Firebase ID token. The caller separately names the expected Firebase auth
 project; the script rejects a mismatched token audience or issuer. It never
 prints a credential, request body, response body, or upstream error body. The
 ID token is written only to a mode-0600 file owned by the current runner
-process.
+process; platforms that cannot enforce that mode fail before creating the
+output file.
 """
 
 from __future__ import annotations
@@ -230,13 +231,16 @@ def mint_probe_token(secret_project: str, firebase_project: str) -> str:
 def write_token(path: Path, token: str) -> None:
     if not path.parent.is_dir() or not token or len(token) > MAX_TOKEN_CHARS:
         raise ProbeTokenError('token_output')
+    fchmod = getattr(os, 'fchmod', None)
+    if not callable(fchmod):
+        raise ProbeTokenError('token_output')
     flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, 'O_NOFOLLOW', 0)
     try:
         descriptor = os.open(path, flags, 0o600)
         try:
             if not stat.S_ISREG(os.fstat(descriptor).st_mode):
                 raise ProbeTokenError('token_output')
-            os.fchmod(descriptor, 0o600)
+            fchmod(descriptor, 0o600)
             with os.fdopen(descriptor, 'w', encoding='utf-8') as handle:
                 descriptor = -1
                 handle.write(token)
