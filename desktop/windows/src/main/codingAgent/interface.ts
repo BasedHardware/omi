@@ -90,8 +90,18 @@ export interface AdapterCapabilityExpectation {
   readonly followUpTicket?: string
 }
 
+/**
+ * Where an adapter's credentials come from. Windows only ships local-user
+ * adapters (Claude Code plus user-connected external ACP commands); the macOS
+ * `managed_cloud` scope (pi-mono) has no Windows adapter. The kernel's
+ * execution-policy boundary checks read this so a session pinned to a local
+ * provider can never be rerouted to a managed one.
+ */
+export type AdapterCredentialScope = 'managed_cloud' | 'local_user'
+
 export interface AdapterCapabilityMatrixEntry {
   readonly adapterId: string
+  readonly credentialScope: AdapterCredentialScope
   readonly expectations: Record<AdapterCapabilityKey, AdapterCapabilityExpectation>
 }
 
@@ -111,6 +121,7 @@ export const ADAPTER_CAPABILITY_MATRIX = {
   // spawned as a node subprocess. The id stays "acp" for parity with macOS.
   acp: {
     adapterId: 'acp',
+    credentialScope: 'local_user',
     expectations: {
       nativeResume: required('ACP exposes native session ids and session/resume.'),
       cancellationDispatch: required('ACP exposes session/cancel dispatch.'),
@@ -133,6 +144,7 @@ export const ADAPTER_CAPABILITY_MATRIX = {
   },
   openclaw: {
     adapterId: 'openclaw',
+    credentialScope: 'local_user',
     expectations: {
       nativeResume: required(
         'OpenClaw ACP exposes native sessions through the Gateway-backed ACP bridge.'
@@ -161,6 +173,7 @@ export const ADAPTER_CAPABILITY_MATRIX = {
   },
   hermes: {
     adapterId: 'hermes',
+    credentialScope: 'local_user',
     expectations: {
       // Hermes ACP sessions live in the running server's in-memory session
       // manager and are only valid for that process.
@@ -189,6 +202,7 @@ export const ADAPTER_CAPABILITY_MATRIX = {
   // real bridge — treat sessions as process-local like Hermes.
   codex: {
     adapterId: 'codex',
+    credentialScope: 'local_user',
     expectations: {
       nativeResume: knownLimitation(
         'Codex ACP session persistence across bridge restarts is unverified; treated as process-local.',
@@ -226,6 +240,19 @@ export const PRODUCTION_ADAPTER_IDS = [
 
 export function isProductionAdapterId(adapterId: string): adapterId is ProductionAdapterId {
   return Object.prototype.hasOwnProperty.call(ADAPTER_CAPABILITY_MATRIX, adapterId)
+}
+
+/**
+ * Windows ships no placeholder adapters (macOS's `a2a`/`pi-mono` scaffolds are
+ * not ported). The kernel adapter-registry still calls this guard before
+ * registering a factory, so it exists for parity and always returns false.
+ */
+export function isPlaceholderAdapterId(_adapterId: string): boolean {
+  return false
+}
+
+export function adapterCredentialScopeFor(adapterId: ProductionAdapterId): AdapterCredentialScope {
+  return ADAPTER_CAPABILITY_MATRIX[adapterId].credentialScope
 }
 
 function restartBehaviorFor(
@@ -281,6 +308,13 @@ export interface ResumeBindingInput extends OpenBindingInput {
 }
 
 export interface AdapterBindingHandle {
+  /**
+   * Kernel-owned persistent binding row id. Populated once the kernel
+   * (agentKernel/) persists a binding; unset for the pre-kernel in-memory task
+   * path and for freshly-opened handles the adapter returns. The worker pool
+   * keys pinned-worker reuse on this.
+   */
+  bindingId?: string
   /** Omi-owned correlation id. */
   sessionId: string
   adapterId: string
@@ -297,6 +331,15 @@ export type OpenedBinding = AdapterBindingHandle
 export interface AdapterAttemptContext {
   /** Omi-owned correlation id for host bookkeeping only. */
   sessionId: string
+  /**
+   * Host-owned identity fields. Optional so the pre-kernel in-memory task path
+   * (which has no owner/request/client context) still satisfies the contract;
+   * the kernel (agentKernel/) always supplies them. Adapter payloads must never
+   * override the ownerId — it is authoritative host identity (INV-AGENT).
+   */
+  ownerId?: string
+  requestId?: string
+  clientId?: string
   runId: string
   attemptId: string
   binding: AdapterBindingHandle
@@ -364,6 +407,16 @@ export interface RuntimeAdapter {
 
   cancelAttempt(context: CancelAttemptContext): Promise<CancelDispatchResult>
   closeBinding?(binding: AdapterBindingHandle): Promise<void>
+
+  /**
+   * Return the MCP server configuration this adapter actually passes to its
+   * underlying session. Adapters that strip per-session MCP servers (e.g.
+   * OpenClaw, which rejects them) should return an empty array so the kernel's
+   * binding-compatibility hash reflects what the adapter truly saw. Adapters
+   * that pass MCP servers through unchanged omit this; the kernel treats an
+   * absent implementation as identity (passthrough).
+   */
+  effectiveMcpServers?(mcpServers: Record<string, unknown>[]): Record<string, unknown>[]
 }
 
 // === Contract assertions =====================================================
