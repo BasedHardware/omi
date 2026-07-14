@@ -88,7 +88,7 @@ from utils.client_device import (
     resolve_client_device_from_websocket_auth_message,
 )
 from utils.pusher import PusherCircuitBreakerOpen
-from services.conversation_finalization import prepare_listen_finalization
+from utils.conversations import lifecycle as lifecycle_service
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
 from utils.request_validation import ImageChunkEnvelope
 from utils.speaker_identification import detect_speaker_from_text
@@ -894,7 +894,7 @@ async def _stream_handler(
 
         finalization = await run_blocking(
             db_executor,
-            prepare_listen_finalization,
+            lifecycle_service.request_finalization,
             uid,
             conversation_id,
             has_byok_keys=bool(get_byok_keys()),
@@ -993,10 +993,11 @@ async def _stream_handler(
             client_device_id=client_device_context.client_device_id,
             client_platform=client_device_context.platform,
         )
-        if client_conversation_id and new_conversation_id == client_conversation_id:
-            conversations_db.create_conversation_if_absent(uid, stub_conversation.model_dump())
-        else:
-            conversations_db.upsert_conversation(uid, conversation_data=stub_conversation.model_dump())
+        lifecycle_service.create_in_progress_conversation(
+            uid,
+            stub_conversation.model_dump(),
+            idempotent=bool(client_conversation_id and new_conversation_id == client_conversation_id),
+        )
         redis_db.set_in_progress_conversation_id(uid, new_conversation_id)
 
         detected_meeting_id = None

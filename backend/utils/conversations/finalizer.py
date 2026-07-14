@@ -16,6 +16,7 @@ from utils.app_integrations import trigger_external_integrations
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.location import async_get_google_maps_location
 from utils.conversations.process_conversation import process_conversation
+from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking
 
 logger = logging.getLogger(__name__)
@@ -40,13 +41,9 @@ async def finalize_persisted_conversation(uid: str, conversation_id: str, langua
     if conversation.status == ConversationStatus.completed:
         return
     if conversation.status != ConversationStatus.processing:
-        await run_blocking(
-            db_executor,
-            conversations_db.update_conversation_status,
-            uid,
-            conversation.id,
-            ConversationStatus.processing,
-        )
+        admitted = await run_blocking(db_executor, lifecycle_service.ensure_processing, uid, conversation.id)
+        if not admitted:
+            return
         conversation.status = ConversationStatus.processing
 
     try:

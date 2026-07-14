@@ -112,6 +112,11 @@ checks:
     triggers: ["backend/**/*.py", "backend/testing/workflow_contracts.json", ".github/workflows/**/*.yml", ".github/actions/detect-changes/**", "scripts/pre-push", "scripts/changed-files"]
     lanes: ["local", "ci"]
     reason: "workflow boundary sources changed"
+  - id: conversation-lifecycle-write-guard
+    command: ["python3", "backend/scripts/check_conversation_lifecycle_writes.py"]
+    triggers: ["backend/**/*.py", "backend/scripts/check_conversation_lifecycle_writes.py"]
+    lanes: ["local", "ci"]
+    reason: "conversation lifecycle has one mutation owner"
   - id: desktop-userdefaults-ratchet
     command: ["python3", "desktop/macos/scripts/check-userdefaults-key-ratchet.py"]
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/scripts/check-userdefaults-key-ratchet.py"]

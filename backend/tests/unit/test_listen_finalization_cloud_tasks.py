@@ -13,7 +13,7 @@ from models.conversation_enums import ConversationStatus
 from routers.conversation_finalization import _parse_task_payload
 import routers.conversation_finalization as finalization_router
 import routers.pusher as pusher_router
-from services import conversation_finalization as finalization_service
+from utils.conversations import lifecycle as lifecycle_service
 from utils import cloud_tasks
 from utils.conversations.finalizer import ConversationFinalizationError
 import utils.conversations.finalizer as persisted_finalizer
@@ -41,13 +41,11 @@ def test_worker_rejects_task_payloads_with_content_or_credentials():
 def test_platform_key_job_dispatches_to_cloud_tasks(monkeypatch):
     intent = {'job_id': 'job-1', 'status': 'queued', 'dispatch_generation': 2, 'requires_byok': False}
     enqueue = MagicMock()
-    monkeypatch.setattr(
-        finalization_service.jobs_db, 'create_or_get_finalization_intent', MagicMock(return_value=intent)
-    )
-    monkeypatch.setattr(finalization_service, 'is_listen_finalization_dispatch_enabled', lambda: True)
-    monkeypatch.setattr(finalization_service, 'enqueue_listen_finalization_job', enqueue)
+    monkeypatch.setattr(lifecycle_service.jobs_db, 'create_or_get_finalization_intent', MagicMock(return_value=intent))
+    monkeypatch.setattr(lifecycle_service, 'is_listen_finalization_dispatch_enabled', lambda: True)
+    monkeypatch.setattr(lifecycle_service, 'enqueue_listen_finalization_job', enqueue)
 
-    result = finalization_service.prepare_listen_finalization('uid-1', 'conversation-1', has_byok_keys=False)
+    result = lifecycle_service.request_finalization('uid-1', 'conversation-1', has_byok_keys=False)
 
     assert result['route'] == 'cloud_tasks'
     enqueue.assert_called_once_with('job-1', 2)
@@ -56,16 +54,14 @@ def test_platform_key_job_dispatches_to_cloud_tasks(monkeypatch):
 def test_enqueue_failure_leaves_job_queued_for_reconciler(monkeypatch):
     intent = {'job_id': 'job-1', 'status': 'queued', 'dispatch_generation': 2, 'requires_byok': False}
     fallback = MagicMock()
+    monkeypatch.setattr(lifecycle_service.jobs_db, 'create_or_get_finalization_intent', MagicMock(return_value=intent))
+    monkeypatch.setattr(lifecycle_service, 'is_listen_finalization_dispatch_enabled', lambda: True)
     monkeypatch.setattr(
-        finalization_service.jobs_db, 'create_or_get_finalization_intent', MagicMock(return_value=intent)
+        lifecycle_service, 'enqueue_listen_finalization_job', MagicMock(side_effect=RuntimeError('offline'))
     )
-    monkeypatch.setattr(finalization_service, 'is_listen_finalization_dispatch_enabled', lambda: True)
-    monkeypatch.setattr(
-        finalization_service, 'enqueue_listen_finalization_job', MagicMock(side_effect=RuntimeError('offline'))
-    )
-    monkeypatch.setattr(finalization_service, 'record_fallback', fallback)
+    monkeypatch.setattr(lifecycle_service, 'record_fallback', fallback)
 
-    result = finalization_service.prepare_listen_finalization('uid-1', 'conversation-1', has_byok_keys=False)
+    result = lifecycle_service.request_finalization('uid-1', 'conversation-1', has_byok_keys=False)
 
     assert result['route'] == 'queued'
     fallback.assert_called_once()
@@ -76,16 +72,14 @@ def test_byok_live_session_uses_pusher_even_when_platform_jobs_use_cloud_tasks(m
     intent = {'job_id': 'job-1', 'status': 'blocked_byok', 'dispatch_generation': 1, 'requires_byok': True}
     enqueue = MagicMock()
     resumed = {'job_id': 'job-1', 'status': 'queued', 'dispatch_generation': 1, 'requires_byok': True}
+    monkeypatch.setattr(lifecycle_service.jobs_db, 'create_or_get_finalization_intent', MagicMock(return_value=intent))
+    monkeypatch.setattr(lifecycle_service, 'is_listen_finalization_dispatch_enabled', lambda: True)
+    monkeypatch.setattr(lifecycle_service, 'enqueue_listen_finalization_job', enqueue)
     monkeypatch.setattr(
-        finalization_service.jobs_db, 'create_or_get_finalization_intent', MagicMock(return_value=intent)
-    )
-    monkeypatch.setattr(finalization_service, 'is_listen_finalization_dispatch_enabled', lambda: True)
-    monkeypatch.setattr(finalization_service, 'enqueue_listen_finalization_job', enqueue)
-    monkeypatch.setattr(
-        finalization_service.jobs_db, 'resume_blocked_byok_job_for_live_session', MagicMock(return_value=resumed)
+        lifecycle_service.jobs_db, 'resume_blocked_byok_job_for_live_session', MagicMock(return_value=resumed)
     )
 
-    result = finalization_service.prepare_listen_finalization('uid-1', 'conversation-1', has_byok_keys=True)
+    result = lifecycle_service.request_finalization('uid-1', 'conversation-1', has_byok_keys=True)
 
     assert result['route'] == 'pusher'
     enqueue.assert_not_called()
@@ -94,13 +88,11 @@ def test_byok_live_session_uses_pusher_even_when_platform_jobs_use_cloud_tasks(m
 def test_byok_job_without_current_keys_remains_explicitly_blocked(monkeypatch):
     intent = {'job_id': 'job-1', 'status': 'blocked_byok', 'dispatch_generation': 1, 'requires_byok': True}
     resume = MagicMock()
-    monkeypatch.setattr(
-        finalization_service.jobs_db, 'create_or_get_finalization_intent', MagicMock(return_value=intent)
-    )
-    monkeypatch.setattr(finalization_service, 'is_listen_finalization_dispatch_enabled', lambda: False)
-    monkeypatch.setattr(finalization_service.jobs_db, 'resume_blocked_byok_job_for_live_session', resume)
+    monkeypatch.setattr(lifecycle_service.jobs_db, 'create_or_get_finalization_intent', MagicMock(return_value=intent))
+    monkeypatch.setattr(lifecycle_service, 'is_listen_finalization_dispatch_enabled', lambda: False)
+    monkeypatch.setattr(lifecycle_service.jobs_db, 'resume_blocked_byok_job_for_live_session', resume)
 
-    result = finalization_service.prepare_listen_finalization('uid-1', 'conversation-1', has_byok_keys=False)
+    result = lifecycle_service.request_finalization('uid-1', 'conversation-1', has_byok_keys=False)
 
     assert result['route'] == 'blocked_byok'
     resume.assert_not_called()
