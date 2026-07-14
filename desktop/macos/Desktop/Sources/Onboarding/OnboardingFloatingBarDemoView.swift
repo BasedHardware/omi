@@ -53,12 +53,23 @@ struct OnboardingFloatingBarDemoView: View {
                             .foregroundColor(OmiColors.textSecondary)
                             .multilineTextAlignment(.center)
                     } else {
-                        Text("Type in the Floating Bar 'Which computer should I buy?'")
-                            .font(.system(size: 24, weight: .bold))
-                            .foregroundColor(OmiColors.textPrimary)
-                            .multilineTextAlignment(.center)
-                            .lineSpacing(4)
-                            .frame(maxWidth: 560)
+                        // One line, ending in an arrow that points up to the real
+                        // floating bar at the top of the screen — once it activates
+                        // many people never look up.
+                        HStack(spacing: OmiSpacing.sm) {
+                            Text("Type in the Floating Bar 'Which computer should I buy?'")
+                                .font(.system(size: 24, weight: .bold))
+                                .foregroundColor(OmiColors.textPrimary)
+                                .lineLimit(1)
+                                .fixedSize()
+
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 24, weight: .bold))
+                                .foregroundColor(OmiColors.textPrimary)
+                                // Tilt up-left so it points toward the bar/dock,
+                                // which sits left of the text's trailing edge.
+                                .rotationEffect(.degrees(-30))
+                        }
                     }
                 }
 
@@ -93,22 +104,26 @@ struct OnboardingFloatingBarDemoView: View {
 
             Spacer()
 
-            // Bottom button — only after AI response completes
-            if showContinue {
-                Button(action: onComplete) {
-                    Text("Continue")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.black)
-                        .frame(maxWidth: 280)
-                        .padding(.vertical, OmiSpacing.md)
-                        .background(Color.white)
-                        .cornerRadius(OmiChrome.smallControlRadius)
+            // Bottom row — back is always available; Continue appears after the AI responds
+            HStack(spacing: OmiSpacing.md) {
+                OnboardingBackButton()
+
+                if showContinue {
+                    Button(action: onComplete) {
+                        Text("Continue")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.black)
+                            .frame(maxWidth: 280)
+                            .padding(.vertical, OmiSpacing.md)
+                            .background(Color.white)
+                            .cornerRadius(OmiChrome.smallControlRadius)
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(.defaultAction)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                .buttonStyle(.plain)
-                .keyboardShortcut(.defaultAction)
-                .padding(.bottom, OmiSpacing.section)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+            .padding(.bottom, OmiSpacing.section)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(OmiColors.backgroundPrimary)
@@ -121,6 +136,7 @@ struct OnboardingFloatingBarDemoView: View {
             GlobalShortcutManager.shared.registerShortcuts()
         }
         .onDisappear {
+            FloatingControlBarManager.shared.barState?.onboardingBarGlow = false
             // Close the AI conversation panel on the floating bar so the next step starts clean
             if FloatingControlBarManager.shared.barState?.showingAIConversation == true {
                 FloatingControlBarManager.shared.toggleAIInput()
@@ -128,6 +144,7 @@ struct OnboardingFloatingBarDemoView: View {
         }
         .onChange(of: barActivated) { _, activated in
             if activated {
+                FloatingControlBarManager.shared.barState?.onboardingBarGlow = true
                 Task { await waitForResponse() }
             }
         }
