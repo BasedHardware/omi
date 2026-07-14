@@ -711,6 +711,14 @@ export type OmiBridgeApi = {
   whatsNewGetPending: () => Promise<WhatsNewPayload | null>
   /** Toast renderer → main: open the GitHub release notes in the browser. */
   whatsNewOpenNotes: () => void
+  /** Open Windows Settings → Privacy & security → Microphone (denied-mic recovery
+   *  in onboarding). Fixed `ms-settings:` target, no caller-supplied URL. */
+  openMicPrivacySettings: () => void
+  /** The REAL Windows microphone permission, read from the Capability Access Manager
+   *  registry in main. `navigator.permissions.query` is NOT usable for this — Electron
+   *  answers 'granted' unconditionally, so onboarding used to false-grant the mic step.
+   *  'unknown' = never set / unreadable, and must be treated as NOT granted. */
+  getMicPermissionState: () => Promise<MicPermissionState>
   perfFirstPaint: () => void
   perfMark: (name: string) => void
   /** True when the main window was created with the Win11 Mica background
@@ -1220,6 +1228,11 @@ export type RewindSearchGroup = {
   representative: RewindFrame
   matchSnippet: string
 }
+
+/** The real Windows microphone consent, read from the registry in main.
+ *  'unknown' = the user has never been asked (or the key is unreadable). Callers MUST
+ *  treat 'unknown' as not-granted — never as a grant. */
+export type MicPermissionState = 'granted' | 'denied' | 'unknown'
 
 export type RewindSettings = {
   captureEnabled: boolean
