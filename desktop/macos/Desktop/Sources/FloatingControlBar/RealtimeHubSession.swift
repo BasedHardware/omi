@@ -613,11 +613,27 @@ final class RealtimeHubSession: NSObject {
   }
 
   /// Return a tool's result to the model and let it continue (speak).
-  func sendToolResult(callId: String, name: String, output: String) {
+  ///
+  /// Gemini handles realtime video and tool responses as concurrent streams, so sending a
+  /// screenshot as `realtimeInput.video` and then unblocking the function can race: the model
+  /// may answer from older context before it processes the frame. Gemini 3 supports inline
+  /// FunctionResponse parts; attach the fresh pixels there so the paused screenshot call resumes
+  /// only with the exact image it captured.
+  func sendToolResult(callId: String, name: String, output: String, image: Data? = nil) {
     q.async { [weak self] in
       guard let self else { return }
       switch self.provider {
       case .openai:
+        if let image {
+          let b64 = image.base64EncodedString()
+          self.send(json: [
+            "type": "conversation.item.create",
+            "item": [
+              "type": "message", "role": "user",
+              "content": [["type": "input_image", "image_url": "data:image/jpeg;base64,\(b64)"]],
+            ],
+          ])
+        }
         self.pendingOpenAIToolCallIds.remove(callId)
         self.send(json: [
           "type": "conversation.item.create",
@@ -630,34 +646,41 @@ final class RealtimeHubSession: NSObject {
         }
       case .gemini:
         self.pendingGeminiToolCallIds.remove(callId)
-        self.send(json: [
-          "toolResponse": [
-            "functionResponses": [["id": callId, "name": name, "response": ["result": output]]]
-          ]
-        ])
+        self.send(json: Self.geminiToolResponse(
+          callId: callId,
+          name: name,
+          output: output,
+          image: image))
       }
     }
   }
 
-  /// Attach fresh pixels captured by the kernel-authorized screenshot executor.
-  /// No ambient or speculative caller may invoke this path.
-  func injectImage(_ image: Data) {
-    let b64 = image.base64EncodedString()
-    q.async { [weak self] in
-      guard let self else { return }
-      switch self.provider {
-      case .openai:
-        self.send(json: [
-          "type": "conversation.item.create",
-          "item": [
-            "type": "message", "role": "user",
-            "content": [["type": "input_image", "image_url": "data:image/jpeg;base64,\(b64)"]],
-          ],
-        ])
-      case .gemini:
-        self.send(json: ["realtimeInput": ["video": ["data": b64, "mimeType": "image/jpeg"]]])
-      }
+  static func geminiToolResponse(
+    callId: String,
+    name: String,
+    output: String,
+    image: Data?
+  ) -> [String: Any] {
+    var functionResponse: [String: Any] = [
+      "id": callId,
+      "name": name,
+      "response": ["result": output],
+    ]
+    if let image {
+      let displayName = "live-screenshot.jpg"
+      functionResponse["response"] = [
+        "result": output,
+        "image": ["$ref": displayName],
+      ]
+      functionResponse["parts"] = [[
+        "inlineData": [
+          "mimeType": "image/jpeg",
+          "data": image.base64EncodedString(),
+          "displayName": displayName,
+        ]
+      ]]
     }
+    return ["toolResponse": ["functionResponses": [functionResponse]]]
   }
 
   // OpenAI: ask for a response with the given modality (audio for spoken turns).

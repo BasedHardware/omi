@@ -1,0 +1,3 @@
+{
+  "change": "Fixed realtime voice to prioritize fresh screen captures and reliably handle the first push-to-talk after launch"
+}

@@ -1242,7 +1242,13 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     executor: { kind: "swiftTool", executorName: "realtimeHub" },
     intendedForAgents: true,
     runtimePreconditions: ["Realtime voice only; requires Screen Recording permission."],
-    adapters: {},
+    // Realtime voice invokes this through the same pi-mono runtime capability
+    // fence as other kernel-authorized tools. The surface still limits the
+    // Swift executor to realtime voice; without this projection the runtime
+    // rejects every provider screenshot call as tool_not_allowed.
+    adapters: {
+      "pi-mono": { advertised: true },
+    },
   },
   {
     name: "point_click",
