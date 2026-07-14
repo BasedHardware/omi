@@ -117,6 +117,11 @@ env:
     value: "memories-backend-dev"
   - name: REDIS_DB_PORT
     value: "13151"
+  - name: REDIS_DB_HOST
+    valueFrom:
+      configMapKeyRef:
+        name: dev-omi-backend-config
+        key: REDIS_DB_HOST
   - name: REDIS_DB_PASSWORD
     valueFrom:
       secretKeyRef:
