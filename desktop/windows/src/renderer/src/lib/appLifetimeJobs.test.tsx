@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, cleanup, act } from '@testing-library/react'
 
@@ -57,5 +59,18 @@ describe('useAppLifetimeJobs — the shell owns the background engines', () => {
     unmount()
     act(() => vi.advanceTimersByTime(5000))
     expect(maybeBuildLocalGraph).not.toHaveBeenCalled()
+  })
+
+  // The tests above prove the HOOK works. They do not prove anyone CALLS it — delete
+  // the call from App.tsx and they all still pass, while the four engines quietly stop
+  // in production. That is the regression this file exists to prevent, so guard the
+  // call site directly. AppShellInner is not exported and rendering the real App would
+  // need the whole auth/router/firebase stack mocked, so this is a source tripwire (the
+  // exception the testing guidance allows) rather than a behavioural test.
+  it('is actually CALLED by the app shell — not just callable', () => {
+    // vitest runs from the package root (desktop/windows).
+    const app = readFileSync(join(process.cwd(), 'src/renderer/src/App.tsx'), 'utf8')
+    const shell = app.slice(app.indexOf('function AppShellInner'), app.indexOf('function AppShell('))
+    expect(shell).toContain('useAppLifetimeJobs()')
   })
 })

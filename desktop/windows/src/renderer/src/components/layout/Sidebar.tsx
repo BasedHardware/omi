@@ -39,6 +39,9 @@ export function Sidebar(): React.JSX.Element {
 
   useEffect(() => {
     void window.omi.rewindGetSettings().then(setRewind)
+    // The Hub's capture pill toggles the same setting and is on screen at the same
+    // time as this one — subscribe so they can't drift apart.
+    return window.omi.onRewindSettings(setRewind)
   }, [])
 
   const email = user?.email

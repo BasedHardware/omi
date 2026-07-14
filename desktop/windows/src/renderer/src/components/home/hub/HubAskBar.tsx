@@ -52,7 +52,11 @@ export function HubAskBar(props: {
         }}
         onBlur={() => setFocused(false)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') onSubmit()
+          // isComposing: while an IME candidate window is open (CJK, and Windows'
+          // own emoji/handwriting panels), Enter COMMITS the candidate — it is not a
+          // submit. Sending here would fire off a half-composed message and swallow
+          // the keystroke the user meant for the IME.
+          if (e.key === 'Enter' && !e.nativeEvent.isComposing) onSubmit()
         }}
         placeholder="Ask omi anything"
         aria-label="Ask omi anything"

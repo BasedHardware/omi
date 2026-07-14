@@ -10,7 +10,9 @@ import type { RewindSettings } from '../../../../../shared/types'
 // The Hub's top-right controls: a screen-capture pill, a listening pill, and the
 // gear menu. Both pills drive the app's REAL capture state — the same
 // rewindGetSettings/rewindSetSettings + `continuousRecording` preference the
-// sidebar toggles — so the Hub and the sidebar can never disagree.
+// sidebar toggles — and both SUBSCRIBE to changes (rewind:settings from main,
+// onPreferencesChange for the mic), which is what actually keeps them from
+// disagreeing with the sidebar. Reading once on mount would not.
 //
 // Mac reveals a listening-MODE sub-control on hover. Windows has no
 // listening-mode concept, so that sub-control is omitted rather than invented.
@@ -112,6 +114,10 @@ export function HubHeader(): React.JSX.Element {
   const [rewind, setRewind] = useState<RewindSettings | null>(null)
   useEffect(() => {
     void window.omi.rewindGetSettings().then(setRewind)
+    // SUBSCRIBE, don't just read once. Main broadcasts `rewind:settings` to every
+    // window on write, and the sidebar's screen toggle is co-visible with this pill
+    // — without this, flipping one leaves the other showing the old state.
+    return window.omi.onRewindSettings(setRewind)
   }, [])
   const captureOn = !!rewind?.captureEnabled
   const toggleCapture = (): void => {

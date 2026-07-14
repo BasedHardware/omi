@@ -21,7 +21,7 @@ import type { HubStatCounts } from './HubStatRibbon'
 const CLOUD_PAGE_SIZE = 100
 
 export function useHubStats(): HubStatCounts {
-  const { memories, loading: memoriesLoading } = useMemories()
+  const { memories, loading: memoriesLoading, error: memoriesError } = useMemories()
 
   // Tasks: the SAME paginating fetch the Tasks page uses — it follows `has_more` to
   // completion, so this is a true total, not a first page.
@@ -68,7 +68,12 @@ export function useHubStats(): HubStatCounts {
     conversations: rows ? rows.length : null,
     conversationsAtLeast: cloudRows >= CLOUD_PAGE_SIZE,
     tasks,
-    memories: memoriesLoading ? null : memories.length,
+    // A FAILED fetch leaves useMemories with an empty list and loading:false (its
+    // `finally` marks the cache loaded either way), so keying only on `loading`
+    // would render "0 Memories" — a hard claim that the user has none — to anyone
+    // who is merely offline. Unknown is an em-dash; 0 is a fact we only state when
+    // we actually know it.
+    memories: memoriesLoading || memoriesError ? null : memories.length,
     screenshots
   }
 }

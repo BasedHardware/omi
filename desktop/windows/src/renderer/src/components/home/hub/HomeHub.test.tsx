@@ -10,7 +10,7 @@ type ChatMsg = { id?: string; role: 'user' | 'assistant'; content: string }
 let chat: { history: ChatMsg[]; sending: boolean; send: ReturnType<typeof vi.fn> }
 vi.mock('../../../state/appState', () => ({ useAppState: () => ({ chat }) }))
 
-let memories: { memories: { id: string }[]; loading: boolean }
+let memories: { memories: { id: string }[]; loading: boolean; error?: string | null }
 vi.mock('../../../hooks/useMemories', () => ({ useMemories: () => memories }))
 
 // The stat ribbon's non-memory sources. Tasks reuses the Tasks page's paginating
@@ -65,6 +65,9 @@ beforeEach(() => {
   ;(window as unknown as { omi: unknown }).omi = {
     rewindGetSettings: vi.fn().mockResolvedValue({ captureEnabled: false }),
     rewindSetSettings: vi.fn().mockResolvedValue({ captureEnabled: true }),
+    // The header SUBSCRIBES to main's rewind:settings broadcast so it can't drift
+    // out of sync with the sidebar's copy of the same toggle.
+    onRewindSettings: vi.fn().mockReturnValue(() => {}),
     rewindFrameCount: vi.fn().mockResolvedValue(1234),
     openExternalUrl: vi.fn()
   }
@@ -203,5 +206,15 @@ describe('HomeHub — stat ribbon counts come from the real sources', () => {
     expect(cell(/Memories/).textContent).toContain('—')
     expect(cell(/Memories/).textContent).not.toContain('0')
     expect(cell(/Conversations/).textContent).toContain('—')
+  })
+
+  it('renders an em-dash — never 0 — when the memories fetch FAILED', () => {
+    // useMemories' `finally` marks the cache loaded even when the request threw, so a
+    // failed/offline fetch arrives here as an empty list with loading:false. Keying
+    // only on `loading` would tell an offline user they have 0 memories.
+    memories = { memories: [], loading: false, error: 'network error' }
+    renderHub()
+    expect(cell(/Memories/).textContent).toContain('—')
+    expect(cell(/Memories/).textContent).not.toContain('0')
   })
 })

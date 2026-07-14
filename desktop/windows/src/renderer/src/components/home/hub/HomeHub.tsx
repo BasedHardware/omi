@@ -99,16 +99,20 @@ export function HomeHub(): React.JSX.Element {
           <HubHeader />
         </div>
 
-        {/* Mac's cluster sits on a stage that is always tall enough for it. A Windows
-            window can be dragged down to minHeight 600 (main/index.ts), where the
-            wordmark + widgets + ribbon + ask bar + 3 suggestions do NOT fit — and an
-            overflow-hidden stage silently cut the ASK BAR, the screen's primary
-            control, off the bottom. So the stage is split: the ask bar and its
-            suggestions are PINNED (they can never leave the viewport, at any window
-            size), and the lead-in above them collapses and then scrolls. */}
+        {/* The stage's height budget. The cluster (ribbon + ask bar + suggestions) is
+            shrink-0 and the lead-in spacer is the ONLY shrinkable item, so a shorter
+            window eats the empty space above the wordmark and never the controls —
+            which is Mac's topInset clamp, reproduced without measuring anything.
+
+            `overflow-y-auto` is a FAIL-SAFE, not the mechanism: at every legal window
+            size (minHeight 600 → ~438px of stage content, vs ~384px needed) it never
+            triggers, and Mac has no scroll view here. It exists so that if someone
+            later adds a 4th suggestion or a taller ask bar and busts the arithmetic,
+            the ask bar becomes reachable-by-scroll instead of silently clipped off
+            the bottom of the screen — which is exactly what the previous version did. */}
         <div
           ref={stageRef}
-          className="flex min-h-0 flex-1 flex-col items-center pt-[clamp(20px,7vh,74px)]"
+          className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto pt-[clamp(20px,7vh,74px)]"
           data-testid="hub-stage"
           data-mode={mode}
         >
