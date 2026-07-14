@@ -13,7 +13,9 @@ Mac reference (frozen ground truth): `.worktrees/mac-ref` @ tag `v0.12.72+12072-
 - [x] **P0 Additive schema PR — MERGED (PR #32, merge c3b01ec).** 3 tables + CRUD + drift-guard.
       Real-app-boot verified tables create; full suite 1484 pass. Drift-guard caught+fixed a real
       Track-2 leak (voice_turn_outbox missing from sign-out wipe) and exempted Track-4 app_meta.
-- [~] **P1 AI User Profile** (enabler #1): IMPLEMENTED (main/assistants/aiUserProfile/{synthesis,service}
+- [x] **P1 AI User Profile — MERGED (PR #42).** Live-smoke verified (real backend+LLM → coherent
+      profile, data_sources_used=66). Renderer auto-trigger wiring deferred to P2 framework.
+- [~] (P1 detail) IMPLEMENTED (main/assistants/aiUserProfile/{synthesis,service}
       + ipc + settings flag + additive types/preload). Synthesis pure+tested; 2-stage; char-cap 10000
       (prompt asks <2000); data_sources_used=total item count (Mac parity). Backend GET/PATCH
       /v1/users/ai-profile (no platform branch). Opus-audited; fix pass in flight (M1 edit-path count
