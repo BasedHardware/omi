@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { GanttChartSquare, Mic, Search, CheckSquare, MessageSquare, Radio } from 'lucide-react'
+import {
+  GanttChartSquare,
+  Mic,
+  Search,
+  CheckSquare,
+  MessageSquare,
+  Radio,
+  type LucideIcon
+} from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
 import {
   conversationsCache,
@@ -45,6 +53,21 @@ import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
 import type { LocalConversation, ConversationFolder } from '../../../shared/types'
 import type { Conversation as CloudConversation } from '../lib/omiApi.generated'
+
+// The "default view" = all folders + no date range. Only this view is written to
+// the shared conversationsCache (filtered fetches keep it clean) and it's the only
+// one whose warm cache lets the first mount skip a fetch. Type + search stay
+// client-side so they don't affect this.
+function isDefaultView(folder: FolderFilter, dateRange: DateRange): boolean {
+  return folder.kind === 'all' && dateRange.start == null && dateRange.end == null
+}
+
+// Chat/recording type filter — a client-side segmented control over the merged rows.
+const TYPE_TABS: { value: FilterKind; label: string; icon?: LucideIcon }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'chat', label: 'Chats', icon: MessageSquare },
+  { value: 'recording', label: 'Recordings', icon: Radio }
+]
 
 function summarize(segments: { text: string }[] | undefined): string {
   if (!segments || segments.length === 0) return ''
@@ -128,11 +151,7 @@ export function Conversations(): React.JSX.Element {
 
   // Folder/starred/date filters are applied SERVER-SIDE (the /v1/conversations
   // query supports them, so cloud pagination stays correct); type + search stay
-  // client-side over the merged rows. Only the default (all folders, no date) view
-  // is written to the shared conversationsCache — filtered fetches keep it clean.
-  const isDefaultView =
-    folderFilter.kind === 'all' && dateRange.start == null && dateRange.end == null
-
+  // client-side over the merged rows.
   const loadAll = useCallback(
     async (showLoading = false): Promise<void> => {
       if (showLoading) setLoading(true)
@@ -194,7 +213,7 @@ export function Conversations(): React.JSX.Element {
       reconcilePending(out.filter((r) => r.source === 'cloud'))
       const merged = [...getPendingConversations(), ...out].sort((a, b) => b.sortAt - a.sortAt)
       // Only the default view is the canonical shared cache.
-      if (folderFilter.kind === 'all' && dateRange.start == null && dateRange.end == null) {
+      if (isDefaultView(folderFilter, dateRange)) {
         conversationsCache.rows = merged
         conversationsCache.loaded = true
       }
@@ -225,14 +244,14 @@ export function Conversations(): React.JSX.Element {
     didInitRef.current = true
     if (
       firstMount &&
-      isDefaultView &&
+      isDefaultView(folderFilter, dateRange) &&
       conversationsCache.loaded &&
       (conversationsCache.rows?.length ?? 0) > 0
     ) {
       return
     }
     void loadAll(true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- isDefaultView read once for the first-mount check; loadAll owns the fetch + its own deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- folder/date read once for the first-mount check; loadAll owns the fetch + its own deps
   }, [loadAll])
 
   // The continuous-recording host (and session-end) request a cloud re-fetch when
@@ -259,7 +278,7 @@ export function Conversations(): React.JSX.Element {
             const merged = [...getPendingConversations(), ...cloud, ...localRows].sort(
               (a, b) => b.sortAt - a.sortAt
             )
-            if (folderFilter.kind === 'all' && dateRange.start == null && dateRange.end == null) {
+            if (isDefaultView(folderFilter, dateRange)) {
               conversationsCache.rows = merged
             }
             return merged
@@ -463,38 +482,20 @@ export function Conversations(): React.JSX.Element {
         </div>
 
         <div className="surface-panel flex items-center gap-1 p-1">
-          <button
-            onClick={() => setType('all')}
-            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
-              type === 'all'
-                ? 'bg-white/15 text-white'
-                : 'text-white/55 hover:bg-white/5 hover:text-white/80'
-            }`}
-          >
-            All
-          </button>
-          <button
-            onClick={() => setType('chat')}
-            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
-              type === 'chat'
-                ? 'bg-white/15 text-white'
-                : 'text-white/55 hover:bg-white/5 hover:text-white/80'
-            }`}
-          >
-            <MessageSquare className="h-3.5 w-3.5" />
-            Chats
-          </button>
-          <button
-            onClick={() => setType('recording')}
-            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
-              type === 'recording'
-                ? 'bg-white/15 text-white'
-                : 'text-white/55 hover:bg-white/5 hover:text-white/80'
-            }`}
-          >
-            <Radio className="h-3.5 w-3.5" />
-            Recordings
-          </button>
+          {TYPE_TABS.map(({ value, label, icon: Icon }) => (
+            <button
+              key={value}
+              onClick={() => setType(value)}
+              className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
+                type === value
+                  ? 'bg-white/15 text-white'
+                  : 'text-white/55 hover:bg-white/5 hover:text-white/80'
+              }`}
+            >
+              {Icon && <Icon className="h-3.5 w-3.5" />}
+              {label}
+            </button>
+          ))}
         </div>
 
         <DateFilterButton dateRange={dateRange} onChange={setDateRange} />

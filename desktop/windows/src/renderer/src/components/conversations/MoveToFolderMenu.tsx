@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Check, FolderInput, FolderMinus } from 'lucide-react'
 import type { ConversationFolder } from '../../../../shared/types'
+import { DEFAULT_FOLDER_COLOR } from './folderColors'
 
 // Row action: assign a conversation to a folder (or remove it). Encapsulated
 // trigger + dropdown; the trigger is a small icon button revealed on row hover.
@@ -62,7 +63,7 @@ export function MoveToFolderMenu({
               >
                 <span
                   className="h-2 w-2 shrink-0 rounded-full"
-                  style={{ backgroundColor: f.color ?? '#6B7280' }}
+                  style={{ backgroundColor: f.color ?? DEFAULT_FOLDER_COLOR }}
                 />
                 <span className="min-w-0 flex-1 truncate">{f.name}</span>
                 {currentFolderId === f.id && <Check className="h-3.5 w-3.5 shrink-0 text-white" />}

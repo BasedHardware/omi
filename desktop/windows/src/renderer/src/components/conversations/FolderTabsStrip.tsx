@@ -1,6 +1,7 @@
 import { Pencil, Plus, Star } from 'lucide-react'
 import type { ConversationFolder } from '../../../../shared/types'
 import type { FolderFilter } from '../../lib/conversations/filtering'
+import { DEFAULT_FOLDER_COLOR } from './folderColors'
 
 // Horizontal folder strip: fixed "All" + "Starred" chips, one chip per folder,
 // then a "+" create button. Selected chip = textPrimary@0.12 fill + @0.3 stroke
@@ -69,7 +70,7 @@ export function FolderTabsStrip({
             >
               <span
                 className="h-2 w-2 shrink-0 rounded-full"
-                style={{ backgroundColor: f.color ?? '#6B7280' }}
+                style={{ backgroundColor: f.color ?? DEFAULT_FOLDER_COLOR }}
               />
               <span className="max-w-[160px] truncate">{f.name}</span>
               <CountBadge n={f.conversationCount} />
