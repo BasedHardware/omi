@@ -62,6 +62,16 @@ checks:
     triggers: ["backend/**/*.py", "backend/route_policy_manifest.yaml", "backend/route_policy_legacy_missing_routes.txt", "backend/scripts/check_route_policy_baseline.py"]
     lanes: ["local", "ci"]
     reason: "new backend routes must declare reviewed policy instead of growing the legacy baseline"
+  - id: firestore-index-manifest
+    command: ["python3", "backend/scripts/generate_firestore_indexes.py"]
+    triggers: ["firestore.indexes.json", "backend/database/firestore_index_registry.py", "backend/scripts/generate_firestore_indexes.py"]
+    lanes: ["local", "ci"]
+    reason: "Firebase composite-index manifest must be generated from the registered requirements"
+  - id: firestore-query-coverage
+    command: ["python3", "backend/scripts/firestore_query_coverage.py", "--check-ratchet"]
+    triggers: ["backend/**/*.py", "backend/scripts/firestore_query_coverage_baseline.json", "backend/scripts/firestore_query_coverage_waivers.json"]
+    lanes: ["local", "ci"]
+    reason: "serving Firestore compound queries cannot add unregistered or unsupported debt"
   - id: lifecycle-headers
     command: ["python3", ".github/scripts/check_lifecycle_headers.py", "--changed-files", "{changed_files}"]
     triggers: ["all"]
