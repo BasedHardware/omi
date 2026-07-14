@@ -307,12 +307,20 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertEqual(directive?.title, "Codex")
   }
 
+  func testProviderDirectiveMapsCodexSttMishears() {
+    let directive = AgentPillsManager.providerDirective(from: "Tell codes to create the home.txt file on my desktop folder.")
+
+    XCTAssertEqual(directive?.provider, .codex)
+    XCTAssertEqual(directive?.rewrittenQuery, "to create the home.txt file on my desktop folder.")
+  }
+
   func testProviderDirectiveIgnoresNonProviderQuestions() {
     XCTAssertNil(AgentPillsManager.providerDirective(from: "what is openclaw?"))
     XCTAssertNil(AgentPillsManager.providerDirective(from: "openclaw architecture"))
     XCTAssertNil(AgentPillsManager.providerDirective(from: "hermes scarf"))
     XCTAssertNil(AgentPillsManager.providerDirective(from: "compare hermes and openclaw"))
     XCTAssertNil(AgentPillsManager.providerDirective(from: "what is codex?"))
+    XCTAssertNil(AgentPillsManager.providerDirective(from: "the discount codes are in my email"))
     XCTAssertNil(AgentPillsManager.providerDirective(from: "how is it going?"))
   }
 

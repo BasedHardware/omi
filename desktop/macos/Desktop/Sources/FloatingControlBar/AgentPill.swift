@@ -324,7 +324,10 @@ final class AgentPillsManager: ObservableObject {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
-        let providerPattern = "(open\\s*claw|openclaw|hermes|codex)"
+        // "codes" and "codex's" are frequent STT mishears of "codex"; they are
+        // only recognized inside the explicit command syntax below, so ordinary
+        // sentences about codes never trigger a delegation.
+        let providerPattern = "(open\\s*claw|openclaw|hermes|codex|codes|codexs)"
         let patterns = [
             #"(?i)^\s*(?:please\s+)?(?:(?:i\s+)?meant\s+)?(?:ask|tell|ping|message|run|use|try)\s+\#(providerPattern)\b(?:\s+(.*))?$"#,
             #"(?i)^\s*(?:please\s+)?\#(providerPattern)\s*[:,\-]\s*(.*)$"#,
@@ -342,7 +345,7 @@ final class AgentPillsManager: ObservableObject {
             switch providerToken {
             case "openclaw": provider = .openclaw
             case "hermes": provider = .hermes
-            case "codex": provider = .codex
+            case "codex", "codes", "codexs": provider = .codex
             default: continue
             }
 
