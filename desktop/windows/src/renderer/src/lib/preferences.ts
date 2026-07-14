@@ -12,6 +12,13 @@ export type Preferences = {
   // Set during the startup wizard.
   displayName?: string
   language: string
+  // Spoken-language candidates for push-to-talk (A3). Empty/undefined (default)
+  // ⇒ INERT: PTT transcribes with the static `language` above, exactly as
+  // before. Non-empty ⇒ per-turn feed-forward — the last provider-detected
+  // language, when it is one of these candidates, hints the NEXT PTT turn
+  // instead of the static pref (corrects the provider mislabeling short
+  // utterances). Base ISO 639-1 codes, e.g. ['en', 'ru'].
+  voiceLanguages?: string[]
   // Chat conversation grouping. 'per-launch' = a new conversation each app run
   // (default, original behavior); 'infinite' = one ongoing conversation shared
   // by the main window and the overlay.

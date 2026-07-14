@@ -9,6 +9,7 @@ import {
   prefetchAuthToken,
   type PttStream
 } from '../lib/ptt/transport'
+import { startPttKeywordCollection } from '../lib/ptt/vocabulary'
 import {
   HOLD_THRESHOLD_MS,
   STREAM_FINALIZE_DEADLINE_MS,
@@ -226,6 +227,13 @@ export function usePushToTalk(opts: Options): PushToTalk {
               dispatch(job, { type: 'CANCEL' })
               return null
             })
+          break
+        }
+        case 'startVocabulary': {
+          // Overlap keyword collection with the hold so its bounded OCR is free
+          // by key-up; batchTranscribe consumes the cached result. Best-effort —
+          // startPttKeywordCollection never throws.
+          startPttKeywordCollection()
           break
         }
         case 'startStream': {
