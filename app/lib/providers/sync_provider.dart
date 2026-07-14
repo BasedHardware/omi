@@ -483,18 +483,29 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<void> syncWal(Wal wal) async {
+    // UI Sync/Auto Sync still call syncWal for a single row, but must not
+    // race a coordinator drain (or device download) on the same WAL stack.
+    if (_startBackgroundSync && _isTransferSeamBusy()) {
+      await _wakeTransfer(WakeTrigger.userRetry);
+      return;
+    }
     _updateSyncState(_syncState.toIdle());
     final result = await _performSync(
       operation: () => _walService.getSyncs().syncWal(wal: wal, progress: this),
       context: 'sync WAL ${wal.id}',
       failedWal: wal,
     );
-    // UI Sync/Auto Sync paths call syncWal directly and bypass the
-    // coordinator drain. A 202 leaves the WAL `uploaded` — wake the single
-    // owner so reconcile is scheduled (do not poke SyncReconciler here).
+    // A 202 leaves the WAL `uploaded` — wake the single owner so reconcile
+    // is scheduled (do not poke SyncReconciler here).
     if (result != null && _startBackgroundSync) {
       unawaited(_wakeTransfer(WakeTrigger.cooldownElapsed));
     }
+  }
+
+  bool _isTransferSeamBusy() {
+    if (_syncState.isProcessing) return true;
+    final syncs = _walService.getSyncs();
+    return syncs.isStorageSyncing == true || syncs.isSdCardSyncing == true;
   }
 
   Future<SyncLocalFilesResponse?> _performSync({

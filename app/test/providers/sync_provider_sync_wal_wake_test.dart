@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -15,6 +16,7 @@ class _FakeSyncs {
   final List<Wal> wals;
   int syncWalCalls = 0;
   SyncLocalFilesResponse? nextSyncResult;
+  Completer<SyncLocalFilesResponse?>? hangSyncWal;
 
   _FakeSyncs(this.wals);
 
@@ -31,6 +33,8 @@ class _FakeSyncs {
 
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     syncWalCalls++;
+    final hang = hangSyncWal;
+    if (hang != null) return hang.future;
     final result = nextSyncResult ?? SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
     if (result.localUploadFailures == 0 && result.newConversationIds.isEmpty) {
       // Mirror a 202 accepted upload: WAL becomes `uploaded`, no conversations yet.
@@ -126,6 +130,43 @@ void main() {
     expect(provider.syncError, contains('Upload failed'));
     // Still wakes — successful HTTP return with partial failures may include uploads.
     expect(wakes, [WakeTrigger.cooldownElapsed]);
+    provider.dispose();
+  });
+
+  test('syncWal during an in-flight sync wakes the coordinator instead of racing', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
+
+    final wal = Wal(timerStart: 1000, codec: BleAudioCodec.pcm16, seconds: 30, status: WalStatus.miss);
+    final other = Wal(timerStart: 2000, codec: BleAudioCodec.pcm16, seconds: 30, status: WalStatus.miss);
+    final hang = Completer<SyncLocalFilesResponse?>();
+    final syncs = _FakeSyncs([wal, other])..hangSyncWal = hang;
+    final wakes = <WakeTrigger>[];
+
+    final provider = SyncProvider(
+      walService: _FakeWalService(syncs),
+      startBackgroundSync: true,
+      waitForWalReady: (_) async {},
+      startRecovery: () async {},
+      wakeTransfer: (trigger) async {
+        wakes.add(trigger);
+      },
+    );
+    await provider.initialized;
+
+    final first = provider.syncWal(wal);
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.isSyncing, isTrue);
+    expect(syncs.syncWalCalls, 1);
+
+    await provider.syncWal(other);
+
+    expect(syncs.syncWalCalls, 1, reason: 'contended syncWal must not start a parallel upload');
+    expect(wakes, [WakeTrigger.userRetry]);
+
+    hang.complete(SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []));
+    await first;
     provider.dispose();
   });
 }

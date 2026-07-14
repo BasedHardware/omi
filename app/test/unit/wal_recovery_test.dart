@@ -462,19 +462,23 @@ void main() {
 
       final listener = _FakeListener();
       final sync = LocalWalSyncImpl(listener);
-      sync.start();
+      try {
+        sync.start();
 
-      // walReady should complete once _initializeWals finishes
-      await sync.walReady;
-      // If we get here, the Completer completed successfully
-      expect(true, isTrue);
-
-      sync.stop();
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-        const MethodChannel('plugins.flutter.io/path_provider'),
-        null,
-      );
-      if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+        // walReady should complete once _initializeWals finishes
+        await sync.walReady;
+        // If we get here, the Completer completed successfully
+        expect(true, isTrue);
+      } finally {
+        // Must await stop before deleting tempDir — unawaited flush/save races
+        // the teardown and flakes under suite concurrency (CI).
+        await sync.stop();
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          null,
+        );
+        if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+      }
     });
   });
 }
