@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 import database.action_items as action_items_db
 import database.conversations as conversations_db
 import database.redis_db as redis_db
+from database.firestore_transaction_retry import FirestoreContentionExhausted
 from database.vector_db import (
     upsert_action_item_vector,
     upsert_action_item_vectors_batch,
@@ -293,6 +294,8 @@ def create_action_item(request: ActionItemCreateRequest, uid: str = Depends(auth
     idempotency_key = _content_idempotency_key(uid, request.description)
     try:
         action_item_id = action_items_db.create_action_item(uid, action_item_data, idempotency_key=idempotency_key)
+    except FirestoreContentionExhausted as exc:
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
     except action_items_db.TaskRelationshipConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     action_item = action_items_db.get_action_item(uid, action_item_id)
@@ -451,6 +454,8 @@ def update_action_item(
     # Update the action item
     try:
         success = action_items_db.update_action_item(uid, action_item_id, update_data)
+    except FirestoreContentionExhausted as exc:
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
     except action_items_db.TaskRelationshipConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not success:
@@ -629,6 +634,8 @@ def create_action_items_batch(
     # Create batch
     try:
         created_ids = action_items_db.create_action_items_batch(uid, action_items_data)
+    except FirestoreContentionExhausted as exc:
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
     except action_items_db.TaskRelationshipConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
