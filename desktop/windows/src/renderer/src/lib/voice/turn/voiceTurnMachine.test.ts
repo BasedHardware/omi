@@ -848,4 +848,24 @@ describe('VoiceTurnReducer', () => {
     expect(model.invalidTransitionCount).toBe(0)
     expect(model.duplicateTerminalCount).toBe(0)
   })
+
+  // --- PORT GUARD (beyond the Swift 38) -----------------------------------
+  // Swift `cancel(_:)` emits only when `Set.remove` returned non-nil. A port
+  // that emits unconditionally produces spurious `cancelDeadline` effects for
+  // deadlines that were never held. On macOS the coordinator suite catches this
+  // (`testTerminalEffectAndCleanupAreExactlyOnce`); no reducer test does, so the
+  // trap would survive until PR-2. Pinned here at the layer that owns it.
+  it('cancelEmitsNothingForADeadlineTheTurnDoesNotHold', () => {
+    const turnID = newTurnID()
+    // `finalize` cancels BOTH lockDecision and captureStart, but a plain hold
+    // only ever armed captureStart.
+    const model = reduce(IDLE, { type: 'start', turnID, intent: 'hold' }).model
+    expect(model.turn?.deadlines.has('lockDecision')).toBe(false)
+    expect(model.turn?.deadlines.has('captureStart')).toBe(true)
+
+    const finalized = reduce(model, { type: 'finalize', turnID })
+
+    const cancels = finalized.effects.filter((e) => e.kind === 'cancelDeadline')
+    expect(cancels).toEqual([{ kind: 'cancelDeadline', turnID, deadline: 'captureStart' }])
+  })
 })
