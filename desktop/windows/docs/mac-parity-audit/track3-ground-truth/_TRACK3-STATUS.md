@@ -56,6 +56,67 @@ Mac reference (frozen ground truth): `.worktrees/mac-ref` @ tag `v0.12.72+12072-
   Visual: emoji keyword-bucket default 🎯; progress = 5-bucket threshold colors (green#22C55E/lime
   #84CC16/yellow#FBBF24/orange#F97316/gray, NOT a gradient); confetti = 4-phase ~3.5s celebration.
 
+- **gt-focus-glow.md ✓** — Focus rides shared 3s capture timer (×3 battery). gemini-2.5-flash via
+  proxy /v1/proxy/gemini/models/{model}:generateContent thinkingBudget 0. Schema {status:
+  focused|distracted, app_or_site, description, message?}. Notify only on state transitions; freq
+  0-5 (0 off/1 60m/2 30m/3 10m/4 3m/5 none), bar-only. Table `focus_sessions`(id,screenshotId,
+  status,appOrSite,description,message,durationSeconds,backendId,backendSynced,createdAt,windowTitle)
+  + dual-write to `memories` (tags focus/focused|distracted/app:X) via generic createMemory (no
+  dedicated focus backend API). Daily score = focusedMin/(focusedMin+distractedMin)*100. Glow = 4
+  click-through edge windows, animated gradient hue focused 0.38 / distracted 0.0, 3.5s, 3×1.5s pulse.
+- **gt-memextract-embeddings.md ✓** — MemoryAssistant: newest-1 frame buffer, interval 600s, gated
+  isEnabled&&notificationsEnabled, Gemini Flash + JPEG + last-20 mem dedup. Schema {has_new_memory,
+  memories[{content ≤15w, category system|interesting, source_app, confidence}], context_summary,
+  current_activity}; only first used; confidence ≥0.7. Save local→createMemory→markSynced. Embeddings:
+  /v1/proxy/gemini/models/{model}:embedContent(s), 3072-dim L2-norm, index cap 5000 over action_items
+  +staged_tasks. Bug-fixes to replicate: composite key {source,id}; guard embeddings.count==texts.count.
+  Pager: two cursors (filtered vs RAW-count advance). **Windows: bulk pager already fixed; REAL bug =
+  hooks/useMemories.ts:43-58 single limit=500/offset=0, Memories page caps ~5000 → fix in my file.**
+
+- **gt-windows-inventory.md ✓** — db.ts new-table pattern = `CREATE TABLE IF NOT EXISTS` in bootstrap
+  (mirror `insights` table + INSIGHT_COLUMNS + recentInsights). `insights` table ALREADY EXISTS →
+  insight depth extends it. dbMigrations MIGRATIONS has one entry (v1); NET-NEW tables need no
+  migration entry (avoids version contention). Renderer patterns: A=local SQLite via IPC
+  (window.omi.X→ipc→db.ts), B=renderer→backend axios (memories/goals/tasks today, no local table).
+  Goals/Tasks have NO hooks (inline in pages; Goals completion duped in QuickGoalsWidget).
+  **CORRECTION — MemoryValueRequest is a PHANTOM**: generated client AND backend memories.py:815/843
+  both use query-param `value: str`; no MemoryValueRequest type exists anywhere. Windows edit/visibility
+  is already correctly wired (useMemories PATCH query-param) — C9 gap is UI-button-only. DO NOT regen
+  toward JSON body (would 422). **Regen IS still needed** — staged_tasks bindings absent from client.
+  Real Memories-page pager bug = useMemories.ts:43-58 (single limit=500/offset=0). AI-profile
+  get/update present in client (update = JSON body). Goal advice/suggest present, uncalled.
+
+## P0 additive-schema PR — IN PROGRESS (Opus agent afe2c9b)
+3 net-new tables via CREATE TABLE IF NOT EXISTS (no migration entry): `ai_user_profiles`,
+`focus_sessions`, `task_embeddings` (composite (source,item_id) PK per Mac bug-fix). + db.ts CRUD +
+shared/types.ts records + tests. Assistant *settings* → use existing Windows settings store (not SQLite).
+
+- **gt-screenfeed.md ✓ (KEY UNBLOCK)** — Capture: renderer RewindCaptureHost getUserMedia 720p/1fps
+  JPEG → IPC rewind:saveFrame → main ingestRewindFrame → file + `rewind_frames` row. Read-only seam
+  (exported, ZERO Track-4 edits): `latestRewindFrame()`, `listRewindFrames()`, `getCurrentScreen()`
+  (main/rewind/currentScreen.ts, ~1s-fresh OCR text). Active window: main/usage/nativeForeground.ts
+  (koffi/user32) with event-driven `subscribeForegroundChange()` (SetWinEventHook) — built, unused,
+  reusable for context-switch detection. NO push "new frame" event → Track 3 polls latestRewindFrame()
+  on own cadence + diffs id. Existing insight ENGINE = renderer/src/lib/insightEngine.ts (mine; 15-min
+  poll, TEXT-only, no vision) → upgrade to two-phase SQL+vision. main/insight/** = display-only.
+  **ARCH DECISION (tentative): coordinator + Focus/Memory/Task assistants live in `main/assistants/**`**
+  (JPEG buffers + native foreground hook + SQLite all in main), polling the read-only seam. Finalize
+  with profile+coordinator + insight extractor detail.
+
+- **gt-connectors.md ✓** — Mac Gmail/Cal = cookie-scrape hack; **Windows AHEAD**: real Google OAuth2
+  PKCE + REST already built (main/integrations/oauth.ts, google.ts, flag VITE_ENABLE_GOOGLE_INTEGRATION)
+  → EXTEND, don't port Mac. Import write path: POST v3/memory-imports/batch (max 100, chunked, retry
+  429/5xx) → fallback POST v3/memories/batch on 404/403 memory_import_requires_canonical (implement
+  BOTH). Synthesis = 1 claude-haiku call → ~10-15 memories + 2-5 tasks. X: GET /v1/x/oauth-url →
+  backend callback → poll /v1/x/connection-status. MCP: server {base}v1/mcp/sse; mint POST /v1/mcp/keys
+  {name}→{key}. CLI writers (idempotent, %USERPROFILE%): Claude Code ~/.claude.json mcpServers.omi-memory
+  (http+bearer); Codex `codex mcp add ... npx -y mcp-remote <url> --header "Authorization: Bearer <key>"`;
+  OpenClaw ~/.openclaw/openclaw.json + SOUL.md note; Hermes ~/.hermes/config.yaml mcp_servers + SOUL.md.
+  ChatGPT/Claude = public PKCE (omi-chatgpt-prod/omi-claude-prod, display URL+clientId). Notion =
+  memory-pack only. Port ConnectorImportRunner shape as shared run-state store. Platform 'windows'
+  recognized backend-side, no connector gating. 3 entry points mount one capability module (interface
+  in doc): listDestinations/runImport/getExportStatus/executeExport/ensureMcpKey/getRunState.
+
 ## Parked questions for Chris (batch — do not block)
 
 - **Q1 (a4c50bcb4 full cherry-pick):** Should the full conversation-provenance commit (backend +
