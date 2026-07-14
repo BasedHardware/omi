@@ -129,6 +129,19 @@ def test_repository_charts_render_the_full_contract_when_helm_is_available(contr
     assert contracts.validate_all_contracts(contracts.render_chart, helm) == []
 
 
+def test_dev_pusher_rollout_preserves_the_existing_replica(contracts: SimpleNamespace):
+    helm = shutil.which("helm")
+    assert helm is not None, "helm must be installed for the rendered deployment contract"
+    contract = next(contract for contract in contracts.CONTRACTS if contract.service == "pusher")
+    documents = contracts.render_chart(contract, "dev", helm)
+    deployment = contracts.deployment_for(documents, contracts.release_name(contract, "dev"))
+
+    assert deployment is not None
+    rolling_update = deployment["spec"]["strategy"]["rollingUpdate"]
+    assert rolling_update["maxUnavailable"] == 0
+    assert rolling_update["maxSurge"] == 1
+
+
 def test_first_party_charts_reject_missing_image_tag_when_helm_is_available(contracts: SimpleNamespace):
     helm = shutil.which("helm")
     assert helm is not None, "helm must be installed for the rendered deployment contract"

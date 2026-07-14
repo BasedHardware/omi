@@ -404,7 +404,7 @@ enum CloudConnectorFormAutomation {
     )
   }
 
-  private static func systemSettingsWindowAppKitFrame() -> CGRect? {
+  static func systemSettingsWindowAppKitFrame() -> CGRect? {
     guard
       let app = NSWorkspace.shared.runningApplications.first(where: {
         $0.bundleIdentifier == "com.apple.systempreferences"

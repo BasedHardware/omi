@@ -195,7 +195,7 @@ struct OnboardingView: View {
           reasonTitle: "Screen Recording",
           reasonDetail: "Screen Recording lets Omi see what you're working on.",
           primaryActionLabel: "Open Screen Recording settings",
-          requiresRestart: true,
+          requiresRestart: false,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "ScreenRecording")
             if !AppBuild.usesLazyDevPermissions {
@@ -225,7 +225,7 @@ struct OnboardingView: View {
           reasonTitle: "Disk Access",
           reasonDetail: "This lets Omi scan your projects and recent files.",
           primaryActionLabel: "Open Disk Access",
-          requiresRestart: false,
+          requiresRestart: true,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 5, stepName: "FullDiskAccess")
             currentStep = 6

@@ -24,6 +24,9 @@ struct OnboardingPermissionStepView: View {
   let onForceComplete: (() -> Void)?
 
   @State private var isRequesting = false
+  @State private var showReopenPrompt = false
+  @State private var hasAutoAdvanced = false
+  @State private var advanceTask: Task<Void, Never>?
   @State private var screenRecordingRefreshTask: Task<Void, Never>?
   private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
 
@@ -36,7 +39,11 @@ struct OnboardingPermissionStepView: View {
       title: title,
       description: description,
       showsSkip: true,
-      onSkip: onSkip,
+      onSkip: {
+        // Skipping a permission step should also clear the floating drag card.
+        PermissionDragGuidance.dismiss()
+        onSkip()
+      },
       onForceComplete: onForceComplete
     ) {
       VStack(alignment: .leading, spacing: OmiSpacing.xl) {
@@ -121,10 +128,24 @@ struct OnboardingPermissionStepView: View {
         guard newPhase == .active else { return }
         refreshPermissionState()
       }
+      .onChange(of: isGranted) { _, granted in
+        if granted {
+          scheduleAutoAdvance()
+        }
+      }
+      .alert("Reopen Omi to finish", isPresented: $showReopenPrompt) {
+        Button("Reopen Omi") { appState.restartApp() }
+        Button("Later", role: .cancel) { onContinue() }
+      } message: {
+        Text("Omi needs to reopen to apply the permissions you just granted.")
+      }
       .onDisappear {
+        advanceTask?.cancel()
         screenRecordingRefreshTask?.cancel()
       }
       .onAppear {
+        hasAutoAdvanced = false
+        advanceTask?.cancel()
         screenRecordingRefreshTask?.cancel()
         coordinator.clearLastActionError()
         refreshPermissionState()
@@ -144,6 +165,27 @@ struct OnboardingPermissionStepView: View {
       return "Waiting for macOS..."
     }
     return "Not granted yet"
+  }
+
+  private func scheduleAutoAdvance() {
+    guard !hasAutoAdvanced else { return }
+    hasAutoAdvanced = true
+    advanceTask?.cancel()
+    advanceTask = Task {
+      try? await Task.sleep(nanoseconds: 350_000_000)
+      guard !Task.isCancelled else { return }
+      await MainActor.run {
+        // The restart-carrying step (the last drag permission) offers the re-open
+        // once granted, instead of silently advancing — one restart applies every
+        // deferred grant. Other steps just continue.
+        if requiresRestart {
+          PermissionDragGuidance.dismiss()
+          showReopenPrompt = true
+        } else {
+          onContinue()
+        }
+      }
+    }
   }
 
   private func refreshPermissionState() {

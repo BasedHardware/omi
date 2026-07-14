@@ -114,6 +114,13 @@ WRITER_MARKERS = (
     "gcloud run jobs update ",
 )
 
+PUSHER_CHART_MARKER = "backend/charts/pusher"
+PUSHER_CONFIGMAP_PREFLIGHT = (
+    "kubectl -n ${{ vars.ENV }}-omi-backend get configmap "
+    "${{ vars.ENV }}-omi-backend-config >/dev/null"
+)
+PUSHER_REFERENCE_PREFLIGHT = "backend/scripts/verify_pusher_config_references.py"
+
 
 class PolicyError(ValueError):
     pass
@@ -206,6 +213,86 @@ def validate_auto_deploy_acceptance(text: str) -> list[str]:
             "gcp_backend_auto_dev.yml: integrated verify must inherit the workflow mutation lock"
         )
     return errors
+
+
+def deploy_job_steps(block: list[str]) -> list[list[str]]:
+    """Return deploy-job step blocks in workflow order."""
+
+    steps: list[list[str]] = []
+    index = 0
+    while index < len(block):
+        if block[index].startswith("      - "):
+            start = index
+            index += 1
+            while index < len(block) and not block[index].startswith("      - "):
+                index += 1
+            steps.append(block[start:index])
+        else:
+            index += 1
+    return steps
+
+
+def pusher_preflight_step_is_valid(name: str, step: list[str]) -> bool:
+    """Return whether a deploy step performs an allowed pusher preflight."""
+
+    if step[0].lstrip().startswith("#"):
+        return False
+
+    conditions = [
+        candidate.strip()
+        for candidate in step
+        if candidate.strip().startswith("if:")
+    ]
+    nonfatal = any(
+        candidate.strip().startswith("continue-on-error:")
+        or candidate.strip() == "set +e"
+        for candidate in step
+    )
+    allowed_conditions = (
+        ["if: env.SERVICE == 'pusher'"]
+        if name == "gcp_backend_pusher.yml"
+        else []
+    )
+    if nonfatal or conditions != allowed_conditions:
+        return False
+
+    step_text = "\n".join(step)
+    if "|| true" in step_text:
+        return False
+    if PUSHER_REFERENCE_PREFLIGHT in step_text:
+        return True
+
+    for line in step:
+        stripped = line.strip()
+        command = stripped.removeprefix("- run: ").removeprefix("run: ")
+        if command == PUSHER_CONFIGMAP_PREFLIGHT:
+            return True
+    return False
+
+
+def validate_pusher_config_preflight(name: str, text: str) -> list[str]:
+    """Require an active ConfigMap check in the pusher deploy job before Helm."""
+
+    if PUSHER_CHART_MARKER not in text:
+        return []
+    block = job_block(text, "deploy")
+    if block is None:
+        return [f"{name}: pusher deploy must verify the backend runtime ConfigMap before Helm"]
+
+    chart_indexes = [
+        index
+        for index, line in enumerate(block)
+        if PUSHER_CHART_MARKER in line and not line.lstrip().startswith("#")
+    ]
+    if not chart_indexes:
+        return []
+    chart_index = min(chart_indexes)
+
+    for step in deploy_job_steps(block[:chart_index]):
+        if pusher_preflight_step_is_valid(name, step):
+            return []
+
+    return [f"{name}: pusher deploy must verify the backend runtime ConfigMap before Helm"]
 
 
 def is_persistent_writer(text: str) -> bool:
@@ -323,6 +410,8 @@ def check_repository() -> list[str]:
 
     auto_deploy = workflow_text.get("gcp_backend_auto_dev.yml", "")
     errors.extend(validate_auto_deploy_acceptance(auto_deploy))
+    for name, text in workflow_text.items():
+        errors.extend(validate_pusher_config_preflight(name, text))
     separate_acceptance_workflows = sorted(
         name
         for name, text in workflow_text.items()
@@ -398,6 +487,106 @@ jobs:
         raise PolicyError(
             "successful deployment did not make integrated acceptance eligible"
         )
+
+    pusher_deploy = """name: fixture
+jobs:
+  deploy:
+    steps:
+      - run: kubectl -n ${{ vars.ENV }}-omi-backend get configmap ${{ vars.ENV }}-omi-backend-config >/dev/null
+      - run: helm upgrade ./backend/charts/pusher
+"""
+    if validate_pusher_config_preflight("fixture.yml", pusher_deploy):
+        raise PolicyError("valid pusher ConfigMap preflight was rejected")
+    reference_preflight = """name: fixture
+jobs:
+  deploy:
+    steps:
+      - name: Preflight pusher ConfigMap and Secret references
+        run: |
+          python3 -m pip install -q pyyaml
+          python3 backend/scripts/verify_pusher_config_references.py \\
+            --environment ${{ vars.ENV }} --namespace ${{ vars.ENV }}-omi-backend
+      - run: helm upgrade ./backend/charts/pusher
+"""
+    if validate_pusher_config_preflight("fixture.yml", reference_preflight):
+        raise PolicyError("valid pusher reference preflight was rejected")
+    missing_preflight = pusher_deploy.replace(
+        "kubectl -n ${{ vars.ENV }}-omi-backend get configmap ${{ vars.ENV }}-omi-backend-config >/dev/null\n",
+        "",
+    )
+    if not any(
+        "before Helm" in error
+        for error in validate_pusher_config_preflight("fixture.yml", missing_preflight)
+    ):
+        raise PolicyError("missing pusher ConfigMap preflight satisfied the deploy contract")
+
+    equivalent_chart_path = """name: fixture
+jobs:
+  deploy:
+    steps:
+      - run: helm upgrade backend/charts/pusher
+"""
+    if not validate_pusher_config_preflight("fixture.yml", equivalent_chart_path):
+        raise PolicyError("equivalent pusher chart path bypassed the deploy contract")
+
+    late_preflight = """name: fixture
+jobs:
+  deploy:
+    steps:
+      - run: helm upgrade ./backend/charts/pusher
+      - run: kubectl -n ${{ vars.ENV }}-omi-backend get configmap ${{ vars.ENV }}-omi-backend-config >/dev/null
+"""
+    if not any(
+        "before Helm" in error
+        for error in validate_pusher_config_preflight("fixture.yml", late_preflight)
+    ):
+        raise PolicyError("late pusher ConfigMap preflight satisfied the deploy contract")
+
+    cross_job_preflight = """name: fixture
+jobs:
+  prepare:
+    steps:
+      - run: kubectl -n ${{ vars.ENV }}-omi-backend get configmap ${{ vars.ENV }}-omi-backend-config >/dev/null
+  deploy:
+    steps:
+      - run: helm upgrade ./backend/charts/pusher
+"""
+    if not validate_pusher_config_preflight("fixture.yml", cross_job_preflight):
+        raise PolicyError("cross-job pusher ConfigMap preflight satisfied the deploy contract")
+
+    disabled_preflight = """name: fixture
+jobs:
+  deploy:
+    steps:
+      - name: Disabled preflight
+        if: false
+        run: kubectl -n ${{ vars.ENV }}-omi-backend get configmap ${{ vars.ENV }}-omi-backend-config >/dev/null
+      - run: helm upgrade ./backend/charts/pusher
+"""
+    if not validate_pusher_config_preflight("fixture.yml", disabled_preflight):
+        raise PolicyError("disabled pusher ConfigMap preflight satisfied the deploy contract")
+
+    nonfatal_preflight = """name: fixture
+jobs:
+  deploy:
+    steps:
+      - name: Nonfatal preflight
+        continue-on-error: true
+        run: kubectl -n ${{ vars.ENV }}-omi-backend get configmap ${{ vars.ENV }}-omi-backend-config >/dev/null
+      - run: helm upgrade ./backend/charts/pusher
+"""
+    if not validate_pusher_config_preflight("fixture.yml", nonfatal_preflight):
+        raise PolicyError("nonfatal pusher ConfigMap preflight satisfied the deploy contract")
+
+    masked_preflight = """name: fixture
+jobs:
+  deploy:
+    steps:
+      - run: kubectl -n ${{ vars.ENV }}-omi-backend get configmap ${{ vars.ENV }}-omi-backend-config >/dev/null || true
+      - run: helm upgrade ./backend/charts/pusher
+"""
+    if not validate_pusher_config_preflight("fixture.yml", masked_preflight):
+        raise PolicyError("masked pusher ConfigMap preflight satisfied the deploy contract")
 
 
 def main() -> int:

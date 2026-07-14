@@ -1647,8 +1647,8 @@ class ChatToolExecutor {
         type: type,
         granted: ScreenCaptureService.checkPermission(),
         pendingMessage:
-          "User needs to toggle Screen Recording for Omi in System Settings, then quit and reopen the app.",
-        requiresRestart: true
+          "User needs to toggle Screen Recording for Omi in System Settings. Don't restart yet — the restart is deferred until after Full Disk Access so it happens once.",
+        requiresRestart: false
       )
 
     case "microphone":
@@ -1754,6 +1754,9 @@ class ChatToolExecutor {
         pane: "Privacy_AllFiles",
         expectedOwnerID: expectedOwnerID,
         authorizationSnapshot: authorizationSnapshot)
+      // Same drag-to-grant mechanic as Screen Recording: drop the app into the
+      // Full Disk Access list to add and enable it in one gesture.
+      Task { await PermissionDragGuidance.presentDragToGrantHelper() }
       try? await Task.sleep(nanoseconds: 3_000_000_000)
       guard isPermissionAuthorizationCurrent(
         expectedOwnerID,
@@ -1765,8 +1768,8 @@ class ChatToolExecutor {
         type: type,
         granted: granted,
         pendingMessage:
-          "User needs to toggle Full Disk Access for Omi in System Settings > Privacy & Security > Full Disk Access.",
-        requiresRestart: false
+          "User needs to toggle Full Disk Access for Omi in System Settings > Privacy & Security > Full Disk Access, then quit and reopen the app. This restart also applies the Screen Recording grant.",
+        requiresRestart: true
       )
 
     default:
