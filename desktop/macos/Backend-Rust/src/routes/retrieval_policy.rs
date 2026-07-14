@@ -59,6 +59,18 @@ impl RetrievalPolicy {
         self.prohibited_sources.contains(&source)
     }
 
+    /// True only when the user asked for the public web in so many words.
+    ///
+    /// Everything else (`Freshness`, `AnaphoricLookup`) is a heuristic guess, so
+    /// it may steer a turn but must never fail one: a route that cannot search
+    /// the web still owes the user an answer.
+    pub(crate) fn web_requirement_is_explicit(&self) -> bool {
+        matches!(
+            self.reason,
+            RetrievalReason::ExplicitWeb | RetrievalReason::Mixed
+        )
+    }
+
     pub(crate) fn reason(&self) -> &'static str {
         self.reason.as_str()
     }
@@ -178,8 +190,33 @@ const ANAPHORIC_LOOKUP_PHRASES: &[&str] = &[
     "find out",
 ];
 
+/// The generic qualifier+subject pairing describes a short conversational ask
+/// ("who is playing today?"). Service synthesis prompts, pasted documents and
+/// agent instructions are long and hit these common words by accident, so they
+/// stay out of the broad heuristic. The fixed phrases above still apply at any
+/// length.
+const MAX_GENERIC_LOOKUP_CHARS: usize = 240;
+
 fn contains_any(text: &str, phrases: &[&str]) -> bool {
     phrases.iter().any(|phrase| text.contains(phrase))
+}
+
+/// Substring matching on single words reads "market" out of "marketing" and
+/// "game" out of "gameplan", so the generic terms match on word boundaries.
+fn contains_any_word(text: &str, words: &[&str]) -> bool {
+    words.iter().any(|word| {
+        text.match_indices(word).any(|(start, _)| {
+            let before_is_word = text[..start]
+                .chars()
+                .next_back()
+                .is_some_and(|ch| ch.is_alphanumeric());
+            let after_is_word = text[start + word.len()..]
+                .chars()
+                .next()
+                .is_some_and(|ch| ch.is_alphanumeric());
+            !before_is_word && !after_is_word
+        })
+    })
 }
 
 fn is_current_weather_lookup(text: &str) -> bool {
@@ -189,8 +226,9 @@ fn is_current_weather_lookup(text: &str) -> bool {
 fn is_fresh_public_lookup(text: &str) -> bool {
     contains_any(text, FRESH_PUBLIC_PHRASES)
         || is_current_weather_lookup(text)
-        || (contains_any(text, FRESH_PUBLIC_TEMPORAL_QUALIFIERS)
-            && contains_any(text, FRESH_PUBLIC_LOOKUP_TERMS))
+        || (text.len() <= MAX_GENERIC_LOOKUP_CHARS
+            && contains_any_word(text, FRESH_PUBLIC_TEMPORAL_QUALIFIERS)
+            && contains_any_word(text, FRESH_PUBLIC_LOOKUP_TERMS))
 }
 
 pub(crate) fn caller_disabled_tools(req: &ChatCompletionRequest) -> bool {
@@ -406,6 +444,41 @@ mod tests {
         assert!(policy.requires(RetrievalSource::PublicWeb));
         assert!(policy.requires(RetrievalSource::OmiPrivate));
         assert_eq!(policy.reason, RetrievalReason::Mixed);
+    }
+
+    #[test]
+    fn leaves_a_service_synthesis_prompt_on_auto() {
+        // The calendar/gmail/notes readers synthesize with a long machine-written
+        // prompt that happens to contain "today" and "schedule". Classifying it as
+        // a public-web lookup routed the import into the web-search-unavailable
+        // failure and dropped every extracted memory.
+        let policy = retrieval_policy(&[message(
+            "user",
+            "Analyze these calendar events and extract a profile.\n\
+             Today's date: 2026-07-14\n\
+             - Extract 10-15 memories (facts about their role, recurring meetings, \
+             relationships, routines, interests, work schedule, hobbies, social life)\n\
+             - Profile should summarize professional identity and schedule patterns",
+        )]);
+        assert_eq!(policy, RetrievalPolicy::auto());
+    }
+
+    #[test]
+    fn does_not_match_generic_lookup_terms_inside_longer_words() {
+        let policy =
+            retrieval_policy(&[message("user", "Review the marketing copy I wrote today")]);
+        assert_eq!(policy, RetrievalPolicy::auto());
+    }
+
+    #[test]
+    fn only_an_explicit_request_is_a_strict_web_requirement() {
+        let guessed = retrieval_policy(&[message("user", "Who's playing in the World Cup today?")]);
+        assert!(guessed.requires(RetrievalSource::PublicWeb));
+        assert!(!guessed.web_requirement_is_explicit());
+
+        let asked = retrieval_policy(&[message("user", "Search the web for the World Cup final")]);
+        assert!(asked.requires(RetrievalSource::PublicWeb));
+        assert!(asked.web_requirement_is_explicit());
     }
 
     #[test]

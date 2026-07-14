@@ -19,6 +19,7 @@ use std::time::Duration;
 
 use crate::auth::{AuthUser, PaywalledAuthUser};
 use crate::byok;
+use crate::fallback::{record_fallback, FallbackOutcome};
 use crate::models::chat_completions::*;
 use crate::AppState;
 
@@ -265,11 +266,25 @@ fn translate_request_inner(
     // Haiku is excluded: web_search_20260209 is not supported there, and a
     // tools-bearing haiku request would 400 with it attached.
     let web_search_supported = enable_web_search && !upstream_model.starts_with("claude-haiku");
-    let force_web_search =
+    let wants_web_search =
         policy.requires(RetrievalSource::PublicWeb) && !caller_disabled_tools(req);
-    if force_web_search && !web_search_supported {
+    if wants_web_search && !web_search_supported && policy.web_requirement_is_explicit() {
         return Err(
             "required public web search is unavailable for this model or deployment".to_string(),
+        );
+    }
+    // A heuristic freshness/anaphoric guess is not a user demand. On a route
+    // without web search (haiku, or the kill switch) answer the turn from model
+    // knowledge instead of failing it — the forced-search instruction below also
+    // bans private context, which would be wrong for a turn we merely guessed at.
+    let force_web_search = wants_web_search && web_search_supported;
+    if wants_web_search && !web_search_supported {
+        record_fallback(
+            "chat_retrieval",
+            "forced_web_search",
+            "model_knowledge",
+            "capability_mismatch",
+            FallbackOutcome::Degraded,
         );
     }
     let client_tools = req.tools.as_deref().unwrap_or(&[]);
@@ -715,7 +730,10 @@ async fn chat_completions(
 
     let web_search_enabled = web_search_enabled();
     let policy = retrieval_policy(&req.messages);
+    // Only an explicit "search the web" is worth failing the turn over. A
+    // heuristic guess degrades to a normal answer in `translate_request_inner`.
     if policy.requires(RetrievalSource::PublicWeb)
+        && policy.web_requirement_is_explicit()
         && !caller_disabled_tools(&req)
         && (!web_search_enabled || route.upstream_model.starts_with("claude-haiku"))
     {
@@ -2484,6 +2502,30 @@ mod tests {
         let req = test_request(vec![user_message("Search the web for HumanPost")]);
         let error = translate_request_inner(&req, "claude-sonnet-4-6", false).unwrap_err();
         assert!(error.contains("required public web search is unavailable"));
+    }
+
+    #[test]
+    fn test_translate_request_guessed_freshness_answers_without_web_search() {
+        // A guessed public-web turn on a route that cannot search (haiku, or the
+        // kill switch) must still be answered: no error, no web_search tool, and
+        // no forced-search instruction — that instruction bans private context.
+        let req = test_request(vec![user_message("Who's playing in the World Cup today?")]);
+
+        for (model, enable_web_search) in [
+            ("claude-haiku-4-5-20251001", true),
+            ("claude-sonnet-4-6", false),
+        ] {
+            let result = translate_request_inner(&req, model, enable_web_search).unwrap();
+            assert!(result.tools.is_none());
+            assert!(result.tool_choice.is_none());
+            let prompt = serde_json::to_value(&result.messages[0])
+                .unwrap()
+                .to_string();
+            assert!(
+                !prompt.contains("omi_retrieval_policy"),
+                "{model}: {prompt}"
+            );
+        }
     }
 
     #[test]
