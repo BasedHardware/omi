@@ -253,6 +253,25 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertTrue(ready.effects.contains(.prepareHubInput(turnID: turnID, sessionID: sessionID)))
   }
 
+  func testHubAdmissionRejectionAfterTransportReadyFallsBackAfterRelease() {
+    let turnID = VoiceTurnID()
+    let sessionID = VoiceSessionID()
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .selectRoute(turnID: turnID, route: .hubWarmWait)).model
+    model = reduce(model, .hubReady(turnID: turnID, sessionID: sessionID)).model
+    model = reduce(model, .finalize(turnID: turnID)).model
+
+    let rejected = reduce(model, .hubAdmissionRejected(turnID: turnID))
+
+    XCTAssertEqual(rejected.model.turn?.phase, .finalizing)
+    XCTAssertEqual(rejected.model.turn?.route, .deepgramBatch)
+    XCTAssertFalse(rejected.model.turn?.deadlines.contains(.hubWarm) == true)
+    XCTAssertTrue(rejected.model.turn?.deadlines.contains(.transcription) == true)
+    XCTAssertTrue(
+      rejected.effects.contains(
+        .fallbackToTranscription(turnID: turnID, reason: .hubWarmTimeout)))
+  }
+
   func testDeferredCommitTimeoutTerminatesWithTypedReason() {
     let turnID = VoiceTurnID()
     let sessionID = VoiceSessionID()

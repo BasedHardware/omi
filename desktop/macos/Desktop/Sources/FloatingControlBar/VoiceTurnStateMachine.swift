@@ -393,6 +393,11 @@ enum VoiceTurnEvent: Equatable, Sendable {
   case captureFailed(turnID: VoiceTurnID, captureID: VoiceCaptureID?, message: String)
   case selectRoute(turnID: VoiceTurnID, route: VoiceTurnRoute)
   case hubReady(turnID: VoiceTurnID, sessionID: VoiceSessionID)
+  /// The physical realtime socket is ready, but the context-bound input admission
+  /// rejected this turn. This is distinct from transport readiness: the warm deadline
+  /// was already cancelled by `hubReady`, so the reducer must explicitly restore the
+  /// bounded transcription fallback instead of leaving a finalizing turn parked.
+  case hubAdmissionRejected(turnID: VoiceTurnID)
   case hubCommitAccepted(
     turnID: VoiceTurnID, sessionID: VoiceSessionID, responseID: VoiceResponseID?)
   case hubCommitClaimed(turnID: VoiceTurnID)
@@ -459,6 +464,7 @@ enum VoiceTurnEvent: Equatable, Sendable {
       .openLockWindow(let turnID), .lock(let turnID),
       .finalize(let turnID), .captureStarted(let turnID, _), .captureFailed(let turnID, _, _),
       .selectRoute(let turnID, _), .hubReady(let turnID, _),
+      .hubAdmissionRejected(let turnID),
       .hubCommitAccepted(let turnID, _, _), .hubCommitClaimed(let turnID),
       .hubCommitDeferred(let turnID),
       .hubCommitDeferredForReplacement(let turnID),
@@ -504,6 +510,7 @@ enum VoiceTurnEvent: Equatable, Sendable {
     case .captureFailed: return "capture_failed"
     case .selectRoute: return "select_route"
     case .hubReady: return "hub_ready"
+    case .hubAdmissionRejected: return "hub_admission_rejected"
     case .hubCommitAccepted: return "hub_commit_accepted"
     case .hubCommitClaimed: return "hub_commit_claimed"
     case .hubCommitDeferred: return "hub_commit_deferred"
@@ -767,6 +774,23 @@ struct VoiceTurnReducer {
       // Transport readiness is not context admission. Keep the logical route in
       // warm-wait until providerReconnected proves an admitted physical binding.
       effects.append(.prepareHubInput(turnID: turn.id, sessionID: sessionID))
+
+    case .hubAdmissionRejected:
+      guard turn.route == .hubWarmWait else {
+        stale(&model, event: event, effects: &effects)
+        return VoiceTurnReduction(model: model, effects: effects)
+      }
+      // `hubReady` cancelled the warm deadline before asking the provider to bind
+      // the canonical context. If that admission fails, restore the same bounded
+      // transcription fallback explicitly; otherwise a released turn remains in
+      // finalizing + hubWarmWait until the idle socket teardown (observed as a
+      // multi-minute PTT spinner).
+      cancel(.hubWarm, in: &model, effects: &effects)
+      effects.append(.fallbackToTranscription(turnID: turn.id, reason: .hubWarmTimeout))
+      model.turn?.route = .deepgramBatch
+      if turn.phase == .finalizing {
+        schedule(.transcription, after: deadlines.transcription, in: &model, effects: &effects)
+      }
 
     case .hubCommitAccepted(_, let sessionID, let responseID):
       let isDeferredCommit = turn.phase == .awaitingResponse && turn.hubCommitPending

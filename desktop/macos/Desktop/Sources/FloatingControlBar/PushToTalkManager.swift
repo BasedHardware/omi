@@ -1470,7 +1470,12 @@ class PushToTalkManager: ObservableObject {
     guard preparation == .accepted else {
       log("PushToTalkManager: realtime transport was ready but context admission was rejected")
       if bufferWhileWarming {
-        resolveRealtimeHubWarmWait(ready: false)
+        // `hubReady` already cancelled the warm deadline. Route the rejection
+        // through the reducer so a released turn cannot remain parked forever in
+        // finalizing + hubWarmWait while the socket idles out.
+        if let turnID = currentVoiceTurnID {
+          voiceTurnCoordinator.send(.hubAdmissionRejected(turnID: turnID))
+        }
       } else {
         _ = startOmniTranscription(captureAlreadyRunning: false)
       }

@@ -1,0 +1,3 @@
+{
+  "change": "Fixed push-to-talk turns spinning indefinitely when realtime context admission fails after the socket becomes ready."
+}
