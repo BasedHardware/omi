@@ -9,8 +9,22 @@ from typing import Any
 
 import pytest
 
+from database import conversations as conversations_db
 from database import recording_sessions
 from utils.conversations import lifecycle as lifecycle_service
+
+
+def _stored_conversation(segments: list[dict[str, Any]], *, level: str = 'standard') -> dict[str, Any]:
+    """Encode a conversation exactly as the production write path stores it.
+
+    Seeding a raw ``transcript_segments`` list is what let the empty-cleanup
+    guard ship reading a compressed blob as if it were a plain list.
+    """
+    return conversations_db._prepare_conversation_for_write(
+        {'id': 'conversation', 'status': 'in_progress', 'transcript_segments': segments},
+        'uid',
+        level,
+    )
 
 
 @dataclass
@@ -178,14 +192,10 @@ def test_missing_active_binding_is_tombstoned_before_rollover(recording_store, m
     assert original['lifecycle_phase'] == 'discarded'
 
 
-def test_empty_cleanup_atomically_tombstones_its_session(recording_store):
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+def test_empty_cleanup_atomically_tombstones_its_session(recording_store, level):
     conversation_path = ('users', 'uid', 'conversations', 'conversation')
-    recording_store.documents[conversation_path] = {
-        'id': 'conversation',
-        'status': 'in_progress',
-        'transcript_segments': [],
-        'has_content': False,
-    }
+    recording_store.documents[conversation_path] = _stored_conversation([], level=level)
     recording_sessions.create_or_get_recording_session(
         'uid', 'recording', 'conversation', firestore_client=recording_store
     )
@@ -201,14 +211,12 @@ def test_empty_cleanup_atomically_tombstones_its_session(recording_store):
     assert binding['lifecycle_phase'] == 'discarded'
 
 
-def test_empty_cleanup_refuses_late_content_without_tombstoning(recording_store):
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+def test_empty_cleanup_refuses_late_content_without_tombstoning(recording_store, level):
     conversation_path = ('users', 'uid', 'conversations', 'conversation')
-    recording_store.documents[conversation_path] = {
-        'id': 'conversation',
-        'status': 'in_progress',
-        'transcript_segments': [{'id': 'late-segment', 'text': 'persisted'}],
-        'has_content': True,
-    }
+    recording_store.documents[conversation_path] = _stored_conversation(
+        [{'id': 'late-segment', 'text': 'persisted'}], level=level
+    )
     recording_sessions.create_or_get_recording_session(
         'uid', 'recording', 'conversation', firestore_client=recording_store
     )
@@ -222,6 +230,26 @@ def test_empty_cleanup_refuses_late_content_without_tombstoning(recording_store)
     assert conversation_path in recording_store.documents
     assert binding is not None
     assert binding['lifecycle_phase'] == 'in_progress'
+
+
+def test_empty_cleanup_keeps_a_conversation_whose_segments_cannot_be_decoded(recording_store):
+    conversation_path = ('users', 'uid', 'conversations', 'conversation')
+    recording_store.documents[conversation_path] = {
+        'id': 'conversation',
+        'status': 'in_progress',
+        'transcript_segments': b'not-a-zlib-stream',
+        'transcript_segments_compressed': True,
+    }
+    recording_sessions.create_or_get_recording_session(
+        'uid', 'recording', 'conversation', firestore_client=recording_store
+    )
+
+    deleted = recording_sessions.tombstone_and_delete_empty_conversation(
+        'uid', 'conversation', 'recording', firestore_client=recording_store
+    )
+
+    assert deleted is False
+    assert conversation_path in recording_store.documents
 
 
 def test_conflicting_retry_returns_the_original_conversation(recording_store):

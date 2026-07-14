@@ -75,18 +75,32 @@ def _commit_cleanup_parent_delete(uid: str, conversation_id: str, transaction: s
     )
 
 
-def _seed_live_generation(client: Any, uid: str, conversation_id: str, recording_session_id: str) -> Any:
+def _seed_empty_live_conversation(client: Any, uid: str, conversation_id: str) -> Any:
+    """Write an empty in-progress conversation the way production writes it.
+
+    Segments are stored compressed, so a raw empty list is a document state
+    production never produces — seeding one hides encoding-aware guard bugs.
+    """
     conversation_ref = _conversation_ref(client, uid, conversation_id)
     conversation_ref.set(
-        {
-            'id': conversation_id,
-            'status': 'in_progress',
-            'discarded': False,
-            'transcript_segments': [],
-            'has_content': False,
-            'data_protection_level': 'standard',
-        }
+        conversations_db._prepare_conversation_for_write(
+            {
+                'id': conversation_id,
+                'status': 'in_progress',
+                'discarded': False,
+                'transcript_segments': [],
+                'has_content': False,
+                'data_protection_level': 'standard',
+            },
+            uid,
+            'standard',
+        )
     )
+    return conversation_ref
+
+
+def _seed_live_generation(client: Any, uid: str, conversation_id: str, recording_session_id: str) -> Any:
+    conversation_ref = _seed_empty_live_conversation(client, uid, conversation_id)
     recording_sessions_db.create_or_get_recording_session(
         uid,
         recording_session_id,
@@ -316,17 +330,7 @@ def _assert_photo_content_contract(client: Any, uid: str) -> None:
 
 def _assert_photo_only_finalization_is_admitted(client: Any, uid: str) -> None:
     conversation_id = f'photo-finalization-{uuid.uuid4().hex}'
-    conversation_ref = _conversation_ref(client, uid, conversation_id)
-    conversation_ref.set(
-        {
-            'id': conversation_id,
-            'status': 'in_progress',
-            'discarded': False,
-            'transcript_segments': [],
-            'has_content': False,
-            'data_protection_level': 'standard',
-        }
-    )
+    _seed_empty_live_conversation(client, uid, conversation_id)
     if not conversations_db.store_conversation_photos(
         uid,
         conversation_id,
@@ -348,17 +352,7 @@ def _assert_photo_only_finalization_is_admitted(client: Any, uid: str) -> None:
 def _assert_legacy_photo_only_finalization_is_admitted(client: Any, uid: str) -> None:
     """Pre-marker photo children must still admit a durable finalization job."""
     conversation_id = f'legacy-photo-finalization-{uuid.uuid4().hex}'
-    conversation_ref = _conversation_ref(client, uid, conversation_id)
-    conversation_ref.set(
-        {
-            'id': conversation_id,
-            'status': 'in_progress',
-            'discarded': False,
-            'transcript_segments': [],
-            'has_content': False,
-            'data_protection_level': 'standard',
-        }
-    )
+    conversation_ref = _seed_empty_live_conversation(client, uid, conversation_id)
     conversation_ref.collection('photos').document('legacy-only-photo').set(
         {'id': 'legacy-only-photo', 'description': 'pre-marker photo-only listen conversation'}
     )
