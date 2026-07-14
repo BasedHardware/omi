@@ -97,7 +97,7 @@ enum GeneratedRealtimeTools {
             "floating_bar",
             "floating_pill"
           ],
-          "description": "Optional canonical surface filter."
+          "description": "Optional surface hint. background_agent and delegated_agent discover recent child sessions across concrete surfaces."
         },
         "limit": {
           "type": "number",

@@ -144,7 +144,7 @@ Returns canonical session/run summaries plus task_agents and floating_agent_pill
       surfaceKind: {
         type: "string",
         enum: ["main_chat", "task_chat", "realtime", "delegated_agent", "background_agent", "floating_bar", "floating_pill"],
-        description: "Filter to a canonical surface kind.",
+        description: "Optional surface hint. background_agent and delegated_agent discover recent child sessions across concrete surfaces.",
       },
       limit: { type: "number", description: "Maximum sessions to return. Default 50, max 200." },
       beforeUpdatedAtMs: { type: "number", description: "Pagination cursor: only sessions updated before this epoch-ms timestamp." },
