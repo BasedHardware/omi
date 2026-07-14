@@ -29,6 +29,8 @@ function fakeWindow(): { win: BrowserWindow; fire: (p: Partial<ContextMenuParams
     handler({}, {
       isEditable: false,
       selectionText: '',
+      misspelledWord: '',
+      dictionarySuggestions: [],
       editFlags: {
         canUndo: false,
         canRedo: false,
@@ -77,7 +79,16 @@ describe('installContextMenu', () => {
     })
 
     expect(buildFromTemplate).toHaveBeenCalledTimes(1)
-    expect(roles()).toEqual(['undo', 'separator', 'cut', 'copy', 'paste', 'separator', 'selectAll'])
+    expect(roles()).toEqual([
+      'undo',
+      'separator',
+      'cut',
+      'copy',
+      'paste',
+      'delete',
+      'separator',
+      'selectAll'
+    ])
     // Must be popped OVER the window it came from — a menu with no owner window
     // can appear on the wrong monitor and won't dismiss with the window.
     expect(popup).toHaveBeenCalledWith({ window: win })

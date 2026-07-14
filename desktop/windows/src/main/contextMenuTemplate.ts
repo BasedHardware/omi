@@ -1,4 +1,16 @@
-import type { ContextMenuParams, MenuItemConstructorOptions } from 'electron'
+import type {
+  BaseWindow,
+  BrowserWindow,
+  ContextMenuParams,
+  MenuItemConstructorOptions
+} from 'electron'
+
+// Electron types a menu click's window as BaseWindow, which has no webContents.
+// Every window we install this menu on is a BrowserWindow (see contextMenu.ts), so
+// narrowing is safe — and it keeps this module free of a runtime electron import,
+// which is what lets it be unit-tested without an Electron runtime.
+const asBrowserWindow = (win: BaseWindow | undefined): BrowserWindow | undefined =>
+  win as BrowserWindow | undefined
 
 // Pure builder for the app's right-click menu. Kept separate from the Electron
 // wiring (contextMenu.ts) so it can be unit-tested without an Electron runtime —
@@ -13,7 +25,10 @@ import type { ContextMenuParams, MenuItemConstructorOptions } from 'electron'
 
 // Only the bits of ContextMenuParams this builder reads. Lets tests construct a
 // params object without faking Electron's full (large) interface.
-export type ContextMenuInput = Pick<ContextMenuParams, 'isEditable' | 'selectionText' | 'editFlags'>
+export type ContextMenuInput = Pick<
+  ContextMenuParams,
+  'isEditable' | 'selectionText' | 'editFlags' | 'misspelledWord' | 'dictionarySuggestions'
+>
 
 /**
  * The menu for a right-click, or [] when there is nothing useful to offer (a
@@ -33,30 +48,64 @@ export function buildContextMenuTemplate(params: ContextMenuInput): MenuItemCons
   // selection is the only sensible action; Select All is offered so keyboard and
   // mouse users can grab the whole block.
   if (!params.isEditable) {
-    if (!hasSelection) return []
+    if (!hasSelection || !flags.canCopy) return []
     const items: MenuItemConstructorOptions[] = [{ role: 'copy' }]
     if (flags.canSelectAll) items.push({ type: 'separator' }, { role: 'selectAll' })
     return items
   }
 
-  // Editable field (chat composer, search box, settings input).
+  // Editable field (chat composer, search box, settings input). Built as GROUPS,
+  // with a separator inserted only between two non-empty ones — so no arrangement
+  // of flags can produce a leading, trailing, or doubled divider.
   const items: MenuItemConstructorOptions[] = []
-  if (flags.canUndo) items.push({ role: 'undo' })
-  if (flags.canRedo) items.push({ role: 'redo' })
+  const addGroup = (group: MenuItemConstructorOptions[]): void => {
+    if (!group.length) return
+    if (items.length) items.push({ type: 'separator' })
+    items.push(...group)
+  }
+
+  // Spelling comes first, the way every Windows text field does it. This is not
+  // optional polish: Electron enables spellcheck by DEFAULT, so the composer
+  // already draws red squiggles — a menu without corrections would show the user
+  // a misspelling it refuses to fix.
+  const spelling: MenuItemConstructorOptions[] = []
+  if (params.misspelledWord) {
+    const word = params.misspelledWord
+    for (const suggestion of params.dictionarySuggestions) {
+      spelling.push({
+        label: suggestion,
+        click: (_item, win) => asBrowserWindow(win)?.webContents.replaceMisspelling(suggestion)
+      })
+    }
+    // Say so explicitly rather than silently showing an editing menu on a word
+    // Chromium has flagged — otherwise the squiggle looks like a bug.
+    if (!spelling.length) spelling.push({ label: 'No spelling suggestions', enabled: false })
+    spelling.push(
+      { type: 'separator' },
+      {
+        label: 'Add to dictionary',
+        click: (_item, win) =>
+          asBrowserWindow(win)?.webContents.session.addWordToSpellCheckerDictionary(word)
+      }
+    )
+  }
+  addGroup(spelling)
+
+  const history: MenuItemConstructorOptions[] = []
+  if (flags.canUndo) history.push({ role: 'undo' })
+  if (flags.canRedo) history.push({ role: 'redo' })
+  addGroup(history)
 
   const edit: MenuItemConstructorOptions[] = []
   if (flags.canCut) edit.push({ role: 'cut' })
   if (flags.canCopy) edit.push({ role: 'copy' })
   if (flags.canPaste) edit.push({ role: 'paste' })
-  if (edit.length) {
-    if (items.length) items.push({ type: 'separator' })
-    items.push(...edit)
-  }
+  // Delete belongs in this group on Windows (Notepad, Edge, and every Win32 edit
+  // control offer it); it only means anything with a selection to delete.
+  if (flags.canDelete && hasSelection) edit.push({ role: 'delete' })
+  addGroup(edit)
 
-  if (flags.canSelectAll) {
-    if (items.length) items.push({ type: 'separator' })
-    items.push({ role: 'selectAll' })
-  }
+  addGroup(flags.canSelectAll ? [{ role: 'selectAll' }] : [])
 
   return items
 }
