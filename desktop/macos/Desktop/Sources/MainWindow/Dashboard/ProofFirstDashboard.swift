@@ -66,6 +66,12 @@ struct DashboardHeroContent: Equatable {
   let prompt: String
 }
 
+struct DashboardRecentConversation: Identifiable, Equatable {
+  let id: String
+  let title: String
+  let timestamp: Date
+}
+
 struct DashboardDayZeroCard: Identifiable, Equatable {
   enum Kind: Equatable {
     case screen
@@ -259,11 +265,13 @@ struct ProofFirstDashboardView: View {
   let heroContent: DashboardHeroContent?
   let dayZeroCards: [DashboardDayZeroCard]
   let upNextTasks: [TaskActionItem]
+  let recentConversations: [DashboardRecentConversation]
   let connectorStatusStore: ImportConnectorStatusStore
   let onHeroAction: (String) -> Void
   let onConnectSetup: () -> Void
   let onToggleTask: (TaskActionItem) -> Void
   let onViewTasks: () -> Void
+  let onViewConversations: () -> Void
   let onSelectConnector: (ImportConnector) -> Void
   let onOpenShortcutSettings: () -> Void
 
@@ -353,6 +361,14 @@ struct ProofFirstDashboardView: View {
           onViewTasks: onViewTasks
         )
         .frame(maxWidth: 760)
+
+        if !recentConversations.isEmpty {
+          DashboardRecentConversationsSection(
+            conversations: recentConversations,
+            onViewAll: onViewConversations
+          )
+          .frame(maxWidth: 760)
+        }
       }
       .frame(maxWidth: .infinity)
       .padding(.horizontal, 28)
@@ -693,6 +709,64 @@ private struct DashboardUpNextSection: View {
       return source.replacingOccurrences(of: "_", with: " ").capitalized
     }
     return "Open task"
+  }
+}
+
+private struct DashboardRecentConversationsSection: View {
+  let conversations: [DashboardRecentConversation]
+  let onViewAll: () -> Void
+
+  var body: some View {
+    VStack(spacing: 0) {
+      HStack {
+        Text("Recent conversations")
+          .scaledFont(size: OmiType.subheading, weight: .semibold)
+          .foregroundStyle(OmiColors.textSecondary)
+        Spacer()
+        Button("View all", action: onViewAll)
+          .buttonStyle(.plain)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .foregroundStyle(OmiColors.textQuaternary)
+          .frame(minHeight: 40)
+          .omiPointerCursor()
+      }
+
+      ForEach(conversations.prefix(2)) { conversation in
+        Button(action: onViewAll) {
+          HStack(spacing: OmiSpacing.sm) {
+            OmiIcon(.messageCircle)
+              .frame(width: 16, height: 16)
+              .foregroundStyle(OmiColors.textQuaternary)
+              .frame(width: 40, height: 40)
+
+            VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+              Text(conversation.title)
+                .scaledFont(size: OmiType.body, weight: .medium)
+                .foregroundStyle(OmiColors.textSecondary)
+                .lineLimit(1)
+              Text(conversation.timestamp.formatted(date: .abbreviated, time: .shortened))
+                .scaledFont(size: OmiType.micro)
+                .foregroundStyle(OmiColors.textQuaternary)
+            }
+            Spacer(minLength: 0)
+            OmiIcon(.arrowRight)
+              .frame(width: 15, height: 15)
+              .foregroundStyle(OmiColors.textQuaternary)
+          }
+          .frame(minHeight: 48)
+          .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .omiPointerCursor()
+        .accessibilityLabel("View conversation: \(conversation.title)")
+      }
+    }
+    .padding(.top, OmiSpacing.sm)
+    .overlay(alignment: .top) {
+      Rectangle()
+        .fill(OmiColors.border.opacity(0.45))
+        .frame(height: 1)
+    }
   }
 }
 

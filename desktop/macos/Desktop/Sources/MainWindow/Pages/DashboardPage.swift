@@ -602,6 +602,7 @@ struct DashboardPage: View {
                     heroContent: proofFirstHeroContent,
                     dayZeroCards: dayZeroSourceStore.cards,
                     upNextTasks: proofFirstUpNextTasks,
+                    recentConversations: proofFirstRecentConversations,
                     connectorStatusStore: homeStatusStore.connectorStatusStore,
                     onHeroAction: handOffToFloatingBar,
                     onConnectSetup: {},
@@ -609,6 +610,7 @@ struct DashboardPage: View {
                         Task { await viewModel.toggleTaskCompletion(task) }
                     },
                     onViewTasks: { navigate(to: .tasks) },
+                    onViewConversations: { navigate(to: .conversations) },
                     onSelectConnector: { connector in
                         selectedImportConnector = connector
                     },
@@ -714,6 +716,20 @@ struct DashboardPage: View {
         appState.conversations
             .filter { !$0.discarded && !$0.deleted }
             .max { conversationRecency($0) < conversationRecency($1) }
+    }
+
+    private var proofFirstRecentConversations: [DashboardRecentConversation] {
+        appState.conversations
+            .filter { !$0.discarded && !$0.deleted }
+            .sorted { conversationRecency($0) > conversationRecency($1) }
+            .prefix(2)
+            .map { conversation in
+                DashboardRecentConversation(
+                    id: conversation.id,
+                    title: sentenceCasedDashboardTitle(conversation.title),
+                    timestamp: conversationRecency(conversation)
+                )
+            }
     }
 
     private func conversationRecency(_ conversation: ServerConversation) -> Date {
