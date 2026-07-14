@@ -1426,7 +1426,7 @@ struct DashboardPage: View {
                 openExportDestination(.claudeCode)
             }
             HomeAIChoiceButton(title: "ChatGPT / Codex", brand: .chatgpt, isConnected: isMCPDestinationConnected(.chatgpt)) {
-                openExportDestination(.codex)
+                openExportDestination(.chatgpt)
             }
             HomeAIChoiceButton(title: "OpenClaw", brand: .openclaw, isConnected: isMCPDestinationConnected(.openclaw)) {
                 openExportDestination(.openclaw)
