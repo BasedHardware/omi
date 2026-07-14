@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def main() -> int:
     errors: list[str] = []
     errors.extend(check_desktop_codemagic_release())
+    errors.extend(check_desktop_preview_publishing())
     errors.extend(check_desktop_qualification_runner())
     errors.extend(check_mobile_codemagic_release_triggers())
     errors.extend(check_docs_workflow_scripts())
@@ -127,7 +128,10 @@ def check_desktop_codemagic_release() -> list[str]:
     automation_bridge = ROOT / "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift"
     if automation_bridge.exists():
         automation_text = automation_bridge.read_text(encoding="utf-8")
-        if "guard AppBuild.isNonProduction else" not in automation_text:
+        if (
+            "AppBuild.allowsLocalAutomation" not in automation_text
+            or "guard allowsLocalAutomation else" not in automation_text
+        ):
             errors.append("desktop automation bridge must stay disabled for the production bundle")
 
     for required_fragment in (
@@ -139,6 +143,98 @@ def check_desktop_codemagic_release() -> list[str]:
     ):
         if required_fragment not in desktop_workflow_body:
             errors.append(f"desktop release is missing signed smoke result artifact fragment: {required_fragment}")
+
+    return errors
+
+
+def check_desktop_preview_publishing() -> list[str]:
+    """Keep the preview lane isolated from normal release authority and state."""
+    errors: list[str] = []
+    dispatcher = ROOT / ".github/workflows/desktop_publish_preview.yml"
+    codemagic = ROOT / "codemagic.yaml"
+    runtime_env = ROOT / "backend/deploy/runtime_env.yaml"
+    app_build = ROOT / "desktop/macos/Desktop/Sources/AppBuild.swift"
+    updater = ROOT / "desktop/macos/Desktop/Sources/UpdaterViewModel.swift"
+    smoke = ROOT / "desktop/macos/scripts/smoke-signed-desktop-artifact.sh"
+
+    if not dispatcher.exists():
+        return ["desktop previews are missing the protected GitHub dispatcher"]
+    dispatcher_text = dispatcher.read_text(encoding="utf-8")
+    for required in (
+        "workflow_dispatch:",
+        "source_ref:",
+        "ref: main",
+        "git ls-remote --exit-code origin",
+        "^preview/",
+        "environment: desktop-preview-publish",
+        "CODEMAGIC_API_TOKEN",
+        'workflowId: "omi-desktop-swift-preview"',
+        'branch: "main"',
+        "PREVIEW_SOURCE_SHA",
+        "### Preview approval context",
+        "https://github.com/${GITHUB_REPOSITORY}/commit/${PREVIEW_SOURCE_SHA}",
+    ):
+        if required not in dispatcher_text:
+            errors.append(f"desktop preview dispatcher is missing required guard fragment: {required}")
+    if "pull_request:" in dispatcher_text or "push:" in dispatcher_text:
+        errors.append("desktop preview dispatcher must be manual-only")
+
+    codemagic_text = codemagic.read_text(encoding="utf-8") if codemagic.exists() else ""
+    preview_workflow_match = re.search(
+        r"\n  omi-desktop-swift-preview:\n(?P<body>.*?)(?=\n  [A-Za-z0-9_-]+:\n|\Z)",
+        codemagic_text,
+        flags=re.DOTALL,
+    )
+    if preview_workflow_match is None:
+        errors.append("codemagic.yaml is missing the preview publishing workflow")
+    else:
+        preview_workflow = preview_workflow_match.group("body")
+        for required in (
+            "desktop_preview_secrets",
+            'PREVIEW_MODE: "true"',
+            'DMGBUILD_VERSION: "1.6.7"',
+            'DESKTOP_PREVIEW_REGISTRY_URL: "https://api.omi.me"',
+            "git checkout --detach \"$PREVIEW_SOURCE_SHA\"",
+            "--if-generation-match=0",
+            "/previews/${PREVIEW_SLUG}/${PREVIEW_SOURCE_SHA}/Omi-Preview.dmg",
+            "${DESKTOP_PREVIEW_REGISTRY_URL%/}/v2/desktop/previews/publish",
+            "External previews do not create GitHub releases.",
+            "External previews do not enter beta or stable qualification.",
+        ):
+            if required not in preview_workflow and required not in codemagic_text:
+                errors.append(f"desktop preview workflow is missing required guard fragment: {required}")
+        if re.search(r"(?m)^\s*- desktop_secrets$", preview_workflow):
+            errors.append("desktop preview workflow must not inherit normal desktop_secrets")
+        if "${OMI_PYTHON_API_URL%/}/v2/desktop/previews/publish" in codemagic_text:
+            errors.append("desktop preview registry must not use the artifact runtime Python API URL")
+
+    runtime_env_text = runtime_env.read_text(encoding="utf-8") if runtime_env.exists() else ""
+    required_runtime_secret = (
+        "            DESKTOP_PREVIEW_PUBLISH_KEY:\n"
+        "              secret: DESKTOP_PREVIEW_PUBLISH_KEY\n"
+        "              version: latest"
+    )
+    if required_runtime_secret not in runtime_env_text:
+        errors.append("production backend must receive the preview publishing key from Secret Manager")
+
+    app_build_text = app_build.read_text(encoding="utf-8") if app_build.exists() else ""
+    for required in (
+        'externalPreviewBundleIdentifierPrefix = "com.omi.preview."',
+        "allowsLocalAutomation",
+        "allowsSparkleUpdates",
+        "hasValidExternalPreviewConfiguration",
+    ):
+        if required not in app_build_text:
+            errors.append(f"external preview build classification is missing: {required}")
+
+    updater_text = updater.read_text(encoding="utf-8") if updater.exists() else ""
+    if "startingUpdater: AppBuild.allowsSparkleUpdates" not in updater_text:
+        errors.append("external preview builds must not start the shared Sparkle updater")
+
+    smoke_text = smoke.read_text(encoding="utf-8") if smoke.exists() else ""
+    for required in ("--preview", "IS_EXTERNAL_PREVIEW", "external preview must not carry a shared Sparkle feed"):
+        if required not in smoke_text:
+            errors.append(f"signed artifact smoke is missing external-preview check: {required}")
 
     return errors
 
