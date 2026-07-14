@@ -5,9 +5,11 @@ description: Proof-first Dashboard paging, hero cascade, and real background set
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Dashboard/ProofFirstDashboard.swift
+  - desktop/macos/Desktop/Sources/MainWindow/OmiWindowChromeBar.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/ShortcutSettings.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiTransparency.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
 preconditions:
   - automation_bridge_ready
