@@ -269,6 +269,33 @@ describe('ConversationDetail — Mac-faithful redesign', () => {
     const width = await drawer.evaluate((el) => el.getBoundingClientRect().width)
     assert.equal(Math.round(width), 450, `drawer must be exactly 450px, got ${width}`)
 
+    // MAJOR 3 regression guard. Mac's root is an HStack, so the drawer is a LAYOUT
+    // SIBLING: opening it COMPRESSES the content column rather than covering the
+    // header. The previous revision positioned the drawer absolutely, which painted
+    // over the whole header action cluster. Assert every header control is still
+    // visible AND unoccluded (elementFromPoint at its centre returns itself), and
+    // that the pill actually flips to "Hide Transcript".
+    const hidePill = page.getByRole('button', { name: 'Hide Transcript', exact: true })
+    await hidePill.waitFor({ state: 'visible' })
+
+    for (const name of ['Hide Transcript', 'Copy link', 'Copy transcript', 'Delete conversation']) {
+      const btn = page.getByRole('button', { name, exact: true }).first()
+      await btn.waitFor({ state: 'visible' })
+      const onTop = await btn.evaluate((el) => {
+        const r = el.getBoundingClientRect()
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+        return el.contains(hit) || el === hit
+      })
+      assert.ok(onTop, `"${name}" must not be occluded by the open drawer`)
+    }
+
+    // The drawer must also sit below the frameless-window drag strip (TitleBar is a
+    // 36px block row in AppShell), so the window stays draggable by its top edge.
+    const drawerTop = await drawer.evaluate((el) => el.getBoundingClientRect().top)
+    assert.ok(drawerTop >= 36, `drawer must start below the 36px drag strip, got top=${drawerTop}`)
+
+    await page.screenshot({ path: path.join(shotsDir, '06-drawer-open-header.png') })
+
     // Multi-speaker bubbles + the user bubble + the italic translation bubble.
     await page
       .getByText('Okay, let us start with the roadmap for Q3.')
@@ -285,24 +312,95 @@ describe('ConversationDetail — Mac-faithful redesign', () => {
     await page.screenshot({ path: path.join(shotsDir, '02-transcript-drawer.png') })
 
     // ── 3. NameSpeaker modal ──────────────────────────────────────────────
-    // Speaker 2 has a single segment, so the "also tag N others" toggle is hidden;
-    // click Nikita (speaker 0, two segments) to see the toggle default ON.
+    // Click Nikita's speaker label (speaker 0, two segments) so the "also tag N
+    // others" toggle is present and can be checked for its ON default.
     await page
       .getByRole('button', { name: /Nikita/ })
       .first()
       .click()
     await page
-      .getByRole('heading', { name: 'Who is speaking?' })
+      .getByRole('heading', { name: 'Name Speaker' })
       .waitFor({ state: 'visible', timeout: 8000 })
 
     const toggle = page.getByRole('checkbox')
     assert.equal(await toggle.isChecked(), true, '"also tag N others" must DEFAULT ON')
     await page.getByText(/Also tag 1 other segment from this speaker/).waitFor({ state: 'visible' })
-    // Roster: You + the account-wide person + Add Person.
-    await page.getByRole('button', { name: 'You', exact: true }).waitFor({ state: 'visible' })
-    await page.getByRole('button', { name: /Add Person/ }).waitFor({ state: 'visible' })
+
+    // Mac's select-then-Save flow: chips select, they do not save on click. Save is
+    // disabled until something is picked. (The previous revision saved instantly on
+    // chip click, which is not what Mac does.)
+    const saveBtn = page.getByRole('button', { name: 'Save', exact: true })
+    assert.equal(await saveBtn.isDisabled(), true, 'Save must be disabled with no selection')
+
+    const youChip = page.getByRole('button', { name: 'You', exact: true })
+    const addChip = page.getByRole('button', { name: '+ Add Person', exact: true })
+    await youChip.waitFor({ state: 'visible' })
+    await addChip.waitFor({ state: 'visible' })
+
+    // MAJOR 2 regression guard: "+ Add Person" must be a solid, enabled chip like the
+    // others — it previously rendered dashed/faded and read as disabled.
+    assert.equal(await addChip.isDisabled(), false, '"+ Add Person" must be enabled')
+    assert.equal(await youChip.isDisabled(), false, '"You" must be enabled')
+
+    await youChip.click()
+    assert.equal(await youChip.getAttribute('aria-pressed'), 'true', 'chip shows selected state')
+    assert.equal(await saveBtn.isDisabled(), false, 'Save enables once a chip is selected')
+
+    // MAJOR 1 regression guard: with a short roster the sheet sizes to its content —
+    // no dead gap between the last control and the footer (it was ~220px).
+    const metrics = async () =>
+      page.evaluate(() => {
+        const dialog = document.querySelector('[role=dialog]')
+        // The capped element is the sheet itself, not ModalShell's bordered wrapper
+        // (whose 1px glass border would read as 451px against a 450px cap).
+        const sheet = dialog?.firstElementChild
+        const footer = dialog?.querySelector('footer')
+        const scroll = footer?.previousElementSibling?.previousElementSibling
+        if (!dialog || !sheet || !footer || !scroll) return null
+        const last = scroll.lastElementChild
+        return {
+          dialogHeight: sheet.getBoundingClientRect().height,
+          gap: last ? footer.getBoundingClientRect().top - last.getBoundingClientRect().bottom : -1,
+          scrollable: scroll.scrollHeight > scroll.clientHeight + 1,
+          overflowY: getComputedStyle(scroll).overflowY
+        }
+      })
+
+    const small = await metrics()
+    assert.ok(small, 'sheet structure: header / divider / scroll / divider / footer')
+    assert.ok(small.gap >= 0 && small.gap < 60, `dead space must be small, got ${small.gap}px`)
+    assert.ok(
+      small.dialogHeight <= 450,
+      `sheet must not exceed Mac's 450px, got ${small.dialogHeight}`
+    )
 
     await page.screenshot({ path: path.join(shotsDir, '03-name-speaker-modal.png') })
+    await page.keyboard.press('Escape')
+
+    // ...and with a LARGE roster it must still cap at 450 and genuinely scroll, so
+    // "size to content" never turns into an unbounded sheet.
+    await page.route('**/v1/users/people**', (route) =>
+      json(
+        route,
+        Array.from({ length: 18 }, (_, i) => ({ id: `p${i}`, name: `Person Number ${i}` }))
+      )
+    )
+    await openDetail(page, 'e2e-conv-processing') // force a remount off this conversation
+    await openDetail(page, 'e2e-conv-1')
+    await page
+      .getByRole('heading', { level: 1, name: 'Roadmap sync' })
+      .waitFor({ state: 'visible', timeout: 15000 })
+    await page.getByRole('button', { name: /View Transcript/ }).click()
+    await page
+      .getByRole('button', { name: /Speaker 0|Person Number/ })
+      .first()
+      .click()
+    await page.getByRole('heading', { name: 'Name Speaker' }).waitFor({ state: 'visible' })
+
+    const big = await metrics()
+    assert.ok(big.dialogHeight <= 450, `sheet must cap at 450px, got ${big.dialogHeight}`)
+    assert.equal(big.overflowY, 'auto', 'the middle region is the scroll area')
+    assert.ok(big.scrollable, 'a large roster must actually scroll inside the sheet')
     await page.keyboard.press('Escape')
 
     // ── 4. Rename modal ───────────────────────────────────────────────────
@@ -312,6 +410,12 @@ describe('ConversationDetail — Mac-faithful redesign', () => {
       .waitFor({ state: 'visible', timeout: 8000 })
     const field = page.getByLabel('Conversation title')
     assert.equal(await field.inputValue(), 'Roadmap sync', 'rename field seeds the current title')
+    // Reviewer asked us to verify autofocus rather than restyle anything.
+    assert.equal(
+      await field.evaluate((el) => el === document.activeElement),
+      true,
+      'rename field must be autofocused'
+    )
     await page.screenshot({ path: path.join(shotsDir, '04-rename-modal.png') })
     await page.keyboard.press('Escape')
 

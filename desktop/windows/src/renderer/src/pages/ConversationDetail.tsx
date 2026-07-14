@@ -572,192 +572,201 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
     apps.find((a) => a.id === appId)?.name ?? 'App insight'
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden">
-      {/* ── Header / toolbar ─────────────────────────────────────────────── */}
-      <header className="shrink-0 px-6 pt-4 pb-3 lg:px-10">
-        <div className="flex items-start gap-3">
-          <button
-            onClick={() => navigate('/conversations')}
-            className="btn-ghost -ml-1 mt-0.5 shrink-0 p-2"
-            title="Back"
-            aria-label="Back"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-2">
-              {structured.emoji && (
-                <span className="shrink-0 text-xl" aria-hidden>
-                  {structured.emoji}
-                </span>
-              )}
-              <h1 className="truncate font-display text-xl font-bold tracking-tight text-white">
-                {title}
-              </h1>
-              <button
-                onClick={() => setRenaming(true)}
-                className="btn-ghost shrink-0 p-1"
-                title="Edit title"
-                aria-label="Edit title"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </button>
-              {status && status !== 'completed' && (
-                <span className="badge shrink-0 capitalize">{status.replace(/_/g, ' ')}</span>
-              )}
-            </div>
-            <p className="mt-1 text-xs text-text-tertiary">{formatWhen(conv)}</p>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-1.5">
+    // Mac's root is an HStack: the content column and the transcript drawer are
+    // SIBLINGS, so opening the drawer compresses the column instead of covering
+    // the header's action buttons (ConversationDetailView.swift:114-166).
+    <div className="flex h-full min-h-0">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        {/* ── Header / toolbar ─────────────────────────────────────────────── */}
+        <header className="shrink-0 px-6 pt-4 pb-3 lg:px-10">
+          <div className="flex items-start gap-3">
             <button
-              onClick={() => setDrawerOpen((v) => !v)}
-              className="flex items-center gap-1.5 rounded-full border border-border bg-white/[0.04] px-3 py-1.5 text-xs text-text-secondary transition-colors hover:bg-white/10 hover:text-white"
-              aria-expanded={drawerOpen}
+              onClick={() => navigate('/conversations')}
+              className="btn-ghost -ml-1 mt-0.5 shrink-0 p-2"
+              title="Back"
+              aria-label="Back"
             >
-              {drawerOpen ? (
-                <PanelRightClose className="h-3.5 w-3.5" />
-              ) : (
-                <PanelRightOpen className="h-3.5 w-3.5" />
-              )}
-              {drawerOpen ? 'Hide Transcript' : 'View Transcript'}
+              <ArrowLeft className="h-5 w-5" />
             </button>
 
-            <ToolbarButton onClick={onCopyLink} title="Copy link">
-              {copied === 'link' ? <Check className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
-            </ToolbarButton>
-            <ToolbarButton onClick={onCopyTranscript} title="Copy transcript">
-              {copied === 'transcript' ? (
-                <Check className="h-4 w-4" />
-              ) : (
-                <Copy className="h-4 w-4" />
-              )}
-            </ToolbarButton>
-            {folders.length > 0 && (
-              <MoveToFolderMenu
-                folders={folders}
-                currentFolderId={conv.folder_id}
-                onMove={onMoveToFolder}
-              />
-            )}
-            <ToolbarButton onClick={() => setConfirmDelete(true)} title="Delete conversation">
-              <Trash2 className="h-4 w-4" />
-            </ToolbarButton>
-          </div>
-        </div>
-      </header>
-
-      {/* ── Body ─────────────────────────────────────────────────────────── */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-10 lg:px-10">
-        <div className="mx-auto max-w-3xl space-y-4">
-          {enriching ? (
-            <div className="surface-card flex flex-col items-center gap-2 p-8 text-center">
-              <Loader2 className="h-5 w-5 animate-spin text-text-tertiary" aria-hidden />
-              <p className="text-sm text-white">Processing conversation…</p>
-              <p className="text-xs text-text-tertiary">Generating summary and action items</p>
-            </div>
-          ) : (
-            overview && (
-              <section className="surface-card p-6">
-                <h2 className="section-label mb-3 flex items-center gap-2">
-                  <Sparkles className="h-3.5 w-3.5" aria-hidden />
-                  Summary
-                </h2>
-                <div className="text-sm leading-relaxed text-text-secondary">
-                  <Markdown text={overview} />
-                </div>
-              </section>
-            )
-          )}
-
-          {/* Metadata chips */}
-          <div className="flex flex-wrap items-center gap-2">
-            <Chip>{conv.source ?? 'unknown'}</Chip>
-            {duration != null && <Chip>{formatDuration(duration)}</Chip>}
-            {category && <Chip>{category}</Chip>}
-          </div>
-
-          {insights.length > 0 && (
-            <section className="space-y-2">
-              <div className="flex items-center justify-between">
-                <h2 className="section-label">App Insights</h2>
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-2">
+                {structured.emoji && (
+                  <span className="shrink-0 text-xl" aria-hidden>
+                    {structured.emoji}
+                  </span>
+                )}
+                <h1 className="truncate font-display text-xl font-bold tracking-tight text-white">
+                  {title}
+                </h1>
                 <button
-                  onClick={openAppPicker}
-                  disabled={reprocessing}
-                  className="btn-ghost px-2.5 py-1 text-[11px] disabled:opacity-40"
+                  onClick={() => setRenaming(true)}
+                  className="btn-ghost shrink-0 p-1"
+                  title="Edit title"
+                  aria-label="Edit title"
                 >
-                  {reprocessing ? 'Reprocessing…' : 'Reprocess'}
+                  <Pencil className="h-3.5 w-3.5" />
                 </button>
+                {status && status !== 'completed' && (
+                  <span className="badge shrink-0 capitalize">{status.replace(/_/g, ' ')}</span>
+                )}
               </div>
-              {insights.map((r, i) => (
-                <InsightCard key={r.app_id ?? i} appName={appName(r.app_id)} content={r.content} />
-              ))}
-            </section>
-          )}
+              <p className="mt-1 text-xs text-text-tertiary">{formatWhen(conv)}</p>
+            </div>
 
-          {/* Try with Apps — always rendered */}
-          <section className="surface-card p-6">
-            <h2 className="section-label mb-3">Try with Apps</h2>
-            {apps.length === 0 ? (
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-xs text-text-tertiary">
-                  Run an Omi app over this conversation for extra insights.
-                </p>
-                <button
-                  onClick={openAppPicker}
-                  className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs text-white transition-colors hover:bg-white/10"
-                >
-                  Browse apps
-                </button>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button
+                onClick={() => setDrawerOpen((v) => !v)}
+                className="flex items-center gap-1.5 rounded-full border border-border bg-white/[0.04] px-3 py-1.5 text-xs text-text-secondary transition-colors hover:bg-white/10 hover:text-white"
+                aria-expanded={drawerOpen}
+              >
+                {drawerOpen ? (
+                  <PanelRightClose className="h-3.5 w-3.5" />
+                ) : (
+                  <PanelRightOpen className="h-3.5 w-3.5" />
+                )}
+                {drawerOpen ? 'Hide Transcript' : 'View Transcript'}
+              </button>
+
+              <ToolbarButton onClick={onCopyLink} title="Copy link">
+                {copied === 'link' ? <Check className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
+              </ToolbarButton>
+              <ToolbarButton onClick={onCopyTranscript} title="Copy transcript">
+                {copied === 'transcript' ? (
+                  <Check className="h-4 w-4" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </ToolbarButton>
+              {folders.length > 0 && (
+                <MoveToFolderMenu
+                  folders={folders}
+                  currentFolderId={conv.folder_id}
+                  onMove={onMoveToFolder}
+                />
+              )}
+              <ToolbarButton onClick={() => setConfirmDelete(true)} title="Delete conversation">
+                <Trash2 className="h-4 w-4" />
+              </ToolbarButton>
+            </div>
+          </div>
+        </header>
+
+        {/* ── Body ─────────────────────────────────────────────────────────── */}
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-10 lg:px-10">
+          <div className="mx-auto max-w-3xl space-y-4">
+            {enriching ? (
+              <div className="surface-card flex flex-col items-center gap-2 p-8 text-center">
+                <Loader2 className="h-5 w-5 animate-spin text-text-tertiary" aria-hidden />
+                <p className="text-sm text-white">Processing conversation…</p>
+                <p className="text-xs text-text-tertiary">Generating summary and action items</p>
               </div>
             ) : (
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {apps.slice(0, 12).map((a) => (
-                  <button
-                    key={a.id}
-                    onClick={() => onReprocess(a.id)}
-                    disabled={reprocessing}
-                    className="w-40 shrink-0 rounded-xl border border-border bg-white/[0.04] p-3 text-left transition-colors hover:bg-white/10 disabled:opacity-40"
-                  >
-                    <p className="truncate text-xs font-medium text-white">{a.name}</p>
-                    <p className="mt-0.5 truncate text-[10px] text-text-quaternary">{a.author}</p>
-                  </button>
-                ))}
-              </div>
+              overview && (
+                <section className="surface-card p-6">
+                  <h2 className="section-label mb-3 flex items-center gap-2">
+                    <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                    Summary
+                  </h2>
+                  <div className="text-sm leading-relaxed text-text-secondary">
+                    <Markdown text={overview} />
+                  </div>
+                </section>
+              )
             )}
-          </section>
 
-          {actionItems.length > 0 && (
-            <section className="surface-card p-6">
-              <h2 className="section-label mb-3">Action Items</h2>
-              <ul className="space-y-1.5">
-                {actionItems.map((a, i) => (
-                  <li key={i} className="flex items-start gap-3 py-1">
-                    <button
-                      onClick={() => onToggleActionItem(i)}
-                      aria-pressed={!!a.completed}
-                      title={a.completed ? 'Mark as open' : 'Mark as done'}
-                      className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-all ${
-                        a.completed
-                          ? 'border-white/30 bg-white/15 text-white'
-                          : 'border-white/20 hover:border-white/45'
-                      }`}
-                    >
-                      {a.completed && <Check className="h-3 w-3" strokeWidth={3} />}
-                    </button>
-                    <span
-                      className={`text-sm leading-relaxed ${
-                        a.completed ? 'text-text-quaternary line-through' : 'text-text-secondary'
-                      }`}
-                    >
-                      {a.description}
-                    </span>
-                  </li>
+            {/* Metadata chips */}
+            <div className="flex flex-wrap items-center gap-2">
+              <Chip>{conv.source ?? 'unknown'}</Chip>
+              {duration != null && <Chip>{formatDuration(duration)}</Chip>}
+              {category && <Chip>{category}</Chip>}
+            </div>
+
+            {insights.length > 0 && (
+              <section className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h2 className="section-label">App Insights</h2>
+                  <button
+                    onClick={openAppPicker}
+                    disabled={reprocessing}
+                    className="btn-ghost px-2.5 py-1 text-[11px] disabled:opacity-40"
+                  >
+                    {reprocessing ? 'Reprocessing…' : 'Reprocess'}
+                  </button>
+                </div>
+                {insights.map((r, i) => (
+                  <InsightCard
+                    key={r.app_id ?? i}
+                    appName={appName(r.app_id)}
+                    content={r.content}
+                  />
                 ))}
-              </ul>
+              </section>
+            )}
+
+            {/* Try with Apps — always rendered */}
+            <section className="surface-card p-6">
+              <h2 className="section-label mb-3">Try with Apps</h2>
+              {apps.length === 0 ? (
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs text-text-tertiary">
+                    Run an Omi app over this conversation for extra insights.
+                  </p>
+                  <button
+                    onClick={openAppPicker}
+                    className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs text-white transition-colors hover:bg-white/10"
+                  >
+                    Browse apps
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {apps.slice(0, 12).map((a) => (
+                    <button
+                      key={a.id}
+                      onClick={() => onReprocess(a.id)}
+                      disabled={reprocessing}
+                      className="w-40 shrink-0 rounded-xl border border-border bg-white/[0.04] p-3 text-left transition-colors hover:bg-white/10 disabled:opacity-40"
+                    >
+                      <p className="truncate text-xs font-medium text-white">{a.name}</p>
+                      <p className="mt-0.5 truncate text-[10px] text-text-quaternary">{a.author}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
             </section>
-          )}
+
+            {actionItems.length > 0 && (
+              <section className="surface-card p-6">
+                <h2 className="section-label mb-3">Action Items</h2>
+                <ul className="space-y-1.5">
+                  {actionItems.map((a, i) => (
+                    <li key={i} className="flex items-start gap-3 py-1">
+                      <button
+                        onClick={() => onToggleActionItem(i)}
+                        aria-pressed={!!a.completed}
+                        title={a.completed ? 'Mark as open' : 'Mark as done'}
+                        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-all ${
+                          a.completed
+                            ? 'border-white/30 bg-white/15 text-white'
+                            : 'border-white/20 hover:border-white/45'
+                        }`}
+                      >
+                        {a.completed && <Check className="h-3 w-3" strokeWidth={3} />}
+                      </button>
+                      <span
+                        className={`text-sm leading-relaxed ${
+                          a.completed ? 'text-text-quaternary line-through' : 'text-text-secondary'
+                        }`}
+                      >
+                        {a.description}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </div>
         </div>
       </div>
 
