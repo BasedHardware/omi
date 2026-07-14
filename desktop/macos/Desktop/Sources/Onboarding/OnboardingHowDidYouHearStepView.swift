@@ -10,6 +10,10 @@ struct OnboardingHowDidYouHearStepView: View {
 
   @AppStorage("onboardingHowDidYouHearSource") private var selectedSource: String = ""
   @State private var shuffledSources: [String] = []
+  /// True when the step appeared with an answer already saved (a revisit).
+  /// Revisits show an explicit Continue button instead of auto-advancing on
+  /// every chip tap — only the first-ever selection auto-advances.
+  @State private var hadSelectionOnAppear = false
 
   private static let sources = [
     "Social media",
@@ -45,20 +49,31 @@ struct OnboardingHowDidYouHearStepView: View {
             ) {
               selectedSource = source
               AnalyticsManager.shared.onboardingHowDidYouHear(source: source)
-              // Answering auto-advances; the saved selection is restored (and
-              // shown pre-selected) if the user comes back to this step.
-              DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                onContinue()
+              // First-ever answer auto-advances; on a revisit the user changes
+              // the saved selection and moves on with the Continue button.
+              if !hadSelectionOnAppear {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                  onContinue()
+                }
               }
             }
           }
         }
 
-        OnboardingBackButton()
-          .padding(.top, OmiSpacing.sm)
+        HStack(spacing: OmiSpacing.md) {
+          OnboardingBackButton()
+
+          if hadSelectionOnAppear {
+            Button("Continue", action: onContinue)
+              .buttonStyle(OmiButtonStyle(.primary))
+              .keyboardShortcut(.defaultAction)
+          }
+        }
+        .padding(.top, OmiSpacing.sm)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .onAppear {
+        hadSelectionOnAppear = !selectedSource.isEmpty
         if shuffledSources.isEmpty {
           shuffledSources = Self.sources.shuffled()
         }
