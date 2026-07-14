@@ -83,7 +83,7 @@ jobs:
           CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
           CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
         run: |
-          python3 backend/scripts/render_backend_runtime_env.py --env ${{ vars.ENV }} >> "$GITHUB_OUTPUT"
+          python3 backend/scripts/render_backend_runtime_env.py --env ${{ vars.ENV }} --job memory-maintenance-job >> "$GITHUB_OUTPUT"
 
       - name: Validate backend runtime env before deploy
         run: |

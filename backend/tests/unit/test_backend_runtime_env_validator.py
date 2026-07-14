@@ -736,6 +736,48 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
     assert errors == []
 
 
+def test_runtime_env_output_simulation_honors_selected_job():
+    validator = load_validator()
+    workflow = {
+        'jobs': {
+            'deploy': {
+                'steps': [
+                    {
+                        'id': 'runtime-env',
+                        'run': (
+                            'python3 backend/scripts/render_backend_runtime_env.py '
+                            '--env dev --job memory-maintenance-job'
+                        ),
+                    }
+                ]
+            }
+        }
+    }
+    manifest = {
+        'environments': {
+            'dev': {
+                'cloud_run': {
+                    'network': {'flags': {'--network': 'omi-dev-vpc-1'}},
+                    'services': {'backend': {'env': {}, 'secrets': {}}},
+                    'jobs': {
+                        'memory-maintenance-job': {'flags': {}, 'env': {}, 'secrets': {}},
+                        'notifications-job': {'flags': {}, 'env': {}, 'secrets': {}},
+                    },
+                }
+            }
+        }
+    }
+
+    outputs = validator._rendered_runtime_env_outputs(workflow, env='dev', manifest=manifest)
+
+    assert set(outputs) == {
+        'cloud_run_flags',
+        'memory_maintenance_job_flags',
+        'memory_maintenance_job_env_vars',
+        'memory_maintenance_job_secrets',
+    }
+
+
 def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
     validator = load_validator()
     state_path = tmp_path / 'cloud_run_state.json'

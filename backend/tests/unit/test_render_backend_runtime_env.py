@@ -23,6 +23,38 @@ def _job_secret_lines(out: str, job_prefix: str) -> set[str]:
     return set(out[start:end].splitlines())
 
 
+def _write_job_scope_manifest(tmp_path: Path) -> Path:
+    manifest = tmp_path / 'runtime_env.yaml'
+    manifest.write_text(
+        '''\
+environments:
+  dev:
+    cloud_run:
+      network:
+        flags:
+          --network:
+            value: test-network
+      services:
+        backend:
+          env:
+            GOOGLE_CLIENT_ID:
+              env_var: GOOGLE_CLIENT_ID
+          secrets: {}
+      jobs:
+        memory-maintenance-job:
+          env:
+            JOB_MODE:
+              value: maintenance
+          secrets: {}
+        notifications-job:
+          env: {}
+          secrets: {}
+''',
+        encoding='utf-8',
+    )
+    return manifest
+
+
 def test_required_env_var_missing_raises(monkeypatch):
     monkeypatch.delenv('SOME_REQUIRED_URL', raising=False)
     with pytest.raises(ValueError, match='requires'):
@@ -52,6 +84,42 @@ def test_network_flags_still_required(monkeypatch):
     monkeypatch.delenv('CLOUD_RUN_VPC_NETWORK', raising=False)
     with pytest.raises(ValueError, match='requires'):
         _MODULE['_render_flags']({'--network': {'env_var': 'CLOUD_RUN_VPC_NETWORK'}})
+
+
+def test_selected_job_ignores_unrelated_service_env(capsys, monkeypatch, tmp_path):
+    manifest = _write_job_scope_manifest(tmp_path)
+    monkeypatch.delenv('GOOGLE_CLIENT_ID', raising=False)
+    monkeypatch.setattr(
+        'sys.argv',
+        [
+            'render_backend_runtime_env.py',
+            '--env',
+            'dev',
+            '--job',
+            'memory-maintenance-job',
+            '--manifest',
+            str(manifest),
+        ],
+    )
+
+    assert _MODULE['main']() == 0
+    out = capsys.readouterr().out
+    assert 'cloud_run_flags<<' in out
+    assert 'memory_maintenance_job_env_vars<<' in out
+    assert 'backend_env_vars<<' not in out
+    assert 'notifications_job_env_vars<<' not in out
+
+
+def test_unknown_selected_job_fails_before_outputs(capsys, monkeypatch, tmp_path):
+    manifest = _write_job_scope_manifest(tmp_path)
+    monkeypatch.setattr(
+        'sys.argv',
+        ['render_backend_runtime_env.py', '--env', 'dev', '--job', 'missing-job', '--manifest', str(manifest)],
+    )
+
+    with pytest.raises(ValueError, match='Cloud Run job missing-job is not defined for dev'):
+        _MODULE['main']()
+    assert capsys.readouterr().out == ''
 
 
 def test_render_dev_emits_memory_maintenance_job_outputs(capsys, monkeypatch):
@@ -162,6 +230,7 @@ def test_notifications_job_workflow_passes_vpc_vars_and_checkout_sha():
     text = workflow.read_text(encoding='utf-8')
     assert 'CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}' in text
     assert 'CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}' in text
+    assert 'render_backend_runtime_env.py --env ${{ vars.ENV }} --job notifications-job' in text
     assert 'git rev-parse --short=7 HEAD' in text
     assert 'short_sha=${GITHUB_SHA::7}' not in text
     assert 'env_vars_update_strategy: overwrite' not in text
@@ -183,6 +252,7 @@ def test_memory_maintenance_job_workflow_passes_vpc_vars_and_checkout_sha():
     assert 'memory_maintenance_job_secrets' in text
     assert 'CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}' in text
     assert 'CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}' in text
+    assert 'render_backend_runtime_env.py --env ${{ vars.ENV }} --job memory-maintenance-job' in text
     assert (
         'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} '
         '${{ steps.runtime-env.outputs.memory_maintenance_job_flags }}'
@@ -190,3 +260,9 @@ def test_memory_maintenance_job_workflow_passes_vpc_vars_and_checkout_sha():
     assert "id-token: 'write'" not in text
     assert 'git rev-parse --short=7 HEAD' in text
     assert 'short_sha=${GITHUB_SHA::7}' not in text
+
+    auto_dev_workflow = (
+        Path(__file__).resolve().parents[3] / '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml'
+    )
+    auto_dev_text = auto_dev_workflow.read_text(encoding='utf-8')
+    assert 'render_backend_runtime_env.py --env dev --job memory-maintenance-job' in auto_dev_text

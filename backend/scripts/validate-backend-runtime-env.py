@@ -1124,22 +1124,25 @@ def _rendered_runtime_env_outputs(workflow: ConfigDict, *, env: str, manifest: C
         rendered_env = _extract_renderer_env(run, env=env)
         if rendered_env is None:
             continue
+        rendered_job = _extract_renderer_job(run)
         env_config = _get_env_config(manifest, rendered_env)
         cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
         network = _as_config_dict(cloud_run.get('network')) or {}
         outputs['cloud_run_flags'] = _render_cloud_run_flags((_as_config_dict(network.get('flags')) or {}))
-        services = _as_config_dict(cloud_run.get('services'))
-        if services is None:
-            continue
-        for service, raw_service_config in services.items():
-            service_config = _as_config_dict(raw_service_config)
-            if service_config is None:
-                continue
-            output_prefix = service.replace('-', '_')
-            outputs[f'{output_prefix}_env_vars'] = _render_cloud_run_env_vars(service_config.get('env', {}))
-            outputs[f'{output_prefix}_secrets'] = _render_cloud_run_secrets(service_config.get('secrets', {}))
+        if rendered_job is None:
+            services = _as_config_dict(cloud_run.get('services')) or {}
+            for service, raw_service_config in services.items():
+                service_config = _as_config_dict(raw_service_config)
+                if service_config is None:
+                    continue
+                output_prefix = service.replace('-', '_')
+                outputs[f'{output_prefix}_env_vars'] = _render_cloud_run_env_vars(service_config.get('env', {}))
+                outputs[f'{output_prefix}_secrets'] = _render_cloud_run_secrets(service_config.get('secrets', {}))
         jobs = _as_config_dict(cloud_run.get('jobs')) or {}
-        for job, raw_job_config in jobs.items():
+        jobs_to_render = jobs if rendered_job is None else {}
+        if rendered_job is not None and rendered_job in jobs:
+            jobs_to_render = {rendered_job: jobs[rendered_job]}
+        for job, raw_job_config in jobs_to_render.items():
             job_config = _as_config_dict(raw_job_config)
             if job_config is None:
                 continue
@@ -1172,6 +1175,16 @@ def _extract_renderer_env(run: str, *, env: str) -> str | None:
         return 'prod'
     if '--env ${{ vars.ENV }}' in run:
         return env
+    return None
+
+
+def _extract_renderer_job(run: str) -> str | None:
+    words = run.split()
+    for index, word in enumerate(words):
+        if word.startswith('--job='):
+            return word.partition('=')[2] or None
+        if word == '--job' and index + 1 < len(words):
+            return words[index + 1]
     return None
 
 
