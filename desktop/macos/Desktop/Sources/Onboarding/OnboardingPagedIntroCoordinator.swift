@@ -74,7 +74,9 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   @Published var isLoadingInsights = false
   @Published var insightStatusText: String = ""
   @Published var isResearchComplete = false
-  @Published var goalDraft: String = ""
+  @Published var goalDraft: String = "" {
+    didSet { UserDefaults.standard.set(goalDraft, forKey: goalDraftKey) }
+  }
   @Published var suggestedGoals: [String] = []
   @Published var goalSaved = OnboardingChatPersistence.isGoalCompleted
   @Published var isSavingGoal = false
@@ -99,6 +101,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   private var webResearchTask: Task<Void, Never>?
   private var localFileMemoryImportTask: Task<Int, Never>?
 
+  private let goalDraftKey = "onboardingGoalDraft"
   private let chatGPTImportedMemoriesKey = "onboardingChatGPTImportedMemoriesCount"
   private let chatGPTImportSummaryKey = "onboardingChatGPTImportSummary"
   private let claudeImportedMemoriesKey = "onboardingClaudeImportedMemoriesCount"
@@ -144,6 +147,10 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       ? defaults.string(forKey: chatGPTImportSummaryKey) ?? "" : ""
     claudeImportSummary = canRestoreMemoryImports
       ? defaults.string(forKey: claudeImportSummaryKey) ?? "" : ""
+
+    // Restore the goal text so revisiting the Goal step (incl. across the
+    // permission-step app restart) shows what the user already entered.
+    goalDraft = defaults.string(forKey: goalDraftKey) ?? ""
   }
 
   deinit {
