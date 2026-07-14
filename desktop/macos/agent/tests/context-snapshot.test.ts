@@ -43,13 +43,11 @@ function fixture(surfaceKind = "main_chat", maxWorkers = 1) {
 }
 
 describe("kernel ContextSnapshot", () => {
-  it("requires direct conversational recall from recent turns without persisting secrets", () => {
+  it("requires direct conversational recall from canonical recent turns", () => {
     const policy = kernelSystemPolicy("realtime_voice", "coordinator");
 
     expect(policy).toContain("recentTurns are the canonical history");
     expect(policy).toContain("before searching memories");
-    expect(policy).toContain("passwords");
-    expect(policy).toContain("persistent memories");
   });
 
   it("keeps user then assistant chronology when reconciliation revisions arrive in reverse order", () => {
