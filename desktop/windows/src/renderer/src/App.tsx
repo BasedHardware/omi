@@ -20,6 +20,7 @@ import { useOnboardingComplete } from './hooks/useOnboardingComplete'
 import { getPreferences } from './lib/preferences'
 import { SandboxBadge } from './components/SandboxBadge'
 import { BarApp } from './components/bar/BarApp'
+import { GlowWindow } from './components/glow/GlowWindow'
 import { CaptureApp } from './capture/CaptureApp'
 import { LiveMirrorHost } from './components/recording/LiveMirrorHost'
 import { auth, onAuthStateChanged } from './lib/firebase'
@@ -232,6 +233,10 @@ function App(): React.JSX.Element {
         <Route path="/insight-toast" element={<InsightToast />} />
         {/* The top-edge bar window (replaces the old floating overlay). */}
         <Route path="/bar" element={<BarApp />} />
+        {/* The focus halo: a click-through ring around the user's active window.
+            Ungated (like /capture) — it paints geometry main hands it and holds
+            no user data. */}
+        <Route path="/glow" element={<GlowWindow />} />
         {/* The hidden capture window. Ungated (like /overlay) — it owns capture
             regardless of the UI auth gate; its hosts self-gate on auth. */}
         <Route path="/capture" element={<CaptureApp />} />

@@ -1,0 +1,161 @@
+/* The focus halo — a soft glowing ring around the user's active window.
+   ⚠ Three rules this file exists to enforce. Break any of them and the shipped
+   defect comes back:
+
+   1. ONE ring div, not four edge strips. An OUTER box-shadow is clipped to the
+      region outside the border box (CSS spec), so a single rounded div gives a
+      ring with a guaranteed-transparent interior and CONTINUOUS ROUNDED CORNERS
+      by construction — no mask, no compositing trick. Four axis-aligned strips
+      cannot do this: their corners are hard 90° edges that visibly don't meet.
+      That was the user's "they do not connect on the corners".
+
+   2. A GLOW, NOT A BORDER. >90% of the alpha lives inside ~5-6px and tapers to
+      nothing by ~20px. The first attempt painted a 24px near-opaque stripe —
+      "way too thick". Perceived thickness is the number the user judges: if you
+      touch the shadow stack, keep the bulk inside ~6px.
+
+   3. ANIMATE `opacity` ONLY. Dev forces software rendering (SwiftShader), so
+      animating filter/box-shadow/colors would repaint a screen-sized blurred
+      shape every frame and stutter. The hue drift is a CROSS-FADE of three
+      pre-rasterized layers, each rasterized once. */
+
+html,
+body.glow-body {
+  background: transparent !important;
+  overflow: hidden;
+  /* The window is click-through at the OS level (setIgnoreMouseEvents); this is
+     the belt-and-braces DOM half — the halo must never eat an event, the user is
+     working in the window underneath it. */
+  pointer-events: none;
+}
+
+/* One run of the halo. `key={runId}` remounts this, which restarts every
+   animation below from zero — a superseding glow never inherits a half-played
+   envelope. The envelope (fade in → hold → fade out) is opacity on this one
+   element, so it composites as a single layer. */
+.halo-run {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  will-change: opacity;
+  animation: halo-envelope 3500ms linear both;
+}
+
+/* The ring. Main sizes the overlay window to the target inflated by `--pad`, so
+   `inset: var(--pad)` alone would seat the ring EXACTLY on the target's frame — and
+   the ring then reflows with zero JS when the window moves or resizes.
+
+   But it is inset by a further `--overlap`, pulling it a few px INSIDE the window's
+   edge. That is deliberate and load-bearing: an outer box-shadow is clipped to the
+   region strictly OUTSIDE the border box, so a ring seated exactly on the frame
+   starts its brightest layer one pixel OFF the window — and fractional display
+   scaling (150%, 175%) rounds that hairline into a visible sliver of background.
+   The user caught it: "a little bit of space between the brightest start of the
+   glow and the actual edge". Overlapping inward puts the bright core ON the
+   window's own edge pixels, so the halo reads as attached rather than floating. */
+.halo-ring {
+  position: absolute;
+  inset: calc(var(--pad) + var(--overlap, 0px));
+  border-radius: var(--radius);
+  background: transparent;
+  will-change: opacity;
+  /* The falloff. Read this before touching a single number.
+
+     ⚠ `rgb(var(--c) / A)`, NOT `rgba(var(--c), A)`. `--c` holds SPACE-separated
+     channels ("239 68 68"), so the legacy comma form expands to
+     `rgba(239 68 68, 0.26)` — mixed syntax, invalid per CSS Color 4, and Chromium
+     drops the ENTIRE box-shadow declaration without a word. The ring then mounts,
+     sizes, animates and acks its paint while drawing absolutely nothing. That is
+     exactly how this shipped invisible once; if the halo ever goes missing again,
+     look here first.
+
+     The INSET layers are NOT decoration — they are THE MAXIMIZED CODE PATH. A
+     maximized window's frame IS the work area, so every OUTWARD layer lands
+     off-screen or under the taskbar. Delete them and every maximized window (i.e.
+     most windows) silently stops glowing.
+
+     MANY layers, not few. The alpha ramp is roughly exponential — each successive
+     layer is wider and much fainter, and no two adjacent layers differ enough for
+     the eye to find the boundary. A sparse stack rasterizes as visible STEPS under
+     dev's forced software rendering (SwiftShader), which is what read as "rough /
+     not seamless". If you simplify this list, the banding comes back.
+
+     The bright core stays inside ~6px (that is the thickness the user judges); the
+     tail hazes out to nothing by ~58px. WINDOW_PAD must stay comfortably above
+     that reach or the window's own edge CLIPS the tail — and a clipped glow ends
+     in a hard line, which is itself the "rough" artifact. */
+  box-shadow:
+    inset 0 0 3px 0 rgb(var(--c) / 0.3),
+    inset 0 0 8px 0 rgb(var(--c) / 0.18),
+    inset 0 0 16px 2px rgb(var(--c) / 0.09),
+    inset 0 0 28px 4px rgb(var(--c) / 0.04),
+    0 0 0 1px rgb(var(--c) / 0.4),
+    0 0 3px 0 rgb(var(--c) / 0.5),
+    0 0 6px 1px rgb(var(--c) / 0.34),
+    0 0 10px 2px rgb(var(--c) / 0.24),
+    0 0 16px 3px rgb(var(--c) / 0.16),
+    0 0 24px 5px rgb(var(--c) / 0.1),
+    0 0 34px 7px rgb(var(--c) / 0.06),
+    0 0 48px 10px rgb(var(--c) / 0.035),
+    0 0 64px 13px rgb(var(--c) / 0.018),
+    0 0 84px 16px rgb(var(--c) / 0.008);
+}
+
+/* Hue drift, done as a cross-fade (see rule 3): three rings of identical geometry
+   in neighbouring hues, breathing in and out on staggered opacity keyframes.
+   h1 is the ring; h2/h3 are tint layers that ride on top of it.
+
+   NO COLOURS LIVE HERE. Each ring's `--c` is set inline from the GlowPaint the main
+   process sends, so this stylesheet is preset-agnostic: a new appearance is a data
+   change in main/glow/glowPresets.ts and nothing in here moves.
+
+   NO masks, either. The first cut gave h1/h2 opposing diagonal `mask-image`
+   gradients so the colour appeared to travel around the ring — but where two masked
+   layers meet, the mask boundary reads as a SEAM, which is precisely the "not
+   seamless" the user saw. A seam is worse than a fancy gradient, so the masks are
+   gone; the hue shift now happens uniformly around the whole ring. */
+.halo-ring.h2 {
+  animation: halo-drift 2400ms ease-in-out infinite alternate;
+}
+.halo-ring.h3 {
+  animation: halo-drift 2400ms ease-in-out 1200ms infinite alternate;
+}
+
+/* Tints peak at 0.45, not 1: unmasked, they stack ON TOP of h1's full-strength
+   ring, so a peak of 1 would treble the alpha and turn the soft glow into a hard
+   bright band. 0.45 reads as the ring breathing, not thickening. */
+@keyframes halo-drift {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 0.45;
+  }
+}
+
+/* Peak comes from the preset's `intensity` (0.85 today) — present, never a hard
+   highlighter outline. The fallback keeps the ring visible if a payload ever
+   arrives without one. */
+@keyframes halo-envelope {
+  0% {
+    opacity: 0;
+  }
+  9% {
+    opacity: var(--peak, 0.85);
+  }
+  71% {
+    opacity: var(--peak, 0.85);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Still a glow, just no breathing — the tint layers hold steady. */
+  .halo-ring.h2,
+  .halo-ring.h3 {
+    animation: none;
+    opacity: 0.3;
+  }
+}

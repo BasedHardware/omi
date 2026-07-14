@@ -60,8 +60,12 @@ describe('appSettings', () => {
       hudContentProtection: true,
       meeting: { mode: 'ask', endGraceMinutes: 2, perApp: {}, firstRunToastShown: false },
       lastShownChangelogVersion: null,
-      aiProfileEnabled: false
+      aiProfileEnabled: false,
+      glowOverlayEnabled: true
     })
+    // The focus halo is opt-OUT (on unless explicitly disabled) — it only ever
+    // appears in response to a Focus verdict, and it is click-through.
+    expect(sanitizeAppSettings({ glowOverlayEnabled: false }).glowOverlayEnabled).toBe(false)
     // The AI user profile is the one opt-IN flag: it defaults OFF until a
     // consumer and a Settings toggle exist, so only an explicit true enables it
     // (everything else here is opt-out). See the AppSettings field comment.

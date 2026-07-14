@@ -35,6 +35,12 @@ export type AppSettings = {
    *  dossier would cost the user with no benefit and no off-switch. The PR that
    *  adds the consumer flips this default on. */
   aiProfileEnabled: boolean
+  /** Track 3 (focus halo): whether the Focus assistant may draw its glowing ring
+   *  around the active window (red when it judges the user distracted, green when
+   *  they refocus). Default ON — it only ever appears in response to a Focus
+   *  verdict, which is itself gated, and it is click-through, so it costs nothing
+   *  when Focus is idle. Mirrors Mac's `assistantsGlowOverlayEnabled`. */
+  glowOverlayEnabled: boolean
 }
 
 const MEETING_MODES: MeetingMode[] = ['off', 'ask', 'auto']
@@ -85,7 +91,8 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
       typeof r.lastShownChangelogVersion === 'string' ? r.lastShownChangelogVersion : null,
     // Opt-IN (=== true), unlike the other flags' opt-out (!== false) — see the
     // AppSettings field comment.
-    aiProfileEnabled: r.aiProfileEnabled === true
+    aiProfileEnabled: r.aiProfileEnabled === true,
+    glowOverlayEnabled: r.glowOverlayEnabled !== false
   }
 }
 

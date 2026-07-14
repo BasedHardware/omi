@@ -4,6 +4,9 @@ import type {
   OmiBridgeApi,
   OmiOverlayApi,
   OmiBarApi,
+  OmiGlowApi,
+  GlowPresetName,
+  GlowShowPayload,
   BarMode,
   BarShowPayload,
   BarChatState,
@@ -408,12 +411,31 @@ const omiBar: OmiBarApi = {
     ipcRenderer.invoke('bar:setContentProtection', enabled)
 }
 
+const omiGlow: OmiGlowApi = {
+  ready: () => ipcRenderer.send('glow:ready'),
+  showAck: (token: number) => ipcRenderer.send('glow:showAck', token),
+  trigger: (preset: GlowPresetName) => ipcRenderer.send('glow:trigger', preset),
+  dismiss: () => ipcRenderer.send('glow:dismiss'),
+  getCurrent: () => ipcRenderer.invoke('glow:getCurrent'),
+  onShow: (cb: (p: GlowShowPayload) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, p: GlowShowPayload): void => cb(p)
+    ipcRenderer.on('glow:show', listener)
+    return () => ipcRenderer.removeListener('glow:show', listener)
+  },
+  onHide: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('glow:hide', listener)
+    return () => ipcRenderer.removeListener('glow:hide', listener)
+  }
+}
+
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('omi', omi)
     contextBridge.exposeInMainWorld('omiOverlay', omiOverlay)
     contextBridge.exposeInMainWorld('omiBar', omiBar)
+    contextBridge.exposeInMainWorld('omiGlow', omiGlow)
   } catch (error) {
     console.error(error)
   }
@@ -426,4 +448,6 @@ if (process.contextIsolated) {
   window.omiOverlay = omiOverlay
   // @ts-ignore (define in dts)
   window.omiBar = omiBar
+  // @ts-ignore (define in dts)
+  window.omiGlow = omiGlow
 }

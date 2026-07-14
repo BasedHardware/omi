@@ -84,6 +84,7 @@ import {
 } from './automation/foregroundTarget'
 import { registerScreenSynthHandlers } from './ipc/screenSynth'
 import { registerAiUserProfileHandlers } from './ipc/aiUserProfile'
+import { createGlowWindow, registerGlowIpc, destroyGlow } from './glow/glowWindow'
 import { maybeGenerateOnStartup as maybeGenerateAiProfileOnStartup } from './assistants/aiUserProfile/service'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
@@ -649,6 +650,10 @@ app.whenReady().then(async () => {
   // a session (Firebase token + base URLs) and drives generation. The background
   // startup check + daily timer are wired at ready-to-show below.
   registerAiUserProfileHandlers()
+  // Track 3 (focus halo): the click-through ring the Focus assistant fires around
+  // the active window (red = distracted, green = refocused). Handler registration
+  // only; the window itself is created at ready-to-show below.
+  registerGlowIpc()
 
   // `win` is this launch's instance for one-shot wiring below (ready-to-show,
   // bench); long-lived consumers read the module-level `mainWindow` instead.
@@ -769,6 +774,11 @@ app.whenReady().then(async () => {
     setTimeout(() => prewarmPrimarySourceId(), 4000)
     // Pre-create the (hidden) acrylic toast window so the first Omi insight shows instantly.
     createInsightToastWindow()
+    // Pre-create the focus-halo window. It is created ONCE and never hidden after
+    // its off-screen prime — a transparent frameless window fades in via the OS
+    // show-animation on every hide→show (the bug that read as the bar "plummeting"),
+    // so the halo parks off-screen instead. See main/glow/glowWindow.ts.
+    createGlowWindow()
     // Post-update "what's new" (Phase 8): a few seconds after startup (once the
     // toast window has loaded), surface the changelog for the version we just
     // updated into. No-op on a fresh install or an unchanged version.
@@ -945,6 +955,7 @@ app.on('will-quit', () => {
   stopMeetingMonitor()
   destroyTray()
   destroyBar()
+  destroyGlow()
   const capture = getCaptureWindow()
   if (capture && !capture.isDestroyed()) capture.destroy()
   unregisterOverlayShortcut()
