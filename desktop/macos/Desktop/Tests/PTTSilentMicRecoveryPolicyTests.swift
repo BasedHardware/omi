@@ -93,6 +93,18 @@ final class PTTSilentMicRecoveryPolicyTests: XCTestCase {
     XCTAssertEqual(policy.consecutiveDeadMicTurns, 1)
   }
 
+  func testCaptureRebuildResetsCounterWithoutArmingOutcome() {
+    var policy = PTTSilentMicRecoveryPolicy()
+
+    XCTAssertFalse(policy.recordDiscardedTurn(totalSec: 1.0, peak: 0).shouldRebuildCapture)
+    policy.recordCaptureRebuild()
+
+    XCTAssertEqual(policy.consecutiveDeadMicTurns, 0)
+    // Bluetooth silent-mic fallback calls recordCaptureRebuild for counter reset
+    // only; it must not arm capture_rebuild outcome tracking.
+    XCTAssertNil(policy.recordSuccessfulTurn())
+  }
+
   private func armedRecoveryPolicy() -> PTTSilentMicRecoveryPolicy {
     var policy = PTTSilentMicRecoveryPolicy()
     XCTAssertFalse(policy.recordDiscardedTurn(totalSec: 1.0, peak: 0).shouldRebuildCapture)

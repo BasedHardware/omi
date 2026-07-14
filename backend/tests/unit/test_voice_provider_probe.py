@@ -225,3 +225,32 @@ def test_provider_send_timeout_is_reported_once_as_a_retryable_bounded_failure(m
     assert output.count("status=FAIL") == 1
     assert "provider=openai step=commit status=FAIL class=timeout" in output
     assert "provider token must not leak" not in output
+
+
+def test_http_429_is_classified_as_retryable():
+    module = _load_module()
+    error = module._classify_http_error(429)
+    assert error.failure_class == "mint_http_4xx"
+    assert error.retryable is True
+
+
+def test_mint_http_429_returns_retryable_exit_code(monkeypatch, capsys):
+    module = _load_module()
+    monkeypatch.setattr(
+        module,
+        "_mint_provider_token",
+        lambda _config: (_ for _ in ()).throw(module._classify_http_error(429)),
+    )
+
+    result = module.run_probe(
+        module.ProbeConfig(
+            provider="openai",
+            base_url="https://candidate.invalid",
+            bearer_token="firebase-token-must-not-leak",
+            timeout_seconds=5,
+        )
+    )
+
+    output = capsys.readouterr().out
+    assert result == 75
+    assert "provider=openai step=mint status=FAIL class=mint_http_4xx" in output

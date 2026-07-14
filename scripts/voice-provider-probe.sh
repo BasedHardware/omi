@@ -99,6 +99,9 @@ def _emit(provider: str, step: str, status: str, failure_class: str) -> None:
 
 
 def _classify_http_error(status_code: int) -> ProbeFailure:
+    # Match desktop mint (CredentialHealthManager.classifyHTTPFailure): upstream 429 is transient.
+    if status_code == 429:
+        return ProbeFailure("mint_http_4xx", retryable=True)
     if 400 <= status_code < 500:
         return ProbeFailure("mint_http_4xx")
     if 500 <= status_code < 600:

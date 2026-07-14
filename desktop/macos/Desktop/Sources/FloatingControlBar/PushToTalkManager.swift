@@ -61,7 +61,6 @@ struct PTTSilentMicRecoveryPolicy {
 
   mutating func recordCaptureRebuild() {
     consecutiveDeadMicTurns = 0
-    awaitingRecoveryOutcome = true
   }
 
   private mutating func resolveRecoveryOutcome(_ outcome: RecoveryOutcome) -> RecoveryOutcome? {
