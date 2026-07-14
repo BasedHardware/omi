@@ -168,6 +168,9 @@ export type LocalConversation = {
   cloudId?: string | null
   syncAttempts?: number
   syncError?: string | null
+  // --- Track 4: local mirror of the cloud starred/folder fields (additive) ---
+  starred?: boolean
+  folderId?: string | null
 }
 
 export type ListenSource = 'mic' | 'system'
@@ -1152,6 +1155,64 @@ export type RewindSettings = {
   /** App names to never screenshot (case-insensitive substring match against the
    *  foreground app/process name). Empty = capture everything. */
   excludedApps: string[]
+}
+
+// --- Track 4: Rewind/Conversations/capture ---
+// Row/DTO shapes for the additive PR0 tables. Handlers land with their features
+// in later Track 4 PRs; these are the accurate column mirrors they build on.
+// (OcrLine — per-line OCR box, persisted as rewind_frames.ocr_lines_json — is
+// already defined above with the OCR helper types.)
+
+/** One semantic-search vector per rewind frame (rewind_embeddings row). `vec` is
+ *  the raw BLOB — a Uint8Array from better-sqlite3 (Buffer is a subclass). */
+export type RewindEmbeddingRow = {
+  frameId: number
+  dim: number
+  model: string
+  vec: Uint8Array
+  createdAt: number
+}
+
+/** A user/system conversation folder (conversation_folders row; mirrors the Mac
+ *  Folder DTO). */
+export type ConversationFolder = {
+  id: string
+  name: string
+  color?: string | null
+  icon?: string | null
+  orderIdx: number
+  isSystem: boolean
+  conversationCount: number
+  updatedAt?: number | null
+}
+
+/** Per-conversation speaker naming (conversation_speaker_names row). */
+export type ConversationSpeakerName = {
+  conversationId: string
+  speakerId: number
+  name?: string | null
+  personId?: string | null
+  isUser: boolean
+}
+
+/** A live meeting note (live_notes row) — AI-generated or manually authored. */
+export type LiveNote = {
+  id: string
+  sessionId: string
+  text: string
+  isAi: boolean
+  segStart?: number | null
+  segEnd?: number | null
+  createdAt: number
+}
+
+/** A buffered live transcript segment persisted for crash recovery
+ *  (rescue_segments row). `segmentJson` is a serialized wire-shape segment. */
+export type RescueSegment = {
+  sessionId: string
+  seq: number
+  segmentJson: string
+  ts: number
 }
 
 // --- Proactive Insights (Rewind OCR → Gemini → acrylic toast) ---

@@ -20,7 +20,19 @@ export const USER_DATA_TABLES = [
   'onboarding_kg_edges',
   'app_usage',
   'rewind_frames',
-  'insights'
+  'insights',
+  // --- Track 4: user-scoped tables added for Rewind/Conversations/capture ---
+  // rewind_frames_fts is deliberately absent: its rows are derived from
+  // rewind_frames via AFTER-DELETE triggers, so `DELETE FROM rewind_frames`
+  // above already empties the FTS index. app_meta is also absent — it holds
+  // app-level flags (clean-exit, launch-at-login migrated) that must survive
+  // sign-out.
+  'conversation_folders',
+  'conversation_speaker_names',
+  'live_notes',
+  'rescue_segments',
+  'rewind_embeddings',
+  'file_index_meta'
 ] as const
 
 // Minimal DB surface the wipe needs — satisfied by both better-sqlite3 (prod)

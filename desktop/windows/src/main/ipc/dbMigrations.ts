@@ -59,11 +59,35 @@ export const MIGRATIONS: Migration[] = [
     up: (d) => {
       // Outbox state machine + retained raw segments for retry/backfill. See
       // ConversationSyncState in shared/types.ts and lib/sync/outbox.ts.
-      addColumnIfMissing(d, 'local_conversation', 'sync_state', "TEXT NOT NULL DEFAULT 'local_only'")
+      addColumnIfMissing(
+        d,
+        'local_conversation',
+        'sync_state',
+        "TEXT NOT NULL DEFAULT 'local_only'"
+      )
       addColumnIfMissing(d, 'local_conversation', 'segments_json', 'TEXT')
       addColumnIfMissing(d, 'local_conversation', 'cloud_id', 'TEXT')
       addColumnIfMissing(d, 'local_conversation', 'sync_attempts', 'INTEGER NOT NULL DEFAULT 0')
       addColumnIfMissing(d, 'local_conversation', 'sync_error', 'TEXT')
+    }
+  },
+  {
+    version: 2,
+    name: 'rewind_fts_backfill',
+    up: (d) => {
+      // One-time backfill of the external-content FTS index from existing
+      // rewind_frames rows. The rewind_frames_fts table + its sync triggers are
+      // created in db.ts's bootstrap block, which runs BEFORE runMigrations, so
+      // the table exists here in production. 'rebuild' is the canonical
+      // external-content re-sync (clears + repopulates from the content table),
+      // so it stays correct even if the index was somehow already populated.
+      // Guard on existence: a bare migration-only harness (e.g. dbMigrations.test)
+      // seeds only local_conversation, so skip cleanly when the table is absent.
+      const hasFts = d
+        .prepare("SELECT 1 AS x FROM sqlite_master WHERE type='table' AND name='rewind_frames_fts'")
+        .get() as { x: number } | undefined
+      if (!hasFts) return
+      d.exec("INSERT INTO rewind_frames_fts(rewind_frames_fts) VALUES('rebuild')")
     }
   }
 ]
@@ -77,7 +101,9 @@ export function runMigrations(d: MigrationDb, migrations: Migration[] = MIGRATIO
   const sorted = [...migrations].sort((a, b) => a.version - b.version)
   sorted.forEach((m, i) => {
     if (m.version !== i + 1) {
-      throw new Error(`migrations must be contiguous from 1; found version ${m.version} at index ${i}`)
+      throw new Error(
+        `migrations must be contiguous from 1; found version ${m.version} at index ${i}`
+      )
     }
   })
   let applied = 0
