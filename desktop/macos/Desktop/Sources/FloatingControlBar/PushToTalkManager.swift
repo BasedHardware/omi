@@ -12,11 +12,15 @@ struct PTTSilentMicRecoveryPolicy {
   private(set) var consecutiveDeadMicTurns = 0
 
   mutating func recordDiscardedTurn(totalSec: TimeInterval, peak: Int) -> Bool {
-    if totalSec >= Self.minDeadTurnSeconds && peak <= Self.deadMicPeakThreshold {
-      consecutiveDeadMicTurns += 1
-    } else {
+    if peak > Self.deadMicPeakThreshold {
+      // Audible input proves the mic is alive, whatever else went wrong with the turn.
       consecutiveDeadMicTurns = 0
+    } else if totalSec >= Self.minDeadTurnSeconds {
+      consecutiveDeadMicTurns += 1
     }
+    // A turn too short to judge carries no evidence either way — an accidental tap, or a
+    // release that beat CoreAudio's capture start and delivered no frames at all. It must
+    // not erase a dead-mic streak, or a dead mic interleaved with taps never recovers.
     return consecutiveDeadMicTurns >= Self.consecutiveDeadTurnThreshold
   }
 

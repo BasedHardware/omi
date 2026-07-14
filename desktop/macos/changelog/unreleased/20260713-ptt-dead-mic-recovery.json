@@ -1,0 +1,3 @@
+{
+  "change": "Fixed push-to-talk never attempting mic recovery when a dead microphone was interleaved with short taps, leaving repeated silent turns"
+}
