@@ -1494,6 +1494,20 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "debug_reach_error",
+      summary: "Show the actionable 'Couldn't reach Omi' card on the bar (Retry/Skip) for visual verification",
+      params: []
+    ) { _ in
+      let mgr = FloatingControlBarManager.shared
+      guard mgr.barState != nil else { return ["error": "no bar state"] }
+      if !mgr.isVisible { mgr.show() }
+      mgr.showReachError(message: "Error 502") {
+        log("debug_reach_error: Retry tapped")
+      }
+      return ["shown": "true"]
+    }
+
+    register(
       name: "reset_main_chat",
       summary: "Clear main-window chat messages and start a fresh session (harness flow isolation)",
       params: []
