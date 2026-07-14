@@ -11,9 +11,11 @@ using NAudio.CoreAudioApi;
 //   opcode 2 = RESTORE  payload = {} (ignored)
 //   opcode 3 = HELLO    payload = {} (ignored)
 // Response frame: [uint32 LE length][UTF-8 JSON]
-//   MUTE:    {"ok":true,"muted":<bool>} | {"ok":false,"message":"..."}
+//   MUTE:    {"ok":true,"muted":true}
+//            {"ok":true,"muted":false,"reason":"not_playing|user_muted|no_device","peak":0.0}
+//            {"ok":false,"message":"..."}
 //   RESTORE: {"ok":true,"muted":false}  | {"ok":false,"message":"..."}
-//   HELLO:   {"ok":true,"protocolVersion":1}
+//   HELLO:   {"ok":true,"protocolVersion":2}
 //
 // Mute contract (idempotent, exactly like the macOS controller):
 //   * mute only when audio is ACTUALLY playing (MasterPeakValue > ~0), and
@@ -29,13 +31,22 @@ internal static class Program
 
     // Must match PROTOCOL_VERSION in src/main/audio/protocol.ts. The bridge
     // asserts a match on spawn and logs loudly on drift (a stale helper build).
-    private const int ProtocolVersion = 1;
+    private const int ProtocolVersion = 2;
 
     // MasterPeakValue is exactly 0 when nothing is rendering; a tiny epsilon
     // guards against float denormal noise. This is the point-in-time "is the
     // device running somewhere" check (macOS kAudioDevicePropertyDeviceIsRunning-
     // Somewhere), sampled once at mute time — not continuously.
     private const float PeakThreshold = 0.0001f;
+
+    // Sampling window for the "is audio playing" test: up to 10 samples, 15ms
+    // apart (~150ms worst case, and only when NOTHING is playing — the moment a
+    // sample clears the threshold we mute immediately). The worst case is the
+    // silent case, where being 150ms late costs nothing because there is nothing
+    // to mute. Well inside the PTT hold, which is ≥350ms before capture even
+    // starts, and it runs off the PTT path anyway (fire-and-forget IPC).
+    private const int PeakSamples = 10;
+    private const int PeakSampleIntervalMs = 15;
 
     private static readonly JsonSerializerOptions JsonOpts =
         new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
@@ -96,23 +107,33 @@ internal static class Program
             }
             catch
             {
-                return Ok(false); // no default output device
+                return Skipped("no_device", 0f); // no default output device
             }
 
             try
             {
-                // "mute only if audio is actually playing"
-                if (device.AudioMeterInformation.MasterPeakValue <= PeakThreshold)
-                {
-                    device.Dispose();
-                    return Ok(false);
-                }
-                // "never touch a device the user has muted themselves" — leaving
-                // _mutedDevice null makes the paired RESTORE a no-op too.
+                // "never touch a device the user has muted themselves" — checked
+                // FIRST: it's the more meaningful reason, and a muted endpoint
+                // meters ~0 anyway, so checking peak first would mislabel every
+                // user-muted device as "not_playing". Leaving _mutedDevice null
+                // makes the paired RESTORE a no-op too, so we never un-mute them.
                 if (device.AudioEndpointVolume.Mute)
                 {
                     device.Dispose();
-                    return Ok(false);
+                    return Skipped("user_muted", 0f);
+                }
+                // "mute only if audio is actually playing". Sampled over a short
+                // window, not a single instant: MasterPeakValue reports the peak of
+                // the LAST device period, and a caller that happens to sample on a
+                // quiet period (or between the render client's buffer fills) reads
+                // 0 even while a stream is playing. One sample is a coin-flip; the
+                // max over ~150ms is not. (Found live: the app's warm helper read a
+                // single 0 and silently refused to mute while a tone was playing.)
+                var peak = PeakOverWindow(device);
+                if (peak <= PeakThreshold)
+                {
+                    device.Dispose();
+                    return Skipped("not_playing", peak);
                 }
                 device.AudioEndpointVolume.Mute = true;
                 _mutedDevice = device; // keep alive; RESTORE unmutes THIS device
@@ -144,6 +165,24 @@ internal static class Program
             TryDispose(device);
             return Ok(false);
         }
+    }
+
+    // Peak over a short sampling window. WASAPI's MasterPeakValue is the peak of
+    // the last device period only, so it legitimately reads 0 between a render
+    // client's buffer fills — polling it once is not a reliable "is anything
+    // playing" test. Returns as soon as it sees audio, so the common case (media
+    // playing) costs a single sample and never delays the mute.
+    private static float PeakOverWindow(MMDevice device)
+    {
+        var peak = 0f;
+        for (var i = 0; i < PeakSamples; i++)
+        {
+            var v = device.AudioMeterInformation.MasterPeakValue;
+            if (v > peak) peak = v;
+            if (peak > PeakThreshold) return peak; // playing — decide immediately
+            Thread.Sleep(PeakSampleIntervalMs);
+        }
+        return peak;
     }
 
     private static void TryDispose(MMDevice device)
@@ -179,6 +218,12 @@ internal static class Program
 
     private static string Ok(bool muted) =>
         JsonSerializer.Serialize(new { ok = true, muted }, JsonOpts);
+
+    // A deliberate no-op, with the reason it happened. Muting silently declining
+    // to act is a support nightmare ("PTT doesn't mute my music") — the bridge
+    // logs this, so a refusal is always explainable.
+    private static string Skipped(string reason, float peak) =>
+        JsonSerializer.Serialize(new { ok = true, muted = false, reason, peak }, JsonOpts);
 
     private static string Err(string message) =>
         JsonSerializer.Serialize(new { ok = false, message }, JsonOpts);

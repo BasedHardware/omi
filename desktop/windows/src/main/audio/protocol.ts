@@ -10,4 +10,8 @@ export const OP_HELLO = 3
 
 // Bumped whenever the wire shape changes; the bridge asserts a match on spawn.
 // Must equal ProtocolVersion in src/main/audio/helper/Program.cs.
-export const PROTOCOL_VERSION = 1
+// v2: MUTE's no-op response carries {reason, peak}, and the "is audio playing"
+//     test samples a window instead of a single instant (a single MasterPeakValue
+//     read is 0 between the render client's buffer fills, so v1 silently refused
+//     to mute while audio WAS playing).
+export const PROTOCOL_VERSION = 2

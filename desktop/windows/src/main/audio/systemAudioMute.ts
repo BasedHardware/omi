@@ -140,7 +140,14 @@ class SystemAudioMuteBridge {
    *  blocks PTT — a missing/dead helper is swallowed. */
   async muteSystemAudio(): Promise<void> {
     try {
-      await this.request(OP_MUTE, '{}')
+      const json = await this.request(OP_MUTE, '{}')
+      // A refusal is a legitimate no-op (nothing playing / the user muted the
+      // device themselves), but a SILENT one is unexplainable in the field
+      // ("PTT doesn't mute my music") — so say why, with the peak we measured.
+      const res = JSON.parse(json) as { muted?: boolean; reason?: string; peak?: number }
+      if (!res.muted && res.reason) {
+        console.log(`[win-audio-helper] mute skipped: ${res.reason} (peak=${res.peak ?? 0})`)
+      }
     } catch {
       /* helper missing / dead / slow — muting is best-effort, never blocks PTT */
     }
