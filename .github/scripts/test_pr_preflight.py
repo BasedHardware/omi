@@ -23,6 +23,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 RUNNER = SCRIPT_DIR / "preflight_runner.py"
 REPO_ROOT = SCRIPT_DIR.parents[1]
 PRE_PUSH_SINGLEFLIGHT = REPO_ROOT / "scripts" / "pre-push-singleflight"
+PRE_PUSH = REPO_ROOT / "scripts" / "pre-push"
 
 
 class FakeResponse(io.BytesIO):
@@ -66,6 +67,15 @@ class SelectionTests(unittest.TestCase):
     def test_pre_push_wrapper_reuses_current_bash_interpreter(self) -> None:
         wrapper = PRE_PUSH_SINGLEFLIGHT.read_text(encoding="utf-8")
         self.assertIn(' -- "$BASH" scripts/pre-push "$@"', wrapper)
+
+    def test_pre_push_accepts_and_propagates_windows_backend_python(self) -> None:
+        pre_push = PRE_PUSH.read_text(encoding="utf-8")
+        setup_prefix = pre_push[: pre_push.index("require_backend_python()")]
+
+        self.assertIn('BACKEND_PYTHON="${BACKEND_PYTHON:-}"', setup_prefix)
+        self.assertIn('"$PWD/backend/.venv/bin/python"', setup_prefix)
+        self.assertIn('"$PWD/backend/.venv/Scripts/python.exe"', setup_prefix)
+        self.assertIn('PYRIGHT_PYTHON="$BACKEND_PYTHON" bash scripts/typecheck.sh', pre_push)
 
     def test_make_preflight_resolves_pr_metadata_before_running_checks(self) -> None:
         result = subprocess.run(
