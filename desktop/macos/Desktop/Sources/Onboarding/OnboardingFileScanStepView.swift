@@ -55,16 +55,20 @@ struct OnboardingFileScanStepView: View {
         }
         .frame(maxWidth: 560, maxHeight: 280)
 
-        if coordinator.scanSnapshot != nil {
-          Button("Continue") {
-            onContinue()
+        HStack(spacing: OmiSpacing.md) {
+          OnboardingBackButton()
+
+          if coordinator.scanSnapshot != nil {
+            Button("Continue") {
+              onContinue()
+            }
+            .buttonStyle(OmiButtonStyle(.primary))
+            .keyboardShortcut(.defaultAction)
+          } else {
+            Text("Scanning your workspace…")
+              .font(.system(size: 13))
+              .foregroundColor(OmiColors.textTertiary)
           }
-          .buttonStyle(OmiButtonStyle(.primary))
-          .keyboardShortcut(.defaultAction)
-        } else {
-          Text("Scanning your workspace…")
-            .font(.system(size: 13))
-            .foregroundColor(OmiColors.textTertiary)
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
