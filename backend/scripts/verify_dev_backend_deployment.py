@@ -142,14 +142,27 @@ def collect_documents(commands: Mapping[str, Sequence[str]]) -> dict[str, Mappin
     return documents
 
 
-def evaluate(expectation: DeploymentExpectation, documents: Mapping[str, Mapping[str, Any]]) -> list[str]:
+def evaluate(
+    expectation: DeploymentExpectation,
+    documents: Mapping[str, Mapping[str, Any]],
+    *,
+    require_serving_traffic: bool = True,
+) -> list[str]:
     errors: list[str] = []
     for service, expected_revision in expectation.revisions.items():
         document = documents.get(f'cloud_run/{service}')
         if document is None:
             errors.append(f'cloud_run/{service}: result missing')
         else:
-            errors.extend(evaluate_cloud_run_service(service, expected_revision, expectation.image, document))
+            errors.extend(
+                evaluate_cloud_run_service(
+                    service,
+                    expected_revision,
+                    expectation.image,
+                    document,
+                    require_serving_traffic=require_serving_traffic,
+                )
+            )
     for key, evaluator in (
         ('gke/deployment', evaluate_listener_deployment),
         ('gke/service', evaluate_listener_service),
@@ -164,7 +177,12 @@ def evaluate(expectation: DeploymentExpectation, documents: Mapping[str, Mapping
 
 
 def evaluate_cloud_run_service(
-    service: str, expected_revision: str, expected_image: str, document: Mapping[str, Any]
+    service: str,
+    expected_revision: str,
+    expected_image: str,
+    document: Mapping[str, Any],
+    *,
+    require_serving_traffic: bool = True,
 ) -> list[str]:
     status = _mapping(document.get('status'))
     template_spec = _mapping(_mapping(_mapping(document.get('spec')).get('template')).get('spec'))
@@ -179,7 +197,7 @@ def evaluate_cloud_run_service(
         errors.append(f'cloud_run/{service}: latest ready revision is not {expected_revision}')
     if image != expected_image:
         errors.append(f'cloud_run/{service}: template image is not {expected_image}')
-    if not expected_traffic or _mapping(expected_traffic[0]).get('percent') != 100:
+    if require_serving_traffic and (not expected_traffic or _mapping(expected_traffic[0]).get('percent') != 100):
         errors.append(f'cloud_run/{service}: expected revision does not receive 100% traffic')
     timeout = template_spec.get('timeoutSeconds')
     if not isinstance(timeout, int) or timeout < MIN_CLOUD_RUN_TIMEOUT_SECONDS:
@@ -245,7 +263,11 @@ def evaluate_listener_endpoints(expectation: DeploymentExpectation, document: Ma
 
 
 def evidence(
-    expectation: DeploymentExpectation, documents: Mapping[str, Mapping[str, Any]], errors: Sequence[str]
+    expectation: DeploymentExpectation,
+    documents: Mapping[str, Mapping[str, Any]],
+    errors: Sequence[str],
+    *,
+    require_serving_traffic: bool = True,
 ) -> dict[str, Any]:
     cloud_run: dict[str, dict[str, Any]] = {}
     for service in CLOUD_RUN_SERVICES:
@@ -277,6 +299,7 @@ def evidence(
             'deploy_run_attempt': expectation.deploy_run_attempt,
             'image': expectation.image,
             'revisions': dict(expectation.revisions),
+            'require_serving_traffic': require_serving_traffic,
         },
         'cloud_run': cloud_run,
         'gke_listener': {
@@ -318,6 +341,11 @@ def main() -> int:
     parser.add_argument('--project', required=True)
     parser.add_argument('--region', default='us-central1')
     parser.add_argument('--environment', default='dev')
+    parser.add_argument(
+        '--candidate',
+        action='store_true',
+        help='verify a ready no-traffic candidate revision before promotion',
+    )
     parser.add_argument('--evidence-path', type=Path)
     args = parser.parse_args()
     try:
@@ -332,11 +360,15 @@ def main() -> int:
         commands = build_read_only_commands(expectation)
         assert_commands_are_read_only(commands)
         documents = collect_documents(commands)
-        errors = evaluate(expectation, documents)
+        errors = evaluate(expectation, documents, require_serving_traffic=not args.candidate)
     except (RuntimeError, ValueError) as exc:
         print(f'ERROR: {exc}', file=sys.stderr)
         return 1
-    rendered = json.dumps(evidence(expectation, documents, errors), indent=2, sort_keys=True)
+    rendered = json.dumps(
+        evidence(expectation, documents, errors, require_serving_traffic=not args.candidate),
+        indent=2,
+        sort_keys=True,
+    )
     print(rendered)
     if args.evidence_path:
         args.evidence_path.parent.mkdir(parents=True, exist_ok=True)
