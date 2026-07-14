@@ -734,7 +734,17 @@ export type OmiBridgeApi = {
   googleMarkProcessed: (source: GoogleSource, ids: string[]) => Promise<void>
   rewindFrames: (from: number, to: number) => Promise<RewindFrame[]>
   rewindDayBounds: () => Promise<{ min: number; max: number } | null>
+  /** Phase 1 of a Rewind search: KEYWORD (FTS5/BM25) results, immediately. Never
+   *  waits on the network — semantic hits follow on `onRewindSearchResults`. */
   rewindSearch: (query: string) => Promise<RewindSearchGroup[]>
+  /** Phase 2: the same result list with semantic hits merged in, delivered if and
+   *  when the embedding round-trip lands. Never fires when semantic search is
+   *  unavailable (signed out, backend down, nothing indexed) — the keyword results
+   *  from `rewindSearch` simply stand. Callers must ignore a payload whose `query`
+   *  is not the one they are currently showing. */
+  onRewindSearchResults: (
+    cb: (r: { query: string; groups: RewindSearchGroup[] }) => void
+  ) => () => void
   /** Relay the Firebase session to the main-process Rewind embedding indexer
    *  (Track 4); null on sign-out. Without it, semantic search stays inert and
    *  `rewindSearch` returns keyword-only results. */

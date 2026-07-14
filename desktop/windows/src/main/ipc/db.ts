@@ -5,6 +5,7 @@ import { categorize } from '../usage/category'
 import { isNewLocalDay } from '../usage/usageDay'
 import { buildRewindFtsMatch } from '../rewind/rewindSearchQuery'
 import { addColumnIfMissing as ensureColumn, runMigrations } from './dbMigrations'
+import { applyRewindEmbeddingSchema } from './rewindEmbeddingSchema'
 import { wipeUserDataOn } from './dbWipe'
 import {
   insertVoiceTurnOn,
@@ -21,7 +22,11 @@ import {
   deleteConversationFolderOn,
   type ConversationFoldersDb
 } from './conversationFolders'
-import { scanTopKBySimilarity } from '../rewind/embedVector'
+import { EMBED_BLOB_BYTES, scanTopKBySimilarity } from '../rewind/embedVector'
+// The backfill's work query and the queue's accept guard MUST agree on what is
+// embeddable, or the query hands back rows the queue refuses — forever. Same
+// constant, one definition.
+import { MIN_EMBED_TEXT_LEN } from '../rewind/embedQueue'
 import type {
   AiUserProfileInput,
   AiUserProfileRecord,
@@ -100,6 +105,11 @@ function get(): Database.Database {
   // Migrate away the incompatible local_kg_* schema from the parked KG experiment.
   dropIfMissingColumn(db, 'local_kg_nodes', 'summary')
   dropIfMissingColumn(db, 'local_kg_edges', 'id')
+  // Track 4 (Rewind semantic search): drop-then-create, as one ordered unit, in a
+  // module the schema tests can actually load. See rewindEmbeddingSchema.ts — a
+  // PR0-era rewind_embeddings has no `hash` column, and indexing it would throw
+  // out of this bootstrap and take every db-backed IPC handler down with it.
+  applyRewindEmbeddingSchema(db)
   db.exec(`
     CREATE TABLE IF NOT EXISTS caption_event (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -233,30 +243,9 @@ function get(): Database.Database {
       VALUES (new.id, new.ocr_text, new.window_title, new.app);
     END;
 
-    -- --- Track 4: Rewind embeddings (semantic search) ---
-    -- Two tables, because consecutive screenshots of a mostly-static screen carry
-    -- BYTE-IDENTICAL OCR text: rewind_embeddings maps each frame to its content
-    -- hash (~8 bytes), and rewind_embedding_vectors stores ONE 12KB vector per
-    -- unique hash. Storing a vector per frame instead would amplify the store by
-    -- the duplicate ratio (~20x, the same ratio that makes the API dedup worth
-    -- doing) while every duplicate frame stays equally findable either way.
-    --
-    -- The dim/model/vec/created_at columns below are LEGACY: the table shipped in
-    -- PR0 with that shape and nothing ever wrote to it. New databases get the
-    -- 2-column form; a database created by PR0 keeps the unused nullable columns
-    -- and gains a hash column via ensureColumn (see ensureSchema).
-    CREATE TABLE IF NOT EXISTS rewind_embeddings (
-      frame_id INTEGER PRIMARY KEY,
-      hash TEXT
-    );
-    CREATE INDEX IF NOT EXISTS idx_rewind_embeddings_hash ON rewind_embeddings(hash);
-    CREATE TABLE IF NOT EXISTS rewind_embedding_vectors (
-      hash TEXT PRIMARY KEY,
-      dim INTEGER,
-      model TEXT,
-      vec BLOB,
-      created_at INTEGER
-    );
+    -- (Track 4's rewind_embeddings / rewind_embedding_vectors are created by
+    -- applyRewindEmbeddingSchema() above, not here — they need a drop-first
+    -- migration that must not be interleaved with this block.)
 
     -- --- Track 4: Conversation folders ---
     CREATE TABLE IF NOT EXISTS conversation_folders (
@@ -395,10 +384,8 @@ function get(): Database.Database {
   // Conversation starring + folder assignment (local mirror of the cloud fields).
   ensureColumn(db, 'local_conversation', 'starred', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn(db, 'local_conversation', 'folder_id', 'TEXT')
-  // Content hash for a database created by PR0's vector-per-frame shape. Nothing
-  // ever wrote to that table, so there is no data to migrate — only the column to
-  // add; its legacy dim/model/vec/created_at columns stay behind, unused.
-  ensureColumn(db, 'rewind_embeddings', 'hash', 'TEXT')
+  // (rewind_embeddings is migrated by migrateRewindEmbeddingSchema, BEFORE the
+  // exec above — an ensureColumn here would run far too late to save it.)
   // Versioned migrations (PRAGMA user_version) — everything beyond the additive
   // baseline above. Ordered + exactly-once; see dbMigrations.ts.
   runMigrations(db)
@@ -1178,16 +1165,33 @@ function dropOrphanedEmbeddingsOn(d: Database.Database): void {
  */
 export function pruneOrphanedRewindEmbeddings(): number {
   const d = get()
-  const before = (d.prepare('SELECT COUNT(*) AS n FROM rewind_embeddings').get() as { n: number }).n
+  // Count BOTH tables: the vectors dropped by the second DELETE are the ones that
+  // actually held screen-derived content, and counting only the mapping rows made
+  // the startup log understate what had been cleaned.
+  const count = (): number =>
+    (
+      d
+        .prepare(
+          `SELECT (SELECT COUNT(*) FROM rewind_embeddings)
+                + (SELECT COUNT(*) FROM rewind_embedding_vectors) AS n`
+        )
+        .get() as { n: number }
+    ).n
+  const before = count()
   d.transaction(() => dropOrphanedEmbeddingsOn(d))()
-  const after = (d.prepare('SELECT COUNT(*) AS n FROM rewind_embeddings').get() as { n: number }).n
-  return before - after
+  return before - count()
 }
 
 /** Frames that have OCR text but no embedding yet, newest first (the frames a
  *  user is most likely to search for). `excludeIds` drops frames the caller has
  *  already given up on this launch — without it, a batch that failed would be
- *  handed back forever and the sweep could never advance past it. */
+ *  handed back forever and the sweep could never advance past it.
+ *
+ *  The length floor MUST match the queue's `MIN_EMBED_TEXT_LEN`. When it didn't,
+ *  every too-short frame (lock screen, video, blank desktop) was returned here,
+ *  refused by the queue, never given an embedding row — and so returned again,
+ *  forever, monopolising the newest-first page until the backfill stalled outright.
+ *  Whitespace-only text is caught by TRIM here and by `.trim()` there. */
 export function rewindFramesNeedingEmbedding(
   limit: number,
   excludeIds: number[] = []
@@ -1201,7 +1205,8 @@ export function rewindFramesNeedingEmbedding(
         `SELECT ${REWIND_COLUMNS_QUALIFIED} FROM rewind_frames
            LEFT JOIN rewind_embeddings ON rewind_embeddings.frame_id = rewind_frames.id
           WHERE rewind_frames.indexed = 1
-            AND rewind_frames.ocr_text IS NOT NULL AND rewind_frames.ocr_text != ''
+            AND rewind_frames.ocr_text IS NOT NULL
+            AND LENGTH(TRIM(rewind_frames.ocr_text)) >= ${MIN_EMBED_TEXT_LEN}
             AND rewind_embeddings.frame_id IS NULL
             ${notIn}
           ORDER BY rewind_frames.ts DESC
@@ -1253,14 +1258,6 @@ export function linkRewindEmbedding(frameId: number, hash: string): boolean {
   return true
 }
 
-/** True when a vector is already stored for this content. */
-export function rewindEmbeddingVectorExists(hash: string): boolean {
-  return (
-    get().prepare('SELECT 1 AS ok FROM rewind_embedding_vectors WHERE hash = ?').get(hash) !==
-    undefined
-  )
-}
-
 /**
  * Rank stored content against `query` and return the matching frames, strongest
  * first — WITHOUT blocking the main process.
@@ -1278,18 +1275,26 @@ export async function searchRewindEmbeddings(
   const d = get()
   // EXISTS against idx_rewind_embeddings_hash: skips vectors no live frame points
   // at, so an orphan that slipped through can't cost us a similarity computation.
+  //
+  // The vec guard is IN THE SQL, not a .filter() on the page. `vec` is nullable,
+  // and scanTopKBySimilarity treats a short page as end-of-store — so filtering
+  // after the fact meant one partially-written row anywhere in the table silently
+  // truncated the scan there, and every vector past it went unranked. Filtering in
+  // the query keeps LIMIT and "rows returned" describing the same set.
   const page = d.prepare(
     `SELECT v.hash AS hash, v.vec AS vec FROM rewind_embedding_vectors v
       WHERE EXISTS (SELECT 1 FROM rewind_embeddings e WHERE e.hash = v.hash)
+        AND v.vec IS NOT NULL AND LENGTH(v.vec) = ${EMBED_BLOB_BYTES}
       ORDER BY v.hash
       LIMIT ? OFFSET ?`
   )
 
   const scored = await scanTopKBySimilarity(
     (offset, size) =>
-      (page.all(size, offset) as { hash: string; vec: Uint8Array }[])
-        .filter((r) => r.vec?.byteLength)
-        .map((r) => ({ hash: r.hash, vec: bufferToVector(r.vec) })),
+      (page.all(size, offset) as { hash: string; vec: Uint8Array }[]).map((r) => ({
+        hash: r.hash,
+        vec: bufferToVector(r.vec)
+      })),
     query,
     limit,
     () => new Promise<void>((resolve) => setImmediate(resolve))

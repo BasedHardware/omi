@@ -109,7 +109,15 @@ async function startProxyStub() {
   }
 }
 
-/** Pre-create omi.db with three OCR'd frames for the backfill to find. */
+/** Pre-create omi.db with three OCR'd frames for the backfill to find.
+ *
+ *  The database is seeded in the shape a SHIPPED `main` build leaves behind —
+ *  including its vector-per-frame `rewind_embeddings` (frame_id, dim, model, vec,
+ *  created_at), which has no `hash` column. That is what every upgrading user
+ *  actually has on disk, and indexing `hash` on it used to throw out of the schema
+ *  bootstrap and take the whole app down (not just Rewind: `get()` is the one
+ *  un-try/caught singleton behind every DB-backed IPC handler). If that regresses,
+ *  this app never reaches its first window and the test dies here. */
 function seedDb(dbPath) {
   const db = new DatabaseSync(dbPath)
   db.exec(`
@@ -124,6 +132,15 @@ function seedDb(dbPath) {
       width INTEGER NOT NULL DEFAULT 0,
       height INTEGER NOT NULL DEFAULT 0,
       indexed INTEGER NOT NULL DEFAULT 0
+    );
+    -- PR0-era table, verbatim from origin/main. Never written to; upgrading a
+    -- database that has it must be lossless AND must not throw.
+    CREATE TABLE rewind_embeddings (
+      frame_id INTEGER PRIMARY KEY,
+      dim INTEGER,
+      model TEXT,
+      vec BLOB,
+      created_at INTEGER
     );
   `)
   const now = Date.now()
@@ -245,12 +262,34 @@ test('embeds seeded frames via the proxy, then merges vector recall into FTS sea
     'identical OCR text is sent to the API exactly once'
   )
 
-  // --- Hybrid search: FTS leads, the semantic hit is added. ---
+  // --- Hybrid search, in two phases. ---
   // Frames 2 and 4 both contain the query's words, so they are the KEYWORD hits.
   // Frame 1 shares no words with the query at all.
-  const groups = await until('search to return the semantic hit', async () => {
-    const g = await win.evaluate((q) => window.omi.rewindSearch(q), QUERY)
-    return g.some((x) => x.representative.id === 1) ? g : null
+  const ftsIds = [2, 4]
+
+  // Collect phase-2 (semantic) pushes as they arrive.
+  await win.evaluate(() => {
+    window.__semantic = []
+    window.omi.onRewindSearchResults((r) => window.__semantic.push(r))
+  })
+
+  // PHASE 1 — keyword results come back WITHOUT waiting on the embedding call.
+  // This is the invariant that matters on a flaky network: the query embed can
+  // burn ~91s of retries, and the FTS rows must not be held hostage behind it.
+  const phase1 = await win.evaluate((q) => window.omi.rewindSearch(q), QUERY)
+  assert.deepEqual(
+    phase1.map((g) => g.representative.id).sort(),
+    ftsIds,
+    'phase 1 is keyword-only, and immediate'
+  )
+
+  // PHASE 2 — the semantic hit arrives out-of-band and is merged in.
+  const groups = await until('the semantic hit to be pushed', async () => {
+    await win.evaluate((q) => window.omi.rewindSearch(q), QUERY)
+    return win.evaluate((q) => {
+      const last = [...window.__semantic].reverse().find((r) => r.query === q)
+      return last && last.groups.some((x) => x.representative.id === 1) ? last.groups : null
+    }, QUERY)
   })
 
   const queryCall = stub.calls.find((c) => c.url.endsWith(':embedContent'))
@@ -258,9 +297,9 @@ test('embeds seeded frames via the proxy, then merges vector recall into FTS sea
   assert.equal(queryCall.payload.content.parts[0].text, QUERY)
 
   const frameIds = groups.map((g) => g.representative.id)
-  const ftsIds = [2, 4]
   // Every keyword hit leads; the semantic-only frame is appended AFTER them and
-  // never displaces one — that is the whole merge contract.
+  // never displaces one — that is the whole merge contract, and it must survive
+  // GROUPING, which used to re-sort it all by timestamp.
   assert.deepEqual(frameIds.slice(0, 2).sort(), ftsIds, 'FTS results lead')
   assert.equal(frameIds[frameIds.length - 1], 1, 'vector recall is appended, not promoted')
   // Frame 1 is here PURELY because its vector matched — the point of the feature.
@@ -268,11 +307,18 @@ test('embeds seeded frames via the proxy, then merges vector recall into FTS sea
 
   // --- Vector failure is non-fatal: keyword results must still render. ---
   stub.setFailEmbedContent(true)
+  await win.evaluate(() => (window.__semantic = []))
   const degraded = await win.evaluate((q) => window.omi.rewindSearch(q), QUERY)
   assert.deepEqual(
     degraded.map((g) => g.representative.id).sort(),
     ftsIds,
     'degrades to keyword-only instead of erroring'
+  )
+  // ...and no phase-2 push ever contradicts that (a dead embed leg stays silent).
+  assert.deepEqual(
+    await win.evaluate(() => window.__semantic),
+    [],
+    'a failed query embed pushes nothing'
   )
 
   // --- PRIVACY: retention must delete the vectors, not just the frames. ---

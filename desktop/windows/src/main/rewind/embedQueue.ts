@@ -11,7 +11,17 @@
 // vector already computed for its twin instead of paying for another API call.
 import { contentHash } from './embedVector'
 
-/** Flush as soon as this many items are pending. */
+/**
+ * Flush as soon as this many items are pending.
+ *
+ * DO NOT RAISE THIS. 100 is not a tuning knob — it is the provider's HARD
+ * CEILING, verified live against the deployed proxy: a 101-item body comes back
+ * `400 INVALID_ARGUMENT` ("at most 100 requests can be in one batch") and the
+ * WHOLE batch fails. And it would fail quietly: a failed embed batch degrades
+ * search to keyword-only rather than erroring, so "let's flush bigger batches"
+ * would silently stop all indexing with nothing user-visible to point at.
+ * `embedBatch` also chunks at 100 defensively, so this cannot reach the wire.
+ */
 export const EMBED_BATCH_SIZE = 100
 
 /** …or this long after the oldest pending item arrived, whichever is first. */

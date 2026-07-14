@@ -51,23 +51,49 @@ async function vectorHits(query: string): Promise<VectorHit[]> {
   }
 }
 
+// Monotonic id for the newest search. The vector leg is slow and its result is
+// delivered out-of-band, so a stale one must never overwrite a newer query's
+// results (type "invoice", then "receipt": invoice's vectors land last).
+let searchSeq = 0
+
 export function registerRewindHandlers(): void {
   ipcMain.handle('rewind:frames', async (_e, from: number, to: number) =>
     listRewindFrames(from, to)
   )
   ipcMain.handle('rewind:dayBounds', async () => rewindDayBounds())
-  // Hybrid search: keyword (FTS5/BM25) then semantic (Gemini vectors), merged with
-  // FTS leading and vectors adding recall only — see rewind/vectorSearchMerge.ts.
-  // The two legs run in sequence, not in parallel: better-sqlite3 is synchronous,
-  // so the FTS query occupies the thread outright and there is nothing for a
-  // concurrent leg to interleave with. (A Promise.all here would have LOOKED
-  // parallel while doing exactly this.) The vector leg is the slow one and it does
-  // yield — see searchRewindEmbeddings.
-  ipcMain.handle('rewind:search', async (_e, query: string) => {
+  // Hybrid search, in TWO PHASES.
+  //
+  // Phase 1 (this handler, synchronous): keyword results (FTS5/BM25), returned
+  // immediately. Phase 2 (below, out-of-band): the same list with semantic hits
+  // merged in, pushed on 'rewind:search-results' when — and if — they arrive.
+  //
+  // Keyword search must NEVER wait on the network, and it used to: the handler
+  // awaited the query embedding, which is up to 3 attempts x a 30s timeout plus
+  // backoff — about 91 seconds on a captive-portal/flaky network. The FTS rows
+  // were sitting in hand from the first millisecond the whole time, and the user
+  // stared at an empty result list. Vector search is ADDITIVE recall; its failure
+  // is supposed to degrade silently to keyword-only (macOS wraps the whole leg in
+  // `try?`), which is only true if keyword results don't depend on it.
+  ipcMain.handle('rewind:search', async (e, query: string) => {
     const q = query.trim()
     if (!q) return []
+    const seq = ++searchSeq
     const fts = searchRewindFrames(q)
-    return groupFrames(mergeRewindSearchResults(fts, await vectorHits(q)), q)
+
+    // Fire-and-forget: nothing about the reply below depends on this resolving,
+    // and it must never reject into the handler.
+    void (async () => {
+      const hits = await vectorHits(q)
+      if (hits.length === 0) return // keyword-only; the phase-1 reply already stands
+      if (seq !== searchSeq) return // a newer query has since been issued
+      if (e.sender.isDestroyed()) return
+      e.sender.send('rewind:search-results', {
+        query: q,
+        groups: groupFrames(mergeRewindSearchResults(fts, hits), q)
+      })
+    })()
+
+    return groupFrames(fts, q)
   })
   // Relay of the renderer's Firebase session — the embedding indexer and the
   // query embedder are inert without it (the token only exists in the renderer).

@@ -50,17 +50,72 @@ const recentHashes = new RecentHashCache()
 // get another chance — just not an immediate, spinning one.
 const failedThisLaunch = new Set<number>()
 
+// Frames the queue refused as unembeddable (OCR text under MIN_EMBED_TEXT_LEN
+// once trimmed). They can never produce a vector, so — exactly like the failed
+// set — they must be excluded from the work query, or they sit at the head of
+// every page forever and the sweep stalls behind them. See runBackfill.
+const unembeddableThisLaunch = new Set<number>()
+
 let session: EmbedSession | null = null
+// Firebase uid behind `session.token`, so a user SWITCH is detectable and not
+// just a sign-out. See configureRewindEmbedSession.
+let sessionUid: string | null = null
 let timer: NodeJS.Timeout | null = null
 let flushInFlight: Promise<void> | null = null
 let backfilling = false
 let backfilled = 0
 
-// Bumped whenever the service is torn down. A backfill suspended on an await
-// (an API call, its 200ms inter-batch pause) would otherwise wake up afterwards
-// and keep sweeping against whatever state replaced it. Each sweep captures the
-// generation it started in and stops as soon as that is no longer current.
+// Bumped whenever the service is torn down or the user changes. Anything
+// suspended on an await (an API call, the backfill's 200ms inter-batch pause)
+// would otherwise wake up afterwards and keep working against whatever state
+// replaced it — writing the PREVIOUS user's vectors into the freshly-wiped
+// database. Every async path captures the generation it started in and stops as
+// soon as that is no longer current.
 let generation = 0
+
+/** Firebase uid (`sub`) inside an id token, or null if it isn't a readable JWT
+ *  (E2E stubs, malformed tokens). Never throws — a failure to read the uid must
+ *  not disarm indexing, it just means we can only detect sign-OUT, not a switch. */
+function tokenUid(token: string): string | null {
+  const payload = token.split('.')[1]
+  if (!payload) return null
+  try {
+    const json = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as {
+      sub?: string
+      user_id?: string
+    }
+    return json.sub ?? json.user_id ?? null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Forget everything the previous user left behind.
+ *
+ * Clearing `session` alone is NOT enough, and that was a real leak: the queue can
+ * hold ~40 frames of user A's OCR text at sign-out, main-process module state
+ * survives the renderer reload, and nothing restarts Electron's main process on
+ * sign-out. So when user B signed in, the next 5s tick drained A's screen text to
+ * the embedding proxy UNDER B'S BEARER TOKEN and wrote the resulting vectors into
+ * the just-wiped database. Same-account is no better: sign out, sign back in, and
+ * vectors derived from pre-wipe screen content are resurrected — which is exactly
+ * the promise ("delete my history leaves no vector of screen content behind")
+ * that the wipe exists to keep.
+ *
+ * Bumping `generation` is what stops the work already in flight; clearing the
+ * four containers is what stops the work merely queued.
+ */
+function forgetSession(): void {
+  generation++ // abandon anything suspended on an await, mid-flight or mid-sweep
+  queue.take(Number.MAX_SAFE_INTEGER) // A's OCR text must not outlive A's session
+  recentHashes.clear() // else a stale hash "links" to a vector the wipe deleted
+  failedThisLaunch.clear()
+  unembeddableThisLaunch.clear()
+  flushInFlight = null // the old drain is now a no-op; don't chain behind it
+  backfilling = false
+  backfilled = 0
+}
 
 /**
  * Set (or clear, on sign-out) the backend session used for embedding calls.
@@ -72,9 +127,19 @@ let generation = 0
  * kicked at app-ready would find no session and give up for the whole launch.
  * Re-kicks are cheap (a caught-up sweep is one query returning no rows) and are
  * how frames captured while signed out eventually get indexed.
+ *
+ * A routine token refresh (same uid) must NOT reset anything — it arrives every
+ * hour and would otherwise throw away a queue and a half-finished sweep.
  */
 export function configureRewindEmbedSession(next: EmbedSession | null): void {
-  session = next && next.token && next.desktopApiBase ? next : null
+  const valid = next && next.token && next.desktopApiBase ? next : null
+  const nextUid = valid ? tokenUid(valid.token) : null
+
+  // Sign-out, or a different user: nothing of the old session may survive.
+  if (!valid || (sessionUid !== null && nextUid !== sessionUid)) forgetSession()
+
+  session = valid
+  sessionUid = nextUid
   if (session) kickBackfill()
 }
 
@@ -113,7 +178,11 @@ function store(frameIds: number[], hash: string, vec: Float32Array): void {
  * the cache), and sends only what is genuinely new to the API — the combination
  * is what macOS measures as a ~20x cut in embedding API volume.
  */
-async function flushBatch(items: PendingEmbed[], current: EmbedSession): Promise<void> {
+async function flushBatch(
+  items: PendingEmbed[],
+  current: EmbedSession,
+  mine: number
+): Promise<void> {
   const { toEmbed, toCopy } = planEmbedBatch(items, recentHashes)
 
   for (const group of toCopy) {
@@ -133,6 +202,10 @@ async function flushBatch(items: PendingEmbed[], current: EmbedSession): Promise
     toEmbed.map((g) => g.text),
     'RETRIEVAL_DOCUMENT'
   )
+  // The sign-out/wipe can land while that request is in flight. Persisting now
+  // would write the previous user's vectors into the wiped database as orphans
+  // (their frames are gone), so drop them on the floor instead.
+  if (generation !== mine) return
   for (let i = 0; i < toEmbed.length; i++) {
     const group = toEmbed[i]
     const vec = vectors[i]
@@ -144,17 +217,26 @@ async function flushBatch(items: PendingEmbed[], current: EmbedSession): Promise
   }
 }
 
-/** Drain the queue. Assumes the caller holds the single-flight slot. */
+/**
+ * Drain the queue. Assumes the caller holds the single-flight slot.
+ *
+ * The session is re-checked on EVERY iteration, not captured once: a sign-out
+ * landing mid-drain used to leave this loop happily sending the signed-out user's
+ * frames with each `await`, because `current` was a stale local.
+ */
 async function drain(current: EmbedSession, force: boolean): Promise<void> {
+  const mine = generation
   while (queue.size > 0) {
+    if (generation !== mine || session !== current) return // signed out / user changed
     const batch = queue.take(EMBED_BATCH_SIZE)
     try {
-      await flushBatch(batch, current)
+      await flushBatch(batch, current, mine)
     } catch (e) {
       // Degrade quietly: these frames stay unembedded (keyword search still
       // finds them) and the sweep moves on. There is no Windows recordFallback
       // emitter to route this through yet (see the Track 3 TODO in
       // assistants/aiUserProfile/orchestrate.ts), so a log is the honest option.
+      if (generation !== mine) return // torn down mid-request; not the new session's failure
       for (const item of batch) failedThisLaunch.add(item.frameId)
       console.warn(`[rewind-embed] batch of ${batch.length} failed: ${(e as Error).message}`)
       return
@@ -214,12 +296,22 @@ export async function embedRewindQuery(text: string): Promise<Float32Array | nul
  * `rewindFramesNeedingEmbedding` returns exactly the work that remains — there is
  * no cursor to persist, and none to corrupt.
  *
- * Frames that failed this launch are excluded IN SQL rather than filtered out
- * afterwards. Filtering after the fact was a bug: one transient API failure left
- * the query returning the same (now-skipped) rows forever, the post-filter emptied
- * them, and an empty list read as "caught up" — silently abandoning the rest of
- * the launch's budget. Excluding them in the query lets the sweep advance past
- * them to the work that is still doable.
+ * Frames that cannot be embedded are excluded IN SQL rather than filtered out
+ * afterwards. Filtering after the fact was a bug, twice over — the query kept
+ * handing back rows the queue would refuse, and an all-refused page read as
+ * "caught up", silently abandoning the rest of the launch's budget:
+ *
+ *  - frames whose batch FAILED this launch (transient API error), and
+ *  - frames whose OCR text is too short to embed (`MIN_EMBED_TEXT_LEN`): a lock
+ *    screen, a full-screen video, a blank desktop, a clock. These are the newest
+ *    rows, so they pile up at the head of `ORDER BY ts DESC` and never leave —
+ *    they can never earn an embedding row, which is the only thing that drops a
+ *    frame out of the work query. Past ~100 of them, page 1 is 100% dead weight
+ *    on this and EVERY FUTURE launch, and the whole pre-existing library is
+ *    silently never indexed.
+ *
+ * Both are excluded in the query, so the sweep advances past them to the work
+ * that is still doable.
  */
 async function runBackfill(): Promise<void> {
   const mine = generation
@@ -228,19 +320,33 @@ async function runBackfill(): Promise<void> {
     if (!session) return // signed out mid-sweep; the next session push resumes it
     const remaining = BACKFILL_MAX_PER_LAUNCH - backfilled
     const frames = rewindFramesNeedingEmbedding(Math.min(EMBED_BATCH_SIZE, remaining), [
-      ...failedThisLaunch
+      ...failedThisLaunch,
+      ...unembeddableThisLaunch
     ])
     if (frames.length === 0) return // genuinely caught up: no embeddable rows left
 
     // Count what the queue ACCEPTED, not what the query returned — `add` drops a
     // frame that is already queued, and the budget must track submitted work.
     let accepted = 0
+    let skipped = 0
     for (const f of frames) {
-      if (f.id != null && enqueueRewindEmbedding(f.id, f.ocrText)) accepted++
+      if (f.id == null) continue
+      // Belt to the SQL filter's braces: SQLite's TRIM only strips spaces, while
+      // the queue's guard is JS `.trim()` (tabs, newlines, NBSP…). A row the query
+      // thinks is long enough but the queue refuses would otherwise be exactly the
+      // dead weight described above.
+      if (!isEmbeddableText(f.ocrText)) {
+        unembeddableThisLaunch.add(f.id)
+        skipped++
+        continue
+      }
+      if (enqueueRewindEmbedding(f.id, f.ocrText)) accepted++
     }
-    // A page the queue accepted nothing from cannot make progress, and the same
-    // page would come back next iteration — stop rather than spin.
-    if (accepted === 0) return
+    // Nothing submitted AND nothing newly excluded means this page cannot change
+    // — the next query would return it verbatim. Stop rather than spin. (If we
+    // skipped some, the next page IS different: those ids are now excluded.)
+    if (accepted === 0 && skipped === 0) return
+    if (accepted === 0) continue // a page of pure dead weight; move past it
     backfilled += accepted
     await flushDue(true)
     await sleep(BACKFILL_BATCH_DELAY_MS)
@@ -267,16 +373,13 @@ export function startRewindEmbedding(): void {
   timer = setInterval(() => void flushDue(), TICK_MS)
 }
 
-/** Test seam: reset all module state. */
+/** Test seam: reset all module state. Deliberately built ON `forgetSession()`
+ *  rather than beside it — the two drifting apart is what C2 was: the reset knew
+ *  every field sign-out had to clear, and production cleared exactly one of them. */
 export function __resetRewindEmbeddingForTests(): void {
   if (timer) clearInterval(timer)
   timer = null
   session = null
-  flushInFlight = null
-  backfilling = false
-  backfilled = 0
-  generation++ // abandon any sweep still suspended on an await
-  failedThisLaunch.clear()
-  recentHashes.clear() // else a stale hash makes the next run "link" to a vector that isn't there
-  queue.take(Number.MAX_SAFE_INTEGER)
+  sessionUid = null
+  forgetSession()
 }

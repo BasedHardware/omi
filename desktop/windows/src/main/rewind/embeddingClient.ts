@@ -104,10 +104,20 @@ export async function embedOne(
 }
 
 /**
- * Embed a batch of texts in one round trip. Returns one entry per input, in
- * order; an entry is null when the API omitted it or returned a wrong-dimension
- * vector, so one bad item can't discard the whole batch. Throws only when the
- * request itself fails.
+ * The provider's hard limit on one `batchEmbedContents` body. Verified live: 101
+ * requests is a `400 INVALID_ARGUMENT` that fails the entire batch. Enforced here
+ * as well as at the queue (`EMBED_BATCH_SIZE`) so no future caller can put an
+ * over-limit body on the wire, whatever it thinks its batch size is.
+ */
+const MAX_BATCH_REQUESTS = 100
+
+/**
+ * Embed a batch of texts. Returns one entry per input, in order; an entry is null
+ * when the API omitted it or returned a wrong-dimension vector, so one bad item
+ * can't discard the whole batch. Throws only when a request itself fails.
+ *
+ * Chunked at the API's 100-request ceiling, sequentially — a caller with 250
+ * texts gets 3 round trips, not one guaranteed 400.
  */
 export async function embedBatch(
   session: EmbedSession,
@@ -115,9 +125,14 @@ export async function embedBatch(
   taskType: EmbedTaskType
 ): Promise<(Float32Array | null)[]> {
   if (texts.length === 0) return []
-  const json = (await post(session, 'batchEmbedContents', {
-    requests: texts.map((t) => requestBody(t, taskType))
-  })) as BatchEmbeddingResponse
-  const embeddings = json.embeddings ?? []
-  return texts.map((_, i) => toVector(embeddings[i]?.values))
+  const out: (Float32Array | null)[] = []
+  for (let i = 0; i < texts.length; i += MAX_BATCH_REQUESTS) {
+    const chunk = texts.slice(i, i + MAX_BATCH_REQUESTS)
+    const json = (await post(session, 'batchEmbedContents', {
+      requests: chunk.map((t) => requestBody(t, taskType))
+    })) as BatchEmbeddingResponse
+    const embeddings = json.embeddings ?? []
+    for (let j = 0; j < chunk.length; j++) out.push(toVector(embeddings[j]?.values))
+  }
+  return out
 }

@@ -23,11 +23,22 @@ import {
   configureRewindEmbedSession,
   embedRewindQuery,
   enqueueRewindEmbedding,
-  rewindEmbeddingsAvailable
+  rewindEmbeddingsAvailable,
+  startRewindEmbedding
 } from './embeddingService'
 import { EMBED_MODEL } from './embedVector'
 
 const SESSION = { desktopApiBase: 'https://desktop.example', token: 'tok' }
+
+/** A session whose token is a real-shaped Firebase JWT for `uid` — so the service
+ *  can tell a user SWITCH from an hourly token refresh. */
+function sessionFor(uid: string): { desktopApiBase: string; token: string } {
+  const b64 = (o: unknown): string => Buffer.from(JSON.stringify(o)).toString('base64url')
+  return {
+    desktopApiBase: 'https://desktop.example',
+    token: `${b64({ alg: 'RS256' })}.${b64({ sub: uid })}.sig`
+  }
+}
 
 const frame = (id: number, ocrText: string): RewindFrame => ({
   id,
@@ -225,6 +236,39 @@ describe('backfill', () => {
     expect(stored).toBe(5000)
   })
 
+  // M1 regression. The work query returned frames the queue would REFUSE (OCR text
+  // under MIN_EMBED_TEXT_LEN — a lock screen, a full-screen video, a blank
+  // desktop, a clock). They never earn an embedding row, so the query hands them
+  // back forever; and since the page is ORDER BY ts DESC they sit at the HEAD.
+  // Past ~100 of them, page 1 is 100% dead weight, `accepted === 0` aborts the
+  // sweep, and the backfill is dead — on this launch and on every future one, with
+  // the entire pre-existing library silently never indexed.
+  it('sweeps past a full page of unembeddable frames instead of stalling forever', async () => {
+    // A DB that does NOT filter by length (i.e. every frame whose ocr_text is
+    // non-empty), so the service's own guard is what has to hold the line.
+    const shortFrames = Array.from({ length: 100 }, (_, i) => frame(i + 1, 'ok')) // 2 chars
+    const realFrames = [frame(101, 'a real screenful of searchable text')]
+    db.rewindFramesNeedingEmbedding.mockImplementation((limit: number, exclude: number[] = []) => {
+      const excluded = new Set(exclude)
+      return [...shortFrames, ...realFrames]
+        .filter((f) => f.id != null && !excluded.has(f.id))
+        .slice(0, limit)
+    })
+
+    configureRewindEmbedSession(SESSION)
+    await settle()
+
+    // The real frame is BEHIND 100 unembeddable ones. It must still get indexed.
+    expect(client.embedBatch).toHaveBeenCalledTimes(1)
+    expect(client.embedBatch.mock.calls[0][1]).toEqual(['a real screenful of searchable text'])
+    expect(db.upsertRewindEmbedding).toHaveBeenCalledWith(
+      101,
+      expect.any(String),
+      vec(1),
+      EMBED_MODEL
+    )
+  })
+
   it('gives up on frames whose batch failed, rather than retrying them forever', async () => {
     client.embedBatch.mockRejectedValue(new Error('proxy down'))
     db.rewindFramesNeedingEmbedding.mockImplementation(() => [
@@ -238,6 +282,69 @@ describe('backfill', () => {
     // but the launch-local failure set stops the sweep from looping on them.
     expect(client.embedBatch).toHaveBeenCalledTimes(1)
     expect(db.upsertRewindEmbedding).not.toHaveBeenCalled()
+  })
+})
+
+// C2 regression. Clearing `session` on sign-out was NOT enough: the queue, the
+// recent-hash cache and the failed set all survived, main's module state outlives
+// a renderer reload, and Electron's main process is never restarted on sign-out.
+// So user A's screen text sat in the queue through the wipe and was drained to
+// the embedding proxy under USER B'S BEARER TOKEN — into B's account, B's quota,
+// B's server-side request context — with the resulting vectors written back into
+// the freshly-wiped database as orphans.
+describe('sign-out and user switch', () => {
+  const A = sessionFor('user-a')
+  const B = sessionFor('user-b')
+
+  it("never sends the signed-out user's queued OCR text under the next user's token", async () => {
+    supply() // backfill has nothing to do; this is purely about the live queue
+    startRewindEmbedding()
+    configureRewindEmbedSession(A)
+    enqueueRewindEmbedding(1, "user A's private screen contents")
+    enqueueRewindEmbedding(2, 'more of user A private text')
+
+    configureRewindEmbedSession(null) // sign out (the DB wipe runs about here)
+    configureRewindEmbedSession(B) // user B signs in on the same machine
+
+    await settle() // the 5s tick fires; A's items are now past the 60s deadline
+
+    // Before the fix: embedBatch(B-session, [A's OCR text...]).
+    expect(client.embedBatch).not.toHaveBeenCalled()
+  })
+
+  it('drops an in-flight batch instead of writing it into the wiped database', async () => {
+    supply()
+    startRewindEmbedding()
+    let release: () => void = () => {}
+    client.embedBatch.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve([vec(1)])
+        })
+    )
+
+    configureRewindEmbedSession(A)
+    enqueueRewindEmbedding(1, "user A's private screen contents")
+    await vi.advanceTimersByTimeAsync(61_000) // flush fires; the request hangs
+
+    configureRewindEmbedSession(null) // sign-out + wipe lands mid-request
+    release() // ...and only now does the proxy answer
+    await settle()
+
+    // The vectors are A's, and A's frames no longer exist. Persisting them would
+    // leave orphan vectors of A's screen in the wiped DB until the next restart.
+    expect(db.upsertRewindEmbedding).not.toHaveBeenCalled()
+    expect(db.linkRewindEmbedding).not.toHaveBeenCalled()
+  })
+
+  it('keeps working across an ordinary hourly token refresh (same user)', async () => {
+    supply([frame(1, 'still user A content')])
+    configureRewindEmbedSession(A)
+    configureRewindEmbedSession({ ...A, token: `${A.token}-refreshed-same-uid` })
+    await settle()
+
+    // A refresh is not a sign-out: it must not throw away the queue or the sweep.
+    expect(client.embedBatch).toHaveBeenCalledTimes(1)
   })
 })
 
