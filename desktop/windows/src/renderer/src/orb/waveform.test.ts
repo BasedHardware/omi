@@ -12,6 +12,7 @@ import {
   historySlots,
   stepWaveLevels
 } from './waveform'
+import { RING_DOT_RENDER_RADIUS } from './choreography'
 
 describe('shapeBarLevel (gated sensitivity curve, calibrated to real mic)', () => {
   // Reference points are the user's MEASURED live orbLevel distribution
@@ -113,19 +114,35 @@ describe('waveBars', () => {
     expect(loud.halfH).toBeGreaterThan(loud.halfW)
   })
 
-  it('resting dot is shorter than the full bar width (a dot, not a stub bar)', () => {
-    // The full bar half-width is barRadiusFrac·pitch; the rest dot is a fraction
-    // of that, so a silent slot reads as a small dot.
-    const [silent] = waveBars([0], 1)
-    const halfW = waveHalfWidth(1)
-    const barW = ((2 * halfW) / 1) * WAVE.barRadiusFrac
-    expect(silent.halfH).toBeLessThan(barW)
-    expect(silent.halfH).toBeCloseTo(barW * WAVE.restRadiusFrac, 6)
-    // The dot must stay a "comfortably visible dot" — not a speck (user, live
-    // tune 2026-07-12: 0.5 read "way too thin/tiny") and not a full bar. Pins the
-    // deliberate 0.7 in a guarded band so a future edit can't silently regress it.
-    expect(WAVE.restRadiusFrac).toBeGreaterThanOrEqual(0.65)
-    expect(WAVE.restRadiusFrac).toBeLessThanOrEqual(0.8)
+  it('resting dot renders at the ring-dot radius (no crossfade pop), clamped to the bar width', () => {
+    // Dot-mass regression guard. The resting waveform dot is pinned to the
+    // orbiting ring dot's RENDERED radius (RING_DOT_RENDER_RADIUS) so the
+    // ring↔waveform crossfade swaps like for like with no thickness pop. It is
+    // clamped to the bar half-width so it can never render fatter than a speaking
+    // bar. (A past change silently thinned the resting dot and the user caught it;
+    // the mass is now pinned to RING_DOT_RENDER_RADIUS, itself guarded below.)
+
+    // Wide-pitch mount (few slots → barW ≫ ring radius): NOT clamped, so the dot
+    // lands exactly on the ring-dot render radius.
+    const wide = waveBars([0], 1)[0]
+    const barWWide = ((2 * waveHalfWidth(1)) / 1) * WAVE.barRadiusFrac
+    expect(barWWide).toBeGreaterThan(RING_DOT_RENDER_RADIUS) // precondition: no clamp
+    expect(wide.halfH).toBeCloseTo(RING_DOT_RENDER_RADIUS, 9)
+    expect(wide.halfH).toBeLessThan(barWWide) // still a dot, not a full bar
+
+    // Narrow-pitch mount (many slots → barW < ring radius): clamps to the bar
+    // width so the dot never exceeds it.
+    const narrow = waveBars(new Array(40).fill(0), 5)[0]
+    const barWNarrow = ((2 * waveHalfWidth(5)) / 40) * WAVE.barRadiusFrac
+    expect(barWNarrow).toBeLessThan(RING_DOT_RENDER_RADIUS) // precondition: clamp engages
+    expect(narrow.halfH).toBeCloseTo(barWNarrow, 9)
+
+    // Dot-mass floor: the ring-dot render radius (dotRadius·discRadius) must stay
+    // in a comfortably-visible band — a future tweak to dotRadius/discRadius can't
+    // silently thin the resting dot to a speck (user: too-thin read "way too
+    // tiny") nor bloat it past a dot.
+    expect(RING_DOT_RENDER_RADIUS).toBeGreaterThanOrEqual(0.08)
+    expect(RING_DOT_RENDER_RADIUS).toBeLessThanOrEqual(0.12)
   })
 
   it('bars are evenly spaced, centered on the row, and within bounds', () => {

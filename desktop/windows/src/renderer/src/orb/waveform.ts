@@ -15,6 +15,8 @@
 // Bars are returned in the shader's normalized short-axis units (y half-extent =
 // 1, x half-extent = aspect), so the fragment shader rasterizes them directly.
 
+import { RING_DOT_RENDER_RADIUS } from './choreography'
+
 /** Shader uniform-array cap for waveform slots (must match u_wave[] in shader.ts).
  *  A wide mount uses ~24–32; a compact square mount ~5–7; this only bounds cost. */
 export const WAVE_MAX_SLOTS = 40
@@ -30,13 +32,10 @@ export const WAVE = {
   /** Bar half-width (the rounded cap radius) as a fraction of the pitch. Sets the
    *  bar:gap ratio. */
   barRadiusFrac: 0.36,
-  /** RESTING (silence) dot radius as a fraction of the bar half-width — a round
-   *  dot, clearly shorter than a bar (user: "shorten the default no-speaking
-   *  bars") yet comfortably visible (user, live tune 2026-07-12: 0.5 read "way
-   *  too thin/tiny — a tad bit vertically thicker"). Width ramps up to the full
-   *  bar quickly (see widthLevel) so actual speech bars stay a uniform width;
-   *  only near-silence reads as a dot. */
-  restRadiusFrac: 0.7,
+  // The RESTING (silence) dot radius is no longer a fraction of the bar width —
+  // it is pinned to the orbiting ring dot's rendered radius (choreography.ts
+  // RING_DOT_RENDER_RADIUS), clamped to the bar width, so the ring↔waveform
+  // crossfade has no thickness pop. See `waveBars`.
   /** Level by which a slot reaches its full bar WIDTH (height keeps growing past
    *  it). Keeps all speaking bars uniform-width while silence stays a slim dot. */
   widthLevel: 0.22,
@@ -137,7 +136,14 @@ export function waveBars(levels: number[], aspect: number): WaveBar[] {
   const halfW = waveHalfWidth(aspect)
   const pitch = (2 * halfW) / n
   const barW = pitch * WAVE.barRadiusFrac // full bar half-width
-  const restR = barW * WAVE.restRadiusFrac // resting round-dot radius (< barW)
+  // Resting (silence) dot radius. Pinned to the orbiting ring dot's RENDERED
+  // radius (RING_DOT_RENDER_RADIUS) so the ring↔waveform crossfade swaps a ring
+  // dot for a resting bar-dot of the SAME size — no thickness pop (they used to
+  // differ ~45% in area). Clamped to `barW` so the dot can never render wider
+  // than the speaking bar itself (on narrow-pitch wide mounts the ring radius
+  // exceeds barW; there the bar width wins). On the main square/bar orb the two
+  // are near-identical, so nothing is clamped and the match is exact.
+  const restR = Math.min(RING_DOT_RENDER_RADIUS, barW)
   const growthH = Math.max(0, WAVE.maxHalfExtent - restR)
   return levels.map((lvl, i) => {
     const l = clamp01(lvl)
