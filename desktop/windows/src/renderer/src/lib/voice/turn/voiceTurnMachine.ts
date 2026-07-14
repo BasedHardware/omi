@@ -1129,6 +1129,15 @@ export function reduceVoiceTurn(
       terminate(model, event.reason, effects, deadlines)
       break
     }
+
+    default: {
+      // Exhaustiveness guard (Swift's switch is exhaustive by compiler). A 32nd
+      // event added to `VoiceTurnEvent` fails to compile HERE instead of
+      // silently no-oping its way through the reducer.
+      const unhandled: never = event
+      void unhandled
+      break
+    }
   }
 
   return { model, effects }
