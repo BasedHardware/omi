@@ -16,13 +16,13 @@ on:
   push:
     branches: [main]
     paths:
-      - 'desktop/windows/**'
-      - '.github/workflows/desktop-windows-ci.yml'
+      - "desktop/windows/**"
+      - ".github/workflows/desktop-windows-ci.yml"
   pull_request:
     branches: [main]
     paths:
-      - 'desktop/windows/**'
-      - '.github/workflows/desktop-windows-ci.yml'
+      - "desktop/windows/**"
+      - ".github/workflows/desktop-windows-ci.yml"
 
 defaults:
   run:
@@ -44,7 +44,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: desktop/windows/pnpm-lock.yaml
       # Checks need no native modules; --ignore-scripts skips the electron-rebuild
-      # / OCR-helper postinstall. The vitest electron stub (test/electronStub.ts)
+      # / native-helper postinstall. The vitest electron stub (test/electronStub.ts)
       # lets the suite run without the electron binary.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
@@ -73,16 +73,18 @@ jobs:
       # OCR + UI-automation helpers are .NET projects built during install/build.
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: "10.0.x"
       - name: Provision .env (ships public Firebase/PostHog config)
         shell: pwsh
         run: Copy-Item .env.example .env
       # Full install: runs postinstall (electron-builder install-app-deps,
-      # electron-rebuild better-sqlite3, ensure-ocr-helper).
+      # electron-rebuild better-sqlite3, ensure-native-helpers).
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build unpacked app
         run: pnpm run build:unpack
+      - name: Verify packaged native helpers
+        run: pnpm run verify:packaged-native-helpers
       - name: Upload unpacked build
         uses: actions/upload-artifact@v4
         with:
