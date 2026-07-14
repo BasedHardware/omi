@@ -83,7 +83,8 @@ def _seed_empty_live_conversation(client: Any, uid: str, conversation_id: str) -
     """
     conversation_ref = _conversation_ref(client, uid, conversation_id)
     conversation_ref.set(
-        conversations_db._prepare_conversation_for_write(
+        conversations_db.encode_conversation_for_write(
+            uid,
             {
                 'id': conversation_id,
                 'status': 'in_progress',
@@ -92,8 +93,6 @@ def _seed_empty_live_conversation(client: Any, uid: str, conversation_id: str) -
                 'has_content': False,
                 'data_protection_level': 'standard',
             },
-            uid,
-            'standard',
         )
     )
     return conversation_ref

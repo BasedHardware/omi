@@ -132,6 +132,18 @@ def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) 
     return data
 
 
+def encode_conversation_for_write(
+    uid: str, conversation_data: Dict[str, Any], level: str = 'standard'
+) -> Dict[str, Any]:
+    """Encode a conversation exactly as the write path stores it.
+
+    The seam exists for harnesses that seed Firestore directly: a hand-written
+    document with a plain ``transcript_segments`` list is a state production
+    never writes, and seeding one hides encoding-aware guard bugs.
+    """
+    return _prepare_conversation_for_write(conversation_data, uid, level)
+
+
 def _decode_transcript_segments_strict(uid: str, raw_segments: Any, compressed: bool) -> List[Any]:
     """Decode a stored ``transcript_segments`` blob, raising when it cannot be read.
 

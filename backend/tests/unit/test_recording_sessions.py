@@ -20,9 +20,9 @@ def _stored_conversation(segments: list[dict[str, Any]], *, level: str = 'standa
     Seeding a raw ``transcript_segments`` list is what let the empty-cleanup
     guard ship reading a compressed blob as if it were a plain list.
     """
-    return conversations_db._prepare_conversation_for_write(
-        {'id': 'conversation', 'status': 'in_progress', 'transcript_segments': segments},
+    return conversations_db.encode_conversation_for_write(
         'uid',
+        {'id': 'conversation', 'status': 'in_progress', 'transcript_segments': segments},
         level,
     )
 
