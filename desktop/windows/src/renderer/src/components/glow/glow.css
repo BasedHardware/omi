@@ -23,9 +23,27 @@ html,
 body.glow-body {
   background: transparent !important;
   overflow: hidden;
-  /* The window is click-through at the OS level (setIgnoreMouseEvents); this is
-     the belt-and-braces DOM half — the halo must never eat an event, the user is
-     working in the window underneath it. */
+}
+
+/* ⚠ `pointer-events: none` MUST stay scoped to `body.glow-body` and MUST NOT be
+   hoisted into the grouped rule above with `html`.
+
+   There is ONE renderer bundle and ONE index.html for every window (main, bar,
+   insight-toast, capture, glow), so this stylesheet is loaded EVERYWHERE — but
+   `body.glow-body` is only ever set on the halo window. An `html` selector has no
+   such scope, and `pointer-events` is INHERITED: `html { pointer-events: none }`
+   propagates to <body>, #root and every descendant of the MAIN window, so the
+   sidebar, chat input, buttons and scrolling all silently stop responding to the
+   mouse. An audit caught exactly that before it shipped; screenshot verification
+   never catches it, because the pixels look perfect.
+
+   (bar.css has the same grouped html/body rule and deliberately keeps
+   pointer-events out of it, for this reason.)
+
+   The window is click-through at the OS level anyway (setIgnoreMouseEvents); this
+   is the belt-and-braces DOM half — the halo must never eat an event, since the
+   user is working in the window underneath it. */
+body.glow-body {
   pointer-events: none;
 }
 

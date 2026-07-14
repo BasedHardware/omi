@@ -234,7 +234,29 @@ export function planGlow(input: GlowTargetInput): GlowDecision {
     return { ok: false, reason: 'too-small' }
   }
   if (!intersectsAnyDisplay(targetDip, displays)) return { ok: false, reason: 'offscreen' }
-  if (isExclusiveFullscreen(targetDip, displays)) return { ok: false, reason: 'fullscreen' }
+
+  // The fullscreen gate must NOT fire for a MAXIMIZED window.
+  //
+  // `isExclusiveFullscreen` matches the frame against the display BOUNDS, on the
+  // assumption that a maximized window stops at the taskbar and so is strictly
+  // smaller. That assumption dies with an AUTO-HIDE taskbar (or on a secondary
+  // monitor, which has none): there workArea === bounds, so a maximized window's
+  // frame IS exactly the display bounds, and gating on the rect alone rejected it
+  // as 'fullscreen' — meaning NO maximized window would ever glow, which is most
+  // windows. An audit caught it; the test fixtures had always given the display a
+  // taskbar, so nothing failed.
+  //
+  // A real exclusive-fullscreen app (a game) is a WS_POPUP with IsZoomed === false,
+  // so `!maximized` is exactly the right precondition: it keeps "never paint over a
+  // game" intact while letting maximized windows through.
+  //
+  // Note this must be tested BEFORE `isSnapped`, and must NOT also require
+  // `!snapped`: isSnapped has a false positive on a full-display rect (it "fills the
+  // width and touches the top", which looks like a top-snap), so a real fullscreen
+  // game would slip past a `!snapped` condition.
+  if (!maximized && isExclusiveFullscreen(targetDip, displays)) {
+    return { ok: false, reason: 'fullscreen' }
+  }
 
   const snapped = isSnapped(targetDip, displays)
   if ((maximized || snapped) && !withinSomeWorkArea(targetDip, displays)) {

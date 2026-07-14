@@ -31,6 +31,45 @@ function input(over: Partial<GlowTargetInput>): GlowTargetInput {
   }
 }
 
+// An audit found that the fullscreen gate silently killed the halo for EVERY
+// maximized window on the (very common) auto-hide-taskbar setup. These pin it.
+describe('planGlow — maximized with no taskbar (auto-hide / secondary monitor)', () => {
+  // With the taskbar auto-hidden there IS no reserved strip, so workArea === bounds.
+  const NO_TASKBAR: DisplayLike = {
+    bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+    workArea: { x: 0, y: 0, width: 1920, height: 1080 }
+  }
+
+  it('still glows a MAXIMIZED window whose frame equals the display bounds', () => {
+    // isExclusiveFullscreen matches the frame against display BOUNDS. With no
+    // taskbar a maximized window's true frame IS the display bounds, so gating on
+    // that alone rejected it as 'fullscreen' — no maximized window would ever glow.
+    const d = planGlow(
+      input({
+        targetDip: { x: 0, y: 0, width: 1920, height: 1080 },
+        displays: [NO_TASKBAR],
+        maximized: true
+      })
+    )
+    expect(d.ok, d.ok ? '' : `unexpectedly rejected: ${d.reason}`).toBe(true)
+    if (d.ok) expect(d.plan.radius).toBe(0) // square corners, like any maximized window
+  })
+
+  it('still refuses to paint over a real exclusive-fullscreen app (a game)', () => {
+    // A true fullscreen app is a WS_POPUP: it fills the display but is NOT zoomed.
+    // That is the distinction the gate now keys on.
+    const d = planGlow(
+      input({
+        targetDip: { x: 0, y: 0, width: 1920, height: 1080 },
+        displays: [NO_TASKBAR],
+        maximized: false
+      })
+    )
+    expect(d.ok).toBe(false)
+    if (!d.ok) expect(d.reason).toBe('fullscreen')
+  })
+})
+
 describe('planGlow — the shipped bug', () => {
   // THE REGRESSION TEST. v1 fed GetWindowRect straight into the geometry. For a
   // maximized window GetWindowRect includes the invisible DWM resize border and

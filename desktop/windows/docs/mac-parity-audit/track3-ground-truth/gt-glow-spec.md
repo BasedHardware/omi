@@ -166,16 +166,21 @@ Keep `body { background: transparent; pointer-events: none }` and the `key={runI
 
 ## 4. Numbers (all DIP/CSS px — scale automatically; keep every dimension out of physical space)
 
+> ⚠ AS-BUILT values below (the first draft of this table said pad 36 / reach 20; the
+> shipped shadow stack has a longer, softer tail, so the pad grew to match). The code is
+> the source of truth — `glowGeometry.ts`.
+
 | param | value | why |
 |---|---|---|
-| `WINDOW_PAD` | **36** | Overlay inflation/side. Glow reach ~20; the extra ~16 absorbs DWM's rounding of our own window (§1b). |
-| glow reach | **~20** | widest layer `spread + blur/2` = 7 + 15 = 22, alpha 0.10 → visually gone by ~20. |
-| **perceived thickness** | **~5–6** | Where the bulk of the alpha lives. **This is the number the user judges.** v1's was **24**. |
+| `WINDOW_PAD` | **80** | Overlay inflation/side. Must exceed the glow's reach or the window's own edge CLIPS the tail — and a clipped glow ends in a hard straight line, which is itself the "rough / not seamless" artifact. The surplus also absorbs DWM's rounding of our own window (§1b). **Raise this whenever you extend the outermost shadow layer.** |
+| glow reach | **~58** | widest layer is `0 0 84px 16px` → `spread + blur/2` ≈ 58. |
+| **perceived thickness** | **~5–6** | Where the bulk of the alpha lives. **This is the number the user judges.** v1's was **24** and he rejected it. |
+| **`RING_OVERLAP`** | **3** | How far the ring is pulled INSIDE the target's edge. **Not optional** — an outer box-shadow is clipped to strictly outside the border box, so a ring seated exactly on the frame starts its brightest layer one pixel OFF the window, and fractional scaling (150%) rounds that into a visible sliver. The user caught it: *"a little bit of space between the brightest start of the glow and the actual edge"*. macOS overlaps inward by 4pt "for a seamless look"; dropping it was a mistake (the four BANDS were the artifact — the inward overlap is load-bearing). |
 | `--radius` | **8**, or **0** maximized/snapped | Win11 uses an 8px top-level radius, and corners are NOT rounded when snapped/maximized. Matching this makes the halo *hug* the window. |
-| peak opacity | **0.85** | envelope max |
+| peak opacity | **0.85** | envelope max — the user's approved FAINT variant. Do not raise. |
 | `MIN_TARGET_SIZE` | 100 | keep |
 | `GLOW_LIFETIME_MS` | 3500 | keep |
-| **DELETE** | `GLOW_THICKNESS=20`, `GLOW_OVERLAP=4` | artifacts of the band model |
+| **DELETE** | `GLOW_THICKNESS=20` | artifact of the band model (unlike the inward overlap — see above) |
 
 v1 = 20px outward + 4px inward of near-opaque gradient. v2 puts >90% of its alpha inside 6px and
 tapers to nothing by 20px. Same outer extent, completely different read: **glow, not border.**

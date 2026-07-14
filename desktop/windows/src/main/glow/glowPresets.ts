@@ -31,6 +31,15 @@ export const GLOW_PRESETS: Record<GlowPresetName, GlowPaint> = {
   }
 }
 
+/**
+ * `Object.hasOwn`, NOT `name in GLOW_PRESETS`: `in` walks the prototype chain, so
+ * `'constructor' in GLOW_PRESETS` is true. A renderer calling
+ * `omiGlow.trigger('constructor')` would then pass this guard, and
+ * `GLOW_PRESETS['constructor']` — the `Object` function — would be handed to
+ * `webContents.send`, which throws "An object could not be cloned" INSIDE an
+ * `ipcMain.on` handler: an uncaught exception in the main process. Matters more
+ * once the Focus assistant feeds a model-derived verdict string in here.
+ */
 export function isGlowPreset(name: unknown): name is GlowPresetName {
-  return typeof name === 'string' && name in GLOW_PRESETS
+  return typeof name === 'string' && Object.hasOwn(GLOW_PRESETS, name)
 }

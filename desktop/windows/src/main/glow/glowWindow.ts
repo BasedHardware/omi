@@ -318,8 +318,17 @@ export function dismissGlow(): void {
   active = null
   const win = glowWindow
   if (!win || win.isDestroyed()) return
-  win.webContents.send('glow:hide')
+  // PARK FIRST, then notify. If the send threw (a gone/destroyed webContents), an
+  // unguarded send BEFORE the park would skip the park entirely — leaving the ring
+  // on screen forever with every timer already cleared, i.e. the one path to a
+  // permanently stuck overlay covering the user's window. Taking it off-screen is
+  // the part that must not be able to fail.
   park(win)
+  try {
+    win.webContents.send('glow:hide')
+  } catch {
+    // The window is going away; it is already parked, which is what matters.
+  }
   diag('dismiss (parked)')
 }
 
