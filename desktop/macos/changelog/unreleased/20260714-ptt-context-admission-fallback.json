@@ -1,0 +1,3 @@
+{
+  "change": "Fixed push-to-talk dropping a spoken question with no answer when the realtime session rejected the turn's context — it now falls back to transcription instead of silently ending the turn"
+}

@@ -409,6 +409,12 @@ enum VoiceTurnEvent: Equatable, Sendable {
     turnID: VoiceTurnID, identity: VoiceEffectIdentity, sessionID: VoiceSessionID)
   case providerReconnectFailed(
     turnID: VoiceTurnID, identity: VoiceEffectIdentity, message: String)
+  /// Buffered PTT input was discarded before it ever reached the provider, because the
+  /// context-bound admission rejected it (or the kernel snapshot it needed failed). Unlike
+  /// `providerReconnectFailed` — a transport failure that kills the turn — the captured audio
+  /// is still intact, so the turn takes the bounded transcription fallback instead of dying.
+  case providerContextAdmissionRejected(
+    turnID: VoiceTurnID, identity: VoiceEffectIdentity, message: String)
   case providerReplacementStarted(
     turnID: VoiceTurnID, identity: VoiceEffectIdentity,
     previousResponseID: VoiceResponseID?, nextResponseID: VoiceResponseID)
@@ -470,6 +476,7 @@ enum VoiceTurnEvent: Equatable, Sendable {
       .hubCommitDeferredForReplacement(let turnID),
       .providerReconnectStarted(let turnID, _, _), .providerReconnected(let turnID, _, _),
       .providerReconnectFailed(let turnID, _, _),
+      .providerContextAdmissionRejected(let turnID, _, _),
       .providerReplacementStarted(let turnID, _, _, _),
       .providerReplacementReady(let turnID, _, _, _), .contextResolved(let turnID, _),
       .providerReplacementFailed(let turnID, _, _),
@@ -518,6 +525,7 @@ enum VoiceTurnEvent: Equatable, Sendable {
     case .providerReconnectStarted: return "provider_reconnect_started"
     case .providerReconnected: return "provider_reconnected"
     case .providerReconnectFailed: return "provider_reconnect_failed"
+    case .providerContextAdmissionRejected: return "provider_context_admission_rejected"
     case .providerReplacementStarted: return "provider_replacement_started"
     case .providerReplacementReady: return "provider_replacement_ready"
     case .providerReplacementFailed: return "provider_replacement_failed"
@@ -895,6 +903,41 @@ struct VoiceTurnReducer {
         return VoiceTurnReduction(model: model, effects: effects)
       }
       terminate(&model, reason: .providerFailed, effects: &effects)
+
+    case .providerContextAdmissionRejected(_, let identity, _):
+      guard case .reconnecting(let expectedIdentity, _) = turn.providerConnection,
+        expectedIdentity == identity, !turn.phase.isTerminal
+      else {
+        stale(&model, event: event, effects: &effects)
+        return VoiceTurnReduction(model: model, effects: effects)
+      }
+      cancel(.providerReconnect, in: &model, effects: &effects)
+      // The rejected audio never reached the provider, so the turn is still recoverable —
+      // but only from an input phase, because the transcription fallback transcribes the
+      // capture buffer. `providerReconnectStarted` projects a released turn into
+      // awaitingResponse while it waits for the socket, so restore the input phase first;
+      // any other phase has no buffered input to rescue and keeps the terminal behavior.
+      let inputPhase: VoiceTurnPhase? = {
+        if turn.phase.isRecording { return turn.phase }
+        if turn.phase == .finalizing { return .finalizing }
+        if turn.phase == .awaitingResponse, turn.hubCommitPending { return .finalizing }
+        return nil
+      }()
+      guard let inputPhase else {
+        terminate(&model, reason: .providerFailed, effects: &effects)
+        return VoiceTurnReduction(model: model, effects: effects)
+      }
+      cancel(.hubWarm, in: &model, effects: &effects)
+      model.turn?.providerConnection = .ready
+      model.turn?.phase = inputPhase
+      model.turn?.projection.isListening = inputPhase.isRecording
+      model.turn?.projection.isThinking = !inputPhase.isRecording
+      model.turn?.projection.isResponseWaiting = false
+      model.turn?.route = .deepgramBatch
+      effects.append(.fallbackToTranscription(turnID: turn.id, reason: .hubWarmTimeout))
+      if inputPhase == .finalizing {
+        schedule(.transcription, after: deadlines.transcription, in: &model, effects: &effects)
+      }
 
     case .providerReplacementStarted(
       _, let identity, let previousResponseID, let nextResponseID):

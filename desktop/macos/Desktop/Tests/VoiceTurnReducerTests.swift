@@ -1243,6 +1243,71 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertEqual(failed.model.turn?.phase, .terminal(.providerFailed))
   }
 
+  func testContextAdmissionRejectionAfterReleaseTranscribesInsteadOfDroppingTheTurn() {
+    let turnID = VoiceTurnID()
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .selectRoute(turnID: turnID, route: .hubWarmWait)).model
+    model = reduce(model, .finalize(turnID: turnID)).model
+    model = reduce(model, .hubCommitDeferred(turnID: turnID)).model
+    let reservation = reserveIdentity(model, turnID: turnID)
+    model = reservation.model
+    model = reduce(
+      model,
+      .providerReconnectStarted(
+        turnID: turnID,
+        identity: reservation.identity,
+        previousSessionID: nil)).model
+    // The pending commit projects the released turn into awaitingResponse while it waits
+    // for the socket; the rejection must still be able to rescue the captured audio.
+    XCTAssertEqual(model.turn?.phase, .awaitingResponse)
+
+    let rejected = reduce(
+      model,
+      .providerContextAdmissionRejected(
+        turnID: turnID,
+        identity: reservation.identity,
+        message: "realtime context admission rejected: rejectMissingContextIdentity"))
+
+    XCTAssertEqual(rejected.model.turn?.phase, .finalizing)
+    XCTAssertEqual(rejected.model.turn?.route, .deepgramBatch)
+    XCTAssertEqual(rejected.model.turn?.providerConnection, .ready)
+    XCTAssertTrue(rejected.model.turn?.deadlines.contains(.transcription) == true)
+    XCTAssertFalse(rejected.model.turn?.deadlines.contains(.providerReconnect) == true)
+    XCTAssertTrue(
+      rejected.effects.contains(
+        .fallbackToTranscription(turnID: turnID, reason: .hubWarmTimeout)))
+    XCTAssertNil(rejected.model.lastTerminal)
+  }
+
+  func testContextAdmissionRejectionWhileHoldingKeepsRecordingOnTheTranscriptionRoute() {
+    let turnID = VoiceTurnID()
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .selectRoute(turnID: turnID, route: .hubWarmWait)).model
+    let reservation = reserveIdentity(model, turnID: turnID)
+    model = reservation.model
+    model = reduce(
+      model,
+      .providerReconnectStarted(
+        turnID: turnID,
+        identity: reservation.identity,
+        previousSessionID: nil)).model
+
+    let rejected = reduce(
+      model,
+      .providerContextAdmissionRejected(
+        turnID: turnID,
+        identity: reservation.identity,
+        message: "realtime context admission rejected: rejectStaleProviderContext"))
+
+    XCTAssertEqual(rejected.model.turn?.phase, .recording)
+    XCTAssertEqual(rejected.model.turn?.route, .deepgramBatch)
+    XCTAssertFalse(rejected.model.turn?.deadlines.contains(.transcription) == true)
+    XCTAssertTrue(
+      rejected.effects.contains(
+        .fallbackToTranscription(turnID: turnID, reason: .hubWarmTimeout)))
+    XCTAssertNil(rejected.model.lastTerminal)
+  }
+
   func testExplicitInterruptRevokesToolAndRejectsItsLateCallback() throws {
     let (startingModel, turnID, _, _) = awaitingHubResponse()
     let reservation = reserveIdentity(startingModel, turnID: turnID)

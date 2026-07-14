@@ -3139,7 +3139,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       reconnectAudioBuffer = nil
       live.abandonInputTurn()
       VoiceTurnCoordinator.shared.send(
-        .providerReconnectFailed(
+        .providerContextAdmissionRejected(
           turnID: pending.turnID,
           identity: pending.identity,
           message: "realtime context admission rejected: \(admission)"))
@@ -3213,7 +3213,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     guard VoiceTurnCoordinator.shared.activeTurnID == turnID else { return }
     session?.abandonInputTurn()
     VoiceTurnCoordinator.shared.send(
-      .providerReconnectFailed(
+      .providerContextAdmissionRejected(
         turnID: turnID,
         identity: pending.identity,
         message: message))
@@ -3779,7 +3779,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       reconnectAudioBuffer = nil
       live.abandonInputTurn()
       VoiceTurnCoordinator.shared.send(
-        .providerReconnectFailed(
+        .providerContextAdmissionRejected(
           turnID: pending.turnID,
           identity: pending.identity,
           message: "realtime reconnect admission rejected: \(admission)"))
