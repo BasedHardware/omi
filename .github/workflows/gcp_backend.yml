@@ -175,9 +175,36 @@ jobs:
       - name: Install Python deps for deploy scripts
         run: python3 -m pip install -q pyyaml
 
+      - name: Resolve production account-deletion task target
+        if: ${{ vars.ENV == 'prod' }}
+        id: account-deletion-target
+        run: |
+          set -euo pipefail
+          SYNC_SERVICE_URL="$(
+            gcloud run services describe "${{ env.SERVICE }}-sync" \
+              --region="${{ env.REGION }}" \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --format='value(status.url)'
+          )"
+          SYNC_TASKS_INVOKER_SA="$(
+            gcloud run services describe "${{ env.SERVICE }}-sync" \
+              --region="${{ env.REGION }}" \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --format=json \
+              | jq -r '.spec.template.spec.containers[0].env[]? | select(.name == "SYNC_TASKS_INVOKER_SA") | .value'
+          )"
+          test -n "$SYNC_SERVICE_URL"
+          test -n "$SYNC_TASKS_INVOKER_SA"
+          {
+            echo "account_deletion_handler_url=${SYNC_SERVICE_URL}/v1/users/account-deletion-wipes/run"
+            echo "sync_tasks_handler_url=${SYNC_SERVICE_URL}/v2/sync-jobs/run"
+            echo "sync_tasks_invoker_sa=${SYNC_TASKS_INVOKER_SA}"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Render backend runtime env
         id: runtime-env
         env:
+          ACCOUNT_DELETION_HANDLER_URL: ${{ steps.account-deletion-target.outputs.account_deletion_handler_url }}
           CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
           CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
           GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
@@ -187,6 +214,8 @@ jobs:
           OMI_LLM_GATEWAY_URL: ${{ vars.OMI_LLM_GATEWAY_URL }}
           STT_PRERECORDED_MODEL: ${{ vars.STT_PRERECORDED_MODEL }}
           SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
+          SYNC_TASKS_HANDLER_URL: ${{ steps.account-deletion-target.outputs.sync_tasks_handler_url }}
+          SYNC_TASKS_INVOKER_SA: ${{ steps.account-deletion-target.outputs.sync_tasks_invoker_sa }}
         run: |
           python3 backend/scripts/render_backend_runtime_env.py --env ${{ vars.ENV }} >> "$GITHUB_OUTPUT"
 
@@ -305,6 +334,7 @@ jobs:
       - name: Apply non-secret backend runtime config
         if: ${{ github.event.inputs.deploy_targets == 'all' }}
         env:
+          ACCOUNT_DELETION_HANDLER_URL: ${{ steps.account-deletion-target.outputs.account_deletion_handler_url }}
           ENVIRONMENT: ${{ vars.ENV }}
           CONVERSATION_SUMMARIZED_APP_IDS: ${{ vars.CONVERSATION_SUMMARIZED_APP_IDS }}
           GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
@@ -321,6 +351,8 @@ jobs:
           REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
           STT_PRERECORDED_MODEL: ${{ vars.STT_PRERECORDED_MODEL }}
           STT_SERVICE_MODELS: ${{ vars.STT_SERVICE_MODELS }}
+          SYNC_TASKS_HANDLER_URL: ${{ steps.account-deletion-target.outputs.sync_tasks_handler_url }}
+          SYNC_TASKS_INVOKER_SA: ${{ steps.account-deletion-target.outputs.sync_tasks_invoker_sa }}
           TYPESENSE_HOST: ${{ vars.TYPESENSE_HOST }}
           TWILIO_ACCOUNT_SID: ${{ vars.TWILIO_ACCOUNT_SID }}
           TWILIO_API_KEY_SID: ${{ vars.TWILIO_API_KEY_SID }}

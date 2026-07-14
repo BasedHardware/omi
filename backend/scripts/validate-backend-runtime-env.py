@@ -42,6 +42,16 @@ _NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_ENV = frozenset(
 _NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_SECRETS = frozenset({'TYPESENSE_HOST', 'TYPESENSE_API_KEY'})
 _SYNC_LEDGER_FENCE_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill')
 _SYNC_LEDGER_FENCE_MODES = frozenset({'legacy', 'standby', 'active'})
+_ACCOUNT_DELETION_PROD_CLOUD_RUN_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
+_ACCOUNT_DELETION_LITERAL_ENV = {
+    'ACCOUNT_DELETION_DISPATCH_MODE': 'cloud_tasks',
+    'ACCOUNT_DELETION_TASKS_QUEUE': 'account-deletion',
+    'SYNC_TASKS_PROJECT': 'based-hardware',
+    'SYNC_TASKS_LOCATION': 'us-central1',
+}
+_ACCOUNT_DELETION_DYNAMIC_ENV = frozenset(
+    {'ACCOUNT_DELETION_HANDLER_URL', 'SYNC_TASKS_INVOKER_SA', 'SYNC_TASKS_HANDLER_URL'}
+)
 _MEMORY_MAINTENANCE_DEV_REQUIRED_FLAGS = {
     '--task-timeout': '3600s',
     '--cpu': '2',
@@ -132,6 +142,7 @@ def validate_runtime_env(
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
     errors.extend(_validate_prerecorded_stt_contract(env, env_config))
     errors.extend(_validate_memory_maintenance_job_contract(env, env_config))
+    errors.extend(_validate_account_deletion_dispatch_contract(env, env_config))
     if check_workflows:
         errors.extend(
             _validate_cloud_run_workflows(
@@ -608,6 +619,70 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
                 )
             )
     return errors
+
+
+def _validate_account_deletion_dispatch_contract(env: str, env_config: ConfigDict) -> list[ValidationError]:
+    """Keep every production API host out of the inline deletion execution path."""
+    if env != 'prod':
+        return []
+
+    errors: list[ValidationError] = []
+    gke = _as_config_dict(env_config.get('gke')) or {}
+    backend_listen = _as_config_dict(gke.get('backend-listen')) or {}
+    _validate_account_deletion_env_entries(
+        errors,
+        scope='prod/gke/backend-listen',
+        env_entries=_as_config_dict(backend_listen.get('env')) or {},
+        dynamic_binding='config_map',
+    )
+
+    cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
+    services = _as_config_dict(cloud_run.get('services')) or {}
+    for service in _ACCOUNT_DELETION_PROD_CLOUD_RUN_SERVICES:
+        service_config = _as_config_dict(services.get(service)) or {}
+        _validate_account_deletion_env_entries(
+            errors,
+            scope=f'prod/cloud_run/{service}',
+            env_entries=_as_config_dict(service_config.get('env')) or {},
+            dynamic_binding='env_var',
+        )
+    return errors
+
+
+def _validate_account_deletion_env_entries(
+    errors: list[ValidationError],
+    *,
+    scope: str,
+    env_entries: ConfigDict,
+    dynamic_binding: str,
+) -> None:
+    for name, expected_value in _ACCOUNT_DELETION_LITERAL_ENV.items():
+        entry = _as_config_dict(env_entries.get(name))
+        if entry is None:
+            errors.append(ValidationError(scope, f'missing required account-deletion env {name}'))
+        elif entry.get('value') != expected_value:
+            errors.append(
+                ValidationError(
+                    scope,
+                    f'account-deletion env {name} must be literal {expected_value!r}',
+                )
+            )
+
+    for name in _ACCOUNT_DELETION_DYNAMIC_ENV:
+        entry = _as_config_dict(env_entries.get(name))
+        if entry is None:
+            errors.append(ValidationError(scope, f'missing required account-deletion env {name}'))
+        elif dynamic_binding == 'env_var' and entry.get('env_var') != name:
+            errors.append(ValidationError(scope, f'account-deletion env {name} must bind ${name}'))
+        elif dynamic_binding == 'config_map':
+            config_map = _as_config_dict(entry.get('config_map')) or {}
+            if config_map.get('name') != 'prod-omi-backend-config' or config_map.get('key') != name:
+                errors.append(
+                    ValidationError(
+                        scope,
+                        f'account-deletion env {name} must bind prod-omi-backend-config/{name}',
+                    )
+                )
 
 
 def _validate_gke(env_config: ConfigDict, *, strict_provisional: bool) -> list[ValidationError]:
