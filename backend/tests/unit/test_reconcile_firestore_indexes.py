@@ -43,7 +43,7 @@ def test_reconcile_deploys_generated_manifest_and_waits_for_every_index():
     assert sleeps == [1]
 
 
-def test_live_gcloud_indexes_derive_collection_group_and_alias_implicit_document_id():
+def test_live_gcloud_indexes_derive_collection_group_with_explicit_document_id():
     live_index = {
         'name': (
             'projects/dev-project/databases/(default)/collectionGroups/' 'task_attention_overrides/indexes/index-id'
@@ -62,16 +62,19 @@ def test_live_gcloud_indexes_derive_collection_group_and_alias_implicit_document
 
     states = reconcile_firestore_indexes.list_live_indexes(project='dev-project', database='(default)', runner=runner)
 
-    assert (
-        states[
-            (
-                'task_attention_overrides',
-                'COLLECTION',
-                (('account_generation', 'ASCENDING'), ('expires_at', 'ASCENDING')),
-            )
-        ]
-        == 'READY'
+    attention_override_signature = (
+        'task_attention_overrides',
+        'COLLECTION',
+        (
+            ('account_generation', 'ASCENDING'),
+            ('expires_at', 'ASCENDING'),
+            ('__name__', 'ASCENDING'),
+        ),
     )
+    assert attention_override_signature in reconcile_firestore_indexes.expected_index_signatures(
+        firebase_index_manifest()
+    )
+    assert states[attention_override_signature] == 'READY'
 
 
 def test_live_gcloud_index_does_not_alias_explicitly_descending_document_id():
