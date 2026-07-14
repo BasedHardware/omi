@@ -36,9 +36,16 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<SyncProvider>().refreshWals();
-      context.read<DeviceProvider>().refreshRingStorageStatus();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final syncProvider = context.read<SyncProvider>();
+      final deviceProvider = context.read<DeviceProvider>();
+      // Discover offline recordings straight from the device so they list here
+      // even when auto-sync is off (device discovery otherwise only runs as the
+      // first step of a full sync). Falls back to the cached list on failure.
+      // Run BLE reads sequentially — this and the storage-usage read below both
+      // hit the same device and would otherwise contend on the GATT link.
+      await syncProvider.discoverDeviceWals(firmwareVersion: deviceProvider.currentFirmwareVersion);
+      await deviceProvider.refreshRingStorageStatus();
       SyncReconciler.instance.poke();
     });
   }
