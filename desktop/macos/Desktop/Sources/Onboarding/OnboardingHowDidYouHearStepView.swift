@@ -11,8 +11,8 @@ struct OnboardingHowDidYouHearStepView: View {
   @AppStorage("onboardingHowDidYouHearSource") private var selectedSource: String = ""
   @State private var shuffledSources: [String] = []
   /// True when the step appeared with an answer already saved (a revisit).
-  /// Revisits show an explicit Continue button instead of auto-advancing on
-  /// every chip tap — only the first-ever selection auto-advances.
+  /// Only the first-ever selection auto-advances; revisits use Continue so
+  /// changing your saved answer doesn't yank you forward.
   @State private var hadSelectionOnAppear = false
 
   private static let sources = [
