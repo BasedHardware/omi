@@ -26,6 +26,29 @@ export async function setConversationTitle(id: string, title: string): Promise<v
   await omiApi.patch(`/v1/conversations/${id}/title`, null, { params: { title } })
 }
 
+/** Mac's "Copy link" (APIClient.getConversationShareLink): flip the conversation
+ *  to "shared" visibility, then hand back the public web URL.
+ *
+ *  Backend contract: `value` is a required QUERY param
+ *  (backend/routers/conversations.py::set_conversation_visibility). Mac also
+ *  sends a redundant `visibility=` param that the backend never binds — not
+ *  ported. */
+export async function getConversationShareLink(id: string): Promise<string> {
+  await omiApi.patch(`/v1/conversations/${id}/visibility`, null, {
+    params: { value: 'shared' }
+  })
+  return `https://h.omi.me/conversations/${id}`
+}
+
+/** Re-run Omi's summarization. `appId` targets a specific app (Mac's App Insights
+ *  "Reprocess" picker); omitted, it regenerates the default summary. Both params
+ *  are query params. */
+export async function reprocessConversation(id: string, appId?: string): Promise<void> {
+  await omiApi.post(`/v1/conversations/${id}/reprocess`, null, {
+    params: appId ? { app_id: appId } : {}
+  })
+}
+
 /** Merge ≥2 conversations into one. FIRE-AND-FORGET: the backend returns
  *  {status:'merging', conversation_ids} and does NOT return the new conversation's
  *  id — the caller must refetch the list to see the result. */
