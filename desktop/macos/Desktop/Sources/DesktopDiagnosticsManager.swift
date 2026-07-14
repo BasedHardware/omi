@@ -17,6 +17,7 @@ enum DesktopHealthEventName: String {
   case realtimeProviderExpectedSessionRotation = "realtime_provider_expected_session_rotation"
   case realtimeProviderPolicyClose = "realtime_provider_policy_close"
   case realtimeProviderSessionError = "realtime_provider_session_error"
+  case realtimeContextPlan = "realtime_context_plan"
   case fallbackTriggered = "fallback_triggered"
 }
 
@@ -480,6 +481,43 @@ final class DesktopDiagnosticsManager {
       properties: properties)
   }
 
+  func recordRealtimeContextPlan(
+    provider: String,
+    model: String,
+    plan: RealtimeCachePlanTelemetry,
+    replacementReason: String
+  ) {
+    record(
+      .realtimeContextPlan,
+      properties: realtimeContextPlanProperties(
+        provider: provider,
+        model: model,
+        plan: plan,
+        phase: "session_start",
+        replacementReason: replacementReason,
+        cacheReadTokens: nil,
+        inputTokens: nil))
+  }
+
+  func recordRealtimeContextPlanUsage(
+    provider: String,
+    model: String,
+    plan: RealtimeCachePlanTelemetry,
+    cacheReadTokens: Int,
+    inputTokens: Int
+  ) {
+    record(
+      .realtimeContextPlan,
+      properties: realtimeContextPlanProperties(
+        provider: provider,
+        model: model,
+        plan: plan,
+        phase: "turn_usage",
+        replacementReason: nil,
+        cacheReadTokens: cacheReadTokens,
+        inputTokens: inputTokens))
+  }
+
   func currentSnapshotsForSentry() -> [[String: Any]] {
     lock.lock()
     let current = snapshots.map { $0.dictionary() }
@@ -716,6 +754,55 @@ final class DesktopDiagnosticsManager {
 
   private func rounded(_ value: Double) -> Double {
     (value * 100).rounded() / 100
+  }
+
+  private func realtimeContextPlanProperties(
+    provider: String,
+    model: String,
+    plan: RealtimeCachePlanTelemetry,
+    phase: String,
+    replacementReason: String?,
+    cacheReadTokens: Int?,
+    inputTokens: Int?
+  ) -> [String: Any] {
+    var properties: [String: Any] = [
+      "phase": phase,
+      "provider": safeProvider(provider),
+      "model": safeOperationalLabel(model),
+      "cache_plan_id": safeFingerprint(plan.planID),
+      "stable_cache_prefix_fingerprint": safeFingerprint(plan.stableCachePrefixFingerprint),
+      "dynamic_context_fingerprint": safeFingerprint(plan.dynamicContextFingerprint),
+      "retained_first_turn_sequence": plan.retainedFirstTurnSeq ?? 0,
+      "retained_last_turn_sequence": plan.retainedLastTurnSeq ?? 0,
+      "omitted_turn_count": plan.omittedTurnCount,
+    ]
+    if let replacementReason {
+      properties["session_replacement_reason"] = safeOperationalLabel(replacementReason)
+    }
+    if let cacheReadTokens {
+      properties["cache_read_tokens"] = max(0, cacheReadTokens)
+    }
+    if let inputTokens {
+      properties["input_tokens"] = max(0, inputTokens)
+    }
+    return properties
+  }
+
+  private func safeFingerprint(_ value: String) -> String {
+    let normalized = value.lowercased()
+    guard normalized.hasPrefix("sha256:"), normalized.count == 71,
+      normalized.dropFirst(7).allSatisfy({ $0.isHexDigit })
+    else { return "invalid" }
+    return normalized
+  }
+
+  private func safeOperationalLabel(_ value: String) -> String {
+    let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard !normalized.isEmpty,
+      normalized.count <= 64,
+      normalized.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" || $0 == "." || $0 == "-" })
+    else { return "unknown" }
+    return normalized
   }
 
   private func classifyInputDevice(_ description: String?) -> String {

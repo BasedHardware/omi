@@ -318,6 +318,21 @@ final class KernelContractWireTests: XCTestCase {
       "ownerId": "owner",
       "sessionId": "session",
       "conversationId": "conversation",
+      "conversationContextPlan": [
+        "version": "conversation-context-plan@1",
+        "planId": "sha256:plan",
+        "conversationId": "conversation",
+        "retainedTurnRange": [
+          "firstTurnId": NSNull(), "firstTurnSeq": NSNull(),
+          "lastTurnId": NSNull(), "lastTurnSeq": NSNull(),
+        ],
+        "omittedTurnCount": 0,
+        "olderHistoryStrategy": "truncated",
+        "semanticPolicyVersion": "conversation-semantic-policy@1",
+        "semanticPolicyFingerprint": "sha256:policy",
+        "stableCachePrefixFingerprint": "sha256:stable",
+        "dynamicContextFingerprint": "sha256:dynamic",
+      ],
       "recentTurns": [],
       "sourceOutcomes": [["source": "screen", "sourceRevision": "sha256:abc"]],
       "activeRuns": [],
@@ -336,6 +351,8 @@ final class KernelContractWireTests: XCTestCase {
       capabilityVersion: "1:digest"))
     XCTAssertEqual(snapshot.sourceRevision(for: .screen), "sha256:abc")
     XCTAssertEqual(snapshot.renderedContext, "[Kernel Context Snapshot]\n{\"sourceOutcomes\":[]}")
+    XCTAssertEqual(snapshot.conversationContextPlan.planID, "sha256:plan")
+    XCTAssertEqual(snapshot.conversationContextPlan.omittedTurnCount, 0)
   }
 
   func testExplicitProfileMigrationCarriesGenerationFenceAndReason() {
@@ -390,13 +407,16 @@ final class KernelContractWireTests: XCTestCase {
     )
     XCTAssertEqual(projection.context, renderedContext)
     XCTAssertEqual(projection.sessionId, "realtime-session-1")
+    XCTAssertEqual(projection.cachePlanID, "sha256:plan")
+    XCTAssertEqual(projection.stableCachePrefixFingerprint, "sha256:stable")
+    XCTAssertEqual(projection.dynamicContextFingerprint, "sha256:dynamic")
     XCTAssertTrue(projection.context.contains("sourceOutcomes"))
     XCTAssertTrue(projection.context.contains("visible window"))
     XCTAssertTrue(projection.context.contains("activeRuns"))
     XCTAssertTrue(projection.context.contains("capabilities"))
     XCTAssertEqual(
       projection.freshnessIdentity,
-      "version-a:renderer-2:1:digest"
+      "version-a:renderer-2:1:digest:sha256:plan"
     )
     XCTAssertEqual(projection.turnIDs, Set(["system", "user", "assistant", "pending"]))
   }
@@ -410,7 +430,7 @@ final class KernelContractWireTests: XCTestCase {
     XCTAssertTrue(projection.context.hasSuffix("kernel-suffix"))
   }
 
-  func testVoiceContextRefreshIdentityUsesOnlySemanticVersionRendererAndCapabilities() throws {
+  func testVoiceContextRefreshIdentityIncludesTheKernelConversationPlan() throws {
     let first = KernelTurnProjection.voiceContextSnapshot(
       from: try makeSnapshot(version: "version-a", generation: 7)
     )
@@ -425,8 +445,13 @@ final class KernelContractWireTests: XCTestCase {
     XCTAssertEqual(first.freshnessIdentity, returnedToSameMaterial.freshnessIdentity)
     XCTAssertEqual(
       returnedToSameMaterial.freshnessIdentity,
-      "version-a:renderer-2:1:digest"
+      "version-a:renderer-2:1:digest:sha256:plan"
     )
+
+    let changedPlan = KernelTurnProjection.voiceContextSnapshot(
+      from: try makeSnapshot(version: "version-a", generation: 10, planID: "sha256:next-plan")
+    )
+    XCTAssertNotEqual(first.freshnessIdentity, changedPlan.freshnessIdentity)
   }
 
   func testInterruptedVoiceTurnDedupUsesJournalTurnIdentity() throws {
@@ -450,6 +475,7 @@ final class KernelContractWireTests: XCTestCase {
     recentTurns: [[String: Any]] = [],
     version: String = "version-a",
     generation: Int = 11,
+    planID: String = "sha256:plan",
     renderedContext: String = "[Kernel Context Snapshot]\n{\"sourceOutcomes\":[]}"
   ) throws -> AgentContextSnapshot {
     try XCTUnwrap(AgentContextSnapshot(dictionary: [
@@ -463,6 +489,21 @@ final class KernelContractWireTests: XCTestCase {
       "ownerId": "owner",
       "sessionId": "session",
       "conversationId": "conversation",
+      "conversationContextPlan": [
+        "version": "conversation-context-plan@1",
+        "planId": planID,
+        "conversationId": "conversation",
+        "retainedTurnRange": [
+          "firstTurnId": NSNull(), "firstTurnSeq": NSNull(),
+          "lastTurnId": NSNull(), "lastTurnSeq": NSNull(),
+        ],
+        "omittedTurnCount": 0,
+        "olderHistoryStrategy": "truncated",
+        "semanticPolicyVersion": "conversation-semantic-policy@1",
+        "semanticPolicyFingerprint": "sha256:policy",
+        "stableCachePrefixFingerprint": "sha256:stable",
+        "dynamicContextFingerprint": "sha256:dynamic",
+      ],
       "recentTurns": recentTurns,
       "sourceOutcomes": [[
         "source": "screen",

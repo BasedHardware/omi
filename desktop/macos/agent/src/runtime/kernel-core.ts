@@ -815,7 +815,7 @@ export class KernelCore {
       adapterId,
       model: accepted.session.modelProfile ?? undefined,
       cwd: accepted.session.defaultCwd ?? undefined,
-      systemPrompt: kernelSystemPolicy(accepted.session.surfaceKind, accepted.session.executionRole),
+      systemPrompt: kernelSystemPolicy(accepted.session.executionRole),
       admittedContextSnapshot: accepted.contextSnapshot,
     };
     if (!input.recoverAfterError) {
@@ -993,7 +993,6 @@ export class KernelCore {
           : "";
         effectivePrompt = `${renderContextSnapshot(
           snapshot,
-          accepted.session.surfaceKind,
           accepted.session.executionRole,
         )}${attachments}\n\n# User Message\n${input.prompt}`;
         effectivePromptBlocks = attemptInput.promptBlocks
@@ -1181,6 +1180,10 @@ export class KernelCore {
       || Array.isArray(snapshot)
       || typeof (snapshot as Record<string, unknown>).version !== "string"
       || !Number.isSafeInteger((snapshot as Record<string, unknown>).snapshotGeneration)
+      || !(snapshot as Record<string, unknown>).conversationContextPlan
+      || typeof (snapshot as Record<string, unknown>).conversationContextPlan !== "object"
+      || Array.isArray((snapshot as Record<string, unknown>).conversationContextPlan)
+      || typeof ((snapshot as Record<string, unknown>).conversationContextPlan as Record<string, unknown>).planId !== "string"
       || !Array.isArray((snapshot as Record<string, unknown>).recentTurns)
       || !Array.isArray((snapshot as Record<string, unknown>).sourceOutcomes)
       || !Array.isArray((snapshot as Record<string, unknown>).activeRuns)

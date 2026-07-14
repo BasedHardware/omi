@@ -56,6 +56,12 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
       conversationId: "conversation-new",
       context: "",
       freshnessIdentity: "1:renderer:capabilities",
+      cachePlanID: "sha256:plan",
+      stableCachePrefixFingerprint: "sha256:stable",
+      dynamicContextFingerprint: "sha256:dynamic",
+      retainedFirstTurnSeq: nil,
+      retainedLastTurnSeq: nil,
+      omittedTurnCount: 0,
       turnIDs: []
     )
     XCTAssertTrue(blankNewConversation.isResolved)

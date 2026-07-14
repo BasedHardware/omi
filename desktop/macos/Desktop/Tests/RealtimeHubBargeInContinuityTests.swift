@@ -621,6 +621,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertTrue(source.contains("beginContextFreshInputPreparation("))
     XCTAssertTrue(source.contains("finishContextFreshInputOnCurrentSession()"))
     XCTAssertTrue(source.contains("preservingReconnectAudio: true"))
+    XCTAssertTrue(source.contains("replacementReason: \"voice_context_changed\""))
     XCTAssertTrue(source.contains("await turnPersistenceLedger.awaitPendingObligations()"))
     XCTAssertTrue(source.contains("await self.refreshVoiceContextSnapshot()"))
     XCTAssertTrue(source.contains("applying deferred voice context refresh after turn persistence"))

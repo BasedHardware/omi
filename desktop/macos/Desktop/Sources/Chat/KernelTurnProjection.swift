@@ -7,6 +7,12 @@ struct KernelVoiceContextSnapshot: Equatable, Sendable {
     conversationId: "",
     context: "",
     freshnessIdentity: "",
+    cachePlanID: "",
+    stableCachePrefixFingerprint: "",
+    dynamicContextFingerprint: "",
+    retainedFirstTurnSeq: nil,
+    retainedLastTurnSeq: nil,
+    omittedTurnCount: 0,
     turnIDs: []
   )
 
@@ -14,13 +20,19 @@ struct KernelVoiceContextSnapshot: Equatable, Sendable {
   let conversationId: String
   let context: String
   let freshnessIdentity: String
+  let cachePlanID: String
+  let stableCachePrefixFingerprint: String
+  let dynamicContextFingerprint: String
+  let retainedFirstTurnSeq: Int?
+  let retainedLastTurnSeq: Int?
+  let omittedTurnCount: Int
   let turnIDs: Set<String>
 
   /// `.empty` is a transport/bridge failure sentinel, not a valid blank
   /// conversation. A valid new conversation may render no text, but it still
   /// has a kernel session and a deterministic freshness identity.
   var isResolved: Bool {
-    !sessionId.isEmpty && !freshnessIdentity.isEmpty
+    !sessionId.isEmpty && !freshnessIdentity.isEmpty && !cachePlanID.isEmpty
   }
 }
 
@@ -1026,12 +1038,19 @@ final class KernelTurnProjection {
       snapshot.version,
       snapshot.rendererFingerprint,
       snapshot.capabilityVersion,
+      snapshot.conversationContextPlan.planID,
     ].joined(separator: ":")
     return KernelVoiceContextSnapshot(
       sessionId: sessionId,
       conversationId: snapshot.conversationId,
       context: snapshot.renderedContext,
       freshnessIdentity: freshnessIdentity,
+      cachePlanID: snapshot.conversationContextPlan.planID,
+      stableCachePrefixFingerprint: snapshot.conversationContextPlan.stableCachePrefixFingerprint,
+      dynamicContextFingerprint: snapshot.conversationContextPlan.dynamicContextFingerprint,
+      retainedFirstTurnSeq: snapshot.conversationContextPlan.retainedFirstTurnSeq,
+      retainedLastTurnSeq: snapshot.conversationContextPlan.retainedLastTurnSeq,
+      omittedTurnCount: snapshot.conversationContextPlan.omittedTurnCount,
       turnIDs: Set(snapshot.typedRecentTurns.map(\.turnId))
     )
   }

@@ -560,6 +560,9 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(hubSource.contains("voiceSessionContext(for:"))
     XCTAssertTrue(hubSource.contains("prefetchedVoiceContextOwnerScope"))
     XCTAssertTrue(hubSource.contains("kernelContext: topLevelContext.rendered"))
+    XCTAssertTrue(hubSource.contains("let kernelContext = voiceSessionContext(for: currentOwnerScope)"))
+    XCTAssertTrue(hubSource.contains("kernelContext: kernelContext.rendered"))
+    XCTAssertTrue(hubSource.contains("toolContext: toolContext"))
     XCTAssertFalse(hubSource.contains("prefetchedFloatingAgentStatus"))
     XCTAssertFalse(hubSource.contains("voiceTurnScreenContextEnvelopeJSON"))
     XCTAssertTrue(bridgeSource.contains("func getContextSnapshot("))
@@ -567,6 +570,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(bridgeSource.contains("let renderedContext: String"))
     XCTAssertTrue(bridgeSource.contains("func recordJournalTurn("))
     XCTAssertTrue(toolsSource.contains("kernelContext: String = \"\""))
+    XCTAssertTrue(toolsSource.contains("Tool-provided context (untrusted)"))
     XCTAssertFalse(toolsSource.contains("<recent_top_level_conversation>"))
   }
 

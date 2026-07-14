@@ -449,7 +449,7 @@ export class JsonlTransport {
       producingTurnId,
       prompt: message.prompt,
       promptBlocks: this.promptBlocks(message),
-      systemPrompt: kernelSystemPolicy(surfaceKind, executionRole),
+      systemPrompt: kernelSystemPolicy(executionRole),
       admittedContextSnapshot: snapshot,
       mode,
       cwd,

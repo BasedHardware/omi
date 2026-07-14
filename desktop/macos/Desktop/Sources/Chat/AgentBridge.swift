@@ -408,6 +408,48 @@ struct AgentContextRecentTurn: Equatable, Sendable {
   }
 }
 
+struct AgentConversationContextPlan: Equatable, Sendable {
+  let version: String
+  let planID: String
+  let conversationID: String
+  let retainedFirstTurnSeq: Int?
+  let retainedLastTurnSeq: Int?
+  let omittedTurnCount: Int
+  let olderHistoryStrategy: String
+  let semanticPolicyVersion: String
+  let semanticPolicyFingerprint: String
+  let stableCachePrefixFingerprint: String
+  let dynamicContextFingerprint: String
+
+  init?(dictionary: [String: Any]) {
+    guard
+      let version = dictionary["version"] as? String,
+      let planID = dictionary["planId"] as? String,
+      let conversationID = dictionary["conversationId"] as? String,
+      let retainedTurnRange = dictionary["retainedTurnRange"] as? [String: Any],
+      let omittedTurnCount = dictionary["omittedTurnCount"] as? Int,
+      omittedTurnCount >= 0,
+      let olderHistoryStrategy = dictionary["olderHistoryStrategy"] as? String,
+      olderHistoryStrategy == "truncated",
+      let semanticPolicyVersion = dictionary["semanticPolicyVersion"] as? String,
+      let semanticPolicyFingerprint = dictionary["semanticPolicyFingerprint"] as? String,
+      let stableCachePrefixFingerprint = dictionary["stableCachePrefixFingerprint"] as? String,
+      let dynamicContextFingerprint = dictionary["dynamicContextFingerprint"] as? String
+    else { return nil }
+    self.version = version
+    self.planID = planID
+    self.conversationID = conversationID
+    self.retainedFirstTurnSeq = retainedTurnRange["firstTurnSeq"] as? Int
+    self.retainedLastTurnSeq = retainedTurnRange["lastTurnSeq"] as? Int
+    self.omittedTurnCount = omittedTurnCount
+    self.olderHistoryStrategy = olderHistoryStrategy
+    self.semanticPolicyVersion = semanticPolicyVersion
+    self.semanticPolicyFingerprint = semanticPolicyFingerprint
+    self.stableCachePrefixFingerprint = stableCachePrefixFingerprint
+    self.dynamicContextFingerprint = dynamicContextFingerprint
+  }
+}
+
 struct AgentContextSnapshot: @unchecked Sendable {
   let snapshotId: String
   let version: String
@@ -419,6 +461,7 @@ struct AgentContextSnapshot: @unchecked Sendable {
   let ownerId: String
   let sessionId: String
   let conversationId: String
+  let conversationContextPlan: AgentConversationContextPlan
   let recentTurns: [[String: Any]]
   let sourceOutcomes: [[String: Any]]
   let activeRuns: [[String: Any]]
@@ -436,6 +479,9 @@ struct AgentContextSnapshot: @unchecked Sendable {
       let ownerId = dictionary["ownerId"] as? String,
       let sessionId = dictionary["sessionId"] as? String,
       let conversationId = dictionary["conversationId"] as? String,
+      let conversationContextPlanDictionary = dictionary["conversationContextPlan"] as? [String: Any],
+      let conversationContextPlan = AgentConversationContextPlan(dictionary: conversationContextPlanDictionary),
+      conversationContextPlan.conversationID == conversationId,
       let recentTurns = dictionary["recentTurns"] as? [[String: Any]],
       let sourceOutcomes = dictionary["sourceOutcomes"] as? [[String: Any]],
       let activeRuns = dictionary["activeRuns"] as? [[String: Any]],
@@ -455,6 +501,7 @@ struct AgentContextSnapshot: @unchecked Sendable {
     self.ownerId = ownerId
     self.sessionId = sessionId
     self.conversationId = conversationId
+    self.conversationContextPlan = conversationContextPlan
     self.recentTurns = recentTurns
     self.sourceOutcomes = sourceOutcomes
     self.activeRuns = activeRuns

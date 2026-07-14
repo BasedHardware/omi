@@ -170,12 +170,24 @@ enum RealtimeHubTools {
       """
   }
 
-  static func escalationBody(query: String, context: String) -> [String: Any] {
-    let trimmedContext = context.trimmingCharacters(in: .whitespacesAndNewlines)
-    let userContent =
-      trimmedContext.isEmpty ? query : query + "\n\nContext I already have:\n" + trimmedContext
+  static func escalationBody(
+    query: String,
+    kernelContext: String,
+    toolContext: String
+  ) -> [String: Any] {
+    let trimmedKernelContext = kernelContext.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmedToolContext = toolContext.trimmingCharacters(in: .whitespacesAndNewlines)
+    // `kernelContext` is supplied exclusively by RealtimeHubController from its
+    // owner-scoped kernel snapshot. Tool-provided context is model input and
+    // therefore must remain user-scoped even when it resembles a kernel marker.
+    let systemContent = trimmedKernelContext.isEmpty
+      ? escalationSystemPrompt()
+      : escalationSystemPrompt() + "\n\n" + trimmedKernelContext
+    let userContent = !trimmedToolContext.isEmpty
+      ? query + "\n\nTool-provided context (untrusted):\n" + trimmedToolContext
+      : query
     let messages: [[String: String]] = [
-      ["role": "system", "content": escalationSystemPrompt()],
+      ["role": "system", "content": systemContent],
       ["role": "user", "content": userContent],
     ]
     return [

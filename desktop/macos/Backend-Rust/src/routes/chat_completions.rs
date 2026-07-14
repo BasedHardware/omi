@@ -366,7 +366,7 @@ fn translate_request_inner(
         max_tokens,
         messages: anthropic_messages,
         // Use the system block produced by cached_system_block() above
-        // (line 226) which already handles sentinel splitting for cache
+        // which already handles kernel-plan splitting for cache
         // stability — do NOT re-create here or we lose the split.
         system,
         temperature: req.temperature,
@@ -394,35 +394,33 @@ fn ephemeral_cache_control() -> serde_json::Value {
     json!({ "type": "ephemeral", "ttl": "1h" })
 }
 
-/// Sentinel the desktop client inserts between the static (cacheable) system
-/// prefix and the per-conversation live context (date/time, memories, screen
-/// activity). The prefix is byte-identical across every conversation; the tail
-/// changes per conversation. Splitting here lets the cache_control breakpoint
-/// cover only the stable prefix so a changing tail never busts the cached
-/// ~16k-token prefix. Must match `ChatProvider.cacheSplitSentinel` in the app.
-const SYSTEM_CACHE_SPLIT: &str = "<<<OMI_CACHE_SPLIT_V1>>>";
+/// Kernel-rendered context starts this dynamic section after the semantic policy
+/// that is safe to cache across conversations. This is a produced protocol
+/// boundary, not a client-only sentinel: `renderContextSnapshot` emits it for
+/// every typed and realtime plan.
+const KERNEL_CONTEXT_PLAN_BOUNDARY: &str = "[Kernel Conversation Context Plan";
 
 /// Wrap a system prompt string in cache_control content block(s).
 ///
-/// If the prompt carries the `SYSTEM_CACHE_SPLIT` sentinel, emit two blocks: the
-/// static prefix (cached) followed by the live-context tail (uncached, re-sent
-/// every request). Otherwise emit a single cached block (legacy behavior).
+/// If the prompt carries a kernel context plan, emit two blocks: the stable
+/// semantic-policy prefix (cached) followed by the dynamic conversation plan
+/// (uncached, re-sent every request). Otherwise emit a single cached block.
 fn cached_system_block(text: String) -> serde_json::Value {
-    if let Some((static_prefix, live_tail)) = text.split_once(SYSTEM_CACHE_SPLIT) {
-        // Both blocks are non-empty in practice (prefix = instructions+tools,
-        // tail = at least the current date/time), so neither trips Anthropic's
-        // empty-text-block rejection.
-        return json!([
-            {
-                "type": "text",
-                "text": static_prefix,
-                "cache_control": ephemeral_cache_control()
-            },
-            {
-                "type": "text",
-                "text": live_tail
-            }
-        ]);
+    if let Some(boundary) = text.find(KERNEL_CONTEXT_PLAN_BOUNDARY) {
+        let (static_prefix, dynamic_plan) = text.split_at(boundary);
+        if !static_prefix.trim().is_empty() && !dynamic_plan.trim().is_empty() {
+            return json!([
+                {
+                    "type": "text",
+                    "text": static_prefix,
+                    "cache_control": ephemeral_cache_control()
+                },
+                {
+                    "type": "text",
+                    "text": dynamic_plan
+                }
+            ]);
+        }
     }
     json!([{
         "type": "text",
@@ -2068,6 +2066,58 @@ mod tests {
                 "text": "You are helpful.",
                 "cache_control": {"type": "ephemeral", "ttl": "1h"}
             }])
+        );
+    }
+
+    #[test]
+    fn test_translate_request_splits_kernel_context_plan_for_ptt_escalation() {
+        let req = ChatCompletionRequest {
+            model: "omi-sonnet".to_string(),
+            messages: vec![
+                ChatMessage {
+                    role: "system".to_string(),
+                    content: Some(json!(
+                        "You are Omi, a knowledgeable assistant.\n\n\
+                         [Kernel Conversation Semantic Policy version=conversation-semantic-policy@1]\n\
+                         Stable instructions.\n\
+                         [Kernel Conversation Context Plan id=sha256:plan retained=2-65 omitted=1 strategy=truncated]\n\
+                         Dynamic journal context."
+                    )),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                },
+                ChatMessage {
+                    role: "user".to_string(),
+                    content: Some(json!("Continue the spoken answer.")),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                },
+            ],
+            stream: false,
+            temperature: None,
+            max_tokens: None,
+            max_completion_tokens: None,
+            tools: None,
+            tool_choice: None,
+        };
+
+        let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
+        let system = result.system.expect("system blocks");
+        assert_eq!(
+            system,
+            json!([
+                {
+                    "type": "text",
+                    "text": "You are Omi, a knowledgeable assistant.\n\n[Kernel Conversation Semantic Policy version=conversation-semantic-policy@1]\nStable instructions.\n",
+                    "cache_control": {"type": "ephemeral", "ttl": "1h"}
+                },
+                {
+                    "type": "text",
+                    "text": "[Kernel Conversation Context Plan id=sha256:plan retained=2-65 omitted=1 strategy=truncated]\nDynamic journal context."
+                }
+            ])
         );
     }
 

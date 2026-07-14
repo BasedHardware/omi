@@ -35,6 +35,12 @@ final class CrossSurfaceContractSmokeTests: XCTestCase {
       conversationId: main.externalRefId,
       context: "",
       freshnessIdentity: typedRevision,
+      cachePlanID: "sha256:plan",
+      stableCachePrefixFingerprint: "sha256:stable",
+      dynamicContextFingerprint: "sha256:dynamic",
+      retainedFirstTurnSeq: 1,
+      retainedLastTurnSeq: 2,
+      omittedTurnCount: 0,
       turnIDs: ["typed-turn", "voice-turn"]
     )
     XCTAssertTrue(snapshot.isResolved)

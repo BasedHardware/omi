@@ -174,8 +174,8 @@ pub struct AnthropicRequest {
     pub max_tokens: u64,
     pub messages: Vec<AnthropicMessage>,
     /// System prompt as array-of-content-blocks with optional cache_control.
-    /// Produced by `cached_system_block()` which handles sentinel splitting
-    /// so volatile live context (dates, times) is excluded from the cached prefix.
+    /// Produced by `cached_system_block()` which uses the kernel context-plan
+    /// boundary so dynamic conversation context is excluded from the cached prefix.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]

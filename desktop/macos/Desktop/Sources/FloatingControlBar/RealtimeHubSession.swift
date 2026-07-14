@@ -88,6 +88,15 @@ enum HubAuth {
   var isEphemeral: Bool { if case .ephemeral = self { return true } else { return false } }
 }
 
+struct RealtimeCachePlanTelemetry: Equatable, Sendable {
+  let planID: String
+  let stableCachePrefixFingerprint: String
+  let dynamicContextFingerprint: String
+  let retainedFirstTurnSeq: Int?
+  let retainedLastTurnSeq: Int?
+  let omittedTurnCount: Int
+}
+
 enum RealtimeHubBargeInStrategy: Equatable {
   case inSessionCancel
   case freshSession
@@ -109,6 +118,7 @@ final class RealtimeHubSession: NSObject {
   private let provider: RealtimeHubProvider
   private let auth: HubAuth
   private let instructions: String
+  private let cachePlan: RealtimeCachePlanTelemetry?
   private weak var delegate: RealtimeHubSessionDelegate?
 
   /// Mic PCM input rate per provider (Gemini 16k native, OpenAI GA needs 24k).
@@ -175,6 +185,7 @@ final class RealtimeHubSession: NSObject {
   private var usageInText = 0
   private var usageInAudio = 0
   private var usageInCached = 0
+  private var usageInTotal = 0
   private var usageOutText = 0
   private var usageOutAudio = 0
 
@@ -182,11 +193,18 @@ final class RealtimeHubSession: NSObject {
   /// clear which model produced which event.
   private var tag: String { "RealtimeHub[\(provider == .openai ? "openai" : "gemini"):\(provider.modelID)]" }
 
-  init(provider: RealtimeHubProvider, auth: HubAuth, instructions: String, delegate: RealtimeHubSessionDelegate) {
+  init(
+    provider: RealtimeHubProvider,
+    auth: HubAuth,
+    instructions: String,
+    delegate: RealtimeHubSessionDelegate,
+    cachePlan: RealtimeCachePlanTelemetry? = nil
+  ) {
     self.provider = provider
     self.auth = auth
     self.instructions = instructions
     self.delegate = delegate
+    self.cachePlan = cachePlan
     super.init()
   }
 
@@ -932,6 +950,7 @@ final class RealtimeHubSession: NSObject {
     usageInText = 0
     usageInAudio = 0
     usageInCached = 0
+    usageInTotal = 0
     usageOutText = 0
     usageOutAudio = 0
   }
@@ -946,12 +965,16 @@ final class RealtimeHubSession: NSObject {
     usageInText += n(inD, "text_tokens")
     usageInAudio += n(inD, "audio_tokens")
     usageInCached += n(inD, "cached_tokens")
+    usageInTotal += n(usage, "input_tokens")
     usageOutText += n(outD, "text_tokens")
     usageOutAudio += n(outD, "audio_tokens")
   }
 
   /// Gemini: usageMetadata is cumulative for the turn → keep the latest (replace, not sum).
   private func accumulateGeminiUsage(_ um: [String: Any]) {
+    func n(_ value: Any?) -> Int {
+      (value as? Int) ?? (value as? NSNumber)?.intValue ?? 0
+    }
     func split(_ arr: Any?) -> (text: Int, audio: Int) {
       var t = 0, a = 0
       for d in (arr as? [[String: Any]]) ?? [] {
@@ -977,16 +1000,29 @@ final class RealtimeHubSession: NSObject {
       usageOutAudio = pout.audio
     }
     usageInCached = (um["cachedContentTokenCount"] as? Int) ?? 0
+    let reportedPromptTokens = n(um["promptTokenCount"])
+    usageInTotal = reportedPromptTokens > 0
+      ? reportedPromptTokens
+      : usageInText + usageInAudio + usageInCached
   }
 
   /// Report the turn's usage to the backend (managed sessions only — BYOK pays direct).
   /// Resets first so a second finishTurn (barge-in edge) can't double-report.
   private func reportUsageIfNeeded() {
-    let it = usageInText, ia = usageInAudio, ic = usageInCached, ot = usageOutText, oa = usageOutAudio
+    let it = usageInText, ia = usageInAudio, ic = usageInCached, totalInput = usageInTotal, ot = usageOutText, oa = usageOutAudio
     resetTurnUsage()
-    guard auth.isEphemeral, it + ia + ic + ot + oa > 0 else { return }
     let providerName = provider == .gemini ? "gemini" : "openai"
     let model = provider.modelID
+    guard it + ia + ic + ot + oa > 0 else { return }
+    if let cachePlan {
+      DesktopDiagnosticsManager.shared.recordRealtimeContextPlanUsage(
+        provider: providerName,
+        model: model,
+        plan: cachePlan,
+        cacheReadTokens: ic,
+        inputTokens: totalInput > 0 ? totalInput : it + ia + ic)
+    }
+    guard auth.isEphemeral else { return }
     Task {
       await APIClient.shared.reportRealtimeUsage(
         provider: providerName, model: model,

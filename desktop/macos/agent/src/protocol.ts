@@ -742,6 +742,27 @@ export interface ContextSnapshotProjection {
   ownerId: string;
   sessionId: string;
   conversationId: string;
+  /**
+   * Kernel-owned continuity and cache contract. This contains no raw turn
+   * content beyond the separately-rendered snapshot material.
+   */
+  conversationContextPlan: {
+    version: string;
+    planId: string;
+    conversationId: string;
+    retainedTurnRange: {
+      firstTurnId: string | null;
+      firstTurnSeq: number | null;
+      lastTurnId: string | null;
+      lastTurnSeq: number | null;
+    };
+    omittedTurnCount: number;
+    olderHistoryStrategy: "truncated";
+    semanticPolicyVersion: string;
+    semanticPolicyFingerprint: string;
+    stableCachePrefixFingerprint: string;
+    dynamicContextFingerprint: string;
+  };
   recentTurns: Array<{
     turnId: string;
     turnSeq: number;

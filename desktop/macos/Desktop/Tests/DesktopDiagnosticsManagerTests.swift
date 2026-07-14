@@ -157,6 +157,43 @@ final class DesktopDiagnosticsManagerTests: XCTestCase {
     XCTAssertEqual(snapshot["recovery_result"] as? String, "turn_terminated_and_rewarm_started")
   }
 
+  func testRealtimeContextPlanTelemetryContainsOnlyHashedPlanFieldsAndTokenCounts() throws {
+    let plan = RealtimeCachePlanTelemetry(
+      planID: "sha256:" + String(repeating: "a", count: 64),
+      stableCachePrefixFingerprint: "sha256:" + String(repeating: "b", count: 64),
+      dynamicContextFingerprint: "sha256:" + String(repeating: "c", count: 64),
+      retainedFirstTurnSeq: 2,
+      retainedLastTurnSeq: 65,
+      omittedTurnCount: 1)
+
+    DesktopDiagnosticsManager.shared.recordRealtimeContextPlan(
+      provider: "openai",
+      model: "gpt-realtime-2",
+      plan: plan,
+      replacementReason: "voice_context_changed")
+    DesktopDiagnosticsManager.shared.recordRealtimeContextPlanUsage(
+      provider: "openai",
+      model: "gpt-realtime-2",
+      plan: plan,
+      cacheReadTokens: 123,
+      inputTokens: 345)
+
+    let snapshots = try healthSnapshots()
+    let start = try XCTUnwrap(snapshots.first)
+    let usage = try XCTUnwrap(snapshots.last)
+    XCTAssertEqual(start["event"] as? String, "realtime_context_plan")
+    XCTAssertEqual(start["phase"] as? String, "session_start")
+    XCTAssertEqual(start["retained_first_turn_sequence"] as? Int, 2)
+    XCTAssertEqual(start["retained_last_turn_sequence"] as? Int, 65)
+    XCTAssertEqual(start["omitted_turn_count"] as? Int, 1)
+    XCTAssertEqual(start["session_replacement_reason"] as? String, "voice_context_changed")
+    XCTAssertEqual(usage["phase"] as? String, "turn_usage")
+    XCTAssertEqual(usage["cache_read_tokens"] as? Int, 123)
+    XCTAssertEqual(usage["input_tokens"] as? Int, 345)
+    XCTAssertNil(usage["conversation_id"])
+    XCTAssertNil(usage["context"])
+  }
+
   func testProviderCloseFallsBackToFailureClassInsteadOfUnclassified() throws {
     DesktopDiagnosticsManager.shared.recordRealtimeProviderClose(
       provider: "openai",
@@ -274,12 +311,15 @@ final class DesktopDiagnosticsManagerTests: XCTestCase {
     file: StaticString = #filePath,
     line: UInt = #line
   ) throws -> [String: Any] {
+    try XCTUnwrap(healthSnapshots().last, file: file, line: line)
+  }
+
+  private func healthSnapshots() throws -> [[String: Any]] {
     let url = try XCTUnwrap(DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment())
     defer { try? FileManager.default.removeItem(at: url) }
 
     let data = try Data(contentsOf: url)
     let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-    let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
-    return try XCTUnwrap(snapshots.last, file: file, line: line)
+    return try XCTUnwrap(root["snapshots"] as? [[String: Any]])
   }
 }

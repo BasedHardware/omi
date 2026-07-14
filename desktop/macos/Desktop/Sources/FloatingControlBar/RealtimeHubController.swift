@@ -1372,6 +1372,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var prefetchedVoiceContext = ""
   private var prefetchedVoiceContextSessionID = ""
   private var prefetchedVoiceContextFreshnessIdentity = ""
+  private var prefetchedVoiceContextCachePlanID = ""
+  private var prefetchedVoiceContextStableCachePrefixFingerprint = ""
+  private var prefetchedVoiceContextDynamicContextFingerprint = ""
+  private var prefetchedVoiceContextRetainedFirstTurnSeq: Int?
+  private var prefetchedVoiceContextRetainedLastTurnSeq: Int?
+  private var prefetchedVoiceContextOmittedTurnCount = 0
   private var prefetchedVoiceContextTurnIDs: Set<String> = []
   private var prefetchedVoiceContextOwnerScope: RealtimeHubOwnerScope?
   /// Typed snapshot identity baked into the current warm session's instructions.
@@ -1494,6 +1500,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// failure. Reset when a socket survives past the idle window or a turn completes.
   private var hubReconnectStrikes = 0
   private var pendingSessionRefreshReason: String?
+  private var pendingPhysicalSessionReplacementReason: String?
   /// Invalidates delayed reconnect callbacks admitted by a previous owner.
   private var ownerBoundaryGeneration: UInt64 = 0
   /// After this many consecutive fast failures (e.g. a stale/revoked key failing auth),
@@ -1621,6 +1628,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     prefetchedVoiceContext = ""
     prefetchedVoiceContextSessionID = ""
     prefetchedVoiceContextFreshnessIdentity = ""
+    prefetchedVoiceContextCachePlanID = ""
+    prefetchedVoiceContextStableCachePrefixFingerprint = ""
+    prefetchedVoiceContextDynamicContextFingerprint = ""
+    prefetchedVoiceContextRetainedFirstTurnSeq = nil
+    prefetchedVoiceContextRetainedLastTurnSeq = nil
+    prefetchedVoiceContextOmittedTurnCount = 0
     prefetchedVoiceContextTurnIDs.removeAll()
     prefetchedVoiceContextOwnerScope = nil
   }
@@ -1786,6 +1799,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     prefetchedVoiceContext = "owner-private-context"
     prefetchedVoiceContextSessionID = "owner-session"
     prefetchedVoiceContextFreshnessIdentity = "owner-freshness"
+    prefetchedVoiceContextCachePlanID = "sha256:" + String(repeating: "a", count: 64)
+    prefetchedVoiceContextStableCachePrefixFingerprint = "sha256:" + String(repeating: "b", count: 64)
+    prefetchedVoiceContextDynamicContextFingerprint = "sha256:" + String(repeating: "c", count: 64)
+    prefetchedVoiceContextRetainedFirstTurnSeq = 1
+    prefetchedVoiceContextRetainedLastTurnSeq = 1
+    prefetchedVoiceContextOmittedTurnCount = 0
     prefetchedVoiceContextTurnIDs = ["owner-turn"]
     prefetchedVoiceContextOwnerScope = ownerScope
     pendingSessionRefreshReason = "owner-fixture-refresh"
@@ -1944,7 +1963,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     log(
       "RealtimeHub: \(primary.displayName) unavailable — failing over to \(primary.alternate.displayName)"
     )
-    teardownSession()
+    teardownSession(replacementReason: "provider_failover")
     ensureWarm()
     return true
   }
@@ -1987,7 +2006,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       "RealtimeHub: preserving barge-in turn while failing over "
         + "\(provider.displayName) → \(alternate.displayName)")
 
-    teardownSession()
+    teardownSession(replacementReason: "barge_in_provider_failover")
     replacementAudioBuffer = pendingTurn
     voiceResponseID = responseID
     pendingBargeInOwnerScope = replacementOwnerScope
@@ -2294,7 +2313,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     else {
       return ["error": "local-profile realtime transport requires an authenticated owner"]
     }
-    teardownSession()
+    teardownSession(replacementReason: "local_profile")
     let context = voiceSessionContext(for: localOwnerScope)
     sessionVoiceContextFreshnessIdentity = context.snapshotFreshnessIdentity
     let localSession = RealtimeHubSession(
@@ -2559,7 +2578,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     {
       return
     }
-    teardownSession()
+    teardownSession(replacementReason: "provider_settings_changed")
     ensureWarm()
   }
 
@@ -2571,7 +2590,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       return
     }
     log("RealtimeHub: \(reason) — re-warming idle session")
-    teardownSession()
+    teardownSession(replacementReason: reason)
     ensureWarm()
   }
 
@@ -2589,7 +2608,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           self.cancelContinuityFenceTurnID = nil
           self.canceledTurnRewarmTask = nil
           log("RealtimeHub: applying deferred voice context refresh after turn persistence")
-          self.teardownSession()
+          self.teardownSession(replacementReason: reason)
           self.ensureWarm()
         }
         self.deferredSessionRefreshTask = nil
@@ -2600,7 +2619,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     if reason == "provider_settings_changed" {
       resetFailoverForProviderSettingsChange()
     }
-    teardownSession()
+    teardownSession(replacementReason: reason)
     ensureWarm()
   }
 
@@ -2687,7 +2706,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       log("RealtimeHub: rebuilding warm session after authenticated owner changed")
       discardSessionAfterOwnerChange()
     }
-    if session != nil { teardownSession() }
+    if session != nil { teardownSession(replacementReason: "warm_session_mismatch") }
 
     if let key = APIKeyService.byokKey(provider.byokProvider) {
       let fingerprint = APIKeyService.byokFingerprint(key)
@@ -3008,8 +3027,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     let instructions = RealtimeHubTools.systemInstruction(
       kernelContext: topLevelContext.rendered,
       userLanguages: AssistantSettings.shared.voiceBaseLanguages)
+    let cachePlan = topLevelContext.cachePlanTelemetry
+    let replacementReason = pendingPhysicalSessionReplacementReason ?? "initial_connect"
+    pendingPhysicalSessionReplacementReason = nil
     let s = RealtimeHubSession(
-      provider: provider, auth: auth, instructions: instructions, delegate: self)
+      provider: provider, auth: auth, instructions: instructions, delegate: self, cachePlan: cachePlan)
     lastWarmAt = nil
     hubConnected = false
     session = s
@@ -3025,6 +3047,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       pcmPlayer = makePCMPlayer()
     }
     s.start()
+    if let cachePlan {
+      DesktopDiagnosticsManager.shared.recordRealtimeContextPlan(
+        provider: provider.rawValue,
+        model: provider.modelID,
+        plan: cachePlan,
+        replacementReason: replacementReason)
+    }
     log(
       "RealtimeHub: warming \(provider.displayName) session "
         + "(\(auth.isEphemeral ? "ephemeral/managed" : "client-direct/BYOK"), "
@@ -3034,16 +3063,50 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private struct VoiceSessionContext {
     let rendered: String
     let snapshotFreshnessIdentity: String
+    let cachePlanID: String
+    let stableCachePrefixFingerprint: String
+    let dynamicContextFingerprint: String
+    let retainedFirstTurnSeq: Int?
+    let retainedLastTurnSeq: Int?
+    let omittedTurnCount: Int
+
+    var cachePlanTelemetry: RealtimeCachePlanTelemetry? {
+      guard !cachePlanID.isEmpty,
+        !stableCachePrefixFingerprint.isEmpty,
+        !dynamicContextFingerprint.isEmpty
+      else { return nil }
+      return RealtimeCachePlanTelemetry(
+        planID: cachePlanID,
+        stableCachePrefixFingerprint: stableCachePrefixFingerprint,
+        dynamicContextFingerprint: dynamicContextFingerprint,
+        retainedFirstTurnSeq: retainedFirstTurnSeq,
+        retainedLastTurnSeq: retainedLastTurnSeq,
+        omittedTurnCount: omittedTurnCount)
+    }
   }
 
   /// Exact context material selected and rendered by the kernel for realtime.
   private func voiceSessionContext(for ownerScope: RealtimeHubOwnerScope) -> VoiceSessionContext {
     guard prefetchedVoiceContextOwnerScope == ownerScope else {
-      return VoiceSessionContext(rendered: "", snapshotFreshnessIdentity: "")
+      return VoiceSessionContext(
+        rendered: "",
+        snapshotFreshnessIdentity: "",
+        cachePlanID: "",
+        stableCachePrefixFingerprint: "",
+        dynamicContextFingerprint: "",
+        retainedFirstTurnSeq: nil,
+        retainedLastTurnSeq: nil,
+        omittedTurnCount: 0)
     }
     return VoiceSessionContext(
       rendered: prefetchedVoiceContext,
-      snapshotFreshnessIdentity: prefetchedVoiceContextFreshnessIdentity
+      snapshotFreshnessIdentity: prefetchedVoiceContextFreshnessIdentity,
+      cachePlanID: prefetchedVoiceContextCachePlanID,
+      stableCachePrefixFingerprint: prefetchedVoiceContextStableCachePrefixFingerprint,
+      dynamicContextFingerprint: prefetchedVoiceContextDynamicContextFingerprint,
+      retainedFirstTurnSeq: prefetchedVoiceContextRetainedFirstTurnSeq,
+      retainedLastTurnSeq: prefetchedVoiceContextRetainedLastTurnSeq,
+      omittedTurnCount: prefetchedVoiceContextOmittedTurnCount
     )
   }
 
@@ -3075,6 +3138,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         self.prefetchedVoiceContext = resolvedSnapshot.context
         self.prefetchedVoiceContextSessionID = resolvedSnapshot.sessionId
         self.prefetchedVoiceContextFreshnessIdentity = resolvedSnapshot.freshnessIdentity
+        self.prefetchedVoiceContextCachePlanID = resolvedSnapshot.cachePlanID
+        self.prefetchedVoiceContextStableCachePrefixFingerprint = resolvedSnapshot.stableCachePrefixFingerprint
+        self.prefetchedVoiceContextDynamicContextFingerprint = resolvedSnapshot.dynamicContextFingerprint
+        self.prefetchedVoiceContextRetainedFirstTurnSeq = resolvedSnapshot.retainedFirstTurnSeq
+        self.prefetchedVoiceContextRetainedLastTurnSeq = resolvedSnapshot.retainedLastTurnSeq
+        self.prefetchedVoiceContextOmittedTurnCount = resolvedSnapshot.omittedTurnCount
         self.prefetchedVoiceContextTurnIDs = resolvedSnapshot.turnIDs
         self.prefetchedVoiceContextOwnerScope = ownerScope
       }
@@ -3109,6 +3178,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     prefetchedVoiceContext = resolvedSnapshot.context
     prefetchedVoiceContextSessionID = resolvedSnapshot.sessionId
     prefetchedVoiceContextFreshnessIdentity = resolvedSnapshot.freshnessIdentity
+    prefetchedVoiceContextCachePlanID = resolvedSnapshot.cachePlanID
+    prefetchedVoiceContextStableCachePrefixFingerprint = resolvedSnapshot.stableCachePrefixFingerprint
+    prefetchedVoiceContextDynamicContextFingerprint = resolvedSnapshot.dynamicContextFingerprint
+    prefetchedVoiceContextRetainedFirstTurnSeq = resolvedSnapshot.retainedFirstTurnSeq
+    prefetchedVoiceContextRetainedLastTurnSeq = resolvedSnapshot.retainedLastTurnSeq
+    prefetchedVoiceContextOmittedTurnCount = resolvedSnapshot.omittedTurnCount
     prefetchedVoiceContextTurnIDs = resolvedSnapshot.turnIDs
     prefetchedVoiceContextOwnerScope = ownerScope
     return true
@@ -3416,10 +3491,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     return detachedSession
   }
 
-  private func teardownSession(preservingReconnectAudio: Bool = false) {
+  private func teardownSession(
+    replacementReason: String = "unspecified_replacement",
+    preservingReconnectAudio: Bool = false
+  ) {
     guard let detachedSession = detachPhysicalSessionForTeardown(
       preservingReconnectAudio: preservingReconnectAudio
     ) else { return }
+    pendingPhysicalSessionReplacementReason = replacementReason
     schedulePhysicalSessionTeardown(detachedSession)
   }
 
@@ -3741,6 +3820,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       ensureWarm()
       return
     }
+    pendingPhysicalSessionReplacementReason = "barge_in"
     startSession(provider: provider, auth: auth, ownerScope: ownerScope)
   }
 
@@ -4103,7 +4183,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
             sessionSnapshotIdentity: self.sessionVoiceContextFreshnessIdentity)
         if needsSessionRefresh {
           log("RealtimeHub: reconnecting before PTT input so provider instructions match canonical context")
-          self.teardownSession(preservingReconnectAudio: true)
+          self.teardownSession(
+            replacementReason: "voice_context_changed",
+            preservingReconnectAudio: true)
         }
         guard !Task.isCancelled,
           self.contextFreshInputPreparationIsCurrent(
@@ -4931,10 +5013,17 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
     case .askHigherModel:
       let query = (command.input["query"] as? String) ?? turnTranscript
-      let context = (command.input["context"] as? String) ?? ""
+      let toolContext = (command.input["context"] as? String) ?? ""
+      let kernelContext = voiceSessionContext(for: currentOwnerScope)
+      guard !kernelContext.rendered.isEmpty,
+        !kernelContext.snapshotFreshnessIdentity.isEmpty
+      else {
+        return .failed(Self.authorizedRealtimeToolError(code: "kernel_context_unavailable"))
+      }
       return await escalateToHigherModel(
         query,
-        context: context,
+        kernelContext: kernelContext.rendered,
+        toolContext: toolContext,
         ownerID: command.ownerID)
 
     case .screenshot:
@@ -5596,7 +5685,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// (no new backend route). Returns the assistant text for the model to speak.
   private func escalateToHigherModel(
     _ query: String,
-    context: String,
+    kernelContext: String,
+    toolContext: String,
     ownerID: String
   ) async -> AuthorizedRealtimeToolExecutionResult
   {
@@ -5604,7 +5694,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       return .failed(Self.authorizedRealtimeOwnerChangedError())
     }
     let body = RealtimeHubTools.escalationBody(
-      query: query, context: context)
+      query: query,
+      kernelContext: kernelContext,
+      toolContext: toolContext)
     let t0 = Date()
     do {
       let answer = try await APIClient.shared.askHigherModel(
