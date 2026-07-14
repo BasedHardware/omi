@@ -20,6 +20,7 @@ def _as_config_dict(value: object) -> ConfigDict | None:
 def main() -> int:
     parser = argparse.ArgumentParser(description='Render backend Cloud Run runtime env from the manifest.')
     parser.add_argument('--env', choices=('dev', 'prod'), required=True)
+    parser.add_argument('--job', help='Render only the named Cloud Run job and shared network flags.')
     parser.add_argument('--manifest', type=Path, default=DEFAULT_MANIFEST)
     args = parser.parse_args()
 
@@ -28,19 +29,25 @@ def main() -> int:
     env_config = _as_config_dict(environments[args.env]) or {}
     cloud_run = _as_config_dict(env_config['cloud_run']) or {}
 
+    services = _as_config_dict(cloud_run.get('services')) or {}
+    jobs = _as_config_dict(cloud_run.get('jobs')) or {}
+    if args.job is not None and args.job not in jobs:
+        raise ValueError(f'Cloud Run job {args.job} is not defined for {args.env}')
+
     network = _as_config_dict(cloud_run.get('network')) or {}
     _emit_output('cloud_run_flags', _render_flags(_as_config_dict(network.get('flags')) or {}))
-    services = _as_config_dict(cloud_run.get('services')) or {}
-    for service, raw_service_config in services.items():
-        service_config = _as_config_dict(raw_service_config)
-        if service_config is None:
-            raise ValueError(f'Cloud Run service {service} must be a mapping')
-        output_prefix = _output_prefix(service)
-        _emit_output(f'{output_prefix}_env_vars', _render_env_vars(service_config.get('env', {})))
-        _emit_output(f'{output_prefix}_secrets', _render_secrets(service_config.get('secrets', {})))
-        _emit_output(f'{output_prefix}_secret_names', _render_secret_names(service_config.get('secrets', {})))
-    jobs = _as_config_dict(cloud_run.get('jobs')) or {}
-    for job, raw_job_config in jobs.items():
+    if args.job is None:
+        for service, raw_service_config in services.items():
+            service_config = _as_config_dict(raw_service_config)
+            if service_config is None:
+                raise ValueError(f'Cloud Run service {service} must be a mapping')
+            output_prefix = _output_prefix(service)
+            _emit_output(f'{output_prefix}_env_vars', _render_env_vars(service_config.get('env', {})))
+            _emit_output(f'{output_prefix}_secrets', _render_secrets(service_config.get('secrets', {})))
+            _emit_output(f'{output_prefix}_secret_names', _render_secret_names(service_config.get('secrets', {})))
+
+    jobs_to_render = {args.job: jobs[args.job]} if args.job is not None else jobs
+    for job, raw_job_config in jobs_to_render.items():
         job_config = _as_config_dict(raw_job_config)
         if job_config is None:
             raise ValueError(f'Cloud Run job {job} must be a mapping')
