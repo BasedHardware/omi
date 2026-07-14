@@ -295,7 +295,9 @@ const omi: OmiBridgeApi = {
   checkForUpdates: () => ipcRenderer.invoke('update:check'),
   getPendingUpdate: () => ipcRenderer.invoke('update:get-pending'),
   suspendShortcutCapture: () => ipcRenderer.send('shortcuts:suspend-capture'),
-  resumeShortcutCapture: () => ipcRenderer.send('shortcuts:resume-capture')
+  resumeShortcutCapture: () => ipcRenderer.send('shortcuts:resume-capture'),
+  // --- Track 6 (UI surfaces) additions ---
+  resetWindowSize: () => ipcRenderer.invoke('window:resetSize')
 }
 
 const omiOverlay: OmiOverlayApi = {

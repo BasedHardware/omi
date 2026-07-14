@@ -4,6 +4,7 @@ import type { MeetingMode } from '../../../../../shared/types'
 import { getPreferences, setPreferences } from '../../../lib/preferences'
 import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
+import { FontSizeCard } from '../FontSizeCard'
 
 export function GeneralTab(): React.JSX.Element {
   const [chatHistoryMode, setChatHistoryMode] = useState(getPreferences().chatHistoryMode)
@@ -36,6 +37,7 @@ export function GeneralTab(): React.JSX.Element {
       />
       <MeetingDetectionRow />
       <LaunchAtLoginRow />
+      <FontSizeCard />
     </>
   )
 }

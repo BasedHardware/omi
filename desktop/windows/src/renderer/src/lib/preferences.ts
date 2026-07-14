@@ -5,6 +5,26 @@ import { DEFAULT_LANGUAGE } from './languages'
 
 const KEY = 'omi-windows-prefs-v1'
 
+// Font-scale bounds live here (the SSOT) and are re-exported by lib/fontScale.ts,
+// which consumers import from. Declaring them in this low-level module keeps the
+// dependency one-directional (fontScale.ts → preferences.ts) with no import cycle,
+// so `normalizeFontScale` can run safely at eval time (in load() below) regardless
+// of module load order.
+export const FONT_SCALE_MIN = 0.5
+export const FONT_SCALE_MAX = 2.0
+export const FONT_SCALE_DEFAULT = 1.0
+
+// Font scale is user-tunable in [0.5, 2.0] (see lib/fontScale.ts). Clamp on both
+// read and write so a hand-edited localStorage blob can't push the whole UI to an
+// unusable size; drop non-finite junk so the 1.0 default applies.
+function normalizeFontScale(p: Preferences): void {
+  if (typeof p.fontScale !== 'number' || !Number.isFinite(p.fontScale)) {
+    delete p.fontScale
+    return
+  }
+  p.fontScale = Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, p.fontScale))
+}
+
 export type Preferences = {
   captionIntervalMs: number
   showRecordingBadge: boolean
@@ -60,6 +80,11 @@ export type Preferences = {
   // OMI_*_ADAPTER_COMMAND env var still works as a power-user override).
   // Claude Code is built in and needs no command.
   agentCommands?: { openclaw?: string; hermes?: string; codex?: string }
+  // Global UI font-scale multiplier (macOS FontScaleSettings parity), applied as
+  // a root rem multiplier in lib/fontScale.ts. Range [0.5, 2.0], clamped on
+  // read/write; undefined = 1.0 (default). Set in Settings → General → Font Size
+  // and via the Ctrl+= / Ctrl+- / Ctrl+0 shortcuts.
+  fontScale?: number
 }
 
 const defaults: Preferences = {
@@ -78,7 +103,9 @@ function load(): Preferences {
     const raw = localStorage.getItem(KEY)
     if (!raw) return { ...defaults }
     const parsed = JSON.parse(raw) as Partial<Preferences>
-    return { ...defaults, ...parsed }
+    const merged = { ...defaults, ...parsed }
+    normalizeFontScale(merged)
+    return merged
   } catch {
     return { ...defaults }
   }
@@ -113,6 +140,7 @@ export function setPreferences(patch: Partial<Preferences>): void {
   // (lost-update clobber, found live during Phase 2 verification). Merging the
   // patch onto a fresh load makes writes field-granular.
   current = { ...load(), ...patch }
+  normalizeFontScale(current)
   try {
     localStorage.setItem(KEY, JSON.stringify(current))
   } catch {
