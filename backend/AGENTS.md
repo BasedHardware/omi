@@ -140,6 +140,7 @@ Rate limiting: `Depends(auth.with_rate_limit(get_current_user_uid, "policy_name"
 ```bash
 bash test-preflight.sh   # Verify env
 bash test.sh             # Run all tests (CI source of truth)
+npm run test:listen-lifecycle:emulator  # Real Firestore transaction contention for listen cleanup/content
 ```
 
 **Tests are selector-driven.** Local `test.sh` runs the full discovered set from `tests/unit/`, `tests/services/`, and `tests/routers/` via `scripts/select_backend_unit_tests.py`; CI uses the same selector but may run only a changed-file subset on PRs. Tests that need live services (Redis, Firebase, real API keys) go in `tests/integration/`, which is not part of selector auto-discovery; note in the PR how you ran them.

@@ -204,7 +204,7 @@ def _write_short_term_via_conversation_ingress(client, auth_headers, monkeypatch
         conversations_db.update_conversation(
             uid,
             conversation.id,
-            {"structured": structured, "status": "completed"},
+            {"structured": structured},
         )
         refreshed = conversations_db.get_conversation(uid, conversation.id)
         from utils.conversations.factory import deserialize_conversation

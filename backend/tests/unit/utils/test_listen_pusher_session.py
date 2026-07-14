@@ -53,6 +53,11 @@ def error_response_201(conversation_id: str, terminal: bool = False):
     return struct.pack("<I", 201) + payload
 
 
+def fenced_response_201(conversation_id: str):
+    payload = json.dumps({"conversation_id": conversation_id, "fenced": True}).encode("utf-8")
+    return struct.pack("<I", 201) + payload
+
+
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
@@ -286,6 +291,21 @@ async def test_incoming_terminal_finalization_error_stops_retrying():
     assert session.pending_conversation_requests == {}
     finalization_frames = [frame for frame in ws.sent if frame_type(frame) == 104]
     assert len(finalization_frames) == 1
+
+
+@pytest.mark.anyio
+async def test_incoming_fenced_finalization_consumes_request_without_completed_callback():
+    active_ref = {"active": True}
+    ws = FakePusherWebSocket(incoming=[fenced_response_201("conv-1")])
+    ws.on_recv = lambda: active_ref.update(active=False)
+    session = make_session(ws=ws, active_ref=active_ref)
+    await session.connect()
+    await session.request_conversation_processing("conv-1", "job-1", 2)
+
+    await session.pusher_receive()
+
+    assert session.pending_conversation_requests == {}
+    assert session.callbacks == []
 
 
 @pytest.mark.anyio
