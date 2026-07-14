@@ -429,14 +429,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   /// option) even when auto-sync is turned off — device discovery otherwise only
   /// happens as the first step of a full sync. Best-effort: swallows BLE errors.
   Future<void> discoverDeviceWals({String? firmwareVersion}) async {
-    Logger.debug('SyncProvider: discoverDeviceWals start (fw=$firmwareVersion)');
     try {
       await _walService.getSyncs().refreshWalsFromDevice(firmwareVersion: firmwareVersion);
     } catch (e) {
       Logger.debug('SyncProvider: device WAL discovery failed: $e');
     }
     await refreshWals();
-    Logger.debug('SyncProvider: discoverDeviceWals done — ${_allWals.length} wals (${missingWals.length} missing)');
   }
 
   Future<WalStats> getWalStats() async {
