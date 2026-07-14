@@ -83,34 +83,24 @@ describe('NotificationThrottle.tryAllow', () => {
     expect(t.tryAllow(input({ now: T0 + 10 * MIN })).allowed).toBe(true)
   })
 
-  it('spends ONE shared budget: a chatty assistant cannot starve another', () => {
+  it('spends ONE GLOBAL budget: the first assistant to speak spends it for everyone', () => {
+    // NOT per-assistant fairness — there is none (both clocks are stamped with
+    // the same instant, so the global one always binds first). What this pins is
+    // the property the user actually feels: the interruptions they get are the
+    // SUM across assistants, and that sum is what the interval limits.
     const t = new NotificationThrottle()
     expect(t.tryAllow(input({ assistantId: 'focus' })).allowed).toBe(true)
-    // The global clock is what gates 'task' here — its own clock is still clean.
+    // 'task' has never sent, yet it is gated — by focus's spend.
     expect(t.tryAllow(input({ assistantId: 'task', now: T0 + 1 * MIN }))).toEqual({
       allowed: false,
       reason: 'frequency'
     })
     expect(t.tryAllow(input({ assistantId: 'task', now: T0 + 10 * MIN })).allowed).toBe(true)
-    // ...and 'task' spending the budget now gates 'focus' in turn.
+    // ...and 'task' spending it now gates 'focus' in turn.
     expect(t.tryAllow(input({ assistantId: 'focus', now: T0 + 11 * MIN }))).toEqual({
       allowed: false,
       reason: 'frequency'
     })
-  })
-
-  it('per-assistant clock gates even when the global one has elapsed', () => {
-    // Level 1 (60m). 'focus' sends at T0; another assistant sends at T0+60m,
-    // which moves the global clock but must not entitle 'focus' to a second send
-    // before ITS own 60m are up.
-    const t = new NotificationThrottle()
-    expect(t.tryAllow(input({ frequencyLevel: 1, assistantId: 'focus' })).allowed).toBe(true)
-    expect(
-      t.tryAllow(input({ frequencyLevel: 1, assistantId: 'task', now: T0 + 60 * MIN })).allowed
-    ).toBe(true)
-    expect(
-      t.tryAllow(input({ frequencyLevel: 1, assistantId: 'focus', now: T0 + 61 * MIN }))
-    ).toEqual({ allowed: false, reason: 'frequency' })
   })
 
   it('a suppressed attempt does not move either clock', () => {

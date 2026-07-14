@@ -2,10 +2,14 @@
 // `NotificationService`'s frequency model — Windows had no equivalent, only
 // ad-hoc per-feature gating.
 //
-// Why two clocks: the per-assistant clock alone lets a chatty assistant fire on
-// its own budget while another does too, and the user experiences the SUM. So a
-// global clock gates as well, and BOTH advance on an allowed send — one shared
-// interruption budget, first assistant to speak spends it for everyone.
+// Why two clocks: what the user experiences is the SUM of every assistant's
+// notifications, so the budget is GLOBAL — the first assistant to speak spends
+// it for everyone. The per-assistant clock is a second, redundant guard carried
+// over from Mac: since `record()` stamps both clocks with the same instant, the
+// per-assistant check can never fail once the global one passes. Keep it for
+// parity (and so a future per-assistant rate could slot in), but do NOT read it
+// as per-assistant fairness — there is none, and claiming otherwise would be a
+// lie about the code.
 //
 // Suppression order (first match wins): snooze → master toggle → frequency.
 // Snooze is never bypassable — the user asked for silence, and a "functional"
@@ -80,7 +84,8 @@ export class NotificationThrottle {
     return { allowed: true }
   }
 
-  /** Spend the budget: both clocks advance together. */
+  /** Spend the budget: both clocks advance together (which is exactly why the
+   *  per-assistant clock is redundant — see the header). */
   record(assistantId: string, now: number): void {
     this.lastGlobalAt = now
     this.lastByAssistant.set(assistantId, now)

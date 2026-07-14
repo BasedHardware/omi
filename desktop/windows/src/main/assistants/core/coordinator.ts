@@ -20,10 +20,11 @@
 // power) so the gating and backpressure logic is testable with no timers, no DB
 // and no Electron.
 import { powerMonitor } from 'electron'
-import { getAppSettings } from '../../appSettings'
+import { getAppSettings, onAppSettingsChanged } from '../../appSettings'
 import { latestRewindFrame } from '../../ipc/db'
 import type { RewindFrame } from '../../../shared/types'
 import { didContextChange } from './contextDetection'
+import { DEBOUNCE_MS, distributionDecision, fallbackIntervalMs } from './distributionGate'
 import { mayAnalyzeFrame } from './privacy'
 
 /** Whatever an assistant produced. The framework never inspects it — it only
@@ -46,11 +47,17 @@ export interface ProactiveAssistant {
   /** The assistant's own cadence policy. Default: analyze every frame. */
   shouldAnalyze?(frameNumber: number, timeSinceLastAnalysisMs: number): boolean
   /** The user moved to a different app/window. `departingFrame` is the last frame
-   *  from the context they just left (null if we never had one). Default: no-op. */
+   *  from the context they just left (null if we never had one).
+   *
+   *  CONTRACT: `newWindowTitle` is **null when the new context failed the privacy
+   *  gate** (an incognito window, a bank, a password manager). You are still told
+   *  the user left — that is not private — but you never receive the sensitive
+   *  title, because an assistant that pastes it into a prompt would ship
+   *  "Chase — Log in" to a cloud model. Default: no-op. */
   onContextSwitch?(
     departingFrame: RewindFrame | null,
     newApp: string,
-    newWindowTitle: string
+    newWindowTitle: string | null
   ): void | Promise<void>
   /** Opt in to keep receiving frames during the post-switch analysis delay (for
    *  time-sensitive detections like "did they come back?"). Default: false. */
@@ -117,7 +124,12 @@ export class AssistantCoordinator {
   private hasContext = false
   /** End of the post-context-switch quiet window; null = not in one. */
   private delayUntil: number | null = null
+  /** When a post-switch debounce is settling, the time it may flush. */
+  private pendingFlushAt: number | null = null
+  /** When the assistants last actually got a frame (drives the fallback interval). */
+  private lastDistributedAt: number | null = null
   private eventCallback: SendEvent | null = null
+  private lastTickErrorAt = 0
 
   constructor(deps: Partial<CoordinatorDeps> = {}) {
     this.deps = { ...defaultDeps(), ...deps }
@@ -150,7 +162,20 @@ export class AssistantCoordinator {
   start(): void {
     this.stopTimer()
     if (!this.deps.isScreenAnalysisEnabled()) return
-    this.timer = setInterval(() => this.tick(), this.intervalMs())
+    // The tick reads the DB, which throws on a closed handle (app quit) or an I/O
+    // error. Unguarded, that escapes to `uncaughtException` — and it would do so
+    // every 3 seconds, forever, filling crash.log. Swallow it, log at most once a
+    // minute, and keep the loop alive.
+    this.timer = setInterval(() => {
+      try {
+        this.tick()
+      } catch (e) {
+        const now = this.deps.now()
+        if (now - this.lastTickErrorAt < 60_000) return
+        this.lastTickErrorAt = now
+        console.warn('[assistants] coordinator tick failed:', e)
+      }
+    }, this.intervalMs())
     // Node keeps the process alive for a pending interval; this one is pure
     // background work and must never be the reason the app lingers.
     this.timer.unref?.()
@@ -166,10 +191,25 @@ export class AssistantCoordinator {
     this.timer = null
   }
 
-  /** Stop the loop AND every assistant (app shutdown / sign-out). */
+  /** Stop the loop AND every assistant (app shutdown / sign-out). Also drops the
+   *  registry and all per-frame state: a later start() must not resume feeding
+   *  assistants we just told to stop, nor inherit a stale quiet window. */
   async stopAll(): Promise<void> {
     this.stop()
-    await Promise.allSettled([...this.assistants.values()].map((a) => a.stop()))
+    const registered = [...this.assistants.values()]
+    this.assistants.clear()
+    this.analyzing.clear()
+    this.lastAnalysisAt.clear()
+    this.lastFrameKey = null
+    this.lastAllowedFrame = null
+    this.lastDistributedAt = null
+    this.pendingFlushAt = null
+    this.delayUntil = null
+    this.hasContext = false
+    this.trackedApp = null
+    this.trackedTitle = null
+    this.frameNumber = 0
+    await Promise.allSettled(registered.map((a) => a.stop()))
   }
 
   /** One pass of the loop. Public so tests drive it directly — the timer's only
@@ -184,18 +224,58 @@ export class AssistantCoordinator {
     this.lastFrameKey = key
     this.frameNumber += 1
 
-    // Context tracking runs on EVERY frame's metadata, including frames the
-    // privacy gate will reject: leaving a banking tab and coming back is a real
-    // context switch, and the assistants must learn about it even though they
-    // never see the bank's pixels.
-    this.checkContextSwitch(frame)
+    const allowed = this.deps.mayAnalyzeFrame(frame)
 
-    if (!this.deps.mayAnalyzeFrame(frame)) return
+    // Context tracking runs on EVERY frame's metadata, including frames the
+    // privacy gate rejects: leaving a banking tab and coming back is a real
+    // context switch, and the assistants must learn about it even though they
+    // never see the bank's pixels — or its title (see the protocol contract).
+    const contextChanged = this.checkContextSwitch(frame, allowed)
+
+    if (!allowed) return
     this.lastAllowedFrame = frame
-    this.distribute(frame)
+
+    const now = this.deps.now()
+
+    // Change-gated distribution (distributionGate.ts): a settling debounce wins
+    // over a fresh decision, so rapid app-hopping produces ONE distribution of
+    // the latest frame rather than one per hop.
+    if (this.pendingFlushAt !== null) {
+      if (contextChanged) this.pendingFlushAt = now + DEBOUNCE_MS // context moved again — resettle
+      // ...but a context that changes on EVERY frame (a title carrying a counter
+      // the normalizer doesn't strip, or a user hopping apps nonstop) would push
+      // the debounce out forever and starve the assistants completely. The
+      // fallback interval is the floor: once it has elapsed, distribute anyway.
+      const starved =
+        this.lastDistributedAt !== null &&
+        now - this.lastDistributedAt >= fallbackIntervalMs(frame.app)
+      if (now < this.pendingFlushAt && !starved) return
+      this.flush(frame, now)
+      return
+    }
+
+    const decision = distributionDecision({
+      contextChanged,
+      app: frame.app,
+      now,
+      lastDistributedAt: this.lastDistributedAt
+    })
+    if (decision === 'skip') return
+    if (decision === 'scheduleDebounce') {
+      this.pendingFlushAt = now + DEBOUNCE_MS
+      return
+    }
+    this.flush(frame, now)
   }
 
-  private checkContextSwitch(frame: RewindFrame): void {
+  private flush(frame: RewindFrame, now: number): void {
+    this.pendingFlushAt = null
+    this.lastDistributedAt = now
+    this.distribute(frame, now)
+  }
+
+  /** Returns whether this frame is a context switch. */
+  private checkContextSwitch(frame: RewindFrame, allowed: boolean): boolean {
     const app = frame.app
     const title = frame.windowTitle
     if (!this.hasContext) {
@@ -203,19 +283,21 @@ export class AssistantCoordinator {
       this.hasContext = true
       this.trackedApp = app
       this.trackedTitle = title
-      return
+      return false
     }
-    if (!didContextChange(this.trackedApp, this.trackedTitle, app, title)) return
+    if (!didContextChange(this.trackedApp, this.trackedTitle, app, title)) return false
 
     this.trackedApp = app
     this.trackedTitle = title
 
     // Fire-and-forget, in parallel: no ordering guarantee across assistants, and
-    // a slow/throwing hook must not stall the loop.
+    // a slow/throwing hook must not stall the loop. A privacy-denied context is
+    // reported WITHOUT its title.
     const departing = this.lastAllowedFrame
+    const reportedTitle = allowed ? title : null
     for (const a of this.assistants.values()) {
       if (!a.onContextSwitch) continue
-      void Promise.resolve(a.onContextSwitch(departing, app, title)).catch((e) =>
+      void Promise.resolve(a.onContextSwitch(departing, app, reportedTitle)).catch((e) =>
         console.warn(`[assistants] ${a.identifier}.onContextSwitch failed:`, e)
       )
     }
@@ -223,9 +305,10 @@ export class AssistantCoordinator {
     const now = this.deps.now()
     // Already inside a quiet window → don't extend it (Mac's isInDelayPeriod
     // guard), or rapid app-hopping would defer analysis indefinitely.
-    if (this.delayUntil !== null && now < this.delayUntil) return
+    if (this.delayUntil !== null && now < this.delayUntil) return true
     this.delayUntil = now + this.deps.analysisDelayMs()
     this.clearAllPendingWork()
+    return true
   }
 
   private clearAllPendingWork(): void {
@@ -237,8 +320,7 @@ export class AssistantCoordinator {
     }
   }
 
-  private distribute(frame: RewindFrame): void {
-    const now = this.deps.now()
+  private distribute(frame: RewindFrame, now: number): void {
     const inDelay = this.delayUntil !== null && now < this.delayUntil
     for (const a of this.assistants.values()) {
       // During the post-switch quiet window only assistants that explicitly need
@@ -274,6 +356,7 @@ export class AssistantCoordinator {
 
 let singleton: AssistantCoordinator | null = null
 let powerHooked = false
+let settingsHooked = false
 
 export function getAssistantCoordinator(): AssistantCoordinator {
   if (!singleton) singleton = new AssistantCoordinator()
@@ -287,15 +370,25 @@ export function registerAssistant(assistant: ProactiveAssistant): void {
   const coordinator = getAssistantCoordinator()
   coordinator.register(assistant)
   hookPowerChanges(coordinator)
+  hookSettingsChanges()
   syncAssistantCoordinator()
 }
 
-/** Re-read the master toggle and start/stop the loop accordingly. Call after a
- *  settings change. */
+/** Re-read the master toggle and start/stop the loop accordingly. */
 export function syncAssistantCoordinator(): void {
   const coordinator = getAssistantCoordinator()
   if (getAppSettings().screenAnalysisEnabled) coordinator.start()
   else coordinator.stop()
+}
+
+/** Without this the master toggle is one-way: `tick()` re-checks the setting so
+ *  turning it OFF works, but nothing re-arms the timer when it goes back ON —
+ *  the feature would stay dead until the next app launch. Any writer of
+ *  AppSettings (a Settings toggle, a backend sync) now re-syncs the loop. */
+function hookSettingsChanges(): void {
+  if (settingsHooked) return
+  settingsHooked = true
+  onAppSettingsChanged(() => syncAssistantCoordinator())
 }
 
 /** The tick interval depends on the power source, so a change has to reschedule
@@ -315,4 +408,5 @@ export function _resetCoordinatorForTests(): void {
   singleton?.stop()
   singleton = null
   powerHooked = false
+  settingsHooked = false
 }

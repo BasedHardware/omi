@@ -89,12 +89,14 @@ function sanitizeMeeting(raw: Partial<MeetingSettings> | null | undefined): Meet
   return { mode, endGraceMinutes: grace, perApp, firstRunToastShown: r.firstRunToastShown === true }
 }
 
-// A non-integer / out-of-range level would silently disable the throttle (an
-// undefined interval reads as "no throttle"), so clamp into 0–5 and default a
-// junk value to 0 = Off.
-function clampFrequency(raw: unknown): number {
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) return 0
-  return Math.min(5, Math.max(0, Math.round(raw)))
+// Anything that is not a valid level reads as 0 = Off — NOT as the nearest level.
+// Clamping (Mac's behavior) would map a corrupt file or a backend settings-sync
+// sending `notification_frequency: 10` onto level 5, which is "no throttle": a
+// user whose default was Off would start getting unthrottled proactive toasts.
+// Junk must always fail quiet, never loud.
+function sanitizeFrequency(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isInteger(raw) || raw < 0 || raw > 5) return 0
+  return raw
 }
 
 // Coerce a partial/untrusted object into fully-valid settings. Passing null/
@@ -126,7 +128,7 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
     glowOverlayEnabled: r.glowOverlayEnabled !== false,
     screenAnalysisEnabled: r.screenAnalysisEnabled !== false,
     notificationsEnabled: r.notificationsEnabled !== false,
-    notificationFrequency: clampFrequency(r.notificationFrequency)
+    notificationFrequency: sanitizeFrequency(r.notificationFrequency)
   }
 }
 
@@ -154,6 +156,19 @@ export function getAppSettings(): AppSettings {
   return cache
 }
 
+// Subscribers notified after every write. This exists so a feature whose master
+// toggle lives here can re-arm itself when the toggle flips (the proactive
+// coordinator's loop, which otherwise could only ever be turned OFF at runtime —
+// turning it back on would need an app restart). Listeners must not throw.
+type SettingsListener = (settings: AppSettings) => void
+const listeners = new Set<SettingsListener>()
+
+/** Subscribe to settings writes. Returns an unsubscribe function. */
+export function onAppSettingsChanged(listener: SettingsListener): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
+
 // Merge a patch over the current settings, update the cache, and persist. Returns
 // the written value.
 export function setAppSettings(patch: Partial<AppSettings>): AppSettings {
@@ -164,10 +179,19 @@ export function setAppSettings(patch: Partial<AppSettings>): AppSettings {
   } catch (e) {
     console.warn('[app-settings] failed to persist:', e)
   }
+  // A listener blowing up must not lose the caller its write.
+  for (const l of listeners) {
+    try {
+      l(next)
+    } catch (e) {
+      console.warn('[app-settings] listener failed:', e)
+    }
+  }
   return next
 }
 
 /** Test-only: drop the in-memory cache so the next read comes from disk. */
 export function _resetForTests(): void {
   cache = null
+  listeners.clear()
 }

@@ -10,7 +10,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../ipc/db', () => ({ latestRewindFrame: vi.fn(() => null) }))
 vi.mock('../../appSettings', () => ({
-  getAppSettings: vi.fn(() => ({ screenAnalysisEnabled: true }))
+  getAppSettings: vi.fn(() => ({ screenAnalysisEnabled: true })),
+  onAppSettingsChanged: vi.fn(() => () => {})
 }))
 
 import {
@@ -180,7 +181,7 @@ describe('plumbing (no-op assistant, end to end)', () => {
     await flush()
     expect(a.analyzed).toHaveLength(0)
 
-    now = T0 + 5_000
+    now = T0 + 60_000 // past the distribution gate's fallback → a second frame is offered
     latest = frame({ id: 2 })
     c.tick()
     await flush()
@@ -189,12 +190,25 @@ describe('plumbing (no-op assistant, end to end)', () => {
     expect(a.shouldAnalyzeCalls[1]).toEqual({ frameNumber: 2, since: Infinity })
   })
 
-  it('stopAll stops every assistant', async () => {
+  it('stopAll stops every assistant and forgets them', async () => {
     const c = make()
     const a = new TestAssistant()
     c.register(a)
+
+    latest = frame({ id: 1 })
+    c.tick()
+    await flush()
+    expect(a.analyzed).toHaveLength(1)
+
     await c.stopAll()
     expect(a.stopped).toBe(1)
+
+    // A later start() must not resume feeding an assistant we told to stop.
+    now = T0 + 120_000
+    latest = frame({ id: 2, ts: now })
+    c.tick()
+    await flush()
+    expect(a.analyzed).toHaveLength(1)
   })
 })
 
@@ -217,32 +231,49 @@ describe('master toggle', () => {
     expect(c.isRunning()).toBe(false)
     c.stop()
   })
+
+  // The toggle must not be one-way: turning it back on re-arms the loop (the
+  // settings listener in registerAssistant is what calls start() again).
+  it('re-arms when the toggle goes back on', () => {
+    const c = make()
+    enabled = false
+    c.start()
+    expect(c.isRunning()).toBe(false)
+
+    enabled = true
+    c.start()
+    expect(c.isRunning()).toBe(true)
+    c.stop()
+  })
 })
 
 describe('backpressure', () => {
+  // Each step jumps a full fallback interval so the distribution gate offers the
+  // frame — backpressure is what we're isolating here, not the gate.
+  async function offerFrame(c: AssistantCoordinator, id: number): Promise<void> {
+    now = T0 + id * 60_000
+    latest = frame({ id, ts: now })
+    c.tick()
+    await flush()
+  }
+
   it('skips a busy assistant instead of queueing frames behind it', async () => {
     const c = make()
     const a = new TestAssistant()
     c.register(a)
     const release = a.hangUntilReleased()
 
-    latest = frame({ id: 1 })
-    c.tick()
-    await flush()
+    await offerFrame(c, 1)
     expect(a.analyzed).toHaveLength(1) // in flight, hanging
 
-    latest = frame({ id: 2 })
-    c.tick()
-    await flush()
+    await offerFrame(c, 2)
     expect(a.analyzed).toHaveLength(1) // skipped, NOT queued
 
     release()
     await flush()
 
     // Free again → the next frame is analyzed.
-    latest = frame({ id: 3 })
-    c.tick()
-    await flush()
+    await offerFrame(c, 3)
     expect(a.analyzed).toHaveLength(2)
     expect(a.analyzed[1].id).toBe(3)
   })
@@ -255,13 +286,8 @@ describe('backpressure', () => {
     c.register(other)
     const release = busy.hangUntilReleased()
 
-    latest = frame({ id: 1 })
-    c.tick()
-    await flush()
-
-    latest = frame({ id: 2 })
-    c.tick()
-    await flush()
+    await offerFrame(c, 1)
+    await offerFrame(c, 2)
 
     expect(busy.analyzed).toHaveLength(1)
     expect(other.analyzed).toHaveLength(2)
@@ -296,7 +322,7 @@ describe('privacy gate', () => {
     expect(a.analyzed).toHaveLength(0)
   })
 
-  it('passes a denied frame’s context switch through, but never its pixels — even as a departing frame', async () => {
+  it('reports a denied context switch WITHOUT its title, and never its pixels', async () => {
     const c = make()
     const a = new TestAssistant()
     c.register(a)
@@ -305,16 +331,107 @@ describe('privacy gate', () => {
     c.tick()
     await flush()
 
-    latest = frame({ id: 2, app: 'Google Chrome', windowTitle: 'Chase — Accounts' })
+    now = T0 + 3_000
+    latest = frame({ id: 2, ts: now, app: 'Google Chrome', windowTitle: 'Chase — Log in' })
     c.tick()
     await flush()
 
     // The move to the bank IS a context switch (assistants must know the user
-    // left Slack) — but the departing frame is the Slack one, and the bank frame
-    // is never analyzed.
+    // left Slack) — but the title is withheld, since an assistant would otherwise
+    // be free to paste "Chase — Log in" into a cloud prompt. The departing frame
+    // is the Slack one, and the bank frame is never analyzed.
     expect(a.switches).toHaveLength(1)
     expect(a.switches[0].departing?.app).toBe('Slack')
+    expect(a.switches[0].title).toBeNull()
     expect(a.analyzed.map((f) => f.app)).toEqual(['Slack'])
+  })
+})
+
+describe('distribution gate (the expensive one)', () => {
+  it('does NOT analyze every new frame while the user types in one window', async () => {
+    const c = make()
+    const a = new TestAssistant()
+    c.register(a)
+
+    // Ten minutes of editing: capture writes a new row ~1s (the pHash keeps
+    // moving as text appears), the coordinator ticks every 3s, and the context —
+    // app + window title — never changes.
+    for (let i = 0; i <= 200; i++) {
+      now = T0 + i * 3_000
+      latest = frame({ id: i + 1, ts: now })
+      c.tick()
+      await flush() // let analyze() settle, so backpressure isn't what's skipping
+    }
+
+    // 201 distinct frames, but only the first + one per 60s fallback. Ungated,
+    // this would be 201 screenshots on their way to a cloud model.
+    expect(a.analyzed).toHaveLength(11)
+  })
+
+  // A debounce that restarts on every frame would never fire. Titles that churn
+  // in a way the normalizer doesn't strip (a live word count, an edit counter)
+  // would otherwise silence the assistants for as long as the user keeps typing.
+  it('still distributes on the fallback when the context changes on EVERY frame', async () => {
+    const c = make()
+    const a = new TestAssistant()
+    a.needsDelayFrames = true // ignore the quiet window; the gate is what's under test
+    c.register(a)
+
+    for (let i = 0; i <= 40; i++) {
+      now = T0 + i * 3_000
+      latest = frame({ id: i + 1, ts: now, windowTitle: `notes — ${i} words` })
+      c.tick()
+      await flush()
+    }
+
+    // First frame, then one per 60s fallback (T0+60s, T0+120s) — not zero.
+    expect(a.analyzed).toHaveLength(3)
+  })
+
+  it('debounces a context switch: one distribution of the LATEST frame, not one per hop', async () => {
+    const c = make()
+    const a = new TestAssistant()
+    a.needsDelayFrames = true // see it despite the post-switch quiet window
+    c.register(a)
+
+    latest = frame({ id: 1, app: 'Slack', windowTitle: 'general' })
+    c.tick()
+    await flush()
+
+    // Three fast hops inside the 3s debounce → nothing distributed yet.
+    for (let i = 1; i <= 3; i++) {
+      now = T0 + i * 1_000
+      latest = frame({ id: 1 + i, ts: now, app: `App${i}`, windowTitle: `w${i}` })
+      c.tick()
+    }
+    await flush()
+    expect(a.analyzed).toHaveLength(1) // still only the first frame
+
+    // Settled: the next tick past the debounce flushes the LATEST frame only.
+    now = T0 + 7_000
+    latest = frame({ id: 9, ts: now, app: 'App3', windowTitle: 'w3' })
+    c.tick()
+    await flush()
+
+    expect(a.analyzed).toHaveLength(2)
+    expect(a.analyzed[1].id).toBe(9)
+  })
+
+  it('uses the 15s messaging fallback so a reply landing in Slack is not missed', async () => {
+    const c = make()
+    const a = new TestAssistant()
+    c.register(a)
+
+    latest = frame({ id: 1, app: 'Slack', windowTitle: 'general' })
+    c.tick()
+    await flush()
+
+    now = T0 + 15_000
+    latest = frame({ id: 2, ts: now, app: 'Slack', windowTitle: 'general' })
+    c.tick()
+    await flush()
+
+    expect(a.analyzed).toHaveLength(2) // a code editor would still be waiting
   })
 })
 
@@ -341,16 +458,24 @@ describe('context switch + analysis delay', () => {
     // Inside the 60s quiet window → the switching frame is not analyzed.
     expect(a.analyzed).toHaveLength(1)
 
-    // Still quiet 59s later...
-    now = T0 + 59_000
+    // The debounce flush lands (T0+6s) but the quiet window swallows it...
+    now = T0 + 6_000
     latest = frame({ id: 3, ts: now, app: 'Chrome', windowTitle: 'Docs' })
     c.tick()
     await flush()
     expect(a.analyzed).toHaveLength(1)
 
-    // ...and analysis resumes once the delay has elapsed.
-    now = T0 + 64_000
+    // ...still quiet at 59s...
+    now = T0 + 59_000
     latest = frame({ id: 4, ts: now, app: 'Chrome', windowTitle: 'Docs' })
+    c.tick()
+    await flush()
+    expect(a.analyzed).toHaveLength(1)
+
+    // ...and analysis of the new context resumes once BOTH the quiet window and
+    // the 60s distribution fallback (from the debounce flush) have elapsed.
+    now = T0 + 66_000
+    latest = frame({ id: 5, ts: now, app: 'Chrome', windowTitle: 'Docs' })
     c.tick()
     await flush()
     expect(a.analyzed).toHaveLength(2)
@@ -368,7 +493,12 @@ describe('context switch + analysis delay', () => {
 
     now = T0 + 3_000
     latest = frame({ id: 2, ts: now, app: 'Chrome', windowTitle: 'Docs' })
-    c.tick()
+    c.tick() // switch → debounce
+    await flush()
+
+    now = T0 + 6_000
+    latest = frame({ id: 3, ts: now, app: 'Chrome', windowTitle: 'Docs' })
+    c.tick() // debounce flushes; the quiet window does not apply to this one
     await flush()
 
     expect(a.analyzed).toHaveLength(2)
@@ -416,8 +546,16 @@ describe('context switch + analysis delay', () => {
     c.tick()
     await flush()
 
+    // No switch → no quiet window, no debounce; the frame is simply skipped by
+    // the fallback gate, exactly like any other unchanged context.
     expect(a.switches).toHaveLength(0)
-    expect(a.analyzed).toHaveLength(2) // no quiet window → analysis continues
+    expect(a.analyzed).toHaveLength(1)
+
+    now = T0 + 60_000
+    latest = frame({ id: 3, ts: now, app: 'Terminal', windowTitle: '⠙ Building — 01:01' })
+    c.tick()
+    await flush()
+    expect(a.analyzed).toHaveLength(2) // the 60s fallback, not a "switch"
   })
 })
 
