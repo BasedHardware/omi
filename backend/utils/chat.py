@@ -299,6 +299,21 @@ def process_voice_message_segment(
 CHAT_STREAM_ERROR_TEXT = "Sorry, something went wrong while generating a response. Please try again."
 
 
+def _new_stream_error_message(app_id: Optional[str], chat_session: Optional[ChatSession]) -> Message:
+    """Construct (but do not persist) the canned fallback AI message."""
+    ai_message = Message(
+        id=str(uuid.uuid4()),
+        text=CHAT_STREAM_ERROR_TEXT,
+        created_at=datetime.now(timezone.utc),
+        sender='ai',
+        app_id=app_id,
+        type='text',
+    )
+    if chat_session:
+        ai_message.chat_session_id = chat_session.id
+    return ai_message
+
+
 def build_stream_error_reply(
     uid: str,
     app_id: Optional[str] = None,
@@ -316,16 +331,8 @@ def build_stream_error_reply(
     exception is logged upstream in ``execute_*_chat_stream`` and is never
     surfaced to the client.
     """
-    ai_message = Message(
-        id=str(uuid.uuid4()),
-        text=CHAT_STREAM_ERROR_TEXT,
-        created_at=datetime.now(timezone.utc),
-        sender='ai',
-        app_id=app_id,
-        type='text',
-    )
+    ai_message = _new_stream_error_message(app_id, chat_session)
     if chat_session:
-        ai_message.chat_session_id = chat_session.id
         chat_db.add_message_to_chat_session(uid, chat_session.id, ai_message.id)
     chat_db.add_message(uid, ai_message.model_dump())
     return ResponseMessage(**ai_message.model_dump(), ask_for_nps=False)
@@ -347,18 +354,28 @@ async def emit_stream_error_fallback(
     calling surface (e.g. ``'chat'`` / ``'voice_chat'``) in server-side logs.
 
     This is a fail-open correctness degrade (real LLM answer -> canned text), so
-    it records the shared fallback metric. Returns the full ``"done: ...\\n\\n"``
-    frame; the reply is persisted inside ``build_stream_error_reply``.
+    it records the shared fallback metric exactly once. Normal path persists the
+    reply and reports ``degraded``; if the Firestore write itself fails we still
+    emit an in-memory ``done:`` frame (unpersisted -- client/server history
+    diverges for this turn) and report ``exhausted``. Returns the full
+    ``"done: ...\\n\\n"`` frame.
     """
     logger.error('%s stream ended without an answer for uid=%s (error=%s)', label, uid, error_recorded)
+    try:
+        fallback = await run_blocking(db_executor, build_stream_error_reply, uid, app_id, chat_session)
+        outcome = 'degraded'
+    except Exception as persist_exc:
+        logger.error('%s stream fallback persistence failed for uid=%s: %s', label, uid, type(persist_exc).__name__)
+        ai_message = _new_stream_error_message(app_id, chat_session)
+        fallback = ResponseMessage(**ai_message.model_dump(), ask_for_nps=False)
+        outcome = 'exhausted'
     record_fallback(
         component='other',
         from_mode='llm_answer',
         to_mode='canned_reply',
         reason='other',
-        outcome='degraded',
+        outcome=outcome,
     )
-    fallback = await run_blocking(db_executor, build_stream_error_reply, uid, app_id, chat_session)
     encoded_response = base64.b64encode(bytes(fallback.model_dump_json(), 'utf-8')).decode('utf-8')
     return f"done: {encoded_response}\n\n"
 

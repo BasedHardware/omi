@@ -140,8 +140,9 @@ def test_v2_messages_emits_fallback_done_frame_on_pipeline_error():
         assert len(ai_writes) == 1
         assert ai_writes[0]['text'] == chat_utils.CHAT_STREAM_ERROR_TEXT
 
-        # Fail-open correctness degrade is recorded once via the shared emitter.
+        # Fail-open correctness degrade is recorded once, as a persisted degrade.
         chat_utils.record_fallback.assert_called_once()
+        assert chat_utils.record_fallback.call_args.kwargs['outcome'] == 'degraded'
     finally:
         _cleanup(saved)
 
@@ -175,25 +176,49 @@ def test_v2_messages_normal_answer_still_emits_single_done_frame():
         _cleanup(saved)
 
 
+def _collect_voice_frames(chat_utils):
+    async def collect():
+        return [
+            chunk
+            async for chunk in chat_utils.process_voice_message_segment_stream(
+                '/tmp/decoded.wav', 'test-uid', language='en'
+            )
+        ]
+
+    return asyncio.run(collect())
+
+
 def test_voice_stream_emits_fallback_done_frame_on_pipeline_error():
     client, router_module, chat_utils, chat_db, saved = _make_client()
     try:
+        stub_calls = []
 
         async def failing_graph_stream(*args, **kwargs):
+            stub_calls.append(1)
             kwargs['callback_data']['error'] = 'boom: internal detail'
             yield None
 
-        sys.modules['utils.retrieval.graph'].execute_graph_chat_stream = failing_graph_stream
+        # Patch the USING module's binding. utils.chat did
+        # ``from utils.retrieval.graph import execute_graph_chat_stream`` at import
+        # time, so patching the graph module's attribute would be stale and the
+        # loop would silently iterate the leftover empty MagicMock instead.
+        chat_utils.execute_graph_chat_stream = failing_graph_stream
 
-        async def collect():
-            return [
-                chunk
-                async for chunk in chat_utils.process_voice_message_segment_stream(
-                    '/tmp/decoded.wav', 'test-uid', language='en'
-                )
-            ]
+        # Spy on the shared emitter to capture the error state the pipeline signalled.
+        real_emit = chat_utils.emit_stream_error_fallback
+        captured = {}
 
-        frames = asyncio.run(collect())
+        async def spy_emit(*args, **kwargs):
+            captured.update(kwargs)
+            return await real_emit(*args, **kwargs)
+
+        chat_utils.emit_stream_error_fallback = spy_emit
+
+        frames = _collect_voice_frames(chat_utils)
+
+        # Prove the error path actually ran -- a stale patch can never go green.
+        assert stub_calls, 'failing_graph_stream was never called (binding was stale)'
+        assert captured.get('error_recorded') is True
 
         done_frames = [f for f in frames if f.startswith('done: ')]
         assert len(done_frames) == 1
@@ -206,8 +231,66 @@ def test_voice_stream_emits_fallback_done_frame_on_pipeline_error():
         assert len(ai_writes) == 1
         assert ai_writes[0]['text'] == chat_utils.CHAT_STREAM_ERROR_TEXT
 
-        # Fail-open correctness degrade is recorded once via the shared emitter.
+        # Fail-open correctness degrade is recorded once, as a persisted degrade.
         chat_utils.record_fallback.assert_called_once()
+        assert chat_utils.record_fallback.call_args.kwargs['outcome'] == 'degraded'
+    finally:
+        _cleanup(saved)
+
+
+def test_voice_stream_emits_fallback_when_pipeline_yields_no_answer():
+    """Distinct from the error path: the pipeline completes cleanly but produces
+    neither an answer nor an error (empty LLM output). Still a blank-bubble bug
+    without the fallback, but error_recorded is False."""
+    client, router_module, chat_utils, chat_db, saved = _make_client()
+    try:
+
+        async def empty_stream(*args, **kwargs):
+            yield None  # no answer, no error
+
+        chat_utils.execute_graph_chat_stream = empty_stream
+
+        real_emit = chat_utils.emit_stream_error_fallback
+        captured = {}
+
+        async def spy_emit(*args, **kwargs):
+            captured.update(kwargs)
+            return await real_emit(*args, **kwargs)
+
+        chat_utils.emit_stream_error_fallback = spy_emit
+
+        frames = _collect_voice_frames(chat_utils)
+
+        assert captured.get('error_recorded') is False
+        done_frames = [f for f in frames if f.startswith('done: ')]
+        assert len(done_frames) == 1
+        payload = _decode_done_frame(''.join(frames))
+        assert payload['text'] == chat_utils.CHAT_STREAM_ERROR_TEXT
+        chat_utils.record_fallback.assert_called_once()
+        assert chat_utils.record_fallback.call_args.kwargs['outcome'] == 'degraded'
+    finally:
+        _cleanup(saved)
+
+
+def test_emit_stream_error_fallback_reports_exhausted_when_persist_fails():
+    """If the Firestore write for the fallback reply itself raises, the emitter
+    must still return a done: frame (blank bubble otherwise) but record the
+    fallback as 'exhausted' rather than the persisted 'degraded'."""
+    client, router_module, chat_utils, chat_db, saved = _make_client()
+    try:
+        chat_db.add_message.side_effect = RuntimeError('firestore down')
+
+        frame = asyncio.run(
+            chat_utils.emit_stream_error_fallback('test-uid', None, None, label='chat', error_recorded=True)
+        )
+
+        assert frame.startswith('done: ')
+        payload = _decode_done_frame(frame)
+        assert payload['text'] == chat_utils.CHAT_STREAM_ERROR_TEXT
+        assert payload['sender'] == 'ai'
+
+        chat_utils.record_fallback.assert_called_once()
+        assert chat_utils.record_fallback.call_args.kwargs['outcome'] == 'exhausted'
     finally:
         _cleanup(saved)
 
