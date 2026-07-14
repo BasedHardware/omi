@@ -2189,7 +2189,7 @@ private struct HomeCanvasBackground: View {
                 material: .hudWindow,
                 blendingMode: .behindWindow,
                 fallback: HomePalette.paper,
-                materialOverlay: Color.black.opacity(0.14)
+                materialOverlay: OmiColors.backgroundPrimary.opacity(0.24)
             )
 
             // Neutral key light high behind the wordmark, with a soft ambient
