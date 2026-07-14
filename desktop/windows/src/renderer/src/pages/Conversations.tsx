@@ -38,6 +38,12 @@ import {
 } from '../lib/conversations/filtering'
 import { fetchFolders, loadCachedFolders } from '../lib/conversations/folders'
 import {
+  removeRows,
+  restoreRows,
+  mergeApplied,
+  shouldCommit
+} from '../lib/conversations/optimistic'
+import {
   mergeConversations,
   moveConversationToFolder,
   setConversationStarred,
@@ -136,10 +142,26 @@ export function Conversations(): React.JSX.Element {
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
-  const [pendingDelete, setPendingDelete] = useState<{ ids: string[]; timeout: number } | null>(
-    null
-  )
+  const [pendingDelete, setPendingDelete] = useState<{
+    ids: string[]
+    timeout: number
+    // The full rows removed optimistically, so Undo can restore them exactly.
+    removed: ConversationRow[]
+  } | null>(null)
   const pendingTimeoutRef = useRef<number | null>(null)
+  // Ids optimistically hidden from the list while a cloud mutation is in flight
+  // (delete undo-window, merge). loadAll() filters these out so an interleaved cloud
+  // refetch can't re-add a row we've already removed; the id is dropped once the
+  // server reconciles (delete committed / merge landed) or the user hits Undo.
+  const suppressedIdsRef = useRef<Set<string>>(new Set())
+  // Monotonic generation of loadAll() calls — a superseded (stale) fetch must not
+  // overwrite fresher rows (fixes the concurrent-refetch clobber).
+  const loadGenRef = useRef(0)
+  // Generation + timer for the post-merge poll, so a new merge (or unmount) cancels
+  // an in-flight poll and its pending setTimeout.
+  const mergePollGenRef = useRef(0)
+  const pollTimerRef = useRef<number | null>(null)
+  const mountedRef = useRef(true)
   // Full local set (including hidden synced rows) — drives the backfill banner.
   const [locals, setLocals] = useState<LocalConversation[]>([])
   const [backfill, setBackfill] = useState<BackfillProgress | null>(null)
@@ -153,18 +175,23 @@ export function Conversations(): React.JSX.Element {
   // query supports them, so cloud pagination stays correct); type + search stay
   // client-side over the merged rows.
   const loadAll = useCallback(
-    async (showLoading = false): Promise<void> => {
+    async (showLoading = false): Promise<Set<string> | null> => {
+      const gen = ++loadGenRef.current
       if (showLoading) setLoading(true)
       conversationsCache.error = null
       setError(null)
       const out: ConversationRow[] = []
       let cloudLite: CloudConversationLite[] = []
+      // Null unless the cloud fetch succeeds; the merge poll only trusts a real
+      // fetch to decide whether the originals are gone.
+      let cloudIds: Set<string> | null = null
       try {
         const r = await omiApi.get<CloudConversation[]>('/v1/conversations', {
           params: buildConversationQuery(folderFilter, dateRange)
         })
         const list = Array.isArray(r.data) ? r.data : []
         cloudLite = list
+        cloudIds = new Set(list.map((c) => c.id))
         for (const c of list) {
           const created = c.created_at ? new Date(c.created_at).getTime() : 0
           out.push({
@@ -211,7 +238,15 @@ export function Conversations(): React.JSX.Element {
       // Drop optimistic pendings the backend has now produced, then fold the rest in
       // at the top so a just-finalized conversation shows instantly.
       reconcilePending(out.filter((r) => r.source === 'cloud'))
-      const merged = [...getPendingConversations(), ...out].sort((a, b) => b.sortAt - a.sortAt)
+      // Hide any rows a concurrent cloud mutation has optimistically removed (delete
+      // undo-window / merge) so this fetch can't resurrect them.
+      const merged = removeRows(
+        [...getPendingConversations(), ...out].sort((a, b) => b.sortAt - a.sortAt),
+        suppressedIdsRef.current
+      )
+      // A superseded fetch (a newer loadAll already started) must not overwrite the
+      // fresher state — but still return its cloud ids so a caller can inspect them.
+      if (!shouldCommit(gen, loadGenRef.current)) return cloudIds
       // Only the default view is the canonical shared cache.
       if (isDefaultView(folderFilter, dateRange)) {
         conversationsCache.rows = merged
@@ -219,6 +254,7 @@ export function Conversations(): React.JSX.Element {
       }
       setRows(merged)
       setLoading(false)
+      return cloudIds
     },
     [folderFilter, dateRange]
   )
@@ -367,30 +403,51 @@ export function Conversations(): React.JSX.Element {
 
   // --- Delete (5s undo, batched) ---
 
-  const executeDeletion = async (ids: string[]): Promise<void> => {
+  // Runs after the 5s undo window. `targets` is the snapshot captured at schedule
+  // time — we can't look rows up here because they were optimistically removed.
+  const executeDeletion = async (targets: ConversationRow[]): Promise<void> => {
     setDeleting(true)
-    for (const id of ids) {
-      const row = rows.find((r) => r.id === id)
-      if (!row || row.pending) continue
+    let anyCloud = false
+    for (const row of targets) {
+      if (row.pending) continue
       try {
-        if (row.source === 'local') await window.omi.deleteLocalConversation(id)
-        else await omiApi.delete(`/v1/conversations/${id}`)
+        if (row.source === 'local') await window.omi.deleteLocalConversation(row.id)
+        else {
+          await omiApi.delete(`/v1/conversations/${row.id}`)
+          anyCloud = true
+        }
       } catch (e) {
-        console.error('Delete failed:', id, e)
+        console.error('Delete failed:', row.id, e)
       }
     }
-    invalidateConversationsCache()
+    // Deletes are committed server-side; drop the suppression before reconciling so
+    // the refetch is authoritative (the rows are gone, so they won't return).
+    for (const row of targets) suppressedIdsRef.current.delete(row.id)
     setDeleting(false)
+    // Trigger the REAL cloud refetch (invalidateConversationsCache() only pokes the
+    // local subscriber, which rebuilds cloud rows from prev and never re-reads the
+    // cloud — that was the M1 bug). refreshCloudConversations() re-runs the full
+    // cloud+local fetch, reconciling both a cloud delete and a local delete.
+    if (anyCloud) refreshCloudConversations()
+    else invalidateConversationsCache()
   }
 
   const scheduleDelete = (ids: string[]): void => {
     if (deleting || ids.length === 0) return
+    const idSet = new Set(ids)
+    // Snapshot the real rows (source + full data) now — needed to delete against the
+    // right store later and to restore exactly on Undo. Pending rows aren't deletable.
+    const targets = rows.filter((r) => idSet.has(r.id) && !r.pending)
+    if (targets.length === 0) return
+    const targetIds = targets.map((r) => r.id)
+    for (const id of targetIds) suppressedIdsRef.current.add(id)
+    setRows((prev) => removeRows(prev, targetIds)) // optimistic removal (M1)
     const timeout = window.setTimeout(() => {
       setPendingDelete(null)
-      void executeDeletion(ids)
+      void executeDeletion(targets)
     }, 5000)
     pendingTimeoutRef.current = timeout
-    setPendingDelete({ ids, timeout })
+    setPendingDelete({ ids: targetIds, timeout, removed: targets })
     setSelected(new Set())
     setSelectMode(false)
   }
@@ -400,28 +457,68 @@ export function Conversations(): React.JSX.Element {
       clearTimeout(pendingTimeoutRef.current)
       pendingTimeoutRef.current = null
     }
+    if (pendingDelete) {
+      for (const r of pendingDelete.removed) suppressedIdsRef.current.delete(r.id)
+      setRows((prev) => restoreRows(prev, pendingDelete.removed))
+    }
     setPendingDelete(null)
   }
 
-  // Cleanup timeout on unmount.
+  // Cleanup timers + stop the merge poll on unmount (avoids setState-after-unmount).
   useEffect(() => {
     return () => {
+      mountedRef.current = false
       if (pendingTimeoutRef.current) clearTimeout(pendingTimeoutRef.current)
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current)
     }
   }, [])
 
   // --- Merge (fire-and-forget; refetch after) ---
 
   const handleMergeConfirmed = async (): Promise<void> => {
-    const ids = mergeableRows(selectedRows).map((r) => r.id)
-    await mergeConversations(ids)
+    const targets = mergeableRows(selectedRows)
+    const ids = targets.map((r) => r.id)
     setMergeOpen(false)
     setSelected(new Set())
     setSelectMode(false)
-    // The new conversation is produced async and the originals are deleted — the
-    // merge response carries no new id, so refetch now and once more shortly after.
-    void loadAll()
-    window.setTimeout(() => void loadAll(), 2500)
+    if (ids.length < 2) return
+    // New generation cancels any in-flight poll from a previous merge.
+    const gen = ++mergePollGenRef.current
+    // Optimistically remove ALL originals — the backend merges them into a new
+    // conversation and deletes every one of them (no new id in the response).
+    for (const id of ids) suppressedIdsRef.current.add(id)
+    setRows((prev) => removeRows(prev, ids))
+    try {
+      await mergeConversations(ids)
+    } catch (e) {
+      // The merge request itself failed — un-suppress and restore the originals.
+      console.error('Merge failed:', e)
+      for (const id of ids) suppressedIdsRef.current.delete(id)
+      setRows((prev) => restoreRows(prev, targets))
+      return
+    }
+    // Merge is async (returns status:merging, deletes originals later). Poll a bounded
+    // number of times until the server drops the originals, guarded by `gen` so a
+    // stale poll (superseded by a new merge or unmount) can't act, and by loadAll()'s
+    // own generation guard so a late refetch can't clobber fresher rows.
+    const ATTEMPTS = 6
+    const INTERVAL_MS = 2200 // ~13s total budget
+    for (let i = 0; i < ATTEMPTS; i++) {
+      await new Promise<void>((resolve) => {
+        pollTimerRef.current = window.setTimeout(resolve, INTERVAL_MS)
+      })
+      if (!mountedRef.current || gen !== mergePollGenRef.current) return
+      const cloudIds = await loadAll()
+      if (!mountedRef.current || gen !== mergePollGenRef.current) return
+      if (cloudIds && mergeApplied(ids, cloudIds)) {
+        // Originals gone server-side — suppression no longer needed.
+        for (const id of ids) suppressedIdsRef.current.delete(id)
+        return
+      }
+    }
+    // Poll exhausted without confirming the merge — leave the originals optimistically
+    // removed (they stay suppressed so an in-flight refetch can't re-add them); the
+    // server is authoritative on the next real load.
   }
 
   // --- Folder dialog callbacks ---
