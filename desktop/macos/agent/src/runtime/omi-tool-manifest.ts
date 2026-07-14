@@ -1333,7 +1333,7 @@ const controlVoicePatches: Partial<Record<AgentControlManifestTool["name"], OmiT
     schemaOverride: schema(
       {
         objective: { type: "string", description: "Self-contained background-agent objective." },
-        provider: { type: "string", enum: ["openclaw", "hermes"], description: "Optional local provider override." },
+        provider: { type: "string", enum: ["openclaw", "hermes", "codex"], description: "Optional local provider override." },
         parent_run_id: { type: "string", description: "Optional parent run to link via delegation." },
         visible: { type: "boolean", description: "Whether to project into floating-bar pill UI. Default true." },
         title: { type: "string", description: "Optional visible session title." },

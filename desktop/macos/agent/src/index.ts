@@ -1306,8 +1306,16 @@ async function main(): Promise<void> {
       onCreate: (adapter) => localAcpAdapters.add(adapter),
     });
   };
+  const ensureCodexAdapter = async (): Promise<boolean> => {
+    return ensureRegisteredAdapter(registry, "codex", {
+      log: logErr,
+      maxWorkers: 1,
+      onCreate: (adapter) => localAcpAdapters.add(adapter),
+    });
+  };
   const hermesAvailable = await ensureHermesAdapter();
   const openClawAvailable = await ensureOpenClawAdapter();
+  const codexAvailable = await ensureCodexAdapter();
   if (!piMonoAvailable && defaultAdapterId === "pi-mono" && process.env.OMI_AGENT_ALLOW_CONTROL_ONLY !== "1") {
     const msg = "pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token); refusing to start";
     logErr(msg);
@@ -1324,6 +1332,12 @@ async function main(): Promise<void> {
   }
   if (!openClawAvailable && defaultAdapterId === "openclaw") {
     const msg = adapterActivationError("openclaw") ?? "OpenClaw adapter is unavailable.";
+    logErr(msg);
+    send({ type: "error", message: msg });
+    process.exit(1);
+  }
+  if (!codexAvailable && defaultAdapterId === "codex") {
+    const msg = adapterActivationError("codex") ?? "Codex adapter is unavailable.";
     logErr(msg);
     send({ type: "error", message: msg });
     process.exit(1);
@@ -1556,6 +1570,10 @@ async function main(): Promise<void> {
           } else if (adapterId === "openclaw") {
             if (!(await ensureOpenClawAdapter())) {
               throw new Error(adapterActivationError("openclaw"));
+            }
+          } else if (adapterId === "codex") {
+            if (!(await ensureCodexAdapter())) {
+              throw new Error(adapterActivationError("codex"));
             }
           }
           await transport.handleQuery(query);

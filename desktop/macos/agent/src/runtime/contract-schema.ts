@@ -119,7 +119,7 @@ export function validateRuntimeContractFixture(
     errors.push("$.failureTaxonomy: must declare the complete bounded production taxonomy");
   }
   const adapters = Array.isArray(value.adapterConformance) ? value.adapterConformance : [];
-  const expectedAdapters = ["pi-mono", "acp", "hermes", "openclaw", "gemini-realtime", "openai-realtime"];
+  const expectedAdapters = ["pi-mono", "acp", "hermes", "openclaw", "codex", "gemini-realtime", "openai-realtime"];
   if (adapters.map((adapter) => isRecord(adapter) ? adapter.adapterId : undefined).join("|") !== expectedAdapters.join("|")) {
     errors.push("$.adapterConformance: must cover every production adapter exactly once");
   }

@@ -322,7 +322,7 @@ const spawnAgentPublicShape = {
   // not fail before the child-admission boundary.
   brief: z.string().min(1).optional(),
   requestedAgentCount: z.coerce.number().int().min(1).max(8).default(1),
-  provider: z.enum(["openclaw", "hermes"]).optional(),
+  provider: z.enum(["openclaw", "hermes", "codex"]).optional(),
   parentRunId: z.string().min(1).optional(),
   visible: z.boolean().default(true),
   title: z.string().min(1).optional(),
@@ -677,7 +677,7 @@ function assertAdapterAllowedForControlRun(context: AgentControlToolContext, ada
 function assertAdapterAllowedForTopLevelLocalProviderSpawn(
   context: AgentControlToolContext,
   adapterId: string,
-  directedProvider?: "hermes" | "openclaw",
+  directedProvider?: "hermes" | "openclaw" | "codex",
 ): void {
   const hasDirectedLocalProvider = directedProvider === adapterId;
   if (!context.trustedUserControl && !hasDirectedLocalProvider) {
@@ -1172,7 +1172,9 @@ export async function handleAgentControlToolCall(
         }
         const adapterId =
           parsed.adapterId ??
-          (parsed.provider === "openclaw" ? "openclaw" : parsed.provider === "hermes" ? "hermes" : undefined) ??
+          (parsed.provider === "openclaw" || parsed.provider === "hermes" || parsed.provider === "codex"
+            ? parsed.provider
+            : undefined) ??
           (parentRunId
             ? context.kernel.defaultAdapterIdForRun(parentRunId)
             : spawnProfile.adapterId);
@@ -1799,7 +1801,7 @@ export async function handleAgentControlToolCall(
       // routing failure. Keep this translation at the control-tool boundary so
       // every surface (including PTT) receives the same bounded recovery state.
       const requestedDirectedProvider = name === "spawn_agent"
-        && (input.provider === "hermes" || input.provider === "openclaw")
+        && (input.provider === "hermes" || input.provider === "openclaw" || input.provider === "codex")
         ? input.provider
         : undefined;
       const isProviderSetupNeeded = (rawCode === "provider_unavailable" || routeReasonCode === "provider_unavailable")
@@ -1822,7 +1824,7 @@ export async function handleAgentControlToolCall(
           message: isAuthorizedExternalSpawnAdmission && errorCode === "control_tool_failed"
             ? "The requested agent could not be started. Try again."
             : isProviderSetupNeeded
-              ? `${requestedDirectedProvider === "hermes" ? "Hermes" : "OpenClaw"} needs setup before it can run an agent.`
+              ? `${directedProviderDisplayName(requestedDirectedProvider)} needs setup before it can run an agent. ${directedProviderInstallHint(requestedDirectedProvider)}`
             : error instanceof Error ? error.message : String(error),
           ...(isProviderSetupNeeded ? { provider: requestedDirectedProvider } : {}),
           ...(isAuthorizedExternalSpawnAdmission ? { retryable: true } : {}),
@@ -1831,6 +1833,32 @@ export async function handleAgentControlToolCall(
       }, "failed");
     }
   });
+}
+
+export function directedProviderDisplayName(provider: "hermes" | "openclaw" | "codex"): string {
+  switch (provider) {
+    case "hermes":
+      return "Hermes";
+    case "openclaw":
+      return "OpenClaw";
+    case "codex":
+      return "Codex";
+  }
+}
+
+/**
+ * One-line, speakable setup instruction per directed local provider. Surfaces
+ * relay this to the user when they ask for a provider that is not installed.
+ */
+export function directedProviderInstallHint(provider: "hermes" | "openclaw" | "codex"): string {
+  switch (provider) {
+    case "hermes":
+      return "Install it by running: curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash — then ask again.";
+    case "openclaw":
+      return "Install it by running: curl -fsSL https://openclaw.ai/install.sh | bash — then ask again.";
+    case "codex":
+      return "Install it by running: npm install -g @openai/codex @zed-industries/codex-acp — then sign in with `codex login` and ask again.";
+  }
 }
 
 function buildControlRunMcpServers(
@@ -2524,10 +2552,10 @@ function serializeFloatingPillSnapshot(summary: {
     runId ||
     sessionId;
   const adapterId = session.defaultAdapterId;
-  const authoritativeProvider = adapterId === "openclaw" || adapterId === "hermes"
+  const authoritativeProvider = adapterId === "openclaw" || adapterId === "hermes" || adapterId === "codex"
     ? adapterId
     : null;
-  const legacyProvider = metadata.provider === "openclaw" || metadata.provider === "hermes"
+  const legacyProvider = metadata.provider === "openclaw" || metadata.provider === "hermes" || metadata.provider === "codex"
     ? metadata.provider
     : null;
   return {

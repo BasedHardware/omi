@@ -287,7 +287,7 @@ enum GeneratedToolCapabilities {
       "Creates a canonical kernel session/run; visible runs project into floating-bar pills.",
       "Calling spawn_agent is the only way to start a visible floating-bar background agent; saying you will start one does not start it.",
       "Use visible=false for parent-linked background work that should not appear as a pill.",
-      "If the user asks to use OpenClaw or Hermes, pass provider='openclaw' or provider='hermes'.",
+      "If the user asks to use OpenClaw, Hermes, or Codex, pass provider='openclaw', provider='hermes', or provider='codex'.",
       "Inspect progress with list_agent_sessions or get_agent_run."
     ]
     ),

@@ -206,6 +206,8 @@ function adapterFailureLabel(adapterId: ProductionAdapterId, provider?: string):
   switch (adapterId) {
     case "openclaw":
       return "OpenClaw";
+    case "codex":
+      return "Codex";
     case "hermes":
       return "Hermes";
     case "pi-mono":

@@ -1208,6 +1208,55 @@ describe("external realtime surface authority", () => {
     store.close();
   });
 
+  it("returns setup instructions when an uninstalled Codex is explicitly requested", async () => {
+    const root = newRoot();
+    const store = new SqliteAgentStore({ databasePath: join(root, "agent.sqlite"), reconcileOnOpen: false });
+    const registry = new AdapterRegistry();
+    registry.register("pi-mono", () => new FakeRuntimeAdapter("pi-mono"));
+    const kernel = new AgentRuntimeKernel({ store, registry });
+    const session = resolveSurfaceSession(store, {
+      ownerId: "owner",
+      surfaceRef: { surfaceKind: "realtime_voice", externalRefKind: "chat", externalRefId: "default" },
+      defaultAdapterId: "pi-mono",
+    }, () => 1);
+    const run = kernel.beginExternalSurfaceRun(beginInput(session.agentSessionId));
+    const routed = kernel.routeExternalSurfaceToolInvocation({
+      ownerId: "owner",
+      sessionId: session.agentSessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      invocationId: "realtime-codex-unavailable",
+      toolName: "spawn_agent",
+      toolInput: { objective: "Fix the failing unit tests", provider: "codex" },
+    });
+    const producerJournal = parseAgentSpawnProducerJournalDescriptor(
+      ((routed.toolInput.metadata as Record<string, unknown>).producerJournal),
+    );
+
+    const rejected = JSON.parse(await handleAgentControlToolCall({
+      kernel,
+      callerSessionId: session.agentSessionId,
+      executionRole: "coordinator",
+      providerBoundary: "managed_cloud",
+      defaultAdapterId: "pi-mono",
+      authorizedProducerJournal: producerJournal,
+      authorizedCallerRunId: run.runId,
+      getOwnerId: () => "owner",
+    }, "spawn_agent", routed.toolInput));
+
+    expect(rejected).toMatchObject({
+      ok: false,
+      error: {
+        code: "provider_setup_needed",
+        provider: "codex",
+        retryable: true,
+      },
+    });
+    expect(rejected.error.message).toContain("Codex needs setup");
+    expect(rejected.error.message).toContain("npm install -g @openai/codex");
+    store.close();
+  });
+
   it("returns a sanitized structured result when external OpenClaw admission is unavailable", async () => {
     const root = newRoot();
     const store = new SqliteAgentStore({ databasePath: join(root, "agent.sqlite"), reconcileOnOpen: false });
@@ -1248,7 +1297,7 @@ describe("external realtime surface authority", () => {
       ok: false,
       error: {
         code: "provider_setup_needed",
-        message: "OpenClaw needs setup before it can run an agent.",
+        message: "OpenClaw needs setup before it can run an agent. Install it by running: curl -fsSL https://openclaw.ai/install.sh | bash — then ask again.",
         provider: "openclaw",
         retryable: true,
       },

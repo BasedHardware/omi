@@ -98,10 +98,11 @@ describe("omi tool manifest", () => {
     expect(spawnAgent?.inputSchema.required).toEqual(["objective"]);
     expect(spawnAgent?.inputSchema.properties).not.toHaveProperty("originSurfaceKind");
     expect(spawnAgent?.inputSchema.properties.provider).toMatchObject({
-      enum: ["openclaw", "hermes"],
+      enum: ["openclaw", "hermes", "codex"],
     });
     expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("provider='openclaw'");
     expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("provider='hermes'");
+    expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("provider='codex'");
   });
 
   it("guides realtime child-result retrieval without exposing internal ids", () => {

@@ -265,7 +265,8 @@ enum GeneratedRealtimeTools {
           "type": "string",
           "enum": [
             "openclaw",
-            "hermes"
+            "hermes",
+            "codex"
           ],
           "description": "Optional local provider override."
         },
