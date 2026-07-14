@@ -102,41 +102,224 @@ struct RealtimeProviderToolResult: Equatable {
 enum RealtimeProviderToolResultPolicy {
   static let maximumByteCount = 48 * 1024
 
-  static func prepare(name: String, output: String) -> RealtimeProviderToolResult {
+  /// The sole model-visible result boundary for both realtime providers.
+  /// Provider-specific transport only happens after this method returns a
+  /// canonical envelope, including rejected/authorization error paths.
+  static func prepare(
+    provider: RealtimeHubProvider = .openai,
+    name: String,
+    output: String
+  ) -> RealtimeProviderToolResult {
     let originalByteCount = output.utf8.count
+    var providerOutput = output
     if name == HubTool.spawnAgent.rawValue,
       let payload = try? JSONSerialization.jsonObject(with: Data(output.utf8)) as? [String: Any],
       let providerResult = payload["providerResult"] as? [String: Any],
+      isCanonicalToolResultEnvelope(providerResult["toolResultEnvelope"]),
       let data = try? JSONSerialization.data(withJSONObject: providerResult, options: [.sortedKeys]),
       let compact = String(data: data, encoding: .utf8)
     {
-      return RealtimeProviderToolResult(
-        output: compact,
-        originalByteCount: originalByteCount,
-        wasOversized: false)
+      providerOutput = compact
     }
-    guard originalByteCount <= maximumByteCount else {
-      let payload: [String: Any] = [
-        "ok": false,
-        "error": [
-          "code": "tool_result_too_large",
-          "message": "The tool returned too much detail. Retry with narrower filters.",
-          "tool": String(name.prefix(128)),
-          "originalBytes": originalByteCount,
-        ],
-      ]
-      let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
-      let bounded = data.flatMap { String(data: $0, encoding: .utf8) }
-        ?? #"{"ok":false,"error":{"code":"tool_result_too_large"}}"#
-      return RealtimeProviderToolResult(
-        output: bounded,
-        originalByteCount: originalByteCount,
-        wasOversized: true)
+    guard providerOutput.utf8.count <= maximumByteCount else {
+      return oversizedFailure(
+        provider: provider,
+        name: name,
+        originalOutput: output,
+        originalByteCount: originalByteCount)
+    }
+    let finalized = finalize(provider: provider, name: name, output: providerOutput)
+    guard finalized.utf8.count <= maximumByteCount else {
+      return oversizedFailure(
+        provider: provider,
+        name: name,
+        originalOutput: output,
+        originalByteCount: originalByteCount)
     }
     return RealtimeProviderToolResult(
-      output: output,
+      output: finalized,
       originalByteCount: originalByteCount,
       wasOversized: false)
+  }
+
+  static func rejectedOutput(
+    code: String,
+    message: String,
+    preservingCanonicalEnvelopeFrom sourceOutput: String? = nil
+  ) -> String {
+    var payload: [String: Any] = [
+      "ok": false,
+      "error": ["code": String(code.prefix(128)), "message": String(message.prefix(512))],
+    ]
+    // Node owns the capability tuple. A Swift classification may refine the
+    // user-facing error, but it must never replace a valid external-run
+    // envelope with synthetic realtime provenance.
+    if let sourceOutput,
+      let sourcePayload = try? JSONSerialization.jsonObject(with: Data(sourceOutput.utf8)) as? [String: Any],
+      isCanonicalToolResultEnvelope(sourcePayload["toolResultEnvelope"])
+    {
+      payload["toolResultEnvelope"] = sourcePayload["toolResultEnvelope"]
+    }
+    let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+    return data.flatMap { String(data: $0, encoding: .utf8) }
+      ?? #"{"ok":false,"error":{"code":"realtime_tool_rejected","message":"The tool could not be completed."}}"#
+  }
+
+  private static func oversizedFailure(
+    provider: RealtimeHubProvider,
+    name: String,
+    originalOutput: String,
+    originalByteCount: Int
+  ) -> RealtimeProviderToolResult {
+    let error: [String: Any] = [
+      "code": "tool_result_too_large",
+      "message": "The tool returned too much detail. Retry with narrower filters.",
+      "tool": String(name.prefix(128)),
+      "originalBytes": originalByteCount,
+    ]
+    let payload: [String: Any] = [
+      "ok": false,
+      "error": error,
+      "toolResultEnvelope": providerFailureEnvelope(
+        provider: provider, name: name, error: error, originalOutput: originalOutput),
+    ]
+    let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+    let bounded = data.flatMap { String(data: $0, encoding: .utf8) }
+      ?? #"{"ok":false,"error":{"code":"tool_result_too_large"}}"#
+    return RealtimeProviderToolResult(
+      output: bounded,
+      originalByteCount: originalByteCount,
+      wasOversized: true)
+  }
+
+  private static func finalize(provider: RealtimeHubProvider, name: String, output: String) -> String {
+    if parsedCanonicalToolResultEnvelope(from: output) != nil { return output }
+    guard var payload = try? JSONSerialization.jsonObject(with: Data(output.utf8)) as? [String: Any]
+    else {
+      return rejectedOutputEnvelope(
+        provider: provider,
+        name: name,
+        code: "realtime_tool_result_unstructured",
+        message: "The tool returned an invalid response.")
+    }
+    let status = payload["ok"] as? Bool == true ? "succeeded" : "failed"
+    let payloadBytes =
+      (try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]))?.count ?? 0
+    payload["toolResultEnvelope"] = [
+      "version": 1,
+      "status": status,
+      "truncated": false,
+      "originalBytes": payloadBytes,
+      "projectedBytes": payloadBytes,
+      "fullOutputRef": NSNull(),
+      "provenance": [
+        "invocationId": "realtime-\(provider.rawValue)-\(String(name.prefix(64)))",
+        "runId": "unknown",
+        "attemptId": "unknown",
+        "toolName": String(name.prefix(128)),
+      ],
+    ]
+    let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+    return data.flatMap { String(data: $0, encoding: .utf8) }
+      ?? rejectedOutputEnvelope(
+        provider: provider,
+        name: name,
+        code: "realtime_tool_result_encoding_failed",
+        message: "The tool response could not be prepared.")
+  }
+
+  private static func rejectedOutputEnvelope(
+    provider: RealtimeHubProvider,
+    name: String,
+    code: String,
+    message: String
+  ) -> String {
+    let error: [String: Any] = [
+      "code": String(code.prefix(128)), "message": String(message.prefix(512)),
+    ]
+    let payload: [String: Any] = [
+      "ok": false,
+      "error": error,
+      "toolResultEnvelope": providerFailureEnvelope(
+        provider: provider,
+        name: name,
+        error: error,
+        originalOutput: ""),
+    ]
+    let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+    return data.flatMap { String(data: $0, encoding: .utf8) }
+      ?? #"{"ok":false}"#
+  }
+
+  /// The Node bridge owns artifacts. Swift never replaces a canonical reference
+  /// with a provider-only payload; it either forwards that envelope or returns
+  /// a typed provider-budget error which preserves an existing artifact ref.
+  private static func providerFailureEnvelope(
+    provider: RealtimeHubProvider,
+    name: String,
+    error: [String: Any],
+    originalOutput: String
+  ) -> [String: Any] {
+    let sourceEnvelope = parsedCanonicalToolResultEnvelope(from: originalOutput)
+    let errorBytes =
+      (try? JSONSerialization.data(withJSONObject: error, options: [.sortedKeys]))?.count ?? 0
+    let sourceOriginalBytes = sourceEnvelope?["originalBytes"] as? Int
+    let sourceRef = sourceEnvelope?["fullOutputRef"] as? String
+    let preservesArtifact = sourceRef != nil && (sourceOriginalBytes ?? 0) > errorBytes
+    let sourceProvenance = sourceEnvelope?["provenance"] as? [String: Any]
+    return [
+      "version": 1,
+      "status": "failed",
+      "truncated": preservesArtifact,
+      "originalBytes": preservesArtifact ? sourceOriginalBytes! : errorBytes,
+      "projectedBytes": errorBytes,
+      "fullOutputRef": preservesArtifact ? sourceRef! : NSNull(),
+      "provenance": sourceProvenance ?? [
+        "invocationId": "realtime-\(provider.rawValue)-provider-budget-\(String(name.prefix(64)))",
+        "runId": "unknown",
+        "attemptId": "unknown",
+        "toolName": String(name.prefix(128)),
+      ],
+    ]
+  }
+
+  private static func parsedCanonicalToolResultEnvelope(from output: String) -> [String: Any]? {
+    guard let payload = try? JSONSerialization.jsonObject(with: Data(output.utf8)) as? [String: Any]
+    else {
+      return nil
+    }
+    if let envelope = payload["toolResultEnvelope"] as? [String: Any],
+      isCanonicalToolResultEnvelope(envelope)
+    {
+      return envelope
+    }
+    if let providerResult = payload["providerResult"] as? [String: Any],
+      let envelope = providerResult["toolResultEnvelope"] as? [String: Any],
+      isCanonicalToolResultEnvelope(envelope)
+    {
+      return envelope
+    }
+    return nil
+  }
+
+  private static func isCanonicalToolResultEnvelope(_ value: Any?) -> Bool {
+    guard let envelope = value as? [String: Any],
+      envelope["version"] as? Int == 1,
+      ["succeeded", "failed", "cancelled"].contains(envelope["status"] as? String ?? ""),
+      let originalBytes = envelope["originalBytes"] as? Int,
+      let projectedBytes = envelope["projectedBytes"] as? Int,
+      let truncated = envelope["truncated"] as? Bool,
+      originalBytes >= projectedBytes,
+      truncated == (projectedBytes < originalBytes),
+      let provenance = envelope["provenance"] as? [String: Any]
+    else { return false }
+    guard
+      ["invocationId", "runId", "attemptId", "toolName"].allSatisfy({
+        (provenance[$0] as? String)?.isEmpty == false
+      })
+    else { return false }
+    if projectedBytes < originalBytes { return envelope["fullOutputRef"] as? String != nil }
+    return envelope["fullOutputRef"] is NSNull || envelope["fullOutputRef"] == nil
   }
 }
 
