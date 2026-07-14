@@ -115,6 +115,52 @@ def test_duplicate_reconnect_reuses_the_same_outbox_job():
     assert transaction.updates == []
 
 
+def test_duplicate_finalization_intent_keeps_the_same_processing_admission():
+    """Characterize #2d67863cad: a disconnect/reconnect never starts a second job.
+
+    The first finalization transaction already moved the conversation to
+    ``processing``.  A later finalizer must reuse that durable identity without
+    another conversation write, so a future service migration cannot re-open
+    the disconnect race while rearranging the handoff.
+    """
+    job_id = 'job-1'
+    transaction = _Transaction()
+    conversation_ref = _conversation(
+        {
+            'status': 'processing',
+            'finalization_job_id': job_id,
+            'finalization_revision': 1,
+        }
+    )
+    collection = _Collection(
+        {
+            job_id: _Ref(
+                job_id,
+                {
+                    'status': 'queued',
+                    'dispatch_generation': 1,
+                    'requires_byok': False,
+                },
+            )
+        }
+    )
+
+    intent = jobs._create_or_get_finalization_intent_txn(
+        transaction,
+        conversation_ref,
+        collection,
+        'uid-1',
+        'conversation-1',
+        False,
+        _now(),
+    )
+
+    assert intent['job_id'] == job_id
+    assert intent['dispatch_generation'] == 1
+    assert transaction.updates == []
+    assert transaction.sets == []
+
+
 def test_byok_job_is_explicitly_blocked_without_persisting_a_key():
     transaction = _Transaction()
     collection = _Collection({})

@@ -356,6 +356,9 @@
       "risk": "high",
       "sources": [
         "backend/database/conversations.py",
+        "backend/database/conversation_finalization_jobs.py",
+        "backend/services/conversation_finalization.py",
+        "backend/utils/conversations/finalizer.py",
         "backend/routers/transcribe.py",
         "backend/routers/pusher.py",
         "backend/routers/conversations.py",
@@ -367,10 +370,15 @@
         "backend/utils/conversations/merge_conversations.py",
         "backend/utils/imports/limitless.py"
       ],
-      "tests": ["tests/unit/test_conversation_lifecycle_contract.py"],
+      "tests": [
+        "tests/unit/test_conversation_lifecycle_contract.py",
+        "tests/unit/test_conversation_finalization_jobs.py",
+        "tests/unit/test_listen_finalization_cloud_tasks.py"
+      ],
       "checks": [],
       "invariants": [
         "only one finalizer claim succeeds for an in-progress conversation",
+        "finalization outbox reconnects reuse one durable job and lease fences stale workers before any fanout",
         "current direct lifecycle mutations remain observable by bounded writer label until convergence",
         "merge rejects sources that are still processing",
         "discard and generic status-write escape hatches remain characterized until the lifecycle service replaces them"
