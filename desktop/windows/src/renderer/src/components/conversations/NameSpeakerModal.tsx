@@ -9,6 +9,7 @@ import {
 } from '../../lib/conversations/speakers'
 import { toast } from '../../lib/toast'
 import { ModalShell } from './ModalShell'
+import { AVATAR_PERSON, AVATAR_USER } from './speakerPalette'
 
 // Mac's NameSpeakerSheet (fixed 400x450), rendered as a centered Windows modal
 // per the Track 4 ruling. Attribute a transcript segment to the user or to an
@@ -121,7 +122,8 @@ export function NameSpeakerModal({
             {/* decorative: the initial repeats the label next to it */}
             <span
               aria-hidden
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#8B5CF6] text-xs font-semibold text-white"
+              style={{ background: AVATAR_USER }}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
             >
               Y
             </span>
@@ -137,7 +139,8 @@ export function NameSpeakerModal({
             >
               <span
                 aria-hidden
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[rgba(139,92,246,0.3)] text-xs font-semibold text-white"
+                style={{ background: AVATAR_PERSON }}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
               >
                 {p.name.trim()[0]?.toUpperCase() ?? <User className="h-3.5 w-3.5" />}
               </span>

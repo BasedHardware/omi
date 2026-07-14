@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import type { TranscriptSegment } from '../omiApi.generated'
 import {
-  AVATAR_NAMED,
-  AVATAR_NAMED_SOFT,
+  AVATAR_PERSON,
   AVATAR_UNNAMED,
+  AVATAR_USER,
   SPEAKER_COLORS,
-  USER_BUBBLE,
+  USER_BUBBLE
+} from '../../components/conversations/speakerPalette'
+import {
   avatarFill,
   avatarInitial,
   bubbleColor,
@@ -63,12 +65,12 @@ describe('bubbleColor', () => {
 describe('avatarInitial / avatarFill', () => {
   it('shows Y for the user', () => {
     expect(avatarInitial(2, true)).toBe('Y')
-    expect(avatarFill(true)).toBe(AVATAR_NAMED)
+    expect(avatarFill(true)).toBe(AVATAR_USER)
   })
 
   it("shows a named person's first letter, uppercased", () => {
     expect(avatarInitial(1, false, 'nikita')).toBe('N')
-    expect(avatarFill(false, 'nikita')).toBe(AVATAR_NAMED_SOFT)
+    expect(avatarFill(false, 'nikita')).toBe(AVATAR_PERSON)
   })
 
   it('shows the raw speaker digit when nobody has named them', () => {

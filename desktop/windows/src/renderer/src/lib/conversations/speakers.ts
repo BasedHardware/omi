@@ -3,34 +3,18 @@
 // no network — so the color/initial/segment-id rules are unit-testable on their
 // own.
 //
-// The palette is Mac's `OmiColors.speakerColors` + `userBubble`, ported verbatim
-// per the Track 4 ruling (TRACK4-PLAN.md). Note INV-UI-1's no-purple ratchet
-// (.github/scripts/check_brand_ui.py) only scans desktop/macos, app/lib and web/
-// — never desktop/windows — so these are the intended values here, not debt.
+// The colors themselves live in ONE place — components/conversations/speakerPalette.ts.
+// Import them from there; never re-declare a hex inline and never promote one to a
+// global token (see that module's header for why).
 
 import type { Person, TranscriptSegment } from '../omiApi.generated'
-
-/** Mac's 6 dark speaker tones, indexed by `speakerId % 6`. */
-export const SPEAKER_COLORS = [
-  '#2D3748', // 0 dark blue-gray
-  '#1E3A5F', // 1 navy
-  '#2D4A3E', // 2 dark teal
-  '#4A3728', // 3 dark brown
-  '#3D2E4A', // 4 dark purple
-  '#4A3A2D' // 5 dark amber
-] as const
-
-/** Fill for the user's own bubbles (Mac `OmiColors.userBubble`). */
-export const USER_BUBBLE = '#43389F'
-
-/** Avatar fill for a speaker nobody has named yet. */
-export const AVATAR_UNNAMED = '#35343B'
-
-/** Mac's `purplePrimary` — the avatar fill for the user (and, at 30%, for a
- *  named person). The Windows token set has no purple accent (Track 5 made
- *  `--accent` white), so this ports Mac's literal value rather than a token. */
-export const AVATAR_NAMED = '#8B5CF6'
-export const AVATAR_NAMED_SOFT = 'rgba(139, 92, 246, 0.3)'
+import {
+  AVATAR_PERSON,
+  AVATAR_USER,
+  AVATAR_UNNAMED,
+  SPEAKER_COLORS,
+  USER_BUBBLE
+} from '../../components/conversations/speakerPalette'
 
 /**
  * Pull the numeric speaker index out of a segment's speaker string:
@@ -74,8 +58,8 @@ export function avatarInitial(
 
 /** Avatar fill, mirroring `avatarInitial`'s three cases. */
 export function avatarFill(isUser: boolean, personName?: string | null): string {
-  if (isUser) return AVATAR_NAMED
-  if (personName?.trim()) return AVATAR_NAMED_SOFT
+  if (isUser) return AVATAR_USER
+  if (personName?.trim()) return AVATAR_PERSON
   return AVATAR_UNNAMED
 }
 
