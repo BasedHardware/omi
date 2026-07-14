@@ -261,6 +261,44 @@ final class VoiceTurnCoordinatorTests: XCTestCase {
       1)
   }
 
+  func testPrepareHubInputCanReserveContextAdmissionIdentityWhileEffectsDrainFIFO() {
+    let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
+    let sessionID = VoiceSessionID()
+    var reservedIdentity: VoiceEffectIdentity?
+
+    coordinator.setEffectHandler { effect in
+      guard case .prepareHubInput(let turnID, _) = effect else { return }
+      // This is the real PTT path: `hubReady` emits prepareHubInput, whose
+      // handler starts a context-fresh admission while the coordinator remains
+      // inside its FIFO effect drain.
+      let identity = coordinator.reserveEffectIdentity()
+      reservedIdentity = identity
+      guard let identity else { return }
+      coordinator.send(
+        .providerReconnectStarted(
+          turnID: turnID,
+          identity: identity,
+          previousSessionID: nil))
+    }
+
+    let turnID = coordinator.begin(intent: .hold)
+    coordinator.send(.selectRoute(turnID: turnID, route: .hubWarmWait))
+    coordinator.send(.hubReady(turnID: turnID, sessionID: sessionID))
+
+    guard let reservedIdentity else {
+      return XCTFail("prepareHubInput must reserve an identity while effects are draining")
+    }
+    XCTAssertEqual(reservedIdentity.generation, turnID.rawValue)
+    guard let connection = coordinator.activeTurn?.providerConnection,
+      case .reconnecting(let appliedIdentity, let previousSessionID) = connection
+    else {
+      return XCTFail("the queued context-admission event must be applied after the effect returns")
+    }
+    XCTAssertEqual(appliedIdentity, reservedIdentity)
+    XCTAssertNil(previousSessionID)
+    XCTAssertEqual(coordinator.model.invalidTransitionCount, 0)
+  }
+
   func testSnapshotReentrantEventsDrainFIFOWithoutRecursiveCallbacks() {
     let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
     var callbackDepth = 0

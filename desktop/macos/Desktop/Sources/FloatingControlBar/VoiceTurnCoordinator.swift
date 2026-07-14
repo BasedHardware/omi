@@ -134,10 +134,21 @@ final class VoiceTurnCoordinator {
 
   /// Reserves an identity from the authoritative turn generation for an async
   /// physical-driver operation. A callback must return this exact identity.
+  ///
+  /// Effects are deliberately drained FIFO. An effect handler can therefore
+  /// reserve an identity while the coordinator is still draining the effect
+  /// that invoked it (for example, `prepareHubInput` after `hubReady`). In
+  /// that case the reservation is already queued ahead of every subsequent
+  /// scoped event from that handler; it is safe to return the identity without
+  /// waiting for the reducer to apply it synchronously.
   func reserveEffectIdentity() -> VoiceEffectIdentity? {
     guard let turn = activeTurn else { return nil }
     let identity = VoiceEffectIdentity(turnID: turn.id, effectID: turn.nextEffectID)
+    let reservationIsQueuedBehindCurrentEffect = isDrainingEvents
     send(.effectIdentityReserved(turnID: turn.id))
+    if reservationIsQueuedBehindCurrentEffect {
+      return identity
+    }
     guard activeTurn?.nextEffectID == (turn.nextEffectID &+ 1) else { return nil }
     return identity
   }
