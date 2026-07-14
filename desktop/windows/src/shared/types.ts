@@ -751,6 +751,12 @@ export type OmiBridgeApi = {
     plan: AutomationPlan
   ) => Promise<{ ok: boolean; canceled?: boolean; message?: string }>
   onAutomationStep: (cb: (r: StepResult) => void) => () => void
+  // --- Track 2 A4: system-audio mute during PTT capture ---
+  // Fire-and-forget (never awaited): the PTT hold path must never wait on the
+  // native helper. Mute is gated renderer-side on the pttMuteSystemAudio pref;
+  // restore is unconditional so a mute is ALWAYS undone, even on error paths.
+  muteSystemAudio: () => void
+  restoreSystemAudio: () => void
   // Cross-window conversations refresh: a renderer that writes a local
   // conversation calls notifyConversationsChanged(); main broadcasts
   // 'conversations:changed' to ALL windows so each invalidates its own

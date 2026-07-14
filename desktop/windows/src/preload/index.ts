@@ -272,6 +272,10 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('automation:step', listener)
     return () => ipcRenderer.removeListener('automation:step', listener)
   },
+  // PTT system-audio mute (Track 2 A4). `send`, never `invoke` — the hold path
+  // is never awaited, so a slow or missing helper can't delay a capture.
+  muteSystemAudio: () => ipcRenderer.send('audio:muteSystemAudio'),
+  restoreSystemAudio: () => ipcRenderer.send('audio:restoreSystemAudio'),
   notifyConversationsChanged: () => ipcRenderer.send('conversations:notify-changed'),
   onConversationsChanged: (cb: () => void) => {
     const listener = (): void => cb()

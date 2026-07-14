@@ -79,6 +79,8 @@ import { registerAutomationHandlers } from './ipc/automation'
 import { registerCodingAgentHandlers } from './ipc/codingAgent'
 import { registerByokHandlers } from './ipc/byok'
 import { probeAgentStoreRuntimeAtStartup } from './agentKernel/startup'
+import { registerAudioMuteHandlers } from './ipc/audioMute'
+import { systemAudioMuteBridge } from './audio/systemAudioMute'
 import { automationBridge } from './automation/bridge'
 import {
   startAutomationTargetTracker,
@@ -677,6 +679,9 @@ app.whenReady().then(async () => {
   // better-sqlite3 driver path that unit tests can't cover. Logs and continues
   // on failure — the kernel is not yet wired to any caller.
   probeAgentStoreRuntimeAtStartup()
+  // PTT system-audio mute IPC (Track 2 A4). Handler registration only — the
+  // native helper is warm-spawned below, off the first-paint critical path.
+  registerAudioMuteHandlers()
 
   // `win` is this launch's instance for one-shot wiring below (ready-to-show,
   // bench); long-lived consumers read the module-level `mainWindow` instead.
@@ -798,6 +803,10 @@ app.whenReady().then(async () => {
     // Warm the (slow) screen-source-id cache a few seconds later, off the critical
     // path, so enabling capture later is an instant cache hit.
     setTimeout(() => prewarmPrimarySourceId(), 4000)
+    // Warm-spawn the audio-mute helper so the first PTT hold never pays the
+    // cold-spawn cost. Deferred off first paint; a silent no-op when the helper
+    // binary was never built (no .NET SDK) — PTT then simply doesn't mute.
+    setTimeout(() => systemAudioMuteBridge.warm(), 4000)
     // Pre-create the (hidden) acrylic toast window so the first Omi insight shows instantly.
     createInsightToastWindow()
     // Post-update "what's new" (Phase 8): a few seconds after startup (once the

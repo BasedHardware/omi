@@ -17,6 +17,7 @@ import {
   type PttStream
 } from '../lib/ptt/transport'
 import { startPttKeywordCollection } from '../lib/ptt/vocabulary'
+import { applyPttSystemAudio, restoreSystemAudio } from '../lib/ptt/systemAudioMute'
 import {
   HOLD_THRESHOLD_MS,
   STREAM_FINALIZE_DEADLINE_MS,
@@ -215,6 +216,13 @@ export function usePushToTalk(opts: Options): PushToTalk {
     let deadMicTurn = false
 
     for (const eff of effects) {
+      // System-audio mute (A4, macOS SystemAudioMuteController): mute other apps
+      // at capture-START (startCapture) and restore at EVERY capture-END path —
+      // release (startDrain), cancel / watchdog / unmount (stopCapture). See
+      // lib/ptt/systemAudioMute.ts for the pref gate and the mapping. Foreground
+      // only: a superseded background job's late teardown must never unmute the
+      // hold that replaced it. Fire-and-forget — never delays PTT.
+      if (isForeground(job)) applyPttSystemAudio(eff.kind)
       switch (eff.kind) {
         case 'startCapture': {
           job.capturePromise = startPttCapture({
@@ -571,6 +579,10 @@ export function usePushToTalk(opts: Options): PushToTalk {
         if (job.state.phase !== 'idle') dispatch(job, { type: 'CANCEL' })
       }
       releasePttMic()
+      // Belt-and-braces: the CANCELs above already restore via stopCapture, but a
+      // mute must NEVER outlive the hook — an unmount is the last chance to undo
+      // it. Unconditional + idempotent (a no-op when nothing is muted).
+      restoreSystemAudio()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
