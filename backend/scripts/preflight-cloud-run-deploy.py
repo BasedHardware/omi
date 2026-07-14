@@ -35,6 +35,7 @@ def main() -> int:
     parser.add_argument('--region', default=DEFAULT_REGION)
     parser.add_argument('--manifest', type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument('--service', action='append', dest='services')
+    parser.add_argument('--migrate-legacy-public-binding', action='append', dest='legacy_public_binding_services')
     parser.add_argument('--check-secrets', action='store_true')
     parser.add_argument('--check-traffic', action='store_true')
     parser.add_argument('--repair-traffic', action='store_true')
@@ -45,6 +46,19 @@ def main() -> int:
 
     services = tuple(args.services or DEFAULT_SERVICES)
     exit_code = 0
+
+    if args.legacy_public_binding_services:
+        try:
+            migrated = migrate_legacy_public_bindings(
+                services=args.legacy_public_binding_services,
+                env=args.env,
+                project=args.project,
+                region=args.region,
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
+        for service in migrated:
+            print(f'migrated legacy GOOGLE_CLIENT_ID binding for {service}')
 
     if args.check_secrets:
         missing = check_rendered_secrets(
@@ -92,6 +106,65 @@ def main() -> int:
                 exit_code = 1
 
     return exit_code
+
+
+PUBLIC_BINDING = 'GOOGLE_CLIENT_ID'
+DEVELOPMENT_PROJECT = 'based-hardware-dev'
+
+
+def migrate_legacy_public_bindings(
+    *, services: tuple[str, ...] | list[str], env: str, project: str, region: str, runner: Any = subprocess.run
+) -> list[str]:
+    if env != 'dev' or project != DEVELOPMENT_PROJECT:
+        raise ValueError('Legacy public-binding migration is development-only')
+
+    migrated: list[str] = []
+    for service in services:
+        document = json.loads(
+            runner(
+                [
+                    'gcloud',
+                    'run',
+                    'services',
+                    'describe',
+                    service,
+                    f'--project={project}',
+                    f'--region={region}',
+                    '--format=json',
+                ],
+                check=True,
+                text=True,
+                capture_output=True,
+            ).stdout
+        )
+        containers = document['spec']['template']['spec'].get('containers')
+        if not isinstance(containers, list) or len(containers) != 1 or not isinstance(containers[0], dict):
+            raise ValueError('Legacy public-binding migration requires exactly one container per Cloud Run service')
+        environments = containers[0].get('env', [])
+        has_legacy_secret = any(
+            entry.get('name') == PUBLIC_BINDING
+            and entry.get('valueFrom', {}).get('secretKeyRef', {}).get('name') == PUBLIC_BINDING
+            for entry in environments
+        )
+        if not has_legacy_secret:
+            continue
+        runner(
+            [
+                'gcloud',
+                'run',
+                'services',
+                'update',
+                service,
+                f'--project={project}',
+                f'--region={region}',
+                f'--remove-secrets={PUBLIC_BINDING}',
+                '--no-traffic',
+                '--quiet',
+            ],
+            check=True,
+        )
+        migrated.append(service)
+    return migrated
 
 
 def check_rendered_secrets(*, env: str, manifest_path: Path, project: str) -> list[SecretBinding]:
