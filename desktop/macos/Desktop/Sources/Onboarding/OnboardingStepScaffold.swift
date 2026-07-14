@@ -328,17 +328,34 @@ struct OnboardingKeyCapView: View {
             lineWidth: 2
           )
       )
+      .overlay(alignment: .topTrailing) {
+        // Named keys mirror a physical Mac key: symbol in the top-right corner…
+        if keyName != nil {
+          Text(token)
+            .font(.system(size: 18, weight: .semibold))
+            .foregroundColor(isActive ? .black : OmiColors.textPrimary)
+            .padding(.top, 8)
+            .padding(.trailing, 10)
+        }
+      }
+      .overlay(alignment: .bottom) {
+        // …with the key's name written along the bottom.
+        if let keyName {
+          Text(keyName)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundColor(isActive ? .black : OmiColors.textPrimary)
+            .padding(.bottom, 8)
+            .padding(.horizontal, 8)
+        }
+      }
       .overlay {
-        VStack(spacing: 2) {
+        // Plain letter keys show just the letter, centered.
+        if keyName == nil {
           Text(token)
             .font(.system(size: 22, weight: .semibold))
-          if let keyName {
-            Text(keyName)
-              .font(.system(size: 11, weight: .medium))
-          }
+            .foregroundColor(isActive ? .black : OmiColors.textPrimary)
+            .padding(.horizontal, 12)
         }
-        .foregroundColor(isActive ? .black : OmiColors.textPrimary)
-        .padding(.horizontal, 12)
       }
       .fixedSize()
   }
