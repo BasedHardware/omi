@@ -382,6 +382,52 @@ def mark_finalization_completed(
     return transactional(transaction, _job_ref(client, job_id), dispatch_generation, lease_epoch, _now())
 
 
+def _mark_finalization_fenced_txn(
+    transaction: Any, job_ref: Any, dispatch_generation: int, lease_epoch: int, now: datetime
+) -> bool:
+    """Terminally complete a current lease that was fenced before fanout.
+
+    A discard or newer lifecycle generation can win after the job lease was
+    acquired. That is a successful no-fanout terminal outcome, not a retryable
+    processing failure. It must remain distinct from normal completion so a
+    replay cannot mistake it for a delivered external integration.
+    """
+    snapshot = job_ref.get(transaction=transaction)
+    if not getattr(snapshot, 'exists', False):
+        return False
+    job = snapshot.to_dict() or {}
+    if job.get('status') == 'completed':
+        return job.get('finalization_outcome') == 'fenced' and int(job.get('lease_epoch') or 0) == lease_epoch
+    if not _is_current_lease(job, dispatch_generation, lease_epoch):
+        return False
+    if job.get('fanout_status') not in (None, 'pending'):
+        return False
+    transaction.update(
+        job_ref,
+        {
+            'status': 'completed',
+            'completed_at': now,
+            'updated_at': now,
+            'lease_expires_at': now,
+            'reconcile_after_at': firestore.DELETE_FIELD,
+            'last_failure_code': None,
+            'finalization_outcome': 'fenced',
+            'fanout_status': 'fenced',
+            'fanout_fenced_at': now,
+        },
+    )
+    return True
+
+
+def mark_finalization_fenced(
+    job_id: str, dispatch_generation: int, lease_epoch: int, *, firestore_client: Any = None
+) -> bool:
+    client = _client(firestore_client)
+    transaction = client.transaction()
+    transactional = firestore.transactional(_mark_finalization_fenced_txn)
+    return transactional(transaction, _job_ref(client, job_id), dispatch_generation, lease_epoch, _now())
+
+
 def _fanout_key(job: dict[str, Any]) -> str:
     key = job.get('fanout_key')
     if isinstance(key, str) and key:

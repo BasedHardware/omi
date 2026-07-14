@@ -296,6 +296,26 @@ def test_finalization_completion_requires_durable_fanout_completion():
     assert jobs._mark_finalization_completed_txn(completed, ref, 1, 4, now) is True
 
 
+def test_fenced_finalization_is_a_terminal_no_fanout_outcome():
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 1,
+            'lease_epoch': 4,
+            'fanout_status': 'pending',
+        },
+    )
+
+    transaction = _Transaction()
+    assert jobs._mark_finalization_fenced_txn(transaction, ref, 1, 4, now) is True
+    update = transaction.updates[0][1]
+    assert update['status'] == 'completed'
+    assert update['finalization_outcome'] == 'fenced'
+    assert update['fanout_status'] == 'fenced'
+
+
 def test_live_pusher_claim_cannot_use_another_conversations_job():
     transaction = _Transaction()
     ref = _Ref(

@@ -7,6 +7,7 @@ fallback.  Callers must first own a durable finalization job lease.
 from __future__ import annotations
 
 import logging
+from enum import Enum
 
 from database import conversations as conversations_db
 from database.redis_db import get_cached_user_geolocation
@@ -26,6 +27,11 @@ class ConversationFinalizationError(RuntimeError):
     """A retryable persisted-conversation finalization failure."""
 
 
+class ConversationFinalizationDisposition(str, Enum):
+    completed = 'completed'
+    fenced = 'fenced'
+
+
 async def finalize_persisted_conversation(
     uid: str,
     conversation_id: str,
@@ -34,7 +40,7 @@ async def finalize_persisted_conversation(
     finalization_job_id: str,
     dispatch_generation: int,
     lease_epoch: int,
-) -> None:
+) -> ConversationFinalizationDisposition:
     """Finalize persisted data once the caller has acquired the job lease.
 
     The pusher WebSocket request already installs request-scoped BYOK context
@@ -49,7 +55,7 @@ async def finalize_persisted_conversation(
     if conversation.status != ConversationStatus.completed and conversation.status != ConversationStatus.processing:
         admitted = await run_blocking(db_executor, lifecycle_service.ensure_processing, uid, conversation.id)
         if not admitted:
-            return
+            return ConversationFinalizationDisposition.fenced
         conversation.status = ConversationStatus.processing
 
     try:
@@ -80,7 +86,7 @@ async def finalize_persisted_conversation(
                 uid,
                 conversation_id,
             )
-            return
+            return ConversationFinalizationDisposition.fenced
         fanout = await run_blocking(
             db_executor,
             lifecycle_service.claim_finalization_fanout,
@@ -106,6 +112,7 @@ async def finalize_persisted_conversation(
                 raise ConversationFinalizationError('fanout_completion_conflict')
         elif fanout['status'] != 'completed':
             raise ConversationFinalizationError('fanout_lease_conflict')
+        return ConversationFinalizationDisposition.completed
     except Exception as error:
         # Provider and validation exceptions can contain transcript excerpts.
         # The job stores and logs only a bounded failure code.

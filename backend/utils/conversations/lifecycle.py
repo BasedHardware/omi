@@ -392,6 +392,11 @@ def complete_finalization_fanout(job_id: str, dispatch_generation: int, lease_ep
     return jobs_db.mark_finalization_fanout_completed(job_id, dispatch_generation, lease_epoch)
 
 
+def complete_fenced_finalization(job_id: str, dispatch_generation: int, lease_epoch: int) -> bool:
+    """Close a current finalization lease when durable state fenced its fanout."""
+    return jobs_db.mark_finalization_fenced(job_id, dispatch_generation, lease_epoch)
+
+
 def request_finalization(
     uid: str,
     conversation_id: str,

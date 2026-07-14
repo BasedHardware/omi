@@ -16,7 +16,12 @@ from services.conversation_finalization import (
     get_listen_finalization_tasks_max_attempts_for_worker,
 )
 from utils.cloud_tasks import verify_listen_finalization_cloud_tasks_oidc
-from utils.conversations.finalizer import ConversationFinalizationError, finalize_persisted_conversation
+from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.finalizer import (
+    ConversationFinalizationDisposition,
+    ConversationFinalizationError,
+    finalize_persisted_conversation,
+)
 from utils.executors import db_executor, run_blocking
 from utils.metrics import LISTEN_FINALIZATION_RETRIES_TOTAL
 
@@ -117,7 +122,7 @@ async def run_listen_finalization_job(
             return JSONResponse(status_code=500, content={'status': 'retry'})
 
         try:
-            await finalize_persisted_conversation(
+            disposition = await finalize_persisted_conversation(
                 job['uid'],
                 job['conversation_id'],
                 finalization_job_id=job_id,
@@ -133,13 +138,22 @@ async def run_listen_finalization_job(
                 return JSONResponse(status_code=200, content={'status': 'dead_letter'})
             return JSONResponse(status_code=500, content={'status': 'retry'})
 
-        completed = await run_blocking(
-            db_executor,
-            jobs_db.mark_finalization_completed,
-            job_id,
-            dispatch_generation,
-            claimed_lease_epoch,
-        )
+        if disposition == ConversationFinalizationDisposition.fenced:
+            completed = await run_blocking(
+                db_executor,
+                lifecycle_service.complete_fenced_finalization,
+                job_id,
+                dispatch_generation,
+                claimed_lease_epoch,
+            )
+        else:
+            completed = await run_blocking(
+                db_executor,
+                jobs_db.mark_finalization_completed,
+                job_id,
+                dispatch_generation,
+                claimed_lease_epoch,
+            )
         if not completed:
             return JSONResponse(status_code=409, content={'status': 'completion_conflict'})
         return JSONResponse(status_code=200, content={'status': 'done'})

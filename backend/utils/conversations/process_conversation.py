@@ -1055,6 +1055,18 @@ def process_conversation(
     structured, discarded = _get_structured(uid, language_code, conversation, force_process, people=people)
     conversation = _get_conversation_obj(uid, structured, conversation)
 
+    # Persist the completed generation before it can trigger any derived work.
+    # A discard or replacement that wins this transaction must not create
+    # integrations, vectors, memories, action items, audio artifacts, folders,
+    # calendar links, usage, or webhooks from a stale in-memory snapshot.
+    conversation.status = ConversationStatus.completed
+    persisted = lifecycle_service.persist_processed_conversation(uid, conversation.dict())
+    if not persisted:
+        logger.info(
+            'processing result fenced before completion side effects uid=%s conversation=%s', uid, conversation.id
+        )
+        return conversation
+
     # Calendar auto-linking calls and mutates a user's Google Calendar during generic
     # conversation processing. Keep it opt-in so normal sync/reprocess jobs do not
     # fan out provider traffic for every connected user.
@@ -1076,6 +1088,11 @@ def process_conversation(
             if calendar_event:
                 conversation.calendar_event = calendar_event
                 asyncio.run(write_conversation_link_to_calendar_event(uid, calendar_event.event_id, conversation.id))
+                conversations_db.update_conversation(
+                    uid,
+                    conversation.id,
+                    {'calendar_event': calendar_event.model_dump(mode='json')},
+                )
         except Exception as e:
             logger.error(f"Error during calendar event linking: {e}")
             pass
@@ -1102,6 +1119,7 @@ def process_conversation(
                 if folder_id:
                     conversation.folder_id = folder_id
                     assigned_folder_id = folder_id
+                    conversations_db.update_conversation(uid, conversation.id, {'folder_id': folder_id})
                     logger.info(
                         f"AI assigned conversation {conversation.id} to folder {folder_id} (confidence: {confidence:.2f}): {reasoning}"
                     )
@@ -1166,18 +1184,6 @@ def process_conversation(
                     )
         except Exception as e:
             logger.error(f"Error creating audio files: {e}")
-
-    conversation.status = ConversationStatus.completed
-    persisted = lifecycle_service.persist_processed_conversation(uid, conversation.dict())
-    if not persisted:
-        # A discard or a newer terminal lifecycle generation won the transaction.
-        # Do not let this stale in-memory result schedule any derived write or
-        # notification; the durable finalizer will also observe the terminal row
-        # before claiming integration fanout.
-        logger.info(
-            'processing result fenced before completion side effects uid=%s conversation=%s', uid, conversation.id
-        )
-        return conversation
 
     # Update folder conversation count after conversation is saved
     if assigned_folder_id:

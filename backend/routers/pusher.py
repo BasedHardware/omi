@@ -20,7 +20,12 @@ from utils.app_integrations import (
     trigger_realtime_audio_bytes,
 )
 from utils.byok import set_byok_keys, set_byok_uid
-from utils.conversations.finalizer import ConversationFinalizationError, finalize_persisted_conversation
+from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.finalizer import (
+    ConversationFinalizationDisposition,
+    ConversationFinalizationError,
+    finalize_persisted_conversation,
+)
 from utils.executors import db_executor, storage_executor, run_blocking
 from utils.async_tasks import (
     supervise_tasks,
@@ -224,7 +229,7 @@ async def _process_conversation_task(
             await send_result({'conversation_id': conversation_id, 'error': 'processing_failed'})
             return
 
-        await finalize_persisted_conversation(
+        disposition = await finalize_persisted_conversation(
             uid,
             conversation_id,
             language,
@@ -233,13 +238,22 @@ async def _process_conversation_task(
             lease_epoch=lease_epoch,
         )
 
-        completed = await run_blocking(
-            db_executor,
-            finalization_jobs_db.mark_finalization_completed,
-            job_id,
-            generation,
-            lease_epoch,
-        )
+        if disposition == ConversationFinalizationDisposition.fenced:
+            completed = await run_blocking(
+                db_executor,
+                lifecycle_service.complete_fenced_finalization,
+                job_id,
+                generation,
+                lease_epoch,
+            )
+        else:
+            completed = await run_blocking(
+                db_executor,
+                finalization_jobs_db.mark_finalization_completed,
+                job_id,
+                generation,
+                lease_epoch,
+            )
         if not completed:
             await send_result({'conversation_id': conversation_id, 'error': 'job_completion_conflict'})
             return
