@@ -23,7 +23,12 @@ async function backfill(): Promise<void> {
         continue
       }
       const result = await helperProcess.ocr(jpeg)
-      setRewindFrameOcr(f.id, result.ok ? result.fullText : '')
+      // Persist per-line boxes (Track 4) with the flattened text for the overlay.
+      setRewindFrameOcr(
+        f.id,
+        result.ok ? result.fullText : '',
+        result.ok ? JSON.stringify(result.lines) : null
+      )
     }
   } finally {
     running = false

@@ -58,7 +58,9 @@ async function refreshCurrentScreen(frameId: number, jpeg: Buffer): Promise<void
     const res = await helperProcess.ocr(jpeg)
     if (res.ok) {
       setCurrentScreen(res.fullText)
-      setRewindFrameOcr(frameId, res.fullText)
+      // Persist per-line boxes (Track 4) alongside the flattened text so the
+      // search highlight overlay has bounding boxes without re-OCR.
+      setRewindFrameOcr(frameId, res.fullText, JSON.stringify(res.lines))
     }
   } catch {
     /* best-effort: keep the last good cached value */
