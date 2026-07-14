@@ -182,7 +182,7 @@ def test_cloud_run_default_service_lists_include_sync_backfill():
     assert manual.index('repair-traffic:') < manual.index('--cloud-run-service backend-sync-backfill')
 
 
-def test_normal_backend_deploys_fail_closed_on_fence_transitions_and_gate_prod_stt_candidates():
+def test_normal_backend_deploys_fail_closed_on_fence_transitions_and_gate_stt_candidates():
     """Static deployment-contract guard for the two P0 rollout boundaries."""
     root = Path(__file__).resolve().parents[3]
     manual = (root / '.github/workflows/gcp_backend.yml').read_text()
@@ -196,11 +196,14 @@ def test_normal_backend_deploys_fail_closed_on_fence_transitions_and_gate_prod_s
     assert "TRANSCRIPTION_CANDIDATE_TAG: stt-gate-${{ github.run_id }}-${{ github.run_attempt }}" in manual
     assert "format('--tag={0}', env.TRANSCRIPTION_CANDIDATE_TAG)" in manual
     assert 'resolve_cloud_run_tagged_url.py' in manual
-    assert '--require-route-identity' in manual
-    assert 'OMI_TRANSCRIPTION_SYNTHETIC_BEARER_TOKEN: ${{ secrets.OMI_TRANSCRIPTION_SYNTHETIC_BEARER_TOKEN }}' in manual
-    assert 'Remove passed production transcription candidate tag' in manual
-    assert 'Remove failed production transcription candidate tag' in manual
-    assert manual.index('Gate production backend candidate on known audio') < manual.index(
+    assert 'uses: ./.github/actions/transcription-release-candidate-probe' in manual
+    assert 'candidate_api_url: ${{ steps.transcription-candidate.outputs.url }}' in manual
+    assert 'project_id: ${{ vars.GCP_PROJECT_ID }}' in manual
+    assert 'OMI_TRANSCRIPTION_SYNTHETIC_' not in manual
+    assert 'Remove passed transcription candidate tag' in manual
+    assert 'Remove failed transcription candidate tag' in manual
+    assert 'if: ${{ failure() && steps.deploy-backend.outcome == \'success\' }}' in manual
+    assert manual.index('Gate backend candidate on known audio') < manual.index(
         'Shift Cloud Run traffic to validated revisions'
     )
 

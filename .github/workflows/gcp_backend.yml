@@ -215,7 +215,7 @@ jobs:
           no_traffic: true
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
-            ${{ github.event.inputs.environment == 'prod' && format('--tag={0}', env.TRANSCRIPTION_CANDIDATE_TAG) || '' }}
+            ${{ format('--tag={0}', env.TRANSCRIPTION_CANDIDATE_TAG) }}
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: ${{ steps.runtime-env.outputs.backend_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.backend_secrets }}
@@ -346,8 +346,9 @@ jobs:
         run: |
           python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-workflows --check-live-cloud-run
 
-      - name: Resolve production transcription candidate URL
-        if: ${{ github.event.inputs.environment == 'prod' }}
+      # The manual development deployment runs this same no-traffic probe before
+      # promotion, making it the required auth and route dry run for production.
+      - name: Resolve transcription candidate URL
         id: transcription-candidate
         run: |
           candidate_url="$(python3 backend/scripts/resolve_cloud_run_tagged_url.py \
@@ -358,24 +359,14 @@ jobs:
             --tag="$TRANSCRIPTION_CANDIDATE_TAG")"
           printf 'url=%s\n' "$candidate_url" >> "$GITHUB_OUTPUT"
 
-      - name: Gate production backend candidate on known audio
-        if: ${{ github.event.inputs.environment == 'prod' }}
-        env:
-          CANDIDATE_API_URL: ${{ steps.transcription-candidate.outputs.url }}
-          OMI_TRANSCRIPTION_SYNTHETIC_AUDIO_URL: ${{ secrets.OMI_TRANSCRIPTION_SYNTHETIC_AUDIO_URL }}
-          OMI_TRANSCRIPTION_SYNTHETIC_BEARER_TOKEN: ${{ secrets.OMI_TRANSCRIPTION_SYNTHETIC_BEARER_TOKEN }}
-          OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_PHRASE: ${{ secrets.OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_PHRASE }}
-          OMI_TRANSCRIPTION_SYNTHETIC_LANGUAGE: ${{ vars.OMI_TRANSCRIPTION_SYNTHETIC_LANGUAGE }}
-          OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_PROVIDER: ${{ vars.OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_PROVIDER }}
-          OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_MODEL: ${{ vars.OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_MODEL }}
-        run: |
-          python3 backend/scripts/transcription_capability_probe.py \
-            --candidate-api-url "$CANDIDATE_API_URL" \
-            --require-route-identity \
-            --json-only
+      - name: Gate backend candidate on known audio
+        uses: ./.github/actions/transcription-release-candidate-probe
+        with:
+          candidate_api_url: ${{ steps.transcription-candidate.outputs.url }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
 
-      - name: Remove passed production transcription candidate tag
-        if: ${{ github.event.inputs.environment == 'prod' }}
+      - name: Remove passed transcription candidate tag
+        if: ${{ success() }}
         run: |
           gcloud run services update-traffic ${{ env.SERVICE }} \
             --project=${{ vars.GCP_PROJECT_ID }} \
@@ -383,10 +374,10 @@ jobs:
             --remove-tags="$TRANSCRIPTION_CANDIDATE_TAG" \
             --quiet
 
-      - name: Remove failed production transcription candidate tag
-        # Tag is created at deploy-backend; clean it up on any later prod failure,
+      - name: Remove failed transcription candidate tag
+        # Tag is created at deploy-backend; clean it up on any later failure,
         # not only after the candidate URL resolution step succeeds.
-        if: ${{ failure() && github.event.inputs.environment == 'prod' && steps.deploy-backend.outcome == 'success' }}
+        if: ${{ failure() && steps.deploy-backend.outcome == 'success' }}
         run: |
           gcloud run services update-traffic ${{ env.SERVICE }} \
             --project=${{ vars.GCP_PROJECT_ID }} \

@@ -48,6 +48,7 @@ def test_workflow_contract_sources_select_adjacent_tests():
         "backend/routers/transcribe.py": "tests/unit/test_listen_pipeline.py",
         "backend/config/prerecorded_stt.py": "tests/unit/test_parakeet_prerecorded.py",
         "backend/scripts/validate-backend-runtime-env.py": "tests/unit/test_backend_runtime_env_validator.py",
+        "backend/scripts/firebase_release_probe_token.py": "tests/unit/test_firebase_release_probe_token.py",
         "backend/charts/pusher/templates/deployment.yaml": "tests/unit/test_rendered_deployment_contract.py",
         "backend/scripts/validate_rendered_deployment_contract.py": "tests/unit/test_rendered_deployment_contract.py",
         ".github/workflows/gcp_backend_auto_dev.yml": "tests/unit/test_verify_dev_backend_deployment.py",

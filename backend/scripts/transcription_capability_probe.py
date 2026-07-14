@@ -1,71 +1,62 @@
 #!/usr/bin/env python3
-"""Probe a deployed transcription candidate with a protected known-audio fixture.
+"""Probe a deployed transcription candidate with a versioned known-audio fixture.
 
-All URLs, credentials, the fixture, and the expected words are external runtime
-configuration.  This script deliberately never prints them.  The full
-``/v2/voice-message/transcribe`` path is the mandatory candidate gate.  An
-optional direct Parakeet target is diagnostic only and must be supplied by a
-VPC-capable runner; it must not make the Parakeet ILB public or become the
-public paging authority.
+The full ``/v2/voice-message/transcribe`` path is the release authority. The
+fixture, its expected transcript, and language are checked into the repository
+with its provenance in a manifest; they are never fetched from a protected URL
+or read from deploy settings. The only runtime credential is a short-lived
+Firebase ID token supplied in a mode-0600 file by the release-probe action.
 
-Required full-route environment:
-    OMI_TRANSCRIPTION_SYNTHETIC_AUDIO_URL
-    OMI_TRANSCRIPTION_SYNTHETIC_API_URL
-    OMI_TRANSCRIPTION_SYNTHETIC_BEARER_TOKEN
-    OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_PHRASE
-    OMI_TRANSCRIPTION_SYNTHETIC_LANGUAGE
-
-Optional environment:
-    OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_PROVIDER
-    OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_MODEL
-    OMI_TRANSCRIPTION_SYNTHETIC_DIRECT_URL
-
-``--candidate-api-url`` overrides the API base URL for a tagged Cloud Run
-revision before promotion.  Keep credentials and fixture configuration in the
-protected runner environment rather than command-line arguments.
-
-Use ``--require-route-identity`` from the promotion workflow so the configured
-provider and model are part of the mandatory full-route candidate contract.
+Reports deliberately contain only booleans and status codes. They never expose
+the token, the fixture body, the transcript, the candidate URL, or API errors.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
+import stat
 import sys
 import urllib.error
 import urllib.request
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Sequence
 
+ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_FIXTURE_PATH = ROOT / 'backend/testing/release_fixtures/transcription-release-probe.wav'
+DEFAULT_MANIFEST_PATH = ROOT / 'backend/testing/release_fixtures/transcription-release-probe.json'
 FULL_ROUTE_PATH = '/v2/voice-message/transcribe'
 STATUS_PASS = 'PASS'
 STATUS_FAIL = 'FAIL'
-STATUS_NOT_RUN = 'NOT_RUN'
 
 MAX_AUDIO_BYTES = 20 * 1024 * 1024
 MAX_RESPONSE_BYTES = 256 * 1024
 MAX_RAW_TRANSCRIPT_CHARS = 4096
 MAX_NORMALIZED_TRANSCRIPT_CHARS = 512
+MAX_BEARER_TOKEN_CHARS = 8192
 LANGUAGE_PATTERN = re.compile(r'^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})?$')
+SHA256_PATTERN = re.compile(r'^[0-9a-f]{64}$')
 
 
 @dataclass(frozen=True)
 class ProbeConfig:
-    audio_url: str | None
+    fixture_path: Path
+    manifest_path: Path
     api_url: str | None
     bearer_token: str | None
-    expected_phrase: str | None
-    synthetic_language: str | None
-    expected_provider: str | None
-    expected_model: str | None
-    direct_url: str | None
     timeout_seconds: float
-    require_direct: bool
-    require_route_identity: bool
+
+
+@dataclass(frozen=True)
+class ProbeFixture:
+    audio: bytes
+    expected_phrase: str
+    language: str
 
 
 @dataclass(frozen=True)
@@ -74,10 +65,6 @@ class HttpResult:
     body: bytes
     error_kind: str | None
     oversized: bool = False
-
-
-def _env(name: str) -> str | None:
-    return (os.environ.get(name) or '').strip() or None
 
 
 def normalize_phrase(value: Any) -> str | None:
@@ -98,20 +85,36 @@ def normalize_language(value: Any) -> str | None:
     return candidate if LANGUAGE_PATTERN.fullmatch(candidate) else None
 
 
+def _read_bearer_token(path: Path | None) -> str | None:
+    if path is None:
+        return None
+    descriptor = -1
+    try:
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
+        file_stat = os.fstat(descriptor)
+        if not stat.S_ISREG(file_stat.st_mode) or file_stat.st_mode & 0o077:
+            os.close(descriptor)
+            descriptor = -1
+            return None
+        with os.fdopen(descriptor, encoding='utf-8') as handle:
+            descriptor = -1
+            token = handle.read().strip()
+    except (OSError, UnicodeDecodeError):
+        return None
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    return token if 0 < len(token) <= MAX_BEARER_TOKEN_CHARS else None
+
+
 def config_from_args(args: argparse.Namespace) -> ProbeConfig:
-    api_url = (args.candidate_api_url or _env('OMI_TRANSCRIPTION_SYNTHETIC_API_URL') or '').strip() or None
+    api_url = (args.candidate_api_url or '').strip() or None
     return ProbeConfig(
-        audio_url=_env('OMI_TRANSCRIPTION_SYNTHETIC_AUDIO_URL'),
+        fixture_path=args.fixture_path,
+        manifest_path=args.manifest_path,
         api_url=api_url.rstrip('/') if api_url else None,
-        bearer_token=_env('OMI_TRANSCRIPTION_SYNTHETIC_BEARER_TOKEN'),
-        expected_phrase=_env('OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_PHRASE'),
-        synthetic_language=_env('OMI_TRANSCRIPTION_SYNTHETIC_LANGUAGE'),
-        expected_provider=_env('OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_PROVIDER'),
-        expected_model=_env('OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_MODEL'),
-        direct_url=_env('OMI_TRANSCRIPTION_SYNTHETIC_DIRECT_URL'),
+        bearer_token=_read_bearer_token(args.bearer_token_file),
         timeout_seconds=args.timeout_seconds,
-        require_direct=args.require_direct,
-        require_route_identity=args.require_route_identity,
     )
 
 
@@ -127,28 +130,22 @@ def request_bytes(request: urllib.request.Request, timeout_seconds: float, max_b
             body, oversized = _read_response(response, max_bytes)
             return HttpResult(status_code=int(response.status), body=body, error_kind=None, oversized=oversized)
     except urllib.error.HTTPError as error:
-        # Consume only a bounded amount so a large error response cannot retain
-        # fixture or transcript data. Its body is never reported.
-        try:
-            _read_response(error, max_bytes)
-        except OSError:
-            pass
+        # Do not read or print an error body: it can contain request-sensitive
+        # data echoed by a proxy or upstream service.
         return HttpResult(status_code=error.code, body=b'', error_kind='http_error')
     except (urllib.error.URLError, OSError, TimeoutError, ValueError):
         return HttpResult(status_code=None, body=b'', error_kind='network_error')
 
 
-def build_multipart(field_name: str, audio: bytes, *, language: str | None = None) -> tuple[str, bytes]:
-    """Encode the real FastAPI UploadFile multipart shape for a WAV fixture."""
+def build_multipart(audio: bytes, language: str) -> tuple[str, bytes]:
+    """Encode the real FastAPI UploadFile multipart shape for the WAV fixture."""
     boundary = f'----omi-transcription-probe-{uuid.uuid4().hex}'
-    language_part = b''
-    if language:
-        language_part = (
-            f'--{boundary}\r\n' 'Content-Disposition: form-data; name="language"\r\n\r\n' f'{language}\r\n'
-        ).encode('ascii')
+    language_part = (
+        f'--{boundary}\r\n' 'Content-Disposition: form-data; name="language"\r\n\r\n' f'{language}\r\n'
+    ).encode('ascii')
     prefix = (
         f'--{boundary}\r\n'
-        f'Content-Disposition: form-data; name="{field_name}"; filename="known-audio.wav"\r\n'
+        'Content-Disposition: form-data; name="files"; filename="transcription-release-probe.wav"\r\n'
         'Content-Type: audio/wav\r\n\r\n'
     ).encode('ascii')
     suffix = f'\r\n--{boundary}--\r\n'.encode('ascii')
@@ -164,10 +161,6 @@ def _details(
     json_object: bool | None = None,
     outcome_success: bool | None = None,
     phrase_match: bool | None = None,
-    provider_checked: bool | None = None,
-    provider_match: bool | None = None,
-    model_checked: bool | None = None,
-    model_match: bool | None = None,
     authority: str | None = None,
     missing_config: tuple[str, ...] = (),
 ) -> dict[str, Any]:
@@ -185,14 +178,6 @@ def _details(
         details['outcome_success'] = outcome_success
     if phrase_match is not None:
         details['phrase_match'] = phrase_match
-    if provider_checked is not None:
-        details['provider_checked'] = provider_checked
-    if provider_match is not None:
-        details['provider_match'] = provider_match
-    if model_checked is not None:
-        details['model_checked'] = model_checked
-    if model_match is not None:
-        details['model_match'] = model_match
     if authority is not None:
         details['authority'] = authority
     if missing_config:
@@ -210,42 +195,48 @@ def _parse_json_object(result: HttpResult) -> dict[str, Any] | None:
     return decoded if isinstance(decoded, dict) else None
 
 
-def _fetch_fixture(config: ProbeConfig) -> tuple[bytes | None, dict[str, Any]]:
-    if not config.audio_url:
-        return None, _details(configured=False, error_kind='configuration', missing_config=('audio_url',))
-    result = request_bytes(
-        urllib.request.Request(config.audio_url, method='GET', headers={'Accept': 'audio/wav'}),
-        config.timeout_seconds,
-        MAX_AUDIO_BYTES,
+def _load_fixture(config: ProbeConfig) -> tuple[ProbeFixture | None, dict[str, Any]]:
+    try:
+        manifest = json.loads(config.manifest_path.read_text(encoding='utf-8'))
+        if not isinstance(manifest, dict):
+            raise ValueError('manifest is not an object')
+        expected_phrase = normalize_phrase(manifest.get('expected_transcript'))
+        language = normalize_language(manifest.get('language'))
+        expected_filename = manifest.get('fixture_filename')
+        expected_sha256 = manifest.get('sha256')
+        if (
+            manifest.get('schema_version') != 1
+            or not expected_phrase
+            or not language
+            or expected_filename != config.fixture_path.name
+            or not isinstance(expected_sha256, str)
+            or not SHA256_PATTERN.fullmatch(expected_sha256)
+        ):
+            raise ValueError('manifest has an invalid release fixture contract')
+        audio = config.fixture_path.read_bytes()
+        if not audio or len(audio) > MAX_AUDIO_BYTES:
+            raise ValueError('fixture size is invalid')
+        if hashlib.sha256(audio).hexdigest() != expected_sha256:
+            raise ValueError('fixture digest differs from manifest')
+    except (OSError, UnicodeDecodeError, ValueError, json.JSONDecodeError):
+        return None, _details(configured=True, error_kind='fixture_invalid', fixture_available=False)
+    return (
+        ProbeFixture(audio=audio, expected_phrase=expected_phrase, language=language),
+        _details(configured=True, fixture_available=True),
     )
-    if result.status_code != 200 or result.oversized or not result.body:
-        return None, _details(
-            configured=True,
-            http_status=result.status_code,
-            error_kind='fixture_unavailable' if not result.error_kind else result.error_kind,
-            fixture_available=False,
-        )
-    return result.body, _details(configured=True, http_status=result.status_code, fixture_available=True)
 
 
 def _missing_full_route_config(config: ProbeConfig) -> tuple[str, ...]:
     required = {
-        'audio_url': config.audio_url,
         'api_url': config.api_url,
         'bearer_token': config.bearer_token,
-        'expected_phrase': config.expected_phrase if normalize_phrase(config.expected_phrase) else None,
-        'synthetic_language': config.synthetic_language if normalize_language(config.synthetic_language) else None,
     }
-    missing = [name for name, value in required.items() if not value]
-    if config.require_route_identity:
-        if not config.expected_provider:
-            missing.append('expected_provider')
-        if not config.expected_model:
-            missing.append('expected_model')
-    return tuple(missing)
+    return tuple(name for name, value in required.items() if not value)
 
 
-def _probe_full_route(config: ProbeConfig, audio: bytes | None, fixture_details: dict[str, Any]) -> dict[str, Any]:
+def _probe_full_route(
+    config: ProbeConfig, fixture: ProbeFixture | None, fixture_details: dict[str, Any]
+) -> dict[str, Any]:
     missing_config = _missing_full_route_config(config)
     if missing_config:
         return {
@@ -253,14 +244,14 @@ def _probe_full_route(config: ProbeConfig, audio: bytes | None, fixture_details:
             'status': STATUS_FAIL,
             'details': _details(configured=False, error_kind='configuration', missing_config=missing_config),
         }
-    if audio is None:
+    if fixture is None:
         return {
             'name': 'full_route',
             'status': STATUS_FAIL,
             'details': {**fixture_details, 'authority': 'candidate_gate'},
         }
 
-    content_type, body = build_multipart('files', audio, language=normalize_language(config.synthetic_language))
+    content_type, body = build_multipart(fixture.audio, fixture.language)
     result = request_bytes(
         urllib.request.Request(
             f'{config.api_url}{FULL_ROUTE_PATH}',
@@ -277,23 +268,9 @@ def _probe_full_route(config: ProbeConfig, audio: bytes | None, fixture_details:
     )
     del body
     payload = _parse_json_object(result)
-    expected_phrase = normalize_phrase(config.expected_phrase)
     outcome_success = payload is not None and payload.get('outcome') == 'success'
-    phrase_match = payload is not None and normalize_phrase(payload.get('transcript')) == expected_phrase
-    provider_checked = config.expected_provider is not None
-    model_checked = config.expected_model is not None
-    provider_match = (
-        payload is not None and payload.get('stt_provider') == config.expected_provider if provider_checked else None
-    )
-    model_match = payload is not None and payload.get('stt_model') == config.expected_model if model_checked else None
-    passed = (
-        result.status_code == 200
-        and payload is not None
-        and outcome_success
-        and phrase_match
-        and (not provider_checked or provider_match)
-        and (not model_checked or model_match)
-    )
+    phrase_match = payload is not None and normalize_phrase(payload.get('transcript')) == fixture.expected_phrase
+    passed = result.status_code == 200 and payload is not None and outcome_success and phrase_match
     return {
         'name': 'full_route',
         'status': STATUS_PASS if passed else STATUS_FAIL,
@@ -305,104 +282,23 @@ def _probe_full_route(config: ProbeConfig, audio: bytes | None, fixture_details:
             json_object=payload is not None,
             outcome_success=outcome_success,
             phrase_match=phrase_match,
-            provider_checked=provider_checked,
-            provider_match=provider_match,
-            model_checked=model_checked,
-            model_match=model_match,
             authority='candidate_gate',
         ),
     }
 
 
-def _probe_direct(config: ProbeConfig, audio: bytes | None, fixture_details: dict[str, Any]) -> dict[str, Any]:
-    if not config.direct_url:
-        return {
-            'name': 'direct_parakeet_diagnostic',
-            'status': STATUS_FAIL if config.require_direct else STATUS_NOT_RUN,
-            'details': _details(
-                configured=False,
-                error_kind='configuration' if config.require_direct else None,
-                missing_config=('direct_url',) if config.require_direct else (),
-                authority='diagnostic_only',
-            ),
-        }
-    if not config.audio_url or not normalize_phrase(config.expected_phrase):
-        missing_config = tuple(
-            name
-            for name, value in {
-                'audio_url': config.audio_url,
-                'expected_phrase': config.expected_phrase if normalize_phrase(config.expected_phrase) else None,
-            }.items()
-            if not value
-        )
-        return {
-            'name': 'direct_parakeet_diagnostic',
-            'status': STATUS_FAIL,
-            'details': _details(configured=False, error_kind='configuration', missing_config=missing_config),
-        }
-    if audio is None:
-        return {
-            'name': 'direct_parakeet_diagnostic',
-            'status': STATUS_FAIL,
-            'details': {**fixture_details, 'authority': 'diagnostic_only'},
-        }
-
-    content_type, body = build_multipart('file', audio)
-    result = request_bytes(
-        urllib.request.Request(
-            config.direct_url,
-            data=body,
-            method='POST',
-            headers={'Accept': 'application/json', 'Content-Type': content_type},
-        ),
-        config.timeout_seconds,
-        MAX_RESPONSE_BYTES,
-    )
-    del body
-    payload = _parse_json_object(result)
-    phrase_match = payload is not None and normalize_phrase(payload.get('text')) == normalize_phrase(
-        config.expected_phrase
-    )
-    passed = result.status_code == 200 and payload is not None and phrase_match
-    return {
-        'name': 'direct_parakeet_diagnostic',
-        'status': STATUS_PASS if passed else STATUS_FAIL,
-        'details': _details(
-            configured=True,
-            http_status=result.status_code,
-            error_kind=result.error_kind or ('invalid_response' if payload is None else None),
-            fixture_available=True,
-            json_object=payload is not None,
-            phrase_match=phrase_match,
-            authority='diagnostic_only',
-        ),
-    }
-
-
 def build_report(config: ProbeConfig) -> dict[str, Any]:
-    full_missing = _missing_full_route_config(config)
-    direct_enabled = config.direct_url is not None
-    needs_fixture = not full_missing or direct_enabled
-    audio: bytes | None = None
-    fixture_details = _details(configured=False, fixture_available=None)
-    if needs_fixture:
-        audio, fixture_details = _fetch_fixture(config)
+    fixture, fixture_details = _load_fixture(config)
     try:
-        full_route = _probe_full_route(config, audio, fixture_details)
-        direct = _probe_direct(config, audio, fixture_details)
+        full_route = _probe_full_route(config, fixture, fixture_details)
     finally:
-        if audio is not None:
-            del audio
-    checks = [full_route, direct]
-    status = STATUS_FAIL if full_route['status'] == STATUS_FAIL else STATUS_PASS
-    if config.require_direct and direct['status'] == STATUS_FAIL:
-        status = STATUS_FAIL
+        if fixture is not None:
+            del fixture
     return {
         'suite': 'omi_transcription_capability_probe',
-        'status': status,
+        'status': full_route['status'],
         'full_route_authoritative': True,
-        'direct_diagnostic_only': True,
-        'checks': checks,
+        'checks': [full_route],
     }
 
 
@@ -412,18 +308,12 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         '--candidate-api-url',
         '--api-url',
         dest='candidate_api_url',
-        help='Tagged candidate revision base URL; overrides protected API URL configuration.',
+        required=True,
+        help='Tagged candidate revision base URL.',
     )
-    parser.add_argument(
-        '--require-direct',
-        action='store_true',
-        help='Fail if the protected direct diagnostic is not configured.',
-    )
-    parser.add_argument(
-        '--require-route-identity',
-        action='store_true',
-        help='Require configured expected provider and model for the full-route candidate gate.',
-    )
+    parser.add_argument('--fixture-path', type=Path, default=DEFAULT_FIXTURE_PATH)
+    parser.add_argument('--manifest-path', type=Path, default=DEFAULT_MANIFEST_PATH)
+    parser.add_argument('--bearer-token-file', type=Path, required=True)
     parser.add_argument('--timeout-seconds', type=float, default=30.0)
     parser.add_argument('--json-only', action='store_true', help='Emit only the redacted machine-readable report.')
     return parser.parse_args(argv)

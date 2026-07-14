@@ -18,6 +18,7 @@ venv/
 dump/
 *.zip
 *.wav
+!backend/testing/release_fixtures/transcription-release-probe.wav
 node_modules
 yarn.lock
 
