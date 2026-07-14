@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { reduce, initialState, type PttEvent, type PttState } from '../lib/ptt/machine'
 import { voicedStats } from '../lib/ptt/gate'
-import { startPttCapture, warmPttMic, releasePttMic, type PttCapture } from '../lib/ptt/capture'
+import {
+  startPttCapture,
+  warmPttMic,
+  releasePttMic,
+  rebuildPttMic,
+  type PttCapture
+} from '../lib/ptt/capture'
+import { DeadMicPolicy, applyDeadMicTurn } from '../lib/ptt/deadMicPolicy'
 import {
   startPttStream,
   batchTranscribe,
@@ -84,6 +91,12 @@ const HINTS = {
   'dead-mic': {
     text: 'Mic heard nothing — check your input device in Windows sound settings',
     ms: TOO_LONG_HINT_MS
+  },
+  // Escalated after repeated dead-mic turns (silent-mic recovery, A7b): the
+  // automatic capture-stack rebuild didn't help, so prompt a stronger action.
+  'dead-mic-escalated': {
+    text: 'Mic still silent — check your microphone, or restart Omi',
+    ms: TOO_LONG_HINT_MS
   }
 } as const
 
@@ -139,6 +152,9 @@ export function usePushToTalk(opts: Options): PushToTalk {
   // Space-inactivity window (short after a mere tap, long after PTT use) — or on
   // overlay blur/hide.
   const micIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Consecutive dead-mic turns across holds (macOS PTTSilentMicRecoveryPolicy):
+  // drives the capture-rebuild-then-escalate ladder. Persists across holds.
+  const deadMicPolicyRef = useRef(new DeadMicPolicy())
 
   const optsRef = useRef(opts)
   // eslint-disable-next-line react-hooks/refs -- intentional latest-ref (once-registered listeners read the newest callbacks)
@@ -192,6 +208,11 @@ export function usePushToTalk(opts: Options): PushToTalk {
     const prevPhase = job.state.phase
     const { state, effects } = reduce(job.state, event)
     job.state = state
+
+    // Whether THIS step's terminal turn was classed dead-mic — the dead-mic hint's
+    // display is deferred to captureEnded so the silent-mic policy can pick base vs
+    // escalated text (showHint and captureEnded arrive in the same effects batch).
+    let deadMicTurn = false
 
     for (const eff of effects) {
       switch (eff.kind) {
@@ -332,6 +353,12 @@ export function usePushToTalk(opts: Options): PushToTalk {
           break
         }
         case 'showHint': {
+          // Defer the dead-mic hint to the policy step (base vs escalated); show
+          // the other hints (too-short / too-long) immediately.
+          if (eff.hint === 'dead-mic') {
+            deadMicTurn = true
+            break
+          }
           if (isForeground(job)) showHint(eff.hint)
           break
         }
@@ -342,6 +369,16 @@ export function usePushToTalk(opts: Options): PushToTalk {
         }
         case 'captureEnded': {
           optsRef.current.onCaptureEnd?.()
+          // Silent-mic escalation (A7b, macOS PTTSilentMicRecoveryPolicy): count
+          // consecutive dead-mic turns — rebuild the capture stack at 2, escalate
+          // the hint + emit distinct telemetry at 3. A non-dead turn resets. Only
+          // the foreground turn drives UI + recovery.
+          if (isForeground(job)) {
+            applyDeadMicTurn(deadMicPolicyRef.current, deadMicTurn, {
+              rebuild: rebuildPttMic,
+              showHint
+            })
+          }
           break
         }
       }

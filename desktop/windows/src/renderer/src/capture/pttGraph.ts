@@ -22,6 +22,7 @@
 // falls back to a cold ephemeral graph — same behavior, minus backfill.
 import { acquireMicStream, floatTo16BitPCM, teardownAudioGraph } from '../lib/audio'
 import { DRAIN_MS, MAX_BUFFER_BYTES } from '../lib/ptt/constants'
+import { trackEvent } from '../lib/analytics'
 
 /** How much already-heard audio the warm graph retains for backfill. Must cover
  *  the 350ms hold threshold plus scheduling jitter; anything older is discarded. */
@@ -171,7 +172,10 @@ export async function warmPttMic(): Promise<void> {
     const graph = await warmPromise
     // A release may have arrived while the graph was being created.
     if (releaseWanted) destroyGraph(graph)
-    else warmGraph = graph
+    else {
+      warmGraph = graph
+      installDeviceChangeListener()
+    }
   } catch {
     /* hold-time capture will retry cold and surface the error */
   } finally {
@@ -188,10 +192,151 @@ export function releasePttMic(): void {
 }
 
 function maybeReleaseWarm(): void {
-  if (releaseWanted && warmGraph && attachedCaptures === 0) {
+  if (releaseWanted && attachedCaptures === 0) teardownWarm()
+}
+
+/** Fully drop the warm graph: cancel any in-flight rebuild, destroy the graph,
+ *  and stop listening for device changes. */
+function teardownWarm(): void {
+  stopRebuild(true)
+  if (warmGraph) {
     destroyGraph(warmGraph)
     warmGraph = null
   }
+  removeDeviceChangeListener()
+}
+
+// --- Device-change / silent-mic capture-graph rebuild ---------------------------
+// Port of macOS AudioCaptureService.handleConfigurationChange → reconfigureAfterChange
+// → retryOrGiveUp: on a default-input swap / format change (A7a) or a silent-mic
+// recovery request (A7b), tear down + rebuild the warm getUserMedia/Web-Audio graph
+// after a 0.3s settle, retrying with linear 1s/2s/3s backoff (4 attempts total,
+// ~6.3s worst case) before giving up. Idempotent — one ladder at a time; cancelled
+// on teardown; deferred while a hold is attached so an active capture never loses
+// its mic mid-turn.
+const REBUILD_SETTLE_MS = 300 // let the OS settle the device swap before reopening
+const REBUILD_MAX_RETRIES = 3 // 4 attempts total: initial + 3 linear-backoff retries
+const REBUILD_BACKOFF_MS = 1000 // retry N waits N*1000ms (1s, 2s, 3s)
+
+let reconfiguring = false // a rebuild ladder is in flight (guards overlap)
+let rebuildTimer: ReturnType<typeof setTimeout> | null = null
+let pendingRebuild: { reason: string; emitTelemetry: boolean } | null = null
+let deviceChangeInstalled = false
+
+function onDeviceChange(): void {
+  // A default-input swap or a format change on the current device — rebuild the
+  // warm graph so the next hold captures from the new device. The 0.3s settle +
+  // the reconfiguring guard debounce a burst of change events into one rebuild.
+  rebuildWarmGraph('device_changed', true)
+}
+
+function installDeviceChangeListener(): void {
+  if (deviceChangeInstalled) return
+  // addEventListener (NOT navigator.mediaDevices.ondevicechange = …) so this
+  // coexists with voiceController's headset-detection listener rather than
+  // clobbering it.
+  navigator.mediaDevices?.addEventListener?.('devicechange', onDeviceChange)
+  deviceChangeInstalled = true
+}
+
+function removeDeviceChangeListener(): void {
+  if (!deviceChangeInstalled) return
+  navigator.mediaDevices?.removeEventListener?.('devicechange', onDeviceChange)
+  deviceChangeInstalled = false
+}
+
+/** Rebuild the warm mic graph. `emitTelemetry` fires the ptt_capture fallback
+ *  events (device-change path); the silent-mic path passes false because the hook
+ *  owns the silent_mic telemetry. Guarded (no overlap), deferred while a hold is
+ *  attached, and a no-op when nothing warm exists (the next hold cold-starts). */
+export function rebuildWarmGraph(reason: string, emitTelemetry: boolean): void {
+  if (reconfiguring) return // a ladder is already running — no overlap
+  if (!warmGraph) return // nothing warm to rebuild; the next hold opens fresh
+  if (attachedCaptures > 0) {
+    // A hold is mid-capture — don't yank its graph; run once it detaches.
+    pendingRebuild = { reason, emitTelemetry }
+    return
+  }
+  reconfiguring = true
+  rebuildTimer = setTimeout(() => {
+    rebuildTimer = null
+    void attemptRebuild(0, reason, emitTelemetry)
+  }, REBUILD_SETTLE_MS)
+}
+
+async function attemptRebuild(
+  retry: number,
+  reason: string,
+  emitTelemetry: boolean
+): Promise<void> {
+  if (releaseWanted) {
+    stopRebuild(true)
+    return
+  }
+  if (warmGraph) {
+    destroyGraph(warmGraph)
+    warmGraph = null
+  }
+  try {
+    const graph = await createGraph(true)
+    if (releaseWanted) {
+      destroyGraph(graph)
+      stopRebuild(true)
+      return
+    }
+    warmGraph = graph
+    stopRebuild(false)
+    if (emitTelemetry) {
+      trackEvent('fallback_triggered', {
+        component: 'ptt_capture',
+        from: 'default_device',
+        to: 'rebuilt',
+        reason,
+        outcome: 'recovered'
+      })
+    }
+  } catch {
+    if (retry < REBUILD_MAX_RETRIES && !releaseWanted) {
+      rebuildTimer = setTimeout(
+        () => {
+          rebuildTimer = null
+          void attemptRebuild(retry + 1, reason, emitTelemetry)
+        },
+        (retry + 1) * REBUILD_BACKOFF_MS
+      )
+    } else {
+      stopRebuild(false)
+      if (emitTelemetry) {
+        trackEvent('fallback_triggered', {
+          component: 'ptt_capture',
+          from: 'default_device',
+          to: 'none',
+          reason,
+          outcome: 'exhausted'
+        })
+      }
+    }
+  }
+}
+
+/** End the current ladder. `clearPending` also drops a deferred rebuild (teardown);
+ *  a normal terminal keeps none pending anyway. */
+function stopRebuild(clearPending: boolean): void {
+  reconfiguring = false
+  if (rebuildTimer) {
+    clearTimeout(rebuildTimer)
+    rebuildTimer = null
+  }
+  if (clearPending) pendingRebuild = null
+}
+
+/** Run a rebuild that was deferred while a hold held the warm graph, now that the
+ *  last capture has detached. */
+function runPendingRebuild(): void {
+  if (!pendingRebuild || attachedCaptures !== 0 || releaseWanted || !warmGraph) return
+  const { reason, emitTelemetry } = pendingRebuild
+  pendingRebuild = null
+  rebuildWarmGraph(reason, emitTelemetry)
 }
 
 // --- Captures ------------------------------------------------------------------
@@ -246,6 +391,7 @@ export async function startPttCapture(opts: PttCaptureOptions = {}): Promise<Ptt
     } else {
       attachedCaptures--
       maybeReleaseWarm()
+      runPendingRebuild()
     }
   }
 
