@@ -295,6 +295,41 @@ def process_voice_message_segment(
     return [message.model_dump(), ai_message_resp]
 
 
+CHAT_STREAM_ERROR_TEXT = "Sorry, something went wrong while generating a response. Please try again."
+
+
+def build_stream_error_reply(
+    uid: str,
+    app_id: Optional[str] = None,
+    chat_session: Optional[ChatSession] = None,
+) -> ResponseMessage:
+    """Persist and return a graceful fallback AI reply for a chat turn that
+    failed mid-stream without producing an answer.
+
+    Without this, the SSE stream ends as a clean 200 with no ``done:`` frame and
+    every client renders a blank assistant bubble. Mirrors
+    ``_build_quota_exceeded_reply``: the reply is persisted so the message the
+    client renders from the ``done:`` frame stays consistent with server-side
+    history (clients persist what they receive). The user's message is already
+    persisted by the caller, so only the AI reply is saved here. The raw
+    exception is logged upstream in ``execute_*_chat_stream`` and is never
+    surfaced to the client.
+    """
+    ai_message = Message(
+        id=str(uuid.uuid4()),
+        text=CHAT_STREAM_ERROR_TEXT,
+        created_at=datetime.now(timezone.utc),
+        sender='ai',
+        app_id=app_id,
+        type='text',
+    )
+    if chat_session:
+        ai_message.chat_session_id = chat_session.id
+        chat_db.add_message_to_chat_session(uid, chat_session.id, ai_message.id)
+    chat_db.add_message(uid, ai_message.model_dump())
+    return ResponseMessage(**ai_message.model_dump(), ask_for_nps=False)
+
+
 async def process_voice_message_segment_stream(
     path: str,
     uid: str,
@@ -399,6 +434,7 @@ async def process_voice_message_segment_stream(
         reversed([Message(**msg) for msg in await run_blocking(db_executor, chat_db.get_messages, uid, limit=10)])
     )
     callback_data = {}
+    answered = False
     # Set usage context for streaming (can't use 'with' across yields)
     usage_token = set_usage_context(uid, Features.CHAT)
     try:
@@ -418,9 +454,21 @@ async def process_voice_message_segment_stream(
                     response_message.ask_for_nps = ask_for_nps
                     data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
                     yield f"done: {data}\n\n"
+                    answered = True
 
                     # send notification
                     send_chat_message_notification(uid, "omi", "omi", ai_message.text, ai_message.id)
+
+        if not answered:
+            # Pipeline failed mid-stream (raw error already logged in
+            # execute_*_chat_stream). Emit a graceful fallback so the client
+            # renders real text instead of a blank bubble.
+            logger.error(
+                'Voice chat stream ended without an answer for uid=%s (error=%s)', uid, bool(callback_data.get('error'))
+            )
+            fallback = await run_blocking(db_executor, build_stream_error_reply, uid, app_id, chat_session)
+            data = base64.b64encode(bytes(fallback.model_dump_json(), 'utf-8')).decode('utf-8')
+            yield f"done: {data}\n\n"
     finally:
         reset_usage_context(usage_token)
 

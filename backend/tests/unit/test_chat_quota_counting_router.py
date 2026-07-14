@@ -135,6 +135,7 @@ def _make_chat_client():
 
     chat_utils = _install_module('utils.chat', ModuleType('utils.chat'))
     chat_utils.acquire_chat_session = MagicMock()
+    chat_utils.build_stream_error_reply = MagicMock()
     chat_utils.initial_message_util = MagicMock()
     chat_utils.process_voice_message_segment = MagicMock()
     chat_utils.resolve_voice_message_language = MagicMock(return_value='en')
