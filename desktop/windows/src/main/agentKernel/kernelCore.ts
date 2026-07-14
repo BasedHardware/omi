@@ -45,6 +45,7 @@ import type {
   AgentArtifact,
   AgentDelegation,
   AgentEvent,
+  AgentExecutionRole,
   AgentRun,
   AgentSession,
   AgentStore,
@@ -130,7 +131,11 @@ import type {
   UpdateArtifactLifecycleInput
 } from './kernelTypes'
 import { StaleAdapterBindingError } from './kernelTypes'
-import { providerBoundaryForAdapter, resolveAdapterWithinBoundary } from './executionPolicy'
+import {
+  executionRoleForSurface,
+  providerBoundaryForAdapter,
+  resolveAdapterWithinBoundary
+} from './executionPolicy'
 
 interface ActiveExecution {
   adapter: RuntimeAdapter
@@ -822,6 +827,29 @@ export class KernelCore {
     }
   }
 
+  /**
+   * The execution role a new session gets. An explicit role from the caller wins
+   * (spawnBackgroundAgent and delegateAgent both pass 'leaf'); otherwise it is
+   * DERIVED FROM THE SURFACE, never defaulted to 'coordinator'.
+   *
+   * macOS derives this at its transport boundary (jsonl-transport.ts calls
+   * executionRoleForSurface on every inbound run). Windows runs the kernel
+   * in-process and has no transport, so there is no single chokepoint above this
+   * one — the kernel itself must be the funnel. Without this, a run created
+   * directly on a leaf surface (background_agent / delegated_agent / floating_bar
+   * pill) silently became a coordinator and kept coordinator spawn rights for the
+   * life of the session, defeating the INV-AGENT leaf guard.
+   */
+  protected executionRoleFor(input: KernelSessionResolutionInput): AgentExecutionRole {
+    return (
+      input.executionRole ??
+      executionRoleForSurface({
+        surfaceKind: input.surfaceKind,
+        externalRefKind: input.externalRefKind
+      })
+    )
+  }
+
   protected resolveSession(input: KernelSessionResolutionInput): AgentSession {
     // An explicit canonical session is authoritative even when the caller also
     // supplies a new surface reference. This is how one long-running thread can
@@ -841,7 +869,7 @@ export class KernelCore {
             externalRefId: input.externalRefId
           },
           defaultAdapterId: input.defaultAdapterId,
-          executionRole: input.executionRole,
+          executionRole: this.executionRoleFor(input),
           providerBoundary: input.providerBoundary,
           title: input.title ?? null
         },
@@ -874,7 +902,7 @@ export class KernelCore {
       externalRefId: input.externalRefId ?? null,
       title: input.title ?? null,
       defaultAdapterId: input.defaultAdapterId ?? 'acp',
-      executionRole: input.executionRole ?? 'coordinator',
+      executionRole: this.executionRoleFor(input),
       providerBoundary:
         input.providerBoundary ?? providerBoundaryForAdapter(input.defaultAdapterId ?? 'acp')
     })

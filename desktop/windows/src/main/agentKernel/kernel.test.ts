@@ -915,11 +915,104 @@ describe('AgentRuntimeKernel — desktop action queue and intent routing', () =>
       ownerId: OWNER,
       subjectKind: 'run',
       subjectId: failed.run.runId,
-      dismissedAtMs: Date.now()
+      // A fixed timestamp: suppression keys on dismissedAtMs being non-null, so
+      // there is no reason to make this test depend on the wall clock.
+      dismissedAtMs: 1_000_000_000
     })
 
     const queue = kernel.listDesktopActionQueue({ ownerId: OWNER })
     expect(queue.some((item) => item.subjectId === failed.run.runId)).toBe(false)
+  })
+})
+
+describe('AgentRuntimeKernel — execution role derived from the surface (INV-AGENT)', () => {
+  // REGRESSION: executionRoleForSurface had no production caller. macOS derives
+  // the role at its transport boundary; Windows is in-process and has no
+  // transport, so the kernel is the funnel. Before the fix, resolveSession
+  // defaulted an unset role to 'coordinator', so a run created directly on a LEAF
+  // surface became a coordinator session — and, because the role is persisted on
+  // the session row, kept coordinator spawn rights forever. That is a leaf escape.
+
+  it.each([
+    ['background_agent', undefined],
+    ['delegated_agent', undefined],
+    ['floating_bar', 'pill']
+  ])('derives leaf for surface %s/%s', async (surfaceKind, externalRefKind) => {
+    const { kernel } = newKernel(fakeAdapter())
+
+    const result = await kernel.executeRun(
+      runInput({
+        surfaceKind,
+        externalRefKind: externalRefKind ?? 'ref',
+        externalRefId: 'x-1'
+      })
+    )
+
+    expect(result.session.executionRole).toBe('leaf')
+  })
+
+  it('derives coordinator for an ordinary chat surface', async () => {
+    const { kernel } = newKernel(fakeAdapter())
+    const result = await kernel.executeRun(runInput())
+    expect(result.session.executionRole).toBe('coordinator')
+
+    const bar = await kernel.executeRun(
+      runInput({ requestId: 'r2', surfaceKind: 'floating_bar', externalRefKind: 'chat' })
+    )
+    expect(bar.session.executionRole).toBe('coordinator')
+  })
+
+  it('lets an explicit role from the caller win over the derived one', async () => {
+    const { kernel } = newKernel(fakeAdapter())
+
+    // spawnBackgroundAgent/delegateAgent pass 'leaf' explicitly; an explicit role
+    // must still be honored rather than re-derived from the surface.
+    const result = await kernel.executeRun(
+      runInput({ surfaceKind: 'main_chat', executionRole: 'leaf' })
+    )
+
+    expect(result.session.executionRole).toBe('leaf')
+  })
+
+  it('closes the escape: a session created on a leaf surface cannot spawn or delegate', async () => {
+    const { kernel } = newKernel(fakeAdapter())
+
+    // A plain executeRun on a leaf surface — no spawnBackgroundAgent involved.
+    const leaf = await kernel.executeRun(
+      runInput({
+        surfaceKind: 'background_agent',
+        externalRefKind: 'ref',
+        externalRefId: 'bg-1'
+      })
+    )
+    expect(leaf.session.executionRole).toBe('leaf')
+
+    // Pre-fix this session was a 'coordinator' and BOTH of these would have been
+    // allowed — the leaf worker could fan out indefinitely.
+    await expect(
+      kernel.spawnBackgroundAgent({
+        ownerId: OWNER,
+        clientId: 'client-1',
+        requestId: 'request-escape',
+        prompt: 'spawn a child',
+        adapterId: 'test-adapter',
+        defaultAdapterId: 'test-adapter',
+        callerSessionId: leaf.session.sessionId
+      })
+    ).rejects.toThrow(/Leaf workers cannot create background agents/)
+
+    await expect(
+      kernel.delegateAgent({
+        mode: 'call',
+        parentRunId: leaf.run.runId,
+        objective: 'delegate onward',
+        ownerId: OWNER,
+        clientId: 'client-1',
+        requestId: 'request-escape-2',
+        adapterId: 'test-adapter',
+        defaultAdapterId: 'test-adapter'
+      })
+    ).rejects.toThrow(/Leaf workers cannot create delegated agents/)
   })
 })
 
