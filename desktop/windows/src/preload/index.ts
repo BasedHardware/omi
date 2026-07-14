@@ -154,6 +154,8 @@ const omi: OmiBridgeApi = {
   rewindDayBounds: () => ipcRenderer.invoke('rewind:dayBounds'),
   rewindSearch: (query: string) => ipcRenderer.invoke('rewind:search', query),
   rewindFrameImage: (imagePath: string) => ipcRenderer.invoke('rewind:frameImage', imagePath),
+  // --- Track 4 --- per-line OCR boxes for the on-image search highlight overlay
+  rewindFrameOcrLines: (frameId: number) => ipcRenderer.invoke('rewind:frameOcrLines', frameId),
   rewindGetSettings: () => ipcRenderer.invoke('rewind:getSettings'),
   rewindSetSettings: (next: RewindSettings) => ipcRenderer.invoke('rewind:setSettings', next),
   rewindPruneNow: () => ipcRenderer.invoke('rewind:pruneNow'),

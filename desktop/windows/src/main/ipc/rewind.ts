@@ -5,7 +5,8 @@ import { getPrimarySourceId } from '../rewind/sourceId'
 import {
   listRewindFrames,
   searchRewindFrames,
-  rewindDayBounds
+  rewindDayBounds,
+  getRewindFrameOcrLines
 } from './db'
 import { groupFrames } from '../rewind/rewindGrouping'
 import {
@@ -25,6 +26,10 @@ export function registerRewindHandlers(): void {
     if (!q) return []
     return groupFrames(searchRewindFrames(q), q)
   })
+  // --- Track 4 --- Per-line OCR bounding boxes for the search highlight overlay.
+  ipcMain.handle('rewind:frameOcrLines', async (_e, frameId: number) =>
+    getRewindFrameOcrLines(frameId)
+  )
   ipcMain.handle('rewind:frameImage', async (_e, imagePath: string) => {
     const root = resolve(rewindRoot())
     const full = resolve(imagePath)
