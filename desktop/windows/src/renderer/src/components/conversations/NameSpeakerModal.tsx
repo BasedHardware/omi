@@ -118,7 +118,11 @@ export function NameSpeakerModal({
             disabled={saving || unaddressable}
             className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#8B5CF6] text-xs font-semibold text-white">
+            {/* decorative: the initial repeats the label next to it */}
+            <span
+              aria-hidden
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#8B5CF6] text-xs font-semibold text-white"
+            >
               Y
             </span>
             You
@@ -131,7 +135,10 @@ export function NameSpeakerModal({
               disabled={saving || unaddressable}
               className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-left text-sm text-white transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[rgba(139,92,246,0.3)] text-xs font-semibold text-white">
+              <span
+                aria-hidden
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[rgba(139,92,246,0.3)] text-xs font-semibold text-white"
+              >
                 {p.name.trim()[0]?.toUpperCase() ?? <User className="h-3.5 w-3.5" />}
               </span>
               <span className="truncate">{p.name}</span>
