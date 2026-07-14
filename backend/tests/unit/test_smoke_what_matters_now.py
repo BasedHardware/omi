@@ -80,10 +80,25 @@ def test_main_uses_the_code_owned_fixture_without_a_uid_environment_variable(mon
     )
 
 
-def test_development_deploy_workflows_use_only_the_existing_admin_key_for_the_smoke():
+def test_auto_dev_smoke_resolves_the_backend_cloud_run_url_with_existing_auth():
     root = Path(__file__).resolve().parents[3]
-    for workflow_name in ('gcp_backend.yml', 'gcp_backend_auto_dev.yml'):
-        workflow = (root / '.github' / 'workflows' / workflow_name).read_text(encoding='utf-8')
-        assert 'OMI_TASK_INTELLIGENCE_SMOKE_UID' not in workflow
-        assert '--secret=ADMIN_KEY' in workflow
-        assert 'smoke_what_matters_now.py --base-url https://api.omi.dev' in workflow
+    workflow = (root / '.github' / 'workflows' / 'gcp_backend_auto_dev.yml').read_text(encoding='utf-8')
+
+    assert 'OMI_TASK_INTELLIGENCE_SMOKE_UID' not in workflow
+    assert '--secret=ADMIN_KEY' in workflow
+    assert 'BACKEND_URL="$(gcloud run services describe backend' in workflow
+    assert '--project="$PROJECT_ID"' in workflow
+    assert "--region=\"${{ env.REGION }}\"" in workflow
+    assert "--format='value(status.url)')\"" in workflow
+    assert 'test -n "$BACKEND_URL"' in workflow
+    assert 'smoke_what_matters_now.py --base-url "$BACKEND_URL"' in workflow
+    assert 'smoke_what_matters_now.py --base-url https://api.omi.dev' not in workflow
+
+
+def test_manual_development_smoke_keeps_its_existing_external_hostname_path():
+    root = Path(__file__).resolve().parents[3]
+    workflow = (root / '.github' / 'workflows' / 'gcp_backend.yml').read_text(encoding='utf-8')
+
+    assert 'OMI_TASK_INTELLIGENCE_SMOKE_UID' not in workflow
+    assert '--secret=ADMIN_KEY' in workflow
+    assert 'smoke_what_matters_now.py --base-url https://api.omi.dev' in workflow

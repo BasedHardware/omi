@@ -383,7 +383,12 @@ jobs:
           ADMIN_KEY="$(gcloud secrets versions access latest --secret=ADMIN_KEY --project="$PROJECT_ID")"
           export ADMIN_KEY
           trap 'unset ADMIN_KEY' EXIT
-          python3 backend/scripts/smoke_what_matters_now.py --base-url https://api.omi.dev
+          BACKEND_URL="$(gcloud run services describe backend \
+            --project="$PROJECT_ID" \
+            --region="${{ env.REGION }}" \
+            --format='value(status.url)')"
+          test -n "$BACKEND_URL"
+          python3 backend/scripts/smoke_what_matters_now.py --base-url "$BACKEND_URL"
 
       - name: Upload deployment acceptance evidence
         if: always()
