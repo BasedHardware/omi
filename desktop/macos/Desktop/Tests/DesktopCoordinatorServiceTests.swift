@@ -536,6 +536,8 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(pillSource.contains("AgentRuntimeStatusStore.shared.recordAcceptedRun("))
   }
 
+  // omi-test-quality: source-inspection -- static contract: the private controller must not
+  // substitute model-provided tool context for its owner-scoped kernel snapshot.
   func testPTTBuildsFreshRealtimeSessionsFromTypedKernelContextSnapshot() throws {
     let chatSource = try sourceFile("Providers/ChatProvider.swift")
     let managerSource = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
@@ -558,6 +560,9 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertFalse(managerSource.contains("floatingAgentStatusContext()"))
     XCTAssertTrue(hubSource.contains("prefetchVoiceContextSnapshotIfNeeded()"))
     XCTAssertTrue(hubSource.contains("voiceSessionContext(for:"))
+    XCTAssertTrue(hubSource.contains("let kernelContext = voiceSessionContext(for: currentOwnerScope)"))
+    XCTAssertTrue(hubSource.contains("kernelSemanticGuidance: kernelContext.semanticGuidance"))
+    XCTAssertTrue(hubSource.contains("toolContext: toolContext"))
     XCTAssertTrue(hubSource.contains("prefetchedVoiceContextOwnerScope"))
     XCTAssertTrue(hubSource.contains("kernelContext: topLevelContext.rendered"))
     XCTAssertFalse(hubSource.contains("prefetchedFloatingAgentStatus"))

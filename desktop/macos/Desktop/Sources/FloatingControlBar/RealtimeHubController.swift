@@ -5200,10 +5200,25 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
     case .askHigherModel:
       let query = (command.input["query"] as? String) ?? turnTranscript
-      let context = (command.input["context"] as? String) ?? ""
+      let toolContext = (command.input["context"] as? String) ?? ""
+      let kernelContext = voiceSessionContext(for: currentOwnerScope)
+      guard !kernelContext.rendered.isEmpty,
+        !kernelContext.snapshotFreshnessIdentity.isEmpty,
+        !kernelContext.semanticGuidance.isEmpty,
+        !kernelContext.stableCacheIdentity.isEmpty,
+        !kernelContext.dynamicContextIdentity.isEmpty,
+        !kernelContext.planID.isEmpty
+      else {
+        return .failed(Self.authorizedRealtimeToolError(code: "kernel_context_unavailable"))
+      }
       return await escalateToHigherModel(
         query,
-        context: context,
+        kernelSemanticGuidance: kernelContext.semanticGuidance,
+        kernelContext: kernelContext.rendered,
+        stableCacheIdentity: kernelContext.stableCacheIdentity,
+        dynamicContextIdentity: kernelContext.dynamicContextIdentity,
+        contextPlanID: kernelContext.planID,
+        toolContext: toolContext,
         ownerID: command.ownerID)
 
     case .screenshot:
@@ -5865,7 +5880,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// (no new backend route). Returns the assistant text for the model to speak.
   private func escalateToHigherModel(
     _ query: String,
-    context: String,
+    kernelSemanticGuidance: String,
+    kernelContext: String,
+    stableCacheIdentity: String,
+    dynamicContextIdentity: String,
+    contextPlanID: String,
+    toolContext: String,
     ownerID: String
   ) async -> AuthorizedRealtimeToolExecutionResult
   {
@@ -5873,7 +5893,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       return .failed(Self.authorizedRealtimeOwnerChangedError())
     }
     let body = RealtimeHubTools.escalationBody(
-      query: query, context: context)
+      query: query,
+      kernelSemanticGuidance: kernelSemanticGuidance,
+      kernelContext: kernelContext,
+      stableCacheIdentity: stableCacheIdentity,
+      dynamicContextIdentity: dynamicContextIdentity,
+      contextPlanID: contextPlanID,
+      toolContext: toolContext)
     let t0 = Date()
     do {
       let answer = try await APIClient.shared.askHigherModel(

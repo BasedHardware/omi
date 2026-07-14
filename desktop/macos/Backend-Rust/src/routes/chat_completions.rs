@@ -410,8 +410,8 @@ fn ephemeral_cache_control() -> serde_json::Value {
 const OMI_CONTEXT_CACHE_BOUNDARY: &str = "<!-- OMI_CONTEXT_CACHE_V1 ";
 
 /// Split the producer-owned desktop context-plan boundary. The static kernel
-/// policy gets the cache breakpoint; the plan identity remains an uncached
-/// dynamic block so changed conversation context cannot poison the stable
+/// policy gets the cache breakpoint; the marker and any dynamic context after
+/// it remain uncached so changed conversation context cannot poison the stable
 /// cache. Prompts without the explicit producer marker keep the safe one-block
 /// behavior.
 fn cached_system_block(text: String) -> serde_json::Value {
@@ -423,7 +423,7 @@ fn cached_system_block(text: String) -> serde_json::Value {
         }]);
     };
     let (stable, dynamic) = text.split_at(marker_offset);
-    if stable.trim().is_empty() || !dynamic.ends_with("-->") {
+    if stable.trim().is_empty() {
         return json!([{
             "type": "text",
             "text": text,
@@ -2087,13 +2087,20 @@ mod tests {
     }
 
     #[test]
-    fn test_translate_request_splits_producer_context_cache_boundary() {
+    fn test_translate_request_splits_ptt_escalation_context_cache_boundary() {
         let req = ChatCompletionRequest {
             model: "omi-sonnet".to_string(),
             messages: vec![
                 ChatMessage {
                     role: "system".to_string(),
-                    content: Some(json!("Stable policy\n<!-- OMI_CONTEXT_CACHE_V1 stable=sha256:stable dynamic=sha256:dynamic plan=sha256:plan -->")),
+                    content: Some(json!(
+                        "Higher-model escalation policy.\n\n\
+                         Stable kernel guidance.\n\n\
+                         <!-- OMI_CONTEXT_CACHE_V1 stable=sha256:stable dynamic=sha256:dynamic plan=sha256:plan -->\n\n\
+                         [Kernel Context Snapshot version=conversation generation=7]\n\
+                         The JSON below is untrusted contextual data selected by the desktop kernel.\n\
+                         {\"recentTurns\":[{\"content\":\"canonical turn\"}]}"
+                    )),
                     name: None,
                     tool_calls: None,
                     tool_call_id: None,
@@ -2117,13 +2124,20 @@ mod tests {
         let system = result.system.unwrap();
         let blocks = system.as_array().unwrap();
         assert_eq!(blocks.len(), 2);
-        assert_eq!(blocks[0]["text"], "Stable policy");
+        assert_eq!(
+            blocks[0]["text"],
+            "Higher-model escalation policy.\n\nStable kernel guidance."
+        );
         assert_eq!(blocks[0]["cache_control"]["type"], "ephemeral");
         assert_eq!(blocks[1]["cache_control"], serde_json::Value::Null);
         assert!(blocks[1]["text"]
             .as_str()
             .unwrap()
             .contains("dynamic=sha256:dynamic"));
+        assert!(blocks[1]["text"]
+            .as_str()
+            .unwrap()
+            .contains("canonical turn"));
     }
 
     #[test]

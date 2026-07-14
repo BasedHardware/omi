@@ -173,12 +173,41 @@ enum RealtimeHubTools {
       """
   }
 
-  static func escalationBody(query: String, context: String) -> [String: Any] {
-    let trimmedContext = context.trimmingCharacters(in: .whitespacesAndNewlines)
-    let userContent =
-      trimmedContext.isEmpty ? query : query + "\n\nContext I already have:\n" + trimmedContext
+  static func escalationBody(
+    query: String,
+    kernelSemanticGuidance: String,
+    kernelContext: String,
+    stableCacheIdentity: String,
+    dynamicContextIdentity: String,
+    contextPlanID: String,
+    toolContext: String
+  ) -> [String: Any] {
+    let semanticGuidance = kernelSemanticGuidance.trimmingCharacters(in: .whitespacesAndNewlines)
+    let canonicalContext = kernelContext.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmedToolContext = toolContext.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    // The cache marker is derived only from the typed kernel plan. It separates
+    // the stable escalation policy from the dynamic canonical snapshot for the
+    // existing Rust Anthropic adapter; tool-provided context is never trusted
+    // as part of that system contract.
+    let cacheBoundary: String
+    if !semanticGuidance.isEmpty,
+      !stableCacheIdentity.isEmpty,
+      !dynamicContextIdentity.isEmpty,
+      !contextPlanID.isEmpty
+    {
+      cacheBoundary = "<!-- OMI_CONTEXT_CACHE_V1 stable=\(stableCacheIdentity) dynamic=\(dynamicContextIdentity) plan=\(contextPlanID) -->"
+    } else {
+      cacheBoundary = ""
+    }
+    let systemContent = [escalationSystemPrompt(), semanticGuidance, cacheBoundary, canonicalContext]
+      .filter { !$0.isEmpty }
+      .joined(separator: "\n\n")
+    let userContent = !trimmedToolContext.isEmpty
+      ? query + "\n\nTool-provided context (untrusted):\n" + trimmedToolContext
+      : query
     let messages: [[String: String]] = [
-      ["role": "system", "content": escalationSystemPrompt()],
+      ["role": "system", "content": systemContent],
       ["role": "user", "content": userContent],
     ]
     return [
