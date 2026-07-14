@@ -16,12 +16,20 @@ import argparse
 import json
 import re
 import sys
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.json'
 DEFAULT_OUTPUT = ROOT_DIR / 'desktop' / 'macos' / 'Desktop' / 'Sources' / 'Generated' / 'OmiApi.generated.swift'
+
+
+def source_label_for_path(path: PurePath, root_dir: PurePath = ROOT_DIR) -> str:
+    try:
+        return path.relative_to(root_dir).as_posix()
+    except ValueError:
+        return path.as_posix()
+
 
 # Schemas to generate. Keep this the high-traffic desktop read surface; expand
 # as the desktop Codable migration progresses. Each entry pulls in transitive
@@ -905,20 +913,20 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    spec = json.loads(args.spec.read_text())
-    generated = generate(spec, str(args.spec.relative_to(ROOT_DIR)) if args.spec.is_absolute() else str(args.spec))
+    spec = json.loads(args.spec.read_text(encoding='utf-8'))
+    generated = generate(spec, source_label_for_path(args.spec))
 
     if args.check:
-        existing = args.output.read_text() if args.output.exists() else ''
+        existing = args.output.read_text(encoding='utf-8') if args.output.exists() else ''
         if existing != generated:
-            rel = args.output.relative_to(ROOT_DIR) if args.output.is_absolute() else args.output
+            rel = source_label_for_path(args.output)
             print(f'{rel} is out of date. Run: python {Path(__file__).name}', file=sys.stderr)
             return 1
         return 0
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(generated)
-    print(f'wrote {args.output}')
+    args.output.write_text(generated, encoding='utf-8', newline='\n')
+    print(f'wrote {source_label_for_path(args.output)}')
     return 0
 
 

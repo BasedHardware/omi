@@ -1236,18 +1236,18 @@ def main() -> int:
     if args.all and args.output:
         raise SystemExit('--output cannot be used with --all')
 
-    spec = json.loads(Path(args.spec).read_text())
+    spec = json.loads(Path(args.spec).read_text(encoding='utf-8'))
     groups = tuple(SCHEMA_GROUPS) if args.all else (args.group,)
     for group in groups:
         output_path = Path(args.output) if args.output else SCHEMA_GROUPS[group]['output']
         generated = build_output(spec, group)
         if args.check:
-            if not output_path.exists() or output_path.read_text() != generated:
+            if not output_path.exists() or output_path.read_text(encoding='utf-8') != generated:
                 raise SystemExit(f'{output_path} is stale; run backend/scripts/generate_dart_models.py --group {group}')
             print(f'{output_path} is up to date')
             continue
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(generated)
+        output_path.write_text(generated, encoding='utf-8', newline='\n')
         print(f'wrote {output_path}')
     return 0
 
