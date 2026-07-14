@@ -625,10 +625,30 @@ export function useChat(): UseChat {
           'It looks like you want me to do something in an app. Phrase it as a direct command (e.g. "type report in the search box") with that app focused, and I\'ll show you a plan to approve.'
         finalMsg = assistantMsg(assistantText)
       }
+      // INTERIM blank-reply guard (superseded by the structured error taxonomy
+      // planned for the chat platform rework). The backend can end the
+      // /v2/messages stream as 200 OK with zero bytes — a swallowed pipeline
+      // exception yields no data chunks AND no done: frame — which would
+      // otherwise render and persist a silent blank assistant bubble. Match the
+      // catch path's contract instead: when nothing at all arrived, replace the
+      // empty pending bubble with an error message (and, like the catch path,
+      // don't speak it). A done: frame carrying structured content (chart /
+      // citations) with intentionally empty text is a valid completion, so only
+      // the truly-empty case trips this.
+      const hasStructuredContent = !!(
+        finalMsg.chartData ||
+        (finalMsg.citations && finalMsg.citations.length)
+      )
+      const noReply = !assistantText.trim() && !hasStructuredContent
+      if (noReply) {
+        assistantText = "Omi didn't send a reply. Try again."
+        finalMsg = assistantMsg(assistantText)
+      }
       renderAssistant(finalMsg)
       // Voice turn: speak the assembled reply (only on the success path, and only
-      // if this generation wasn't dismissed — never speak a zombie reply).
-      if (isCurrent()) maybeSpeak(assistantText, fromVoice)
+      // if this generation wasn't dismissed — never speak a zombie reply). Skip
+      // the no-reply error so it matches the catch path, which never speaks.
+      if (isCurrent() && !noReply) maybeSpeak(assistantText, fromVoice)
     } catch (e) {
       // A reset()/dismiss aborts the fetch, which rejects here — but the generation
       // is already stale, so we must NOT surface an error bubble for it. A watchdog
