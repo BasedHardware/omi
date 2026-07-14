@@ -159,12 +159,13 @@ async def _process_conversation_task(
                 )
                 await run_blocking(
                     db_executor,
-                    conversations_db.update_conversation_status,
+                    lifecycle_service.transition,
                     uid,
                     conversation_id,
                     ConversationStatus.failed,
+                    expected=ConversationStatus.processing,
                 )
-                await run_blocking(db_executor, conversations_db.set_conversation_as_discarded, uid, conversation_id)
+                await run_blocking(db_executor, lifecycle_service.discard, uid, conversation_id)
                 return True
             await run_blocking(
                 db_executor,
@@ -206,6 +207,9 @@ async def _process_conversation_task(
             expected_conversation_id=conversation_id,
         )
         claim_status = claim['status']
+        if claim_status == 'fenced':
+            await send_result({'conversation_id': conversation_id, 'fenced': True})
+            return
         if claim_status == 'completed':
             await send_result({'conversation_id': conversation_id, 'success': True})
             return
@@ -256,6 +260,9 @@ async def _process_conversation_task(
             )
         if not completed:
             await send_result({'conversation_id': conversation_id, 'error': 'job_completion_conflict'})
+            return
+        if disposition == ConversationFinalizationDisposition.fenced:
+            await send_result({'conversation_id': conversation_id, 'fenced': True})
             return
         await send_result({'conversation_id': conversation_id, 'success': True})
     except ConversationFinalizationError:

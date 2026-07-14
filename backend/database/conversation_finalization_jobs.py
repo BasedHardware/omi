@@ -283,6 +283,8 @@ def _claim_finalization_job_txn(
         return _claim_result('identity_mismatch')
     if expected_conversation_id is not None and job.get('conversation_id') != expected_conversation_id:
         return _claim_result('identity_mismatch')
+    if status == 'completed' and job.get('finalization_outcome') == 'fenced':
+        return _claim_result('fenced')
     if status in TERMINAL_JOB_STATUSES:
         return _claim_result(status)
     if bool(job.get('requires_byok')) and not allow_byok:

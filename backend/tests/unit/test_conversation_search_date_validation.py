@@ -369,6 +369,31 @@ def test_finalize_conversation_claim_loser_returns_latest_without_side_effects()
     assert response.conversation.status == ConversationStatus.processing
 
 
+def test_legacy_finalize_claim_loser_returns_latest_without_processing_or_integrations():
+    target = _conversation(status=ConversationStatus.in_progress)
+    latest = _conversation(status=ConversationStatus.failed)
+
+    with (
+        patch.object(conv, 'retrieve_in_progress_conversation', return_value={'id': 'conv-1'}),
+        patch.object(conv, 'deserialize_conversation', side_effect=[target, latest]),
+        patch.object(conv.lifecycle_service, 'admit_processing', return_value=False) as claim_status,
+        patch.object(conv.redis_db, 'get_cached_user_geolocation', return_value=None),
+        patch.object(conv.redis_db, 'get_in_progress_conversation_id') as get_pointer,
+        patch.object(conv.redis_db, 'remove_in_progress_conversation_id') as remove_pointer,
+        patch.object(conv, 'process_conversation') as process,
+        patch.object(conv, 'trigger_external_integrations', AsyncMock(return_value=[])) as integrations,
+        patch.object(conv, '_get_valid_conversation_by_id', return_value={'id': 'conv-1'}),
+    ):
+        response = conv.process_in_progress_conversation(uid='test-uid')
+
+    claim_status.assert_called_once_with('test-uid', 'conv-1')
+    get_pointer.assert_not_called()
+    remove_pointer.assert_not_called()
+    process.assert_not_called()
+    integrations.assert_not_called()
+    assert response.conversation.status == ConversationStatus.failed
+
+
 def test_finalize_conversation_is_noop_for_completed_conversation():
     completed = _conversation(status=ConversationStatus.completed)
 

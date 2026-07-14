@@ -398,6 +398,21 @@ def test_fenced_finalization_is_a_terminal_no_fanout_outcome():
     assert update['fanout_status'] == 'fenced'
 
 
+def test_completed_fenced_job_replays_as_a_fenced_result():
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'completed',
+            'finalization_outcome': 'fenced',
+            'dispatch_generation': 1,
+        },
+    )
+
+    claim = jobs._claim_finalization_job_txn(_Transaction(), ref, 1, False, 1500, _now())
+
+    assert claim == {'status': 'fenced', 'lease_epoch': None, 'attempt_count': 0}
+
+
 def test_live_pusher_claim_cannot_use_another_conversations_job():
     transaction = _Transaction()
     ref = _Ref(
