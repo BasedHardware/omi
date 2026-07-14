@@ -3143,5 +3143,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Laitteen tallennustila",
+    "deviceStoragePercentFull": "{percent} % täynnä",
+    "deviceStorageUsedOfTotal": "{used} / {total} käytössä",
+    "deviceStorageFree": "{free} vapaana",
+    "deviceStorageNearlyFull": "Laite on lähes täynnä — synkronoi vapauttaaksesi tilaa."
 }

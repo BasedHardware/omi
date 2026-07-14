@@ -9601,4 +9601,25 @@ class AppLocalizationsNl extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Fout bij verbinden met Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Apparaatopslag';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% vol';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used van $total gebruikt';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free vrij';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Apparaat bijna vol — synchroniseer om ruimte vrij te maken.';
 }

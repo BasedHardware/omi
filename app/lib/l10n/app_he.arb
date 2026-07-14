@@ -10721,5 +10721,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "אחסון המכשיר",
+    "deviceStoragePercentFull": "{percent}% מלא",
+    "deviceStorageUsedOfTotal": "{used} מתוך {total} בשימוש",
+    "deviceStorageFree": "{free} פנוי",
+    "deviceStorageNearlyFull": "המכשיר כמעט מלא — סנכרן כדי לפנות מקום."
 }

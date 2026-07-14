@@ -106,6 +106,7 @@ enum LocalAgentProviderDetector {
         if let path = firstExecutable(
             named: provider.executableName,
             fileManager: fileManager,
+            environment: environment,
             homeDirectory: homeDirectory
         ) {
             return LocalAgentProviderAvailability(provider: provider, status: .available(command: path))
@@ -135,9 +136,13 @@ enum LocalAgentProviderDetector {
     private static func firstExecutable(
         named name: String,
         fileManager: FileManager,
+        environment: [String: String],
         homeDirectory: String
     ) -> String? {
-        for dir in adapterActivationSearchDirectories(homeDirectory: homeDirectory) {
+        for dir in adapterActivationSearchDirectories(
+            environment: environment,
+            homeDirectory: homeDirectory
+        ) {
             let path = (dir as NSString).appendingPathComponent(name)
             if fileManager.isExecutableFile(atPath: path) {
                 return path
@@ -146,16 +151,26 @@ enum LocalAgentProviderDetector {
         return nil
     }
 
-    // Detection is intentionally hermetic: only home-relative activation directories
-    // (plus the explicit OMI_*_ADAPTER_COMMAND env) are trusted, never arbitrary $PATH
-    // or absolute system bin dirs. Consulting /opt/homebrew/bin or /usr/local/bin made
-    // availability depend on the host machine's global installs (see #9033).
-    private static func adapterActivationSearchDirectories(homeDirectory: String) -> [String] {
-        [
+    // Detection is intentionally hermetic: it uses only the supplied PATH and
+    // home directory (plus an explicit OMI_* command), never ProcessInfo's
+    // ambient environment or NSHomeDirectory. This makes tests and app launch
+    // behavior agree even on machines with globally-installed adapters.
+    private static func adapterActivationSearchDirectories(
+        environment: [String: String],
+        homeDirectory: String
+    ) -> [String] {
+        let pathDirectories = (environment["PATH"] ?? "")
+            .split(separator: ":")
+            .map(String.init)
+            .filter { !$0.isEmpty }
+        let candidates = pathDirectories + [
             "\(homeDirectory)/.hermes/hermes-agent/venv/bin",
             "\(homeDirectory)/.hermes/node/bin",
             "\(homeDirectory)/.hermes/hermes-agent",
             "\(homeDirectory)/.local/bin",
         ]
+        return candidates.reduce(into: [String]()) { result, directory in
+            if !result.contains(directory) { result.append(directory) }
+        }
     }
 }

@@ -2,6 +2,11 @@ import { createHash } from "node:crypto";
 
 import { recordJournalTurn, updateJournalTurn } from "./conversation-journal.js";
 import { conversationTurnFromRow } from "./conversation-turns.js";
+import {
+  assertToolResultEnvelope,
+  makeToolResultEnvelope,
+  type ToolResultEnvelope,
+} from "./tool-result-envelope.js";
 import type { AgentStore, ConversationContentBlock, ConversationResource, ConversationTurn } from "./types.js";
 
 export interface AgentSpawnProducerJournalDescriptor {
@@ -138,9 +143,17 @@ export function compactRealtimeSpawnToolResult(
       "The background agent could not be started. Please try again.",
     );
   }
+  const sourceEnvelope = canonicalRealtimeSpawnEnvelope(parsed);
+  if (!sourceEnvelope) {
+    return compactRealtimeSpawnFailure(
+      "realtime_spawn_missing_tool_result_envelope",
+      "The background agent result was incomplete. Please try again.",
+      true,
+    );
+  }
   if (parsed.ok !== true) {
     const error = compactRawError(parsed.error, "spawn_failed", "The background agent could not be started.");
-    return compactRealtimeSpawnFailure(error.code, error.message, error.retryable);
+    return compactRealtimeSpawnFailure(error.code, error.message, error.retryable, sourceEnvelope);
   }
 
   let child: RealtimeSpawnChildReceipt;
@@ -151,18 +164,20 @@ export function compactRealtimeSpawnToolResult(
       "realtime_spawn_child_receipt_missing",
       "The background agent could not be started. Please try again.",
       true,
+      sourceEnvelope,
     );
   }
 
   const journalReceipt = compactJournalReceipt(agentSpawnJournalReceipt(descriptor));
   const semanticDigest = realtimeSpawnSemanticDigest(journalReceipt, child);
-  const providerResult = compactProviderResult(child, semanticDigest);
+  const providerResult = compactProviderResult(child, semanticDigest, sourceEnvelope);
   const providerBytes = Buffer.byteLength(JSON.stringify(providerResult), "utf8");
   if (providerBytes > MAX_COMPACT_PROVIDER_RESULT_BYTES) {
     return compactRealtimeSpawnFailure(
       "realtime_spawn_provider_result_oversized",
       "The background agent could not be started. Please try again.",
       true,
+      sourceEnvelope,
     );
   }
 
@@ -173,6 +188,7 @@ export function compactRealtimeSpawnToolResult(
     child,
     semanticDigest,
     providerResult,
+    toolResultEnvelope: sourceEnvelope,
   };
   const encoded = JSON.stringify(envelope);
   if (Buffer.byteLength(encoded, "utf8") > MAX_COMPACT_REALTIME_SPAWN_BYTES) {
@@ -180,6 +196,7 @@ export function compactRealtimeSpawnToolResult(
       "realtime_spawn_result_oversized",
       "The background agent could not be started. Please try again.",
       true,
+      sourceEnvelope,
     );
   }
   return encoded;
@@ -243,7 +260,11 @@ function compactJournalReceipt(receipt: AgentSpawnJournalReceipt): AgentSpawnJou
   };
 }
 
-function compactProviderResult(child: RealtimeSpawnChildReceipt, semanticDigest: string): Record<string, unknown> {
+function compactProviderResult(
+  child: RealtimeSpawnChildReceipt,
+  semanticDigest: string,
+  toolResultEnvelope: ToolResultEnvelope,
+): Record<string, unknown> {
   const status = providerLifecycleStatus(child.lifecycle.state);
   const providerChild = {
     sessionId: child.sessionId,
@@ -263,6 +284,7 @@ function compactProviderResult(child: RealtimeSpawnChildReceipt, semanticDigest:
     message: status.message,
     child: providerChild,
     semanticDigest,
+    toolResultEnvelope,
   };
 }
 
@@ -293,24 +315,59 @@ function providerLifecycleStatus(state: RealtimeSpawnLifecycleState): {
   }
 }
 
-function compactRealtimeSpawnFailure(code: string, message: string, retryable?: boolean): string {
+function compactRealtimeSpawnFailure(
+  code: string,
+  message: string,
+  retryable?: boolean,
+  sourceEnvelope?: ToolResultEnvelope,
+): string {
   const error: RealtimeSpawnCompactError = {
     code: compactErrorCode(code, "realtime_spawn_failed"),
     message: compactDisplayText(message, "The background agent could not be started.", 512),
     ...(retryable === undefined ? {} : { retryable }),
   };
+  const providerResult = {
+    schemaVersion: REALTIME_SPAWN_SCHEMA_VERSION,
+    ok: false,
+    code: error.code,
+    message: error.message,
+    ...(retryable === undefined ? {} : { retryable }),
+  };
+  const toolResultEnvelope = sourceEnvelope ?? makeToolResultEnvelope({
+    status: "failed",
+    truncated: false,
+    originalBytes: Buffer.byteLength(JSON.stringify(providerResult), "utf8"),
+    projectedBytes: Buffer.byteLength(JSON.stringify(providerResult), "utf8"),
+    fullOutputRef: null,
+    provenance: {
+      invocationId: `realtime:spawn:${error.code}`,
+      runId: "unknown",
+      attemptId: "unknown",
+      toolName: "spawn_agent",
+    },
+  });
   return JSON.stringify({
     schemaVersion: REALTIME_SPAWN_SCHEMA_VERSION,
     ok: false,
     error,
-    providerResult: {
-      schemaVersion: REALTIME_SPAWN_SCHEMA_VERSION,
-      ok: false,
-      code: error.code,
-      message: error.message,
-      ...(retryable === undefined ? {} : { retryable }),
-    },
+    providerResult: { ...providerResult, toolResultEnvelope },
+    toolResultEnvelope,
   });
+}
+
+/**
+ * A realtime spawn projection may change presentation fields, never the
+ * canonical tool-result recovery contract. Direct unit callers that predate
+ * the envelope receive a bounded typed failure envelope instead of a bare
+ * provider payload.
+ */
+function canonicalRealtimeSpawnEnvelope(result: Record<string, unknown>): ToolResultEnvelope | undefined {
+  try {
+    assertToolResultEnvelope(result.toolResultEnvelope);
+    return result.toolResultEnvelope;
+  } catch {
+    return undefined;
+  }
 }
 
 function compactRawError(value: unknown, fallbackCode: string, fallbackMessage: string): RealtimeSpawnCompactError {

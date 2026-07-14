@@ -37,6 +37,7 @@ class FinalizationClaim(TypedDict):
 
     status: str
     lease_epoch: int | None
+    attempt_count: int
 
 
 def _now() -> datetime:
@@ -52,8 +53,8 @@ def get_finalization_reconcile_stale_after() -> timedelta:
     return timedelta(seconds=max(30, seconds))
 
 
-def _claim_result(status: str, lease_epoch: int | None = None) -> FinalizationClaim:
-    return {'status': status, 'lease_epoch': lease_epoch}
+def _claim_result(status: str, lease_epoch: int | None = None, attempt_count: int = 0) -> FinalizationClaim:
+    return {'status': status, 'lease_epoch': lease_epoch, 'attempt_count': attempt_count}
 
 
 def _is_current_lease(job: dict[str, Any], dispatch_generation: int, lease_epoch: int) -> bool:
@@ -251,6 +252,7 @@ def _claim_finalization_job_txn(
 
     lease_epoch = int(job.get('lease_epoch') or 0) + 1
     lease_expires_at = now + timedelta(seconds=lease_seconds)
+    attempt_count = int(job.get('attempt_count') or 0) + 1
 
     transaction.update(
         job_ref,
@@ -263,10 +265,12 @@ def _claim_finalization_job_txn(
             'lease_epoch': lease_epoch,
             'reconcile_after_at': (firestore.DELETE_FIELD if bool(job.get('requires_byok')) else lease_expires_at),
             'updated_at': now,
-            'attempt_count': int(job.get('attempt_count') or 0) + 1,
+            # The claimer owns the attempt budget: an inline (pusher) worker has
+            # no Cloud Tasks retry count to fence its terminal attempt with.
+            'attempt_count': attempt_count,
         },
     )
-    return _claim_result('claimed', lease_epoch)
+    return _claim_result('claimed', lease_epoch, attempt_count)
 
 
 def claim_finalization_job(

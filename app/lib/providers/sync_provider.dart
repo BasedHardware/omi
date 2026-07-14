@@ -424,6 +424,19 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     notifyListeners();
   }
 
+  /// Enumerate offline recordings directly from the device, then refresh the
+  /// list. Lets the Auto Sync page show device recordings (with a manual Sync
+  /// option) even when auto-sync is turned off — device discovery otherwise only
+  /// happens as the first step of a full sync. Best-effort: swallows BLE errors.
+  Future<void> discoverDeviceWals({String? firmwareVersion}) async {
+    try {
+      await _walService.getSyncs().refreshWalsFromDevice(firmwareVersion: firmwareVersion);
+    } catch (e) {
+      Logger.debug('SyncProvider: device WAL discovery failed: $e');
+    }
+    await refreshWals();
+  }
+
   Future<WalStats> getWalStats() async {
     return await _walService.getSyncs().getWalStats();
   }

@@ -286,13 +286,21 @@ class ListenPusherSession:
                     conversation_id = result.get("conversation_id")
 
                     if "error" in result:
-                        pending = self.pending_conversation_requests.get(conversation_id)
-                        if pending is not None:
-                            # The pusher has released its durable lease back to
-                            # queued. Keep the request so this live session can
-                            # reclaim it instead of stranding `processing`.
-                            pending['sent_at'] = self.deps.now() - PENDING_REQUEST_TIMEOUT - 1
-                        logger.error(f"Conversation processing failed: {self.uid} {self.session_id}")
+                        if result.get("terminal"):
+                            # The job reached its attempt budget and is now
+                            # dead-lettered. Retrying it would never converge.
+                            self.pending_conversation_requests.pop(conversation_id, None)
+                            logger.error(
+                                f"Conversation processing failed terminally: {conversation_id} {self.uid} {self.session_id}"
+                            )
+                        else:
+                            pending = self.pending_conversation_requests.get(conversation_id)
+                            if pending is not None:
+                                # The pusher has released its durable lease back to
+                                # queued. Keep the request so this live session can
+                                # reclaim it instead of stranding `processing`.
+                                pending['sent_at'] = self.deps.now() - PENDING_REQUEST_TIMEOUT - 1
+                            logger.error(f"Conversation processing failed: {self.uid} {self.session_id}")
                     elif result.get("success"):
                         self.pending_conversation_requests.pop(conversation_id, None)
                         logger.info(f"Conversation processed by pusher: {conversation_id} {self.uid} {self.session_id}")

@@ -16,7 +16,7 @@ import type {
   RuntimeAdapter,
 } from "./interface.js";
 import type { ArtifactRole } from "../runtime/types.js";
-import { normalizeRuntimeFailure, type RuntimeFailure } from "../runtime/failures.js";
+import { isRuntimeFailureCode, normalizeRuntimeFailure, type RuntimeFailure } from "../runtime/failures.js";
 import type { OutboundMessageDraft } from "../protocol.js";
 
 type LocalSubprocessRequest = {
@@ -555,6 +555,7 @@ export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
     if (!code || !userMessage) return undefined;
     return normalizeRuntimeFailure({
       code,
+      failureCode: isRuntimeFailureCode(value.failureCode) ? value.failureCode : undefined,
       userMessage,
       technicalMessage: optionalString(value.technicalMessage),
       source: value.source === "adapter_process" || value.source === "adapter_execution" || value.source === "runtime"

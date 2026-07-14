@@ -4937,7 +4937,7 @@ private var activeBridgeSendGeneration: Int?
     private func updateMessage(id: String, text: String) {
         if let index = messages.firstIndex(where: { $0.id == id }) {
             if messages[index].sender == .ai {
-                messages[index].text = normalizeAssistantSentenceSpacing(text)
+                messages[index].text = Self.normalizeAssistantSentenceSpacing(text)
             } else {
                 messages[index].text = text
             }
@@ -4946,7 +4946,49 @@ private var activeBridgeSendGeneration: Int?
 
     /// Normalize missing spaces after sentence punctuation in assistant messages.
     /// Example: "Hello.World" -> "Hello. World", "Great!Lets go" -> "Great! Lets go"
-    private func normalizeAssistantSentenceSpacing(_ text: String) -> String {
+    ///
+    /// Code spans are preserved verbatim so identifiers, file paths, and method
+    /// chains like `pd.DataFrame`, `System.IO`, or `foo.Bar()` are never mangled
+    /// into `pd. DataFrame`. Both fenced code blocks (``` / ~~~) and inline
+    /// backtick spans are skipped. Applied on every streaming flush, so it must
+    /// treat an unterminated span (fence or backtick still open mid-stream) as
+    /// code to avoid corrupting code that is still arriving.
+    static func normalizeAssistantSentenceSpacing(_ text: String) -> String {
+        let lines = text.components(separatedBy: "\n")
+        var output: [String] = []
+        output.reserveCapacity(lines.count)
+        var inFencedBlock = false
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
+                inFencedBlock.toggle()
+                output.append(line)  // fence marker line, verbatim
+            } else if inFencedBlock {
+                output.append(line)  // code content, verbatim
+            } else {
+                output.append(normalizeInlinePreservingCode(line))
+            }
+        }
+
+        return output.joined(separator: "\n")
+    }
+
+    /// Apply sentence-spacing normalization to a single line, leaving inline
+    /// backtick code spans untouched. An odd number of backticks (an unterminated
+    /// span) leaves its trailing content treated as code.
+    private static func normalizeInlinePreservingCode(_ line: String) -> String {
+        guard line.contains("`") else { return applySentenceSpacing(line) }
+
+        let parts = line.split(separator: "`", omittingEmptySubsequences: false)
+        let normalizedParts = parts.enumerated().map { index, part -> String in
+            // Even segments are outside inline code; odd segments are inside.
+            index.isMultiple(of: 2) ? applySentenceSpacing(String(part)) : String(part)
+        }
+        return normalizedParts.joined(separator: "`")
+    }
+
+    private static func applySentenceSpacing(_ text: String) -> String {
         var normalized = text
 
         if let punctuationUpper = try? NSRegularExpression(pattern: #"([.!?])(?=[A-Z])"#) {
@@ -4974,7 +5016,7 @@ private var activeBridgeSendGeneration: Int?
     private func flushStreamingBuffer() {
         streamingBuffer.flush(messages: &messages) { message, text in
             if message.sender == .ai {
-                return self.normalizeAssistantSentenceSpacing(text)
+                return Self.normalizeAssistantSentenceSpacing(text)
             }
             return text
         }
@@ -5003,7 +5045,7 @@ private var activeBridgeSendGeneration: Int?
             messages: &messages,
             normalizeText: { message, text in
             if message.sender == .ai {
-                return self.normalizeAssistantSentenceSpacing(text)
+                return Self.normalizeAssistantSentenceSpacing(text)
             }
             return text
             }
@@ -5029,7 +5071,7 @@ private var activeBridgeSendGeneration: Int?
             messages: &messages,
             normalizeText: { message, text in
             if message.sender == .ai {
-                return self.normalizeAssistantSentenceSpacing(text)
+                return Self.normalizeAssistantSentenceSpacing(text)
             }
             return text
             }
@@ -5308,7 +5350,7 @@ private var activeBridgeSendGeneration: Int?
             messages: &messages,
             normalizeText: { message, text in
             if message.sender == .ai {
-                return self.normalizeAssistantSentenceSpacing(text)
+                return Self.normalizeAssistantSentenceSpacing(text)
             }
             return text
             }

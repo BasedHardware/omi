@@ -62,9 +62,11 @@ jobs:
           location: ${{ env.REGION }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
-      - name: Require non-secret backend runtime config
+      - name: Preflight pusher ConfigMap and Secret references
         run: |
-          kubectl -n ${{ vars.ENV }}-omi-backend get configmap ${{ vars.ENV }}-omi-backend-config >/dev/null
+          python3 -m pip install -q pyyaml
+          python3 backend/scripts/verify_pusher_config_references.py \
+            --environment ${{ vars.ENV }} --namespace ${{ vars.ENV }}-omi-backend
 
       - name: Deploy Pusher to GKE cluster using Helm
         run: |

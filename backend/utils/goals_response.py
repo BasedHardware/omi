@@ -39,6 +39,17 @@ def response_bool(value, fallback: bool) -> bool:
     return fallback
 
 
+def response_int(value, fallback: int) -> int:
+    if isinstance(value, bool):
+        return fallback
+    if isinstance(value, int):
+        return value
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
 def normalize_goal_response(goal: dict) -> dict:
     normalized = dict(goal)
     now = datetime.now(timezone.utc)
@@ -74,7 +85,7 @@ def normalize_goal_response(goal: dict) -> dict:
     normalized['min_value'] = response_float(normalized.get('min_value'), 0)
     normalized['max_value'] = response_float(normalized.get('max_value'), 10)
     normalized['is_active'] = status not in {'achieved', 'abandoned'}
-    normalized['latest_progress_sequence'] = int(normalized.get('latest_progress_sequence', 0))
+    normalized['latest_progress_sequence'] = response_int(normalized.get('latest_progress_sequence'), 0)
     normalized['created_at'] = created_at
     normalized['updated_at'] = updated_at
     return normalized

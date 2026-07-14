@@ -1125,6 +1125,8 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     search_tasks: ["query"],
     complete_task: ["task_id"],
     delete_task: ["task_id"],
+    read_tool_output: ["artifactId"],
+    search_tool_output: ["artifactId", "query"],
     save_knowledge_graph: ["nodes", "edges"],
     get_conversations: [],
     search_conversations: ["query"],

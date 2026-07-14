@@ -255,7 +255,7 @@ final class VoiceTurnCoordinatorTests: XCTestCase {
     coordinator.send(.hubReady(turnID: turnID, sessionID: sessionID))
 
     XCTAssertEqual(resolutions, 1)
-    XCTAssertEqual(coordinator.model.turn?.route, .hubWarmWait)
+    XCTAssertEqual(coordinator.model.turn?.route, .hub(sessionID: sessionID))
     XCTAssertEqual(
       coordinator.timelineSnapshot().filter { $0.event == "hub_ready" }.count,
       1)

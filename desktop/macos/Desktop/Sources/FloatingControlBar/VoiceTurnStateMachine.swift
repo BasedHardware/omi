@@ -771,12 +771,17 @@ struct VoiceTurnReducer {
         return VoiceTurnReduction(model: model, effects: effects)
       }
       cancel(.hubWarm, in: &model, effects: &effects)
-      // Transport readiness is not context admission. Keep the logical route in
-      // warm-wait until providerReconnected proves an admitted physical binding.
+      // The route is the driver's audio/commit routing signal, not an admission
+      // grant: the PTT driver owns a hub turn only while the route reads `.hub`.
+      // Input admission stays fenced by `providerConnection` and
+      // `RealtimeInputAdmissionPolicy`, so binding here cannot leak audio to the
+      // provider before the canonical context is bound.
+      model.turn?.route = .hub(sessionID: sessionID)
+      model.turn?.sessionID = sessionID
       effects.append(.prepareHubInput(turnID: turn.id, sessionID: sessionID))
 
     case .hubAdmissionRejected:
-      guard turn.route == .hubWarmWait else {
+      guard routeMatchesHub(turn.route) else {
         stale(&model, event: event, effects: &effects)
         return VoiceTurnReduction(model: model, effects: effects)
       }

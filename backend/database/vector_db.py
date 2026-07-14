@@ -120,6 +120,8 @@ def upsert_vector(uid: str, conversation_id: str, vector: List[float]) -> None:
 
 
 def upsert_vector2(uid: str, conversation_id: str, vector: List[float], metadata: Dict[str, Any]) -> None:
+    if index is None:
+        return
     data: VectorRecordDoc = _get_data(uid, conversation_id, vector)
     typed_metadata: Dict[str, Any] = data['metadata']
     typed_metadata.update(metadata)
@@ -128,6 +130,8 @@ def upsert_vector2(uid: str, conversation_id: str, vector: List[float], metadata
 
 
 def update_vector_metadata(uid: str, conversation_id: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    if index is None:
+        return {}
     metadata['uid'] = uid
     metadata['memory_id'] = conversation_id
     result: Dict[str, Any] = index.update(f'{uid}-{conversation_id}', set_metadata=metadata, namespace="ns1")
@@ -188,6 +192,8 @@ def query_vectors_by_metadata(
     dates: List[str],
     limit: int = 5,
 ) -> List[str]:
+    if index is None:
+        return []
     and_clauses: List[Dict[str, Any]] = [{'uid': {'$eq': uid}}]
     filter_data: Dict[str, Any] = {'$and': and_clauses}
     if people or topics or entities or dates:

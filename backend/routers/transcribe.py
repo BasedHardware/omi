@@ -150,6 +150,7 @@ from utils.transcribe_decisions import (  # async-blockers: no-import-scope; asy
     normalize_codec_frame,
     normalize_language,
     person_id_for_client,
+    validate_audio_format,
     resolve_photo_conversation_source,
     select_translation_language,
     should_enable_speaker_identification,
@@ -379,6 +380,12 @@ async def _stream_handler(
     logger.info(
         f'_stream_handler {uid} {session_id} {language} {sample_rate} {codec} {include_speech_profile} {stt_service} {conversation_timeout} custom_stt={custom_stt_mode} onboarding={onboarding_mode} client_conversation_id={bool(client_conversation_id)}'
     )
+
+    audio_format_error = validate_audio_format(codec, sample_rate)
+    if audio_format_error is not None:
+        logger.warning(f"Rejecting unsupported audio format: {audio_format_error} {uid} {session_id}")
+        await websocket.close(code=1003, reason=audio_format_error)
+        return
 
     use_custom_stt = custom_stt_mode == CustomSttMode.enabled
     is_multi_channel = channels >= 2

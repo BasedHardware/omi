@@ -10721,5 +10721,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "పరికర నిల్వ",
+    "deviceStoragePercentFull": "{percent}% నిండింది",
+    "deviceStorageUsedOfTotal": "{total} లో {used} ఉపయోగించబడింది",
+    "deviceStorageFree": "{free} ఖాళీ",
+    "deviceStorageNearlyFull": "పరికరం దాదాపు నిండిపోయింది — స్థలాన్ని ఖాళీ చేయడానికి సింక్ చేయండి."
 }

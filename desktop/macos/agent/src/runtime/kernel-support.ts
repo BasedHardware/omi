@@ -124,6 +124,9 @@ export function bindingMetadata(input: ExecuteAgentRunInput, adapter?: RuntimeAd
     : input.mcpServers ?? [];
   return JSON.stringify({
     mcpServersHash: stableJsonHash(stableMcpServerConfig(effectiveMcpServers)),
+    systemPromptCacheIdentity: input.systemPromptCacheIdentity ?? null,
+    dynamicContextIdentity: input.dynamicContextIdentity ?? null,
+    contextPlanId: input.contextPlanId ?? null,
   });
 }
 

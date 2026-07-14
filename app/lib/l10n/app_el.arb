@@ -3143,5 +3143,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Αποθηκευτικός χώρος συσκευής",
+    "deviceStoragePercentFull": "{percent}% γεμάτο",
+    "deviceStorageUsedOfTotal": "{used} από {total} σε χρήση",
+    "deviceStorageFree": "{free} ελεύθερα",
+    "deviceStorageNearlyFull": "Η συσκευή είναι σχεδόν γεμάτη — συγχρονίστε για να ελευθερώσετε χώρο."
 }

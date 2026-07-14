@@ -41,6 +41,8 @@ describe("omi tool manifest", () => {
       "create_desktop_dispatch",
       "cancel_agent_run",
       "inspect_agent_artifacts",
+      "read_tool_output",
+      "search_tool_output",
       "update_agent_artifact_lifecycle",
       "send_agent_message",
       "spawn_agent",

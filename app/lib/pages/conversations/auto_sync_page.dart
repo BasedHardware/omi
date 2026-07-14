@@ -6,6 +6,8 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/local_storage_page.dart';
 import 'package:omi/pages/conversations/private_cloud_sync_page.dart';
+import 'package:omi/pages/conversations/widgets/device_storage_card.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/wals.dart';
@@ -34,16 +36,24 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<SyncProvider>().refreshWals();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final syncProvider = context.read<SyncProvider>();
+      final deviceProvider = context.read<DeviceProvider>();
+      // Discover offline recordings straight from the device so they list here
+      // even when auto-sync is off (device discovery otherwise only runs as the
+      // first step of a full sync). Falls back to the cached list on failure.
+      // Run BLE reads sequentially — this and the storage-usage read below both
+      // hit the same device and would otherwise contend on the GATT link.
+      await syncProvider.discoverDeviceWals(firmwareVersion: deviceProvider.currentFirmwareVersion);
+      await deviceProvider.refreshRingStorageStatus();
       SyncReconciler.instance.poke();
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<SyncProvider, UserProvider>(
-      builder: (context, syncProvider, userProvider, _) {
+    return Consumer3<SyncProvider, UserProvider, DeviceProvider>(
+      builder: (context, syncProvider, userProvider, deviceProvider, _) {
         final syncState = syncProvider.syncState;
         final pendingWals = syncProvider.pendingWals;
         final syncedWals = syncProvider.syncedWals;
@@ -92,6 +102,11 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                       _buildConversationsCard(syncProvider),
                     ],
                     if (syncState.hasError) ...[const SizedBox(height: 16), _buildErrorCard(syncState, syncProvider)],
+                    if (WalSyncs.isRingBufferFirmware(deviceProvider.currentFirmwareVersion) &&
+                        deviceProvider.ringStatus != null) ...[
+                      const SizedBox(height: 32),
+                      DeviceStorageCard(status: deviceProvider.ringStatus!),
+                    ],
                     const SizedBox(height: 32),
                     _buildStorageSettings(userProvider),
                     if (hasAnyRecording) ...[
