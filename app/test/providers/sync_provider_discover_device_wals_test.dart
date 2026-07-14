@@ -27,7 +27,7 @@ class _FakeSyncs {
 
   // Mirrors the real WalSyncs.refreshWalsFromDevice(): enumerate the device into
   // the cache that getAllWals() then returns.
-  Future<void> refreshWalsFromDevice() async {
+  Future<void> refreshWalsFromDevice({String? firmwareVersion}) async {
     refreshCalls++;
   }
 

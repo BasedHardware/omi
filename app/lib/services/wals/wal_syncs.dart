@@ -103,14 +103,30 @@ class WalSyncs implements IWalSync {
   /// enumerated on connect via [sdcard.setDevice], so they're not repeated here.
   /// Safe no-op when no device is set; each sub-sync guards against running
   /// while a sync is in progress.
-  Future<void> refreshWalsFromDevice() async {
-    if (_device == null) return;
-    if (isRingBufferFirmware(_device?.firmwareRevision)) {
+  Future<void> refreshWalsFromDevice({String? firmwareVersion}) async {
+    if (_device == null) {
+      Logger.debug('WalSyncs.refreshWalsFromDevice: no device set — skipping');
+      return;
+    }
+    // Prefer the caller-supplied firmware (resolved from the enriched
+    // pairedDevice) — _device here is the raw connect object whose
+    // firmwareRevision can still be 'Unknown', which would misroute discovery.
+    final fw = (firmwareVersion != null && firmwareVersion.isNotEmpty && firmwareVersion != 'Unknown')
+        ? firmwareVersion
+        : _device?.firmwareRevision;
+    final ring = isRingBufferFirmware(fw);
+    Logger.debug('WalSyncs.refreshWalsFromDevice: device=${_device?.id} fw=$fw ring=$ring');
+    if (ring) {
       await _ringSync.refreshWalsFromDevice();
     } else {
       await _storageSync.refreshWalsFromDevice();
     }
     await _flashPageSync.refreshWalsFromDevice();
+    final ringN = (await _ringSync.getMissingWals()).length;
+    final storageN = (await _storageSync.getMissingWals()).length;
+    final flashN = (await _flashPageSync.getMissingWals()).length;
+    final sdN = (await _sdcardSync.getMissingWals()).length;
+    Logger.debug('WalSyncs.refreshWalsFromDevice: missing ring=$ringN storage=$storageN flash=$flashN sdcard=$sdN');
   }
 
   Future<WalStats> getWalStats() async {
