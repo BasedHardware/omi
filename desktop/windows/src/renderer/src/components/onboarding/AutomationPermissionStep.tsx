@@ -1,5 +1,5 @@
 import { Zap } from 'lucide-react'
-import { setPreferences } from '../../lib/preferences'
+import { getPreferences, setPreferences } from '../../lib/preferences'
 import { PermissionStep } from './PermissionStep'
 
 type AutomationPermissionStepProps = {
@@ -17,13 +17,21 @@ export function AutomationPermissionStep({
   onContinue,
   onSkip
 }: AutomationPermissionStepProps): React.JSX.Element {
-  // Automation has no OS permission prompt — granting it is a local opt-in that
-  // records consent. useChat's action-planner pre-step gates on this preference
-  // (alongside the OMI_AUTOMATION env kill-switch), so flipping it on here is what
-  // actually lets Omi take real UI actions in your apps.
+  // Automation has no OS permission prompt (Windows UIA needs no grant) —
+  // enabling it is a local opt-in that records consent, so there is nothing to
+  // poll and no `checkGranted`. useChat's action-planner pre-step gates on this
+  // preference (alongside the OMI_AUTOMATION env kill-switch), so flipping it on
+  // here is what actually lets Omi take real UI actions in your apps.
   const enableAutomation = async (): Promise<void> => {
     setPreferences({ automationConsentedAt: Date.now() })
   }
+
+  // The consent already recorded (a resumed or repeated onboarding). Reading it keeps the
+  // card honest — "Enabled", not "Not enabled yet" — and, because a detected state never
+  // auto-advances, the user still confirms with Continue rather than watching the step
+  // flash by.
+  const isConsented = async (): Promise<boolean> =>
+    typeof getPreferences().automationConsentedAt === 'number'
 
   return (
     <PermissionStep
@@ -38,14 +46,17 @@ export function AutomationPermissionStep({
       statusText={{
         idle: 'Not enabled yet',
         waiting: 'Enabling',
-        granted: 'Enabled'
+        granted: 'Enabled',
+        denied: "Couldn't enable"
       }}
       buttonLabel={{
-        idle: 'Automation',
+        idle: 'Enable',
         waiting: 'Enabling',
-        granted: 'Enabled'
+        granted: 'Enabled',
+        denied: 'Try again'
       }}
       onActivate={enableAutomation}
+      checkGranted={isConsented}
       onContinue={onContinue}
       onSkip={onSkip}
     />
