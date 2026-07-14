@@ -29,6 +29,7 @@ struct FloatingControlBarView: View {
     var onShareLink: (() async -> String?)?
 
     @State private var isHovering = false
+    @State private var onboardingGlowOn = false
     @State private var notchLogoHovering = false
     @State private var notchSettingsHovering = false
     @State private var agentSwitcherCollapseWorkItem: DispatchWorkItem?
@@ -286,6 +287,36 @@ struct FloatingControlBarView: View {
                             edgeInset: state.usesNotchIsland ? 0 : 3
                         )
                         .frame(width: surfaceWidth, height: surfaceHeight)
+                    }
+
+                    // Onboarding: a plain white glow on the bar edge so first-run
+                    // users notice it — no animated sweep. Reuses the voice glow's
+                    // shape and ramps in 1s after the bar appears. Clears the
+                    // moment they start typing.
+                    if state.onboardingBarGlow && state.aiInputText.isEmpty {
+                        NotchLowerEdgeShape(
+                            bottomRadius: bottomRadius,
+                            topRadius: state.usesNotchIsland ? 0 : 14,
+                            edgeInset: state.usesNotchIsland ? 0 : 3
+                        )
+                        .stroke(
+                            Color.white,
+                            style: StrokeStyle(lineWidth: 3.2, lineCap: .round, lineJoin: .round)
+                        )
+                        .frame(width: surfaceWidth, height: surfaceHeight)
+                        .shadow(color: Color.white.opacity(0.85), radius: 12)
+                        .shadow(color: Color.white.opacity(0.5), radius: 22)
+                        .opacity(onboardingGlowOn ? 1 : 0)
+                        .allowsHitTesting(false)
+                        .onAppear {
+                            onboardingGlowOn = false
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                                OmiMotion.withGated(.easeIn(duration: 0.7)) {
+                                    onboardingGlowOn = true
+                                }
+                            }
+                        }
+                        .onDisappear { onboardingGlowOn = false }
                     }
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
