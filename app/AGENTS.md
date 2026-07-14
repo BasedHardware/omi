@@ -81,6 +81,8 @@ flutter test test/unit/  # specific directory
 
 `bash test.sh` bootstraps missing local generated files with an empty `API_BASE_URL` so `test/` stays hermetic.
 
+PR CI runs `flutter test` and an analyzer ratchet (`app/scripts/analyze_ratchet.sh`) — analyzer errors always fail; new info/warning lint occurrences above `app/analysis_baseline.json` fail. Run the script locally before committing app Dart changes. Deliberate lint acceptances/improvements update the baseline via `--update-baseline` in the same PR.
+
 ### Test Patterns
 - Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
 - Test state machine logic via minimal abstractions mirroring production flow
@@ -129,4 +131,21 @@ All API requests include: X-Request-Start-Time, X-App-Platform, X-Device-Id-Hash
 
 - See `e2e/SKILL.md` for navigation architecture, screen map, widget patterns, and 34 reference flows
 - See `e2e/flows/*.yaml` for individual flow definitions
-- agent-flutter (Marionette) for programmatic UI interaction — see root AGENTS.md for setup
+
+## Verifying UI Changes (agent-flutter)
+
+After any Flutter UI edit, verify programmatically with [agent-flutter](https://github.com/beastoin/agent-flutter) (Marionette is integrated in debug builds). Install once: `npm install -g agent-flutter-cli`.
+
+Edit → Verify → Evidence loop:
+1. Edit code, hot restart: `kill -SIGUSR2 $(pgrep -f "flutter run" | head -1)`
+2. Connect: `AGENT_FLUTTER_LOG=/tmp/flutter-run.log agent-flutter connect`
+3. Verify: `agent-flutter snapshot -i`
+4. Interact: `agent-flutter press @e3` / `press 540 1200` / `find type button press` / `fill @e5 "text"` / `dismiss`
+5. Evidence: `agent-flutter screenshot /tmp/evidence.png`
+
+Key rules:
+- Must reconnect after every hot restart (kills VM Service session).
+- Refs go stale frequently — always re-snapshot before every interaction. Use `press x y` as fallback.
+- `AGENT_FLUTTER_LOG` must point to flutter run stdout (not logcat).
+- Prefer `find type X` / `find key "name"` over hardcoded `@ref`. Add `Key('descriptive_name')` to new interactive widgets.
+- Full command reference: `agent-flutter schema`.
