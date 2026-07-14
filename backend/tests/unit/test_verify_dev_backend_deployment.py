@@ -103,7 +103,11 @@ def test_dev_deploy_migrates_only_exact_legacy_google_client_id_secrets_without_
                                 {
                                     'name': 'GOOGLE_CLIENT_ID',
                                     'valueFrom': {'secretKeyRef': {'name': 'GOOGLE_CLIENT_ID', 'key': 'latest'}},
-                                }
+                                },
+                                {
+                                    'name': 'STT_PRERECORDED_MODEL',
+                                    'valueFrom': {'secretKeyRef': {'name': 'STT_PRERECORDED_MODEL', 'key': 'latest'}},
+                                },
                             ]
                         }
                     ]
@@ -152,7 +156,7 @@ def test_dev_deploy_migrates_only_exact_legacy_google_client_id_secrets_without_
             'backend',
             '--project=based-hardware-dev',
             '--region=us-central1',
-            '--remove-secrets=GOOGLE_CLIENT_ID',
+            '--remove-secrets=GOOGLE_CLIENT_ID,STT_PRERECORDED_MODEL',
             '--no-traffic',
             '--quiet',
         ],
@@ -290,7 +294,9 @@ def test_dev_deploy_invokes_legacy_binding_migration_only_for_dev_services() -> 
 
     assert 'environment: development' in text
     assert 'backend/scripts/preflight-cloud-run-deploy.py' in text
-    assert '--migrate-legacy-public-binding backend --migrate-legacy-public-binding backend-sync' in text
+    assert text.count('--migrate-legacy-public-binding') == 4
+    for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        assert f'--migrate-legacy-public-binding {service}' in text
     assert text.index('migrate-legacy-public-binding') < text.index('Deploy ${{ env.SERVICE }} to Cloud Run')
 
 

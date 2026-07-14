@@ -125,7 +125,10 @@ jobs:
           --env dev
           --project="${{ vars.GCP_PROJECT_ID }}"
           --region="${{ env.REGION }}"
-          --migrate-legacy-public-binding backend --migrate-legacy-public-binding backend-sync
+          --migrate-legacy-public-binding backend
+          --migrate-legacy-public-binding backend-sync
+          --migrate-legacy-public-binding backend-sync-backfill
+          --migrate-legacy-public-binding backend-integration
 
       - name: Deploy ${{ env.SERVICE }} to Cloud Run
         id: deploy-backend
