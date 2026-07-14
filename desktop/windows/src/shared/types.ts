@@ -1,3 +1,6 @@
+// BYOK provider key types used by the OmiBridgeApi surface below.
+import type { ByokKeys, ByokProvider } from './byok'
+
 /** Cap for PCM chunks queued while an audio lane is becoming ready (~5s of
  *  16kHz mono int16). Shared by BOTH pre-ready buffers — the renderer's
  *  pre-session queue (usePushToTalk) and the main process's pre-OPEN WebSocket
@@ -772,6 +775,18 @@ export type OmiBridgeApi = {
     commandOverrides?: CodingAgentCommandOverrides
   ) => Promise<{ ok: boolean; error?: string }>
   onCodingAgentEvent: (cb: (event: CodingAgentEvent) => void) => () => void
+  // --- BYOK (bring-your-own-key) provider keys (encrypted at rest in main) ---
+  /** Every stored provider key, decrypted. Returns key material to the renderer
+   *  Settings UI (same trust model as the app). Empty map when none stored. */
+  byokGetAll: () => Promise<ByokKeys>
+  /** Encrypt + persist one provider's key. A blank key clears that provider. */
+  byokSet: (provider: ByokProvider, key: string) => Promise<void>
+  /** Remove one provider's stored key. */
+  byokClear: (provider: ByokProvider) => Promise<void>
+  /** Remove all stored provider keys. */
+  byokClearAll: () => Promise<void>
+  /** True only when all four providers have a key (backend all-or-nothing). */
+  byokIsActive: () => Promise<boolean>
 }
 
 // --- Coding agents ---
