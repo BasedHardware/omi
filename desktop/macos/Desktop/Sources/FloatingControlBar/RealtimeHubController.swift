@@ -563,6 +563,23 @@ struct InterruptedTurnPayload: Equatable {
 /// policy before sending the terminal reducer event, which makes the ordering
 /// deterministic and directly testable without a live socket.
 enum RealtimeProviderFailureContinuity {
+  /// Installs the journal fence before provider teardown can terminalize the
+  /// turn. Transcript resolution may suspend, but the next context refresh can
+  /// already observe and await this exact continuity obligation.
+  @MainActor
+  static func registerCapturedTurn(
+    in ledger: RealtimeTurnPersistenceLedger,
+    continuityKey: String,
+    capturedTurnTask: Task<InterruptedTurnPayload?, Never>,
+    record: @escaping @MainActor (InterruptedTurnPayload) async -> Bool
+  ) -> Task<Bool, Never> {
+    ledger.enqueue(continuityKey: continuityKey, retainingReceipt: true) {
+      await persistCapturedTurn(
+        resolve: { await capturedTurnTask.value },
+        record: record)
+    }
+  }
+
   static func persistCapturedTurn(
     resolve: () async -> InterruptedTurnPayload?,
     record: (InterruptedTurnPayload) async -> Bool
@@ -5319,25 +5336,22 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // user turn from the next shared-context snapshot.
     let interruptedTurnTask = captureInterruptedTurnPayloadIfNeeded()
     if let interruptedTurnTask {
-      Task { @MainActor [weak self] in
-        guard let self else { return }
-        _ = await RealtimeProviderFailureContinuity.persistCapturedTurn(
-          resolve: { await interruptedTurnTask.value },
-          record: { [weak self] interruptedTurn in
-            guard let self else { return false }
-            let persistence = self.enqueueTurnPersistence(
-              idempotencyKey: interruptedTurn.idempotencyKey,
-              retainingReceipt: true
-            ) { [weak self] in
-              await self?.persistTurnDirectlyToKernel(
-                ownerID: interruptedTurn.ownerID,
-                userText: interruptedTurn.userText,
-                assistantText: interruptedTurn.assistantText,
-                interrupted: true,
-                idempotencyKey: interruptedTurn.idempotencyKey) ?? false
-            }
-            return await persistence.value
-          })
+      // Register the continuity obligation synchronously, before any terminal
+      // reducer event below can schedule the next context refresh. Enqueuing
+      // only after transcript resolution creates a TOCTOU window where the
+      // next PTT turn can snapshot the journal without this failed turn.
+      let failedTurnContinuityKey = turnIdempotencyKey
+      _ = RealtimeProviderFailureContinuity.registerCapturedTurn(
+        in: turnPersistenceLedger,
+        continuityKey: failedTurnContinuityKey,
+        capturedTurnTask: interruptedTurnTask
+      ) { [weak self] interruptedTurn in
+        await self?.persistTurnDirectlyToKernel(
+          ownerID: interruptedTurn.ownerID,
+          userText: interruptedTurn.userText,
+          assistantText: interruptedTurn.assistantText,
+          interrupted: true,
+          idempotencyKey: interruptedTurn.idempotencyKey) ?? false
       }
     }
     // A socket we intentionally dropped is detached in teardownSession() before it's

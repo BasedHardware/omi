@@ -34,6 +34,37 @@ private actor SuspendedTurnPersistenceGate {
 
 @MainActor
 final class RealtimeHubBargeInContinuityTests: XCTestCase {
+  func testProviderFailureRegistersContinuityFenceBeforeTranscriptResolution() async {
+    let ledger = RealtimeTurnPersistenceLedger()
+    let gate = SuspendedTurnPersistenceGate()
+    let payload = InterruptedTurnPayload(
+      ownerID: "owner-a",
+      userText: "request screen recording permission",
+      assistantText: "I can help with that",
+      idempotencyKey: "voice:failure-fence")
+    let capturedTurnTask = Task<InterruptedTurnPayload?, Never> { payload }
+
+    let persistence = RealtimeProviderFailureContinuity.registerCapturedTurn(
+      in: ledger,
+      continuityKey: payload.idempotencyKey,
+      capturedTurnTask: capturedTurnTask
+    ) { captured in
+      await gate.persist(continuityKey: captured.idempotencyKey)
+    }
+
+    XCTAssertEqual(
+      ledger.pendingContinuityKeys,
+      [payload.idempotencyKey],
+      "the next PTT context refresh must see the obligation before async resolution starts")
+
+    await gate.waitUntilSuspended(continuityKey: payload.idempotencyKey)
+    let accepted = await gate.accept(continuityKey: payload.idempotencyKey)
+    let persisted = await persistence.value
+    XCTAssertTrue(accepted)
+    XCTAssertTrue(persisted)
+    XCTAssertTrue(ledger.pendingContinuityKeys.isEmpty)
+  }
+
   func testProviderFailurePersistsCapturedTurnBeforeTerminalCleanup() async {
     let payload = InterruptedTurnPayload(
       ownerID: "owner-a",
