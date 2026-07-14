@@ -430,6 +430,261 @@ export function salvage(srcFile: string, destFile: string, driver: RecoveryDrive
   }
 }
 
+// --- Suspected-corruption flag (the runtime trip) ---------------------------
+//
+// WHY THIS EXISTS. The open+sanity detector above only ever fires on SCHEMA-page
+// damage — and that same damage makes sqlite_master unreadable, so salvage gets
+// nothing and every such recovery is a wipe. The corruption that actually costs
+// the user data is a damaged DATA page: open succeeds, the sanity query succeeds,
+// most tables read perfectly, and only the damaged table throws SQLITE_CORRUPT at
+// runtime, forever, silently. (Measured — see the module header and the tests.)
+//
+// So a corrupt error raised by ANY live query trips a persisted flag, and the
+// repair runs at the NEXT startup, where it is safe: single-threaded, before the
+// read-only handle and the KG worker's own connection exist. This is what makes
+// the salvage engine reachable at all.
+//
+// macOS designed exactly this (RewindDatabase.reportQueryError counts consecutive
+// corrupt/IOERR errors and closes the DB at maxQueryIOErrorsBeforeRecovery so the
+// next initialize() recovers) — and then never called it from anywhere. This
+// finishes that intent rather than inheriting the dead end.
+
+const FLAG_SUSPECTED = 'db_corruption_suspected'
+const FLAG_ATTEMPTS = 'db_repair_attempts'
+
+/** Give up rebuilding after this many attempts and leave the database alone. A
+ *  repair that keeps failing must not rebuild the DB on every launch forever. */
+export const MAX_REPAIR_ATTEMPTS = 3
+
+function readMeta(db: RecoveryDb, key: string): string | null {
+  try {
+    const row = db
+      .prepare('SELECT value FROM app_meta WHERE key = ?')
+      .get(...([key] as never[])) as { value: string | null } | undefined
+    return row?.value ?? null
+  } catch {
+    // app_meta may not exist yet (brand-new DB) or may be unreadable.
+    return null
+  }
+}
+
+function writeMeta(db: RecoveryDb, key: string, value: string): boolean {
+  try {
+    db.exec('CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT)')
+    db.prepare('INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)').run(
+      ...([key, value] as never[])
+    )
+    return true
+  } catch {
+    // The DB is too damaged to even record the suspicion. Nothing more we can do
+    // here — schema-level damage is caught by the startup detector anyway.
+    return false
+  }
+}
+
+/** Record that a live query raised a corrupt error, so the next launch repairs.
+ *  Returns false if the suspicion could not be persisted. */
+export function markCorruptionSuspected(db: RecoveryDb): boolean {
+  return writeMeta(db, FLAG_SUSPECTED, '1')
+}
+
+export function isCorruptionSuspected(db: RecoveryDb): boolean {
+  return readMeta(db, FLAG_SUSPECTED) === '1'
+}
+
+function clearSuspicion(db: RecoveryDb): void {
+  try {
+    db.prepare('DELETE FROM app_meta WHERE key IN (?, ?)').run(
+      ...([FLAG_SUSPECTED, FLAG_ATTEMPTS] as never[])
+    )
+  } catch {
+    // Best-effort.
+  }
+}
+
+function repairAttempts(db: RecoveryDb): number {
+  const n = Number(readMeta(db, FLAG_ATTEMPTS) ?? '0')
+  return Number.isFinite(n) && n > 0 ? n : 0
+}
+
+// --- Re-verification (the flag is a suspicion, never a verdict) --------------
+
+export type TableProbe = {
+  /** Rows the app can actually READ from each table right now. A table whose full
+   *  read throws serves nothing, so it counts as 0. */
+  readable: Record<string, number>
+  /** Tables whose full read raises a corrupt error. */
+  damaged: string[]
+}
+
+/**
+ * Read every table to find out what is ACTUALLY broken, right now. This is the
+ * re-verification gate: the persisted flag says "a query threw once", which could
+ * have been a transient or misclassified error. Nothing destructive happens until
+ * this proves the corruption still reproduces.
+ */
+export function probeTables(db: RecoveryDb): TableProbe {
+  const probe: TableProbe = { readable: {}, damaged: [] }
+  let names: string[]
+  try {
+    const rows = db
+      .prepare(
+        "SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'"
+      )
+      .all() as { name: string; sql: string | null }[]
+    // Ignore exactly what salvage ignores: FTS virtual tables and their shadow
+    // tables. They are a derived index, rebuilt from the recovered content — if we
+    // counted their rows as "readable", the never-worse guard would see salvage
+    // "losing" them and would veto every legitimate repair.
+    const virtualNames = rows.filter((r) => r.sql && isVirtual(r.sql)).map((r) => r.name)
+    const isDerived = (name: string): boolean =>
+      virtualNames.includes(name) ||
+      virtualNames.some((v) => FTS_SHADOW_SUFFIXES.some((s) => name === `${v}_${s}`))
+    names = rows.filter((r) => !isDerived(r.name)).map((r) => r.name)
+  } catch (err) {
+    // Even the schema is unreadable — that is corruption of the worst kind.
+    if (isCorruptionError(err)) probe.damaged.push('sqlite_master')
+    return probe
+  }
+  for (const name of names) {
+    try {
+      const rows = db.prepare(`SELECT * FROM ${quote(name)}`).all()
+      probe.readable[name] = rows.length
+    } catch (err) {
+      if (isCorruptionError(err)) {
+        probe.damaged.push(name)
+        probe.readable[name] = 0 // the app cannot read this table at all
+      }
+      // A non-corrupt error (e.g. a shadow table we may not select from) is not
+      // damage — leave it out of both maps.
+    }
+  }
+  return probe
+}
+
+/**
+ * Never rebuild into a worse state. A swap is only allowed if salvage kept at
+ * least as many rows as the app can currently read from every table that still
+ * reads. Recovering 793/800 rows of a table that currently throws entirely is a
+ * win; "recovering" 250 of the 300 rows of a table that reads fine is data loss.
+ */
+export function salvageIsAnImprovement(probe: TableProbe, salvaged: SalvageResult): boolean {
+  if (salvaged.rows <= 0) return false
+  for (const [table, currentlyReadable] of Object.entries(probe.readable)) {
+    if (currentlyReadable <= 0) continue // nothing to lose on a table we cannot read
+    if ((salvaged.tables[table] ?? 0) < currentlyReadable) return false
+  }
+  return true
+}
+
+export type RepairOutcome =
+  /** The flag was a false alarm: nothing is damaged now. Flag cleared, DB untouched. */
+  | { action: 'no_repair_needed' }
+  /** Too many failed attempts — stop rebuilding, leave the DB alone, report. */
+  | { action: 'abandoned'; attempts: number; damaged: string[] }
+  /** Salvage would have lost rows a working table still serves. Original kept. */
+  | { action: 'kept_original'; damaged: string[]; backupPath: string | null }
+  /** Repaired: the salvaged database replaced the damaged one. */
+  | { action: 'repaired'; status: RecoveryStatus; damaged: string[] }
+
+/**
+ * The next-launch repair for a database flagged by the runtime trip. Called with
+ * an already-open handle at startup, before any other connection exists.
+ *
+ * Order is the whole safety argument:
+ *   1. Boot-loop guard  — give up after MAX_REPAIR_ATTEMPTS rather than rebuild forever.
+ *   2. Re-verify        — the flag is a suspicion; prove the damage still reproduces.
+ *   3. Count the attempt BEFORE doing anything destructive, so a crash mid-repair
+ *      still counts against the budget.
+ *   4. Backup -> salvage -> "is this actually better?" -> only then swap.
+ * The caller closes `db` when this returns anything other than no_repair_needed/abandoned.
+ */
+export function repairSuspectedCorruption(
+  db: RecoveryDb,
+  file: string,
+  driver: RecoveryDriver,
+  opts: { backupsDir: string; hooks?: RecoveryHooks; now?: () => Date }
+): RepairOutcome {
+  const log = opts.hooks?.log ?? ((): void => {})
+  const now = opts.now?.() ?? new Date()
+
+  const attempts = repairAttempts(db)
+  if (attempts >= MAX_REPAIR_ATTEMPTS) {
+    log(`db: repair abandoned after ${attempts} attempts — leaving the database alone`)
+    return { action: 'abandoned', attempts, damaged: probeTables(db).damaged }
+  }
+
+  const probe = probeTables(db)
+  if (probe.damaged.length === 0) {
+    // Transient or misclassified: everything reads clean now. Do NOT rebuild.
+    log('db: corruption suspicion did not reproduce — clearing the flag, no repair')
+    clearSuspicion(db)
+    return { action: 'no_repair_needed' }
+  }
+  log(`db: corruption re-verified in: ${probe.damaged.join(', ')}`)
+  opts.hooks?.onCorruption?.(
+    new Error(`database corruption confirmed in: ${probe.damaged.join(', ')}`),
+    'sanity'
+  )
+
+  // Count this attempt BEFORE touching anything, so a crash mid-repair still burns
+  // an attempt and cannot loop forever.
+  writeMeta(db, FLAG_ATTEMPTS, String(attempts + 1))
+  db.close()
+
+  let backupPath: string | null = null
+  try {
+    backupPath = backupCorruptDb(file, opts.backupsDir, now)
+    log(`db: corrupt database backed up to ${backupPath}`)
+  } catch (e) {
+    log(`db: WARNING could not back up the corrupt database: ${(e as Error)?.message}`)
+  }
+
+  const tmp = `${file}.salvage-${now.getTime()}`
+  forceRemove(tmp)
+  // Salvage from the BACKUP, not from the live file. Opening the original
+  // read-only re-creates its -wal/-shm, and Windows then refuses to unlink them
+  // during the swap (EBUSY) — which fails the whole repair. Reading the copy
+  // leaves omi.db with no handle on it at all, so the swap below cannot be
+  // blocked. Falls back to the original only if the backup could not be written.
+  const salvageSource = backupPath ?? file
+  const salvaged = salvage(salvageSource, tmp, driver)
+  log(
+    `db: salvage recovered ${salvaged.rows} row(s) from ${Object.keys(salvaged.tables).length} table(s)`
+  )
+
+  if (!salvageIsAnImprovement(probe, salvaged)) {
+    // Rebuilding would cost the user rows a working table still serves. Keep the
+    // original untouched; the damaged table stays broken, but nothing else is lost.
+    forceRemove(tmp)
+    log('db: salvage would not improve on the current database — keeping the original')
+    return { action: 'kept_original', damaged: probe.damaged, backupPath }
+  }
+
+  removeSidecars(file)
+  forceRemove(file)
+  renameSync(tmp, file)
+  removeSidecars(file)
+
+  return {
+    action: 'repaired',
+    damaged: probe.damaged,
+    status: {
+      recovered: true,
+      reset: false,
+      rowsRecovered: salvaged.rows,
+      tablesRecovered: salvaged.tables,
+      backupPath
+    }
+  }
+}
+
+/** Clear the suspicion + attempt counter on the freshly repaired database (the
+ *  salvage copied app_meta across, flag and all). */
+export function clearCorruptionFlags(db: RecoveryDb): void {
+  clearSuspicion(db)
+}
+
 // --- Open with recovery -----------------------------------------------------
 
 /** One shape, shared with the renderer's recovery notice (shared/types.ts). */
@@ -457,8 +712,32 @@ function closeQuietly(db: RecoveryDb | null): void {
   }
 }
 
+/**
+ * Delete a file, tolerating Windows's EBUSY.
+ *
+ * On Windows a file cannot be unlinked while any handle is open, and SQLite's
+ * close is not always instantaneous about releasing the -wal/-shm (a failed
+ * checkpoint on a corrupt DB can leave them held for a moment). A bare rmSync
+ * therefore throws EBUSY and takes the whole repair down with it — which is
+ * exactly what the e2e caught: the swap failed, get() threw, and the repair
+ * re-ran on every call. Retry briefly, then give up loudly.
+ */
+function forceRemove(file: string, attempts = 10): void {
+  for (let i = 0; ; i++) {
+    try {
+      rmSync(file, { force: true })
+      return
+    } catch (err) {
+      if (i >= attempts - 1) throw err
+      // Synchronous backoff: this runs at startup, before any window exists, and
+      // the whole budget is ~500ms on a path that fires once in a database's life.
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50)
+    }
+  }
+}
+
 function removeSidecars(file: string): void {
-  for (const suffix of ['-wal', '-shm', '-journal']) rmSync(`${file}${suffix}`, { force: true })
+  for (const suffix of ['-wal', '-shm', '-journal']) forceRemove(`${file}${suffix}`)
 }
 
 /** Open + prove the connection can actually read the schema. macOS's real sanity
@@ -540,21 +819,24 @@ function recover(
   }
 
   const tmp = `${file}.salvage-${now.getTime()}`
-  rmSync(tmp, { force: true })
-  const salvaged = salvage(file, tmp, driver)
+  forceRemove(tmp)
+  // Salvage from the BACKUP copy, never the live file: opening the original
+  // read-only re-creates its -wal/-shm, and Windows then refuses to unlink them
+  // during the swap below (EBUSY). Reading the copy leaves omi.db unheld.
+  const salvaged = salvage(backupPath ?? file, tmp, driver)
   log(
     `db: salvaged ${salvaged.rows} row(s) from ${Object.keys(salvaged.tables).length} table(s)` +
       (salvaged.skipped.length ? `; skipped ${salvaged.skipped.join(', ')}` : '')
   )
 
   removeSidecars(file)
-  rmSync(file, { force: true })
+  forceRemove(file)
 
   const useSalvaged = salvaged.rows > 0
   if (useSalvaged) {
     renameSync(tmp, file)
   } else {
-    rmSync(tmp, { force: true })
+    forceRemove(tmp)
   }
   removeSidecars(file)
 
@@ -576,7 +858,7 @@ function recover(
     // than leaving the user with an app that cannot start.
     log(`db: salvaged database failed to open (${(err as Error)?.message}); resetting instead`)
     removeSidecars(file)
-    rmSync(file, { force: true })
+    forceRemove(file)
     return {
       db: openChecked(file, driver),
       status: { ...status, reset: true, rowsRecovered: 0, tablesRecovered: {} }

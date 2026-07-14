@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3'
-import { app } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { basename, dirname, join } from 'path'
 import { categorize } from '../usage/category'
 import { isNewLocalDay } from '../usage/usageDay'
@@ -7,8 +7,13 @@ import { buildRewindFtsMatch } from '../rewind/rewindSearchQuery'
 import { addColumnIfMissing as ensureColumn, runMigrations } from './dbMigrations'
 import { applyRewindEmbeddingSchema } from './rewindEmbeddingSchema'
 import {
+  clearCorruptionFlags,
+  isCorruptionError,
+  isCorruptionSuspected,
+  markCorruptionSuspected,
   NO_RECOVERY,
   openDatabaseWithRecovery,
+  repairSuspectedCorruption,
   type RecoveryDb,
   type RecoveryDriver,
   type RecoveryStatus
@@ -128,6 +133,80 @@ const betterSqliteDriver: RecoveryDriver = {
 
 let recoveryStatus: RecoveryStatus = NO_RECOVERY
 
+// --- The runtime corruption trip ---------------------------------------------
+//
+// A damaged DATA page is invisible to the startup open+sanity check: the DB opens,
+// the schema reads, and only the damaged table throws SQLITE_CORRUPT — every time
+// it is queried, forever. Without this trip nothing would ever notice, and the
+// salvage engine could never run on the one class of corruption where it saves the
+// user's data (measured: sibling tables intact, ~99% of the damaged table's rows
+// still recoverable).
+//
+// So: arm every statement on the shared connection. A corrupt error from ANY live
+// query persists a suspicion flag and asks the user to restart; the repair itself
+// runs at the next startup, where it is safe. The error is always RETHROWN — this
+// observes, it never swallows.
+//
+// macOS has the same design (reportQueryError -> maxQueryIOErrorsBeforeRecovery)
+// with zero callers. This is the wiring it never got.
+
+let corruptionNoticed = false
+
+/** Persist the suspicion and tell the user, once per session. Never throws: it
+ *  runs from inside a failing query's catch block. */
+function noteCorruption(handle: Database.Database, err: unknown): void {
+  if (corruptionNoticed) return
+  corruptionNoticed = true
+  console.error('db: a live query raised a corruption error — flagging for repair on restart', err)
+  captureError(err, { area: 'db_corruption_runtime', extra: { file: dbFilePath() } })
+  try {
+    markCorruptionSuspected(handle as unknown as RecoveryDb)
+  } catch {
+    // Too damaged even to record it; the startup detector covers that class.
+  }
+  // Ask the user to restart. The repair cannot run now — the KG worker and the
+  // read-only handle are live, and replacing the file under them would strand them.
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed()) w.webContents.send('db:corruption-detected')
+  }
+}
+
+/**
+ * Wrap `prepare`/`exec` so a corrupt error from any query trips the flag. The
+ * error is rethrown unchanged, so caller behavior is identical — this is a pure
+ * observer on the failure path, and adds nothing to the success path beyond a
+ * try/catch.
+ */
+function armCorruptionTrip(handle: Database.Database): Database.Database {
+  const watch = <T>(run: () => T): T => {
+    try {
+      return run()
+    } catch (err) {
+      if (isCorruptionError(err)) noteCorruption(handle, err)
+      throw err
+    }
+  }
+
+  const originalPrepare = handle.prepare.bind(handle)
+  handle.prepare = ((sql: string) => {
+    const stmt = watch(() => originalPrepare(sql))
+    for (const method of ['all', 'get', 'run', 'iterate', 'pluck'] as const) {
+      const original = stmt[method]
+      if (typeof original !== 'function')
+        continue
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- driver methods are variadic/overloaded
+      ;(stmt as any)[method] = (...args: unknown[]) =>
+        watch(() => (original as (...a: unknown[]) => unknown).apply(stmt, args))
+    }
+    return stmt
+  }) as typeof handle.prepare
+
+  const originalExec = handle.exec.bind(handle)
+  handle.exec = ((sql: string) => watch(() => originalExec(sql))) as typeof handle.exec
+
+  return handle
+}
+
 /** What happened to the database on this launch: whether corruption was detected,
  *  how many rows were salvaged, and whether it had to be reset. Surfaced to the
  *  user over IPC (`db:recoveryStatus`) — unlike macOS, whose equivalent flag is
@@ -170,8 +249,59 @@ function get(): Database.Database {
       }
     }
   })
-  db = opened.db as unknown as Database.Database
+  let handle = opened.db
   recoveryStatus = opened.status
+
+  // The next-launch half of the runtime trip: a previous session saw a live query
+  // raise a corrupt error and flagged it. The flag is only a SUSPICION — repair
+  // re-verifies that the damage still reproduces, refuses to rebuild into a worse
+  // state, and gives up after MAX_REPAIR_ATTEMPTS rather than looping forever.
+  if (!recoveryStatus.recovered && isCorruptionSuspected(handle)) {
+    const hooks = {
+      log: (m: string) => console.log(m),
+      onCorruption: (err: unknown) => {
+        console.error('db: corruption confirmed on restart — repairing', err)
+        captureError(err, { area: 'db_corruption_confirmed', extra: { file } })
+      }
+    }
+    const outcome = repairSuspectedCorruption(handle, file, betterSqliteDriver, {
+      backupsDir: backupsDir(),
+      hooks
+    })
+    if (outcome.action === 'repaired') {
+      handle = openDatabaseWithRecovery(file, betterSqliteDriver, { backupsDir: backupsDir() }).db
+      recoveryStatus = outcome.status
+      // The salvage copied app_meta across, flag and all — clear it on the repaired DB.
+      clearCorruptionFlags(handle)
+    } else if (outcome.action === 'abandoned' || outcome.action === 'kept_original') {
+      // Confirmed damage we deliberately did NOT rebuild. Leave the DB alone, tell
+      // the user, and report — never silently keep limping.
+      const reason =
+        outcome.action === 'abandoned'
+          ? `repair budget exhausted after ${outcome.attempts} attempts`
+          : 'a rebuild would have lost rows that still read fine'
+      console.error(`db: corruption confirmed but NOT repaired — ${reason}`)
+      captureError(new Error(`db corruption unrepaired: ${reason}`), {
+        area: 'db_corruption_unrepaired',
+        extra: { file, damaged: outcome.damaged }
+      })
+      recoveryStatus = {
+        ...NO_RECOVERY,
+        unrepairable: true,
+        damagedTables: outcome.damaged,
+        backupPath: outcome.action === 'kept_original' ? outcome.backupPath : null
+      }
+      // The handle was closed by the repair on the kept_original path; reopen.
+      if (outcome.action === 'kept_original') {
+        handle = openDatabaseWithRecovery(file, betterSqliteDriver, { backupsDir: backupsDir() }).db
+      }
+    }
+    // 'no_repair_needed' (false alarm) leaves the handle and the DB untouched.
+  }
+
+  // Arm the trip so a corrupt error from any live query flags the DB for repair at
+  // the next launch. Must wrap the FINAL handle (post-repair).
+  db = armCorruptionTrip(handle as unknown as Database.Database)
   // WAL mode: allows main-thread reads to proceed concurrently while the KG
   // write worker holds the write lock. Synchronous stays at the default FULL so
   // non-KG tables (local_conversation etc.) are not at power-loss risk.

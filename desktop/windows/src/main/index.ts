@@ -1059,6 +1059,14 @@ app.whenReady().then(async () => {
   // Renderer → quit for real (menu/button in the UI).
   ipcMain.on('app:quit', () => quitApp())
 
+  // Renderer → restart. Used by the database-corruption prompt: the repair can only
+  // run at startup (before the read-only handle and the KG worker's own connection
+  // exist), so the fix is one clean relaunch.
+  ipcMain.on('app:relaunch', () => {
+    app.relaunch()
+    quitApp()
+  })
+
   // Dev perf bench: after the renderer loads, record the startup-timing marks and
   // quit. Entirely dev-only — tree-shaken from packaged main (see dev/bench).
   if (import.meta.env.DEV) devBench.runBenchDriver(win)

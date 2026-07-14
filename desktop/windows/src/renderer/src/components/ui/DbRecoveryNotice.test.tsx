@@ -19,10 +19,30 @@ const HEALTHY: DbRecoveryStatus = {
   backupPath: null
 }
 
+// Captures the main→renderer corruption event so a test can fire it.
+let fireCorruption: (() => void) | null = null
+const relaunchSpy = vi.fn()
+
 function mockStatus(status: DbRecoveryStatus | Promise<never>): void {
-  ;(window as unknown as { omi: { dbRecoveryStatus: () => Promise<DbRecoveryStatus> } }).omi = {
+  fireCorruption = null
+  ;(
+    window as unknown as {
+      omi: {
+        dbRecoveryStatus: () => Promise<DbRecoveryStatus>
+        onDbCorruptionDetected: (cb: () => void) => () => void
+        relaunchApp: () => void
+      }
+    }
+  ).omi = {
     dbRecoveryStatus: () =>
-      status instanceof Promise ? status : Promise.resolve(status as DbRecoveryStatus)
+      status instanceof Promise ? status : Promise.resolve(status as DbRecoveryStatus),
+    onDbCorruptionDetected: (cb) => {
+      fireCorruption = cb
+      return () => {
+        fireCorruption = null
+      }
+    },
+    relaunchApp: relaunchSpy
   }
 }
 
@@ -100,5 +120,54 @@ describe('DbRecoveryNotice', () => {
     mockStatus(Promise.reject(new Error('no such handler')) as Promise<never>)
     await renderNotice()
     expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('says the data is untouched when corruption was confirmed but not repaired', async () => {
+    // The boot-loop / never-worse paths: we deliberately did NOT rebuild. The copy
+    // must not imply anything was lost, because nothing was.
+    mockStatus({
+      recovered: false,
+      reset: false,
+      rowsRecovered: 0,
+      tablesRecovered: {},
+      backupPath: null,
+      unrepairable: true,
+      damagedTables: ['rewind_frames']
+    })
+    await renderNotice()
+
+    const notice = screen.getByRole('status')
+    expect(notice.textContent).toContain('could not repair it safely')
+    expect(notice.textContent).toContain('Nothing has been deleted')
+    expect(notice.textContent).not.toContain('reset')
+  })
+
+  describe('the runtime trip (a live query hit corruption this session)', () => {
+    it('prompts for a restart, honestly — the repair happens on relaunch, nothing is lost yet', async () => {
+      mockStatus(HEALTHY)
+      await renderNotice()
+      expect(screen.queryByRole('status')).toBeNull() // silent until it happens
+
+      await act(async () => {
+        fireCorruption?.()
+      })
+
+      const notice = screen.getByRole('status')
+      expect(notice.textContent).toContain('Restart Omi')
+      expect(notice.textContent).toContain('repair the database automatically')
+      // Must NOT imply data loss — the repair has not even run yet.
+      expect(notice.textContent).toContain('still on disk')
+    })
+
+    it('restarts the app when the button is clicked', async () => {
+      mockStatus(HEALTHY)
+      await renderNotice()
+      await act(async () => {
+        fireCorruption?.()
+      })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Restart Omi' }))
+      expect(relaunchSpy).toHaveBeenCalledOnce()
+    })
   })
 })

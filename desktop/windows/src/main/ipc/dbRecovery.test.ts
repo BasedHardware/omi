@@ -27,11 +27,18 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   backupCorruptDb,
+  clearCorruptionFlags,
   isAccessError,
   isCorruptionError,
+  isCorruptionSuspected,
+  markCorruptionSuspected,
+  MAX_REPAIR_ATTEMPTS,
   openDatabaseWithRecovery,
+  probeTables,
   pruneBackups,
+  repairSuspectedCorruption,
   salvage,
+  salvageIsAnImprovement,
   type RecoveryDb,
   type RecoveryDriver
 } from './dbRecovery'
@@ -322,5 +329,229 @@ describe('salvage — table-agnostic, per-table and per-row resilient', () => {
   it('returns nothing for a file that is not a database', () => {
     writeFileSync(dbFile, randomBytes(5000))
     expect(salvage(dbFile, join(dir, 'out.db'), driver).rows).toBe(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The runtime trip (option B) — the whole reason the salvage engine is reachable.
+//
+// A damaged DATA page is invisible to open+sanity: the app starts, the schema
+// reads, and only the damaged table throws — forever, silently. These tests pin
+// that entire path: not detected at startup -> a live query trips the classifier
+// -> the flag persists -> the next launch re-verifies, salvages, and swaps.
+// ---------------------------------------------------------------------------
+
+/** Damage a data page in the middle of the file. Lands in rewind_frames and
+ *  leaves the schema page and every other table perfectly readable. */
+function corruptDataPage(file: string): void {
+  const size = statSync(file).size
+  clobber(file, Math.floor(size / 2) & ~4095, 4096)
+}
+
+function openDb(file: string): RecoveryDb {
+  return new DatabaseSync(file) as unknown as RecoveryDb
+}
+
+describe('runtime corruption trip (option B)', () => {
+  it('a damaged data page is NOT detected at startup — this is why the trip exists', () => {
+    buildDb(dbFile)
+    corruptDataPage(dbFile)
+
+    const { db, status } = openDatabaseWithRecovery(dbFile, driver, { backupsDir })
+    // Open succeeds and the sanity query passes: macOS's detector is blind here.
+    expect(status.recovered).toBe(false)
+    expect(backupNames()).toEqual([])
+
+    // But a real query against the damaged table throws a corrupt error...
+    let thrown: unknown
+    try {
+      db.prepare('SELECT * FROM rewind_frames').all()
+    } catch (e) {
+      thrown = e
+    }
+    expect(thrown, 'the damaged table must actually throw').toBeDefined()
+    // ...and the classifier recognizes it. That is the trip.
+    expect(isCorruptionError(thrown)).toBe(true)
+
+    // Sibling tables are untouched — a wipe here would be catastrophic.
+    expect(
+      (db.prepare('SELECT count(*) AS n FROM local_conversation').get() as { n: number }).n
+    ).toBe(300)
+    db.close()
+  })
+
+  it('persists the suspicion so the next launch can repair', () => {
+    buildDb(dbFile)
+    const db = openDb(dbFile)
+    expect(isCorruptionSuspected(db)).toBe(false)
+    expect(markCorruptionSuspected(db)).toBe(true)
+    db.close()
+
+    // Survives a restart (it is on disk, not in memory).
+    const next = openDb(dbFile)
+    expect(isCorruptionSuspected(next)).toBe(true)
+    clearCorruptionFlags(next)
+    expect(isCorruptionSuspected(next)).toBe(false)
+    next.close()
+  })
+
+  // THE test for option B: the end-to-end case the orchestrator required.
+  it('repairs on the next launch: every other table intact, most of the damaged table recovered', () => {
+    buildDb(dbFile)
+    corruptDataPage(dbFile)
+
+    // --- session 1: a live query trips the flag ---
+    const s1 = openDb(dbFile)
+    expect(() => s1.prepare('SELECT * FROM rewind_frames').all()).toThrow()
+    markCorruptionSuspected(s1)
+    s1.close()
+
+    // --- session 2 (next launch): re-verify, salvage, swap ---
+    const s2 = openDb(dbFile)
+    expect(isCorruptionSuspected(s2)).toBe(true)
+    const outcome = repairSuspectedCorruption(s2, dbFile, driver, { backupsDir })
+
+    expect(outcome.action).toBe('repaired')
+    if (outcome.action !== 'repaired') throw new Error('unreachable')
+    expect(outcome.damaged).toContain('rewind_frames')
+    expect(outcome.status.recovered).toBe(true)
+    expect(outcome.status.reset).toBe(false)
+    expect(outcome.status.backupPath).not.toBeNull()
+    expect(backupNames()).toHaveLength(1)
+
+    // The user's OTHER data — conversations, insights, usage — survives whole.
+    // macOS's recovery salvages only `screenshots` and would have destroyed all of this.
+    expect(countRows(dbFile, 'local_conversation')).toBe(300)
+    expect(countRows(dbFile, 'insights')).toBe(200)
+    expect(countRows(dbFile, 'app_usage')).toBe(150)
+
+    // The damaged table loses only the rows on the bad page — not the whole table.
+    const frames = countRows(dbFile, 'rewind_frames')
+    expect(frames).toBeGreaterThan(700)
+    expect(frames).toBeLessThan(800)
+    // Per-table, so the total can't hide a shortfall. (app_meta rides along too —
+    // it carries the flag + attempt counter, which is exactly how the boot-loop
+    // budget survives a rebuild.)
+    expect(outcome.status.tablesRecovered).toMatchObject({
+      local_conversation: 300,
+      insights: 200,
+      app_usage: 150,
+      rewind_frames: frames
+    })
+
+    // And the repaired database is genuinely healthy now: the read that used to
+    // throw works.
+    const after = openDb(dbFile)
+    expect(() => after.prepare('SELECT * FROM rewind_frames').all()).not.toThrow()
+    expect(probeTables(after).damaged).toEqual([])
+    clearCorruptionFlags(after)
+    after.close()
+  })
+
+  // FALSE-POSITIVE SAFETY: the flag is a suspicion, never a verdict.
+  it('does NOT rebuild when the damage does not reproduce (transient/misclassified)', () => {
+    buildDb(dbFile)
+
+    // Flag set, but the database is perfectly healthy — e.g. a one-off error, or a
+    // misclassification. Rebuilding here would be destroying good data.
+    const db = openDb(dbFile)
+    markCorruptionSuspected(db)
+    const outcome = repairSuspectedCorruption(db, dbFile, driver, { backupsDir })
+
+    expect(outcome.action).toBe('no_repair_needed')
+    expect(backupNames()).toEqual([]) // nothing backed up
+    expect(isCorruptionSuspected(db)).toBe(false) // flag cleared
+    db.close()
+
+    // Every row still there, and no rebuild ever happened: the file was never
+    // swapped (no salvage temp left behind) and the schema version is untouched.
+    // (The file's byte length legitimately changes — writing then deleting the flag
+    // touches app_meta — so the meaningful assertions are the data ones.)
+    expect(countRows(dbFile, 'local_conversation')).toBe(300)
+    expect(countRows(dbFile, 'rewind_frames')).toBe(800)
+    expect(countRows(dbFile, 'insights')).toBe(200)
+    expect(readdirSync(dir).filter((f) => f.includes('.salvage-'))).toEqual([])
+    const d = new DatabaseSync(dbFile, { readOnly: true })
+    const version = (d.prepare('PRAGMA user_version').get() as { user_version: number })
+      .user_version
+    d.close()
+    expect(version).toBe(2)
+  })
+
+  // NO BOOT LOOP: a repair that keeps failing must not rebuild on every launch.
+  it('gives up after MAX_REPAIR_ATTEMPTS and leaves the database alone', () => {
+    buildDb(dbFile)
+    corruptDataPage(dbFile)
+
+    const db = openDb(dbFile)
+    markCorruptionSuspected(db)
+    // Simulate MAX_REPAIR_ATTEMPTS already-burned attempts (each prior launch tried
+    // and crashed before clearing the flag).
+    db.prepare('INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)').run(
+      ...(['db_repair_attempts', String(MAX_REPAIR_ATTEMPTS)] as never[])
+    )
+
+    const outcome = repairSuspectedCorruption(db, dbFile, driver, { backupsDir })
+    expect(outcome.action).toBe('abandoned')
+    if (outcome.action !== 'abandoned') throw new Error('unreachable')
+    expect(outcome.attempts).toBe(MAX_REPAIR_ATTEMPTS)
+
+    // Nothing destructive happened: no backup, no swap, data as it was.
+    expect(backupNames()).toEqual([])
+    db.close()
+    expect(countRows(dbFile, 'local_conversation')).toBe(300)
+  })
+
+  it('counts the attempt BEFORE repairing, so a crash mid-repair still burns budget', () => {
+    buildDb(dbFile)
+    corruptDataPage(dbFile)
+    const db = openDb(dbFile)
+    markCorruptionSuspected(db)
+    repairSuspectedCorruption(db, dbFile, driver, { backupsDir })
+
+    // The repaired DB carries the incremented counter across (app_meta is salvaged).
+    const after = openDb(dbFile)
+    const row = after
+      .prepare('SELECT value FROM app_meta WHERE key = ?')
+      .get(...(['db_repair_attempts'] as never[])) as { value: string } | undefined
+    after.close()
+    expect(row?.value).toBe('1')
+  })
+})
+
+describe('never rebuild into a worse state', () => {
+  it('refuses a swap that would lose rows a working table still serves', () => {
+    // A table that currently reads 300 rows must never come back with fewer.
+    const probe = {
+      readable: { local_conversation: 300, rewind_frames: 0 },
+      damaged: ['rewind_frames']
+    }
+    expect(
+      salvageIsAnImprovement(probe, {
+        rows: 1050,
+        tables: { local_conversation: 250, rewind_frames: 800 }, // lost 50 good rows!
+        skipped: []
+      })
+    ).toBe(false)
+  })
+
+  it('allows a swap that rescues a table which currently throws entirely', () => {
+    // The 793/800 case: rewind_frames serves NOTHING today, so 793 is pure gain.
+    const probe = {
+      readable: { local_conversation: 300, rewind_frames: 0 },
+      damaged: ['rewind_frames']
+    }
+    expect(
+      salvageIsAnImprovement(probe, {
+        rows: 1093,
+        tables: { local_conversation: 300, rewind_frames: 793 },
+        skipped: []
+      })
+    ).toBe(true)
+  })
+
+  it('refuses a swap that salvaged nothing at all', () => {
+    const probe = { readable: { local_conversation: 300 }, damaged: ['rewind_frames'] }
+    expect(salvageIsAnImprovement(probe, { rows: 0, tables: {}, skipped: [] })).toBe(false)
   })
 })

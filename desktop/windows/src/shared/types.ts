@@ -781,6 +781,11 @@ export type OmiBridgeApi = {
   /** What happened to omi.db at startup — whether it was found corrupt and had to
    *  be repaired or reset. Read once on mount to tell the user. */
   dbRecoveryStatus: () => Promise<DbRecoveryStatus>
+  /** Main → renderer: a live query just raised a database-corruption error. The
+   *  repair can only run at startup, so the UI asks the user to restart. */
+  onDbCorruptionDetected: (cb: () => void) => () => void
+  /** Restart the app (used by the corruption prompt). */
+  relaunchApp: () => void
   insightGetSettings: () => Promise<InsightSettings>
   insightSetSettings: (patch: Partial<InsightSettings>) => Promise<InsightSettings>
   insightAdd: (p: InsightPayload) => Promise<void>
@@ -1451,6 +1456,12 @@ export type DbRecoveryStatus = {
   tablesRecovered: Record<string, number>
   /** Where the corrupt original was archived, if the backup succeeded. */
   backupPath: string | null
+  /** Corruption was CONFIRMED but deliberately not repaired — either the repair
+   *  budget was exhausted (boot-loop guard) or a rebuild would have lost rows a
+   *  working table still serves. The database is left exactly as it was. */
+  unrepairable?: boolean
+  /** Tables whose reads actually throw (populated on the confirmed-damage paths). */
+  damagedTables?: string[]
 }
 
 export type InsightPayload = {
