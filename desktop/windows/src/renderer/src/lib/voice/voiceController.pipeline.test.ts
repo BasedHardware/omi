@@ -19,6 +19,7 @@ import {
   speakText,
   interruptCurrentResponse,
   stopVoiceSession,
+  setVoiceOutputDevice,
   FILLER_PHRASES
 } from './voiceController'
 
@@ -38,11 +39,16 @@ const speak = vi.fn((u: MockUtterance) => {
 const cancel = vi.fn()
 const resume = vi.fn()
 
+// When set, the NEXT setSinkId call blocks on this promise — lets a test open
+// the barge-in-during-device-selection window in playTtsBlob.
+let sinkIdBlocker: { promise: Promise<void>; resolve: () => void } | null = null
 class MockAudio {
   src = ''
   onended: (() => void) | null = null
   onerror: (() => void) | null = null
-  setSinkId = vi.fn(async () => {})
+  setSinkId = vi.fn(async () => {
+    if (sinkIdBlocker) await sinkIdBlocker.promise
+  })
   play = vi.fn(async () => {
     audios.push(this as unknown as MockAudio)
   })
@@ -75,6 +81,7 @@ const synthMock = synthesizeTts as unknown as Mock
 beforeEach(() => {
   lastUtterance = null
   audios = []
+  sinkIdBlocker = null
   speak.mockClear()
   cancel.mockClear()
   resume.mockClear()
@@ -202,5 +209,30 @@ describe('interruptCurrentResponse — barge-in', () => {
     expect(audios.length).toBe(2)
     audios[1].onended?.()
     await done2
+  })
+
+  it('a barge-in during output-device selection never starts stale audio', async () => {
+    // A non-default output device forces playTtsBlob's setSinkId await — the one
+    // window where an interrupt could land after the chunk resolved but before
+    // playback starts. The element must never play (stale audio) after barge-in.
+    await setVoiceOutputDevice('device-1')
+    try {
+      const gate = deferred<void>()
+      sinkIdBlocker = { promise: gate.promise, resolve: () => gate.resolve() }
+      synthMock.mockResolvedValueOnce(new Blob(['a'])) // single short chunk, no filler
+
+      const done = speakText('short reply')
+      await flush() // synth resolved → playTtsBlob now blocked inside setSinkId
+      expect(audios.length).toBe(0) // not playing yet — still selecting the sink
+
+      interruptCurrentResponse() // barge-in DURING device selection
+      gate.resolve() // sink selection completes only after the interrupt
+      await flush()
+
+      expect(audios.length).toBe(0) // stale audio never started
+      await done // resolves promptly → orb glow clears
+    } finally {
+      await setVoiceOutputDevice('') // restore module sinkId for other tests
+    }
   })
 })

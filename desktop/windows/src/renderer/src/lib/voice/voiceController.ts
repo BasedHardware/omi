@@ -345,29 +345,34 @@ async function playTtsBlob(blob: Blob): Promise<void> {
   const url = URL.createObjectURL(blob)
   const el = new Audio()
   el.src = url
-  if (sinkId) {
-    await el.setSinkId(sinkId).catch(() => {
-      /* unknown device — default */
-    })
+  let finish: () => void = () => {}
+  const done = new Promise<void>((resolve) => {
+    finish = resolve
+  })
+  let stopped = false
+  el.onended = () => finish()
+  el.onerror = () => finish()
+  // teardown()/barge-in silences an in-flight TTS: pause the element AND resolve
+  // the waiter so the caller's finally drains the gate immediately. Installed
+  // BEFORE the setSinkId await below so an interrupt landing during device
+  // selection marks this element stopped and it never starts — otherwise it
+  // would play to completion as stale audio after the barge-in.
+  stopCurrentTts = () => {
+    stopped = true
+    try {
+      el.pause()
+    } catch {
+      /* ignore */
+    }
+    finish()
   }
   try {
-    let finish: () => void = () => {}
-    const done = new Promise<void>((resolve) => {
-      finish = resolve
-    })
-    el.onended = () => finish()
-    el.onerror = () => finish()
-    // teardown() silences an in-flight TTS: pause the element AND resolve the
-    // waiter so the caller's finally drains the gate immediately.
-    stopCurrentTts = () => {
-      try {
-        el.pause()
-      } catch {
-        /* ignore */
-      }
-      finish()
+    if (sinkId) {
+      await el.setSinkId(sinkId).catch(() => {
+        /* unknown device — default */
+      })
     }
-    await el.play()
+    if (!stopped) await el.play()
     await done
   } finally {
     stopCurrentTts = null
