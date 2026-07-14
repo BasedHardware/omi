@@ -6,10 +6,13 @@ import {
   listRewindFrames,
   searchRewindFrames,
   rewindDayBounds,
-  getRewindFrameOcrLines
+  getRewindFrameOcrLines,
+  searchRewindEmbeddings,
+  rewindFramesByIds
 } from './db'
 import { groupFrames } from '../rewind/rewindGrouping'
-import { configureRewindEmbedSession } from '../rewind/embeddingService'
+import { configureRewindEmbedSession, embedRewindQuery } from '../rewind/embeddingService'
+import { mergeRewindSearchResults, type VectorHit } from '../rewind/vectorSearchMerge'
 import {
   getRewindSettings,
   updateRewindSettings,
@@ -20,15 +23,47 @@ import { pruneRewindOnce } from '../rewind/retentionRunner'
 import { rewindRoot } from '../rewind/paths'
 import type { RewindSettings } from '../../shared/types'
 
+/** How many semantic neighbours to pull before the similarity floor + the
+ *  already-in-FTS filter thin them out. */
+const VECTOR_TOP_K = 50
+
+/**
+ * Semantic hits for a query, or [] when semantic search is unavailable (signed
+ * out, embedding backend down, nothing indexed yet). Never throws: on macOS the
+ * whole vector leg is a `try?`, and keyword results must render regardless.
+ */
+async function vectorHits(query: string): Promise<VectorHit[]> {
+  try {
+    const vec = await embedRewindQuery(query)
+    if (!vec) return []
+    const scored = searchRewindEmbeddings(vec, VECTOR_TOP_K)
+    const frames = rewindFramesByIds(scored.map((s) => s.frameId))
+    const byId = new Map(frames.map((f) => [f.id, f]))
+    return scored
+      .map((s) => {
+        const frame = byId.get(s.frameId)
+        return frame ? { frame, similarity: s.similarity } : null
+      })
+      .filter((h): h is VectorHit => h !== null)
+  } catch (e) {
+    console.warn(`[rewind-embed] vector search failed, keyword-only: ${(e as Error).message}`)
+    return []
+  }
+}
+
 export function registerRewindHandlers(): void {
   ipcMain.handle('rewind:frames', async (_e, from: number, to: number) =>
     listRewindFrames(from, to)
   )
   ipcMain.handle('rewind:dayBounds', async () => rewindDayBounds())
+  // Hybrid search: keyword (FTS5/BM25) and semantic (Gemini vectors) run in
+  // parallel, then merge with FTS leading and vectors adding recall only —
+  // see rewind/vectorSearchMerge.ts for the contract.
   ipcMain.handle('rewind:search', async (_e, query: string) => {
     const q = query.trim()
     if (!q) return []
-    return groupFrames(searchRewindFrames(q), q)
+    const [fts, vector] = await Promise.all([Promise.resolve(searchRewindFrames(q)), vectorHits(q)])
+    return groupFrames(mergeRewindSearchResults(fts, vector), q)
   })
   // Relay of the renderer's Firebase session — the embedding indexer and the
   // query embedder are inert without it (the token only exists in the renderer).
