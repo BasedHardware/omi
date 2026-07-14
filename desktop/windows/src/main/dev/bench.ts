@@ -101,10 +101,9 @@ export function applyDevWindowTitleSuffix(win: BrowserWindow): void {
 // launches and break every GPU surface for the next run — the recurring "stale"
 // breakage (the primary checkout reuses localhost:5179 + the default profile every
 // time; a linked worktree reuses its own derived origin + profile). In dev we
-// render in SOFTWARE
-// (no GPU process to crash) while keeping WebGL alive on SwiftShader, and stop
-// the per-origin 3D block so a crash can never permanently blocklist WebGL. Opt
-// back into hardware with OMI_DEV_HW_GPU=1 (interactive perf on a healthy
+// render in SOFTWARE (no GPU process to crash) while keeping WebGL alive on
+// SwiftShader. (The per-origin 3D block is disabled for ALL builds in index.ts.)
+// Opt back into hardware with OMI_DEV_HW_GPU=1 (interactive perf on a healthy
 // display). Packaged builds are never touched — they keep full hardware
 // acceleration. Must run before the app is ready.
 export function applyDevGpuStability(): void {
@@ -122,8 +121,9 @@ export function applyDevGpuStability(): void {
     app.commandLine.appendSwitch('remote-debugging-port', String(resolveDevInstance().cdpPort))
     app.commandLine.appendSwitch('remote-allow-origins', '*')
   }
-  // A GPU crash must never permanently blocklist WebGL for the shared dev origin.
-  app.disableDomainBlockingFor3DAPIs()
+  // (disableDomainBlockingFor3DAPIs — "a GPU crash must never permanently blocklist
+  // WebGL for the origin" — now runs unconditionally in index.ts, prod included; it
+  // was never a dev-only concern. Don't re-add it here.)
   if (process.env.OMI_DEV_HW_GPU === '1') return
   // Software compositing: the GPU process can't crash the UI…
   app.disableHardwareAcceleration()

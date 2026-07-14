@@ -12,6 +12,10 @@ import {
 } from '../../lib/useGraphSimulation'
 import { nodeColor } from './nodeColor'
 import { useWebglRecovery } from '../../lib/useWebglRecovery'
+import { isWebglAvailable } from '../../lib/webglSupport'
+import { BrainGraphFallback } from './BrainGraphFallback'
+import { ErrorBoundary } from '../ui/ErrorBoundary'
+import { trackEvent } from '../../lib/analytics'
 
 export type BrainGraphProps = {
   graph: KnowledgeGraph
@@ -131,7 +135,11 @@ function GraphNodeMesh({
   })
 
   return (
-    <group ref={groupRef} position={[node.x, node.y, node.z]} scale={reduced ? [1, 1, 1] : [0, 0, 0]}>
+    <group
+      ref={groupRef}
+      position={[node.x, node.y, node.z]}
+      scale={reduced ? [1, 1, 1] : [0, 0, 0]}
+    >
       <mesh>
         {/* 16×16 (down from 32×32): at the on-screen size these spheres actually
             render — small, glowing, and softened by the halo/bloom layers below
@@ -151,7 +159,13 @@ function GraphNodeMesh({
       {/* pulsing glow halo (scales with the shine) */}
       <mesh ref={glowMesh}>
         <sphereGeometry args={[radius * 1.9, 12, 12]} />
-        <meshBasicMaterial ref={glowMat} color={color} transparent opacity={0.12} depthWrite={false} />
+        <meshBasicMaterial
+          ref={glowMat}
+          color={color}
+          transparent
+          opacity={0.12}
+          depthWrite={false}
+        />
       </mesh>
       {/* faint outer bloom for extra shine */}
       <mesh>
@@ -353,11 +367,7 @@ function GraphScene({
           frameLoop={frameLoop}
         />
       ))}
-      {interactive ? (
-        <OrbitControls enablePan enableZoom enableRotate />
-      ) : (
-        <CameraRig />
-      )}
+      {interactive ? <OrbitControls enablePan enableZoom enableRotate /> : <CameraRig />}
     </>
   )
 }
@@ -389,6 +399,9 @@ export function BrainGraph({
   const onVisibleChangeRef = useRef(onVisibleChange)
   // eslint-disable-next-line react-hooks/refs -- intentional latest-ref (keeps the effect below from re-firing on every render just because the caller passed a new inline callback)
   onVisibleChangeRef.current = onVisibleChange
+  const onReadyRef = useRef(onReady)
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref (same reason as above: onReady is passed as an inline callback)
+  onReadyRef.current = onReady
 
   // Off-screen GPU saving for the Memories tab only (pauseWhenHidden): UNMOUNT
   // the canvas while the host is collapsed to 0×0 (its MainViews tab is
@@ -462,29 +475,83 @@ export function BrainGraph({
   // the caller (e.g. Memories.tsx) immediately, ahead of the debounced remount.
   const recoveryKey = useWebglRecovery(hostRef, handleContextLost)
 
+  // Can we get a WebGL context AT ALL right now? A GPU crash loop (the real field
+  // failure — five `child-process-gone type=GPU` in 30s) blows through the remount
+  // cap above, and once Chromium refuses new 3D contexts three.js's WebGLRenderer
+  // THROWS on construction. Probing first means we show a deliberate static mark
+  // instead of a black void, and the ErrorBoundary below catches the throw if the
+  // context dies between the probe and the mount.
+  const [glAvailable, setGlAvailable] = useState(isWebglAvailable)
+  // Every recoveryKey bump is a post-crash remount attempt (debounced, so the GPU
+  // process has had a chance to restart) — the one moment worth re-probing. Skip
+  // the initial run: useState already probed. A recovered GPU therefore heals the
+  // fallback back into a live canvas; an unrecovered one keeps the mark.
+  const firstProbe = useRef(true)
+  useEffect(() => {
+    if (firstProbe.current) {
+      firstProbe.current = false
+      return
+    }
+    setGlAvailable(isWebglAvailable())
+  }, [recoveryKey])
+
+  // Rendering mode change (WebGL → static, or back): report it. Transition-only, so
+  // a persistently GPU-less machine emits once, not once per render.
+  const degraded = useRef(false)
+  const reportMode = useCallback((webgl: boolean, reason: string): void => {
+    if (degraded.current === !webgl) return
+    degraded.current = !webgl
+    trackEvent('fallback_triggered', {
+      component: 'brain_graph_render',
+      from: webgl ? 'static' : 'webgl',
+      to: webgl ? 'webgl' : 'static',
+      reason,
+      outcome: webgl ? 'recovered' : 'degraded'
+    })
+  }, [])
+  useEffect(() => {
+    reportMode(glAvailable, 'gpu_unavailable')
+    // The static fallback IS the finished surface in this mode. Callers gate a
+    // loading placeholder on onReady (Memories crossfades on it), so without this
+    // the mark would sit invisible behind a spinner until their bounded timeout.
+    if (!glAvailable) onReadyRef.current?.()
+  }, [glAvailable, reportMode])
+
   return (
     <div ref={hostRef} className="absolute inset-0">
-      {showCanvas && (
-      <Canvas
-        key={recoveryKey}
-        // Narrow FOV: a wide FOV projects off-center spheres into ellipses
-        // ("deformed" nodes); this keeps them as round circles. CameraRig derives
-        // its distance from the FOV, so the framing/zoom is unchanged.
-        camera={{ position: [0, 0, 700], fov: 28, near: 1, far: 20000 }}
-        dpr={[1, 2]}
-        frameloop={frameLoop}
-        gl={{ antialias: true, alpha: true }}
-        onCreated={() => onReady?.()}
-      >
-        <GraphScene
-          graph={graph}
-          centerNodeId={centerNodeId}
-          interactive={interactive}
-          shuffleKey={shuffleKey}
-          frameLoop={frameLoop}
-        />
-      </Canvas>
-      )}
+      {showCanvas &&
+        (glAvailable ? (
+          // Keyed with recoveryKey so a post-crash remount also RESETS a boundary
+          // that has already caught a throw — otherwise one bad mount would pin the
+          // fallback forever, even on a GPU that came back.
+          <ErrorBoundary
+            key={recoveryKey}
+            label="BrainGraph"
+            fallback={<BrainGraphFallback />}
+            onError={() => reportMode(false, 'renderer_init_failed')}
+          >
+            <Canvas
+              // Narrow FOV: a wide FOV projects off-center spheres into ellipses
+              // ("deformed" nodes); this keeps them as round circles. CameraRig derives
+              // its distance from the FOV, so the framing/zoom is unchanged.
+              camera={{ position: [0, 0, 700], fov: 28, near: 1, far: 20000 }}
+              dpr={[1, 2]}
+              frameloop={frameLoop}
+              gl={{ antialias: true, alpha: true }}
+              onCreated={() => onReady?.()}
+            >
+              <GraphScene
+                graph={graph}
+                centerNodeId={centerNodeId}
+                interactive={interactive}
+                shuffleKey={shuffleKey}
+                frameLoop={frameLoop}
+              />
+            </Canvas>
+          </ErrorBoundary>
+        ) : (
+          <BrainGraphFallback />
+        ))}
     </div>
   )
 }

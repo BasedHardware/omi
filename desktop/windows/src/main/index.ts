@@ -149,10 +149,19 @@ const startHidden = process.argv.includes('--hidden')
 // runner overrides OMI_PERF_LOG). Packaged builds write nothing unless the env
 // var is explicitly set — no silent prod telemetry file. Runs before app:start.
 if (import.meta.env.DEV) devBench.applyDevPerfLogDefault()
-// Dev GPU stability: render in software + keep WebGL on SwiftShader + never let a
-// GPU crash permanently blocklist WebGL, so the orb / brain map / blur / effects
-// stay reliable on flaky dev GPUs (hybrid laptop, asleep display, headless soak).
-// Must run before app ready. Packaged builds keep full hardware acceleration.
+// PRODUCTION TOO: never let a GPU-process crash permanently blocklist WebGL.
+// After a few GPU crashes Chromium domain-blocks 3D APIs for the origin "until
+// restart", so every subsequent context request returns null and the WebGL
+// surfaces (brain map, orb) are dead for the rest of the session — no remount can
+// recover them. Real field evidence: crash.log shows GPU crash LOOPS on hybrid-GPU
+// laptops (five `child-process-gone type=GPU` in 30s). Disabling the block costs a
+// healthy machine nothing and is what makes the renderer's recovery remounts able
+// to actually get a fresh context. Must run before app ready.
+app.disableDomainBlockingFor3DAPIs()
+// Dev GPU stability: render in software + keep WebGL on SwiftShader, so the orb /
+// brain map / blur / effects stay reliable on flaky dev GPUs (hybrid laptop,
+// asleep display, headless soak). Must run before app ready. Packaged builds keep
+// full hardware acceleration.
 if (import.meta.env.DEV) devBench.applyDevGpuStability()
 perfMark('app:start')
 

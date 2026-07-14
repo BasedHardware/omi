@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import type { BrainGraphProps } from './BrainGraph'
 import { ErrorBoundary } from '../ui/ErrorBoundary'
+import { BrainGraphFallback } from './BrainGraphFallback'
 
 // Lazy wrapper so the heavy 3D stack (three + @react-three/fiber + drei +
 // d3-force-3d, ~1MB) is code-split out of the initial renderer bundle and only
@@ -8,19 +9,16 @@ import { ErrorBoundary } from '../ui/ErrorBoundary'
 // This shrinks window:created→renderer:eval, the dominant startup phase.
 const BrainGraphImpl = lazy(() => import('./BrainGraph').then((m) => ({ default: m.BrainGraph })))
 
-// The 3D brain map is the only WebGL surface in the app, so it's the first thing
-// to fail if the GPU process is unhealthy (e.g. a contended/locked Chromium GPU
-// cache when two instances share a profile) or if its code-split chunk fails to
-// load. This ErrorBoundary only guards a THROW below (failed lazy chunk, three
-// init error) — degrades to a blank pane instead of crashing the whole screen
-// (onboarding has no other boundary above it). A LOST WebGL context is a
-// different failure mode (doesn't throw) and is handled inside BrainGraph
-// itself via useWebglRecovery, which remounts its own canvas subtree — that
-// recovery already covers both this lazy path and Onboarding's direct mount,
-// so it isn't duplicated here.
+// This boundary now only guards the LAZY LOAD itself (a code-split chunk that
+// fails to download / evaluate). The WebGL failure modes are all handled inside
+// BrainGraph: a lost context by useWebglRecovery (remounts its canvas subtree), an
+// unavailable context and a throwing three.js renderer by its own probe + inner
+// ErrorBoundary → BrainGraphFallback. That coverage applies to this lazy path and
+// to Onboarding's direct mount alike. A failed chunk degrades to the same static
+// mark rather than a blank pane, so the screen never shows an empty black hole.
 export function BrainGraph(props: BrainGraphProps): React.JSX.Element {
   return (
-    <ErrorBoundary label="BrainGraph" fallback={<div className="h-full w-full" aria-hidden />}>
+    <ErrorBoundary label="LazyBrainGraph" fallback={<BrainGraphFallback />}>
       <Suspense fallback={<div className="h-full w-full" aria-hidden />}>
         <BrainGraphImpl {...props} />
       </Suspense>
