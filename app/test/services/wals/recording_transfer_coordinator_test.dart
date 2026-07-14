@@ -138,6 +138,30 @@ void main() {
       expect(harness.reconciledUploadedWal, isTrue);
       expect(harness.reofferedUploadedWal, isFalse);
     });
+
+    test('partial drain failure still reconciles uploaded WALs before retry', () async {
+      final harness = _TransferHarness()
+        ..drainFails = true
+        ..drainNeedsReconciliation = true;
+      addTearDown(harness.dispose);
+
+      await harness.coordinator.wake(WakeTrigger.startup);
+
+      // Initial reconcile + post-drain reconcile for uploaded WALs.
+      expect(harness.reconcilePasses, 2);
+      expect(harness.scheduledCooldowns, hasLength(1));
+    });
+
+    test('contended drain schedules retry instead of clearing as success', () async {
+      final harness = _TransferHarness()..drainContended = true;
+      addTearDown(harness.dispose);
+
+      await harness.coordinator.wake(WakeTrigger.startup);
+
+      expect(harness.drainPasses, 1);
+      expect(harness.scheduledCooldowns, hasLength(1));
+      expect(harness.coordinator.nextCooldownAt, DateTime.utc(2026, 1, 1, 0, 0, 5));
+    });
   });
 }
 
@@ -180,6 +204,8 @@ class _TransferHarness {
 
   Completer<void>? reconcileGate;
   bool drainFails = false;
+  bool drainNeedsReconciliation = false;
+  bool drainContended = false;
   bool uploadedWalAwaitingReconcile = false;
   bool reconciledUploadedWal = false;
   bool reofferedUploadedWal = false;
@@ -215,12 +241,19 @@ class _TransferHarness {
     _concurrentDrains++;
     maximumConcurrentDrains = maximumConcurrentDrains < _concurrentDrains ? _concurrentDrains : maximumConcurrentDrains;
     try {
+      if (drainContended) {
+        return const RecordingTransferDrainResult.contended();
+      }
       if (uploadedWalAwaitingReconcile) reofferedUploadedWal = true;
       if (drainFails) {
         // This mirrors LocalWalSyncImpl's normal-return failure: the WAL stays
         // retryable and is not surfaced as synced.
         walState = 'miss';
-        return const RecordingTransferDrainResult(attempted: true, failed: true, needsReconciliation: false);
+        return RecordingTransferDrainResult(
+          attempted: true,
+          failed: true,
+          needsReconciliation: drainNeedsReconciliation,
+        );
       }
       drainedWalIds.addAll(backlog);
       backlog.clear();

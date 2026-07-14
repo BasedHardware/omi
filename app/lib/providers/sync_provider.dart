@@ -27,6 +27,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   final bool _startBackgroundSync;
   final Future<void> Function(LocalWalSyncImpl phone) _waitForWalReady;
   final Future<void> Function() _startRecovery;
+  final Future<void> Function(WakeTrigger trigger) _wakeTransfer;
 
   /// Completes after WAL loading and startup fair-use reconciliation finish.
   @visibleForTesting
@@ -297,11 +298,13 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     @visibleForTesting bool startBackgroundSync = true,
     @visibleForTesting Future<void> Function(LocalWalSyncImpl phone)? waitForWalReady,
     @visibleForTesting Future<void> Function()? startRecovery,
+    @visibleForTesting Future<void> Function(WakeTrigger trigger)? wakeTransfer,
   })  : _walServiceOverride = walService,
         _uploadGate = uploadGate ?? SyncUploadGate.instance,
         _startBackgroundSync = startBackgroundSync,
         _waitForWalReady = waitForWalReady ?? ((phone) => phone.walReady),
-        _startRecovery = startRecovery ?? (() => RecordingTransferCoordinator.instance.wake(WakeTrigger.startup)) {
+        _startRecovery = startRecovery ?? (() => RecordingTransferCoordinator.instance.wake(WakeTrigger.startup)),
+        _wakeTransfer = wakeTransfer ?? ((trigger) => RecordingTransferCoordinator.instance.wake(trigger)) {
     _walService.subscribe(this, this);
     _audioPlayerUtils.addListener(_onAudioPlayerStateChanged);
     _freshRateLimitWasActive = SyncRateLimiter.instance.isLimitedForLane('fresh');
@@ -334,7 +337,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     _backfillRateLimitWasActive = backfillActive;
     notifyListeners();
     if (cooldownEnded && _startBackgroundSync) {
-      unawaited(RecordingTransferCoordinator.instance.wake(WakeTrigger.cooldownElapsed));
+      unawaited(_wakeTransfer(WakeTrigger.cooldownElapsed));
     }
   }
 
@@ -385,9 +388,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<RecordingTransferDrainResult> _drainEligibleWals() async {
-    if (_isDisposed || _syncState.isProcessing) return const RecordingTransferDrainResult.skipped();
+    if (_isDisposed || _syncState.isProcessing) return const RecordingTransferDrainResult.contended();
     if (_walService.getSyncs().isStorageSyncing || _walService.getSyncs().isSdCardSyncing) {
-      return const RecordingTransferDrainResult.skipped();
+      return const RecordingTransferDrainResult.contended();
     }
 
     final hadEligibleWals = missingWals.isNotEmpty;
@@ -463,7 +466,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   Future<void> syncWals({WakeTrigger trigger = WakeTrigger.userRetry}) async {
     if (_startBackgroundSync) {
-      await RecordingTransferCoordinator.instance.wake(trigger);
+      await _wakeTransfer(trigger);
       return;
     }
     await _syncWalsDirect();
@@ -481,11 +484,17 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   Future<void> syncWal(Wal wal) async {
     _updateSyncState(_syncState.toIdle());
-    await _performSync(
+    final result = await _performSync(
       operation: () => _walService.getSyncs().syncWal(wal: wal, progress: this),
       context: 'sync WAL ${wal.id}',
       failedWal: wal,
     );
+    // UI Sync/Auto Sync paths call syncWal directly and bypass the
+    // coordinator drain. A 202 leaves the WAL `uploaded` — wake the single
+    // owner so reconcile is scheduled (do not poke SyncReconciler here).
+    if (result != null && _startBackgroundSync) {
+      unawaited(_wakeTransfer(WakeTrigger.cooldownElapsed));
+    }
   }
 
   Future<SyncLocalFilesResponse?> _performSync({
@@ -517,9 +526,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         return result;
       }
 
-      if ((result?.localUploadFailures ?? 0) > 0) {
-        _updateSyncState(_syncState.toError(message: 'Upload failed. Check your connection and try again'));
-      } else if (result != null && _hasConversationResults(result)) {
+      // Process successful conversation IDs even when other batches failed —
+      // localUploadFailures must not discard completed results.
+      if (result != null && _hasConversationResults(result)) {
         Logger.debug(
           'SyncProvider: $context returned ${result.newConversationIds.length} new, ${result.updatedConversationIds.length} updated conversations',
         );
@@ -528,9 +537,13 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
           'updatedConversations': result.updatedConversationIds.length,
         });
         await _processConversationResults(result);
-      } else {
+      } else if ((result?.localUploadFailures ?? 0) == 0) {
         DebugLogManager.logInfo('SyncProvider: $context completed with no new conversations');
         _updateSyncState(_syncState.toCompleted(conversations: []));
+      }
+
+      if ((result?.localUploadFailures ?? 0) > 0) {
+        _updateSyncState(_syncState.toError(message: 'Upload failed. Check your connection and try again'));
       }
       return result;
     } catch (e) {
@@ -576,7 +589,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   Future<void> retrySync() async {
     if (_startBackgroundSync) {
-      await RecordingTransferCoordinator.instance.wake(WakeTrigger.userRetry);
+      await _wakeTransfer(WakeTrigger.userRetry);
       return;
     }
     final failedWal = _syncState.failedWal;
@@ -728,7 +741,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     }
     // Cancel only stops further uploads. Recordings already `uploaded` are
     // safe on the server — keep reconciling them through the single owner.
-    unawaited(RecordingTransferCoordinator.instance.wake(WakeTrigger.cooldownElapsed));
+    unawaited(_wakeTransfer(WakeTrigger.cooldownElapsed));
   }
 
   /// Transfer a single WAL from device storage (SD card or flash page) to phone storage

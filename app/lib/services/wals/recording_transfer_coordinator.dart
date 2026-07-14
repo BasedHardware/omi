@@ -25,16 +25,27 @@ class RecordingTransferDrainResult {
     required this.attempted,
     required this.failed,
     required this.needsReconciliation,
+    this.contended = false,
   });
 
+  /// Nothing eligible to drain (empty backlog). Not a retry signal.
   const RecordingTransferDrainResult.skipped()
       : attempted = false,
         failed = false,
-        needsReconciliation = false;
+        needsReconciliation = false,
+        contended = false;
+
+  /// Drain could not run because another sync owned the seam. Retry later.
+  const RecordingTransferDrainResult.contended()
+      : attempted = false,
+        failed = false,
+        needsReconciliation = false,
+        contended = true;
 
   final bool attempted;
   final bool failed;
   final bool needsReconciliation;
+  final bool contended;
 }
 
 typedef RecordingTransferPass = Future<void> Function();
@@ -228,18 +239,23 @@ class RecordingTransferCoordinator {
 
       final result = await _drain();
       await _refreshPending();
-      if (result.failed) {
-        _scheduleRetry('eligible WAL upload returned a retryable failure');
-        return;
-      }
-      _failureStreak = 0;
 
-      // A successful 202 upload created `uploaded` WALs. Re-enter the
-      // reconciler through this owner so it can schedule its foreground poll.
+      // Partial upload success still leaves `uploaded` WALs that need the
+      // reconciler before any failure/contention retry path runs.
       if (result.needsReconciliation) {
         await _reconcile();
         await _refreshPending();
       }
+
+      if (result.failed) {
+        _scheduleRetry('eligible WAL upload returned a retryable failure');
+        return;
+      }
+      if (result.contended) {
+        _scheduleRetry('eligible WAL drain was contended');
+        return;
+      }
+      _failureStreak = 0;
     } catch (error, stackTrace) {
       Logger.debug(
         'RecordingTransferCoordinator: $trigger pass failed: $error\n$stackTrace',
