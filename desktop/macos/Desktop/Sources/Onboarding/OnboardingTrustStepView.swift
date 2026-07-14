@@ -37,6 +37,8 @@ struct OnboardingTrustStepView: View {
         .frame(maxWidth: 560, alignment: .leading)
 
         HStack(spacing: OmiSpacing.md) {
+          OnboardingBackButton()
+
           Button("Continue") {
             coordinator.clearLastActionError()
             onContinue()
